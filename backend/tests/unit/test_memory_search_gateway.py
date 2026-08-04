@@ -37,8 +37,8 @@ def _item(memory_id, *, tier=MemoryTier.short_term, status=MemoryItemStatus.acti
         captured_at=now - timedelta(days=1),
         updated_at=now,
         expires_at=expires_at if expires_at is not None else now + timedelta(days=30),
-        ledger_commit_id="commit1" if tier == MemoryTier.long_term else None,
-        ledger_sequence=1 if tier == MemoryTier.long_term else None,
+        ledger_commit_id=f"commit-{memory_id}",
+        ledger_sequence=1,
         item_revision=1,
         source_commit_id=f"source-commit-{memory_id}",
         content_hash=f"content-hash-{memory_id}",
@@ -46,11 +46,11 @@ def _item(memory_id, *, tier=MemoryTier.short_term, status=MemoryItemStatus.acti
     )
 
 
-def _hit(item, *, score=0.9, projection_commit_id="commit1"):
+def _hit(item, *, score=0.9, projection_commit_id=None):
     return SearchVectorHit(
         memory_id=item.memory_id,
         score=score,
-        projection_commit_id=projection_commit_id,
+        projection_commit_id=projection_commit_id or item.ledger_commit_id,
         vector_updated_at=item.updated_at,
         uid=item.uid,
         account_generation=item.account_generation,
@@ -80,6 +80,23 @@ def test_search_gateway_hydrates_authoritative_items_and_drops_stale_or_missing_
 
     assert [entry.item.memory_id for entry in result.results] == ["mem1"]
     assert result.decisions["missing"] == SearchDecision.missing_authoritative_item
+
+
+def test_search_gateway_accepts_per_item_projection_commits_across_one_rollout_generation():
+    first = _item("mem-first")
+    second = _item("mem-second")
+
+    result = hydrate_and_filter_vector_hits(
+        hits=[_hit(first), _hit(second)],
+        authoritative_items={first.memory_id: first, second.memory_id: second},
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        mode=SearchMode.default,
+        required_projection_commit_id="rollout-activation-fence",
+        required_account_generation=0,
+    )
+
+    assert [entry.item.memory_id for entry in result.results] == ["mem-first", "mem-second"]
+    assert result.repair_purge_candidates == []
 
 
 def test_search_gateway_fail_closed_on_stale_projection_or_default_archive_access():

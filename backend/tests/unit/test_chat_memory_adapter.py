@@ -50,7 +50,9 @@ def test_chat_memory_tool_wires_memory_adapter_before_legacy_vector_search():
     assert legacy_call in contents
     assert contents.index(rollout_call) < contents.index(legacy_call)
     assert 'if default_memories is not None:' not in contents
-    assert 'MemoryReadDecision.USE_LEGACY_SAFE' in contents
+    # The legacy-fallback decision is centralized in chat_legacy_read_authorized (#10736),
+    # which allows USE_LEGACY_SAFE plus the un-enrolled missing_rollout_state cohort.
+    assert 'if not chat_legacy_read_authorized(default_memories):' in contents
 
 
 def test_chat_rollout_reader_supports_omi_chat_grant_without_reading_memory_items():
@@ -110,6 +112,41 @@ def test_chat_default_memory_adapter_uses_product_search_and_excludes_stale_shor
     assert 'coffee stale short term' not in result
     assert 'coffee archive memory' not in result
     assert 'archive_default_visible=False' in result
+
+
+def test_chat_default_memory_adapter_collapses_short_term_alias_to_long_term_survivor():
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    survivor = _memory_item(
+        'canonical-survivor',
+        tier=MemoryTier.long_term,
+        now=now,
+        captured_at=now - timedelta(days=3),
+        content='coffee Project Beacon canonical survivor',
+        canonical_memory_id='canonical-survivor',
+        updated_at=now - timedelta(days=2),
+    )
+    alias = _memory_item(
+        'duplicate-short-term',
+        now=now,
+        content='coffee Project Beacon duplicate alias',
+        canonical_memory_id=survivor.memory_id,
+        updated_at=now - timedelta(hours=1),
+    )
+    docs = {'users/u1/memory_control/state': _enabled_rollout_doc()}
+    docs.update({f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [alias, survivor]})
+
+    result = search_memory_default_chat_memories_text(
+        uid='u1',
+        query='Project Beacon',
+        limit=10,
+        db_client=_FirestoreFake(docs),
+        now=now,
+    )
+
+    assert result is not None
+    assert result.startswith("Found 1 memory default memories matching 'Project Beacon':")
+    assert 'coffee Project Beacon canonical survivor' in result
+    assert 'coffee Project Beacon duplicate alias' not in result
 
 
 def test_chat_default_memory_adapter_returns_none_when_rollout_or_grant_disabled_without_firestore_read():

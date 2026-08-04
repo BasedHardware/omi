@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -15,7 +16,13 @@ from models.memory_contracts import (
     LifecycleState,
     deterministic_contract_id,
 )
-from models.memory_operations import MemoryOperation, MemoryOperationStatus, logical_payload_digest
+from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType, logical_payload_digest
+from models.memory_promotion import (
+    MemoryGraphAssertion,
+    PromotionGraphPlan,
+    build_memory_graph_assertion,
+    valid_promotion_admission,
+)
 from models.memory_domain import (
     MemoryLayer,
     MemoryProcessingState,
@@ -23,14 +30,34 @@ from models.memory_domain import (
     physical_status_to_record_status,
 )
 from models.product_memory import (
+    RESTRICTED_SENSITIVITY_LABELS,
+    MemoryItem,
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
-    MemoryItem,
 )
 from utils.memory.short_term_lifecycle import default_short_term_expiry
 
 logger = logging.getLogger(__name__)
+_GRAPH_PREDICATE_RE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$")
+
+_PATCH_MUTATION_IDENTITY_EXCLUDED_KEYS = {
+    "schema_version",
+    "patch_id",
+    "packet_id",
+    "run_id",
+    "observed_head_commit_id",
+    "idempotency_key",
+    "decision",
+    "result_status",
+    "target_memory_id",
+    "memory_text",
+    "supersedes",
+    "existing_item",
+    "superseded_items",
+    "evidence",
+    "mutation_metadata",
+}
 
 
 class ApplyStatus(str, Enum):
@@ -191,8 +218,35 @@ class ApplyResult(BaseModel):
     control_state: MemoryControlState
     operation: MemoryOperation
     memory_items: List[MemoryItem] = Field(default_factory=list)
+    graph_assertions: List[MemoryGraphAssertion] = Field(default_factory=list)
     outbox_events: List[MemoryOutboxEvent] = Field(default_factory=list)
     reason: Optional[str] = None
+
+
+def _canonical_mutation_identity_value(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return _canonical_mutation_identity_value(value.model_dump(mode="json"))
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _canonical_mutation_identity_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_mutation_identity_value(item) for item in value]
+    if isinstance(value, set):
+        normalized = [_canonical_mutation_identity_value(item) for item in value]
+        return sorted(normalized, key=repr)
+    return value
+
+
+def build_patch_mutation_identity(patch_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Return every item-affecting patch field not already in the base operation digest."""
+    return {
+        key: _canonical_mutation_identity_value(value)
+        for key, value in patch_payload.items()
+        if key not in _PATCH_MUTATION_IDENTITY_EXCLUDED_KEYS
+    }
 
 
 def _deterministic_materialized_memory_id(*, uid: str, patch: DurableMemoryPatch, commit_id: str) -> str:
@@ -214,6 +268,82 @@ def _deterministic_materialized_memory_id(*, uid: str, patch: DurableMemoryPatch
     )
 
 
+def memory_content_hash(*, content: Optional[str], evidence_ids: List[str]) -> str:
+    return deterministic_contract_id(
+        "memory-content",
+        {"content": content, "evidence_ids": evidence_ids},
+    )
+
+
+def _valid_graph_enrichment_receipt(
+    raw_receipt: Any,
+    *,
+    operation: MemoryOperation,
+    existing_item: MemoryItem,
+    control_state: MemoryControlState,
+    graph_plan: Optional[PromotionGraphPlan],
+) -> bool:
+    """Validate the persisted receipt before allowing a graph-only LTM mutation."""
+    if not isinstance(raw_receipt, dict) or graph_plan is None:
+        return False
+    if raw_receipt.get("schema_version") != "canonical_memory_graph_enrichment_receipt.v1":
+        return False
+    evidence_ids = raw_receipt.get("evidence_ids")
+    if not isinstance(evidence_ids, list) or not evidence_ids:
+        return False
+    if any(not isinstance(value, str) or not value.strip() for value in evidence_ids):
+        return False
+    normalized_evidence_ids = sorted(value.strip() for value in evidence_ids)
+    if len(normalized_evidence_ids) != len(set(normalized_evidence_ids)):
+        return False
+
+    def nonnegative_int(value: Any) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    receipt_id = raw_receipt.get("receipt_id")
+    uid = raw_receipt.get("uid")
+    memory_id = raw_receipt.get("memory_id")
+    content_hash = raw_receipt.get("content_hash")
+    plan_hash = raw_receipt.get("plan_hash")
+    item_revision = raw_receipt.get("item_revision")
+    account_generation = raw_receipt.get("account_generation")
+    source_generation = raw_receipt.get("source_generation")
+    if not all(
+        isinstance(value, str) and value.strip() for value in (receipt_id, uid, memory_id, content_hash, plan_hash)
+    ):
+        return False
+    if not all(nonnegative_int(value) for value in (item_revision, account_generation, source_generation)):
+        return False
+    expected_id = (
+        "ger_"
+        + deterministic_contract_id(
+            "canonical-memory-graph-enrichment-receipt",
+            {
+                "schema_version": raw_receipt["schema_version"],
+                "uid": uid,
+                "memory_id": memory_id,
+                "item_revision": item_revision,
+                "content_hash": content_hash,
+                "evidence_ids": normalized_evidence_ids,
+                "account_generation": account_generation,
+                "source_generation": source_generation,
+                "plan_hash": plan_hash,
+            },
+        )[:32]
+    )
+    return (
+        receipt_id == expected_id
+        and uid == operation.uid
+        and memory_id == existing_item.memory_id
+        and item_revision == existing_item.item_revision
+        and content_hash == existing_item.content_hash
+        and normalized_evidence_ids == sorted(record.evidence_id for record in existing_item.evidence)
+        and account_generation == control_state.account_generation
+        and source_generation == control_state.source_generation
+        and plan_hash == graph_plan.plan_hash
+    )
+
+
 def _processing_state_for_promotion(
     promotion: Optional[Dict[str, Any]],
     *,
@@ -222,6 +352,8 @@ def _processing_state_for_promotion(
     processing_status = str((promotion or {}).get("processing_status") or "")
     if processing_status in {"pending_processing", "processing_failed_retryable", "pending_admission"}:
         return ProcessingState.pending
+    if processing_status == "processing_blocked":
+        return ProcessingState.blocked
     if processing_status == "processed":
         return ProcessingState.processed
     return fallback
@@ -268,9 +400,7 @@ def _materialize_memory_item(
         item_revision=1,
         source_commit_id=commit_id,
         source_commit_sequence=sequence,
-        content_hash=deterministic_contract_id(
-            "memory-content", {"content": patch.memory_text, "evidence_ids": patch.evidence_ids}
-        ),
+        content_hash=memory_content_hash(content=patch.memory_text, evidence_ids=patch.evidence_ids),
         account_generation=account_generation,
         promotion=promotion,
         subject_entity_id=patch.subject_entity_id,
@@ -341,12 +471,9 @@ def _apply_update_memory_item(
         "item_revision": existing.item_revision + 1,
     }
     if patch.memory_text is not None and patch.memory_text.strip():
-        updates["content_hash"] = deterministic_contract_id(
-            "memory-content",
-            {
-                "content": patch.memory_text,
-                "evidence_ids": [item.evidence_id for item in (evidence or existing.evidence)],
-            },
+        updates["content_hash"] = memory_content_hash(
+            content=patch.memory_text,
+            evidence_ids=[item.evidence_id for item in (evidence or existing.evidence)],
         )
     if promotion_audit is not None:
         updates["promotion"] = promotion_audit
@@ -356,27 +483,62 @@ def _apply_update_memory_item(
         updates["predicate"] = patch.predicate
     if patch.arguments:
         updates["arguments"] = dict(patch.arguments)
+    if patch.target_visibility is not None:
+        updates["visibility"] = patch.target_visibility
+    if patch.target_user_asserted is not None:
+        updates["user_asserted"] = patch.target_user_asserted
     if extra_updates:
         updates.update(extra_updates)
+    if patch.clear_graph_assertion:
+        updates.update(
+            {
+                "subject_entity_id": None,
+                "predicate": None,
+                "arguments": {},
+                "graph_ready": False,
+                "graph_assertion_id": None,
+                "graph_plan_hash": None,
+                "kg_extracted": False,
+            }
+        )
     return existing.model_copy(update=updates)
 
 
 def _stale_operation(operation: MemoryOperation) -> MemoryOperation:
-    data = operation.dict()
+    data = operation.model_dump(mode="python")
     data.update({"status": MemoryOperationStatus.stale_generation, "updated_at": datetime.now(timezone.utc)})
     return MemoryOperation(**data)
 
 
-def _operation_digest_for_patch(patch: DurableMemoryPatch) -> str:
-    return logical_payload_digest(
-        {
-            "decision": patch.decision.value,
-            "memory_text": patch.memory_text,
-            "target_memory_id": patch.target_memory_id,
-            "result_status": patch.result_status.value,
-            "supersedes": patch.supersedes,
-        }
-    )
+def _operation_digest_for_patch(
+    patch: DurableMemoryPatch,
+    operation: MemoryOperation,
+    *,
+    mutation_identity: Dict[str, Any],
+) -> str:
+    logical_payload: Dict[str, Any] = {
+        "decision": patch.decision.value,
+        "memory_text": patch.memory_text,
+        "target_memory_id": patch.target_memory_id,
+        "result_status": patch.result_status.value,
+        "supersedes": patch.supersedes,
+        "arguments": patch.arguments,
+    }
+    if operation.logical_payload.subject_entity_id is not None:
+        logical_payload["subject_entity_id"] = patch.subject_entity_id
+    if operation.logical_payload.predicate is not None:
+        logical_payload["predicate"] = patch.predicate
+    if operation.logical_payload.target_tier is not None:
+        logical_payload["target_tier"] = patch.target_tier.value if patch.target_tier is not None else None
+    if operation.logical_payload.target_visibility is not None:
+        logical_payload["target_visibility"] = patch.target_visibility
+    if operation.logical_payload.target_user_asserted is not None:
+        logical_payload["target_user_asserted"] = patch.target_user_asserted
+    if operation.logical_payload.clear_graph_assertion is not None:
+        logical_payload["clear_graph_assertion"] = patch.clear_graph_assertion
+    if operation.logical_payload.mutation_metadata is not None:
+        logical_payload["mutation_metadata"] = mutation_identity
+    return logical_payload_digest(logical_payload)
 
 
 def _barrier_outbox_events(
@@ -423,7 +585,9 @@ def apply_long_term_patch_transaction(
     control head/generations, operation journal status, memory item mutation, and outbox append.
     """
     raw = dict(patch_payload)
+    mutation_identity = build_patch_mutation_identity(raw)
     existing_item_raw = raw.pop("existing_item", None)
+    superseded_items_raw = raw.pop("superseded_items", None)
     promotion_audit = raw.pop("promotion_audit", None)
     promotion_metadata = raw.pop("promotion", None)
     expected_item_revision = raw.pop("expected_item_revision", None)
@@ -439,6 +603,8 @@ def apply_long_term_patch_transaction(
         "kg_extracted",
         "confidence",
         "sensitivity_labels",
+        "capture_device_ids",
+        "primary_capture_device",
     ):
         if optional_key in raw:
             extra_item_updates[optional_key] = raw.pop(optional_key)
@@ -476,7 +642,21 @@ def apply_long_term_patch_transaction(
             operation=operation,
             reason=type(exc).__name__,
         )
-    if _operation_digest_for_patch(patch) != operation.logical_payload_digest:
+    if patch.evidence_ids != operation.evidence_ids:
+        return ApplyResult(
+            status=ApplyStatus.payload_mismatch,
+            control_state=control_state,
+            operation=operation,
+            reason="patch evidence_ids do not match operation evidence_ids",
+        )
+    if (
+        _operation_digest_for_patch(
+            patch,
+            operation,
+            mutation_identity=mutation_identity,
+        )
+        != operation.logical_payload_digest
+    ):
         return ApplyResult(
             status=ApplyStatus.payload_mismatch,
             control_state=control_state,
@@ -496,11 +676,29 @@ def apply_long_term_patch_transaction(
             reason="operation generation does not match control state",
         )
     if operation.observed_head_commit_id and operation.observed_head_commit_id != control_state.head_commit_id:
+        rebased_operation = operation.model_copy(
+            update={
+                "observed_head_commit_id": control_state.head_commit_id,
+                "attempt_count": operation.attempt_count + 1,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        )
         return ApplyResult(
             status=ApplyStatus.retryable_head_mismatch,
             control_state=control_state,
-            operation=operation,
+            operation=rebased_operation,
             reason="observed head does not match current head",
+        )
+
+    if (
+        operation.operation_type == MemoryOperationType.graph_enrichment
+        and patch.decision != DurablePatchDecision.update
+    ):
+        return ApplyResult(
+            status=ApplyStatus.invalid_patch,
+            control_state=control_state,
+            operation=operation,
+            reason="graph enrichment requires an update decision",
         )
 
     if any(item.source_state != SourceState.active for item in evidence):
@@ -529,6 +727,8 @@ def apply_long_term_patch_transaction(
             memory_items=[],
             outbox_events=outbox_events,
         )
+    transitioning_to_long_term = False
+    graph_enrichment = False
     if patch.decision == DurablePatchDecision.update:
         if existing_item_raw is None:
             return ApplyResult(
@@ -561,9 +761,97 @@ def apply_long_term_patch_transaction(
                 operation=operation,
                 reason="update patch expected_content_hash mismatch",
             )
-        if patch.target_tier == MemoryTier.long_term:
-            admission_metadata = promotion_audit if isinstance(promotion_audit, dict) else existing_item.promotion or {}
+        graph_enrichment = operation.operation_type == MemoryOperationType.graph_enrichment
+        if graph_enrichment:
+            raw_graph_plan = promotion_audit.get("graph_plan") if isinstance(promotion_audit, dict) else None
+            raw_receipt = promotion_audit.get("graph_enrichment_receipt") if isinstance(promotion_audit, dict) else None
+            try:
+                graph_plan = PromotionGraphPlan(**raw_graph_plan) if isinstance(raw_graph_plan, dict) else None
+            except Exception:
+                graph_plan = None
+            required_receipt_valid = not (existing_item.promotion or {}).get(
+                "required"
+            ) or valid_required_processing_receipt(
+                content=existing_item.content or "",
+                item_revision=existing_item.item_revision,
+                promotion=existing_item.promotion or {},
+            )
+            if not (
+                existing_item.status == MemoryItemStatus.active
+                and existing_item.tier == MemoryTier.long_term
+                and existing_item.processing_state == ProcessingState.processed
+                and not existing_item.graph_ready
+                and graph_plan is not None
+                and _valid_graph_enrichment_receipt(
+                    raw_receipt,
+                    operation=operation,
+                    existing_item=existing_item,
+                    control_state=control_state,
+                    graph_plan=graph_plan,
+                )
+                and required_receipt_valid
+                and not set(existing_item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+                and (existing_item.promotion or {}).get("user_review") is not False
+                and patch.target_tier is None
+                and patch.memory_text is None
+                and patch.target_visibility is None
+                and patch.target_user_asserted is None
+                and not patch.clear_graph_assertion
+                and not extra_item_updates
+                and promotion_metadata is None
+                and patch.result_status == LifecycleState.active
+                and not patch.supersedes
+                and patch.subject_entity_id == graph_plan.subject_entity_id
+                and (
+                    not existing_item.subject_entity_id
+                    or graph_plan.subject_entity_id == existing_item.subject_entity_id
+                )
+                and patch.predicate == graph_plan.predicate
+                and (not existing_item.predicate or graph_plan.predicate == existing_item.predicate)
+                and bool(_GRAPH_PREDICATE_RE.fullmatch(graph_plan.predicate))
+                and patch.arguments == graph_plan.arguments
+                and (not existing_item.arguments or graph_plan.arguments == existing_item.arguments)
+                and sorted(record.evidence_id for record in evidence)
+                == sorted(record.evidence_id for record in existing_item.evidence)
+            ):
+                return ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="graph enrichment must attach one validated plan without changing Long-term semantics",
+                )
+        if existing_item.tier == MemoryTier.long_term and existing_item.status == MemoryItemStatus.active:
+            proposed_evidence = evidence or existing_item.evidence
+            semantic_change = any(
+                (
+                    _resolved_update_content(existing_item, patch) != existing_item.content,
+                    [item.evidence_id for item in proposed_evidence]
+                    != [item.evidence_id for item in existing_item.evidence],
+                    (patch.subject_entity_id or existing_item.subject_entity_id) != existing_item.subject_entity_id,
+                    (patch.predicate or existing_item.predicate) != existing_item.predicate,
+                    (patch.arguments or existing_item.arguments) != existing_item.arguments,
+                )
+            )
+            explicit_short_term_demotion = patch.target_tier == MemoryTier.short_term and patch.clear_graph_assertion
+            if semantic_change and not explicit_short_term_demotion and not graph_enrichment:
+                return ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="Long-term semantics are immutable; promote a new Short-term item and supersede this one",
+                )
+        transitioning_to_long_term = (
+            existing_item.tier != MemoryTier.long_term and patch.target_tier == MemoryTier.long_term
+        )
+        if transitioning_to_long_term:
+            admission_metadata = promotion_audit if isinstance(promotion_audit, dict) else {}
             proposed_content = _resolved_update_content(existing_item, patch) or ""
+            proposed_evidence = evidence or existing_item.evidence
+            proposed_evidence_ids = [item.evidence_id for item in proposed_evidence]
+            proposed_content_hash = memory_content_hash(
+                content=proposed_content,
+                evidence_ids=proposed_evidence_ids,
+            )
             if admission_metadata.get("required") and not valid_required_processing_receipt(
                 content=proposed_content,
                 item_revision=existing_item.item_revision,
@@ -574,6 +862,26 @@ def apply_long_term_patch_transaction(
                     control_state=control_state,
                     operation=operation,
                     reason="required durable memory is missing processing receipt",
+                )
+            if (
+                not valid_promotion_admission(
+                    memory_id=existing_item.memory_id,
+                    source_item_revision=existing_item.item_revision,
+                    output_content_hash=proposed_content_hash,
+                    evidence_ids=proposed_evidence_ids,
+                    subject_entity_id=patch.subject_entity_id or existing_item.subject_entity_id,
+                    predicate=patch.predicate or existing_item.predicate,
+                    arguments=patch.arguments or existing_item.arguments,
+                    supersedes=patch.supersedes,
+                    promotion=admission_metadata,
+                )
+                or operation.operation_type != MemoryOperationType.synthesis
+            ):
+                return ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="Short-term to Long-term transition requires a current promotion admission and graph plan",
                 )
         memory_item = _apply_update_memory_item(
             existing=existing_item,
@@ -595,39 +903,165 @@ def apply_long_term_patch_transaction(
             promotion=promotion_metadata,
         )
         if extra_item_updates:
-            memory_item = MemoryItem(**{**memory_item.dict(), **extra_item_updates})
-    outbox_events = []
-    if (
-        memory_item.processing_state == ProcessingState.processed
-        and (memory_item.promotion or {}).get("user_review") is not False
-    ):
-        outbox_events = [
+            memory_item = MemoryItem(**{**memory_item.model_dump(), **extra_item_updates})
+
+    memory_items = [memory_item]
+    graph_assertions: List[MemoryGraphAssertion] = []
+    refresh_graph_assertion = (
+        transitioning_to_long_term
+        or graph_enrichment
+        or (
+            memory_item.tier == MemoryTier.long_term
+            and memory_item.status == MemoryItemStatus.active
+            and memory_item.graph_ready
+            and not patch.clear_graph_assertion
+        )
+    )
+    if refresh_graph_assertion:
+        admission_metadata = memory_item.promotion or {}
+        raw_graph_plan = admission_metadata.get("graph_plan")
+        if not isinstance(raw_graph_plan, dict):
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="active graph-backed Long-term update requires its stored graph plan",
+            )
+        try:
+            graph_plan = PromotionGraphPlan(**raw_graph_plan)
+        except Exception:
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="active graph-backed Long-term update has an invalid stored graph plan",
+            )
+        assertion = build_memory_graph_assertion(
+            uid=operation.uid,
+            memory_id=memory_item.memory_id,
+            item_revision=memory_item.item_revision,
+            content_hash=memory_item.content_hash or "",
+            evidence_ids=[item.evidence_id for item in memory_item.evidence],
+            graph_plan=graph_plan,
+            commit_id=commit_id,
+            commit_sequence=next_control.commit_sequence,
+            created_at=memory_item.updated_at,
+        )
+        memory_item = memory_item.model_copy(
+            update={
+                "graph_ready": True,
+                "graph_assertion_id": assertion.assertion_id,
+                "graph_plan_hash": graph_plan.plan_hash,
+                "kg_extracted": True,
+            }
+        )
+        memory_items = [memory_item]
+        graph_assertions = [assertion]
+
+    if patch.supersedes:
+        if not isinstance(superseded_items_raw, list):
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="superseding promotion requires authoritative superseded_items",
+            )
+        superseded_by_id = {
+            item.memory_id: item
+            for raw_item in superseded_items_raw
+            for item in [raw_item if isinstance(raw_item, MemoryItem) else MemoryItem(**raw_item)]
+        }
+        if set(superseded_by_id) != set(patch.supersedes):
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="superseded_items do not match patch supersedes",
+            )
+        for superseded_id in patch.supersedes:
+            existing_superseded = superseded_by_id[superseded_id]
+            if existing_superseded.status != MemoryItemStatus.active:
+                return ApplyResult(
+                    status=ApplyStatus.target_not_active,
+                    control_state=control_state,
+                    operation=operation,
+                    reason=f"superseded target is not active: {superseded_id}",
+                )
+            superseded_item = existing_superseded.model_copy(
+                update={
+                    "canonical_memory_id": memory_item.memory_id,
+                    "status": MemoryItemStatus.superseded,
+                    "superseded_by": memory_item.memory_id,
+                    "updated_at": max(datetime.now(timezone.utc), existing_superseded.updated_at),
+                    "ledger_commit_id": commit_id,
+                    "ledger_sequence": next_control.commit_sequence,
+                    "version": existing_superseded.version + 1,
+                    "item_revision": existing_superseded.item_revision + 1,
+                    "graph_ready": False,
+                    "graph_assertion_id": None,
+                    "graph_plan_hash": None,
+                    "kg_extracted": False,
+                }
+            )
+            memory_items.append(superseded_item)
+
+    outbox_events: List[MemoryOutboxEvent] = []
+    for changed_item in memory_items:
+        has_restricted_sensitivity = bool(
+            set(changed_item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS)
+        )
+        projection_eligible = (
+            changed_item.status == MemoryItemStatus.active
+            and changed_item.processing_state == ProcessingState.processed
+            and changed_item.tier in {MemoryTier.short_term, MemoryTier.long_term}
+            and (changed_item.promotion or {}).get("user_review") is not False
+            and not has_restricted_sensitivity
+        )
+        vector_eligible = (
+            changed_item.status == MemoryItemStatus.active
+            and changed_item.processing_state == ProcessingState.processed
+            and changed_item.tier in {MemoryTier.short_term, MemoryTier.long_term}
+            and (changed_item.promotion or {}).get("user_review") is not False
+            and not has_restricted_sensitivity
+        )
+        action_by_event_type = {
+            MemoryOutboxEventType.projection_sync: "upsert" if projection_eligible else "delete",
+            MemoryOutboxEventType.vector_sync: "upsert" if vector_eligible else "delete",
+        }
+        outbox_events.extend(
             MemoryOutboxEvent(
-                event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),
+                event_id=_event_id(event_type, commit_id, changed_item.memory_id, operation.operation_id),
                 uid=operation.uid,
                 event_type=event_type,
                 commit_id=commit_id,
                 parent_commit_id=control_state.head_commit_id,
                 commit_sequence=next_control.commit_sequence,
-                memory_id=memory_item.memory_id,
+                memory_id=changed_item.memory_id,
                 operation_id=operation.operation_id,
                 account_generation=control_state.account_generation,
                 source_generation=control_state.source_generation,
-                payload={"memory_id": memory_item.memory_id, "tier": memory_item.tier.value, "action": "upsert"},
+                payload={
+                    "memory_id": changed_item.memory_id,
+                    "tier": changed_item.tier.value,
+                    "action": action_by_event_type[event_type],
+                    "item_revision": changed_item.item_revision,
+                    "content_hash": changed_item.content_hash,
+                },
             )
             for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
-        ]
+        )
     committed_operation = operation.mark_committed(
         commit_id,
         committed_sequence=next_control.commit_sequence,
-        committed_memory_item_ids=[memory_item.memory_id],
+        committed_memory_item_ids=[item.memory_id for item in memory_items],
         committed_outbox_event_ids=[event.event_id for event in outbox_events],
     )
     return ApplyResult(
         status=ApplyStatus.committed,
         control_state=next_control,
         operation=committed_operation,
-        memory_items=[memory_item],
+        memory_items=memory_items,
+        graph_assertions=graph_assertions,
         outbox_events=outbox_events,
     )
 
@@ -640,4 +1074,6 @@ __all__ = [
     "MemoryOutboxEventType",
     "MemoryOutboxStatus",
     "apply_long_term_patch_transaction",
+    "build_patch_mutation_identity",
+    "memory_content_hash",
 ]

@@ -4,14 +4,13 @@ Verifies that is_locked conversations/memories/action_items are properly guarded
 in the Developer API write endpoints and knowledge graph rebuild.
 """
 
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
 import os
 import pytest
 import sys
 from types import ModuleType, SimpleNamespace
 
 from tests.unit.memory_import_isolation import (
-    WS_I_HEAVY_STUB_MODULE_NAMES,
     restore_sys_modules,
     snapshot_sys_modules,
 )
@@ -159,7 +158,6 @@ def _reinstall_dev_api_lock_bypass_stubs():
 def _install_legacy_safe_memory_developer_defaults(monkeypatch):
     """Keep dev API lock tests focused on lock checks rather than memory write gating."""
     import utils.memory.default_read_rollout as rollout
-    import utils.memory.developer_memory_adapter as developer_adapter
 
     def _legacy_rollout(uid='test-uid', **_kwargs):
         return rollout.legacy_safe_default_read_rollout_decision(
@@ -170,7 +168,6 @@ def _install_legacy_safe_memory_developer_defaults(monkeypatch):
         )
 
     allowed_write = rollout.LegacyMemoryWriteGuardDecision(allowed=True, detail={'enabled': True})
-    ready_gate = rollout.WriteConvergencePolicy(source_path='test/dev-convergence', ready=True)
 
     monkeypatch.setattr(
         rollout,
@@ -492,6 +489,18 @@ class TestDevApiActionItemLockEnforcement:
 class TestKnowledgeGraphLockEnforcement:
     """K1: Knowledge graph rebuild must exclude locked memories."""
 
+    @pytest.fixture(autouse=True)
+    def _legacy_graph_ownership(self, monkeypatch):
+        from routers import knowledge_graph as route
+        from utils.memory.memory_system import MemorySystem
+
+        monkeypatch.setattr(route, 'pin_memory_system', MagicMock(return_value=MemorySystem.LEGACY))
+        monkeypatch.setattr(
+            route.kg_db,
+            'has_stored_memory_graph_assertions',
+            MagicMock(return_value=False),
+        )
+
     def test_rebuild_filters_locked_memories(self):
         """K1: _rebuild_graph_task must filter out locked memories."""
         import database.memories as memories_db
@@ -571,51 +580,30 @@ class TestKnowledgeGraphLockEnforcement:
         args = rebuild_knowledge_graph.call_args[0]
         assert len(args[1]) == 1
 
-    def test_rebuild_reads_canonical_memories_via_memory_service(self):
-        """Canonical cohort must rebuild KG from MemoryService.read, not legacy DB."""
-        from datetime import datetime, timezone
-        from unittest.mock import patch
-
-        from models.memories import MemoryDB, MemoryCategory
+    def test_rebuild_aborts_when_account_is_canonical(self):
+        """Canonical graph assertions must never be replaced by the legacy LLM rebuild."""
         from utils.memory.memory_system import MemorySystem
         from utils.llm.knowledge_graph import rebuild_knowledge_graph
 
-        canonical_memory = MemoryDB(
-            id='mem-canonical',
-            uid='uid-canonical',
-            content='Canonical KG fact',
-            category=MemoryCategory.interesting,
-            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        )
-        service = MagicMock()
-        service.read.return_value = [canonical_memory]
         rebuild_knowledge_graph.reset_mock()
 
         import database.memories as memories_db
 
         with patch('routers.knowledge_graph.pin_memory_system', return_value=MemorySystem.CANONICAL):
-            with patch('routers.knowledge_graph.MemoryService', return_value=service):
-                with patch.object(memories_db, 'get_memories') as legacy_get:
-                    from routers.knowledge_graph import _rebuild_graph_task
+            with patch.object(memories_db, 'get_memories') as legacy_get:
+                from routers.knowledge_graph import _rebuild_graph_task
 
-                    _rebuild_graph_task('uid-canonical', 'Test User')
+                _rebuild_graph_task('uid-canonical', 'Test User')
 
-        service.read.assert_called_once_with('uid-canonical', limit=500)
         legacy_get.assert_not_called()
-        rebuild_knowledge_graph.assert_called_once()
-        passed_memories = rebuild_knowledge_graph.call_args[0][1]
-        assert passed_memories == [{'id': 'mem-canonical', 'content': 'Canonical KG fact'}]
+        rebuild_knowledge_graph.assert_not_called()
 
     def test_rebuild_reads_legacy_memories_via_memories_db(self):
         """Non-canonical cohort must keep legacy memories_db.get_memories."""
-        from unittest.mock import patch
-
         from utils.memory.memory_system import MemorySystem
         from utils.llm.knowledge_graph import rebuild_knowledge_graph
 
         legacy_mem = _make_memory(locked=False, memory_id='mem-legacy')
-        service = MagicMock()
         rebuild_knowledge_graph.reset_mock()
 
         import database.memories as memories_db
@@ -623,13 +611,11 @@ class TestKnowledgeGraphLockEnforcement:
         memories_db.get_memories = MagicMock(return_value=[legacy_mem])
 
         with patch('routers.knowledge_graph.pin_memory_system', return_value=MemorySystem.LEGACY):
-            with patch('routers.knowledge_graph.MemoryService', return_value=service):
-                from routers.knowledge_graph import _rebuild_graph_task
+            from routers.knowledge_graph import _rebuild_graph_task
 
-                _rebuild_graph_task('uid-legacy', 'Test User')
+            _rebuild_graph_task('uid-legacy', 'Test User')
 
         memories_db.get_memories.assert_called_once_with('uid-legacy', limit=500)
-        service.read.assert_not_called()
         rebuild_knowledge_graph.assert_called_once()
         assert rebuild_knowledge_graph.call_args[0][1][0]['id'] == 'mem-legacy'
 

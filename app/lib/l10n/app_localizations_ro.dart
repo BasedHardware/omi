@@ -1475,7 +1475,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get payYourSttProvider => 'Folosește Omi liber. Plătești doar furnizorul STT direct.';
 
   @override
-  String get freeMinutesMonth => '1.200 de minute gratuite/lună incluse. Nelimitat cu ';
+  String get freeMinutesMonth => '300 de minute gratuite/lună incluse. Nelimitat cu ';
 
   @override
   String get omiUnlimited => 'Omi Nelimitat';
@@ -4730,7 +4730,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Niciun acces specific la date configurat.';
 
   @override
-  String get basicPlanDescription => '1.200 minute premium + nelimitat pe dispozitiv';
+  String get basicPlanDescription => '300 minute premium + nelimitat pe dispozitiv';
 
   @override
   String get minutes => 'minute';
@@ -6025,8 +6025,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get cloudProvider => 'Furnizor cloud';
 
   @override
-  String get premiumMinutesInfo =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
+  String get premiumMinutesInfo => '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată.';
 
   @override
   String get viewUsage => 'Vizualizați utilizarea';
@@ -6109,7 +6108,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
+      '300 minute premium/lună. Fila Pe dispozitiv oferă transcriere gratuită nelimitată. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9818,4 +9817,7 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Nu s-a putut conecta la acel microfon. Asigură-te că este conectat în Configurările iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';
 }

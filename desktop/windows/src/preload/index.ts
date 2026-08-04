@@ -370,7 +370,9 @@ const omi: OmiBridgeApi = {
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
   rewindRebuildIndex: () => ipcRenderer.invoke('rewind:rebuildIndex'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
-  rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
+  rewindCaptureSourceId: () => ipcRenderer.invoke('rewind:captureSourceId'),
+  rewindSaveFrame: (data: Uint8Array, sourceId: string) =>
+    ipcRenderer.invoke('rewind:saveFrame', data, sourceId),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
   codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) =>
     ipcRenderer.invoke('codingAgent:list', commandOverrides),
@@ -484,6 +486,11 @@ const omi: OmiBridgeApi = {
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),
   screenSynthAdvanceWatermark: (ts) => ipcRenderer.invoke('screenSynth:advanceWatermark', ts),
   screenSynthRecordRun: (run) => ipcRenderer.invoke('screenSynth:recordRun', run),
+  onRewindCaptureNow: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('rewind:capture-now', listener)
+    return () => ipcRenderer.removeListener('rewind:capture-now', listener)
+  },
   onRewindSettings: (cb: (s: RewindSettings) => void) => {
     const listener = (_e: unknown, s: RewindSettings): void => cb(s)
     ipcRenderer.on('rewind:settings', listener)
@@ -674,6 +681,7 @@ const omi: OmiBridgeApi = {
   getBetaUpdatesOptIn: () => ipcRenderer.invoke('update:get-beta-optin'),
   setBetaUpdatesOptIn: (enabled: boolean) => ipcRenderer.invoke('update:set-beta-optin', enabled),
   getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
+  installUpdateNow: () => ipcRenderer.invoke('update:install-now'),
   suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
   resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture'),
   // --- Track 6 (UI surfaces) additions ---

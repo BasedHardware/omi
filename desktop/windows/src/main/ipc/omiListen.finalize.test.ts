@@ -40,6 +40,10 @@ const h = vi.hoisted(() => {
       this.readyState = FakeWebSocket.OPEN
       for (const fn of this.listeners.get('open') ?? []) fn()
     }
+    simulateClose(code = 1006, reason = ''): void {
+      this.readyState = FakeWebSocket.CLOSED
+      for (const fn of this.listeners.get('close') ?? []) fn(code, Buffer.from(reason))
+    }
   }
   const ipcHandlers = new Map<string, (...args: unknown[]) => void>()
   return { FakeWebSocket, ipcHandlers }
@@ -56,17 +60,24 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { registerOmiListenHandlers } from './omiListen'
+import { isListenSessionOwnedBy, registerOmiListenHandlers } from './omiListen'
 
 const ipc = {
   start: (sessionId: string, ownerId = 1, mode = 'ptt') =>
     h.ipcHandlers.get('omi-listen:start')!(
-      { sender: { id: ownerId } },
+      { sender: { id: ownerId, once: vi.fn() } },
       { sessionId, token: 'tok', language: 'en', source: 'mic', mode }
     ),
-  feed: (sessionId: string, bytes: number) =>
-    h.ipcHandlers.get('omi-listen:feed')!(null, sessionId, new ArrayBuffer(bytes)),
-  finalize: (sessionId: string) => h.ipcHandlers.get('omi-listen:finalize')!(null, sessionId)
+  feed: (sessionId: string, bytes: number, ownerId = 1) =>
+    h.ipcHandlers.get('omi-listen:feed')!(
+      { sender: { id: ownerId } },
+      sessionId,
+      new ArrayBuffer(bytes)
+    ),
+  finalize: (sessionId: string, ownerId = 1) =>
+    h.ipcHandlers.get('omi-listen:finalize')!({ sender: { id: ownerId } }, sessionId),
+  stop: (sessionId: string, ownerId = 1) =>
+    h.ipcHandlers.get('omi-listen:stop')!({ sender: { id: ownerId } }, sessionId)
 }
 
 function lastWs(): InstanceType<typeof h.FakeWebSocket> {
@@ -74,10 +85,16 @@ function lastWs(): InstanceType<typeof h.FakeWebSocket> {
 }
 
 beforeAll(() => {
-  registerOmiListenHandlers()
+  registerOmiListenHandlers((ownerId) => ownerId !== 99)
 })
 
 describe('PTT stream lane', () => {
+  it('rejects session creation from an untrusted window', () => {
+    expect(() => ipc.start('denied-lane', 99)).toThrow(
+      'listen session is not allowed from this window'
+    )
+  })
+
   it('buffers pre-OPEN audio and flushes it in order on open', () => {
     ipc.start('flush-1')
     const ws = lastWs()
@@ -122,7 +139,7 @@ describe('PTT stream lane', () => {
     expect(first.sent).toHaveLength(0)
   })
 
-  it('does not supersede a different window\'s PTT session', () => {
+  it("does not supersede a different window's PTT session", () => {
     ipc.start('win1-hold', 11)
     const first = lastWs()
     ipc.start('win2-hold', 12)
@@ -142,7 +159,34 @@ describe('PTT stream lane', () => {
     ipc.start('screen-sys', 22, 'transcribe')
     const ws = lastWs()
     ws.simulateOpen()
-    ipc.finalize('screen-sys')
+    ipc.finalize('screen-sys', 22)
     expect(ws.sent).toContain('finalize')
+  })
+
+  it('rejects cross-window feed, finalize, and stop operations', () => {
+    ipc.start('owned-lane', 31, 'transcribe')
+    const ws = lastWs()
+    ws.simulateOpen()
+
+    ipc.feed('owned-lane', 64, 32)
+    ipc.finalize('owned-lane', 32)
+    ipc.stop('owned-lane', 32)
+
+    expect(ws.sent).toHaveLength(0)
+    expect(ws.readyState).toBe(h.FakeWebSocket.OPEN)
+    ipc.stop('owned-lane', 31)
+    expect(ws.readyState).toBe(h.FakeWebSocket.CLOSED)
+  })
+
+  it('retains ownership after a socket drop so the owner can stop local audio', () => {
+    ipc.start('dropped-lane', 41, 'transcribe')
+    const ws = lastWs()
+    ws.simulateClose()
+
+    expect(isListenSessionOwnedBy('dropped-lane', 41)).toBe(true)
+    expect(isListenSessionOwnedBy('dropped-lane', 42)).toBe(false)
+
+    ipc.stop('dropped-lane', 41)
+    expect(isListenSessionOwnedBy('dropped-lane', 41)).toBe(false)
   })
 })

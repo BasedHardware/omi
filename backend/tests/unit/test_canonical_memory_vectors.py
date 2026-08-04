@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from tests.unit.memory_import_isolation import (
     WS_I_HEAVY_STUB_MODULE_NAMES,
     restore_sys_modules,
@@ -43,16 +42,16 @@ def _vector_db_stub_isolation():
 from database.memory_vector_metadata import (
     MEMORY_VECTOR_SCHEMA_VERSION,
     build_archive_memory_vector_filter,
+    build_canonical_memory_vector_delete_filter,
     build_default_memory_vector_filter,
     build_memory_vector_metadata,
+    canonical_memory_provider_id,
     parse_memory_search_vector_hit,
 )
-from database.memory_vector_metadata import build_memory_vector_metadata
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 
 _FIXTURE_NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -60,6 +59,7 @@ _FIXTURE_NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 def _item(
     memory_id="mem_abc123",
     *,
+    uid="uid-canonical",
     tier=MemoryTier.short_term,
     status=MemoryItemStatus.active,
     processing_state=ProcessingState.processed,
@@ -69,7 +69,7 @@ def _item(
     now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
     return MemoryItem(
         memory_id=memory_id,
-        uid="uid-canonical",
+        uid=uid,
         version=2,
         tier=tier,
         status=status,
@@ -129,6 +129,7 @@ def _metadata_matches_filter(metadata, pinecone_filter):
 
 class _RecordingIndex:
     def __init__(self):
+        self.deletes = []
         self.upserts = []
         self.queries = []
         self._vectors = {}
@@ -161,8 +162,32 @@ class _RecordingIndex:
         matches.sort(key=lambda match: match["id"])
         return {"matches": matches[:top_k]}
 
+    def delete(self, *, ids=None, filter=None, namespace):
+        if ids is not None and filter is not None:
+            raise ValueError("delete accepts ids or filter, not both")
+        vector_ids = list(ids or [])
+        if filter is not None:
+            vector_ids = [
+                vector_id
+                for vector_id, stored in self._vectors.items()
+                if _metadata_matches_filter(stored["metadata"], filter)
+            ]
+        self.deletes.append(
+            {
+                "ids": list(ids) if ids is not None else None,
+                "filter": filter,
+                "namespace": namespace,
+            }
+        )
+        for vector_id in vector_ids:
+            self._vectors.pop(vector_id, None)
+        return {"deleted_count": len(vector_ids)}
+
 
 class _FailingIndex:
+    def delete(self, **kwargs):
+        return {"deleted_count": 0}
+
     def upsert(self, **kwargs):
         raise RuntimeError("pinecone unavailable")
 
@@ -196,6 +221,31 @@ def _install_recording_vector_db(monkeypatch):
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
     sys.modules["database.vector_db"] = vector_db
     return vector_db, fake_index
+
+
+@pytest.fixture
+def canonical_write_support(monkeypatch, _vector_db_stub_isolation):
+    from tests.unit.test_ws_i_write_convergence import (
+        _FakeDb,
+        _fresh_short_term_item,
+        _sample_memory_payload,
+        _stored_item,
+        _trusted_account_generation,
+        extraction_memory_id,
+        write_canonical_extraction_memory,
+    )
+
+    _vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    return SimpleNamespace(
+        FakeDb=_FakeDb,
+        fresh_short_term_item=_fresh_short_term_item,
+        sample_memory_payload=_sample_memory_payload,
+        stored_item=_stored_item,
+        trusted_account_generation=_trusted_account_generation,
+        extraction_memory_id=extraction_memory_id,
+        write_canonical_extraction_memory=write_canonical_extraction_memory,
+        fake_index=fake_index,
+    )
 
 
 def test_build_memory_vector_metadata_uses_neutral_keys_not_memory():
@@ -238,7 +288,7 @@ def test_parse_memory_search_vector_hit_rejects_legacy_memory_tier_metadata():
     assert parsed.decision == SearchDecision.stale_vector
 
 
-def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypatch):
+def test_upsert_canonical_memory_vector_writes_user_scoped_id_and_metadata(monkeypatch):
     vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
     item = _item(memory_id="mem_hash001", tier=MemoryTier.short_term)
@@ -246,11 +296,103 @@ def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypat
 
     assert len(fake_index.upserts) == 1
     payload = fake_index.upserts[0]["vectors"][0]
-    assert payload["id"] == "mem_hash001"
-    assert not payload["id"].startswith("memvec:")
+    assert payload["id"] == canonical_memory_provider_id("uid-canonical", "mem_hash001")
     assert payload["metadata"]["memory_schema_version"] == MEMORY_VECTOR_SCHEMA_VERSION
     assert payload["metadata"]["memory_layer"] == "short_term"
     assert fake_index.upserts[0]["namespace"] == "ns2"
+
+
+def test_upsert_canonical_memory_vector_fails_closed_when_migration_cleanup_fails(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+
+    def fail_cleanup(**kwargs):
+        raise RuntimeError("pinecone cleanup unavailable")
+
+    monkeypatch.setattr(fake_index, "delete", fail_cleanup)
+
+    with pytest.raises(RuntimeError, match="cleanup unavailable"):
+        vector_db.upsert_canonical_memory_vector(_item(memory_id="mem_cleanup_failed"))
+
+    assert fake_index.upserts == []
+
+
+def test_same_memory_id_isolated_by_uid_across_pinecone_upsert_search_and_delete(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    from utils.memory.canonical_vector_sync import delete_canonical_memory_vector
+
+    memory_id = "content-derived-shared-id"
+    first_uid = "uid-first"
+    second_uid = "uid-second"
+    first = _item(memory_id=memory_id, uid=first_uid, tier=MemoryTier.long_term)
+    second = _item(memory_id=memory_id, uid=second_uid, tier=MemoryTier.long_term)
+
+    fake_index._vectors[memory_id] = {
+        "id": memory_id,
+        "values": [0.1, 0.2, 0.3],
+        "metadata": {"uid": first_uid, "memory_id": memory_id},
+    }
+    vector_db.upsert_canonical_memory_vector(first)
+    assert memory_id not in fake_index._vectors
+    vector_db.upsert_canonical_memory_vector(second)
+
+    first_provider_id = canonical_memory_provider_id(first_uid, memory_id)
+    second_provider_id = canonical_memory_provider_id(second_uid, memory_id)
+    assert first_provider_id != second_provider_id
+    assert set(fake_index._vectors) == {first_provider_id, second_provider_id}
+    assert [hit.memory_id for hit in vector_db.query_memory_vector_candidates(first_uid, "content").hits] == [memory_id]
+    assert [hit.memory_id for hit in vector_db.query_memory_vector_candidates(second_uid, "content").hits] == [
+        memory_id
+    ]
+
+    # A stale bare-ID row that predates the migration is removed alongside
+    # this user's scoped row, without touching another user's projection.
+    fake_index._vectors[memory_id] = {
+        "id": memory_id,
+        "values": [0.1, 0.2, 0.3],
+        "metadata": {"uid": first_uid, "memory_id": memory_id},
+    }
+    assert delete_canonical_memory_vector(first_uid, memory_id) is True
+    assert fake_index.deletes[-1] == {
+        "ids": None,
+        "filter": build_canonical_memory_vector_delete_filter(first_uid, memory_id),
+        "namespace": "ns2",
+    }
+    assert set(fake_index._vectors) == {second_provider_id}
+    assert vector_db.query_memory_vector_candidates(first_uid, "content").hits == []
+    assert [hit.memory_id for hit in vector_db.query_memory_vector_candidates(second_uid, "content").hits] == [
+        memory_id
+    ]
+
+
+def test_account_purge_removes_all_uid_rows_across_provider_id_generations(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    memory_id = "content-derived-shared-id"
+    first_uid = "uid-first"
+    second_uid = "uid-second"
+    first = _item(memory_id=memory_id, uid=first_uid, tier=MemoryTier.long_term)
+    second = _item(memory_id=memory_id, uid=second_uid, tier=MemoryTier.long_term)
+    vector_db.upsert_canonical_memory_vector(first)
+    vector_db.upsert_canonical_memory_vector(second)
+
+    fake_index._vectors[memory_id] = {
+        "id": memory_id,
+        "values": [0.1, 0.2, 0.3],
+        "metadata": {"uid": first_uid, "memory_id": memory_id},
+    }
+    fake_index._vectors["memvec:retired-revision-id"] = {
+        "id": "memvec:retired-revision-id",
+        "values": [0.1, 0.2, 0.3],
+        "metadata": {"uid": first_uid, "memory_id": "another-memory"},
+    }
+
+    assert vector_db.delete_canonical_memory_vectors(first_uid) is True
+
+    assert set(fake_index._vectors) == {canonical_memory_provider_id(second_uid, memory_id)}
+    assert fake_index.deletes[-1] == {
+        "ids": None,
+        "filter": build_canonical_memory_vector_delete_filter(first_uid),
+        "namespace": "ns2",
+    }
 
 
 def test_upsert_canonical_memory_vector_strips_null_optional_metadata(monkeypatch):
@@ -408,29 +550,40 @@ def test_sync_canonical_memory_vector_swallows_pinecone_failure(monkeypatch):
     assert hard_failures == [1]
 
 
-def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
-    from tests.unit.test_ws_i_write_convergence import (
-        _FakeDb,
-        _fresh_short_term_item,
-        _sample_memory_payload,
-        _stored_item,
-        _trusted_account_generation,
-        extraction_memory_id,
-        write_canonical_extraction_memory,
+def test_sync_canonical_memory_vector_deletes_restricted_item_without_upsert(monkeypatch):
+    from utils.memory import canonical_vector_sync
+
+    deleted = []
+    upserted = []
+    vector_db = types.ModuleType("database.vector_db")
+    vector_db.upsert_canonical_memory_vector = lambda *args, **kwargs: upserted.append((args, kwargs))
+    sys.modules["database.vector_db"] = vector_db
+    monkeypatch.setattr(
+        canonical_vector_sync,
+        "delete_canonical_memory_vector",
+        lambda uid, memory_id: (deleted.append((uid, memory_id)), True)[1],
     )
 
-    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    synced = canonical_vector_sync.sync_canonical_memory_vector(_item(sensitive=True))
+
+    assert synced is True
+    assert deleted == [("uid-canonical", "mem_abc123")]
+    assert upserted == []
+
+
+def test_write_path_does_not_fast_sync_vector_on_idempotent_skip(canonical_write_support):
+    support = canonical_write_support
     uid = "uid-canonical"
     conversation_id = "conv-1"
     content = "User enjoys hiking"
-    memory_id = extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
-    committed_item = _fresh_short_term_item(
+    memory_id = support.extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
+    committed_item = support.fresh_short_term_item(
         uid=uid,
         memory_id=memory_id,
         conversation_id=conversation_id,
         content=content,
     )
-    db = _FakeDb(
+    db = support.FakeDb(
         {
             f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
@@ -442,7 +595,7 @@ def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
                 source_version="v1",
                 artifact_preservation=ArtifactPreservationState.preserved,
             ).model_dump(mode="json"),
-            f"users/{uid}/memory_items/{memory_id}": _stored_item(committed_item),
+            f"users/{uid}/memory_items/{memory_id}": support.stored_item(committed_item),
         }
     )
     apply_result = SimpleNamespace(
@@ -458,22 +611,19 @@ def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
         return_value=apply_result,
     ), patch(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
-        return_value=_trusted_account_generation(),
-    ), patch(
-        "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
-        return_value=None,
+        return_value=support.trusted_account_generation(),
     ):
-        returned_id = write_canonical_extraction_memory(
-            uid, _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content), db_client=db
+        returned_id = support.write_canonical_extraction_memory(
+            uid,
+            support.sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content),
+            db_client=db,
         )
 
     assert returned_id == memory_id
-    assert len(fake_index.upserts) == 1
-    assert fake_index.upserts[0]["vectors"][0]["id"] == memory_id
-    assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "short_term"
+    assert support.fake_index.upserts == []
 
 
-def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
+def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     from tests.unit.test_ws_i_write_convergence import _install_heavy_import_stubs
 
     _install_heavy_import_stubs()
@@ -526,9 +676,6 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
         "utils.memory.legacy_backfill.apply_long_term_patch_firestore",
         return_value=apply_result,
     ), patch(
-        "utils.memory.legacy_backfill._ensure_backfill_operation",
-        return_value=SimpleNamespace(operation_id="op-1"),
-    ), patch(
         "utils.memory.legacy_backfill._persist_evidence",
         return_value=None,
     ), patch(
@@ -537,9 +684,6 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
     ), patch(
         "utils.memory.legacy_backfill.legacy_backfill_memory_id",
         return_value=canonical_memory_id,
-    ), patch(
-        "utils.memory.legacy_backfill.sync_atom_keyword_index_for_item",
-        return_value=True,
     ):
         row_result = _apply_one_legacy_row(
             uid=uid,
@@ -554,159 +698,4 @@ def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
     assert row_result.skip_reason == "idempotent_skip"
     assert row_result.vector_sync_failed is False
     assert row_result.keyword_sync_succeeded is True
-    assert len(fake_index.upserts) == 1
-    assert fake_index.upserts[0]["vectors"][0]["id"] == canonical_memory_id
-    assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
-
-
-def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
-    from utils.memory.short_term_promotion import promote_short_term_item_via_apply
-
-    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
-    uid = "uid-canonical"
-    set_canonical_cohort(monkeypatch, uid)
-    memory_id = "mem_promote"
-    short_item = _item(memory_id=memory_id, tier=MemoryTier.short_term).model_copy(update={"uid": uid})
-    long_item = short_item.model_copy(update={"tier": MemoryTier.long_term})
-
-    vector_db.upsert_canonical_memory_vector(short_item)
-
-    class _PromotionDb:
-        def document(self, path):
-            return SimpleNamespace(
-                get=lambda: SimpleNamespace(exists=False),
-                set=lambda *args, **kwargs: None,
-            )
-
-    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
-
-    committed_apply = SimpleNamespace(
-        status=ApplyStatus.committed,
-        memory_items=[long_item],
-        operation=SimpleNamespace(committed_memory_item_ids=[memory_id]),
-    )
-    with patch(
-        "utils.memory.short_term_promotion.apply_long_term_patch_firestore",
-        return_value=committed_apply,
-    ), patch(
-        "utils.memory.short_term_promotion._ensure_promotion_operation",
-        return_value=SimpleNamespace(operation_id="op-promo"),
-    ), patch(
-        "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        return_value=True,
-    ), patch(
-        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        return_value=CanonicalKgPromotionResult(attempted=True, success=True),
-    ):
-        promoted, _, _, keyword_sync_succeeded = promote_short_term_item_via_apply(
-            uid,
-            short_item,
-            control=control,
-            run_id="promo-run",
-            trigger_reason="batch_threshold",
-            now=now,
-            db_client=_PromotionDb(),
-        )
-    assert keyword_sync_succeeded is True
-
-    idempotent_apply = SimpleNamespace(
-        status=ApplyStatus.idempotent_skip,
-        memory_items=[],
-        operation=SimpleNamespace(committed_memory_item_ids=[memory_id]),
-    )
-
-    class _PromotionDbWithItem:
-        def document(self, path):
-            if path.endswith(memory_id):
-                return SimpleNamespace(
-                    get=lambda: SimpleNamespace(
-                        exists=True,
-                        to_dict=lambda: long_item.model_dump(mode="json"),
-                    ),
-                )
-            return SimpleNamespace(get=lambda: SimpleNamespace(exists=False), set=lambda *a, **k: None)
-
-    with patch(
-        "utils.memory.short_term_promotion.apply_long_term_patch_firestore",
-        return_value=idempotent_apply,
-    ), patch(
-        "utils.memory.short_term_promotion._ensure_promotion_operation",
-        return_value=SimpleNamespace(operation_id="op-promo-2"),
-    ), patch(
-        "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        return_value=True,
-    ), patch(
-        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        return_value=CanonicalKgPromotionResult(attempted=True, success=True),
-    ):
-        promoted, _, _, keyword_sync_succeeded = promote_short_term_item_via_apply(
-            uid,
-            short_item,
-            control=control,
-            run_id="promo-run-2",
-            trigger_reason="batch_threshold",
-            now=now,
-            db_client=_PromotionDbWithItem(),
-        )
-    assert keyword_sync_succeeded is True
-
-    vector_ids = [upsert["vectors"][0]["id"] for upsert in fake_index.upserts]
-    assert vector_ids == [memory_id, memory_id, memory_id]
-    assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "short_term"
-    assert fake_index.upserts[1]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
-    assert fake_index.upserts[2]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
-    assert len(fake_index._vectors) == 1
-    assert fake_index._vectors[memory_id]["metadata"]["memory_layer"] == "long_term"
-
-
-def test_promotion_vector_sync_failure_increments_report(monkeypatch):
-    from datetime import datetime, timezone
-
-    from utils.memory.short_term_promotion import run_canonical_short_term_promotion
-
-    vector_db = _load_vector_db_with_stubs()
-    monkeypatch.setattr(vector_db, "index", _FailingIndex())
-    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
-    sys.modules["database.vector_db"] = vector_db
-
-    from tests.unit.test_ws_b_short_term_lifecycle import (
-        _canonical_db_with_control,
-        _seed_canonical_short_term,
-        _set_canonical_cohort,
-    )
-
-    now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
-    uid = "uid-canonical-vector-fail"
-    _set_canonical_cohort(monkeypatch, uid)
-    monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
-        lambda *_args, **_kwargs: True,
-    )
-    monkeypatch.setattr(
-        "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
-        lambda *_args, **_kwargs: True,
-    )
-    monkeypatch.setattr(
-        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-        lambda *_args, **_kwargs: CanonicalKgPromotionResult(attempted=True, success=True),
-    )
-    db = _canonical_db_with_control(uid)
-    threshold = 25
-    for index in range(threshold):
-        _seed_canonical_short_term(
-            db,
-            uid=uid,
-            conversation_id=f"conv-vector-fail-{index}",
-            content=f"Fact {index}",
-            monkeypatch=monkeypatch,
-        )
-
-    report = run_canonical_short_term_promotion(uid, db_client=db, now=now, run_id="promo-vector-fail")
-
-    assert report.trigger_reason == "batch_threshold"
-    assert report.promoted_count == threshold
-    assert report.vector_sync_failures == threshold
-    for memory_id in report.promoted_memory_ids:
-        stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
-        assert stored["tier"] == MemoryTier.long_term.value
+    assert fake_index.upserts == []

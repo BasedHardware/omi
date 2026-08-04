@@ -10,6 +10,7 @@ from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,32 @@ def _artifact_ref(
     if source_url:
         ref['url'] = source_url
     return ref
+
+
+def _capture_external_memory_write(uid: str, *, source: str, memories: List[MemoryDB]) -> None:
+    if not memories:
+        return
+    capture = SurfaceParityCapture.from_environ(
+        principal_id=uid,
+        session_id=f"{source}:{memories[0].id}",
+        surface="memory_write",
+        source=source,
+        provider_lane="memory",
+        route_or_model="external-memory-write",
+        request={"memory_count": len(memories), "source": source},
+    )
+    payload = [
+        {
+            "id": memory.id,
+            "content": (memory.content or "")[:8192],
+            "category": memory.category.value,
+            "source_type": memory.evidence[0].source_type if memory.evidence else "unknown",
+        }
+        for memory in memories[:100]
+    ]
+    capture.observe("client", {"type": "external_memory_write_request", "memories": payload})
+    capture.observe("inbound", {"type": "accepted_memories", "memories": payload})
+    capture.persist()
 
 
 def process_external_integration_memory(
@@ -144,6 +171,8 @@ def process_external_integration_memory(
                 [memory_write_payload(fact_db, MemoryApiExposure.LEGACY) for fact_db in saved_memories],
             )
 
+        _capture_external_memory_write(uid, source=f"integration_{app_id}", memories=saved_memories)
+
     return saved_memories
 
 
@@ -188,5 +217,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
                 uid,
                 [memory_write_payload(memory_db, MemoryApiExposure.LEGACY) for memory_db in saved_memories],
             )
+
+        _capture_external_memory_write(uid, source=f"twitter_{persona_id}", memories=saved_memories)
 
     return saved_memories

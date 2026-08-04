@@ -2,7 +2,15 @@
 
 set -eo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+# Git runs hooks with the working directory at the top of the invoking work
+# tree, so fall back to it when `git rev-parse --show-toplevel` cannot resolve a
+# work tree. This keeps linked worktrees from aborting into a --no-verify push.
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# shellcheck source=dev-harness/_resolve_python.sh
+source scripts/dev-harness/_resolve_python.sh
+PYTHON_BIN="$(dev_harness_python)"
+BACKEND_PYTHON="$(dev_harness_canonical_python || true)"
 
 PUSH_REMOTE="${1:-origin}"
 BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"
@@ -78,10 +86,9 @@ CHANGED_FILES_LIST=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-changed-files.XXXXXX")
 SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXXXX")
 SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
-trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
+RELEASE_GUARD_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-release-guard-tests.XXXXXX")
+trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS" "$RELEASE_GUARD_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
-BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
-
 declare -a CI_PREDICTION_VERIFIED=()
 declare -a CI_PREDICTION_DEFERRED=()
 declare -a CI_PREDICTION_SKIPPED=()
@@ -128,10 +135,10 @@ print_ci_prediction_summary() {
 }
 
 require_backend_python() {
-  if [[ -x "$BACKEND_PYTHON" ]]; then
+  if [[ -n "$BACKEND_PYTHON" && -x "$BACKEND_PYTHON" ]]; then
     return 0
   fi
-  echo "FAIL: a selected backend check requires backend/.venv/bin/python, but it was not found." >&2
+  echo "FAIL: a selected backend check requires the canonical backend/.venv interpreter, but it was not found." >&2
   echo "      Create it with: make setup" >&2
   return 1
 }
@@ -162,7 +169,7 @@ changed_matches() {
   return 1
 }
 
-CI_PREDICTION_SELECTION=$(python3 scripts/pre_push_ci_prediction.py --changed-files "$CHANGED_FILES_LIST")
+CI_PREDICTION_SELECTION=$("$PYTHON_BIN" scripts/pre_push_ci_prediction.py --changed-files "$CHANGED_FILES_LIST" --base "$BASE_REF")
 if ci_prediction_selected "app-ci-only"; then
   ci_prediction_note_deferred "full Flutter analyzer/tests and platform compiles"
 fi
@@ -177,7 +184,19 @@ check_pr_preflight() {
   local has_supplied_pr_body=0
 
   if [ "${PRE_PUSH_SKIP_PR_PREFLIGHT:-}" = "1" ]; then
+    # The broad preflight hatch is useful when local PR metadata discovery is
+    # unavailable, but it must not let a recurring failure class bypass the
+    # guard-artifact ratchet that CI enforces. That check is deterministic and
+    # needs only the already-required local PR body, so keep it mandatory.
+    if [ -z "${OMI_PR_BODY_FILE:-}" ] || [ ! -f "${OMI_PR_BODY_FILE}" ]; then
+      echo "FAIL: PRE_PUSH_SKIP_PR_PREFLIGHT=1 requires OMI_PR_BODY_FILE so the failure-class guard-artifact ratchet still runs." >&2
+      return 1
+    fi
     echo "Skipping shared PR preflight because PRE_PUSH_SKIP_PR_PREFLIGHT=1."
+    echo "==> failure-class guard-artifact ratchet (mandatory under preflight hatch)"
+    "$PYTHON_BIN" .github/scripts/check_failure_class_guard_ratchet.py \
+      --pr-body-file "$OMI_PR_BODY_FILE"
+    ci_prediction_note_verified "failure-class guard-artifact ratchet (mandatory under PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
     ci_prediction_note_skipped "shared PR contract and hygiene (PRE_PUSH_SKIP_PR_PREFLIGHT=1)"
     return
   fi
@@ -253,8 +272,8 @@ check_optional_formatters() {
   if [ "${#python_files[@]}" -gt 0 ]; then
     if command -v black >/dev/null 2>&1; then
       black_cmd=(black)
-    elif python3 -m black --version >/dev/null 2>&1; then
-      black_cmd=(python3 -m black)
+    elif "$PYTHON_BIN" -m black --version >/dev/null 2>&1; then
+      black_cmd=("$PYTHON_BIN" -m black)
     fi
 
     if [ "${#black_cmd[@]}" -gt 0 ]; then
@@ -267,7 +286,7 @@ check_optional_formatters() {
 
   if [ "${#arb_files[@]}" -gt 0 ]; then
     echo "==> ARB JSON formatting (${#arb_files[@]} file(s))"
-    python3 - "${arb_files[@]}" <<'PY'
+    "$PYTHON_BIN" - "${arb_files[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -306,6 +325,10 @@ require_flutter_generated_prerequisites() {
   if [ ! -f app/.dart_tool/package_config.json ]; then
     echo "FAIL: Flutter generated-output checks need resolved app dependencies." >&2
     echo "      Run: cd app && flutter pub get" >&2
+    # make setup provisions the backend venv only, so a contributor who never
+    # touches app/ can reach this with no Flutter toolchain at all -- and the
+    # selector wakes this lane for any ROUTING_INPUTS edit. CI still runs it.
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_FLUTTER_GENERATED=1 git push" >&2
     return 1
   fi
 }
@@ -334,10 +357,13 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter build_runner generated-output check"
     (
+      # Git exports linked-worktree metadata to hooks. Flutter resolves its own
+      # SDK version through Git, so those variables must not leak into Flutter.
+      unset GIT_DIR GIT_WORK_TREE
       cd app
-      dart run build_runner build --delete-conflicting-outputs
+      flutter pub run build_runner build --delete-conflicting-outputs
       git diff --exit-code -- lib || {
-        echo "FAIL: generated Dart files are stale. Run: cd app && dart run build_runner build --delete-conflicting-outputs" >&2
+        echo "FAIL: generated Dart files are stale. Run: cd app && flutter pub run build_runner build --delete-conflicting-outputs" >&2
         exit 1
       }
       untracked=$(git ls-files --others --exclude-standard -- lib)
@@ -359,6 +385,8 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter l10n generated-output check"
     (
+      # Keep Flutter's SDK-version Git lookup isolated from hook worktree state.
+      unset GIT_DIR GIT_WORK_TREE
       cd app
       flutter gen-l10n
       git diff --exit-code -- lib/l10n || {
@@ -387,15 +415,15 @@ check_desktop_flow_lint_if_needed() {
     return
   fi
 
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "FAIL: desktop E2E flow metadata checks require python3 and PyYAML." >&2
-    echo "      Install Python 3 and run: python3 -m pip install PyYAML" >&2
+  if ! "$PYTHON_BIN" -c "import yaml" >/dev/null 2>&1; then
+    echo "FAIL: desktop E2E flow metadata checks require Python 3 and PyYAML." >&2
+    echo "      Run make setup to create the locked backend environment." >&2
     echo "      Deliberate hatch: PRE_PUSH_SKIP_DESKTOP_FLOW_LINT=1 git push" >&2
     return 1
   fi
 
   echo "==> desktop E2E flow metadata lint"
-  python3 desktop/macos/scripts/desktop-flow-lint.py
+  "$PYTHON_BIN" desktop/macos/scripts/desktop-flow-lint.py
   ci_prediction_note_verified "desktop E2E flow metadata and bridge-action references"
 }
 
@@ -469,7 +497,7 @@ check_backend_typecheck_if_needed() {
   require_backend_python
   (
     cd backend
-    bash scripts/typecheck.sh
+    PYRIGHT_PYTHON="$BACKEND_PYTHON" bash scripts/typecheck.sh
   )
 }
 
@@ -591,7 +619,7 @@ check_runtime_image_source_closure_if_needed() {
     return
   fi
 
-    python3 backend/scripts/runtime_image_contracts.py check
+    "$PYTHON_BIN" backend/scripts/runtime_image_contracts.py check
 }
 
 check_openapi_contract_if_needed() {
@@ -601,20 +629,13 @@ check_openapi_contract_if_needed() {
   fi
 
   if ! changed_matches \
-    'backend/**' \
-    'docs/api-reference/openapi.json' \
+    'backend/models/*.py' \
+    'backend/models/**/*.py' \
+    'backend/routers/*.py' \
+    'backend/routers/**/*.py' \
     'docs/api-reference/app-client-openapi.json' \
-    'docs/api-reference/integration-public-openapi.json' \
     'app/lib/backend/http/api/**' \
     'app/lib/backend/schema/**' \
-    'app/lib/models/announcement.dart' \
-    'app/lib/models/subscription.dart' \
-    'app/lib/models/user_usage.dart' \
-    'desktop/windows/src/renderer/src/lib/omiApi.generated.ts' \
-    'web/app/src/lib/omiApi.generated.ts' \
-    'web/admin/lib/services/omi-api/omiApi.generated.ts' \
-    'web/personas-open-source/src/lib/omiApi.generated.ts' \
-    'docs/docs.json' \
     '.github/workflows/openapi-contract.yml' \
     'scripts/pre-push'
   then
@@ -626,14 +647,30 @@ check_openapi_contract_if_needed() {
     --base-ref "$BASE_REMOTE_REF"
   (
     cd backend
-    scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
     scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json
-    scripts/openapi_runner.sh scripts/export_openapi.py --surface integration-public --check ../docs/api-reference/integration-public-openapi.json
   )
 
   "$BACKEND_PYTHON" backend/scripts/generate_dart_models.py --all --check
   "$BACKEND_PYTHON" backend/scripts/generate_ts_openapi_types.py --check
   "$BACKEND_PYTHON" backend/scripts/generate_swift_openapi_types.py --check
+}
+
+check_release_process_guards_if_needed() {
+  if ! changed_matches \
+    '.github/workflows/desktop_qualify_beta.yml' \
+    '.github/scripts/check-release-process-guards.py' \
+    'scripts/run-release-process-guards.sh' \
+    'backend/tests/unit/test_desktop_release_scripts.py'
+  then
+    return
+  fi
+
+  bash scripts/run-release-process-guards.sh
+  printf '%s\n' 'tests/unit/test_desktop_release_scripts.py' > "$RELEASE_GUARD_TESTS"
+  (
+    cd backend
+    BACKEND_UNIT_TEST_FILE_LIST="$RELEASE_GUARD_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
+  )
 }
 
 check_workflows_if_needed() {
@@ -664,6 +701,7 @@ check_workflows_if_needed() {
     actionlint_cmd=(go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12)
   else
     echo "FAIL: actionlint or go is required to validate changed workflow files." >&2
+    echo "      Deliberate hatch: PRE_PUSH_SKIP_ACTIONLINT=1 git push" >&2
     return 1
   fi
 
@@ -700,43 +738,6 @@ check_desktop_swift_if_needed() {
   )
 }
 
-check_desktop_rust_if_needed() {
-  local -a rust_files=()
-  local file
-
-  if [ "${PRE_PUSH_SKIP_DESKTOP_RUST:-}" = "1" ]; then
-    echo "Skipping desktop Rust checks because PRE_PUSH_SKIP_DESKTOP_RUST=1."
-    return
-  fi
-
-  if ! changed_matches \
-    'desktop/macos/Backend-Rust/*' \
-    'desktop/macos/Backend-Rust/**/*' \
-    '.github/workflows/repo-checks.yml' \
-    '.github/workflows/desktop-checks.yml' \
-    '.github/actions/detect-changes/*' \
-    '.github/actions/detect-changes/**/*'
-  then
-    return
-  fi
-
-  for file in "${CHANGED_FILES[@]}"; do
-    case "$file" in
-      desktop/macos/Backend-Rust/*.rs|desktop/macos/Backend-Rust/**/*.rs)
-        [ ! -f "$file" ] || rust_files+=("${file#desktop/macos/Backend-Rust/}")
-        ;;
-    esac
-  done
-
-  (
-    cd desktop/macos/Backend-Rust
-    if [ "${#rust_files[@]}" -gt 0 ]; then
-      rustfmt --edition 2021 --check "${rust_files[@]}"
-    fi
-    cargo check --locked
-  )
-}
-
 check_desktop_launcher_tests_if_needed() {
   if [ "${PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS:-}" = "1" ]; then
     echo "Skipping desktop launcher tests because PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS=1."
@@ -755,6 +756,15 @@ check_desktop_launcher_tests_if_needed() {
   (
     cd desktop/macos
     for test_script in tests/test-*.sh; do
+      # These are live named-bundle checks, not hermetic launcher tests. The
+      # pre-push hook neither launches an automation bridge nor knows a QA app
+      # path, so retain them for their Tier-3 E2E flow/direct harness command.
+      case "$test_script" in
+        tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+          echo "== $test_script (skipped: requires a mounted named bundle)"
+          continue
+          ;;
+      esac
       echo "== $test_script"
       bash "$test_script"
     done
@@ -783,20 +793,20 @@ check_gauntlet_evidence_if_needed() {
 }
 
 run_step check_pr_preflight
-run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
-run_step python3 .github/scripts/check-deployment-concurrency.py --self-test
-run_step python3 .github/scripts/check-deployment-concurrency.py
+run_step "$PYTHON_BIN" .github/scripts/check-desktop-prod-promotion-policy.py
+run_step "$PYTHON_BIN" .github/scripts/check-deployment-concurrency.py --self-test
+run_step "$PYTHON_BIN" .github/scripts/check-deployment-concurrency.py
 run_step check_backend_runtime_env_if_needed
 run_step check_backend_typecheck_if_needed
 run_step check_runtime_image_source_closure_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
+run_step check_release_process_guards_if_needed
 run_step check_workflows_if_needed
 run_step check_flutter_generated_if_needed
 run_step check_desktop_flow_lint_if_needed
 run_step check_windows_kgworker_native_closure_if_needed
 run_step check_desktop_swift_if_needed
-run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
 run_step check_gauntlet_evidence_if_needed

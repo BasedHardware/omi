@@ -363,6 +363,10 @@ final class AgentSyncBatchQueryTests: XCTestCase {
 }
 
 #if DEBUG
+  // omi-release-compile: this suite drives AgentSyncService's DEBUG-only
+  // startForTesting/syncOnceForTesting seam; the release-mode notification
+  // regression step must compile the bundle without it.
+
   /// These tests drive `syncTick` through the same table reads and HTTP paths as
   /// the loop. The DEBUG-only clock/hook seam avoids a scheduler or bridge fault
   /// protocol while preserving production ownership and recovery behavior.

@@ -18,17 +18,9 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, providers, safety, memory_scenarios
+from . import config, providers, qualification, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
-SERVICE_PORTS = {
-    "firestore": config.FIRESTORE_PORT,
-    "auth": config.AUTH_PORT,
-    "redis": config.REDIS_PORT,
-    "typesense": config.TYPESENSE_PORT,
-    "backend": config.BACKEND_PORT,
-    "desktop-backend": config.DESKTOP_BACKEND_PORT,
-}
 
 
 def _now() -> str:
@@ -40,7 +32,12 @@ def _repo_root() -> Path:
 
 
 def _marker(cfg: config.HarnessConfig, service: str) -> str:
-    return f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    token = os.environ.get("OMI_HARNESS_OWNERSHIP_TOKEN", "").strip()
+    return (
+        f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}:{token}"
+        if token
+        else f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+    )
 
 
 def _load_json(path: Path, default: dict[str, object]) -> dict[str, object]:
@@ -178,7 +175,7 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
     if service == "auth":
         return _http_ok(f"http://{cfg.auth_host}/")
     if service == "typesense":
-        url = f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections"
+        url = f"http://127.0.0.1:{cfg.typesense_port}/collections"
         headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
         ok, detail = _http_ok(url, headers=headers)
         if ok:
@@ -299,8 +296,6 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
         missing.append("Python package uvicorn (install backend requirements before starting backend)")
-    if not _which("cargo"):
-        missing.append("cargo (required to build the Rust desktop backend)")
     provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     missing.extend(provider_report.missing)
     warnings.extend(provider_report.warnings)
@@ -320,7 +315,7 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firestore_emulator: {cfg.firestore_host}")
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
-    print(f"typesense: 127.0.0.1:{config.TYPESENSE_PORT}")
+    print(f"typesense: 127.0.0.1:{cfg.typesense_port}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
 
@@ -396,7 +391,7 @@ def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.
         "firestore": cfg.firestore_host,
         "firebase_auth": cfg.auth_host,
         "redis": f"{cfg.redis_host}:{cfg.redis_port}",
-        "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
+        "typesense": f"127.0.0.1:{cfg.typesense_port}",
         "backend": cfg.backend_url,
         "desktop_backend": cfg.desktop_backend_url,
     }
@@ -480,6 +475,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _prepend_pythonpath(env: dict[str, str], *entries: Path) -> None:
+    values = [str(path) for path in entries]
+    if existing := env.get("PYTHONPATH"):
+        values.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(values)
+
+
 def _start_process(
     cfg: config.HarnessConfig,
     service: str,
@@ -504,11 +506,10 @@ def _start_process(
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = log_path.open("ab")
     child_env = config.child_env_for(cfg) if env is None else env
-    child_env["PYTHONPATH"] = f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{child_env.get('PYTHONPATH', '')}"
+    python_paths = [cfg.repo_root / "scripts" / "dev-harness"]
     if service == "backend":
-        child_env["PYTHONPATH"] = (
-            f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{cfg.repo_root / 'backend'}:{child_env.get('PYTHONPATH', '')}"
-        )
+        python_paths.append(cfg.repo_root / "backend")
+    _prepend_pythonpath(child_env, *python_paths)
     supervised = [
         sys.executable,
         "-m",
@@ -528,6 +529,7 @@ def _start_process(
         {
             "service": service,
             "pid": proc.pid,
+            "process_group": proc.pid,
             "port": port,
             "endpoint": f"127.0.0.1:{port}",
             "log": str(log_path),
@@ -540,48 +542,28 @@ def _start_process(
     print(f"{service}: started pid={proc.pid} log={log_path}")
 
 
-def _desktop_backend_dir(cfg: config.HarnessConfig) -> Path:
-    return cfg.repo_root / "desktop" / "macos" / "Backend-Rust"
-
-
-def _ensure_desktop_backend_binary(cfg: config.HarnessConfig) -> Path:
-    backend_dir = _desktop_backend_dir(cfg)
-    release = os.environ.get("OMI_DESKTOP_BACKEND_RELEASE", "").strip() in {"1", "true", "yes"}
-    profile = "release" if release else "debug"
-    binary = backend_dir / "target" / profile / "omi-desktop-backend"
-    stale_markers = ("src", "Cargo.toml", "Cargo.lock")
-
-    def _is_stale(marker: str) -> bool:
-        path = backend_dir / marker
-        if not path.exists():
-            return False
-        if path.is_file():
-            return path.stat().st_mtime > binary.stat().st_mtime
-        newer = subprocess.run(
-            ["find", str(path), "-newer", str(binary)],
-            cwd=backend_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            check=False,
-        )
-        return bool(newer.stdout.strip())
-
-    if binary.is_file() and not any(_is_stale(marker) for marker in stale_markers):
-        return binary
-    build_cmd = ["cargo", "build"]
-    if release:
-        build_cmd.append("--release")
-    print(f"desktop-backend: building ({' '.join(build_cmd)})...")
-    subprocess.run(build_cmd, cwd=backend_dir, check=True)
-    return binary
-
-
 def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
+    config_path = cfg.layout.services_dir / "firebase" / "firebase.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        payload = json.loads((cfg.repo_root / "firebase.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Cannot load firebase.json for harness: {exc}") from exc
+    emulators = payload.setdefault("emulators", {})
+    for name, port in (("firestore", cfg.firestore_port), ("auth", cfg.auth_port)):
+        emulator = emulators.setdefault(name, {})
+        emulator["host"] = "127.0.0.1"
+        emulator["port"] = port
+    firestore = payload.setdefault("firestore", {})
+    firestore["rules"] = str(cfg.repo_root / "firestore.rules")
+    firestore["indexes"] = str(cfg.repo_root / "firestore.indexes.json")
+    _write_json(config_path, payload)
     base = ["firebase"] if _which("firebase") else ["npx", "firebase-tools"]
     return [
         *base,
         "emulators:start",
+        "--config",
+        str(config_path),
         "--only",
         "firestore,auth",
         "--project",
@@ -626,7 +608,7 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
             "--api-address",
             "127.0.0.1",
             "--api-port",
-            str(config.TYPESENSE_PORT),
+            str(cfg.typesense_port),
             "--api-key",
             config.LOCAL_TYPESENSE_API_KEY,
             "--enable-cors",
@@ -638,7 +620,7 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
         "--name",
         _typesense_container_name(cfg),
         "-p",
-        f"127.0.0.1:{config.TYPESENSE_PORT}:{config.TYPESENSE_PORT}",
+        f"127.0.0.1:{cfg.typesense_port}:{config.TYPESENSE_CONTAINER_PORT}",
         "-v",
         f"{typesense_dir}:/data",
         f"typesense/typesense:{config.TYPESENSE_PINNED_VERSION}",
@@ -650,7 +632,15 @@ def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
     ]
 
 
-def _start_services(cfg: config.HarnessConfig) -> None:
+# Infrastructure services (firestore, auth, redis, typesense) start first so the
+# Python backend can connect to them immediately on boot.  The brief settle delay
+# prevents a port-binding race on resource-constrained runners (e.g. M1 Studio
+# under qualification load) where the backend starts before the emulator has
+# finished binding its port.
+_INFRA_SETTLE_DELAY = 2.0
+
+
+def _start_infrastructure(cfg: config.HarnessConfig) -> None:
     cfg.layout.logs_dir.mkdir(parents=True, exist_ok=True)
     _start_process(
         cfg,
@@ -658,7 +648,7 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         _firebase_command(cfg),
         cwd=cfg.repo_root,
         log_name="firebase-emulators.log",
-        port=config.FIRESTORE_PORT,
+        port=cfg.firestore_port,
     )
     redis_dir = cfg.layout.services_dir / "redis"
     redis_dir.mkdir(parents=True, exist_ok=True)
@@ -690,42 +680,121 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         _typesense_command(cfg),
         cwd=cfg.repo_root,
         log_name="typesense.log",
-        port=config.TYPESENSE_PORT,
+        port=cfg.typesense_port,
     )
+
+
+def _start_app_services(cfg: config.HarnessConfig) -> None:
+    """Start backend and desktop-backend after infrastructure is settling."""
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(config.BACKEND_PORT)],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(cfg.backend_port)],
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
-        port=config.BACKEND_PORT,
+        port=cfg.backend_port,
     )
-    desktop_binary = _ensure_desktop_backend_binary(cfg)
     _start_process(
         cfg,
         "desktop-backend",
-        [str(desktop_binary)],
-        cwd=_desktop_backend_dir(cfg),
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "desktop_backend:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(cfg.desktop_backend_port),
+        ],
+        cwd=cfg.repo_root / "backend",
         log_name="desktop-backend.log",
-        port=config.DESKTOP_BACKEND_PORT,
+        port=cfg.desktop_backend_port,
         env=config.desktop_backend_child_env_for(cfg),
     )
 
 
-def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 45.0) -> list[str]:
+def _start_services(cfg: config.HarnessConfig) -> None:
+    _start_infrastructure(cfg)
+    # Give infrastructure services a brief head start so the Python backend can
+    # bind connections to Redis, Firestore, and Typesense immediately on boot.
+    # Without this, on a loaded runner the backend may retry connections during
+    # its startup window, extending boot time beyond the health-check deadline.
+    time.sleep(_INFRA_SETTLE_DELAY)
+    _start_app_services(cfg)
+
+
+# Per-service health-check deadlines (seconds).  The Python backend needs the
+# longest window: it imports heavy ML/NLP modules and initialises connections to
+# every infrastructure service.  On an M1 Studio runner under qualification load,
+# 45 s (the old flat deadline shared across *all* services) is not enough.
+_HEALTH_TIMEOUTS: dict[str, float] = {
+    "firestore": 45.0,
+    "auth": 45.0,
+    "typesense": 45.0,
+    "backend": 90.0,
+    "desktop-backend": 60.0,
+    "redis": 30.0,
+}
+
+
+def _wait_health(
+    cfg: config.HarnessConfig,
+    *,
+    timeout: float | None = None,
+) -> list[str]:
+    """Wait for all harness services to become healthy.
+
+    Each service has its own deadline (see ``_HEALTH_TIMEOUTS``) measured from
+    the moment the wait begins.  If a recorded process dies before its deadline,
+    the service is marked unhealthy immediately instead of polling uselessly.
+    Pass ``timeout`` to override the backend deadline for backwards-compat callers.
+    """
     typesense_headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
     checks = {
         "firestore": (f"http://{cfg.firestore_host}/", None),
         "auth": (f"http://{cfg.auth_host}/", None),
-        "typesense": (f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections", typesense_headers),
+        "typesense": (f"http://127.0.0.1:{cfg.typesense_port}/collections", typesense_headers),
         "backend": (f"{cfg.backend_url}/docs", None),
         "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
+        "redis": (None, None),  # port-based check
     }
     pending = dict(checks)
-    deadline = time.time() + timeout
+    start = time.time()
+    # Per-service deadlines; ``timeout`` overrides the backend deadline only.
+    deadlines: dict[str, float] = {}
+    for service in pending:
+        base = _HEALTH_TIMEOUTS.get(service, 45.0)
+        if timeout is not None and service == "backend":
+            base = timeout
+        deadlines[service] = start + base
     failures: dict[str, str] = {}
-    while pending and time.time() < deadline:
+    process_records = {r["service"]: r for r in _process_records(cfg)}
+    while pending:
+        now = time.time()
+        # Expire services whose per-service deadline has passed.
+        for service in list(pending):
+            if now >= deadlines[service]:
+                url = pending[service][0]
+                failures.setdefault(service, f"not healthy after {deadlines[service] - start:.0f}s at {url}")
+                pending.pop(service)
+        if not pending:
+            break
         for service, (url, headers) in list(pending.items()):
+            # Fail fast if the process died — no point polling a dead service.
+            record = process_records.get(service)
+            if record:
+                pid_val = int(record.get("pid", -1))
+                if not safety.process_exists(pid_val):
+                    failures[service] = f"process exited (pid={pid_val}); check log: {record.get('log', '?')}"
+                    pending.pop(service)
+                    print(f"{service}: {failures[service]}")
+                    continue
+            if service == "redis":
+                if _port_open("127.0.0.1", cfg.redis_port):
+                    print("redis: healthy (port-open)")
+                    pending.pop(service)
+                continue
             ok, detail = _http_ok(url, headers=headers)
             if ok:
                 print(f"{service}: healthy ({detail})")
@@ -736,7 +805,7 @@ def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 45.0) -> list[st
             time.sleep(0.75)
     for service, (url, _) in pending.items():
         failures.setdefault(service, f"not healthy at {url}")
-    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending]
+    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending] if failures else []
 
 
 def cmd_up(args: argparse.Namespace) -> int:
@@ -777,7 +846,7 @@ def cmd_up(args: argparse.Namespace) -> int:
                 "firestore": cfg.firestore_host,
                 "auth": cfg.auth_host,
                 "redis": f"{cfg.redis_host}:{cfg.redis_port}",
-                "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
+                "typesense": f"127.0.0.1:{cfg.typesense_port}",
                 "backend": cfg.backend_url,
                 "desktop_backend": cfg.desktop_backend_url,
             },
@@ -954,6 +1023,39 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_qualification_lease(args: argparse.Namespace) -> int:
+    repo_root = _repo_root()
+    if args.lease_action == "acquire":
+        lease = qualification.acquire(
+            repo_root=repo_root,
+            lease_id=args.lease_id,
+            owner_pid=args.owner_pid,
+            port_offset=args.port_offset,
+            retained_runs=args.retained_runs,
+            retention_age_seconds=args.retention_age_seconds,
+        )
+        print(json.dumps(lease, sort_keys=True))
+        return 0
+    if args.lease_action == "release":
+        qualification.release(
+            repo_root=repo_root,
+            lease_id=args.lease_id,
+            token=args.token,
+            retained_runs=args.retained_runs,
+            retention_age_seconds=args.retention_age_seconds,
+        )
+        return 0
+    if args.lease_action == "preflight-fault-cleanup":
+        qualification.preflight_fault_cleanup(
+            repo_root=repo_root,
+            lease_id=args.lease_id,
+            token=args.token,
+            result_path=Path(args.result),
+        )
+        return 0
+    raise AssertionError(f"Unexpected qualification lease action {args.lease_action!r}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dev-harness")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -970,6 +1072,29 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "status":
             command.add_argument("--write-summary", action="store_true", default=False)
         command.set_defaults(func=func)
+    lease = sub.add_parser("qualification-lease", help="Acquire or safely release a local qualification stack lease")
+    lease_sub = lease.add_subparsers(dest="lease_action", required=True)
+    acquire = lease_sub.add_parser("acquire")
+    acquire.add_argument("--lease-id", required=True)
+    acquire.add_argument("--owner-pid", required=True, type=int)
+    acquire.add_argument("--port-offset", required=True, type=int)
+    acquire.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
+    acquire.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
+    acquire.set_defaults(func=cmd_qualification_lease)
+    release = lease_sub.add_parser("release")
+    release.add_argument("--lease-id", required=True)
+    release.add_argument("--token", required=True)
+    release.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
+    release.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
+    release.set_defaults(func=cmd_qualification_lease)
+    fault_preflight = lease_sub.add_parser(
+        "preflight-fault-cleanup",
+        help="Validate and reclaim the exact lease-owned disposable fault listener",
+    )
+    fault_preflight.add_argument("--lease-id", required=True)
+    fault_preflight.add_argument("--token", required=True)
+    fault_preflight.add_argument("--result", required=True)
+    fault_preflight.set_defaults(func=cmd_qualification_lease)
     return parser
 
 
@@ -977,7 +1102,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     try:
         return int(args.func(args))
-    except safety.SafetyError as exc:
+    except (safety.SafetyError, qualification.QualificationLeaseError) as exc:
         print(f"Safety check failed: {exc}")
         return 2
 

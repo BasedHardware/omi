@@ -1467,7 +1467,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get payYourSttProvider => 'Prostorocno uporabite omi. Plačujete samo svojemu STT ponudniku.';
 
   @override
-  String get freeMinutesMonth => '1.200 brezplačnih minut/mesec vključenih. Neomejeno z ';
+  String get freeMinutesMonth => '300 brezplačnih minut/mesec vključenih. Neomejeno z ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4714,7 +4714,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Noben specifičen dostop do podatkov ni nastavljen.';
 
   @override
-  String get basicPlanDescription => '1.200 premium minut + neomejeno na naprava';
+  String get basicPlanDescription => '300 premium minut + neomejeno na naprava';
 
   @override
   String get minutes => 'minut';
@@ -6011,7 +6011,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo.';
+      '300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo.';
 
   @override
   String get viewUsage => 'Poglej uporabo';
@@ -6092,7 +6092,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo. ';
+      '300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9799,4 +9799,7 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'S tem mikrofonom se ni bilo mogoče povezati. Prepričajte se, da je povezan v nastavitvah iPhona.';
+
+  @override
+  String get syncStatusTooOld => 'Prestaro za sinhronizacijo — Omi ga ne more sprejeti';
 }

@@ -18,7 +18,8 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db, get_firestore_client
+from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -378,9 +379,20 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
             # so an older in-memory Conversation cannot clobber that edit.
+            # A null existing value means "never user-set" (stub docs dump None
+            # fields), so only non-null values are preserved — otherwise the
+            # stub's folder_id: None would revert every AI folder assignment.
             for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-                if field in existing:
+                if existing.get(field) is not None:
                     write_data[field] = existing[field]
+
+            # folder_id is user-owned even when explicitly cleared: the folder
+            # move endpoints stamp folder_user_set, so "no folder" chosen by the
+            # user (folder_id None + marker) must survive processing output.
+            # Only a stub's never-user-touched None may be overwritten by the
+            # AI folder assignment above.
+            if existing.get('folder_user_set'):
+                write_data['folder_id'] = existing.get('folder_id')
 
             user_title = existing.get('user_title')
             if isinstance(user_title, str):
@@ -441,9 +453,20 @@ def persist_processing_result_with_lifecycle(
         existing = existing_snapshot.to_dict() or {}
 
         # Generated processing content never owns user-managed fields.
+        # A null existing value means "never user-set" (stub docs dump None
+        # fields), so only non-null values are preserved — otherwise the
+        # stub's folder_id: None would revert every AI folder assignment.
         for field in ('starred', 'folder_id', 'visibility', 'user_title'):
-            if field in existing:
+            if existing.get(field) is not None:
                 write_data[field] = existing[field]
+
+        # folder_id is user-owned even when explicitly cleared: the folder
+        # move endpoints stamp folder_user_set, so "no folder" chosen by the
+        # user (folder_id None + marker) must survive processing output.
+        # Only a stub's never-user-touched None may be overwritten by the
+        # AI folder assignment above.
+        if existing.get('folder_user_set'):
+            write_data['folder_id'] = existing.get('folder_id')
 
         user_title = existing.get('user_title')
         if isinstance(user_title, str):
@@ -609,9 +632,19 @@ def get_conversations_count(
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
+        # The archive's `sources=omi` must compose with the multi-status `in`
+        # filter below. Firestore allows only one disjunctive `in` filter per
+        # query, so a singleton source is an equality predicate, not a
+        # degenerate `in` predicate.
+        if len(sources) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+        if len(statuses) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
     if categories:
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
     if folder_id:
@@ -633,6 +666,7 @@ def get_conversations_without_photos(
     offset: int = 0,
     include_discarded: bool = False,
     statuses: List[str] = [],
+    sources: Optional[List[str]] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[List[str]] = None,
@@ -646,8 +680,18 @@ def get_conversations_without_photos(
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if sources:
+        # Keep the paginated list semantically identical to the count query;
+        # see `get_conversations_count` for why a singleton is equality.
+        if len(sources) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', '==', sources[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if len(statuses) > 0:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+        if len(statuses) == 1:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', '==', statuses[0]))
+        else:
+            conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
 
     if categories:
         conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
@@ -710,6 +754,36 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
+
+
+def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:
+    """Atomically claim the one analytics success slot for a conversation.
+
+    The marker lives in Firestore under the authoritative conversation document,
+    rather than in a best-effort cache. ``create`` is atomic: the caller that
+    creates the marker is the only caller allowed to capture the optional
+    analytics event; an existing marker means a retry/re-finalization must not
+    emit again. It deliberately has no TTL, so Redis loss, cache eviction, and
+    arbitrary retry windows cannot re-open the slot.
+
+    Callers must treat storage errors as *not acquired*. This is telemetry-only:
+    failing closed avoids a possible duplicate and must never interrupt the
+    underlying conversation extraction.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    marker_ref = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .collection('analytics_markers')
+        .document('conversation_memories_extracted')
+    )
+    try:
+        marker_ref.create({'created_at': firestore.SERVER_TIMESTAMP})
+        return True
+    except AlreadyExists:
+        return False
 
 
 def create_audio_files_from_chunks(
@@ -949,18 +1023,18 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
 
 
 def delete_conversation(uid, conversation_id):
-    """
-    Delete a conversation and its photos subcollection.
+    """Delete a conversation and every subcollection underneath it.
 
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
+    Firestore does not cascade, and a conversation owns more than ``photos``: the per-provider
+    post-processing transcripts (verbatim segment text), the Hume emotion predictions, and the
+    analytics marker. Purging only photos left those behind as data no query can reach — not even
+    the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
+    Children are enumerated live, so a subcollection added later is purged too.
     """
-    # Delete photos subcollection first
-    delete_conversation_photos(uid, conversation_id)
-
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
 
 
@@ -1139,6 +1213,46 @@ def get_processing_conversations(uid: str):
     # back to pusher for background processing — that would defeat the freemium cost saving.
     conversations = [c for c in conversations if not c.get('deferred')]
     return conversations
+
+
+def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
+    """Oldest-first bounded selection of orphaned in-progress conversations (#9809).
+
+    A conversation owned by any live session refreshes `finished_at` on every
+    segment and that session's lifecycle loop processes it within the
+    conversation timeout, so anything idle past the cutoff has no owner.
+    Missing or non-datetime `finished_at` is excluded: without a trustworthy
+    idle clock the row cannot be proven orphaned.
+    """
+    stale = []
+    for conversation in conversations:
+        finished_at = conversation.get('finished_at')
+        if isinstance(finished_at, datetime) and finished_at < cutoff:
+            stale.append(conversation)
+    stale.sort(key=lambda conversation: conversation['finished_at'])
+    return stale[:limit]
+
+
+def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10, firestore_client=None):
+    """In-progress conversations whose last activity predates the cutoff (#9809).
+
+    The composite index orders by the last activity clock, so the bounded read
+    always reaches the oldest candidates. Without that ordering, an arbitrary
+    first page could keep old orphaned rows beyond it invisible forever.
+    """
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    conversations_ref = (
+        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.build(
+            user_ref.collection(conversations_collection),
+            {'status': ConversationStatus.in_progress.value},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('finished_at', direction=firestore.Query.ASCENDING)
+        .limit(limit)
+    )
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
+    return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
@@ -1335,7 +1449,6 @@ def update_conversation_segments(
 ):
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    transaction = client.transaction()
 
     @firestore.transactional
     def _write_segments(transaction) -> bool:
@@ -1358,7 +1471,7 @@ def update_conversation_segments(
         transaction.update(doc_ref, prepared_payload)
         return True
 
-    return _write_segments(transaction)
+    return run_transactional(client, _write_segments)
 
 
 # ***********************************

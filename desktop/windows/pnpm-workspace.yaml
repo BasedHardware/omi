@@ -1,8 +1,17 @@
 overrides:
+  '@hono/node-server': '~2.0.5'
   adm-zip: '>=0.5.16'
+  app-builder-lib: '~26.15.0'
+  axios: '~1.18.0'
+  'brace-expansion@5.0.6': '~5.0.8'
+  builder-util-runtime: '~9.7.0'
   esbuild: '>=0.28.1'
+  fast-uri: '~3.1.4'
   form-data: '>=4.0.6'
+  js-yaml: '~4.3.0'
+  postcss: '~8.5.18'
   protobufjs: '>=7.6.3'
+  tar: '~7.5.18'
   undici: '>=7.28.0'
   websocket-driver: '>=0.7.5'
 
@@ -44,3 +53,5 @@ minimumReleaseAgeExclude:
   - '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.205'
   - '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.205'
   - '@anthropic-ai/claude-agent-sdk@0.3.205'
+  - react-router-dom@7.18.2
+  - react-router@7.18.2

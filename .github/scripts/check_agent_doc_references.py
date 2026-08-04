@@ -31,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 # Docs whose references must resolve. Component AGENTS.md files are discovered.
-EXTRA_DOCS = ("CLAUDE.md", "PRODUCT.md", "docs/agents")
+EXTRA_DOCS = ("CLAUDE.md", "PRODUCT.md", "docs/agents", ".cursor/cloud-agent-environment.md")
 
 SOURCE_SUFFIXES = {
     ".md", ".py", ".sh", ".yaml", ".yml", ".json", ".dart", ".swift",

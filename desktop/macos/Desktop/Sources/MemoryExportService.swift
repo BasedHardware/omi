@@ -22,19 +22,75 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     DesktopBackendEnvironment.pythonBaseURL()
   }
 
+  /// MCP data serving follows the selected Python serving plane, but OAuth grant
+  /// issuance and readback belong to the production identity authority for every
+  /// production-family app (including Beta).
+  static var mcpOAuthBaseURL: String {
+    DesktopBackendEnvironment.authBaseURL()
+  }
+
+  static func mcpServerURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.pythonBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "v1/mcp/sse"
+  }
+
+  static func mcpAuthorizeURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "authorize"
+  }
+
+  static func mcpTokenURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil
+  ) -> String {
+    let useDevelopmentBackends = DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+      bundleIdentifier: bundleIdentifier,
+      updateChannel: AppBuild.currentUpdateChannel
+    )
+    return DesktopBackendEnvironment.authBaseURL(
+      useDevelopmentBackends: useDevelopmentBackends,
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue
+    ) + "token"
+  }
+
   /// The hosted Omi MCP SSE endpoint every client connects to.
   static var mcpServerURL: String { "\(mcpBaseURL)v1/mcp/sse" }
 
   /// OAuth endpoints exposed by the same backend for MCP custom-connector setup.
-  static var mcpAuthorizeURL: String { "\(mcpBaseURL)authorize" }
-  static var mcpTokenURL: String { "\(mcpBaseURL)token" }
+  static var mcpAuthorizeURL: String { "\(mcpOAuthBaseURL)authorize" }
+  static var mcpTokenURL: String { "\(mcpOAuthBaseURL)token" }
 
   /// Registered OAuth client for ChatGPT custom connectors on this backend.
   /// Prod registers `omi-chatgpt-prod` as a PUBLIC PKCE client — the token
   /// endpoint rejects any client secret for it, so setup must leave the
   /// secret blank. Dev registers `omi-chatgpt-dev`.
   static var chatgptOAuthClientID: String {
-    mcpBaseURL.contains("api.omi.me") ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
+    chatgptOAuthClientID(forOAuthBaseURL: mcpOAuthBaseURL)
+  }
+
+  static func chatgptOAuthClientID(forOAuthBaseURL baseURL: String) -> String {
+    URL(string: baseURL)?.host == "api.omi.me" ? "omi-chatgpt-prod" : "omi-chatgpt-dev"
   }
 
   /// The approved ChatGPT directory listing. This is the primary ChatGPT
@@ -674,106 +730,6 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   fileprivate var connectedAtKey: String { "memoryExportConnectedAt.\(rawValue)" }
 }
 
-struct MemoryExportStatus: Sendable {
-  let exportedCount: Int
-  let lastExportedAt: Date?
-  let detailText: String?
-  let isConfigured: Bool
-  let hasConnection: Bool
-}
-
-struct MCPSetupCompletionSummary: Equatable, Sendable {
-  let title: String
-  let subtitle: String
-}
-
-struct MemoryExportConnectionPresentation: Equatable {
-  let primaryActionTitle: String?
-  let completion: MCPSetupCompletionSummary?
-
-  static func make(
-    destination: MemoryExportDestination,
-    status: MemoryExportStatus?,
-    isRunning: Bool,
-    accessibilityPreflightMissing: Bool = false
-  ) -> MemoryExportConnectionPresentation {
-    if status?.hasConnection == true {
-      return MemoryExportConnectionPresentation(
-        primaryActionTitle: nil,
-        completion: destination.mcpSetupCompletionSummary
-      )
-    }
-
-    let title: String
-    if isRunning {
-      title = "Connecting…"
-    } else {
-      switch destination.mcpExecuteKind {
-      case .directoryApp:
-        title = "Add Omi to ChatGPT"
-      case .localAutonomous:
-        title = "Do it for me"
-      case .browserAutonomous:
-        title = accessibilityPreflightMissing ? "Grant Accessibility" : "Do it for me"
-      case .assisted:
-        title = destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
-      }
-    }
-
-    return MemoryExportConnectionPresentation(primaryActionTitle: title, completion: nil)
-  }
-}
-
-/// Rendered MCP connection instructions for a single client.
-struct MCPSetup: Sendable {
-  let serverURL: String
-  let copyTitle: String?
-  let copyText: String?
-  let steps: [String]
-  let openURL: URL?
-  let openTitle: String?
-}
-
-struct MemoryExportResult: Sendable {
-  let memoryCount: Int
-  let detailText: String?
-  let destinationURL: URL?
-  let fileURL: URL?
-  let clipboardText: String?
-}
-
-struct AgentConnectionTestResult: Sendable {
-  let hostedMemoryCount: Int
-  let localToolCount: Int
-
-  var summary: String {
-    "Connection looks good: Omi returned \(hostedMemoryCount) hosted memories, and Desktop shared \(localToolCount) local tools."
-  }
-}
-
-enum MemoryExportError: LocalizedError {
-  case noMemories
-  case invalidNotionConfiguration
-  case invalidNotionResponse
-  case invalidObsidianVault
-  case requestFailed(String)
-
-  var errorDescription: String? {
-    switch self {
-    case .noMemories:
-      return "There are no memories available to export yet."
-    case .invalidNotionConfiguration:
-      return "Enter both a Notion integration token and a parent page ID."
-    case .invalidNotionResponse:
-      return "Notion returned an unexpected response."
-    case .invalidObsidianVault:
-      return "Choose a valid Obsidian vault folder first."
-    case .requestFailed(let message):
-      return message
-    }
-  }
-}
-
 actor MemoryExportService {
   static let shared = MemoryExportService()
 
@@ -813,12 +769,16 @@ actor MemoryExportService {
       destination.supportsMCP
       ? MemoryExportConnectionDetector.scanLocalMCPConnections(for: destination, matchingKey: currentMCPKey)
       : []
-    return status(for: destination, localMCPConnections: localConnections)
+    return status(
+      for: destination,
+      localMCPConnections: localConnections,
+      cloudGrantObservation: destination.cloudOAuthGrantClientIDs.isEmpty ? nil : "cached_or_derived")
   }
 
   private func status(
     for destination: MemoryExportDestination,
-    localMCPConnections: Set<MemoryExportDestination>
+    localMCPConnections: Set<MemoryExportDestination>,
+    cloudGrantObservation: String? = nil
   ) -> MemoryExportStatus {
     let exportedCount = max(defaults.integer(forKey: destination.exportedCountKey), 0)
 
@@ -845,6 +805,14 @@ actor MemoryExportService {
       hasConnection = hasConnectedTimestamp || hasLocalMCPConnection
     case .notion, .obsidian, .gemini, .agents:
       hasConnection = exportedCount > 0 || hasConnectedTimestamp || hasLocalMCPConnection
+    }
+    if let cloudGrantObservation {
+      DesktopDiagnosticsManager.shared.recordStateAuthoritySignal(
+        seam: .connectorStatus,
+        from: cloudGrantObservation,
+        to: hasConnection ? "connected" : "not_connected",
+        direction: "cloud_grant_status_inferred",
+        subject: destination.rawValue)
     }
     let isConfigured: Bool
     switch destination {
@@ -875,7 +843,13 @@ actor MemoryExportService {
     let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(matchingKey: storedMCPKey())
     return Dictionary(
       lastWriteWins: MemoryExportDestination.allCases.map { destination in
-        (destination, status(for: destination, localMCPConnections: localConnections))
+        (
+          destination,
+          status(
+            for: destination,
+            localMCPConnections: localConnections,
+            cloudGrantObservation: destination.cloudOAuthGrantClientIDs.isEmpty ? nil : "cached_or_derived")
+        )
       })
   }
 
@@ -886,9 +860,10 @@ actor MemoryExportService {
   func refreshCloudGrantConnectionStatus(for destination: MemoryExportDestination) async -> MemoryExportStatus {
     let clientIDs = destination.cloudOAuthGrantClientIDs
     guard !clientIDs.isEmpty else { return status(for: destination) }
+    var observation = "authoritative_grant_check"
     do {
       let response: OAuthGrantsResponse = try await APIClient.shared.get(
-        "v1/mcp/oauth/grants", includeBYOK: false)
+        "v1/mcp/oauth/grants", customBaseURL: MemoryExportDestination.mcpOAuthBaseURL, includeBYOK: false)
       let isAuthorized = response.grants.contains { clientIDs.contains($0.clientID) && $0.isActive }
 
       if isAuthorized {
@@ -900,9 +875,16 @@ actor MemoryExportService {
       }
     } catch {
       log("MemoryExportService: \(destination.title) OAuth grant refresh failed: \(error.localizedDescription)")
+      observation = "cached_after_check_failed"
     }
 
-    return status(for: destination)
+    let localConnections = MemoryExportConnectionDetector.scanLocalMCPConnections(
+      for: destination,
+      matchingKey: storedMCPKey())
+    return status(
+      for: destination,
+      localMCPConnections: localConnections,
+      cloudGrantObservation: observation == "authoritative_grant_check" ? nil : observation)
   }
 
   func notionConfiguration() -> (token: String, parentPageID: String) {

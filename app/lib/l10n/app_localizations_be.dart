@@ -4719,7 +4719,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Немаэ канфігураванага спецыфічнага доступу да дадзеных.';
 
   @override
-  String get basicPlanDescription => '1 200 прэміум мін + неабмежавана на прыладзе';
+  String get basicPlanDescription => '300 прэміум мін + неабмежавана на прыладзе';
 
   @override
   String get minutes => 'хвіліны';
@@ -9801,4 +9801,7 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Не ўдалося падключыцца да гэтага мікрафона. Праверце, ці падключаны ён у наладах iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Занадта старое для сінхранізацыі — Omi не можа яго прыняць';
 }

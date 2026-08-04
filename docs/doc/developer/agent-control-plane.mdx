@@ -489,7 +489,7 @@ CREATE TABLE grants (
   operation TEXT NOT NULL,
   resource_pattern TEXT NOT NULL,
   effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
-  source TEXT NOT NULL CHECK (source IN ('legacy_default', 'policy', 'user', 'system')),
+  source TEXT NOT NULL CHECK (source IN ('policy', 'user', 'system')),
   constraints_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(constraints_json)),
   created_at_ms INTEGER NOT NULL,
   expires_at_ms INTEGER,
@@ -499,6 +499,11 @@ CREATE TABLE grants (
 CREATE INDEX grants_lookup_idx
   ON grants(session_id, run_id, capability, operation, created_at_ms DESC);
 ```
+
+Portable grant writers MUST use `policy`, `user`, or `system`. Older runtimes may
+still recognize `legacy_default` while migrating existing databases, but clients
+MUST NOT send it and cleanup migrations MUST revoke those rows without presenting
+them as current policy grants.
 
 ### 8.3 Intentionally omitted Phase 1 tables
 
@@ -1180,7 +1185,7 @@ For the initial release it MAY preserve:
 However:
 
 - every automatic ACP decision MUST emit an `approval.resolved` or equivalent audit event;
-- once the store is present, each run MUST receive an explicit `legacy_default` grant record describing the broad legacy authority;
+- automatic legacy/high-trust decisions MUST NOT synthesize a durable broad grant;
 - new adapters MUST explicitly opt into this policy rather than inheriting it accidentally;
 - no code outside the policy module may make ad hoc approval decisions;
 - the product MUST label this mode as legacy/high-trust internally.

@@ -68,7 +68,7 @@ def _offline_process_conversation(uid: str, _language: str, conversation: Any, *
             'conversation_id': conversation_id,
             'persisted': bool(persisted),
             'force_process': bool(kwargs.get('force_process')),
-            'defer_memory_extraction': bool(kwargs.get('defer_memory_extraction')),
+            'defer_derived_effects': bool(kwargs.get('defer_derived_effects')),
         }
     )
     return conversation

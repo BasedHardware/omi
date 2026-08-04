@@ -1,0 +1,3 @@
+{
+  "change": "Fixed naming transcript speakers so assignments persist for legacy conversations and failed saves can be retried"
+}

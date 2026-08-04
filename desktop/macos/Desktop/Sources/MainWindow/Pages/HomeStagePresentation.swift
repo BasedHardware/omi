@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 
 enum HomeStageMode: Equatable {
@@ -12,6 +13,14 @@ enum HomeStageMode: Equatable {
   /// click or Esc *open* the chat.
   static func collapseCatcherActive(mode: HomeStageMode, resting: HomeStageMode) -> Bool {
     mode != resting && mode != .hub
+  }
+
+  func topPadding(hub: CGFloat) -> CGFloat {
+    switch self {
+    case .hub: return hub
+    case .chat: return 0
+    case .connect: return OmiSpacing.lg
+    }
   }
 
   var automationLabel: String {

@@ -113,11 +113,11 @@ except ImportError:
 
 
 try:
-    from utils.llm.gateway_anthropic import get_gateway_first_anthropic_client
+    from utils.llm.gateway_anthropic import get_gateway_anthropic_client
 except ImportError:
 
-    def get_gateway_first_anthropic_client(*, legacy_client, agent_model):
-        return legacy_client
+    def get_gateway_anthropic_client(*, byok_api_key=None):
+        raise RuntimeError('Omi gateway Anthropic client is unavailable')
 
 
 try:
@@ -128,14 +128,6 @@ except ImportError as exc:
 
     def maybe_wrap_dev_gateway_shadow(*, legacy_model, **_kwargs):
         return legacy_model
-
-
-try:
-    from utils.llm.gateway_serving import wrap_gateway_with_legacy_fallback
-except ImportError:
-    # Stubbed/isolated test environments may lack langchain_core submodules.
-    def wrap_gateway_with_legacy_fallback(*, gateway_model, **_kwargs):
-        return gateway_model
 
 
 from utils.llm.usage_tracker import get_usage_callback
@@ -208,22 +200,26 @@ class _AnthropicClientProxy:
 
     def _resolve(self) -> anthropic.AsyncAnthropic:
         byok = get_byok_key('anthropic')
+        if should_route_features_through_gateway():
+            return get_gateway_anthropic_client(byok_api_key=byok)
         if byok:
-            legacy = _cached_anthropic(byok)
-            if should_route_features_through_gateway():
-                return get_gateway_first_anthropic_client(
-                    legacy_client=legacy,
-                    agent_model=ANTHROPIC_AGENT_MODEL,
-                    byok_api_key=byok,
-                )
-            return legacy
-        return get_gateway_first_anthropic_client(
-            legacy_client=self._default_client(),
-            agent_model=ANTHROPIC_AGENT_MODEL,
-        )
+            return _cached_anthropic(byok)
+        return self._default_client()
 
     def __getattr__(self, name: str):
         return getattr(self._resolve(), name)
+
+
+def get_direct_anthropic_client(*, byok_api_key: str | None = None) -> anthropic.AsyncAnthropic:
+    """Return Anthropic without consulting the feature gateway switch.
+
+    Desktop chat has a legacy Anthropic fallback for BYOK and specialist model
+    requests. Calling the module-level proxy there would re-enter the managed
+    gateway whenever the global feature flag is enabled.
+    """
+    if byok_api_key:
+        return _cached_anthropic(byok_api_key)
+    return anthropic_client._default_client()
 
 
 class _OpenAIEmbeddingsProxy:
@@ -505,21 +501,12 @@ def get_llm(
             byok_key = byok_key_for_profile
 
     if byok_key and gateway_feature_mode:
-        byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
-        if byok_client is None:
-            raise RuntimeError(f'BYOK is not supported for feature={feature} provider={provider}')
-        gateway_model = get_or_create_omi_gateway_llm_for_byok(
+        result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=_effective_byok_provider(model, provider),
             api_key=byok_key,
             streaming=streaming,
             feature=feature,
-        )
-        result = wrap_gateway_with_legacy_fallback(
-            feature=feature,
-            gateway_model=gateway_model,
-            legacy_model=byok_client,
-            credential_source='service_forwarded_byok',
         )
     elif byok_key:
         byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
@@ -529,18 +516,7 @@ def get_llm(
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
     elif gateway_feature_mode:
-        gateway_model = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming, feature=feature)
-        if provider in {'anthropic', 'perplexity'}:
-            # No OpenAI-compatible LangChain legacy client for these providers.
-            result = gateway_model
-        else:
-            legacy_model = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
-            result = wrap_gateway_with_legacy_fallback(
-                feature=feature,
-                gateway_model=gateway_model,
-                legacy_model=legacy_model,
-                credential_source='omi_managed',
-            )
+        result = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming, feature=feature)
     else:
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
 
@@ -666,7 +642,7 @@ class _LazyClientProxy:
 
 
 def _create_legacy_llm_mini() -> ChatOpenAI:
-    return ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback], request_timeout=120, max_retries=1)
+    return ChatOpenAI(model=get_model('learnings'), callbacks=[_usage_callback], request_timeout=120, max_retries=1)
 
 
 llm_mini = _LazyClientProxy(_create_legacy_llm_mini)

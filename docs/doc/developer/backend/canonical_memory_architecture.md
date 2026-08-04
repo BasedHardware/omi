@@ -1,232 +1,363 @@
 # Canonical Memory Runtime Architecture
 
-> **Runtime flow companion (WS-O era).** Plain-English map of how capture → consolidation → promotion → long-term/KG → read/search works in code today on branch `memory-canonical-rollout`.
+> Plain-English map of the canonical capture → terminal route → atomic
+> Long-term admission → retrieval flow.
 >
-> - **Visual companion:** [canonical_memory_architecture.html](./canonical_memory_architecture.html) — open in a browser for boxes-and-arrows.
-> - **Domain vocabulary & schema SSOT:** [docs/memory/domain_model.md](../../../memory/domain_model.md) — layers, record fields, state matrix (do not duplicate here).
-> - **Product/storage decisions:** [docs/epics/memory_normative_architecture.md](../../../epics/memory_normative_architecture.md).
+> - **Visual companion:** [canonical_memory_architecture.html](./canonical_memory_architecture.html)
+> - **Domain vocabulary and schema SSOT:** [docs/memory/domain_model.md](../../../memory/domain_model.md)
+> - **Product/storage decisions:** [docs/epics/memory_normative_architecture.md](../../../epics/memory_normative_architecture.md)
 
-**Status:** Local on `memory-canonical-rollout` (not merged to `main`). Canonical cohort is code-whitelisted; everyone else stays on legacy routing.
+Canonical routing remains cohort-gated and fail-closed. This document describes
+the canonical lane; non-canonical users remain on the legacy lane until their
+explicit cutover.
 
----
+## The lifecycle in one view
 
-## Top-level flow
-
+```text
+Conversation, explicit user memory, import, API, plugin, integration
+                              │
+                              ▼
+              broad Short-term capture (all new intake)
+                              │
+                              ▼
+       required normalization → TTL audit/expiry settlement
+                              │
+                              ▼
+      one total consolidation decision for each pending item
+             ┌────────────────┼───────────────┐
+             │                │               │
+          promote       archive/review     reject
+             │                │               │
+             ▼                └──────┬────────┘
+ atomic Long-term admission           ▼
+ receipt + graph assertion       outside default access
+ item + ledger + operation
+ outbox, all in one commit
+             │
+             ├──────────────► outbox-retried projections
+             │                 keyword/compatibility + vector
+             ▼
+ default retrieval = eligible Short-term + Long-term
+                  → canonical-lineage dedupe
 ```
-Raw inputs (conversation, chat, OCR, explicit API/plugin memory)
-        │
-        ▼
-┌───────────────────────────────────────────────────────────┐
-│  LAYER 1 — Short-term capture (extract liberally)         │
-│  Evidence/extractions are processed; explicit text pending│
-└───────────────────────────────────────────────────────────┘
-        │
-        ▼  explicit text: required normalization + receipt
-┌───────────────────────────────────────────────────────────┐
-│  LAYER 2 — Maintenance pass                               │
-│  Required processing → TTL → consolidation → promotion    │
-└───────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌───────────────────────────────────────────────────────────┐
-│  Long-term + derived indexes                              │
-│  same memory_items row (layer flip) + Pinecone + KG       │
-└───────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌───────────────────────────────────────────────────────────┐
-│  Reads / search / agent tools                             │
-│  MemoryService read/search → visibility + hybrid retrieval│
-└───────────────────────────────────────────────────────────┘
-```
 
----
+The important ownership rule is simple: broad capture creates Short-term;
+consolidation owns the only terminal L2 route; the atomic apply transaction owns
+Long-term admission; projections never own memory state.
 
-## Two-layer principle
+## 1. Capture: all new intake is Short-term
 
-| Layer | Job | Philosophy | Where in code |
-|-------|-----|------------|---------------|
-| **Layer 1 (Short-term)** | Capture structured extractions from any source | **Extract liberally** — recall over precision; noise is expected | `write_canonical_extraction_memory` in `backend/utils/memory/canonical_memory_adapter.py` |
-| **Layer 2 (Long-term)** | Consolidate, dedupe, promote durable facts | **Filter/consolidate in code + LLM** — merge, supersede, corroborate before promotion | `run_canonical_consolidation`, `run_canonical_short_term_promotion` in `backend/utils/memory/` |
+All newly captured memory enters `users/{uid}/memory_items/{memory_id}` as
+Short-term. That includes:
 
-Benchmark repo AGENTS.md Rule #12.5 states the same invariant for the ingestion pipeline: Layer 1 maximizes recall; Layer 2 owns dedup, entity resolution, and contradiction handling. The canonical memory path implements Layer 2 as the maintenance cron (consolidation → promotion gate → vector/KG side effects).
+- processed Conversation extraction;
+- first-party “remember this” submissions;
+- imports;
+- generic API and developer writes;
+- plugins and integrations.
 
----
+Explicit submissions may be immediately visible in the first-party memory list
+as pending Short-term so the user receives a write receipt. Protected
+agent/chat/developer/MCP/search consumers exclude pending raw text until
+processing completes.
 
-## Cohort gating (fail-closed)
+Conversation capture accepts a candidate only when every quote reference is
+grounded in one transcript segment. Extraction and validation finish before
+source replacement: an extraction failure preserves all prior canonical state,
+while a successful empty reprocess is authoritative and fully retracts the
+prior conversation-sourced state.
 
-Every read/write/maintenance path resolves the user's cohort first.
+Historical migration/backfill is not new intake. Its explicit migration policy
+may materialize retained historical tiers, but it must not expose a reusable
+direct-to-Long-term writer.
 
 | Concern | Behavior | Evidence |
 |---------|----------|----------|
-| Whitelist | Only UIDs in `CANONICAL_MEMORY_USERS` get canonical routing | `backend/utils/memory/memory_system.py:14-17`, `resolve_memory_system` at `:36-57` |
-| Default | Absent from whitelist → `MemorySystem.LEGACY` (explicit, not implicit) | `memory_system.py:54-57` |
-| Kill-switch | Removing a UID from the code whitelist overrides any stale Firestore `memory_system=canonical` | Docstring at `memory_system.py:43-44` |
+| Whitelist | Only UIDs in `CANONICAL_MEMORY_USERS` get canonical memory, task intelligence, and Chat-first | `backend/config/canonical_memory_cohort.py`, `resolve_memory_system` |
+| Default | Absent from whitelist → `MemorySystem.LEGACY`, task intelligence off, Chat-first off | `canonical_memory_cohort.py` and `utils/task_intelligence/rollout.py` |
+| Kill-switch | Removing a UID from the code whitelist overrides stale Firestore controls and hides canonical task routes | `canonical_memory_cohort.py` and `routers/canonical_task_access.py` |
+| Operational controls | `MEMORY_MODE`, `MEMORY_ENABLED_USERS`, and `MEMORY_V3_GET_ENABLED` govern deployment readiness only; they never grant product entitlement. `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only, while consolidation remains an independent L2 incident/cost switch. | `docs/runbooks/canonical-memory-rollout-flags.md` |
 | Request pin | HTTP/MCP handlers pin cohort once per request to avoid mid-request flips | `backend/utils/memory/memory_system_pin.py:17-40` |
-| Routing seam | `MemoryService._resolve_backend` picks `CanonicalMemoryBackend` vs `LegacyMemoryBackend` | `backend/utils/memory/memory_service.py:390-394` |
+| Routing seam | `MemoryService._resolve_backend` picks `CanonicalMemoryBackend` vs `LegacyMemoryBackend`; an enrolled-but-unready account fails closed rather than falling back | `backend/utils/memory/memory_service.py` |
 | Maintenance refusal | Consolidation/promotion return `skipped_reason="not_canonical_cohort"` for legacy users | `canonical_consolidation.py:784-785`, `short_term_promotion.py:361-362` |
 
----
+Primary seams:
 
-## Stage-by-stage
+| Concern | Code |
+|---|---|
+| Public route selection | `backend/utils/memory/memory_service.py` |
+| Canonical capture/write adapter | `backend/utils/memory/canonical_memory_adapter.py` |
+| Explicit-submission envelope | `backend/utils/memory/required_promotion.py` |
+| Canonical item model | `backend/models/product_memory.py` |
+| Atomic persistence boundary | `backend/database/memory_apply_store.py` |
 
-### 1. Capture → Short-term write (Layer 1)
+## 2. Maintenance: normalize, enforce TTL, route once
 
-**What happens:** Processed conversation extraction uses `MemoryService.write` / `write_batch`. Explicit user, MCP, developer API, plugin, and integration submissions use the same public create APIs as before, but the compatibility seam stores them as `tier=short_term`, `processing_state=pending`, with immutable submission provenance and a 30-day TTL. Filesystem, mail, calendar, and notes imports use `/v3/memory-imports/batch` and create evidence only, never product memories.
+The enabled `memory-maintenance-job` runs
+`run_canonical_short_term_maintenance` once per canonical cohort user:
 
-**Plain English:** Raw external text never enters Long-term or its derived indexes. An explicit memory is immediately visible in the first-party `/v3/memories` list as Short-term, while agent/chat, developer, MCP, search-index, and KG reads ignore it until processing completes.
+1. `memory_outbox_worker.py` drains already-committed work before any
+   Short-term row is parsed.
+2. `canonical_required_processing.py` normalizes required explicit
+   submissions and records their processing receipt.
+3. `short_term_promotion.py` audits Short-term TTL lifecycle and settles an
+   expired processed item as a canonical reject, atomically emitting projection
+   deletes. It never promotes.
+4. `canonical_consolidation.py` gives every item in the deterministic,
+   server-bounded eligible set one terminal route.
+5. `memory_outbox_worker.py` drains events committed by those phases.
 
-| Piece | Evidence |
-|-------|----------|
-| Conversation extraction seam | `backend/utils/conversations/process_conversation.py:460-461` (`MemoryService`) |
-| Canonical extraction write | `write_canonical_extraction_memory` — `canonical_memory_adapter.py:476` |
-| Structured fields on write | `canonical_memory_adapter.py:534-535` (`subject_entity_id` in patch) |
-| Record shape | `MemoryItem` — `backend/models/product_memory.py:93-129` |
-| Subject inference (voice) | `process_conversation.py:478`, `:496` (`infer_subject_from_segments`) |
-| Explicit submission envelope | `required_processing_payload` in `backend/utils/memory/required_promotion.py` |
-| Evidence-only imports | `create_memory_import_batch` in `backend/routers/memories.py` |
+There is no separate generic promotion step. A blocked or invalid consolidation
+result cannot fall through to another promoter.
+Consolidation failures are durable and revision-scoped: before invoking the
+LLM, a leased attempt is recorded under `memory_runs`. A retrying source is
+isolated from fresh items. Three failed attempts settle it through the
+canonical `review` route. If the Archive review route conflicts, the same apply
+boundary commits a blocked Short-term review and projection deletes, removing
+the quarantined revision from the eligible query. If storage prevents both
+terminal commits, later runs retry only those routes without another LLM call.
+A durable cursor advances the stable ordered scan past a still-blocked page and
+resets after reaching later work, so the oldest query window cannot remain
+pinned. Retry and quarantine reports fail the cohort job while later selected
+sources continue, preventing poison-row starvation, unbounded model cost, and
+silent success.
 
-### 2. Required processing for explicit memories
+Required processing queries active pending required rows, and negative user
+review moves a row to terminal `processing_rejected`. TTL selects active,
+processed, expired Short-term rows in `expires_at, memory_id` order;
+consolidation selects active, processed, source-active Short-term rows in
+`captured_at, memory_id` order. Eligibility filters precede server-owned query
+limits, so unrelated rows cannot starve overflow. Each pass drains every batch
+in its selected set; overflow remains immediately eligible on the next
+Scheduler run, without a 24-hour watermark delay.
 
-**What happens:** `canonical_required_processing.py` normalizes every explicit canonical submission into one self-contained memory plus structured `subject_entity_id`, `predicate`, and `arguments`. User-requested memories have a required durable outcome: processing may retry, but it cannot silently reject or downgrade them. A successful pass attaches a versioned processing receipt containing processor identity, input/output hashes, source submission ID, and timestamp. Only a required memory with that receipt is promotion-eligible.
+The cron is disabled unless
+`MEMORY_CANONICAL_MAINTENANCE_ENABLED=true` and the code-reviewed canonical
+cohort is non-empty. Cloud Scheduler owns cadence; the process has no second
+interval gate.
 
-**Plain English:** “Remember this” is guaranteed to remain a durable intent, but the raw sentence is not itself trusted as a graph atom. The processor makes it fit the memory model first and leaves an auditable receipt.
+## 3. Consolidation: an exact terminal partition
 
-Failures remain pending/retryable Short-term. Edits to an admitted memory invalidate its KG citation and search projections, create a new pending revision, and go through the same processor again.
+For every non-empty eligible pending set, consolidation:
 
-Legacy migration is deliberately stricter: manually added and positively reviewed rows enter this required-processing path, while unreviewed bulk/profile rows are stored as hidden `pending_admission` candidates. Those candidates are provenance-preserving quarantine records, not processor input or promotion candidates; a separate future admission decision is required before they can become product memory.
+1. loads active, processed, unexpired Short-term items;
+2. gathers and hydrates candidate memories;
+3. sends the batch and its evidence to one L2 planning call;
+4. validates the complete response before the first mutation;
+5. applies each item-addressed route through the atomic apply store.
 
-### 3. Scheduled maintenance orchestration
+The response must contain exactly one decision for every pending item and no
+unknown or duplicate source IDs. Its terminal routes are:
 
-**What happens:** Hourly `memory-maintenance-job` may run `run_canonical_short_term_maintenance_cron` when `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true` and the whitelist is non-empty. Per user: **required processing → TTL audit → consolidation → promotion** (in that order). The maintenance job is the durable processor and retry owner; request handlers only stage the submission and return it as pending Short-term.
+| Route | Canonical result |
+|---|---|
+| `promote` | Atomically admit the same `memory_id` to active Long-term |
+| `archive` | Settle as an active Archive item outside default access |
+| `review` | Settle in Archive and create the review projection |
+| `reject` | Settle as hidden Archive |
 
-**Plain English:** A background job ages out expired short-term rows, asks the LLM to reconcile duplicates/contradictions, then promotes survivors to long-term — but only if consolidation did not fail mid-flight.
+Incomplete partitions, duplicate routes, unowned evidence, unknown references,
+cross-pending supersession, parse failures, or apply failures block the
+watermark. They do not partially invent a replacement route.
 
-| Piece | Evidence |
-|-------|----------|
-| Cron entry + env gate | `canonical_short_term_maintenance_cron.py:31-52`, `run_canonical_short_term_maintenance_cron` at `:150` |
-| Orchestration order | `run_canonical_short_term_maintenance` — `short_term_promotion.py:480-509` |
-| Promotion gate semantics | Docstring at `short_term_promotion.py:352-357`; gate logic `:365-374`, `:496-501` |
+Captured `subject_entity_id` and subject attribution are authoritative.
+Promotion must conserve a known source subject and cannot rewrite a third-party
+subject as the user; any contradiction blocks the batch before mutation.
 
-### 4. Batched LLM consolidation (Layer 2 decider)
+Review rows are revision-scoped projections. Resolution validates the pending
+row's source commit, item revision, content hash, and review route inside the
+same Firestore transaction that updates the canonical item and redacts the
+queue row. Accept/correct returns the item to pending Short-term processing
+after clearing its settled route; reject/drop privacy-tombstones it. Stale and
+competing commands fail closed, and review reads recheck authoritative item
+state so delayed cleanup cannot expose a deleted candidate.
 
-**What happens:**
+Privacy deletion closes the complete non-tombstoned canonical lineage,
+including hidden and superseded aliases. Embedded evidence and semantic item
+fields are scrubbed; a standalone evidence document is preserved only when a
+surviving item still references it. Delete-all repeats bounded transactions
+until a final control-fenced rescan observes no remaining item, or fails rather
+than reporting a partial deletion.
 
-1. List pending short-term items (`list_pending_consolidation_items`).
-2. Trigger when batch count ≥ threshold **or** ≥24h since `last_consolidation_run_at` (first run is batch-only).
-3. For each batch: gather vector/Firestore candidates → format context → **single batched LLM call** (`invoke_consolidation_agent`).
-4. Apply decisions through `apply_long_term_patch_firestore` (merge, update, supersede, corroborate).
-5. Escalate ambiguous conflicts to `review_queue`.
-6. Advance `last_consolidation_run_at` watermark only on clean completion (fail-closed on parse failure or partial supersede).
+Conversation replacement locates its exact source cohort through the
+`source_ids array_contains` index and cursor-bounded pages, never an account-wide
+item scan. If that source owns the active survivor of a merged lineage, the
+same replacement transaction reactivates independently sourced superseded
+Long-term rows, rebuilds their version-fenced graph assertions, and emits
+projection upserts. A provider-returned empty candidate list is an authoritative
+withdrawal; a non-empty batch containing an ungrounded quote fails before this
+transaction so validation cannot masquerade as an empty replacement.
 
-**Plain English:** Before anything becomes long-term, an LLM batch decides whether items duplicate, contradict, corroborate, or coexist. Code enforces atomicity: if a supersede step fails after the survivor commits, the watermark blocks and promotion defers.
+Account deletion uses the durable top-level wipe marker as a projection-write
+fence before provider purge. Projection workers become delete-only while that
+fence is active, and provider purge defers until no projection lease remains.
 
-| Piece | Evidence |
-|-------|----------|
-| Module purpose | `canonical_consolidation.py:1-6` |
-| Pending + trigger | `list_pending_consolidation_items` `:134-149`, `consolidation_trigger_reason` `:152+` |
-| Candidate gather + context | `gather_consolidation_candidates` `:217`, `format_consolidation_llm_context` `:261` |
-| Sole LLM decider | `invoke_consolidation_agent` `:360-383` |
-| Apply + supersede atomicity | `apply_consolidation_decision` `:618`, `ConsolidationPartialApply` `:403-408` |
-| Watermark fail-closed | `_should_advance_consolidation_watermark` `:411-427`, persist at `:888-895` |
-| Review escalation | `_escalate_to_review_queue` `:546`, `create_review_conflict` — `backend/database/review_queue.py:57` |
-| KG citation prune on supersede | `invalidate_kg_for_memory_retraction` — `canonical_memory_adapter.py:61-73` → `knowledge_graph.py:244` |
-| Corroboration fields | `MemoryItem.corroboration_count` — `product_memory.py:122-123`; increment in apply `:705-708` |
+Primary guard surfaces:
 
-### 5. Promotion gate → Long-term
+- `backend/tests/unit/test_canonical_consolidation.py`
+- `backend/tests/unit/test_canonical_consolidation_apply.py`
+- `backend/tests/unit/test_canonical_maintenance_ordering.py`
 
-**What happens:** After consolidation, promotion runs only for items allowed by the gate:
+## 4. Long-term admission: receipt and graph assertion are atomic
 
-- `consolidation_batched_ids is None` — consolidation did not fire this pass → normal batch/daily promotion.
-- `consolidation_batched_ids == {}` — consolidation fired but watermark blocked → **defer all promotion**.
-- `consolidation_batched_ids == {ids…}` — only batched survivors may promote this pass.
+`promote` is the only route into Long-term. The consolidation plan must provide
+a non-empty structured `PromotionGraphPlan`. Server code binds that plan to:
 
-Promotion flips `tier` short_term → long_term on the **same** `memory_id` via `apply_long_term_patch_firestore`, then syncs keyword index, Pinecone vector, and KG extraction.
+- the current Short-term `memory_id` and item revision;
+- the output content hash;
+- the exact evidence IDs;
+- the superseded memory IDs;
+- the graph-plan hash.
 
-For required explicit memories, promotion additionally fails closed unless `processing_status=processed` and a valid `processing_receipt` are present.
+That binding becomes a server-authored `PromotionAdmissionReceipt`. The apply
+boundary accepts the transition only for a `synthesis` operation with a current,
+valid receipt.
 
-**Plain English:** Long-term is not a copy — it's a audited layer transition on one row. Vector and KG are derived indexes built at promotion time.
+One Firestore transaction then writes:
 
-| Piece | Evidence |
-|-------|----------|
-| Batch-or-daily trigger | `promotion_trigger_reason` — `short_term_promotion.py:134-156` |
-| First-run batch-only guard | Docstring at `short_term_promotion.py:6-9` |
-| Promotion apply | `promote_short_term_item_via_apply` `:206-288` |
-| Fast-track bypass (default off) | `is_fast_track_promotable` `:114-116`, env `MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED` |
-| Post-promotion side effects | `sync_atom_keyword_index_for_item` `:279`, `sync_canonical_memory_vector` `:286`, `extract_kg_for_promoted_memory` `:287` |
+```text
+memory_state/apply_control
+memory_state/head
+memory_operations/{operation_id}
+memory_commits/{commit_id}
+memory_items/{memory_id}
+memory_graph_assertions/{memory_id}
+memory_outbox/{event_id}
+```
 
-### 6. KG write on promotion
+The promoted item, receipt, graph assertion, ledger head/commit, operation
+result, supersession invalidations, and outbox events therefore succeed or
+roll back together. An active newly admitted Long-term item cannot exist
+without its version-fenced per-memory graph representation.
 
-**What happens:** When a row becomes `tier=long_term`, `extract_kg_for_promoted_memory` calls `extract_knowledge_from_memory` (LLM) and upserts nodes/edges into the Firestore KG (`users/{uid}/knowledge_graph/...`). Retractions prune citations via `prune_memory_citations_from_kg`.
+`memory_graph_assertions/{memory_id}` is graph authority for canonical memory.
+The shared knowledge graph merges current assertions with retained legacy graph
+data on read; it is a derived view, not a second LLM extraction or admission
+authority. That overlay reads stable document-ID-ordered pages of at most 500
+assertions plus the bounded legacy inputs, returns at most 500 nodes and 1,000
+edges, and reports `truncated=true` whenever an input or merged result exceeds
+its cap. `node_count` and `edge_count` report the records included in that
+bounded snapshot. Returned edges are referentially closed over the returned
+node page; filtering a dangling edge also marks the response truncated. Public
+graph delete and rebuild return HTTP 409 for canonical or retained-assertion accounts at
+`DELETE /v1/knowledge-graph` and `POST /v1/knowledge-graph/rebuild` because
+those assertions, not the mutable shared projection, are authority.
 
-| Piece | Evidence |
-|-------|----------|
-| Extraction on promotion | `canonical_kg_promotion.py:25-66` |
-| Predicate/subject-aware content | `canonical_kg_promotion.py:44-48` |
-| KG store | `backend/database/knowledge_graph.py` — `upsert_knowledge_node` `:112`, `upsert_knowledge_edge` `:189` |
-| Idempotent flag | `kg_extracted` on `MemoryItem` — `product_memory.py:129` |
+Primary contracts:
 
-### 7. Reads and search
+| Concern | Code |
+|---|---|
+| Admission receipt and graph models | `backend/models/memory_promotion.py` |
+| Pure transition validation | `backend/models/memory_apply.py` |
+| Atomic Firestore transaction | `backend/database/memory_apply_store.py` |
+| Read-side assertion merge | `backend/database/knowledge_graph.py` |
 
-**What happens:** All product reads go through `MemoryService.read` / `search` / `search_mcp`. The first-party `/v3/memories` list opts into required pending submissions so users see their write immediately as Short-term. Agent/chat, developer, MCP, plugin, and search consumers use the protected default and see only processed memories. Search combines Typesense keyword hits + Pinecone vectors with RRF reranking (processed rows only).
+## 5. Projections: outbox retry is the authority
 
-**Plain English:** The memory-management screen can show a pending Short-term receipt without allowing that raw text to influence an agent. Once processed, normal Short-term and Long-term reads work as before; archive remains explicit.
+The canonical transaction commits deterministic `projection_sync` and
+`vector_sync` events alongside each projection-eligible state change. This
+normal outbox is the sole delivery authority for keyword/compatibility and
+vector projections; capture, consolidation, and apply do not perform a regular
+synchronous projection fast path.
 
-| Piece | Evidence |
-|-------|----------|
-| Read routing | `MemoryService.read` — `memory_service.py:396-409` |
-| Canonical list | `read_canonical_memories` — `canonical_memory_adapter.py:167` |
-| Hybrid search | `search_canonical_memories` — `canonical_memory_adapter.py:192-275` |
-| Keyword index | `atom_keyword_index.py` (sync on promotion) |
-| Graph traversal tool (read-only) | `backend/utils/memory/kg_graph_traversal.py` |
+`backend/database/memory_outbox_worker.py` owns normal projection convergence:
 
----
+- leases pending, retryable, and expired-processing events with an ownership
+  epoch;
+- reloads the canonical item instead of trusting event content;
+- checks account generation, item revision, and content hash;
+- performs an idempotent keyword/compatibility or vector upsert/delete;
+- acknowledges only an exact `True` success from the side-effect adapter;
+- retries failures with deterministic bounded backoff, then dead-letters;
+- leaves lost/failed acknowledgements replayable.
 
-## Data stores (canonical cohort)
+Restricted items are delete-only across keyword, compatibility, embedding, and
+vector providers; their content is never submitted for indexing or embedding,
+and only ID-scoped deletes contact providers to purge prior state.
+When an expired processing lease is reclaimed, the worker repairs the provider
+to current authoritative state before acknowledgement even if the original
+event fences are stale. Ordinary stale events may still settle without replay.
 
-| Store | Role | Evidence |
-|-------|------|----------|
-| `users/{uid}/memory_items/{id}` | Single product store; `tier` = short_term / long_term / archive | `domain_model.md`, `product_memory.py` |
-| `users/{uid}/memory_evidence/` | Immutable evidence artifacts | `canonical_memory_adapter.py:370` |
-| `users/{uid}/memory_operations/` + ledger apply | Audited mutations | `apply_long_term_patch_firestore` — `database/memory_apply_store.py` |
-| `memory_items.promotion.submission` / `processing_receipt` | Source provenance and durable-admission proof | `required_promotion.py`, `canonical_required_processing.py` |
-| Pinecone ns2 | Neutral `mem_*` vector ids | `neutral_vector_id_for_memory` — `canonical_memory_adapter.py:56-58` |
-| Firestore KG | Nodes/edges with memory citations | `knowledge_graph.py` |
-| `review_queue` | Human escalation for ambiguous conflicts | `review_queue.py:57` |
+Deletes, tombstones, superseded rows, and newer item versions outrank stale
+upserts. Privacy/delete paths may attempt an immediate best-effort purge to
+reduce exposure, but atomically committed normal projection/vector delete
+events remain the retry authority. The authoritative tombstone makes graph
+reads fail closed immediately; the durable projection-delete event removes
+the per-memory graph assertion before pruning shared citations. Deferring that
+derived delete keeps the released 100-item batch contract within Firestore's
+transaction limit. Expired processed Short-term items use the same canonical
+reject/apply path, preventing stale vectors from accumulating.
+Legacy backfill and remediation never invoke projection or legacy KG writers
+directly.
 
-Legacy `users/{uid}/memories` remains for non-canonical users and as a non-destructive fallback for migrated users (see `domain_model.md` backfill directive).
+## 6. Default reads and search
 
----
+`MemoryService.read`, `search`, and `search_mcp` route canonical consumers
+through authoritative `memory_items` hydration and lifecycle policy.
 
-## Known gaps / nits (honest)
+Default retrieval:
 
-Items below are intentional deferrals or edge cases worth reviewing — not hidden behind optimistic docs.
+- includes active, processed, eligible Short-term and Long-term;
+- excludes Archive unless an explicit Archive operation is authorized;
+- excludes expired, blocked, hidden, tombstoned, restricted, stale, or
+  cross-user state;
+- groups aliases by `canonical_memory_id` lineage;
+- prefers the active Long-term canonical survivor for a duplicated lineage;
+- retains fresh Short-term items that represent unique evidence.
 
-| Gap | Why it matters | Evidence |
-|-----|----------------|----------|
-| **Fast-track promotion bypass** | When `MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true`, `user_asserted` short-term items promote on `user_asserted_fast_track` even if batch/daily gate is not met — skips consolidation ordering for those rows | `short_term_promotion.py:70-72`, `:383-385` |
-| **LLM invoke exceptions uncaught** | Parse failures become `parse_failed:*` and block watermark; raw LLM/network exceptions from `_invoke_consolidation_llm` propagate uncaught through `submit_with_context(...).result()` | `canonical_consolidation.py:355-357`, `:374`, `:828` (no try/except around invoke) |
-| **Corroboration re-bump on re-consolidation** | Operation-level idempotency is tested (`test_consolidation_apply_is_idempotent_on_operation_retry`), but a later consolidation pass on the same still-short-term duplicate could increment `corroboration_count` again if the agent re-issues `corroboration_increment` — no per-pair dedupe key | `canonical_consolidation.py:705-708`; test at `test_canonical_consolidation_apply.py:300` |
-| **`review_queue` cascade purge** | Conversation delete / account purge paths do not fully cascade-review-queue cleanup for canonical cohort | `domain_model.md` delete matrix row `review_queue` 🔜 |
-| **Cron default off** | Maintenance requires explicit `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true` + non-empty whitelist | `canonical_short_term_maintenance_cron.py:31-33` |
-| **Legacy stack retained** | `database/memories.py` and legacy paths still exist until WS-H decommission | Plan §WS-H; `LegacyMemoryBackend` in `memory_service.py:239` |
-| **Partial `subject_entity_id` coverage** | Voice extraction infers subject; not all external writers may populate predicate/subject triples — KG promotion degrades to plain content | `process_conversation.py:478`; `canonical_kg_promotion.py:44-48` |
+The same lineage collapse is used for default lists and hybrid search, so a
+Short-term alias and its Long-term survivor cannot both appear as separate
+logical memories.
 
----
+Search merges keyword and vector candidate IDs, hydrates authoritative items,
+applies default visibility, collapses lineage, and then reranks. Neither
+Typesense nor Pinecone content is trusted as the response source.
 
-## Quick file index (agents)
+Primary guard:
+`backend/tests/unit/test_ws_m_atom_keyword_index.py`.
+
+## Canonical stores
+
+| Store | Role |
+|---|---|
+| `users/{uid}/memory_items/{id}` | One tiered product-memory store |
+| `users/{uid}/memory_evidence/{id}` | Immutable/source-state evidence |
+| `users/{uid}/memory_operations/{id}` | Audited operation journal |
+| `users/{uid}/memory_commits/{id}` + `memory_state/*` | Canonical ledger/head |
+| `users/{uid}/memory_graph_assertions/{memory_id}` | Atomic per-memory graph authority |
+| `users/{uid}/memory_outbox/{id}` | Retryable derived-projection intent |
+| `users/{uid}/memory_lineage/*` / `canonical_memory_id` | Alias resolution and dedupe |
+| `review_queue` | Derived human-review projection |
+| Typesense / Pinecone / shared KG | Derived, rebuildable projections |
+
+Legacy `users/{uid}/memories` remains for non-canonical users and as the
+non-destructive rollback source until the separately approved decommission.
+
+## Cohort and failure behavior
+
+- `memory_system.py` requires code-reviewed cohort membership.
+- `memory_system_pin.py` pins one cohort decision per request.
+- `MemoryService` selects one backend; it does not dual-write defensively.
+- Non-canonical maintenance is a no-op.
+- Invalid consolidation output blocks before mutation.
+- Invalid or stale promotion admission fails closed with no item, assertion, or
+  outbox write.
+- Projection failure does not roll back canonical memory; its durable event
+  remains retryable.
+
+## Quick file index
 
 | Concern | Primary file |
-|---------|----------------|
-| Cohort whitelist | `backend/utils/memory/memory_system.py` |
-| Read/write seam | `backend/utils/memory/memory_service.py` |
-| Canonical CRUD + search | `backend/utils/memory/canonical_memory_adapter.py` |
-| Consolidation agent | `backend/utils/memory/canonical_consolidation.py` |
-| Promotion + maintenance | `backend/utils/memory/short_term_promotion.py` |
-| Explicit required processing | `backend/utils/memory/canonical_required_processing.py` |
-| Cron wiring | `backend/utils/memory/canonical_short_term_maintenance_cron.py` |
-| KG on promotion | `backend/utils/memory/canonical_kg_promotion.py` |
-| Record model | `backend/models/product_memory.py` |
-| KG persistence | `backend/database/knowledge_graph.py` |
-| Review conflicts | `backend/database/review_queue.py` |
+|---|---|
+| Cohort selection | `backend/utils/memory/memory_system.py` |
+| Public read/write seam | `backend/utils/memory/memory_service.py` |
+| Canonical CRUD/list/search | `backend/utils/memory/canonical_memory_adapter.py` |
+| Required normalization | `backend/utils/memory/canonical_required_processing.py` |
+| Maintenance ordering | `backend/utils/memory/short_term_promotion.py` |
+| Total consolidation route | `backend/utils/memory/canonical_consolidation.py` |
+| Promotion admission models | `backend/models/memory_promotion.py` |
+| Pure atomic transition | `backend/models/memory_apply.py` |
+| Firestore apply transaction | `backend/database/memory_apply_store.py` |
+| Projection retry worker | `backend/database/memory_outbox_worker.py` |
+| Graph assertion reads | `backend/database/knowledge_graph.py` |
 | Domain vocabulary | `docs/memory/domain_model.md` |

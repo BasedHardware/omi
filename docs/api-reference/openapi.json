@@ -290,7 +290,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -371,7 +371,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -1712,6 +1712,62 @@
             "title": "Google Place Id"
           },
           "latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "Geolocation",
+        "type": "object"
+      },
+      "GeolocationInput": {
+        "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "google_place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Place Id"
+          },
+          "latitude": {
             "title": "Latitude",
             "type": "number"
           },
@@ -1735,7 +1791,7 @@
           "latitude",
           "longitude"
         ],
-        "title": "Geolocation",
+        "title": "GeolocationInput",
         "type": "object"
       },
       "GoalHistoryEntryResponse": {

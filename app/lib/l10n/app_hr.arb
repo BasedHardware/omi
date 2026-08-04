@@ -1483,7 +1483,7 @@
     "exportConfiguration": "Izvezi konfiguraciju",
     "bringYourOwn": "Donesi svoje",
     "payYourSttProvider": "Slobodno koristi omi. Direktno plaćaš samo svojem STT pružatelju.",
-    "freeMinutesMonth": "1.200 besplatnih minuta/mjesec uključeno. Neograničeno sa ",
+    "freeMinutesMonth": "300 besplatnih minuta/mjesec uključeno. Neograničeno sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Domaćin je obavezan",
     "validPortRequired": "Validan port je obavezan",
@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 premium minuta + neograničeno na uređaju",
+    "basicPlanDescription": "300 premium minuta + neograničeno na uređaju",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7265,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
+    "premiumMinutesInfo": "300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7376,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
+    "premiumMinutesMonth": "300 premium minuta/mjesec. Kartica Na uređaju nudi neograničenu besplatnu transkripciju.",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Čeka sinkronizaciju",
     "syncStatusRetrying": "Obrada nije uspjela — ponovni pokušaj",
     "syncStatusFailed": "Neuspjelo — dodirnite Pokušaj ponovno",
+    "syncStatusTooOld": "Prestaro za sinkronizaciju — Omi ga ne može prihvatiti",
     "syncStatusFileUnavailable": "Datoteka nije dostupna",
     "syncStatusUploaded": "Učitano · obrađuje se na Omi",
     "noRecordingsYet": "Još nema snimaka",

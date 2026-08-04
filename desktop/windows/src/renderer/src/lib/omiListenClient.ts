@@ -4,7 +4,7 @@ import { getPreferences } from './preferences'
 import { getWindowsDeviceIdHash } from './clientDevice'
 
 export type OmiListenCallbacks = {
-  /** Fires once when the v4/listen WS reaches OPEN. */
+  /** Fires once both the v4/listen WS and the requested audio source are ready. */
   onConnected: () => void
   /** Fires for each batch of finalized segments. */
   onSegments: (segments: BackendSegment[]) => void
@@ -57,13 +57,21 @@ export async function startOmiListen(
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
 
   let stopped = false
-  let connected = false
+  let backendConnected = false
+  let audioSourceReady = false
+  let readyNotified = false
+
+  const notifyReady = (): void => {
+    if (stopped || readyNotified || !backendConnected || !audioSourceReady) return
+    readyNotified = true
+    cb.onConnected()
+  }
 
   const unsubMsg = window.omi.onListenMessage((msg) => {
     if (msg.sessionId !== sessionId) return
     if (msg.kind === 'connected') {
-      connected = true
-      cb.onConnected()
+      backendConnected = true
+      notifyReady()
     } else if (msg.kind === 'segments') {
       cb.onSegments(msg.segments)
     } else if (msg.kind === 'event') {
@@ -72,14 +80,14 @@ export async function startOmiListen(
       cb.onError(new Error(msg.message), msg.fatal)
     } else if (msg.kind === 'closed') {
       if (stopped) return
-      if (connected) {
+      if (readyNotified) {
         // Connected then dropped (clean, quota, or abnormal) → let the caller
         // end the session and surface an error. Pass the reason so a 1008
         // entitlement/quota close can be reported as such, not a bare code.
         cb.onClosed(msg.code, msg.reason)
       } else {
-        // Never connected → an initial failure; surface as fatal so the caller
-        // reports that transcription couldn't start.
+        // The full source + transport lane never became usable. Surface this as
+        // an initial failure even when the backend socket briefly reached OPEN.
         cb.onError(new Error(`v4/listen closed (${msg.code}) ${msg.reason}`.trim()), true)
       }
     }
@@ -95,11 +103,19 @@ export async function startOmiListen(
     // Re-issue audio-start — AudioSessionHost re-acquires the source and resumes
     // feeding this session. One seam covers every startOmiListen consumer.
     if (ev.type === 'capture-window-restarted') {
+      audioSourceReady = false
       window.omi.captureCommand({ type: 'audio-start', sessionId, source })
       return
     }
+    if (ev.type === 'audio-source-ready' && ev.sessionId === sessionId) {
+      audioSourceReady = true
+      notifyReady()
+      return
+    }
     if (ev.type !== 'audio-source-error' || ev.sessionId !== sessionId) return
-    cb.onError(new Error(ev.message || 'audio source failed'), true)
+    const error = new Error(ev.message || 'audio source failed')
+    if (ev.name) error.name = ev.name
+    cb.onError(error, true)
   })
 
   try {

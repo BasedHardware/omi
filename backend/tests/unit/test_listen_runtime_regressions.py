@@ -209,38 +209,42 @@ def test_runtime_emits_speaker_suggestion_event():
     assert emitted_events[0].person_name == 'Avery'
 
 
-class _JourneyAttempt:
+class _LiveSTTAttempt:
     instances = []
 
-    def __init__(self, journey):
-        self.journey = journey
+    def __init__(self, *, provider, platform):
+        self.provider = provider
+        self.platform = platform
         self.finished = False
-        self.outcomes = []
+        self.terminals = []
         self.__class__.instances.append(self)
 
-    def finish(self, outcome):
+    def finish(self, outcome, *, phase):
         if self.finished:
             return
         self.finished = True
-        self.outcomes.append(outcome)
+        self.terminals.append((outcome, phase))
 
 
 def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, live_transcription_failed=False):
     runtime = object.__new__(ListenSessionRuntime)
+    runtime.use_custom_stt = False
     runtime.state = SimpleNamespace(
         close_code=close_code,
         stt_terminal_failure=stt_terminal_failure,
         live_transcription_failed=live_transcription_failed,
         live_transcription_attempt=None,
     )
+    runtime.stt_service = STTService.deepgram
+    runtime.client_device_context = SimpleNamespace(platform='ios')
     return runtime
 
 
 def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(monkeypatch):
     import routers.listen.runtime as runtime_module
 
-    _JourneyAttempt.instances = []
-    monkeypatch.setattr(runtime_module, 'JourneyAttempt', _JourneyAttempt)
+    _LiveSTTAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
     runtime = _live_transcription_runtime(close_code=1011, stt_terminal_failure=True)
 
     runtime.start_live_transcription()
@@ -248,9 +252,25 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     runtime.complete_live_transcription()
     runtime._finish_live_transcription()
 
-    assert len(_JourneyAttempt.instances) == 1
-    assert _JourneyAttempt.instances[0].journey == 'live_transcription'
-    assert _JourneyAttempt.instances[0].outcomes == ['success']
+    assert len(_LiveSTTAttempt.instances) == 1
+    assert _LiveSTTAttempt.instances[0].provider == 'deepgram'
+    assert _LiveSTTAttempt.instances[0].platform == 'ios'
+    assert _LiveSTTAttempt.instances[0].terminals == [('success', 'transcript_delivery')]
+
+
+def test_custom_stt_does_not_create_a_backend_provider_attempt(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
+    _LiveSTTAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
+    runtime = _live_transcription_runtime()
+    runtime.use_custom_stt = True
+
+    runtime.start_live_transcription()
+    runtime.complete_live_transcription()
+    runtime._finish_live_transcription()
+
+    assert _LiveSTTAttempt.instances == []
 
 
 @pytest.mark.parametrize(
@@ -267,8 +287,8 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
 ):
     import routers.listen.runtime as runtime_module
 
-    _JourneyAttempt.instances = []
-    monkeypatch.setattr(runtime_module, 'JourneyAttempt', _JourneyAttempt)
+    _LiveSTTAttempt.instances = []
+    monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
     runtime = _live_transcription_runtime(
         close_code=close_code,
         stt_terminal_failure=stt_terminal_failure,
@@ -279,11 +299,33 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
     runtime._finish_live_transcription()
     runtime._finish_live_transcription()
 
-    assert _JourneyAttempt.instances[0].outcomes == [expected]
+    assert _LiveSTTAttempt.instances[0].terminals == [(expected, 'teardown')]
 
 
 @pytest.mark.anyio
-async def test_transcript_delivery_marks_live_transcription_success_only_after_a_nonempty_client_send(monkeypatch):
+async def test_event_delivery_after_close_stops_queueing_events_for_a_gone_socket():
+    """A post-close RuntimeError means the client is gone, same as a disconnect."""
+    attempts = []
+
+    async def send_json(payload):
+        attempts.append(payload)
+        raise RuntimeError("Unexpected ASGI message 'websocket.send', after sending 'websocket.close'.")
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.state = SimpleNamespace(active=True)
+    runtime.request = SimpleNamespace(websocket=SimpleNamespace(send_json=send_json))
+
+    event = SimpleNamespace(to_json=lambda: {'type': 'ping'})
+    assert await runtime.asend_event(event) is False
+    assert runtime.state.active is False
+
+    # Now inactive, so the next event is not even attempted.
+    assert await runtime.asend_event(event) is False
+    assert attempts == [{'type': 'ping'}]
+
+
+def _transcript_processor_for_delivery(monkeypatch, websocket):
+    """One buffered segment ready to deliver, with the loop ending after that pass."""
     import routers.listen.transcripts as transcripts_module
 
     class Segment:
@@ -302,13 +344,6 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
         def combine_segments(_existing, new_segments):
             return new_segments, [], []
 
-    class WebSocket:
-        def __init__(self):
-            self.sent = []
-
-        async def send_json(self, payload):
-            self.sent.append(payload)
-
     state = SimpleNamespace(
         active=True,
         first_audio_byte_timestamp=100.0,
@@ -318,8 +353,8 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
         speaker_id_done=asyncio.Event(),
     )
     state.speaker_id_done.set()
-    websocket = WebSocket()
     delivered = []
+    flushed = []
 
     async def wait(_seconds):
         state.active = False
@@ -333,6 +368,9 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
 
     async def no_op(*_args, **_kwargs):
         return None
+
+    async def flush_speaker_assignments(conversation_id):
+        flushed.append(conversation_id)
 
     host = SimpleNamespace(
         state=state,
@@ -355,15 +393,63 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
     processor._update_live_conversation = update
     processor._translate = no_op
     processor._speaker_detection = no_op
-    processor.flush_speaker_assignments = no_op
+    processor.flush_speaker_assignments = flush_speaker_assignments
 
     monkeypatch.setattr(transcripts_module, 'TranscriptSegment', Segment)
     monkeypatch.setattr(transcripts_module, 'deserialize_conversation', lambda _data: SimpleNamespace())
+
+    return processor, delivered, flushed
+
+
+@pytest.mark.anyio
+async def test_transcript_delivery_marks_live_transcription_success_only_after_a_nonempty_client_send(monkeypatch):
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
 
     await processor.process_loop()
 
     assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
     assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
+async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client_socket_is_closed(monkeypatch):
+    """A send after close must not kill the loop before its final speaker flush.
+
+    Starlette answers a send on a closed socket with RuntimeError. That escaped the
+    lifetime task, so the tail of `process_loop` never ran and the session's
+    speaker -> person assignments were never written to the conversation.
+    """
+
+    class ClosedWebSocket:
+        def __init__(self):
+            self.attempts = 0
+
+        async def send_json(self, _payload):
+            self.attempts += 1
+            raise RuntimeError(
+                "Unexpected ASGI message 'websocket.send', after sending 'websocket.close' "
+                'or response already completed.'
+            )
+
+    websocket = ClosedWebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+
+    await processor.process_loop()
+
+    assert websocket.attempts == 1
+    assert flushed == ['conversation-1']
+    # Nothing reached the client, so the live-transcription attempt is not a success.
+    assert delivered == []
+    assert processor.host.state.active is False
 
 
 async def _async_result(value):
@@ -406,3 +492,42 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+
+
+def _heartbeat_runtime(send_text):
+    from starlette.websockets import WebSocketState
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_text=send_text)
+    )
+    runtime.state = SimpleNamespace(active=True, last_activity_time=None)
+    return runtime
+
+
+@pytest.mark.anyio
+async def test_heartbeat_treats_gone_peer_as_disconnect_not_crash():
+    """A client that vanishes between the state read and the keepalive write ends the
+    session as a disconnect; the heartbeat must not raise out of its supervised task."""
+    from fastapi.websockets import WebSocketDisconnect
+
+    async def send_text(_payload):
+        raise WebSocketDisconnect()
+
+    runtime = _heartbeat_runtime(send_text)
+    await runtime._heartbeat()
+
+    assert runtime.state.active is False
+
+
+@pytest.mark.anyio
+async def test_heartbeat_stops_after_close_message_instead_of_crashing():
+    """The ASGI server refuses a send once the close frame went out — same disconnect."""
+
+    async def send_text(_payload):
+        raise RuntimeError('Cannot call "send" once a close message has been sent.')
+
+    runtime = _heartbeat_runtime(send_text)
+    await runtime._heartbeat()
+
+    assert runtime.state.active is False

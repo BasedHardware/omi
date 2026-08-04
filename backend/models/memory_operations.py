@@ -11,11 +11,14 @@ from models.memory_contracts import deterministic_contract_id
 
 class MemoryOperationType(str, Enum):
     source_candidate = "source_candidate"
+    source_replacement = "source_replacement"
     synthesis = "synthesis"
     long_term_apply = "long_term_apply"
+    user_mutation = "user_mutation"
     archive_transition = "archive_transition"
     projection_sync = "projection_sync"
     vector_sync = "vector_sync"
+    graph_enrichment = "graph_enrichment"
     deletion = "deletion"
 
 
@@ -44,6 +47,14 @@ class OperationLogicalPayload(BaseModel):
     target_memory_id: Optional[str] = None
     result_status: Optional[str] = None
     supersedes: List[str] = Field(default_factory=list)
+    subject_entity_id: Optional[str] = None
+    predicate: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    target_tier: Optional[str] = None
+    target_visibility: Optional[str] = None
+    target_user_asserted: Optional[bool] = None
+    clear_graph_assertion: Optional[bool] = None
+    mutation_metadata: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def canonical(self) -> Dict[str, Any]:
@@ -55,7 +66,21 @@ def _coerce_logical_payload(value: OperationLogicalPayload | Dict[str, Any]) -> 
         return value
     known = {
         key: value[key]
-        for key in ["decision", "memory_text", "target_memory_id", "result_status", "supersedes"]
+        for key in [
+            "decision",
+            "memory_text",
+            "target_memory_id",
+            "result_status",
+            "supersedes",
+            "subject_entity_id",
+            "predicate",
+            "arguments",
+            "target_tier",
+            "target_visibility",
+            "target_user_asserted",
+            "clear_graph_assertion",
+            "mutation_metadata",
+        ]
         if key in value
     }
     metadata = {key: val for key, val in value.items() if key not in known}
@@ -236,7 +261,7 @@ class MemoryOperation(BaseModel):
     def _transition(self, *, status: MemoryOperationStatus, **updates: Any) -> "MemoryOperation":
         if self.status in _TERMINAL_STATUSES:
             raise ValueError(f"cannot transition terminal operation from {self.status.value}")
-        data = self.dict()
+        data = self.model_dump(mode="python")
         data.update(updates)
         data["status"] = status
         data["updated_at"] = datetime.now(timezone.utc)

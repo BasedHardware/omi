@@ -16,6 +16,10 @@ from database.memory_vector_repair_pinecone_adapter import (
     make_pinecone_vector_deleter,
     make_pinecone_vector_repairer,
 )
+from database.memory_vector_metadata import (
+    build_canonical_memory_vector_delete_filter,
+    canonical_memory_provider_id,
+)
 from database.memory_vector_repair_outbox_worker import (
     VectorRepairOutboxWorkerTickConfig,
     ack_vector_repair_purge_outbox_record,
@@ -652,25 +656,31 @@ class TestWorkerCore:
         assert dead_updates.patches[-1][1]["attempt_count"] == 3
         assert dead_updates.patches[-1][1]["last_error"] == "pinecone unavailable"
 
-    def test_pinecone_adapter_delete_passes_vector_id_and_ns2_namespace_to_injected_deleter(self):
+    def test_pinecone_adapter_delete_uses_uid_fenced_filter_in_ns2(self):
         calls = []
         deleter = make_pinecone_vector_deleter(
-            delete_vectors=lambda *, ids, namespace: calls.append({"ids": list(ids), "namespace": namespace})
+            delete_vectors=lambda *, filter, namespace: calls.append({"filter": filter, "namespace": namespace})
             or {"ok": True}
         )
 
-        result = deleter(_record(vector_id="memvec:stale"))
+        provider_id = canonical_memory_provider_id("u1", "mem-1")
+        result = deleter(_record(vector_id=provider_id))
 
         assert VECTOR_REPAIR_PINECONE_NAMESPACE == "ns2"
-        assert calls == [{"ids": ["memvec:stale"], "namespace": "ns2"}]
+        delete_filter = build_canonical_memory_vector_delete_filter("u1", "mem-1")
+        assert calls == [{"filter": delete_filter, "namespace": "ns2"}]
         assert result["action"] == "delete"
-        assert result["vector_ids"] == ["memvec:stale"]
+        assert result["filter"] == delete_filter
+        assert result["vector_ids"] == [provider_id]
         assert result["namespace"] == "ns2"
 
     def test_pinecone_adapter_repair_upserts_authoritative_memory_vector_with_ns2_metadata_and_embedding(self):
+        deletes = []
         upserts = []
         repairer = make_pinecone_vector_repairer(
             embed_text=lambda content: [0.1, 0.2, 0.3],
+            delete_vectors=lambda *, filter, namespace: deletes.append({"filter": filter, "namespace": namespace})
+            or {"count": 1},
             upsert_vectors=lambda *, vectors, namespace: upserts.append({"vectors": vectors, "namespace": namespace})
             or {"count": 1},
             now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
@@ -679,9 +689,15 @@ class TestWorkerCore:
         result = repairer(_record(required_projection_commit_id="projection-2"), _live_item())
 
         assert len(upserts) == 1
+        assert deletes == [
+            {
+                "filter": build_canonical_memory_vector_delete_filter("u1", "mem-1"),
+                "namespace": "ns2",
+            }
+        ]
         assert upserts[0]["namespace"] == "ns2"
         vector = upserts[0]["vectors"][0]
-        assert vector["id"].startswith("memvec:")
+        assert vector["id"] == canonical_memory_provider_id("u1", "mem-1")
         assert vector["values"] == [0.1, 0.2, 0.3]
         assert vector["metadata"]["uid"] == "u1"
         assert vector["metadata"]["memory_id"] == "mem-1"
@@ -695,10 +711,33 @@ class TestWorkerCore:
         assert result["vector_id"] == vector["id"]
         assert result["namespace"] == "ns2"
 
+    def test_pinecone_adapter_repair_does_not_upsert_when_identity_cleanup_fails(self):
+        upserts = []
+
+        def fail_cleanup(*, filter, namespace):
+            raise RuntimeError("pinecone cleanup failed")
+
+        repairer = make_pinecone_vector_repairer(
+            embed_text=lambda content: [0.1, 0.2, 0.3],
+            delete_vectors=fail_cleanup,
+            upsert_vectors=lambda *, vectors, namespace: upserts.append(vectors),
+        )
+
+        try:
+            repairer(_record(), _live_item())
+        except RuntimeError as exc:
+            assert str(exc) == "pinecone cleanup failed"
+        else:
+            raise AssertionError("expected cleanup failure")
+
+        assert upserts == []
+
     def test_pinecone_adapter_repair_not_ready_without_content_or_required_fences_and_has_no_side_effects(self):
+        deletes = []
         upserts = []
         repairer = make_pinecone_vector_repairer(
             embed_text=lambda content: [0.1],
+            delete_vectors=lambda *, filter, namespace: deletes.append(filter),
             upsert_vectors=lambda *, vectors, namespace: upserts.append(vectors),
         )
 
@@ -715,14 +754,15 @@ class TestWorkerCore:
             else:
                 raise AssertionError("expected repair not-ready failure")
 
+        assert deletes == []
         assert upserts == []
 
     def test_worker_failure_path_records_adapter_failure_and_duplicate_batch_has_one_pinecone_side_effect(self):
         calls = []
         updates = _Updates()
 
-        def failing_delete(*, ids, namespace):
-            calls.append((tuple(ids), namespace))
+        def failing_delete(*, filter, namespace):
+            calls.append((filter, namespace))
             raise RuntimeError("pinecone delete failed")
 
         deleter = make_pinecone_vector_deleter(delete_vectors=failing_delete)
@@ -739,7 +779,7 @@ class TestWorkerCore:
             max_attempts=3,
         )
 
-        assert calls == [(("vec-1",), "ns2")]
+        assert calls == [(build_canonical_memory_vector_delete_filter("u1", "mem-1"), "ns2")]
         assert result["failed_count"] == 1
         assert result["skipped_count"] == 1
         assert updates.patches[-1][0] == "dup-a"
@@ -1252,12 +1292,23 @@ class TestEntrypoint:
         )
 
         item = deps.authoritative_item_loader({"uid": "u1", "memory_id": "mem1"})
-        deps.vector_deleter({"vector_id": "vec1"})
+        deps.vector_deleter({"vector_id": "vec1", "uid": "u1", "memory_id": "mem1"})
         deps.vector_repairer({"required_projection_commit_id": "projection-1"}, item)
 
         assert ("pinecone", "pc-key") in calls
         assert ("index", "memory-index") in calls
         assert ("get", "users/u1/memory_items/mem1") in calls
-        assert ("delete", {"ids": ["vec1"], "namespace": "ns2"}) in calls
+        assert (
+            calls.count(
+                (
+                    "delete",
+                    {
+                        "filter": build_canonical_memory_vector_delete_filter("u1", "mem1"),
+                        "namespace": "ns2",
+                    },
+                )
+            )
+            == 2
+        )
         assert ("embed", "User prefers concise updates.") in calls
         assert any(call[0] == "upsert" and call[1]["namespace"] == "ns2" for call in calls)

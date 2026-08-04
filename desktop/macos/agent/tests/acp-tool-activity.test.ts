@@ -143,7 +143,7 @@ describe("AcpRuntimeAdapter tool activity translation", () => {
     ]);
   });
 
-  it("maps ACP failed and cancelled tool updates to failed activity", () => {
+  it("preserves ACP failed and cancelled tool outcomes", () => {
     const harness = translateHarness();
 
     harness.translate({
@@ -169,7 +169,7 @@ describe("AcpRuntimeAdapter tool activity translation", () => {
       {
         type: "tool_activity",
         name: "Bash",
-        status: "failed",
+        status: "cancelled",
         toolUseId: "tool-cancelled",
       },
     ]);

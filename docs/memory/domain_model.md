@@ -5,7 +5,7 @@
 > It supersedes scattered legacy codename-era docs for domain terminology. Implementation types live
 > in `backend/models/memory_domain.py`.
 >
-> **Runtime architecture (capture → consolidate → promote → read):**
+> **Runtime architecture (capture → route once → atomically admit → read):**
 > [docs/doc/developer/backend/canonical_memory_architecture.md](../doc/developer/backend/canonical_memory_architecture.md)
 > (visual: [HTML companion](../doc/developer/backend/canonical_memory_architecture.html)).
 
@@ -21,8 +21,9 @@ flowchart TD
   end
   subgraph memories [Memories - one store, layer-tagged]
     ST[Short-term layer: extractions + TTL/decay]
+    Route{one terminal consolidation route}
     LT[Long-term layer: durable facts]
-    AR[archive state on long-term]
+    AR[Archive layer]
   end
   subgraph workflow [Workflow - not memory]
     Tasks[action_items]
@@ -34,7 +35,9 @@ flowchart TD
   Conv --> ST
   Conv --> Tasks
   Conv --> Goals
-  ST -- promote --> LT
+  ST --> Route
+  Route -- promote + receipt + graph assertion --> LT
+  Route -- archive / review / reject --> AR
   LT -- age-out --> AR
 ```
 
@@ -43,8 +46,8 @@ flowchart TD
 | **Conversation** | Persisted **session record** at `users/{uid}/conversations`: processed `transcript_segments`, session metadata (`structured`, `apps_results`), audio/photo linkage. Upstream of memory. | `in_progress` → `processing` → `completed`; user can delete whole session | N/A — Conversations tab, not Memories |
 | **Capture session** | Ephemeral listen/recording window (WebSocket lifetime). For voice paths, **1:1 with a Conversation** stub created at listen start. Use this term when distinguishing runtime capture from the persisted record. | Ends when recording stops | N/A |
 | **Raw input** | True source capture: audio in GCS, screenshots/files. Conversation docs hold **processed** transcripts (STT, diarization, speaker attribution) — not pristine raw audio/text. | Retained per recording/privacy policy | N/A — never surfaced as "memory" |
-| **Short-term memory** (Layer 1) | Structured extractions in **Memories**, tagged `layer=short_term`. Observations tied to a source (usually a Conversation via `evidence[].source_id`). | Born on extraction; **TTL/decay**; **promoted** to Long-term or expires | Yes |
-| **Long-term memory** (Layer 2) | Durable facts in **Memories**, tagged `layer=long_term` (e.g. "Name is David Zhang", "Based in Seattle"). | Promotion/consolidation or direct user assertion; may **age to Archive** | Yes |
+| **Short-term memory** (Layer 1) | Broad new intake in **Memories**, tagged `layer=short_term`. Observations and explicit submissions retain source evidence (usually a Conversation via `evidence[].source_id`). | Every new memory starts here; **TTL/decay**; exactly one consolidation route settles it | Yes when eligible |
+| **Long-term memory** (Layer 2) | Durable synthesized facts in **Memories**, tagged `layer=long_term` (e.g. "Name is David Zhang", "Based in Seattle"). | Only an atomic `promote` route with a server-authored admission receipt and per-memory graph assertion may enter; may **age to Archive** | Yes |
 | **Archive** | Aged-out long-term (`layer=archive` or terminal state); kept for recall but not shown by default. | Terminal unless explicitly resurfaced | No (explicit opt-in only) |
 | **Workflow** | Action items and goals — task state, due dates, integrations, progress. **Not** memory layers. | Task: pending → done; Goal: active → ended | Yes (dedicated UX) |
 
@@ -77,9 +80,39 @@ flowchart TD
   untiered legacy and local-pending records remain a compatibility/provenance concern until
   an authoritative read or create receipt supplies their lifecycle.
 - **Conversations** are never Memories. No merge of Conversations tab into Memories.
-- **Promotion** is an explicit Short-term → Long-term transition (corroboration, consolidation,
-  or user assertion) within Memories — audited, not a silent flag flip.
-- Non-durable / rejected extractions stay Short-term or are pruned; they never reach Long-term.
+- **Every new intake is Short-term**, including conversation extraction,
+  explicit first-party memory, import, API, plugin, and integration writes.
+  Historical migration/backfill is a separate, explicit policy and cannot
+  expose a reusable direct-to-Long-term path.
+- Canonical conversation capture accepts only quote references grounded in one
+  transcript segment. Extraction failure preserves prior source state; a
+  successful empty reprocess fully retracts prior conversation-sourced state.
+- **Consolidation owns the only terminal route** for pending Short-term:
+  exactly one of `promote`, `archive`, `review`, or `reject`. Incomplete,
+  duplicate, or unknown item-addressed output mutates nothing.
+- **Promotion** is the audited Short-term → Long-term route within Memories.
+  The server binds the current item revision, content, evidence, supersedes
+  set, and graph plan into an admission receipt and commits the Long-term item
+  plus `memory_graph_assertions/{memory_id}` atomically. Promotion conserves
+  authoritative subject identity and attribution; it cannot rewrite a known
+  third-party subject as the user.
+- No generic batch/daily pass, call-site promotion, or user-asserted fast track
+  may bypass consolidation.
+- Non-durable/rejected routes settle in Archive or hidden/review state; they
+  never reach Long-term.
+- Default reads include eligible Short-term + Long-term, then collapse aliases
+  by canonical lineage so a logical memory appears once.
+- Keyword, vector, compatibility, and shared-graph indexes are outbox-retried
+  projections of canonical state, not mutation authorities. Restricted items
+  are delete-only: their content never reaches keyword, compatibility,
+  embedding, or vector providers, while ID-scoped deletes purge prior state.
+- Maintenance drains existing outbox work before parsing rows and drains new
+  commit events afterward. A reclaimed expired-processing event repairs current
+  authoritative provider state before acknowledgement.
+- Canonical graph assertions are derived-state authority. Bounded reads return
+  only edges whose endpoints are in the returned node page and mark filtering
+  as truncation; public canonical or retained-assertion delete/rebuild requests
+  return HTTP 409.
 - **Workflow** (`action_items`, `goals`) is extracted from the same seam as Memories but stored
   separately. Long-term may absorb a *fact about* a commitment; the task/goal row stays in workflow.
 - Conversation delete cascades to evidence tombstoning on linked Short-term items (`tombstone_source`).
@@ -140,7 +173,7 @@ The legacy pipeline introduced **L1/L2 as processing stages** — **not** the sa
 |--------|----------------|-------------|
 | **Conversations** | `users/{uid}/conversations` | Upstream session records |
 | **Action items / goals** | `action_items`, `goals` | Workflow — unchanged |
-| **Knowledge graph** | Neo4j / `knowledge_graph.py` | Derived from long-term facts; invalidation on delete/reprocess (WS-J) |
+| **Knowledge graph** | `memory_graph_assertions` + shared graph / `knowledge_graph.py` | Per-memory assertions commit with Long-term admission; shared nodes/edges are a referentially closed, bounded read-side projection and legacy merge; public assertion-backed delete/rebuild returns HTTP 409 |
 | **Trends** | `trends_db` | Separate derived index from conversations |
 | **Legacy conversation shims** | `plugins_results`, `processing_memory_id` | Mirrored from `apps_results` / `processing_conversation_id`; **retire** when old clients age out |
 
@@ -158,7 +191,7 @@ No active `/v1` or `/v2` memories REST API — `/v3` is the legacy product surfa
 
 | Retire | Replace with | WS |
 |--------|--------------|-----|
-| `memvec:` vector prefix (stored IDs — migrate per rollout Q5) | `memory` / `canonical_memory` / neutral vector IDs | WS-G, WS-J |
+| `memvec:` revision-scoped vector IDs | One user-scoped `memproj:` provider ID derived from `(uid, memory_id)` | WS-G, WS-J |
 | `tier` (product field on items) | `layer` | WS-G, WS-F |
 | `L1`, `L2`, `layer1`, `layer2` in **product/UI** context | **Short-term** / **Long-term** / **promotion** | WS-G, WS-F |
 | `L1MemoryArchiveItem`, `WorkingMemoryObservation` in **docs/comments** | working observation / short-term candidate | WS-G |
@@ -188,15 +221,18 @@ The single record shape every canonical-cohort store/client converges on.
 
 | Field | Type | Meaning | Notes |
 |-------|------|---------|-------|
-| `id` | string | Stable record id | Neutral scheme (no `memvec:`); see rollout §10 Q5 |
+| `id` | string | Stable canonical record id | Provider projections derive a separate user-scoped ID; see rollout §10 Q5 |
 | `content` | string | The fact/observation text | — |
 | `layer` | `short_term` \| `long_term` \| `archive` | **Product lifecycle layer**; drives UI badge, default visibility, TTL | The only axis users/clients see |
 | `status` | `active` \| `superseded` \| `tombstoned` | **Record lifecycle**; non-`active` excluded from normal reads | Distinct from `layer` |
 | `processing_state` | `pending` \| `processed` \| `blocked` | **Internal pipeline** state | Never surfaced to clients |
 | `category` | legacy taxonomy value | Metadata only (`core`/`hobbies`/… → primary four in UI) | **Not** a layer |
 | `evidence[]` | array of `{ source_type, source_id, … }` | Provenance; for voice paths `source_id` = Conversation id | Drives cascade/tombstone on Conversation delete |
-| `source_id` | string | Primary upstream source (usually a Conversation) | Indexed for cascade |
-| `promotion` | `{ from_layer, to_layer, reason, at, by }` \| null | **Audit record** of Short→Long transitions | Promotion is never a silent flag flip |
+| `source_ids` | string array | Exact projection of `evidence[].source_id` / `conversation_id` values | `array_contains` index drives bounded source replacement |
+| `canonical_memory_id` | string \| null | Alias/lineage target for a consolidated logical memory | Default reads dedupe on this lineage |
+| `promotion` | route audit + `admission_receipt` + `graph_plan` \| null | **Admission record** of Short→Long transitions | Receipt is server-authored and revision/content/evidence-fenced |
+| `ledger_commit_id` / `ledger_sequence` | string / integer \| null | Atomic canonical commit fence | Required for active Long-term |
+| `graph_ready` / `graph_assertion_id` / `graph_plan_hash` | boolean / string / string | Version-fenced per-memory graph admission | Required for newly admitted active Long-term |
 | `ttl` / `expires_at` | timestamp \| null | Short-term decay deadline | Null for long-term/archive |
 | `created_at` / `updated_at` | timestamp | — | — |
 
@@ -218,7 +254,13 @@ anything else is a bug a validator should reject.
 
 ### Rules
 
-- **Promotion requires `processing_state=processed`** — a `pending`/`blocked` item never reaches `long_term`.
+- **Promotion requires `processing_state=processed`** — a `pending`/`blocked`
+  item never reaches `long_term`.
+- Every new active `long_term` admission requires a valid server-authored
+  promotion receipt and matching per-memory graph assertion in the same ledger
+  transaction. Legacy migration state is not a new admission.
+- Every pending item is conserved through one terminal consolidation route;
+  there is no independent generic or fast-track promotion transition.
 - `archive` items are **never `superseded`** (terminal) — they tombstone or are resurfaced.
 - `status=tombstoned` overrides visibility at **every** layer (hard-excluded from default reads).
 - Physical storage may carry `status=hidden` (canonical pipeline outcome for secret/rejected items). It has
@@ -306,6 +348,20 @@ Extraction builds `MemoryDB` rows via `MemoryDB.from_memory()` (`models/memories
 - Legacy mirror **`memory_id`** — set equal to `conversation_id` in `MemoryDB.__init__` for
   older query paths (e.g. `get_memory_ids_for_conversation` filters on `memory_id`).
 
+Canonical capture additionally requires every persisted
+`evidence[].quote_refs[]` quote to occur in one processed transcript segment.
+Extraction validates the complete replacement set before retracting prior
+state: a genuinely empty provider result is authoritative, while any emitted
+candidate without a unique quote binding fails the replacement and preserves
+the prior source cohort.
+
+Canonical replacement reads only the indexed `source_ids` cohort in bounded
+cursor pages. When withdrawing a source-owned canonical survivor, the same
+control-fenced transaction reactivates any superseded Long-term item backed by
+independent active evidence, restores its graph assertion, and emits upsert
+projection events. Independent provenance therefore cannot remain stranded
+behind a tombstoned survivor.
+
 **Conversation delete cascade** keys on this provenance: `memories_db.delete_memories_for_conversation`
 → `ripple_source_deletion(uid, conversation_id)` tombstones evidence where
 `evidence[].source_id == conversation_id` and retracts facts with no surviving evidence; shadow
@@ -330,7 +386,7 @@ provenance via `conversation_id` / `evidence[].source_id`.
 
 ---
 
-## Ratified rollout decisions (§10) — locked 2026-06-23
+## Ratified rollout decisions (§10) — Q3 superseded 2026-07-27
 
 Authoritative record of the §10 blocking decisions. Ratified by product owner before WS-I start.
 
@@ -338,19 +394,21 @@ Authoritative record of the §10 blocking decisions. Ratified by product owner b
 |---|----------|---------------------|----------------------|
 | Q1 | Write convergence for `process_conversation` | **Hard cutover** | Canonical-cohort extraction writes go to the canonical store **only** — no legacy write/fallback for canonical users. (Override of the dual-write default.) |
 | Q2 | Interim split-brain tolerance | **None — disallowed** | A canonical-cohort user must read AND write the canonical store. Consequence: WS-I must also route that cohort's **reads** to canonical (cannot leave reads on legacy), else the user loses freshly written memories. |
-| Q3 | Promotion trigger Short→Long | **Batch-or-daily** | Short-term promotes to Long-term in batches once enough accumulate to process a full batch, OR once per day, whichever comes first. (Implemented in WS-B, not WS-I.) |
+| Q3 | Terminal route trigger for pending Short-term | **Every bounded pending set** | Each enabled maintenance pass deterministically selects a server-bounded eligible set and routes every selected item exactly once through consolidation. Overflow remains immediately eligible on the next Scheduler run, with no 24-hour watermark delay. `promote` performs atomic Long-term admission; there is no separate batch/daily or fast-track promotion pass. |
 | Q4 | Backfill dedup (both stores) | **Hash-based idempotency key** | Deterministic id derived from source so re-runs never duplicate. (WS-C.) |
-| Q5 | Vector ID strategy | **Neutral prefix** | Drop `memvec:`; canonical items use neutral vector IDs. (WS-J/WS-G.) |
+| Q5 | Provider projection ID strategy | **User-scoped stable ID** | Typesense and Pinecone use one `memproj:` hash of `(uid, memory_id)` while metadata retains `memory_id` for canonical hydration. (WS-J/WS-G.) |
 | Q6 | API field name for layer axis | **`layer`** | Desktop aliases `tier` during WS-G. |
-| Q7 | Reprocess semantics | **Full retract** | Reprocess/sync-merge retracts conversation-sourced items across ALL stores + vectors before re-extract. |
+| Q7 | Reprocess semantics | **Full retract after successful extraction** | Extraction failure preserves prior state. A successful result replaces the source across all stores and vectors; an empty result therefore performs a full retract. |
 | Q8 | Conversation-delete cascade | **Server-default `cascade=true` + fix clients** | Belt-and-suspenders; desktop currently omits the flag. (WS-J/WS-K.) |
 
 **WS-I scope consequence of Q1+Q2:** WS-I is NOT a dual-write add-on. For the canonical cohort it must
 make the `CanonicalMemoryBackend` real for **both write and read**, route `process_conversation`
 extraction to canonical-only, and route the cohort's read path (at least `/v3` GET) to canonical — so a
-canonical user is fully self-consistent. The canonical cohort stays **empty in production**
-(`CANONICAL_MEMORY_USERS` empty in `memory_system.py`); only explicitly-added test users are affected. Legacy-cohort behavior
-must remain byte-unchanged.
+canonical user is fully self-consistent. The canonical cohort stays code-owned
+in `backend/config/canonical_memory_cohort.py` and intentionally small; only
+explicitly reviewed users and isolated fixtures are affected. Runtime rollout
+flags do not grant entitlement. Legacy-cohort behavior must remain
+byte-unchanged.
 
 ### Backfill & reversibility directive (locked 2026-06-23)
 
@@ -364,6 +422,8 @@ must remain byte-unchanged.
   (legacy store deletion) without explicit owner sign-off at full-migration time.
 - **Consequence for Q1 cutover:** "cutover" governs the *write/read routing* for a canonical user
   (their NEW writes go canonical-only), not destruction of their pre-existing legacy data.
+- Historical backfill that materializes retained legacy data as Long-term is a
+  migration operation, not new intake or a reusable promotion bypass.
 
 ---
 
@@ -371,14 +431,29 @@ must remain byte-unchanged.
 
 Status legend: ✅ handled in code today · ⚠️ gated / needs sign-off · 🔜 future wave · — not applicable
 
-| Trigger | legacy `memories` | canonical `memory_items` | `memory_evidence` | `memory_operations` | Pinecone ns2 (legacy `{uid}-{id}`) | Pinecone ns2 (canonical neutral `mem_…`) | Pinecone ns2 (legacy `memvec:…`) | `review_queue` | Neo4j KG | WS-M keyword index |
+| Trigger | legacy `memories` | canonical `memory_items` | `memory_evidence` | `memory_operations` | Pinecone ns2 (legacy `{uid}-{id}`) | Pinecone ns2 (canonical `memproj:<hash(uid,memory_id)>`) | Pinecone ns2 (retired `memvec:…`) | `review_queue` | Neo4j KG | WS-M keyword index |
 |---------|-------------------|--------------------------|-------------------|---------------------|-------------------------------------|------------------------------------------|-------------------------------|--------------|----------|-------------------|
 | **Conversation delete, `cascade=false`** (current server default) | — (no cascade) | — | — | — | — | — | — | — | — | — |
-| **Conversation delete, `cascade=true`** | ✅ `ripple_source_deletion` / tombstone evidence | ✅ `MemoryService.retract_conversation_memories` (canonical cohort only) | ✅ tombstone in retract | — | ✅ `delete_memory_vector` for retracted legacy ids | ✅ purge outbox via retract (`neutral_vector_id_for_memory`) | 🔜 legacy `memvec:` vectors not purged on cascade yet | 🔜 no cascade purge wired | 🔜 `invalidate_kg_for_memory_retraction` logs deferral | 🔜 TBD (WS-M) |
-| **Account delete** | ✅ Firestore recursive wipe + `delete_memory_vectors_batch` | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ `_purge_derived_user_data` | ✅ `purge_canonical_derived_user_data` (canonical cohort only) | 🔜 not enumerated on account delete | ✅ subcollection wipe | ✅ `knowledge_nodes` / `knowledge_edges` wiped | 🔜 TBD (WS-M) |
-| **Reprocess / sync-merge (Q7 full retract)** | ✅ legacy path in `_extract_memories_inner` | ✅ `retract_conversation_sourced_memories` | ✅ evidence tombstone in retract | — | ✅ legacy delete in reprocess inner | ✅ purge outbox in retract | 🔜 apply `vector_sync` still writes `memvec:` (carry-forward WS-G) | 🔜 | 🔜 KG hook defers to rebuild | 🔜 TBD (WS-M) |
-| **Supersede / tombstone (single memory)** | ✅ `invalidate_memory` / ripple | ✅ `delete_canonical_memory` | ✅ per-item tombstone | ✅ via apply path | ✅ router delete | ✅ purge outbox | 🔜 | 🔜 | 🔜 | 🔜 TBD (WS-M) |
-| **Archive transition** | 🔜 legacy archive path | 🔜 canonical archive workers | — | — | 🔜 archive vector filter exists; purge on transition not wired | 🔜 | 🔜 | — | — | 🔜 TBD (WS-M) |
+| **Conversation delete, `cascade=true`** | ✅ `ripple_source_deletion` / tombstone evidence | ✅ atomic complete-source replacement (canonical cohort only) | ✅ scrubbed tombstone in replacement | ✅ replacement ledger operation | ✅ `delete_memory_vector` for retracted legacy ids | ✅ user-scoped purge outbox | — no new writes | ✅ bounded indexed purge + authoritative read fence | ✅ citation prune, retried by projection delivery | ✅ delete outbox |
+| **Account delete** | ✅ Firestore recursive wipe + `delete_memory_vectors_batch` | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ `_purge_derived_user_data` | ✅ UID-authoritative provider purge even with no Firestore items | — no new writes | ✅ subcollection wipe | ✅ `knowledge_nodes` / `knowledge_edges` wiped | ✅ UID purge |
+| **Reprocess / sync-merge (Q7 full retract)** | ✅ legacy path in `_extract_memories_inner` | ✅ atomic complete-source replacement | ✅ scrubbed tombstone in replacement | ✅ replacement ledger operation | ✅ legacy delete in reprocess inner | ✅ user-scoped purge outbox | — no new writes | ✅ bounded indexed purge | ✅ citation prune | ✅ delete outbox |
+| **Supersede / tombstone (single memory)** | ✅ `invalidate_memory` / ripple | ✅ complete non-tombstoned canonical lineage | ✅ scrub embedded evidence; preserve shared standalone evidence only for survivors | ✅ atomic deletion ledger operation | ✅ router delete | ✅ user-scoped purge outbox | — no new writes | ✅ atomic current-review redaction + bounded cleanup | ✅ citation prune | ✅ delete outbox |
+| **Archive transition** | 🔜 legacy archive path | ✅ consolidation `archive` / `review` route | — | ✅ canonical apply operation | 🔜 legacy archive purge not wired | ✅ delete outbox | — no new writes | ✅ created only for the `review` route | — | ✅ delete outbox |
+
+Canonical review IDs include the source item revision. Resolution validates that
+revision together with its source commit and content hash in the same
+transaction that mutates the canonical item and redacts the queue row.
+Authoritative review reads fail closed when a delayed projection still points
+at a stale or tombstoned item.
+
+Canonical delete-all uses bounded tombstone transactions followed by a
+control-fenced rescan loop. It succeeds only after observing a stable empty set
+of non-tombstoned items; repeated concurrent writes produce an error instead of
+a partial-success response.
+
+Canonical account deletion is fenced by the durable top-level wipe record.
+Normal projection delivery becomes delete-only while the fence is active, and
+provider purge fails retryably until all leased projection work has drained.
 
 ### Q8 — conversation-delete cascade default (⚠️ gated)
 
@@ -393,11 +468,20 @@ production behavior change for every user and requires explicit owner sign-off w
 **When approved:** change `Query(False)` → `Query(True)` in `routers/conversations.py` and land
 desktop client fix (WS-K).
 
-### Q5 — neutral vector id (canonical)
+### Q5 — user-scoped provider id (canonical)
 
-Canonical purge paths use `neutral_vector_id_for_memory` (`mem_…` = `memory_id`). Legacy apply
-`vector_sync` / repair worker still upserts `memvec:…` via `deterministic_memory_vector_id` —
-**carry-forward to WS-G**; do not break existing `memvec:` vectors in shared Pinecone ns2.
+Typesense and Pinecone use the same stable `memproj:` hash of `(uid, memory_id)` as their external
+document/vector ID. Canonical `memory_id` remains unchanged in provider metadata and is the only
+hydration key. No bare-`memory_id` or revision-scoped compatibility write or read fallback is
+emitted.
+
+Migration cleanup is metadata-authoritative rather than ID-authoritative. Before an ordinary
+Typesense/Pinecone upsert or Pinecone repair, the writer deletes rows matching `(uid, memory_id)`,
+which removes both a legacy bare-ID row and any prior `memproj:` row without touching another
+user's projection. Per-memory privacy deletion uses the same fence. Rebuild and account deletion
+purge by `uid`, even when Firestore no longer enumerates an item, so orphaned legacy rows cannot
+survive. Provider cleanup failure fails the projection operation; the durable outbox retries
+instead of acknowledging a partial migration.
 
 ---
 

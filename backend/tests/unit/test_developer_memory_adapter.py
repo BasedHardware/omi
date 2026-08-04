@@ -183,9 +183,11 @@ def test_developer_update_route_checks_split_brain_guard_before_reads_and_legacy
 
 
 def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():
-    # Static tripwire (source order, not behavior): the list route may reach the
-    # legacy read only through the deny branch's narrow un-enrolled guard (#9892);
-    # the vector route still requires an explicit legacy-safe decision.
+    # Static tripwire (source order, not behavior): both the list and vector routes may
+    # reach the legacy read only through the same narrow un-enrolled guard — an explicit
+    # USE_LEGACY_SAFE decision, or a deny whose only reason is missing_rollout_state
+    # (#9892). Vector used to fail closed on that guard, which is #10203; it now recovers
+    # like the list route, but must still not reach legacy on any other deny reason.
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
     denied_check = 'if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:'
@@ -196,10 +198,16 @@ def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision(
     assert legacy_call in contents
     assert contents.index(denied_check) < contents.index(unenrolled_guard) < contents.index(legacy_call)
     vector_route_source = _function_source_for_route('/v1/dev/user/memories/vector/search', 'get')
-    legacy_safe_check = 'if memory_result.should_use_legacy_fallback:'
+    # The vector route serves legacy only when USE_LEGACY_SAFE, or a deny whose only
+    # reason is missing_rollout_state — and the plain deny 403 stays as the fallthrough.
+    serve_legacy_check = 'serve_legacy = memory_result.should_use_legacy_fallback or ('
+    missing_rollout_guard = "and memory_result.fallback_reason == 'missing_rollout_state'"
     assert denied_check in vector_route_source
-    assert legacy_safe_check in vector_route_source
-    assert vector_route_source.index(denied_check) < vector_route_source.index(legacy_safe_check)
+    assert serve_legacy_check in vector_route_source
+    assert missing_rollout_guard in vector_route_source
+    # serve_legacy is decided before the plain deny 403, so a legacy account recovers
+    # instead of failing closed.
+    assert vector_route_source.index(serve_legacy_check) < vector_route_source.index(denied_check)
 
 
 def test_developer_category_filters_do_not_force_legacy_when_memory_can_decide_safely():

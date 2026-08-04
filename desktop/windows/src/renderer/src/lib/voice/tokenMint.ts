@@ -21,7 +21,7 @@ import type { VoiceProvider } from './sessionMachine'
 // death). Without it, warming the hub with a stale token routes the user to Login.
 const MINT_CONFIG = { __sessionPreserving: true } as AxiosRequestConfig
 
-// Server-locked models (mirror Backend-Rust routes/realtime.rs constants).
+// Server-locked models.
 export const OPENAI_REALTIME_MODEL = 'gpt-realtime-2'
 export const GEMINI_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview'
 

@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
+
 from database import review_queue
 from utils.llm.memories import HighRecallMemories, Memories
 
@@ -80,15 +82,18 @@ def test_review_queue_lists_pending_items_by_impact(monkeypatch):
         def __init__(self, doc_id, data):
             self.id = doc_id
             self._data = data
+            self.reference = MagicMock()
 
         def to_dict(self):
             return self._data
 
     queue_ref = MagicMock()
+    queue_ref.where.return_value = queue_ref
+    queue_ref.order_by.return_value = queue_ref
+    queue_ref.limit.return_value = queue_ref
     queue_ref.stream.return_value = [
-        FakeDoc('low', {'status': 'pending', 'impact': 0.2}),
-        FakeDoc('done', {'status': 'accepted', 'impact': 1.0}),
         FakeDoc('high', {'status': 'pending', 'impact': 0.8}),
+        FakeDoc('low', {'status': 'pending', 'impact': 0.2}),
     ]
     user_ref = MagicMock()
     user_ref.collection.return_value = queue_ref
@@ -153,6 +158,66 @@ def test_review_queue_resolve_accept_appends_commit_updates_queue_and_records_co
     assert updates[0]['resolution_commit_id'] == 'commit-review'
     assert corrections[0]['decision'] == 'accept'
     assert marked_short_term == [('st-new', 'commit-review')]
+
+
+def test_canonical_review_resolution_uses_canonical_authority_and_redacts_projection(monkeypatch):
+    item = {
+        'review_id': 'review-canonical',
+        'fact_id': 'mem-canonical',
+        'candidate': {'id': 'mem-canonical', 'content': 'Private candidate text'},
+        'conflict_with': ['mem-old'],
+        'source_short_term_id': 'mem-canonical',
+        'authority': 'canonical_memory',
+        'status': 'pending',
+    }
+    doc_ref = MagicMock()
+    queue_ref = MagicMock()
+    queue_ref.document.return_value = doc_ref
+    user_ref = MagicMock()
+    user_ref.collection.return_value = queue_ref
+    users_ref = MagicMock()
+    users_ref.document.return_value = user_ref
+
+    resolved_item = {
+        **item,
+        'status': 'accepted',
+        'decision': 'accept',
+        'candidate': {'id': 'mem-canonical'},
+        'permitted_uses': [],
+        'resolution_commit_id': 'canonical-commit',
+    }
+    monkeypatch.setattr(review_queue, 'get_review_conflict', MagicMock(side_effect=[item, resolved_item]))
+    monkeypatch.setattr(review_queue, 'db', MagicMock(collection=MagicMock(return_value=users_ref)))
+    canonical_commit = MagicMock(return_value={'commit': {'commit_id': 'canonical-commit'}})
+    monkeypatch.setattr(review_queue, '_append_canonical_resolution_commit', canonical_commit)
+    monkeypatch.setattr(
+        review_queue,
+        'append_resolution_commit',
+        lambda *_args, **_kwargs: pytest.fail('canonical review wrote legacy memory authority'),
+    )
+    monkeypatch.setattr(
+        review_queue,
+        'record_correction',
+        lambda *_args, **_kwargs: pytest.fail('canonical review retained a legacy correction record'),
+    )
+    monkeypatch.setattr(
+        review_queue.short_term_db,
+        'mark_consolidated',
+        lambda *_args, **_kwargs: pytest.fail('canonical review touched the legacy short-term store'),
+    )
+
+    result = review_queue.resolve_review_conflict(
+        'uid-1',
+        'review-canonical',
+        'accept',
+        reason='confirmed',
+    )
+
+    canonical_commit.assert_called_once_with('uid-1', item, 'accept', None, 'confirmed')
+    assert result['commit']['commit_id'] == 'canonical-commit'
+    assert result['correction'] is None
+    assert result['item']['candidate'] == {'id': 'mem-canonical'}
+    doc_ref.update.assert_not_called()
 
 
 def test_review_queue_reject_uses_projection_writer(monkeypatch):

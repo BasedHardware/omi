@@ -4,10 +4,51 @@ tier: 2
 description: Hermetic chat in Home tab — send/receive with Rust OMI_LLM_STUB=1 (v0.12.119+ redesign — chat is embedded in Home, not a separate tab)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  - desktop/macos/Desktop/Sources/APIClient+AuthPolicy.swift
+  - desktop/macos/Desktop/Sources/Auth/AuthSessionAttemptFence.swift
+  - desktop/macos/Desktop/Sources/Chat/APIClient+KernelJournal.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentFailureTranscriptFormatter.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentLifecycleDisplayProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentLifecycleTranscriptProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AuthorizedToolExecution.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
+  - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelJournalEventHub.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnJournal.swift
+  - desktop/macos/Desktop/Sources/Chat/WritingToolsFix.swift
+  - desktop/macos/Desktop/Sources/BrowserExtensionSetup.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimeline.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimelineModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatTranscriptGeometry.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  # The marker query enters AgentClient.Session through the serialized context
+  # admission path before the exact stub reply is asserted below.
+  - desktop/macos/Desktop/Sources/Chat/AgentContextAdmissionGate.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentContextRevision.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeJournalContracts.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
 preconditions:
   - automation_bridge_ready
 

@@ -73,6 +73,21 @@ logger = logging.getLogger(__name__)
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
 
+# Longest frame the Opus format can carry, in milliseconds.
+OPUS_MAX_FRAME_MS = 120
+
+
+def opus_decode_capacity(sample_rate: int) -> int:
+    """Samples to hand `Decoder.decode` as its output-buffer size.
+
+    Opus packets are self-describing: `frame_size` is only the capacity of the buffer the
+    decoder writes into, and it never emits more samples than the packet actually holds, so
+    a 10 ms frame still decodes to 10 ms under a larger buffer. Sizing it to the negotiated
+    frame duration instead made libopus answer `buffer too small` for every longer frame a
+    client sent, and the receiver dropped the whole session's audio one frame at a time.
+    """
+    return sample_rate // 1000 * OPUS_MAX_FRAME_MS
+
 
 def _get_opuslib() -> Any:
     if opuslib is None:
@@ -101,6 +116,16 @@ class ListenReceiver:
         self.vad_gate: Any = None
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
+
+    def _capture(self, method: str, *args: Any) -> None:
+        """Keep optional dev capture out of the production audio failure domain."""
+        capture = getattr(self.host, method, None)
+        if not callable(capture):
+            return
+        try:
+            capture(*args)
+        except Exception as error:
+            logger.warning('Listen parity capture failed method=%s type=%s', method, type(error).__name__)
 
     def initialize_decoders(self) -> None:
         request = self.host.request
@@ -191,6 +216,7 @@ class ListenReceiver:
                 for index, config in enumerate(self.channel_configs):
 
                     def callback(segments: List[Dict[str, Any]], channel: ChannelConfig = config) -> None:
+                        self._capture('capture_inbound_stt', segments)
                         for segment in segments:
                             segment['is_user'] = channel.is_user
                             segment['speaker'] = channel.speaker_label
@@ -220,8 +246,13 @@ class ListenReceiver:
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
-            parakeet_callback = make_stream_callback(self.host.transcripts.enqueue, self.vad_gate, False)
-            modulate_callback = make_stream_callback(self.host.transcripts.enqueue, self.vad_gate, True)
+
+            def capture_and_enqueue(segments: List[Dict[str, Any]]) -> None:
+                self._capture('capture_inbound_stt', segments)
+                self.host.transcripts.enqueue(segments)
+
+            parakeet_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, False)
+            modulate_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, True)
             raw = await self._create_stt_socket(
                 parakeet_callback,
                 request.sample_rate,
@@ -343,6 +374,7 @@ class ListenReceiver:
         if self.host.state.fair_use_dg_budget_exhausted:
             buffer.clear()
             return
+        outbound_audio = bytes(buffer)
         sent = await flush_live_stt_buffer(
             request.websocket,
             self.host.state,
@@ -352,6 +384,7 @@ class ListenReceiver:
             platform=self.host.client_device_context.platform,
         )
         if sent:
+            self._capture('capture_outbound_stt', outbound_audio)
             self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
 
     async def _handle_multi_channel_audio(self, data: bytes) -> None:
@@ -362,7 +395,9 @@ class ListenReceiver:
         audio = data[1:]
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
-                audio = self.multi_opus_decoders[channel_index].decode(bytes(audio), request.sample_rate // 50)
+                audio = self.multi_opus_decoders[channel_index].decode(
+                    bytes(audio), opus_decode_capacity(request.sample_rate)
+                )
             except Exception as error:
                 logger.warning(
                     'Listen audio frame decode failed codec=opus channel=%s type=%s',
@@ -373,6 +408,7 @@ class ListenReceiver:
             if not audio:
                 return
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
+        self._capture('capture_client_audio', pcm)
         # Custom-STT clients own transcript production.  Their channel sockets are intentionally
         # absent, but captured audio still proceeds to the pusher mix path.
         if not self.host.use_custom_stt:
@@ -392,19 +428,26 @@ class ListenReceiver:
                     platform=self.host.client_device_context.platform,
                 )
                 if sent:
+                    self._capture('capture_outbound_stt', pcm)
                     self.host.state.dg_usage_ms_pending += dg_usage_ms
-        self.channel_mix_buffers[channel_index].extend(pcm)
-        decision = decide_multi_channel_mix(
-            self.channel_mix_buffers, audio_bytes_enabled=self.host.audio_bytes_send is not None
-        )
-        if decision.should_mix:
-            mixed = mix_n_channel_buffers(
-                [bytearray(buffer[: decision.min_len]) for buffer in self.channel_mix_buffers]
+        # Only accumulate channel audio for the pusher mix when an audio-bytes consumer is attached.
+        # decide_multi_channel_mix and the teardown flush both gate on this same condition, so
+        # without a consumer nothing ever drains these per-channel buffers. Appending regardless (the
+        # old behavior) left them growing for the whole session (~64 KB/s for stereo) until the
+        # worker ran out of memory, taking every co-located live session down with it.
+        if self.host.audio_bytes_send is not None:
+            self.channel_mix_buffers[channel_index].extend(pcm)
+            decision = decide_multi_channel_mix(
+                self.channel_mix_buffers, audio_bytes_enabled=self.host.audio_bytes_send is not None
             )
-            if mixed and self.host.audio_bytes_send is not None:
-                self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
-            for buffer in self.channel_mix_buffers:
-                del buffer[: decision.min_len]
+            if decision.should_mix:
+                mixed = mix_n_channel_buffers(
+                    [bytearray(buffer[: decision.min_len]) for buffer in self.channel_mix_buffers]
+                )
+                if mixed and self.host.audio_bytes_send is not None:
+                    self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
+                for buffer in self.channel_mix_buffers:
+                    del buffer[: decision.min_len]
 
     async def _handle_text(self, message: str) -> None:
         try:
@@ -496,7 +539,9 @@ class ListenReceiver:
                     try:
                         decoded: bytes = data
                         if request.codec == 'opus':
-                            decoded = self.opus_decoder.decode(bytes(data), frame_size=self.host.frame_size)
+                            decoded = self.opus_decoder.decode(
+                                bytes(data), frame_size=opus_decode_capacity(request.sample_rate)
+                            )
                         elif request.codec == 'aac':
                             decoded = self.aac_decoder.decode(bytes(data))
                         elif request.codec == 'lc3':
@@ -510,6 +555,7 @@ class ListenReceiver:
                         continue
                     if not decoded:
                         continue
+                    self._capture('capture_client_audio', decoded)
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
                     if not self.host.use_custom_stt:

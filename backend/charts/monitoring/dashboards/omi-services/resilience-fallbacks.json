@@ -480,7 +480,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(llm_gateway_requests_total{fallback_used=\"true\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total[30m])), 1e-9)",
+          "expr": "sum(rate(llm_gateway_requests_total{route_serving_class=\"actual_fallback\",fallback_used=\"true\",fallback_reason!=\"none\",outcome=\"success\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=~\"success|error\"}[30m])), 1e-9)",
           "legendFormat": "fallback_used share",
           "range": true,
           "refId": "A"
@@ -503,7 +503,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "**Real-traffic journeys:** chat, pusher, live transcription, and capture-finalization measure accepted work through a server-observable terminal boundary. Product-failure alerts require real traffic; cancelled client/transport endings and fenced stale work remain visible without counting as product failures. An absent source is scrape health, not zero traffic. Semantics: `backend/docs/runbooks/real-traffic-journeys.md`.",
+        "content": "**Real-traffic journeys:** chat, pusher, and capture-finalization use their server-observable terminal boundaries. Live STT separately measures accepted listener attempts and their bounded terminal outcomes. Product-failure alerts require real traffic; cancelled client/transport endings and fenced stale work remain visible without counting as product failures. An absent source is scrape health, not zero traffic. Semantics: `backend/docs/runbooks/real-traffic-journeys.md`.",
         "mode": "markdown"
       },
       "pluginVersion": "12.1.0",
@@ -661,8 +661,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[6h])) - sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[6h]))",
-          "legendFormat": "accepted minus terminal (6h)",
+          "expr": "max by (state) (listen_finalization_durable_jobs)",
+          "legendFormat": "durable {{state}}",
           "range": true,
           "refId": "A"
         },
@@ -672,8 +672,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(omi_capture_finalization_reconciliations_total[15m]))",
-          "legendFormat": "stale reconciliations / second",
+          "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))",
+          "legendFormat": "new durable terminals (30m)",
           "range": true,
           "refId": "B"
         },
@@ -687,9 +687,118 @@
           "legendFormat": "oldest nonterminal age",
           "range": true,
           "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (outcome) (rate(listen_finalization_stale_processing_reconciliations_total[15m]))",
+          "legendFormat": "stale orphan recovery {{outcome}}",
+          "range": true,
+          "refId": "D"
         }
       ],
-      "title": "Capture finalization reconciliation and nonterminal work",
+      "title": "Capture finalization durable projection and nonterminal work",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_stt_accepted_total[$__rate_interval])), 1)) and (sum(increase(omi_live_stt_accepted_total[$__rate_interval])) > 0)",
+          "legendFormat": "live STT",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Live STT attempt failure rate (failure / accepted)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(llm_gateway_requests_total{route_serving_class=\"lkg\",outcome=\"success\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=\"success\"}[30m])), 1e-9)",
+          "legendFormat": "ordinary LKG serving share",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "LLM gateway LKG serving share (rollout exposure)",
       "type": "timeseries"
     }
   ],

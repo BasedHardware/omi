@@ -23,6 +23,14 @@ class Check:
     reason: str
 
 
+def _resolve_repo_root() -> Path:
+    """Return the worktree root even when the linked-worktree Git context is bare."""
+    try:
+        return Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))
+    except subprocess.CalledProcessError:
+        return Path.cwd()
+
+
 def run_git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -31,6 +39,7 @@ def run_git(root: Path, *args: str) -> str:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
     )
     return result.stdout.strip()
 
@@ -160,7 +169,7 @@ def main() -> int:
     if bool(args.repository) != bool(args.pr_number):
         print("FAIL: --repository and --pr-number must be supplied together", file=sys.stderr)
         return 2
-    root = (args.root or Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))).resolve()
+    root = (args.root or _resolve_repo_root()).resolve()
     started = time.monotonic()
     try:
         merge_base = run_git(root, "merge-base", args.base, args.head)

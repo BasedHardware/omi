@@ -1,8 +1,9 @@
 """Hermetic source contracts for agent VM /health auth (#7326 phase 1).
 
-Behavioral coverage for provision NAT/tag lives in Rust `agent::contract_tests`.
-This file is a static tripwire: it would have caught shipping `/health` without
-`verifyAuth`, or callers that still hit `/health` without credentials.
+Behavioral coverage for provision NAT/tag lives in `test_desktop_agent_vm.py`
+and `test_agent_vm_firewall_contract.py`. This file is a static tripwire: it
+would have caught shipping `/health` without auth, or callers that still hit
+`/health` without credentials.
 """
 
 from __future__ import annotations
@@ -11,29 +12,28 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-AGENT_MJS = REPO_ROOT / "desktop" / "macos" / "agent-cloud" / "agent.mjs"
+AGENT_VM_MAIN = REPO_ROOT / "backend" / "agent_vm" / "main.py"
 AGENT_PROXY = REPO_ROOT / "backend" / "agent-proxy" / "main.py"
 AGENT_SYNC = REPO_ROOT / "desktop" / "macos" / "Desktop" / "Sources" / "AgentSyncService.swift"
-AGENT_VM = REPO_ROOT / "desktop" / "macos" / "Desktop" / "Sources" / "AgentVMService.swift"
+AGENT_VM_SERVICE = REPO_ROOT / "desktop" / "macos" / "Desktop" / "Sources" / "AgentVMService.swift"
 
 
 def _health_handler_block(source: str) -> str:
     match = re.search(
-        r"// Health check.*?if \(\(req\.url === \"/health\".*?\n(?P<body>.*?)\n    // Database upload",
+        r'@app\.get\("/health"\).*?async def health\(request: Request\).*?:\n(?P<body>.*?)(?=\n@app\.|\Z)',
         source,
         flags=re.DOTALL,
     )
-    assert match, "agent.mjs must define the /health HTTP handler"
+    assert match, "agent_vm/main.py must define the /health HTTP handler"
     return match.group("body")
 
 
-def test_agent_mjs_health_requires_verify_auth_before_ok_response():
-    source = AGENT_MJS.read_text()
+def test_agent_vm_health_requires_auth_before_ok_response():
+    source = AGENT_VM_MAIN.read_text()
     body = _health_handler_block(source)
-    assert "verifyAuth(req)" in body
-    assert 'writeHead(401' in body
-    assert 'writeHead(200' in body
-    assert body.index("verifyAuth(req)") < body.index('writeHead(200')
+    assert "runtime.require_auth(request)" in body
+    assert '"databaseReady": runtime.db is not None' in body
+    assert body.index("runtime.require_auth(request)") < body.index("return {")
     assert "no auth" not in body.lower()
 
 
@@ -47,7 +47,7 @@ def test_agent_proxy_sends_bearer_on_vm_health_checks():
 
 def test_desktop_health_callers_send_auth():
     sync_source = AGENT_SYNC.read_text()
-    vm_source = AGENT_VM.read_text()
+    vm_source = AGENT_VM_SERVICE.read_text()
     for source in (sync_source, vm_source):
         assert r"health?token=\(authToken)" in source
         assert 'forHTTPHeaderField: "Authorization"' in source

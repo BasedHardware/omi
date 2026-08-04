@@ -91,7 +91,11 @@ struct SignInView: View {
                 leading: { GoogleLogo().frame(width: 15, height: 15) },
                 action: { signIn(apple: false) })
             }
-            .frame(width: 320)
+            // This used to be a fixed 320pt column. When the window was
+            // narrower (or its usable width was reduced by window chrome),
+            // both sign-in actions extended past the visible content area.
+            .frame(maxWidth: 320)
+            .frame(maxWidth: .infinity)
             .padding(.top, 34)
 
             if authState.isLoading {
@@ -110,7 +114,8 @@ struct SignInView: View {
               Text(UserFacingErrorPresentation.message(from: error, while: .signIn))
                 .geist(size: 12.5).foregroundStyle(sb.ink(.w6))
                 .multilineTextAlignment(.center)
-                .frame(width: 320)
+                .frame(maxWidth: 320)
+                .frame(maxWidth: .infinity)
                 .padding(.top, 12)
             }
 
@@ -123,6 +128,7 @@ struct SignInView: View {
         }
       }
       .frame(maxWidth: 460)
+      .padding(.horizontal, 24)
       .animation(.easeOut(duration: 0.5), value: introRevealed)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)

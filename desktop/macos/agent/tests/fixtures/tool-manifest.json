@@ -1087,6 +1087,7 @@
               "desktop.context.screen_summary",
               "desktop.context.screenshot_image",
               "desktop.tasks.readwrite",
+              "desktop.memories.write",
               "desktop.artifacts.manage",
               "desktop.automation.read",
               "desktop.automation.act_dev_only",
@@ -1107,6 +1108,7 @@
               "desktop.context.screen_summary",
               "desktop.context.screenshot_image",
               "desktop.tasks.readwrite",
+              "desktop.memories.write",
               "desktop.artifacts.manage",
               "desktop.automation.read",
               "desktop.automation.act_dev_only",
@@ -1152,6 +1154,7 @@
               "desktop.context.screen_summary",
               "desktop.context.screenshot_image",
               "desktop.tasks.readwrite",
+              "desktop.memories.write",
               "desktop.artifacts.manage",
               "desktop.automation.read",
               "desktop.automation.act_dev_only",
@@ -1172,6 +1175,7 @@
               "desktop.context.screen_summary",
               "desktop.context.screenshot_image",
               "desktop.tasks.readwrite",
+              "desktop.memories.write",
               "desktop.artifacts.manage",
               "desktop.automation.read",
               "desktop.automation.act_dev_only",
@@ -2504,6 +2508,11 @@
           "type": "object",
           "description": "Small structured metadata for this run.",
           "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
+          "additionalProperties": true
         }
       },
       "required": [
@@ -2586,6 +2595,11 @@
           "type": "object",
           "description": "Small structured metadata for this run.",
           "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
+          "additionalProperties": true
         }
       },
       "required": [
@@ -2628,6 +2642,7 @@
       "Use visible=false for parent-linked background work that should not appear as a pill.",
       "The primary coordinator decides in its model loop whether to call spawn_agent. When the current user explicitly asks OpenClaw or Hermes to do work, call spawn_agent in that same turn with that provider; do not delegate that instruction to another agent, use a text-pattern handoff, or narrate that only another chat surface can do it.",
       "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
+      "Pass toolPolicy.allowedToolNames to restrict which Omi tools the child agent may call; it can only narrow, never widen, the child's tool set.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ],
     "latency": "async background",
@@ -2693,6 +2708,11 @@
         "metadata": {
           "type": "object",
           "description": "Small structured metadata for this run.",
+          "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
           "additionalProperties": true
         }
       },
@@ -2763,6 +2783,11 @@
         "metadata": {
           "type": "object",
           "description": "Small structured metadata for this run.",
+          "additionalProperties": true
+        },
+        "toolPolicy": {
+          "type": "object",
+          "description": "Optional child tool restriction: { allowedToolNames: string[] } of canonical Omi tool names. The child's tools become the intersection with its default set; an empty intersection leaves the child with no tools.",
           "additionalProperties": true
         }
       },
@@ -3817,6 +3842,71 @@
     },
     "voice": {
       "realtimeDescription": "Search the user's memories / facts for a SPECIFIC thing ('what's my dog's name', 'where do I work', 'what's my partner's name'). Fast synchronous read. Speak the result."
+    }
+  },
+  {
+    "name": "create_memory",
+    "label": "Create Memory",
+    "description": "Save exactly one user-provided fact or preference to short-term memory. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Never infer a memory, and never call for a negative request such as 'do not remember this'.",
+    "promptSnippet": "create_memory - Save one explicitly requested fact or preference to short-term memory",
+    "promptGuidelines": [
+      "The current user message must explicitly and affirmatively ask Omi to remember or save the supplied content.",
+      "Pass only the content to remember; do not add inferred facts, categories, tags, or metadata.",
+      "Do not call when the user merely states a fact, asks a question, asks for a suggestion, or says not to remember/save something.",
+      "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
+      "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory."
+    ],
+    "latency": "fast network",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "The exact user-provided content to save as a short-term memory."
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false,
+      "idempotentHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "chatToolExecutor"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Requires the coordinator's typed desktop chat surface and authenticated backend access.",
+      "The Swift executor selects the new short-term-memory endpoint and legacy-memory fallback as supported by the installed app/backend."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true,
+        "condition": "typedChatCoordinatorOnly"
+      },
+      "omi-tools-stdio": {
+        "advertised": true,
+        "condition": "typedChatCoordinatorOnly"
+      }
+    },
+    "surfaces": [
+      "desktop_chat"
+    ],
+    "capabilityDoc": {
+      "title": "Create Memory",
+      "summary": "Save one user-provided fact or preference to short-term memory.",
+      "bullets": [
+        "Use only when the user explicitly and affirmatively asks you to remember or save the supplied content.",
+        "Do not infer memories from conversation context, and do not call for a negative request such as 'do not remember this'.",
+        "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory."
+      ]
     }
   },
   {

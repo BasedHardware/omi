@@ -25,6 +25,7 @@ LANES = frozenset({"local", "ci"})
 REQUIRED_CHECKS = (
     "source_resolved_from_origin",
     "exact_sha_checkout_verified",
+    "runner_self_clean",
     "swift_cache_prepared",
     "self_check",
     "offline_stack_ready",
@@ -130,7 +131,12 @@ def _self_test() -> int:
     expect_fail("malformed sha", {**base, "source_sha": "deadbeef"}, "deadbeef", "40 lowercase hex")
     expect_fail("non-offline provider", {**base, "provider_mode": "production"}, "a" * 40, "offline")
     expect_fail("bad lane", {**base, "lane": "staging"}, "a" * 40, "lane")
-    expect_fail("missing check", {**base, "checks": {n: True for n in REQUIRED_CHECKS if n != "self_check"}}, "a" * 40, "missing")
+    expect_fail(
+        "missing check",
+        {**base, "checks": {n: True for n in REQUIRED_CHECKS if n != "self_check"}},
+        "a" * 40,
+        "missing",
+    )
     expect_fail("failed check", {**base, "checks": {**base["checks"], "self_check": False}}, "a" * 40, "failed")
     expect_fail("forbidden production field", {**base, "is_live": True}, "a" * 40, "production/qualification")
     expect_fail("forbidden qualification field", {**base, "qualified_beta": True}, "a" * 40, "production/qualification")

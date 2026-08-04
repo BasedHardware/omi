@@ -1472,7 +1472,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get payYourSttProvider => 'Gunakan omi secara bebas. Anda hanya membayar penyedia STT Anda secara langsung.';
 
   @override
-  String get freeMinutesMonth => '1.200 menit gratis/bulan termasuk. Tanpa batas dengan ';
+  String get freeMinutesMonth => '300 menit gratis/bulan termasuk. Tanpa batas dengan ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4719,7 +4719,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Tidak ada akses data spesifik yang dikonfigurasi.';
 
   @override
-  String get basicPlanDescription => '1.200 menit premium + tak terbatas di perangkat';
+  String get basicPlanDescription => '300 menit premium + tak terbatas di perangkat';
 
   @override
   String get minutes => 'menit';
@@ -6014,7 +6014,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
+      '300 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas.';
 
   @override
   String get viewUsage => 'Lihat penggunaan';
@@ -6096,7 +6096,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
+      '300 menit premium/bulan. Tab Di Perangkat menawarkan transkripsi gratis tanpa batas. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9781,4 +9781,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Tidak dapat terhubung ke mikrofon tersebut. Pastikan mikrofon terhubung di Pengaturan iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Terlalu lama untuk disinkronkan — Omi tidak dapat menerimanya';
 }

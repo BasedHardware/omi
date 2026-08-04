@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-recoverable-provider-failure-terminal",
+  "violated_contract": "A recoverable dependency failure must not terminate the user-facing request it interrupted: a transport-class provider fault with nothing yet delivered has to be re-issued within the request's remaining budget, and if it still cannot be recovered it must be reported as a failure rather than left indistinguishable from a dependency that legitimately returned nothing.",
+  "canonical_prevention": "Classify provider exceptions into transport-class (retryable) and request-class (not retryable) at the call boundary, re-issue only while no output has reached the user and the request budget still admits a full attempt, bound each attempt well under the end-to-end deadline so a retry can run at all, and propagate the unrecovered failure reason to the caller that renders and records the outcome.",
+  "canonical_prevention_artifact": [
+    "backend/utils/retrieval/safety.py",
+    "backend/tests/unit/test_chat_agent_provider_retry.py"
+  ],
+  "evidence_prs": [10773],
+  "scope_hints": [
+    "backend/utils/retrieval/**",
+    "backend/utils/llm/**"
+  ],
+  "status": "open"
+}

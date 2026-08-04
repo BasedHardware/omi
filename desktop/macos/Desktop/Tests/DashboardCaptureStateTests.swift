@@ -1,6 +1,19 @@
 import XCTest
 
+@testable import Omi_Computer
+
 final class DashboardCaptureStateTests: XCTestCase {
+  @MainActor
+  func testListeningModeTitlePreservesOakleyMetaName() {
+    let appState = AppState()
+    appState.isTranscribing = true
+    appState.recordingInputDeviceName = "Oakley Meta Vanguard"
+
+    XCTAssertEqual(
+      CaptureListeningLogic.listeningModeTitle(appState: appState, raw: "always"),
+      "Oakley Meta Vanguard")
+  }
+
   func testDashboardCaptureStatusUsesLiveMonitoringState() throws {
     let source = try dashboardSource()
     let logic = try captureLogicSource()
@@ -103,13 +116,24 @@ final class DashboardCaptureStateTests: XCTestCase {
       "An early return drops the hotkey's input focus when chat is already visible")
   }
 
-  func testSecondaryHomePagesReturnHomeOnEscape() throws {
-    let source = try desktopHomeSource()
-
-    XCTAssertTrue(source.contains(".onExitCommand {\n          navigateHomeOnEscapeIfNeeded()\n        }"))
-    XCTAssertTrue(source.contains("[.conversations, .memories, .tasks, .rewind].contains(item)"))
-    XCTAssertTrue(source.contains("selectedIndex = SidebarNavItem.dashboard.rawValue"))
-    XCTAssertFalse(source.contains("[.conversations, .chat, .memories, .tasks, .rewind]"))
+  func testSecondaryHomePagesReturnHomeOnEscape() {
+    for item in [SidebarNavItem.conversations, .memories, .tasks, .rewind] {
+      XCTAssertTrue(
+        DesktopHomeEscapeNavigation.shouldNavigateHome(
+          selectedIndex: item.rawValue,
+          usesLegacyHomeDesign: false
+        ))
+    }
+    XCTAssertFalse(
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: SidebarNavItem.chat.rawValue,
+        usesLegacyHomeDesign: false
+      ))
+    XCTAssertFalse(
+      DesktopHomeEscapeNavigation.shouldNavigateHome(
+        selectedIndex: SidebarNavItem.tasks.rawValue,
+        usesLegacyHomeDesign: true
+      ))
   }
 
   func testHomeConnectorButtonsOpenSheetsDirectly() throws {
@@ -268,7 +292,9 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("onSelectDestination(destination)"))
     XCTAssertTrue(source.contains("selectedExportDestination = destination"))
     XCTAssertTrue(source.contains("if appProvider.apps.isEmpty && !appProvider.isLoading"))
-    XCTAssertTrue(source.contains("ViewThatFits(in: .horizontal)"))
+    // Responsive layout was extracted into AppsHeaderRow (AppsPageHeaderControls.swift);
+    // AppsPage now delegates to it instead of inlining ViewThatFits.
+    XCTAssertTrue(source.contains("AppsHeaderRow("))
     XCTAssertTrue(source.contains("private var searchField: some View"))
     XCTAssertTrue(source.contains("private var filterControls: some View"))
     XCTAssertFalse(source.contains("struct AppsCatalogContent: View"))
@@ -295,15 +321,17 @@ final class DashboardCaptureStateTests: XCTestCase {
   func testHomeOverlaysBehaveLikeModals() throws {
     let dashboard = try dashboardSource()
     let apps = try appsSource()
+    let escapeKeyHandler = try escapeKeyHandlerSource()
     let normalizedDashboard = normalizedWhitespace(dashboard)
 
     // Esc must dismiss the topmost overlay. Custom ZStack overlays are not
     // NSWindow sheets, so Esc comes from the shared catcher's window-scoped
     // key monitor — onExitCommand never fires (the overlays are never
     // focused) and hidden cancel-shortcut buttons get culled from dispatch.
-    XCTAssertTrue(apps.contains("struct OverlayModalEscapeCatcher: NSViewRepresentable"))
-    XCTAssertTrue(apps.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
-    XCTAssertTrue(apps.contains("event.window === window"))
+    XCTAssertTrue(escapeKeyHandler.contains("struct OverlayModalEscapeCatcher: View"))
+    XCTAssertTrue(escapeKeyHandler.contains("struct EscapeKeyHandler: NSViewRepresentable"))
+    XCTAssertTrue(escapeKeyHandler.contains("NSEvent.addLocalMonitorForEvents(matching: .keyDown)"))
+    XCTAssertTrue(escapeKeyHandler.contains("registration.window === window"))
     XCTAssertTrue(
       dashboard.contains("if appsPopupAcceptsInput && !homeConnectSheetIsPresented"),
       "The apps popup owns Esc only while the connect sheet is not presented"
@@ -364,6 +392,16 @@ final class DashboardCaptureStateTests: XCTestCase {
     try source(named: "AppsPage.swift")
   }
 
+  private func escapeKeyHandlerSource() throws -> String {
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let handlerURL =
+      testsURL
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/EscapeKeyHandler.swift")
+    // omi-test-quality: source-inspection -- static contract: Esc stays window-scoped, never .onExitCommand
+    return try String(contentsOf: handlerURL, encoding: .utf8)
+  }
+
   private func source(named fileName: String) throws -> String {
     let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
     let sourceURL =
@@ -374,12 +412,28 @@ final class DashboardCaptureStateTests: XCTestCase {
   }
 
   private func methodBody(named name: String, in source: String) throws -> String {
-    let pattern = #"private func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n    \}"#
-    let regex = try NSRegularExpression(pattern: pattern)
-    let range = NSRange(source.startIndex..<source.endIndex, in: source)
-    let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))
-    let bodyRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
-    return String(source[bodyRange])
+    guard let declaration = source.range(of: "private func \(name)(") else {
+      throw NSError(domain: "DashboardCaptureStateTests", code: 1)
+    }
+    guard let openingBrace = source[declaration.upperBound...].firstIndex(of: "{") else {
+      throw NSError(domain: "DashboardCaptureStateTests", code: 2)
+    }
+
+    var depth = 0
+    var cursor = openingBrace
+    while cursor < source.endIndex {
+      switch source[cursor] {
+      case "{": depth += 1
+      case "}":
+        depth -= 1
+        if depth == 0 {
+          return String(source[source.index(after: openingBrace)..<cursor])
+        }
+      default: break
+      }
+      cursor = source.index(after: cursor)
+    }
+    throw NSError(domain: "DashboardCaptureStateTests", code: 3)
   }
 
   private func computedPropertyBody(named name: String, in source: String) throws -> String {

@@ -32,29 +32,6 @@ extension RealtimeHubController {
     return true
   }
 
-  func acceptsTurnEvent(
-    _ identity: RealtimeHubEventIdentity?,
-    source: RealtimeHubSession
-  ) -> Bool {
-    guard isCurrentSession(source), let identity else { return false }
-    guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: identity.turnID) != nil else {
-      log("RealtimeHub: dropping provider event after authenticated owner changed")
-      return false
-    }
-    guard identity.turnID == VoiceTurnCoordinator.shared.activeTurnID,
-      RealtimeHubEventOwnership.accepts(
-        identity,
-        activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
-        activeResponseID: voiceResponseID)
-    else {
-      log(
-        "RealtimeHub: dropping stale provider event turn=\(identity.turnID) "
-          + "response=\(identity.responseID)")
-      return false
-    }
-    return true
-  }
-
   func sendToolResultIfCurrent(
     source: RealtimeHubSession,
     callId: String,
@@ -370,6 +347,9 @@ extension RealtimeHubController {
             self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
               AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
             self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
+            // Cancel any streaming projection that may have started before the
+            // spawn receipt arrived; the spawn owns the canonical exchange now.
+            self.cancelStreamingJournalWrites(forContinuityKey: receipt.continuityKey)
             self.lastTurnDiagnostics = [
               "provider": self.providerTag,
               "provider_transcript": self.turnTranscript,
@@ -638,10 +618,18 @@ extension RealtimeHubController {
     authorizedRealtimeToolError(code: AuthorizedToolExecution.Rejection.ownerChangedDuringExecution.code)
   }
 
+  func hubDidOpenInputWindow(source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
+    AgentCompletionVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+    NotchCardVoiceDelivery.shared.voiceSessionDidOpenInputWindow()
+  }
+
   func hubDidConnect(source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
+    AgentCompletionVoiceDelivery.shared.voiceSessionDidConnect()
+    NotchCardVoiceDelivery.shared.voiceSessionDidConnect()
     let replayedReconnectTurn = reconnectAudioBuffer != nil
     let replayedReplacementTurn = replacementAudioBuffer != nil
     if replayedReplacementTurn {
@@ -795,6 +783,8 @@ extension RealtimeHubController {
     else { return }
     if !text.isEmpty {
       assistantText += text
+      beginStreamingRealtimeProjectionIfNeeded()
+      scheduleStreamingRealtimeProjectionFlush(continuityKey: turnIdempotencyKey)
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {

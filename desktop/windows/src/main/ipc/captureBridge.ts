@@ -13,14 +13,16 @@ import type { CaptureCommand, CaptureEvent } from '../../shared/types'
 // The main process still owns every listen WebSocket, so audio origin (capture
 // window) and transcript destination (any UI window) stay decoupled.
 
-// CaptureEvent types that target a single owning UI window (the window that
-// issued the originating command). Everything else that flows through this path
+// CaptureEvent types that target a single owning window (the window that issued
+// the originating command, including the capture window itself). Everything else
+// that flows through this path
 // (`live`, `meeting-capture-status`) is consumed only by the MAIN window's hosts
 // (LiveMirrorHost) or by main's own event tap, so it is routed to the main window
 // rather than fanned out to the bar/glow/toast/capture windows that just drop it.
 // (`capture-window-restarted` does NOT flow through here — it originates in main
 // and uses emitCaptureEventFromMain below.)
 const OWNED_EVENT_TYPES = new Set<CaptureEvent['type']>([
+  'audio-source-ready',
   'audio-source-error',
   'ptt-chunk',
   'ptt-drained',
@@ -43,9 +45,19 @@ export function onCaptureEventInMain(cb: (event: CaptureEvent) => void): () => v
   return () => mainEventListeners.delete(cb)
 }
 
+function notifyMainEventListeners(event: CaptureEvent): void {
+  for (const cb of mainEventListeners) {
+    try {
+      cb(event)
+    } catch (err) {
+      console.warn('[capture] main event listener threw:', err)
+    }
+  }
+}
+
 /**
  * Pure routing decision: given an event, the ownerId the capture window tagged it
- * with (if any), the ids of the candidate (non-capture) windows, and the main
+ * with (if any), the ids of the candidate windows, and the main
  * window's id, return the window ids that should receive it. Owned events go to
  * their owner only; every other event through this path is main-window-only
  * (LiveMirrorHost / main's tap are the sole consumers) — both are dropped if their
@@ -63,12 +75,50 @@ export function routeCaptureEvent(
   return mainWindowId !== undefined && windowIds.includes(mainWindowId) ? [mainWindowId] : []
 }
 
+export function canForwardRendererCaptureCommand(
+  command: CaptureCommand,
+  senderId: number,
+  ownsListenSession: (sessionId: string, ownerId: number) => boolean,
+  mainWindowId?: number
+): boolean {
+  // Meeting capture is main-process policy. No renderer may bypass the detector
+  // and consent flow by issuing these commands through the public preload API.
+  switch (command.type) {
+    case 'meeting-capture-start':
+    case 'meeting-capture-stop':
+      return false
+    // Audio capture must be attached to a listen socket already owned by the same
+    // renderer; this also permits the capture window's continuous/meeting lanes.
+    case 'audio-start':
+    case 'audio-stop':
+      return ownsListenSession(command.sessionId, senderId)
+    // All remaining controls originate in the main UI. Keeping them off auxiliary
+    // renderers prevents a compromised toast/glow window from controlling capture.
+    case 'live-finalize':
+    case 'live-view':
+    case 'ptt-warm':
+    case 'ptt-release':
+    case 'ptt-start':
+    case 'ptt-drain':
+    case 'ptt-dispose':
+    case 'ptt-rebuild':
+    case 'screen-view':
+    case 'assistant-speaking':
+    case 'assistant-utterance':
+    case 'auth-changed':
+      return senderId === mainWindowId
+    default:
+      return false
+  }
+}
+
 /**
  * Emit a capture event that ORIGINATES in main (e.g. capture-window-restarted)
  * to every UI window, skipping the capture window itself. Used for events the
  * capture window can't send about itself (its own recreation).
  */
 export function emitCaptureEventFromMain(event: CaptureEvent, captureWcId: number | null): void {
+  notifyMainEventListeners(event)
   for (const w of BrowserWindow.getAllWindows()) {
     if (w.isDestroyed() || w.webContents.id === captureWcId) continue
     w.webContents.send('omi-capture:event', event)
@@ -82,11 +132,19 @@ export function emitCaptureEventFromMain(event: CaptureEvent, captureWcId: numbe
  */
 export function registerCaptureBridge(
   getCaptureWc: () => WebContents | null,
-  getMainWc: () => WebContents | null
+  getMainWc: () => WebContents | null,
+  ownsListenSession: (sessionId: string, ownerId: number) => boolean
 ): void {
   ipcMain.on('omi-capture:cmd', (e, cmd: CaptureCommand) => {
     const wc = getCaptureWc()
     if (!wc || wc.isDestroyed()) return
+    if (!cmd || typeof cmd !== 'object' || typeof cmd.type !== 'string') return
+    const mainWc = getMainWc()
+    const mainWindowId = mainWc && !mainWc.isDestroyed() ? mainWc.id : undefined
+    if (!canForwardRendererCaptureCommand(cmd, e.sender.id, ownsListenSession, mainWindowId)) {
+      console.warn('[capture] rejected unauthorized command:', cmd.type)
+      return
+    }
     // Forward to the capture window tagged with the sender's id (ownerId) so owned
     // events (audio errors, PTT) route back to it. The capture window's OWN
     // continuous-mic lane also issues audio-start (its omiListenClient runs in this
@@ -102,16 +160,12 @@ export function registerCaptureBridge(
     // inject capture events (it would let a hostile/XSS'd UI window forge PTT
     // audio or live-store ops into other windows).
     if (!wc || wc.isDestroyed() || e.sender.id !== wc.id) return
-    for (const cb of mainEventListeners) {
-      try {
-        cb(payload.event)
-      } catch (err) {
-        console.warn('[capture] main event listener threw:', err)
-      }
-    }
-    const targets = BrowserWindow.getAllWindows().filter(
-      (w) => !w.isDestroyed() && w.webContents.id !== wc.id
-    )
+    notifyMainEventListeners(payload.event)
+    // Include the capture window in the candidate set. Its own continuous-mic
+    // and meeting hosts issue audio-start commands from inside that window, so
+    // their owned ready/error events must route back to the same renderer.
+    // Non-owned events still resolve only to the main window below.
+    const targets = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
     const mainWc = getMainWc()
     const mainWindowId = mainWc && !mainWc.isDestroyed() ? mainWc.id : undefined
     const targetIds = routeCaptureEvent(

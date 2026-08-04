@@ -502,6 +502,36 @@ describe('dispatch create/resolve — the consent gate', () => {
     expect((event.payload as Record<string, unknown>).grantId).toBe(grant.grantId)
   })
 
+  it('rejects the retired legacy_default grant source at the control boundary', async () => {
+    const { kernel, store } = newKernel()
+    const session = store.insertSession({
+      ownerId: OWNER,
+      surfaceKind: 'main_chat',
+      defaultAdapterId: 'acp'
+    })
+    const dispatchId = await createApproval(kernel, { sourceSessionId: session.sessionId })
+
+    const result = await call(coordinatorContext(kernel), 'resolve_desktop_dispatch', {
+      dispatchId,
+      status: 'resolved',
+      resolution: { decision: 'allow' },
+      grant: {
+        capability: 'desktop.context.screenshot_image',
+        operation: 'get_screenshot',
+        resourcePattern: 'display:1',
+        source: 'legacy_default',
+        expiresAtMs: Date.now() + 60_000
+      }
+    })
+
+    expect(result.ok).toBe(false)
+    expect(store.allRows('SELECT COUNT(*) AS n FROM grants')[0].n).toBe(0)
+    expect(
+      store.getRow('SELECT status FROM desktop_dispatches WHERE dispatch_id = ?', [dispatchId])
+        .status
+    ).toBe('pending')
+  })
+
   const grantRejections: Array<[string, Record<string, unknown>, RegExp]> = [
     [
       'a grant for a capability the user was never asked about',

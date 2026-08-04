@@ -15,8 +15,8 @@ input="${1:--}"
 if [ "$input" != "-" ] && [ ! -f "$input" ]; then
   usage
 fi
-if [ "$input" = "-" ]; then
-  input=/dev/stdin
+if [ "$input" != "-" ]; then
+  exec < "$input"
 fi
 
 while IFS= read -r path || [ -n "$path" ]; do
@@ -25,6 +25,6 @@ while IFS= read -r path || [ -n "$path" ]; do
       exit 0
       ;;
   esac
-done < "$input"
+done
 
 exit 1

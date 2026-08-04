@@ -16,6 +16,8 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
+typedef FetchMemoriesRequest = Future<GetMemoriesResult> Function({int limit, int offset, bool thisDeviceOnly});
+
 class MemoriesProvider extends ChangeNotifier {
   List<Memory> _memories = [];
   bool _loading = true;
@@ -32,6 +34,12 @@ class MemoriesProvider extends ChangeNotifier {
   ConnectivityProvider? _connectivityProvider;
   bool _isSyncing = false;
   int _sessionGeneration = 0;
+  final FetchMemoriesRequest _fetchMemoriesRequest;
+  final Future<bool> Function(String) _deleteMemoryRequest;
+
+  MemoriesProvider({FetchMemoriesRequest? fetchMemoriesRequest, Future<bool> Function(String)? deleteMemoryRequest})
+      : _fetchMemoriesRequest = fetchMemoriesRequest ?? getMemoriesResult,
+        _deleteMemoryRequest = deleteMemoryRequest ?? deleteMemoryServer;
 
   List<Memory> get memories => _memories;
   bool get loading => _loading;
@@ -215,23 +223,54 @@ class MemoriesProvider extends ChangeNotifier {
 
   Future<void> loadMemories({int limit = 100}) async {
     final generation = _sessionGeneration;
+    // Snapshot the pending-deletion ID before any await: a refresh that
+    // started during the undo window must still suppress the deleted item
+    // even if _finalizeDeletion() clears the field while the fetch is in
+    // flight.
+    final tombstoneId = _pendingDeletionId;
     _loading = true;
     notifyListeners();
 
     if (_filterThisDeviceOnly) {
       await _ensureClientDeviceInitialized();
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration) {
+        return;
+      }
     }
 
-    final result = await getMemoriesResult(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
-    if (generation != _sessionGeneration) return;
-    _memories = result.memories;
-    _deviceScopeSupported = result.deviceScopeSupported;
+    // Page until a short page: backend no longer expands the first page to 5000
+    // (prod GET /v3/memories 504s). Cap total fetch so a huge account cannot hang the UI.
+    const maxPages = 20;
+    final all = <Memory>[];
+    var offset = 0;
+    var deviceScopeSupported = true;
+    for (var page = 0; page < maxPages; page++) {
+      final result = await _fetchMemoriesRequest(limit: limit, offset: offset, thisDeviceOnly: _filterThisDeviceOnly);
+      if (generation != _sessionGeneration) {
+        return;
+      }
+      deviceScopeSupported = result.deviceScopeSupported;
+      all.addAll(result.memories);
+      if (result.memories.length < limit) {
+        break;
+      }
+      offset += result.memories.length;
+    }
+    // Keep an optimistic delete hidden throughout its undo window. Use the
+    // snapshot taken before the fetch so a concurrent finalization that
+    // clears _pendingDeletionId mid-fetch cannot reinsert the row.
+    // Re-check _pendingDeletionId at apply time: if the user deleted a memory
+    // after loadMemories() started (tombstoneId was null at snapshot), the
+    // stale response still contains it and would reinsert the row.
+    final currentTombstoneId = _pendingDeletionId;
+    final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
+    _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
+    _deviceScopeSupported = deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
-      if (!_memories.any((m) => m.id == pending.id)) {
+      if (pending.id != effectiveTombstoneId && !_memories.any((m) => m.id == pending.id)) {
         _memories.add(pending);
       }
     }
@@ -319,16 +358,34 @@ class MemoriesProvider extends ChangeNotifier {
 
     final id = _pendingDeletionId!;
 
+    final deletedMemory = _lastDeletedMemory;
+    var deleteSucceeded = true;
+
     // If memory was created offline and not yet synced
     if (SharedPreferencesUtil().pendingMemories.any((m) => m.id == id)) {
       SharedPreferencesUtil().removePendingMemory(id);
     } else {
       // Memory exists on server
-      await deleteMemoryServer(id);
+      try {
+        deleteSucceeded = await _deleteMemoryRequest(id);
+      } catch (e) {
+        Logger.debug('MemoriesProvider: Failed to delete memory $id: $e');
+        deleteSucceeded = false;
+      }
     }
 
-    _pendingDeletionId = null;
-    _lastDeletedMemory = null;
+    if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
+      if (!_memories.any((memory) => memory.id == id)) {
+        _memories.add(deletedMemory!);
+      }
+      _setCategories();
+      notifyListeners();
+    }
+
+    if (_pendingDeletionId == id) {
+      _pendingDeletionId = null;
+      _lastDeletedMemory = null;
+    }
   }
 
   Future<void> confirmPendingDeletion() async {

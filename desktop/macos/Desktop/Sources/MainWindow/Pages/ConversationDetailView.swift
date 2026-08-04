@@ -16,6 +16,7 @@ struct ConversationDetailView: View {
   var onFetchPeople: (() async -> Void)?
   var onCreatePerson: ((String) async -> Person?)?
   var onAssignSpeaker: ((String, [String], String?, Bool) async -> Bool)?
+  @ObservedObject private var automation = ConversationDetailAutomationState.shared
 
   @StateObject private var appProvider = AppProvider()
   @State private var showAppSelector = false
@@ -184,7 +185,7 @@ struct ConversationDetailView: View {
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
     .onAppear {
-      ConversationDetailAutomationState.shared.setOpen(
+      showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
         conversationId: conversation.id,
         transcriptDrawerOpen: showTranscriptDrawer
       )
@@ -192,12 +193,22 @@ struct ConversationDetailView: View {
         hasAppeared = true
       }
     }
+    .onChange(of: conversation.id) { _, conversationId in
+      showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
+        conversationId: conversationId,
+        transcriptDrawerOpen: showTranscriptDrawer
+      )
+    }
     .onDisappear {
       ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
     }
     .onChange(of: showTranscriptDrawer) { _, newValue in
       ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
         newValue, conversationId: conversation.id)
+    }
+    .onChange(of: automation.transcriptDrawerOpen) { _, isOpen in
+      guard automation.openConversationId == conversation.id, isOpen else { return }
+      showTranscriptDrawer = true
     }
     .task {
       await appProvider.fetchApps()
@@ -261,34 +272,31 @@ struct ConversationDetailView: View {
         allSegments: displayConversation.transcriptSegments,
         people: people,
         onSave: { personId, isUser, segmentIndices in
-          Task {
-            let assignment = Self.assignmentMetadata(
-              for: segmentIndices,
-              in: displayConversation.transcriptSegments
-            )
-            let success =
-              await onAssignSpeaker?(
-                conversation.id,
-                assignment.targets,
-                personId,
-                isUser
-              ) ?? false
-            if success {
-              await persistSpeakerAssignment(
-                conversationId: conversation.id,
-                backendSegmentIds: assignment.backendIds,
-                fallbackSegmentOrders: assignment.fallbackOrders,
-                isUser: isUser,
-                personId: personId
-              )
-              updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
-            }
-            selectedSegmentForNaming = nil
-          }
+          guard let onAssignSpeaker else { return false }
+
+          let assignment = Self.assignmentMetadata(
+            for: segmentIndices,
+            in: displayConversation.transcriptSegments
+          )
+          let success = await onAssignSpeaker(
+            conversation.id,
+            assignment.targets,
+            personId,
+            isUser
+          )
+          guard success else { return false }
+
+          await persistSpeakerAssignment(
+            conversationId: conversation.id,
+            backendSegmentIds: assignment.backendIds,
+            fallbackSegmentOrders: assignment.fallbackOrders,
+            isUser: isUser,
+            personId: personId
+          )
+          updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
+          return true
         },
-        onCreatePerson: { name in
-          await onCreatePerson?(name)
-        },
+        onCreatePerson: onCreatePerson,
         onDismiss: {
           selectedSegmentForNaming = nil
         }
@@ -357,7 +365,6 @@ struct ConversationDetailView: View {
     }
     .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, OmiSpacing.lg)
-    .background(OmiColors.backgroundTertiary.opacity(0.5))
     .alert("Edit Conversation Title", isPresented: $showEditDialog) {
       TextField("Title", text: $editedTitle)
       Button("Cancel", role: .cancel) {}
@@ -752,7 +759,7 @@ struct ConversationDetailView: View {
         segment: segment,
         isUser: segment.isUser,
         personName: segment.personId.flatMap { peopleDict[$0]?.name },
-        onSpeakerTapped: segment.isUser
+        onSpeakerTapped: segment.isUser || onAssignSpeaker == nil
           ? nil
           : {
             selectedSegmentForNaming = segment

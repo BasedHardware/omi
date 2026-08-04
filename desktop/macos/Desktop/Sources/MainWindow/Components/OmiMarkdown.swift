@@ -10,12 +10,17 @@ import OmiTheme
 /// - Code blocks render with proper monospace font and background box.
 /// - Tables use an Omi-owned `Grid` with fixed decoration. They deliberately
 ///   avoid geometry preferences.
+/// - Thematic breaks render as a quiet, branded section divider rather than
+///   leaking their Markdown source (`---`) into a response.
 ///
-/// Chat Markdown deliberately disables SwiftUI text selection. On macOS,
-/// `textSelection(.enabled)` installs AppKit-backed `SelectionOverlay` views
-/// that can form a non-converging setFont → intrinsic-size → AttributeGraph
-/// loop when a long transcript scrolls. Chat bubbles already provide a
-/// whole-message copy action; code blocks and tables add focused copy actions.
+/// Live chat Markdown deliberately disables native SwiftUI text selection. Even
+/// settled messages still participate in transcript loading, scrolling, window
+/// resizing, and parent-state updates. AppKit-backed selection overlays can turn
+/// those updates into a non-converging font/intrinsic-size/layout loop.
+///
+/// Chat bubbles retain whole-message copy actions, while code blocks and tables
+/// keep their focused copy controls. A future selectable reading surface must be
+/// isolated from the live transcript instead of adding an escape hatch here.
 struct OmiMarkdown: View {
   enum Style: Equatable {
     case assistant
@@ -54,7 +59,7 @@ struct OmiMarkdown: View {
 /// Keeps parent-only UI feedback (copy checkmarks, hover chrome, ratings) from
 /// rebuilding unchanged message content. Combined with the selection-free
 /// render boundary above, this prevents AppKit font invalidations from
-/// re-entering AttributeGraph while the transcript scrolls.
+/// re-entering AttributeGraph while the transcript changes.
 struct OmiMarkdownContent: View, Equatable {
   let text: String
   let style: OmiMarkdown.Style
@@ -87,6 +92,8 @@ struct OmiMarkdownContent: View, Equatable {
               codeBlockView(code, language: language)
             case .table(let table):
               OmiMarkdownTableView(table: table, style: style, fontScale: fontScale)
+            case .thematicBreak:
+              thematicBreakView()
             }
           }
         }
@@ -94,16 +101,39 @@ struct OmiMarkdownContent: View, Equatable {
     }
   }
 
+  // MARK: - Thematic Break
+
+  private func thematicBreakView() -> some View {
+    let dividerColor = style == .user ? Color.white.opacity(0.34) : OmiColors.textTertiary.opacity(0.44)
+
+    return Capsule()
+      .fill(dividerColor)
+      .frame(maxWidth: .infinity)
+      .frame(height: 1)
+      .padding(.vertical, OmiSpacing.sm)
+      .accessibilityLabel("Section break")
+  }
+
   @ViewBuilder
   private func textView(_ content: String) -> some View {
     let fontSize = round(14 * fontScale)
     let processed = Self.preprocessText(content)
-    let styled = Self.styledAttributedString(
+    let inlineCopy = Self.inlineCopyContent(
       from: processed, style: style, fontSize: fontSize, fontScale: fontScale
     )
 
     Group {
-      if let s = styled {
+      if let inlineCopy {
+        OmiMarkdownInlineCopyText(
+          attributed: inlineCopy.attributed,
+          placeholders: inlineCopy.placeholders,
+          style: style,
+          fontSize: fontSize,
+          fontScale: fontScale
+        )
+      } else if let s = Self.styledAttributedString(
+        from: processed, style: style, fontSize: fontSize, fontScale: fontScale
+      ) {
         Text(s)
           .if_available_writingToolsNone()
       } else {
@@ -119,33 +149,7 @@ struct OmiMarkdownContent: View, Equatable {
 
   @ViewBuilder
   private func codeBlockView(_ code: String, language: String?) -> some View {
-    let codeFontSize = round(13 * fontScale)
-    let bgColor =
-      style == .user
-      ? Color.white.opacity(0.15)
-      : OmiColors.backgroundTertiary
-
-    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-      HStack(spacing: OmiSpacing.xs) {
-        if let language {
-          Text(language)
-            .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(style == .user ? .white.opacity(0.7) : OmiColors.textTertiary)
-        }
-        Spacer(minLength: 0)
-        CodeBlockCopyButton(code: code)
-      }
-
-      ScrollView(.horizontal, showsIndicators: false) {
-        Text(code)
-          .font(.system(size: codeFontSize, design: .monospaced))
-          .foregroundColor(Self.baseColor(for: style))
-          .if_available_writingToolsNone()
-      }
-    }
-    .padding(OmiSpacing.md)
-    .background(bgColor)
-    .cornerRadius(OmiChrome.elementRadius)
+    OmiMarkdownCodeBlockView(code: code, language: language, style: style, fontScale: fontScale)
   }
 
   // MARK: - Attributed String Styling
@@ -216,6 +220,24 @@ struct OmiMarkdownContent: View, Equatable {
     )
   }
 
+  fileprivate static func inlineCopyContent(
+    from content: String,
+    style: OmiMarkdown.Style,
+    fontSize: CGFloat,
+    fontScale: CGFloat
+  ) -> (attributed: AttributedString, placeholders: [OmiMarkdownInlineCode.Placeholder])? {
+    guard let masked = OmiMarkdownInlineCode.maskedMarkdown(content),
+      let attributed = styledAttributedString(
+        from: masked.markdown,
+        style: style,
+        fontSize: fontSize,
+        fontScale: fontScale
+      )
+    else { return nil }
+
+    return (attributed, masked.placeholders)
+  }
+
   fileprivate static func baseColor(for style: OmiMarkdown.Style) -> Color {
     switch style {
     case .assistant:
@@ -253,12 +275,118 @@ struct OmiMarkdownContent: View, Equatable {
   }
 }
 
+/// A fenced code block scrolls horizontally, but it lives inside the vertical
+/// transcript scroller. AppKit otherwise lets the inner `NSScrollView` consume
+/// an entire trackpad gesture even when the gesture is vertical, stranding the
+/// transcript at whichever code block happens to pass under the pointer.
+/// Preserve horizontal code navigation while routing vertical intent to the
+/// enclosing transcript.
+struct VerticalWheelPassthrough: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView(frame: .zero)
+    context.coordinator.scheduleAttachment(for: view)
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.scheduleAttachment(for: nsView)
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    coordinator.stop()
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator() }
+
+  @MainActor
+  final class Coordinator {
+    private var monitor: Any?
+    private weak var innerScrollView: NSScrollView?
+    private weak var outerScrollView: NSScrollView?
+
+    func scheduleAttachment(for view: NSView) {
+      for delay in [0.0, 0.05] {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak view] in
+          guard let self, let view else { return }
+          self.install(for: view)
+        }
+      }
+    }
+
+    func install(for view: NSView) {
+      guard
+        let inner = Self.enclosingScrollView(for: view),
+        let outer = Self.enclosingScrollView(above: inner)
+      else {
+        stop()
+        return
+      }
+      guard innerScrollView !== inner || outerScrollView !== outer else { return }
+      stop()
+      innerScrollView = inner
+      outerScrollView = outer
+      monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
+        self?.handle(event) ?? event
+      }
+    }
+
+    func handle(_ event: NSEvent) -> NSEvent? {
+      guard
+        let innerScrollView,
+        let outerScrollView,
+        event.window === innerScrollView.window,
+        abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX),
+        event.scrollingDeltaY != 0
+      else { return event }
+      let location = innerScrollView.convert(event.locationInWindow, from: nil)
+      guard innerScrollView.bounds.contains(location) else { return event }
+      NotificationCenter.default.post(
+        name: .chatVerticalWheelPassthrough,
+        object: outerScrollView,
+        userInfo: ["event": event]
+      )
+      outerScrollView.scrollWheel(with: event)
+      return nil
+    }
+
+    func stop() {
+      if let monitor { NSEvent.removeMonitor(monitor) }
+      monitor = nil
+      innerScrollView = nil
+      outerScrollView = nil
+    }
+
+    private static func enclosingScrollView(for view: NSView) -> NSScrollView? {
+      var candidate: NSView? = view
+      while let current = candidate {
+        if let scrollView = current as? NSScrollView { return scrollView }
+        candidate = current.superview
+      }
+      return nil
+    }
+
+    private static func enclosingScrollView(above inner: NSScrollView) -> NSScrollView? {
+      var candidate = inner.superview
+      while let current = candidate {
+        if let scrollView = current as? NSScrollView { return scrollView }
+        candidate = current.superview
+      }
+      return nil
+    }
+
+    deinit {
+      MainActor.assumeIsolated { stop() }
+    }
+  }
+}
+
 struct OmiMarkdownDocument: Equatable {
   struct Block: Identifiable, Equatable {
     enum Kind: Equatable {
       case text(String)
       case codeBlock(language: String?, code: String)
       case table(OmiMarkdownTable)
+      case thematicBreak
     }
 
     let id: Int
@@ -331,12 +459,377 @@ struct OmiMarkdownDocument: Equatable {
         continue
       }
 
+      if Self.isThematicBreak(lines[index]) {
+        flushText()
+        appendBlock(.thematicBreak)
+        index += 1
+        continue
+      }
+
       textLines.append(lines[index])
       index += 1
     }
 
     flushText()
     self.blocks = parsedBlocks
+  }
+
+  /// CommonMark thematic-break syntax: at least three of the same marker,
+  /// optionally separated by spaces or tabs. This intentionally runs after
+  /// fenced-code handling so `---` inside a code sample remains literal text.
+  static func isThematicBreak(_ line: String) -> Bool {
+    let markers = line.filter { !$0.isWhitespace }
+    guard markers.count >= 3, let marker = markers.first else { return false }
+    guard marker == "-" || marker == "*" || marker == "_" else { return false }
+    return markers.allSatisfy { $0 == marker }
+  }
+}
+
+/// Finds simple, closed inline-code spans so the code itself can be an explicit
+/// copy target. Unterminated backticks stay ordinary text while an assistant
+/// response is still streaming.
+enum OmiMarkdownInlineCode {
+  enum Segment: Equatable {
+    case text(String)
+    case code(String)
+  }
+
+  struct Placeholder: Equatable {
+    let marker: String
+    let code: String
+  }
+
+  struct MaskedMarkdown: Equatable {
+    let markdown: String
+    let placeholders: [Placeholder]
+  }
+
+  enum RenderSegment {
+    case text(AttributedString)
+    case code(String)
+  }
+
+  static func containsSpan(in text: String) -> Bool {
+    !closedSpans(in: text).isEmpty
+  }
+
+  static func segments(in text: String) -> [Segment] {
+    var result = [Segment]()
+
+    var textStart = text.startIndex
+    for span in closedSpans(in: text) {
+      if textStart < span.range.lowerBound {
+        result.append(.text(String(text[textStart..<span.range.lowerBound])))
+      }
+      result.append(.code(span.code))
+      textStart = span.range.upperBound
+    }
+
+    if textStart < text.endIndex {
+      result.append(.text(String(text[textStart..<text.endIndex])))
+    }
+    if result.isEmpty {
+      result.append(.text(text))
+    }
+    return result
+  }
+
+  /// Replaces code spans with plain-text markers before Markdown parsing. This
+  /// keeps surrounding emphasis and link delimiters intact while shielding the
+  /// copied code from Markdown interpretation.
+  static func maskedMarkdown(_ text: String) -> MaskedMarkdown? {
+    let spans = closedSpans(in: text)
+    guard !spans.isEmpty else { return nil }
+
+    var markdown = String()
+    var placeholders = [Placeholder]()
+    var textStart = text.startIndex
+
+    for (index, span) in spans.enumerated() {
+      markdown += text[textStart..<span.range.lowerBound]
+
+      var marker = "omiInlineCodePlaceholder\(index)"
+      while text.contains(marker) || placeholders.contains(where: { $0.marker == marker }) {
+        marker.append("x")
+      }
+
+      markdown += marker
+      placeholders.append(Placeholder(marker: marker, code: span.code))
+      textStart = span.range.upperBound
+    }
+
+    markdown += text[textStart..<text.endIndex]
+    return MaskedMarkdown(markdown: markdown, placeholders: placeholders)
+  }
+
+  static func renderSegments(
+    in attributed: AttributedString,
+    placeholders: [Placeholder]
+  ) -> [[RenderSegment]] {
+    var lines = [[RenderSegment]]([[]])
+    let rendered = String(attributed.characters)
+    var renderedStart = rendered.startIndex
+    var attributedStart = attributed.startIndex
+
+    func appendText(_ range: Range<AttributedString.Index>) {
+      var segmentStart = range.lowerBound
+      var cursor = range.lowerBound
+
+      while cursor < range.upperBound {
+        if attributed.characters[cursor] == "\n" {
+          if segmentStart < cursor {
+            lines[lines.count - 1].append(.text(AttributedString(attributed[segmentStart..<cursor])))
+          }
+          lines.append([])
+          cursor = attributed.index(afterCharacter: cursor)
+          segmentStart = cursor
+        } else {
+          cursor = attributed.index(afterCharacter: cursor)
+        }
+      }
+
+      if segmentStart < range.upperBound {
+        lines[lines.count - 1].append(.text(AttributedString(attributed[segmentStart..<range.upperBound])))
+      }
+    }
+
+    for placeholder in placeholders {
+      guard let markerRange = rendered.range(of: placeholder.marker, range: renderedStart..<rendered.endIndex) else {
+        continue
+      }
+
+      let lowerOffset = rendered.distance(from: rendered.startIndex, to: markerRange.lowerBound)
+      let upperOffset = rendered.distance(from: rendered.startIndex, to: markerRange.upperBound)
+      let attributedLower = attributed.index(attributed.startIndex, offsetByCharacters: lowerOffset)
+      let attributedUpper = attributed.index(attributed.startIndex, offsetByCharacters: upperOffset)
+
+      appendText(attributedStart..<attributedLower)
+      lines[lines.count - 1].append(.code(placeholder.code))
+      attributedStart = attributedUpper
+      renderedStart = markerRange.upperBound
+    }
+
+    appendText(attributedStart..<attributed.endIndex)
+    return lines
+  }
+
+  private struct Span {
+    let range: Range<String.Index>
+    let code: String
+  }
+
+  private static func closedSpans(in text: String) -> [Span] {
+    var spans = [Span]()
+    var cursor = text.startIndex
+
+    while cursor < text.endIndex {
+      guard text[cursor] == "`" else {
+        cursor = text.index(after: cursor)
+        continue
+      }
+
+      var fenceEnd = cursor
+      while fenceEnd < text.endIndex, text[fenceEnd] == "`" {
+        fenceEnd = text.index(after: fenceEnd)
+      }
+      let fence = String(text[cursor..<fenceEnd])
+
+      guard let closingFence = text.range(of: fence, range: fenceEnd..<text.endIndex) else {
+        cursor = fenceEnd
+        continue
+      }
+
+      spans.append(
+        Span(
+          range: cursor..<closingFence.upperBound,
+          code: String(text[fenceEnd..<closingFence.lowerBound])
+        )
+      )
+      cursor = closingFence.upperBound
+    }
+
+    return spans
+  }
+}
+
+private struct OmiMarkdownInlineCopyText: View {
+  let attributed: AttributedString
+  let placeholders: [OmiMarkdownInlineCode.Placeholder]
+  let style: OmiMarkdown.Style
+  let fontSize: CGFloat
+  let fontScale: CGFloat
+
+  private var lines: [[OmiMarkdownInlineCode.RenderSegment]] {
+    OmiMarkdownInlineCode.renderSegments(in: attributed, placeholders: placeholders)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+        if line.isEmpty {
+          Color.clear.frame(height: fontSize * 0.45)
+        } else {
+          OmiMarkdownInlineFlowLayout(spacing: 0, lineSpacing: 2) {
+            ForEach(Array(line.enumerated()), id: \.offset) { _, segment in
+              switch segment {
+              case .text(let value):
+                inlineText(value)
+              case .code(let value):
+                OmiMarkdownInlineCodeCopyButton(code: value, style: style, fontScale: fontScale)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func inlineText(_ value: AttributedString) -> some View {
+    Text(value)
+      .fixedSize(horizontal: false, vertical: true)
+      .if_available_writingToolsNone()
+  }
+}
+
+private struct OmiMarkdownCopyToast: View {
+  let fontScale: CGFloat
+
+  var body: some View {
+    Text("Copied")
+      .font(.system(size: round(11 * fontScale), weight: .semibold))
+      .foregroundColor(.white)
+      .padding(.horizontal, 7)
+      .padding(.vertical, 3)
+      .background(Color.black.opacity(0.82))
+      .clipShape(Capsule())
+      .overlay(Capsule().stroke(.white.opacity(0.22), lineWidth: 1))
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Copied")
+      .allowsHitTesting(false)
+  }
+}
+
+private struct OmiMarkdownInlineCodeCopyButton: View {
+  let code: String
+  let style: OmiMarkdown.Style
+  let fontScale: CGFloat
+  @State private var copied = false
+  @State private var copyGeneration = 0
+
+  private var backgroundColor: Color {
+    style == .user ? .white.opacity(copied ? 0.22 : 0.15) : OmiColors.backgroundTertiary
+  }
+
+  var body: some View {
+    Button {
+      copyCode()
+    } label: {
+      Text(code)
+        .font(.system(size: round(13 * fontScale), design: .monospaced))
+        .foregroundColor(OmiMarkdownContent.baseColor(for: style))
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(backgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+          RoundedRectangle(cornerRadius: 4)
+            .stroke(copied ? OmiColors.accent.opacity(0.7) : .clear, lineWidth: 1)
+        )
+    }
+    .buttonStyle(.plain)
+    .overlay(alignment: .topTrailing) {
+      if copied {
+        OmiMarkdownCopyToast(fontScale: fontScale)
+          .offset(x: 8, y: -18)
+      }
+    }
+    .zIndex(copied ? 1 : 0)
+    .accessibilityLabel(copied ? "Copied" : "Copy inline code")
+    .accessibilityValue(code)
+    .help(copied ? "Copied" : "Click to copy code")
+  }
+
+  private func copyCode() {
+    guard OmiMarkdownClipboard.copy(code) else {
+      copied = false
+      return
+    }
+
+    copied = true
+    copyGeneration += 1
+    let generation = copyGeneration
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+      guard copyGeneration == generation else { return }
+      copied = false
+    }
+  }
+}
+
+private struct OmiMarkdownInlineFlowLayout: Layout {
+  var spacing: CGFloat
+  var lineSpacing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+    let result = layout(in: proposal.width ?? .greatestFiniteMagnitude, subviews: subviews)
+    return result.size
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+    let result = layout(in: bounds.width, subviews: subviews)
+    for (index, subview) in subviews.enumerated() {
+      subview.place(
+        at: CGPoint(x: bounds.minX + result.positions[index].x, y: bounds.minY + result.positions[index].y),
+        proposal: result.proposals[index]
+      )
+    }
+  }
+
+  private func layout(in maxWidth: CGFloat, subviews: Subviews) -> (
+    size: CGSize, positions: [CGPoint], proposals: [ProposedViewSize]
+  ) {
+    var positions = [CGPoint]()
+    var proposals = [ProposedViewSize]()
+    var cursor = CGPoint.zero
+    var rowHeight: CGFloat = 0
+    var totalWidth: CGFloat = 0
+
+    for subview in subviews {
+      var proposal = ProposedViewSize.unspecified
+      var size = subview.sizeThatFits(proposal)
+      if size.width > maxWidth {
+        proposal = ProposedViewSize(width: maxWidth, height: nil)
+        size = subview.sizeThatFits(proposal)
+      }
+
+      if cursor.x > 0, cursor.x + size.width > maxWidth {
+        cursor.x = 0
+        cursor.y += rowHeight + lineSpacing
+        rowHeight = 0
+      }
+
+      positions.append(cursor)
+      proposals.append(proposal)
+      rowHeight = max(rowHeight, size.height)
+      totalWidth = max(totalWidth, cursor.x + size.width)
+      cursor.x += size.width + spacing
+    }
+
+    return (
+      CGSize(width: totalWidth, height: cursor.y + rowHeight),
+      positions,
+      proposals
+    )
+  }
+}
+
+private enum OmiMarkdownClipboard {
+  @discardableResult
+  static func copy(_ text: String) -> Bool {
+    NSPasteboard.general.clearContents()
+    return NSPasteboard.general.setString(text, forType: .string)
   }
 }
 
@@ -372,7 +865,6 @@ struct OmiMarkdownTable: Equatable {
   let header: [String]
   let alignments: [ColumnAlignment]
   let rows: [[String]]
-  let rawMarkdown: String
 
   fileprivate static func parse(
     lines: [String],
@@ -387,7 +879,6 @@ struct OmiMarkdownTable: Equatable {
     let parsedAlignments = separatorCells.compactMap(parseAlignment)
     guard parsedAlignments.count == header.count else { return nil }
 
-    var rawLines = [lines[startIndex], lines[startIndex + 1]]
     var rows = [[String]]()
     var cursor = startIndex + 2
 
@@ -398,7 +889,6 @@ struct OmiMarkdownTable: Equatable {
       guard rowCells.count >= 2 else { break }
 
       rows.append(normalize(rowCells, columnCount: header.count))
-      rawLines.append(line)
       cursor += 1
     }
 
@@ -406,8 +896,7 @@ struct OmiMarkdownTable: Equatable {
       OmiMarkdownTable(
         header: header,
         alignments: parsedAlignments,
-        rows: rows,
-        rawMarkdown: rawLines.joined(separator: "\n")
+        rows: rows
       ),
       cursor
     )
@@ -506,29 +995,35 @@ private struct OmiMarkdownTableView: View {
   }
 
   var body: some View {
-    VStack(alignment: .trailing, spacing: OmiSpacing.xxs) {
-      MarkdownTableCopyButton(markdown: table.rawMarkdown)
+    ScrollView(.horizontal, showsIndicators: true) {
+      tableGrid
+    }
+    .background(VerticalWheelPassthrough())
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityLabel("Scrollable markdown table")
+    .accessibilityHint("Scroll horizontally to view additional columns")
+  }
 
-      Grid(alignment: .topLeading, horizontalSpacing: 1, verticalSpacing: 1) {
-        ForEach(Array(allRows.enumerated()), id: \.offset) { rowIndex, row in
-          GridRow(alignment: .top) {
-            ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, content in
-              cell(content, row: rowIndex, column: columnIndex)
-            }
+  private var tableGrid: some View {
+    Grid(alignment: .topLeading, horizontalSpacing: 1, verticalSpacing: 1) {
+      ForEach(Array(allRows.enumerated()), id: \.offset) { rowIndex, row in
+        GridRow(alignment: .top) {
+          ForEach(Array(row.enumerated()), id: \.offset) { columnIndex, content in
+            cell(content, row: rowIndex, column: columnIndex)
           }
         }
       }
-      .padding(1)
-      .background(borderColor)
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(borderColor, lineWidth: 1)
-      )
-      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    // A table remains copyable through its dedicated action, but does not
-    // create one AppKit SelectionOverlay per cell inside the live transcript.
+    .padding(1)
+    .background(borderColor)
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+    .overlay(
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+        .stroke(borderColor, lineWidth: 1)
+    )
+    .fixedSize(horizontal: false, vertical: true)
+    // Tables do not create one AppKit SelectionOverlay per cell inside the
+    // live transcript. Copy remains available only on fenced code blocks.
     .textSelection(.disabled)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("omi-markdown-table")
@@ -547,7 +1042,20 @@ private struct OmiMarkdownTableView: View {
     let metrics = columnMetrics(column, alignment: columnAlignment)
 
     Group {
-      if let styled {
+      if let inlineCopy = OmiMarkdownContent.inlineCopyContent(
+        from: content,
+        style: style,
+        fontSize: fontSize,
+        fontScale: fontScale
+      ) {
+        OmiMarkdownInlineCopyText(
+          attributed: inlineCopy.attributed,
+          placeholders: inlineCopy.placeholders,
+          style: style,
+          fontSize: fontSize,
+          fontScale: fontScale
+        )
+      } else if let styled {
         Text(styled)
       } else {
         Text(content)
@@ -560,10 +1068,9 @@ private struct OmiMarkdownTableView: View {
       minWidth: metrics.minWidth,
       idealWidth: metrics.idealWidth,
       maxWidth: metrics.maxWidth,
-      minHeight: row == 0 ? 40 : 44,
       alignment: columnAlignment.topAlignment
     )
-    .padding(.vertical, OmiSpacing.sm)
+    .padding(.vertical, row == 0 ? OmiSpacing.sm : OmiSpacing.xs)
     .padding(.horizontal, OmiSpacing.md)
     .frame(maxHeight: .infinity, alignment: columnAlignment.topAlignment)
     .background(rowBackground(row))
@@ -602,50 +1109,75 @@ private struct OmiMarkdownTableView: View {
   }
 }
 
-private struct MarkdownTableCopyButton: View {
-  let markdown: String
-  @State private var copied = false
-
-  var body: some View {
-    Button {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(markdown, forType: .string)
-      copied = true
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        copied = false
-      }
-    } label: {
-      Label(copied ? "Copied" : "Copy table", systemImage: copied ? "checkmark" : "doc.on.doc")
-        .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(copied ? .green : OmiColors.textTertiary)
-    }
-    .buttonStyle(.plain)
-    .accessibilityIdentifier("omi-markdown-table-copy")
-    .help("Copy table")
-  }
-}
-
-/// Owns transient copy feedback below the selectable-message render boundary.
-/// Updating this leaf must not invalidate the surrounding SelectionOverlay.
-private struct CodeBlockCopyButton: View {
+/// A whole code card is its copy target, avoiding a tiny, easy-to-miss header
+/// action and preserving the selection-free live transcript contract.
+private struct OmiMarkdownCodeBlockView: View {
   let code: String
+  let language: String?
+  let style: OmiMarkdown.Style
+  let fontScale: CGFloat
   @State private var copied = false
+  @State private var copyGeneration = 0
+
+  private var backgroundColor: Color {
+    style == .user ? .white.opacity(0.15) : OmiColors.backgroundTertiary
+  }
 
   var body: some View {
-    Button {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(code, forType: .string)
-      copied = true
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-        copied = false
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      HStack(spacing: OmiSpacing.xs) {
+        if let language {
+          Text(language)
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundColor(style == .user ? .white.opacity(0.7) : OmiColors.textTertiary)
+        }
+        Spacer(minLength: 0)
+        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(copied ? .green : (style == .user ? .white.opacity(0.7) : OmiColors.textTertiary))
+          .frame(width: round(16 * fontScale), height: round(16 * fontScale))
       }
-    } label: {
-      Image(systemName: copied ? "checkmark" : "doc.on.doc")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(copied ? .green : OmiColors.textTertiary)
+
+      ScrollView(.horizontal, showsIndicators: false) {
+        Text(code)
+          .font(.system(size: round(13 * fontScale), design: .monospaced))
+          .foregroundColor(OmiMarkdownContent.baseColor(for: style))
+          .if_available_writingToolsNone()
+          .background(VerticalWheelPassthrough())
+      }
     }
-    .buttonStyle(.plain)
-    .accessibilityLabel("Copy code")
-    .help("Copy code")
+    .padding(OmiSpacing.md)
+    .background(backgroundColor)
+    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+    .overlay(alignment: .topTrailing) {
+      if copied {
+        OmiMarkdownCopyToast(fontScale: fontScale)
+          .padding(.top, OmiSpacing.md + OmiSpacing.xs)
+          .padding(.trailing, OmiSpacing.md)
+      }
+    }
+    .onTapGesture { copyCode() }
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityLabel(copied ? "Copied" : "Copy code block")
+    .accessibilityHint("Click anywhere in the code block to copy")
+    .accessibilityAction { copyCode() }
+    .help(copied ? "Copied" : "Click anywhere to copy code")
+  }
+
+  private func copyCode() {
+    guard OmiMarkdownClipboard.copy(code) else {
+      copied = false
+      return
+    }
+
+    copied = true
+    copyGeneration += 1
+    let generation = copyGeneration
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+      guard copyGeneration == generation else { return }
+      copied = false
+    }
   }
 }

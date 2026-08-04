@@ -1,3 +1,0 @@
-{
-  "change": "Fixed background agents that fail to start showing a misleading \"check OpenClaw setup\" message even when OpenClaw was never used"
-}

@@ -69,6 +69,7 @@ const desktopCoordinatorBundleSchema = z.enum([
   "desktop.context.screen_summary",
   "desktop.context.screenshot_image",
   "desktop.tasks.readwrite",
+  "desktop.memories.write",
   "desktop.artifacts.manage",
   "desktop.automation.read",
   "desktop.automation.act_dev_only",
@@ -298,6 +299,10 @@ const sendAgentMessageSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
+const toolPolicySchema = strictObject({
+  allowedToolNames: z.array(z.string().min(1)).max(64),
+});
+
 const spawnBackgroundAgentSchema = strictObject({
   prompt: z.string().min(1),
   originSurfaceKind: originSurfaceKindSchema,
@@ -314,6 +319,7 @@ const spawnBackgroundAgentSchema = strictObject({
   requestId: z.string().min(1).optional(),
   clientId: z.string().min(1).default("omi-control-tools"),
   metadata: z.record(z.string(), z.unknown()).default({}),
+  toolPolicy: toolPolicySchema.optional(),
 });
 
 const spawnAgentPublicShape = {
@@ -335,6 +341,7 @@ const spawnAgentPublicShape = {
   requestId: z.string().min(1).optional(),
   clientId: z.string().min(1).default("omi-control-tools"),
   metadata: z.record(z.string(), z.unknown()).default({}),
+  toolPolicy: toolPolicySchema.optional(),
 } as const;
 
 const spawnAgentSchema = strictObject(spawnAgentPublicShape);
@@ -1341,6 +1348,7 @@ export async function handleAgentControlToolCall(
                     runMode: "act",
                     clientId: parsed.clientId,
                     metadata: siblingMetadata,
+                    toolPolicy: parsed.toolPolicy,
                     authoritySignal: context.executionLease?.signal,
                     mcpServers,
                   }));
@@ -1372,6 +1380,7 @@ export async function handleAgentControlToolCall(
                       ...siblingMetadata,
                       provider: parsed.provider ?? null,
                     },
+                    toolPolicy: parsed.toolPolicy,
                     admittedContextSnapshot: producerContextSnapshot,
                     authoritySignal: context.executionLease?.signal,
                     mcpServers,

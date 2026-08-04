@@ -39,6 +39,15 @@ class RolloutStage(str, Enum):
     ACTIVE = 'active'
 
 
+class RouteServingClass(str, Enum):
+    """Bounded classification of why the terminal provider served the request."""
+
+    ACTIVE = 'active'
+    CANARY = 'canary'
+    LKG = 'lkg'
+    ACTUAL_FALLBACK = 'actual_fallback'
+
+
 class FailureClass(str, Enum):
     TIMEOUT_BEFORE_OUTPUT = 'timeout_before_output'
     PROVIDER_429_OMI_PAID = 'provider_429_omi_paid'
@@ -95,6 +104,13 @@ class Capabilities(StrictBaseModel):
     streaming: bool
     structured_output: StructuredOutputMode
     tools: bool
+    translation: bool = False
+
+    @model_validator(mode='after')
+    def validate_translation(self):
+        if self.translation and self.structured_output != StructuredOutputMode.JSON_SCHEMA:
+            raise ValueError('translation lanes require json_schema structured output')
+        return self
 
 
 class Objective(StrictBaseModel):

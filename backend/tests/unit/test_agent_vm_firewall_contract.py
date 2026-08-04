@@ -15,7 +15,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIREWALL_IAC = REPO_ROOT / "backend" / "charts" / "agent-vm-firewall" / "firewall-rule.yaml"
 APPLY_SCRIPT = REPO_ROOT / "backend" / "scripts" / "apply-agent-vm-firewall.sh"
-AGENT_RS = REPO_ROOT / "desktop" / "macos" / "Backend-Rust" / "src" / "routes" / "agent.rs"
+DESKTOP_AGENT_VM = REPO_ROOT / "backend" / "routers" / "desktop_agent_vm.py"
 
 
 def _load_firewall_doc() -> dict:
@@ -77,19 +77,17 @@ def test_apply_script_refuses_without_phase3_gate():
 
 
 def _provision_insert_body_source() -> str:
-    source = AGENT_RS.read_text()
-    body_fn = source.split("fn build_gce_vm_insert_body", 1)[1]
-    return body_fn.split("\n/// Create a GCE VM", 1)[0]
+    source = DESKTOP_AGENT_VM.read_text()
+    body_fn = source.split("async def _create_vm", 1)[1]
+    return body_fn.split("\n    token = await run_blocking", 1)[0]
 
 
 def test_provision_keeps_public_nat_and_firewall_tag():
     """Phase 1: public NAT stays; VMs stay tagged for a later cutover."""
-    source = AGENT_RS.read_text()
+    source = DESKTOP_AGENT_VM.read_text()
     insert_body = _provision_insert_body_source()
 
-    assert "fn build_gce_vm_insert_body" in source
-    assert "contract_create_gce_vm_provision_json_keeps_public_nat_and_firewall_tag" in source
-    assert "contract_agent_vm_ip_uses_public_nat_ip" in source
+    assert "async def _create_vm" in source
     assert '"items": ["omi-agent-vm"]' in insert_body
     assert "ONE_TO_ONE_NAT" in insert_body
     assert "accessConfigs" in insert_body

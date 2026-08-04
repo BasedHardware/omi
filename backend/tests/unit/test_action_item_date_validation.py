@@ -309,6 +309,9 @@ action_item_tools = _load_module_from_file(
 create_action_item_tool = action_item_tools.create_action_item_tool
 update_action_item_tool = action_item_tools.update_action_item_tool
 
+# discard_parser only needs pydantic and langchain_core, so load the real module.
+_load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm" / "discard_parser.py")
+
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",

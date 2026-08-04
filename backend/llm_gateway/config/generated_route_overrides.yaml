@@ -5,12 +5,13 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
   - feature: chat_agent
-    primary: {provider: anthropic, model: claude-sonnet-5}
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: medium}
   - feature: chat_extraction
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: chat_graph
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: chat_responses
     primary: {provider: openai, model: gpt-5.6-luna}
@@ -40,43 +41,43 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
   - feature: external_structure
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: fair_use
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
   - feature: goals
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: goals_advice
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
   - feature: knowledge_graph
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: learnings
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
   - feature: memories
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: memory_category
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
   - feature: memory_conflict
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: memory_l1
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: memory_l2
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
   - feature: notifications
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: openglass
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: persona_chat
     primary: {provider: openai, model: gpt-5-nano}
@@ -88,11 +89,11 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
   - feature: proactive_notification
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
   - feature: smart_glasses
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
   - feature: what_matters_now
-    primary: {provider: openai, model: gpt-5.4-nano}
+    primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}

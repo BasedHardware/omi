@@ -96,6 +96,19 @@ struct ModelQoS {
       }
     }
 
+    /// Live notch suggestions.
+    ///
+    /// Deliberately a tier below the other proactive assistants. This one is triggered by
+    /// ordinary context changes rather than a slow timer, so its call volume is an order of
+    /// magnitude higher; the work — "does this screen plus what Omi already knows justify
+    /// one short sentence?" — is well within Flash-Lite. Cost, not capability, sets this.
+    static var suggestions: String {
+      switch activeTier {
+      case .premium: return "gemini-2.5-flash-lite"
+      case .max: return "gemini-2.5-flash"
+      }
+    }
+
     /// Embeddings (not tier-dependent, kept separate)
     static var embedding: String { "gemini-embedding-001" }
   }

@@ -38,6 +38,19 @@ jobs:
           ref: ${{ inputs.release_tag }}
           fetch-depth: 0
 
+      - name: Verify live desktop-backend chat compatibility
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 \
+            https://desktop-backend-hhibjajaja-uc.a.run.app/health \
+            > /tmp/desktop-backend-health.json
+          jq -e '
+            .status == "healthy"
+            and .service == "omi-desktop-backend"
+            and .chat_contract_version == "1"
+          ' /tmp/desktop-backend-health.json >/dev/null
+          rm -f /tmp/desktop-backend-health.json
+
       - name: Generate Omi Bot token
         id: app-token
         uses: actions/create-github-app-token@v3

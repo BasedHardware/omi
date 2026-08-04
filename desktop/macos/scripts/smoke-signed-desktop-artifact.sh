@@ -468,7 +468,21 @@ assert_backend_routing_config() {
   ! grep -Eq 'localhost|127[.]0[.]0[.]1|0[.]0[.]0[.]0|ngrok|dev-serve' "$env_file" \
     || fail "artifact .env contains a local/dev tunnel backend reference"
 
+  if [[ "$IS_EXTERNAL_PREVIEW" != true ]]; then
+    local firebase_plist firebase_project
+    firebase_plist="$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+    [[ -f "$firebase_plist" ]] || fail "production-family artifact is missing GoogleService-Info.plist"
+    firebase_project="$(/usr/libexec/PlistBuddy -c 'Print :PROJECT_ID' "$firebase_plist" 2>/dev/null || true)"
+    [[ "$firebase_project" == "based-hardware" ]] \
+      || fail "production-family artifact Firebase project must be based-hardware"
+    ! grep -q '^OMI_AUTH_API_URL=' "$env_file" \
+      || fail "production-family artifact must not bundle an OMI_AUTH_API_URL override"
+    ! grep -Eq '^(FIREBASE_AUTH_EMULATOR_HOST|FIREBASE_PROJECT_ID|OMI_DESKTOP_LOCAL_PROFILE)=' "$env_file" \
+      || fail "production-family artifact must not bundle a Firebase project, emulator, or local-profile override"
+  fi
+
   pass "Backend routing config matches the declared external backend"
+  pass "Production Firebase identity matches the declared release authority"
 }
 
 assert_sparkle_and_artifacts() {
@@ -534,7 +548,7 @@ assert_helper_runtime_integrity() {
   [[ -d "$resources/agent" ]] || fail "agent runtime missing"
   [[ -f "$resources/agent/src/runtime/omi-tool-manifest.ts" ]] || fail "agent tool manifest missing"
   [[ -d "$resources/pi-mono-extension" ]] || fail "pi-mono-extension missing"
-  [[ -x "$resources/Omi Computer_Omi Computer.bundle/node" ]] || fail "bundled node missing"
+  [[ -x "$resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node" ]] || fail "bundled node missing"
   local sharp_arch expected_arch sharp_native libvips_native
   for sharp_arch in arm64 x64; do
     expected_arch="$sharp_arch"

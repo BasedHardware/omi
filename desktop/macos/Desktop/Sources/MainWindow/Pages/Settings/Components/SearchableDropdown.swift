@@ -14,6 +14,26 @@ struct SearchableDropdownOption: Identifiable, Hashable {
   }
 }
 
+enum SearchableDropdownFiltering {
+  static func filteredOptions(
+    _ options: [SearchableDropdownOption],
+    query: String
+  ) -> [SearchableDropdownOption] {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return options }
+
+    return options.filter { option in
+      option.title.localizedCaseInsensitiveContains(trimmed)
+        || option.id.localizedCaseInsensitiveContains(trimmed)
+        || (option.subtitle?.localizedCaseInsensitiveContains(trimmed) ?? false)
+    }
+  }
+
+  static func usesSearchablePopover(optionCount: Int, threshold: Int = 8) -> Bool {
+    optionCount > threshold
+  }
+}
+
 struct SearchableDropdown: View {
   let title: String
   var label: String? = nil
@@ -23,6 +43,8 @@ struct SearchableDropdown: View {
   var minWidth: CGFloat = 0
   var maxWidth: CGFloat = 320
   var maxHeight: CGFloat = 300
+  var controlHeight: CGFloat? = nil
+  var usesHeaderChrome = false
   let onSelect: (SearchableDropdownOption) -> Void
 
   @State private var isPresented = false
@@ -56,51 +78,54 @@ struct SearchableDropdown: View {
   }
 
   var body: some View {
-    if options.count > threshold {
-      Button {
-        isPresented.toggle()
-      } label: {
-        dropdownLabel
-      }
-      .buttonStyle(.plain)
-      .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-        SearchableDropdownPopover(
-          title: title,
-          options: options,
-          selectedId: selectedId,
-          query: $query,
-          maxHeight: maxHeight
-        ) { option in
-          onSelect(option)
-          query = ""
-          isPresented = false
+    Group {
+      if options.count > threshold {
+        Button {
+          isPresented.toggle()
+        } label: {
+          dropdownLabel
         }
-        .frame(width: popoverWidth)
-      }
-      .onChange(of: isPresented) { _, presented in
-        if !presented {
-          query = ""
-        }
-      }
-    } else {
-      Menu {
-        ForEach(options) { option in
-          Button(option.title) {
+        .buttonStyle(.plain)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+          SearchableDropdownPopover(
+            title: title,
+            options: options,
+            selectedId: selectedId,
+            query: $query,
+            maxHeight: maxHeight
+          ) { option in
             onSelect(option)
+            query = ""
+            isPresented = false
+          }
+          .frame(width: popoverWidth)
+        }
+        .onChange(of: isPresented) { _, presented in
+          if !presented {
+            query = ""
           }
         }
-      } label: {
-        dropdownLabel
+      } else {
+        Menu {
+          ForEach(options) { option in
+            Button(option.title) {
+              onSelect(option)
+            }
+          }
+        } label: {
+          dropdownLabel
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
       }
-      .menuStyle(.borderlessButton)
-      .fixedSize()
     }
+    .frame(height: controlHeight)
   }
 
   private var dropdownLabel: some View {
     HStack(spacing: OmiSpacing.xs) {
       Text(selectedTitle)
-        .scaledFont(size: OmiType.caption, weight: .medium)
+        .scaledFont(size: usesHeaderChrome ? OmiType.body : OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
         .lineLimit(1)
 
@@ -108,13 +133,16 @@ struct SearchableDropdown: View {
         .scaledFont(size: OmiType.micro, weight: .semibold)
         .foregroundColor(OmiColors.textTertiary)
     }
-    .padding(.horizontal, OmiSpacing.sm)
-    .padding(.vertical, OmiSpacing.xs)
-    .frame(minWidth: minWidth)
+    .padding(.horizontal, usesHeaderChrome ? OmiSpacing.md : OmiSpacing.sm)
+    .padding(.vertical, usesHeaderChrome ? 0 : OmiSpacing.xs)
+    .frame(minWidth: minWidth, minHeight: controlHeight)
     .background(
-      Capsule()
-        .fill(OmiColors.backgroundSecondary.opacity(0.7))
-        .overlay(Capsule().stroke(OmiColors.border.opacity(0.8), lineWidth: 1))
+      Capsule(style: .continuous)
+        .fill(usesHeaderChrome ? Color.white.opacity(0.06) : OmiColors.backgroundSecondary.opacity(0.7))
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(usesHeaderChrome ? Color.white.opacity(0.08) : OmiColors.border.opacity(0.8), lineWidth: 1)
+        )
     )
   }
 
@@ -135,14 +163,7 @@ private struct SearchableDropdownPopover: View {
   @FocusState private var searchIsFocused: Bool
 
   private var filteredOptions: [SearchableDropdownOption] {
-    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return options }
-
-    return options.filter { option in
-      option.title.localizedCaseInsensitiveContains(trimmed)
-        || option.id.localizedCaseInsensitiveContains(trimmed)
-        || (option.subtitle?.localizedCaseInsensitiveContains(trimmed) ?? false)
-    }
+    SearchableDropdownFiltering.filteredOptions(options, query: query)
   }
 
   private var listHeight: CGFloat {

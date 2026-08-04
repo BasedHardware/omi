@@ -49,13 +49,7 @@ Future<ActionItemsResponse?> tryGetActionItems({
     url += '&end_date=${endDate.toUtc().toIso8601String()}';
   }
 
-  var response = await makeApiCall(
-    url: url,
-    headers: {},
-    method: 'GET',
-    body: '',
-    retries: 0,
-  );
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '', retries: 0);
 
   if (response == null) return null;
 

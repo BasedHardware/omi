@@ -1,12 +1,12 @@
 <!-- SINGLE SOURCE OF TRUTH for all agent instructions in this repo (Claude Code, Codex, and any other agent). -->
-<!-- CLAUDE.md is the one pointer to this file. Add or change rules HERE, never in CLAUDE.md. -->
+<!-- CLAUDE.md is a thin pointer to this file. Add or change rules HERE, never in CLAUDE.md. -->
 <!-- Format spec: https://agents.md | Codex guidance: https://developers.openai.com/codex/guides/agents-md -->
 
 # Omi Agent Guide
 
-These rules apply to every AI agent working in this repository. This file is **high-level guidance plus an index** — the `AGENTS.md` nearest your work carries the detail; load it just-in-time. A CI check (`.github/scripts/check_agents_md_lean.py`) keeps every `AGENTS.md` within a size ratchet: add detail to the component guide, not here.
+These rules apply to every AI agent working in this repository. This file is **high-level guidance plus an index** — component guides carry the detail; load them just-in-time for the area you are working in. `CLAUDE.md` just points here. A CI check (`.github/scripts/check_agents_md_lean.py`) keeps this file lean: add detail to the component guide, not here.
 
-**Two audiences read this file.** Engineering standards (Definition of Done, testing, formatting) apply to everyone — maintainers and open-source contributors alike. Rules about production app bundles, deploys, and local machine workflows assume a maintainer environment; in a fork, follow your own process and skip those. Contributor flow: `docs/doc/developer/Contribution.mdx`.
+**Two audiences read this file.** Engineering standards (Definition of Done, testing, formatting) apply to everyone — maintainers and open-source contributors alike. Rules about this repo's `main` branch, production app bundles, deploys, and local machine workflows assume a maintainer environment; in a fork, follow your user's process for landing changes and skip those. Contributor flow: `docs/doc/developer/Contribution.mdx`.
 
 ## Read Next (just-in-time)
 
@@ -15,13 +15,9 @@ These rules apply to every AI agent working in this repository. This file is **h
 | Backend Python (`backend/`) | `backend/AGENTS.md` — setup, async/executors, WebSocket rules, service map, logging security, testing |
 | Flutter app (`app/`) | `app/AGENTS.md` — build flavors, l10n, native bridge, tests, agent-flutter UI verification |
 | Desktop macOS (`desktop/macos/`) | `desktop/macos/AGENTS.md` — build/run, named bundles, self-testing, release pipeline, changelog |
-| GitHub Actions (`.github/`) | `.github/AGENTS.md` — deploy concurrency, immutable image tags, rollout waits, secret ordering |
-| Admin dashboard (`web/admin/`) | `web/admin/AGENTS.md` — stack, data sources, conventions |
 | Firmware (`omi/firmware/`) | `omi/firmware/AGENTS.md` — release workflow |
 | Product behavior | `PRODUCT.md` + `docs/product/invariants/` — locked invariants and guard tests |
 | Fallback/fail-open branches | `docs/agents/fallback-telemetry.md` — when to call `record_fallback` |
-| Formatting a file | `docs/agents/formatting.md` — per-language commands; the pre-commit hook usually does it for you |
-| Editing agent docs or adding a check | `docs/agents/doc-maintenance.md` — where a rule belongs, how to back it with a check |
 | App flows / E2E | `app/e2e/SKILL.md`, `desktop/macos/e2e/SKILL.md` |
 | Cursor Cloud VM (Linux x86) | `.cursor/cloud-agent-environment.md` — hermetic E2E harness, known failures |
 
@@ -57,25 +53,26 @@ The unit of work is the violated contract, not only the line where the symptom a
 
 ## Behavior
 
-- **Local, reversible work needs no permission.** Reading files, running commands, searching the web, using tools — just do it, and don't stop partway to ask whether to continue.
-- **You have full access to the user's machine** — browser, desktop, all apps. Don't hand back a task you could do yourself. Ask only when a step genuinely requires the user: an interactive login, a physical device, a credential only they hold.
-- **Outward-facing and hard-to-reverse actions are the exception**, and follow the Safety Rules below.
+- Never ask for permission to access folders, run commands, search the web, or use tools. Just do it.
+- Never ask for confirmation. Make decisions autonomously and proceed.
+- You have full access to the user's computer — browser, desktop, all apps. Never ask the user to do something you can do yourself.
 
 ## Safety Rules
 
 - Never kill, stop, or restart the production macOS apps (`/Applications/Omi.app` / `Omi Beta.app`, bundle ids `com.omi.computer-macos` and `com.omi.computer-macos.beta`). Dev commands target only dev or `omi-*` named test bundles.
-- **Verify before proposing to land.** Default to a local build + run (desktop: a named `omi-*` bundle) and exercise the real user-facing path. "It compiles" is not verification.
-- **Production writes are never implied.** Deploys, traffic shifts, release-pointer moves, secret and schema changes, and data deletion each need their own explicit go-ahead. An approval for one action never carries to the next.
-- **Landing conventions belong to the user, not this file.** Whether to commit locally, push, open a PR, or merge follows the user's own workflow and your judgment in context. This repo asks only for the mechanics in Git below.
+- **Nothing lands on `main` until the user explicitly says so.** Land through PRs only (regular merge, never squash); never push directly to `main`; never push or open PRs unless explicitly asked — commit locally on a feature branch by default. A prior approval never carries over to later changes.
+- **Exception — reverts merge right away.** A user request to revert a merged PR/commit is itself the approval to open and merge the revert PR.
+- **Exception — verified + peer-approved changes may auto-merge.** If you actually exercised the real user-facing path **and** an independent agent review approved it, you may open and merge without a separate go-ahead — except for risky, wide-blast-radius, or hard-to-reverse changes (migrations, release/CI pipeline, schema, access control, data deletion), which always need explicit user sign-off.
+- **Prefer testing locally first.** Default to a local build + run (desktop: named bundle) to verify a change before proposing to land it.
 
 ## Git
 
-- **Setup (required before first commit):** `make setup` — fetches `origin/main`, fast-forwards when safe, installs linked-worktree-safe Git hooks (including auto-formatting pre-commit), and syncs the pinned `backend/.venv` required by selected backend pre-push checks. It does not install app or desktop runtime environments.
+- **Setup (required before first commit):** `make setup` — fetches `origin/main`, fast-forwards when safe, installs repo Git hooks (including the auto-formatting pre-commit hook) with linked-worktree-safe paths.
 - Before starting work: `git fetch origin && git pull --ff-only` on `main` — don't branch off stale state.
 - Always work in a git worktree for code changes (`git worktree add`); commit to the current branch and never switch branches mid-task.
 - Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
-- **Merge, never squash.** Keeping merge commits is what makes a change cleanly revertible with `git revert -m 1` later.
 - If push fails (remote ahead): `git pull --rebase && git push`.
+- **PR size is reported, not bounded** (`pr-scope` manifest check — advisory annotations, never blocks): 1,500+ changed production-source lines warns; 3,000+ cites the audited history of missed regressions. Split only when the pieces are independently verifiable; otherwise give the one PR proportional review depth.
 - **RELEASE command:** branch from `main`, individual commits, push, open PR, merge without squash, switch back to `main` and pull. **RELEASEWITHBACKEND:** RELEASE + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Issues
@@ -98,7 +95,18 @@ The unit of work is the violated contract, not only the line where the symptom a
 
 ## Formatting
 
-The `make setup` pre-commit hook auto-formats staged files, so this is usually automatic. Per-language commands, and the generated files you must never format by hand: `docs/agents/formatting.md`.
+The pre-commit hook (installed by `make setup`) auto-formats staged files. Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`. Manual commands:
+
+| Language | Manual command |
+|----------|----------------|
+| Dart (`app/`) | `dart format --line-length 120 <files>` |
+| Python (`backend/`) | `black --line-length 120 --skip-string-normalization <files>` |
+| ARB (`app/lib/l10n/`) | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
+| C/C++ (firmware) | `clang-format -i <files>` |
+| Swift (`desktop/macos/Desktop/`) | `desktop/macos/scripts/swift-format-wrapper.sh format -i <files>` |
+| Web (`web/`) | `npx prettier --write <files>` |
+
+Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually. Swift files under `Desktop/Sources/Generated/` are excluded from the formatter scope.
 
 ## Computer Control
 
@@ -109,13 +117,15 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 - **Coverage grows by ratchet, not mandate:** every bug fix adds the regression test that would have caught it; new features test the core path and main error path — no more. A small test that stays meaningful in a year beats ten brittle ones.
 - **Push gate budget:** `scripts/pre-push` is a bounded local acceptance gate, intentionally smaller than CI: cap broad backend selection at 40 files and use only the desktop debug compile. Do not add full suites, release compiles, or CI-only toolchain pins to it — push-time bloat breaks normal iteration. Use focused feedback while editing; CI remains the full test authority.
 - **CI tests must be hermetic** (no live services, network, sleeps, or ordering dependence) — and hermetic tests must run in CI: put them where the component's runner discovers them. A test needing a live service stays out of CI; note in the PR how you ran it.
+- Backend enforces test discovery mechanically: manifest check `backend-test-discovery` fails on any test file no verified runner discovers.
+- **New fail-closed gates ship with a legacy-principal test** — an existing/unmigrated principal (no state doc, old API key, already-shipped client) asserting the intended fallback; gates without one have shipped day-one breakage.
+- **A test rewritten in the same PR as the code it asserts is suspect** — the PR body must cite an external source (platform doc, wire contract, measurement) for the new expected value, or the rewrite deletes the guard.
 - Delete or fix a flaky/obsolete test you encounter — a suite people distrust is worse than a smaller suite.
 - Component runners and prerequisites: see the component guides (`backend/AGENTS.md` → Testing, `app/AGENTS.md` → Test Strategy). High-risk backend workflows must be listed in `backend/testing/workflow_contracts.json` with contract tests.
 
 ## Deploys & Release Pipelines
 
-- Desktop macOS (daily candidate → qualified beta → manual stable): `desktop/macos/AGENTS.md` → Release Pipeline.
-- Desktop Windows (auto on `desktop/windows/**` merge → tag `v*-windows` → beta GitHub release): `.github/workflows/desktop_windows_release.yml`; setup and secrets: `desktop/windows/docs/release-pipeline.md`.
+- Desktop (daily candidate → qualified beta → manual stable): `desktop/macos/AGENTS.md` → Release Pipeline.
 - Backend: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`. Runtime env contract: `backend/AGENTS.md` → Service Map.
 - Firmware (Omi CV1): `omi/firmware/AGENTS.md`.
 
@@ -123,13 +133,16 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 
 | Blocked on | Hatch |
 |---|---|
-| A signed, qualified desktop candidate did not reach Beta | `desktop_recover_beta.yml` with its exact tag, `confirm=recover-beta`, and a reason |
+| Desktop candidate won't cut (`Desktop Swift Build & Tests` red/flaky) | `desktop_auto_release.yml` with `release_mode=break_glass` |
 | Backend deploy has no Release Eligibility proof | `gcp_backend.yml` with `skip_eligibility_proof=true`, `break_glass_confirm=deploy-without-proof`, `break_glass_reason` |
 
 Hatches relax *evidence* requirements only. They never relax that code is merged to `main` first, and never reach stable/prod pointers without their own explicit confirm.
 
 ## Documentation Maintenance
 
-`AGENTS.md` files are the only place rules live: this root file for cross-component rules, the nearest component guide for its own detail, and exactly one `CLAUDE.md` at the repo root as a pointer. Docs move with the code that changed them, in the same PR.
-
-**Write rules mechanically and back them with checks** — a rule is only reliable if a weak agent can apply it without judgment, and enforced rules don't drift while requested behavior does. Where a rule belongs, how to add a check, and the size ratchet on every `AGENTS.md`: `docs/agents/doc-maintenance.md`.
+- **This file is the single source of truth for cross-component agent rules; component `AGENTS.md` files own their component's detail.** `CLAUDE.md` files are pointers only.
+- **Keep this file lean** — high-level rules and the index, short plain bullets. Detail goes in the component guide; `.github/scripts/check_agents_md_lean.py` enforces the budget. Prefer editing/replacing an existing line over adding new ones.
+- **Write rules mechanically, and back them with checks.** A rule is only reliable if a weak agent can apply it without judgment. Prefer encoding a rule as a script or CI check with a clear failure message — enforced rules don't drift; requested behavior does.
+- **New checks, probes, or validation scripts must be wired into an existing CI or deploy lane in the same PR.** On-demand scripts and scheduled jobs with no blocking audience are dead checks.
+- **When a defect ships because guidance was misread or missing, tighten the guidance in the fix PR** — make the rule mechanical enough that the same misreading can't recur, or add a check that catches it.
+- PR changes to setup, test commands, safety rules, service boundaries, or env vars update the matching guide in the same PR. Architecture / core-flow / API changes update Mintlify docs (`docs/doc/developer/`). Product direction or locked invariants update `PRODUCT.md` / `docs/product/invariants/` and guard tests.

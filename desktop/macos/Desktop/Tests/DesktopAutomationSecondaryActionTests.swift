@@ -29,6 +29,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       "set_transcription_language",
       "transcription_language_snapshot",
       "memory_graph_snapshot",
+      "open_memory_atlas",
+      "memory_atlas_set_viewport",
       "open_quick_note",
       "about_snapshot",
       "settings_notifications_snapshot",
@@ -44,6 +46,19 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
         "expected bridge action \(action) to be registered"
       )
     }
+  }
+
+  func testGoogleProbeActionsPassExplicitUserIntentToTheirReaders() throws {
+    // omi-test-quality: source-inspection -- static contract: the bridge action
+    // must pass the user-consent boundary to the concrete reader; exercising it
+    // would require live browser cookies and Keychain state.
+    let source = try bridgeSource()
+    XCTAssertTrue(
+      try actionBody(named: "calendar_read_probe", in: source).contains("userInitiated: true")
+    )
+    XCTAssertTrue(
+      try actionBody(named: "gmail_read_probe", in: source).contains("userInitiated: true")
+    )
   }
 
   func testConversationListSnapshotIncludesFolderFields() throws {
@@ -254,6 +269,19 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
       XCTAssertTrue(body.contains("\"\(key)\""), "memory_graph_snapshot should return \(key)")
     }
     XCTAssertTrue(body.contains("getKnowledgeGraph"))
+  }
+
+  func testMemoryAtlasHarnessActionsPostBoundedViewportNotifications() throws {
+    let openBody = try actionBody(named: "open_memory_atlas", in: try bridgeSource())
+    XCTAssertTrue(openBody.contains("desktopAutomationOpenMemoryAtlasRequested"))
+    XCTAssertTrue(openBody.contains("\"target\": \"page\""))
+
+    let viewportBody = try actionBody(named: "memory_atlas_set_viewport", in: try bridgeSource())
+    XCTAssertTrue(viewportBody.contains("desktopAutomationMemoryAtlasViewportRequested"))
+    XCTAssertTrue(viewportBody.contains("\"page\""))
+    for parameter in ["target", "zoom", "pan_x", "pan_y", "reset"] {
+      XCTAssertTrue(viewportBody.contains("\"\(parameter)\""))
+    }
   }
 
   func testNavigateViaShortcutPostsSidebarNotification() throws {

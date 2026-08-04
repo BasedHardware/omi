@@ -658,7 +658,7 @@ struct OnboardingChatView: View {
       Task {
         // Start bridge eagerly so it's ready by the time we need to send
         // (ensureBridgeStarted waits for API keys internally)
-        async let bridgeWarmup: () = chatProvider.warmupBridge()
+        async let bridgeWarmup: Bool = chatProvider.warmupBridge()
 
         // Load previous messages from backend (same default chat, sessionId=nil)
         await chatProvider.loadDefaultChatMessages()
@@ -683,7 +683,7 @@ struct OnboardingChatView: View {
         }
 
         // Wait for bridge warmup before sending
-        await bridgeWarmup
+        _ = await bridgeWarmup
 
         // Resume the conversation — tell the AI the app was restarted
         await chatProvider.sendMessage(
@@ -1872,6 +1872,8 @@ struct OnboardingChatBubble: View {
         return false
       case .discoveryCard:
         return true
+      case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+        return false
       case .agentSpawn, .agentCompletion:
         return true
       }

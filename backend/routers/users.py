@@ -53,9 +53,10 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
+from utils.user_language import normalize_user_language
 from database.users import *
 from models.conversation import Conversation
-from models.geolocation import Geolocation
+from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
 from models.shared import StatusResponse
@@ -75,6 +76,8 @@ from models.users import (
     PricingOption,
     PhoneCallQuota,
     TrialMetadata,
+    LocationContextConsentResponse,
+    LocationContextConsentUpdate,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -118,7 +121,7 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from utils.byok import has_byok_keys, invalidate_byok_state_cache
+from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
 import logging
 
 logger = logging.getLogger(__name__)
@@ -220,6 +223,13 @@ class MemorySummaryRatingResponse(BaseModel):
 class TrainingDataOptInResponse(BaseModel):
     opted_in: bool
     status: Optional[str] = None
+
+
+def _location_context_consent_response(consent) -> LocationContextConsentResponse:
+    return LocationContextConsentResponse(
+        enabled=bool(consent and consent.is_active()),
+        expires_at=consent.expires_at if consent and consent.is_active() else None,
+    )
 
 
 class DailySummaryTestResponse(UserStatusResponse):
@@ -392,12 +402,19 @@ async def run_account_deletion_wipe(
             logger.warning(f'account_deletion handler: non-actionable task for {uid}, claim_status={claim_status}')
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
 
-        ok = await run_blocking(cleanup_executor, background_wipe_user_data, uid)
+        max_attempts = get_account_deletion_tasks_max_attempts()
+        terminal = task_authentication.retry_count >= max_attempts - 1
+        ok = await run_blocking(
+            cleanup_executor,
+            background_wipe_user_data,
+            uid,
+            task_authentication.retry_count,
+            terminal,
+        )
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 
-        max_attempts = get_account_deletion_tasks_max_attempts()
-        if task_authentication.retry_count >= max_attempts - 1:
+        if terminal:
             logger.error(
                 f'account_deletion handler: final attempt {task_authentication.retry_count + 1} failed for {uid}'
             )
@@ -417,7 +434,13 @@ async def run_account_deletion_wipe(
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
-def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
+def set_user_geolocation(geolocation: GeolocationInput, uid: str = Depends(auth.get_current_user_uid)):
+    validated_geolocation = validated_geolocation_or_none(geolocation)
+    if validated_geolocation is None:
+        # Preserve the released endpoint's success-shaped input contract while
+        # ensuring out-of-range coordinates cannot enter the cache or any provider path.
+        return {'status': 'ok', 'message': 'Location ignored because its coordinates are invalid.'}
+
     last_location_data = get_cached_user_geolocation(uid)
     if last_location_data:
         try:
@@ -425,20 +448,20 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
             last_lat = round(last_location.latitude, 4)
             last_lon = round(last_location.longitude, 4)
-            new_lat = round(geolocation.latitude, 4)
-            new_lon = round(geolocation.longitude, 4)
+            new_lat = round(validated_geolocation.latitude, 4)
+            new_lon = round(validated_geolocation.longitude, 4)
 
             # Only update if location has changed up to 4 decimal places
             if last_lat == new_lat and last_lon == new_lon:
                 return {'status': 'ok', 'message': 'Location not changed significantly.'}
 
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, validated_geolocation.model_dump())
         except Exception as e:
             logger.error(f"Error processing geolocation update, caching new location anyway. Error: {e}")
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, validated_geolocation.model_dump())
     else:
         # No previous location, so cache the new one
-        cache_user_geolocation(uid, geolocation.model_dump())
+        cache_user_geolocation(uid, validated_geolocation.model_dump())
 
     return {'status': 'ok'}
 
@@ -457,9 +480,12 @@ def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
+    set_user_webhook_db(uid, wtype, url)
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
-    set_user_webhook_db(uid, wtype, url)
+    else:
+        enable_user_webhook_db(uid, wtype)
+        record_dev_webhook_success(uid, wtype)
     return {'status': 'ok'}
 
 
@@ -809,9 +835,7 @@ def set_chat_message_analytics(
 def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's preferred language."""
     language = get_user_language_preference(uid)
-    if not language:
-        return {'language': None}
-    return {'language': language}
+    return {'language': language or None}
 
 
 class SetUserLanguageRequest(BaseModel):
@@ -821,9 +845,9 @@ class SetUserLanguageRequest(BaseModel):
 @router.patch('/v1/users/language', tags=['v1'], response_model=UserLanguageUpdateResponse)
 def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    language = data.language
+    language = normalize_user_language(data.language)
     if not language:
-        raise HTTPException(status_code=400, detail="Language is required")
+        raise HTTPException(status_code=400, detail="A supported language code is required")
     set_user_language_preference(uid, language)
     single_language_mode = not supports_live_multilingual_mode(language)
     set_user_transcription_preferences(uid, single_language_mode=single_language_mode)
@@ -1031,6 +1055,21 @@ def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
     return {'status': 'ok', 'message': 'Your request has been submitted for review. We will let you know soon.'}
 
 
+@router.get('/v1/users/location-context-consent', tags=['v1'], response_model=LocationContextConsentResponse)
+def get_location_context_consent(uid: str = Depends(auth.get_current_user_uid)):
+    """Return the current city-context disclosure and active server-side consent state."""
+    return _location_context_consent_response(users_db.get_user_location_context_consent(uid))
+
+
+@router.put('/v1/users/location-context-consent', tags=['v1'], response_model=LocationContextConsentResponse)
+def set_location_context_consent(update: LocationContextConsentUpdate, uid: str = Depends(auth.get_current_user_uid)):
+    """Grant, renew, or revoke city-only location context for interactive chat."""
+    if update.enabled and not update.disclosure_accepted:
+        raise HTTPException(status_code=422, detail='location context requires accepting the provider disclosure')
+    consent = users_db.set_user_location_context_consent(uid, enabled=update.enabled)
+    return _location_context_consent_response(consent)
+
+
 # **************************************
 # ************* Usage ******************
 # **************************************
@@ -1079,7 +1118,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             raise HTTPException(
                 status_code=400, detail=f"Invalid fingerprint for {provider}: expected lowercase hex SHA-256 (64 chars)"
             )
-    users_db.set_byok_active(uid, data.fingerprints)
+    users_db.set_byok_active(uid, {p: peppered_fingerprint(fp) for p, fp in data.fingerprints.items()})
     invalidate_byok_state_cache(uid)
     clear_trial_paywall_cache(uid)
     return {"active": True}

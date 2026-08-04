@@ -345,6 +345,13 @@ actor AgentSyncService {
     }
   }
 
+  /// AgentSync reads every table on a short polling interval. Forward a local
+  /// SQLite failure to the lifecycle owner so a recoverable stale pool can be
+  /// closed and reopened instead of being retried indefinitely.
+  static func reportDatabaseReadFailure(_ error: Error) async {
+    await RewindDatabase.shared.reportQueryError(error)
+  }
+
   // MARK: - Re-upload trigger
 
   /// `/health` normally catches a missing database, while the table-bound
@@ -484,11 +491,13 @@ actor AgentSyncService {
           let allColumns = columnInfos.compactMap { $0["name"] as? String }
           return allColumns.filter { !spec.excludedColumns.contains($0) }
         }
+        await RewindDatabase.shared.reportQuerySuccess()
         guard syncGeneration == generation else { return 0 }
         cachedTableColumns[spec.name] = fetched
         columns = fetched
       } catch {
         log("AgentSync: error fetching schema for \(spec.name) — \(error.localizedDescription)")
+        await Self.reportDatabaseReadFailure(error)
         return 0
       }
     }
@@ -540,6 +549,7 @@ actor AgentSyncService {
         return AgentSyncRowsPayload(rows: rows)
       }
       let rows = rowsPayload.rows
+      await RewindDatabase.shared.reportQuerySuccess()
 
       guard syncGeneration == generation else { return 0 }
 
@@ -579,6 +589,7 @@ actor AgentSyncService {
       }
     } catch {
       log("AgentSync: error reading \(spec.name) — \(error.localizedDescription)")
+      await Self.reportDatabaseReadFailure(error)
     }
     return 0
   }

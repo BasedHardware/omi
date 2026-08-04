@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
@@ -1295,44 +1297,42 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
-  func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay() throws {
-    // Mechanical guard for the omi-chat-continuity main-thread freeze:
-    // ChatMessagesView used to apply `.textSelection(.enabled)` on the LazyVStack,
-    // wrapping every agent-card header Text in SelectionOverlay and thrashing
-    // GraphHost via setFont → invalidateIntrinsicContentSize.
-    let root = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
+  @MainActor
+  func testCompletedChatTranscriptLayoutConvergesAcrossRepeatedResizes() {
+    let messages = (0..<16).map { index in
+      """
+      Completed response \(index) includes **formatted text**, `inline code`, and a list:
 
-    let messagesSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatMessagesView.swift"),
-      encoding: .utf8
-    )
-    let markdownSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/OmiMarkdown.swift"),
-      encoding: .utf8
-    )
-    let bubbleSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
-      encoding: .utf8
+      - First point with enough content to wrap when the transcript narrows
+      - Second point with a stable whole-message copy action
+      """
+    }
+    let host = NSHostingView(
+      rootView: ScrollView {
+        LazyVStack(alignment: .leading, spacing: 8) {
+          ForEach(messages.indices, id: \.self) { index in
+            OmiMarkdown(text: messages[index], sender: .ai)
+          }
+        }
+      }
     )
 
-    XCTAssertFalse(
-      messagesSource.contains(".textSelection(.enabled)"),
-      "chat message stack must not enable selection on chrome Text views"
-    )
-    XCTAssertFalse(
-      markdownSource.contains(".textSelection(.enabled)"),
-      "chat Markdown must not create SelectionOverlay views that can loop while scrolling"
-    )
-    XCTAssertTrue(
-      markdownSource.contains(".textSelection(.disabled)"),
-      "the OmiMarkdown boundary must explicitly suppress inherited text selection"
-    )
-    XCTAssertTrue(
-      bubbleSource.contains(".textSelection(.disabled)"),
-      "agent card headers must disable SelectionOverlay on truncated snippets"
-    )
+    var sizesByWidth = [CGFloat: CGSize]()
+    for width in [620.0, 1100.0, 760.0, 980.0, 620.0, 1100.0] {
+      host.frame = NSRect(x: 0, y: 0, width: width, height: 720)
+      host.layoutSubtreeIfNeeded()
+
+      let size = host.fittingSize
+      XCTAssertTrue(size.width.isFinite, "transcript width must remain finite")
+      XCTAssertTrue(size.height.isFinite, "transcript height must remain finite")
+      XCTAssertGreaterThan(size.height, 0, "completed messages must remain visible")
+
+      if let previous = sizesByWidth[width] {
+        XCTAssertEqual(previous, size, "repeating a transcript width must converge to the same layout")
+      } else {
+        sizesByWidth[width] = size
+      }
+    }
   }
 
   func testCanonicalSurfacesBindSharedProviderMessages() throws {

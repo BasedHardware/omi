@@ -266,11 +266,15 @@ async def supervise_tasks(
         done, monitored = await asyncio.wait(monitored, return_when=asyncio.FIRST_COMPLETED)
 
         exit_result = None
-        for task in done:
-            if task is receive_task:
-                exit_result = SupervisorResult(reason="disconnect", task_name=task.get_name())
-                break
-            if not task.cancelled():
+        if receive_task in done:
+            # The client disconnect owns the exit reason for the round it lands in.
+            # `done` is a set, so scanning it in iteration order let a bg task that
+            # observed the same disconnect report "crash" on ordering luck alone.
+            exit_result = SupervisorResult(reason="disconnect", task_name=receive_task.get_name())
+        else:
+            for task in done:
+                if task.cancelled():
+                    continue
                 try:
                     exc = task.exception()
                 except asyncio.CancelledError:

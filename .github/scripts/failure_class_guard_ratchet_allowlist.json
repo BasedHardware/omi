@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "note": "Classes already over the guard-artifact threshold when the ratchet landed (2026-07-24). This list only shrinks: adding an entry is an explicit admission that a class recurs without a reusable guard, and an entry must be removed once its class records a canonical_prevention_artifact. See docs/product/failure-classes.md.",
+  "grandfathered": [
+    {
+      "id": "FC-unprovisioned-rollout-target",
+      "declarations_at_baseline": 3,
+      "reason": "3 first-parent integration changes in the same window; the definition describes a deploy-lane endpoint-provisioning check that does not exist yet as a nameable artifact."
+    }
+  ]
+}

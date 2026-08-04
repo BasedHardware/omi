@@ -7,12 +7,7 @@ import 'package:omi/services/wals/wal.dart';
 /// A not-yet-synced recording must never be visually identical to a failed
 /// one, and an `uploaded` (processing) recording must read distinctly.
 void main() {
-  Wal makeWal({
-    required WalStatus status,
-    bool isSyncing = false,
-    int retryCount = 0,
-    String? jobId,
-  }) {
+  Wal makeWal({required WalStatus status, bool isSyncing = false, int retryCount = 0, String? jobId}) {
     return Wal(
       timerStart: 1700000000,
       codec: BleAudioCodec.opus,
@@ -24,8 +19,10 @@ void main() {
   }
 
   group('Wal.syncDisplayState', () {
+    const terminalStatuses = {WalStatus.corrupted, WalStatus.outsideRecoveryWindow};
+
     test('isSyncing wins over every non-terminal status', () {
-      for (final s in WalStatus.values.where((status) => status != WalStatus.corrupted)) {
+      for (final s in WalStatus.values.where((status) => !terminalStatuses.contains(status))) {
         final w = makeWal(status: s, isSyncing: true);
         expect(w.syncDisplayState, WalSyncDisplayState.syncing, reason: 'status=$s');
       }
@@ -33,6 +30,24 @@ void main() {
 
     test('corrupted wins over a stale syncing flag', () {
       expect(makeWal(status: WalStatus.corrupted, isSyncing: true).syncDisplayState, WalSyncDisplayState.corrupted);
+    });
+
+    test('outsideRecoveryWindow wins over a stale syncing flag', () {
+      expect(
+        makeWal(status: WalStatus.outsideRecoveryWindow, isSyncing: true).syncDisplayState,
+        WalSyncDisplayState.outsideRecoveryWindow,
+        reason: 'a recording the server refused for good must never render as an active upload',
+      );
+    });
+
+    test('outsideRecoveryWindow -> outsideRecoveryWindow regardless of retry count', () {
+      for (final r in [0, 1, walMaxAutoRetries]) {
+        expect(
+          makeWal(status: WalStatus.outsideRecoveryWindow, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.outsideRecoveryWindow,
+          reason: 'retryCount=$r must not downgrade it to waiting/retrying/failed',
+        );
+      }
     });
 
     test('uploaded -> uploaded (processing on server)', () {
@@ -54,16 +69,23 @@ void main() {
 
     test('miss with 1..(max-1) retries -> retrying', () {
       for (var r = 1; r < walMaxAutoRetries; r++) {
-        expect(makeWal(status: WalStatus.miss, retryCount: r).syncDisplayState, WalSyncDisplayState.retrying,
-            reason: 'retryCount=$r');
+        expect(
+          makeWal(status: WalStatus.miss, retryCount: r).syncDisplayState,
+          WalSyncDisplayState.retrying,
+          reason: 'retryCount=$r',
+        );
       }
     });
 
     test('miss at/over max retries -> failed (needs manual retry)', () {
       expect(
-          makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries).syncDisplayState, WalSyncDisplayState.failed);
-      expect(makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries + 5).syncDisplayState,
-          WalSyncDisplayState.failed);
+        makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries).syncDisplayState,
+        WalSyncDisplayState.failed,
+      );
+      expect(
+        makeWal(status: WalStatus.miss, retryCount: walMaxAutoRetries + 5).syncDisplayState,
+        WalSyncDisplayState.failed,
+      );
     });
 
     test('inProgress -> waiting', () {
@@ -78,6 +100,11 @@ void main() {
       expect(back.status, WalStatus.uploaded);
       expect(back.jobId, 'job-xyz');
       expect(back.uploadedAt, 1700000123);
+    });
+
+    test('outsideRecoveryWindow survives a restart', () {
+      final w = makeWal(status: WalStatus.outsideRecoveryWindow);
+      expect(Wal.fromJson(w.toJson()).status, WalStatus.outsideRecoveryWindow);
     });
 
     test('legacy json without job fields defaults safely', () {

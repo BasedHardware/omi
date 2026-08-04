@@ -140,21 +140,36 @@ export default {
     artifactName: '${name}-${version}.${ext}'
   },
   linux: {
-    target: ['AppImage', 'snap', 'deb'],
+    // AppImage + deb only — snap omitted: strict confinement blocks
+    // xprop/tesseract/proc used by Linux active-window and OCR seams.
+    target: ['AppImage', 'deb'],
     maintainer: 'Based Hardware <team@basedhardware.com>',
-    category: 'Utility'
+    category: 'Utility',
+    synopsis: 'AI that sees your screen, listens, and remembers'
   },
   appImage: {
     artifactName: '${name}-${version}.${ext}'
+  },
+  deb: {
+    // Runtime tools/libs the Linux platform seams call out of process. Missing
+    // ones degrade gracefully (OCR/active-window return empty), but packaging the
+    // depends keeps the shipped App experience complete on Debian/Ubuntu.
+    depends: [
+      'tesseract-ocr',
+      'tesseract-ocr-eng',
+      'libnotify4',
+      'libxss1',
+      'x11-utils'
+    ]
   },
   npmRebuild: false,
   // --- AUTO-UPDATE ---
   // electron-updater is wired in src/main/updater.ts (packaged builds only; silent
   // download + install-on-next-quit; NSIS differential updates stay default-on).
-  // The production feed is the GitHub releases where the macOS beta channel lives.
-  // Local testing uses dev-app-update.yml + OMI_UPDATER_DEV=1 (forceDevUpdateConfig)
-  // instead of this feed. releaseType 'release' means only non-prerelease GitHub
-  // releases are served as updates.
+  // This GitHub config makes electron-builder emit latest.yml and app-update.yml.
+  // Before every production check, updater.ts replaces the repository-wide GitHub
+  // provider with the backend-selected immutable Windows release directory. Local
+  // testing keeps dev-app-update.yml + OMI_UPDATER_DEV=1 (forceDevUpdateConfig).
   //
   // NOTE: this block is the UPDATE FEED only — it must never be used as an upload
   // target. electron-builder auto-publishes to it when CI + a git tag are detected,

@@ -38,6 +38,7 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
 )
 from models.conversation_enums import ConversationSource
+from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
@@ -845,18 +846,12 @@ async def sync_local_files(
                 logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 
 
-# ---------------------------------------------------------------------------
-# v2 async sync-local-files
-# ---------------------------------------------------------------------------
-# v1 processes segments synchronously (80-180s for large payloads → 504).
-# v2 returns 202 immediately after saving raw files, then runs the full
-# pipeline (decode → VAD → fair-use → STT → LLM) in a background thread.
-# The app polls GET /v2/sync-local-files/{job_id} until the job reaches
-# a terminal status.
-# ---------------------------------------------------------------------------
-
-
-@router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
+@router.post(  # v2 async sync-local-files
+    "/v2/sync-local-files",
+    status_code=202,
+    response_model=SyncJobStartResponse,
+    responses=SYNC_LOCAL_FILES_V2_RESPONSES,
+)
 @max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
@@ -1757,7 +1752,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     return JSONResponse(status_code=200, content={'status': 'done', 'reconciled': True})
             failure = failure_from_exception(e, provider=latest_job.get('stt_provider'))
             sync_model = latest_job.get('stt_model')
-            if task_retry_count >= max_attempts - 1:
+            if not failure.retryable or task_retry_count >= max_attempts - 1:
                 logger.error(
                     'event=sync_transcription_job outcome=%s status=failed_final lane=%s '
                     'attempt=%d exception_type=%s',

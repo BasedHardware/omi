@@ -151,6 +151,7 @@
         // These values are passed from the backend template rendering
         const appId = "{{ app_id }}";
         const state = "{{ state }}";
+        const csrfToken = "{{ csrf_token }}";
 
         // Firebase configuration
         const firebaseConfig = {
@@ -207,6 +208,7 @@
             const formData = new FormData();
             formData.append('firebase_id_token', idToken);
             formData.append('app_id', appId);
+            formData.append('csrf_token', csrfToken);
             if (state) {
                 formData.append('state', state);
             }

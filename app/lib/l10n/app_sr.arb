@@ -1483,7 +1483,7 @@
     "exportConfiguration": "Извоз конфигурације",
     "bringYourOwn": "Донесите своју",
     "payYourSttProvider": "Слободно користите omi. Плаћате само добављачу STT директно.",
-    "freeMinutesMonth": "1.200 слободних минута/месец укључено. Неограничено са ",
+    "freeMinutesMonth": "300 слободних минута/месец укључено. Неограничено са ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хост је обавезан",
     "validPortRequired": "Важећи порт је обавезан",
@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 премиум минута + без ограничења на уређају",
+    "basicPlanDescription": "300 премиум минута + без ограничења на уређају",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7265,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.",
+    "premiumMinutesInfo": "300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7376,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ",
+    "premiumMinutesMonth": "300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Чека синхронизацију",
     "syncStatusRetrying": "Обрада није успела — нови покушај",
     "syncStatusFailed": "Неуспело — додирните Покушај поново",
+    "syncStatusTooOld": "Превише стара за синхронизацију — Omi не може да је прихвати",
     "syncStatusFileUnavailable": "Датотека није доступна",
     "syncStatusUploaded": "Отпремљено · обрада на Omi",
     "noRecordingsYet": "Још нема снимака",

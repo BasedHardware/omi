@@ -29,6 +29,16 @@ protocol RealtimeHubSessionDelegate: AnyObject {
     identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession)
   func hubDidError(_ failure: RealtimeHubTransportFailure, source: RealtimeHubSession)
+  /// The session became able to accept injected (non-PTT) context — a warm
+  /// Gemini activity window just opened. The capability signal that retries a
+  /// background-agent completion left unadvanced while the session was idle.
+  func hubDidOpenInputWindow(source: RealtimeHubSession)
+}
+
+extension RealtimeHubSessionDelegate {
+  /// Default no-op: only the controller that owns background-completion delivery
+  /// needs the "ready for injected context" signal.
+  func hubDidOpenInputWindow(source: RealtimeHubSession) {}
 }
 
 enum RealtimeHubTransportFailureKind: String, Equatable, Sendable {
@@ -64,7 +74,7 @@ struct RealtimeHubTransportFailure: Equatable, Sendable {
       kind: kind(for: failure.phase),
       message: failure.message,
       systemDomain: boundedSystemDomain(failure.underlyingError),
-      systemCode: failure.underlyingError.map { ($0 as NSError).code })
+      systemCode: failure.underlyingError.map { posixCode($0) ?? ($0 as NSError).code })
   }
 
   static func providerClose(code: Int, reason: String) -> Self {
@@ -91,7 +101,7 @@ struct RealtimeHubTransportFailure: Equatable, Sendable {
       kind: phase,
       message: error.localizedDescription,
       systemDomain: boundedSystemDomain(error),
-      systemCode: (error as NSError).code)
+      systemCode: posixCode(error) ?? (error as NSError).code)
   }
 
   private static func kind(
@@ -118,12 +128,25 @@ struct RealtimeHubTransportFailure: Equatable, Sendable {
       && nsError.code == Int(POSIXErrorCode.EADDRNOTAVAIL.rawValue)
   }
 
+  /// The POSIX errno behind a transport failure, if it has one. `NWError.posix` is
+  /// the shape the read/write path actually produces and it does not bridge into
+  /// `NSPOSIXErrorDomain`, so it has to be unwrapped explicitly — the same typed
+  /// read `isLocalAddressUnavailable` already performs.
+  static func posixCode(_ error: Error) -> Int? {
+    if let networkError = error as? NWError,
+      case .posix(let code) = networkError
+    {
+      return Int(code.rawValue)
+    }
+    let nsError = error as NSError
+    return nsError.domain == NSPOSIXErrorDomain ? nsError.code : nil
+  }
+
   private static func boundedSystemDomain(_ error: Error?) -> String? {
     guard let error else { return nil }
+    if posixCode(error) != nil { return "posix" }
     if error is NWError { return "network" }
-    let domain = (error as NSError).domain
-    if domain == NSPOSIXErrorDomain { return "posix" }
-    if domain == NSURLErrorDomain { return "url" }
+    if (error as NSError).domain == NSURLErrorDomain { return "url" }
     return "other"
   }
 }

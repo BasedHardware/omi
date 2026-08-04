@@ -14,7 +14,9 @@ validated against enrolled fingerprints so that:
 """
 
 import hashlib
+import hmac
 import logging
+import os
 import threading
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -26,6 +28,36 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.websockets import WebSocket
 
 logger = logging.getLogger('byok')
+
+_BYOK_PEPPER = os.getenv('BYOK_FINGERPRINT_PEPPER', '')
+_warned_no_pepper = False
+
+
+def peppered_fingerprint(client_fingerprint: str) -> str:
+    """Wrap a client-computed SHA-256 key fingerprint with a server-side HMAC
+    pepper before it's persisted or compared.
+
+    The client only ever sends/knows plain SHA-256(raw_key) — that's a
+    deliberate privacy property (the server never sees raw BYOK keys at
+    enrollment). But a plain, unsalted SHA-256 of a well-known-prefix API key
+    (sk-, sk-ant-, AIza, ...) is rainbow-table attackable if the stored
+    fingerprint ever leaks (e.g. a Firestore export). Mixing in a
+    server-only secret closes that without changing the client protocol at
+    all — clients still send the same plain fingerprint/raw key they always
+    did; only what Omi's server persists changes.
+
+    Falls back to the identity function (legacy behavior, no pepper) when
+    BYOK_FINGERPRINT_PEPPER isn't configured, so this stays a strict
+    improvement rather than a required migration.
+    """
+    if not _BYOK_PEPPER:
+        global _warned_no_pepper
+        if not _warned_no_pepper:
+            logger.warning('BYOK_FINGERPRINT_PEPPER not set — BYOK fingerprints are stored unsalted')
+            _warned_no_pepper = True
+        return client_fingerprint
+    return hmac.new(_BYOK_PEPPER.encode(), client_fingerprint.encode(), hashlib.sha256).hexdigest()
+
 
 # ---------------------------------------------------------------------------
 # In-memory TTL cache for Firestore BYOK state lookups.
@@ -199,8 +231,21 @@ def _check_byok_validity(uid: str) -> Optional[str]:
         if not raw_key:
             return f"BYOK key header missing for enrolled provider: {provider}"
         request_fp = hashlib.sha256(raw_key.encode()).hexdigest()
-        if request_fp != stored_fp:
+        # Accept either the current peppered form or the legacy plain form,
+        # so users enrolled before BYOK_FINGERPRINT_PEPPER was set aren't
+        # locked out until they next rotate/re-enroll their keys.
+        if not (
+            hmac.compare_digest(peppered_fingerprint(request_fp), stored_fp)
+            or hmac.compare_digest(request_fp, stored_fp)
+        ):
             return f"BYOK key fingerprint mismatch for provider: {provider}"
+
+    # A header for a provider the user never enrolled has no stored fingerprint, so the
+    # loop above never sees it and it would reach the provider clients unvalidated. Drop
+    # it, mirroring the non-enrolled-user path above: anything we cannot verify must not
+    # be used, and downstream falls back to Omi's own key for that provider.
+    if any(provider not in stored_fingerprints for provider in request_keys):
+        _byok_ctx.set({p: key for p, key in request_keys.items() if p in stored_fingerprints})
 
     return None
 

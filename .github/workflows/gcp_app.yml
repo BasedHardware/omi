@@ -14,18 +14,20 @@ on:
       - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'prod'
+        type: choice
+        options: [development, prod]
 
 concurrency:
-  group: deploy-cloud-run-omi-web-app-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+  group: deploy-cloud-run-omi-web-app-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     permissions:
       actions: read
       contents: read
@@ -39,6 +41,8 @@ jobs:
         uses: ./.github/actions/deploy-public-build
         with:
           target: app
-          environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+          environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          network: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}

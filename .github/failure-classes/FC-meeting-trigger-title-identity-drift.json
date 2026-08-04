@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-meeting-trigger-title-identity-drift",
+  "violated_contract": "Event-triggered meeting detection must recognize a provider in the browser-title form present when microphone use first triggers evaluation; it must not depend only on a later title form whose transition emits no detector event.",
+  "canonical_prevention": "Keep provider join and in-call title identities together in tested pattern data, scope title matching to known browser processes, and retain negative near-prefix cases so broader coverage does not create generic-title false positives.",
+  "canonical_prevention_artifact": [
+    "desktop/windows/src/main/meeting/patterns.test.ts"
+  ],
+  "evidence_prs": [
+    10628
+  ],
+  "scope_hints": [
+    "desktop/windows/src/main/meeting/patterns.json",
+    "desktop/windows/src/main/meeting/patterns.test.ts"
+  ],
+  "status": "open"
+}

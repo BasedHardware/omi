@@ -1,4 +1,4 @@
-"""Sync canonical-cohort memory items to Pinecone using neutral vector ids + metadata."""
+"""Sync canonical-cohort memory items to Pinecone using user-scoped provider ids."""
 
 from __future__ import annotations
 
@@ -6,18 +6,22 @@ import logging
 from typing import Callable, Optional
 
 from models.memory_evidence import SourceState
-from models.product_memory import MemoryItemStatus, ProcessingState, MemoryItem
+from models.product_memory import (
+    RESTRICTED_SENSITIVITY_LABELS,
+    MemoryItem,
+    MemoryItemStatus,
+    ProcessingState,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def delete_canonical_memory_vector(uid: str, memory_id: str) -> bool:
-    """Delete a canonical neutral-id vector (identity = memory_id)."""
+    """Delete all provider identities for one user's canonical memory."""
     try:
-        from database.vector_db import delete_pinecone_memory_vectors_by_id
+        from database.vector_db import delete_canonical_memory_vectors
 
-        deleted_count = delete_pinecone_memory_vectors_by_id([memory_id])
-        return deleted_count == 1
+        return delete_canonical_memory_vectors(uid, memory_id)
     except Exception:
         logger.exception(
             "canonical vector delete failed memory_id=%s uid=%s",
@@ -33,7 +37,12 @@ def sync_canonical_memory_vector(
     projection_commit_id: Optional[str] = None,
     on_hard_failure: Optional[Callable[[], None]] = None,
 ) -> bool:
-    """Upsert one live canonical memory item vector. Returns True when an upsert was attempted."""
+    """Converge one live canonical item without indexing restricted content."""
+    if set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
+        deleted = delete_canonical_memory_vector(item.uid, item.memory_id)
+        if not deleted and on_hard_failure is not None:
+            on_hard_failure()
+        return deleted
     if (
         item.status != MemoryItemStatus.active
         or item.processing_state != ProcessingState.processed

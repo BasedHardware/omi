@@ -25,8 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_IMAGE_TAG = "0123456"
 
 IMAGE_TAG_DEPLOYMENT_PATHS = (
-    ".github/workflows/gcp_backend.yml",
-    ".github/workflows/gcp_backend_auto_dev.yml",
+    ".github/actions/deploy-backend-stack/action.yml",
     ".github/workflows/gcp_backend_listen_helm.yml",
     ".github/workflows/gcp_backend_agent_proxy.yml",
     ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml",
@@ -63,7 +62,12 @@ CONTRACTS = (
         expected_env=(("OMI_ENV_STAGE", "{environment}"), ("GOOGLE_CLOUD_PROJECT", "{project}")),
         required_secret_name=True,
     ),
-    DeploymentContract(service="pusher", image_name="pusher", required_secret_name=True),
+    DeploymentContract(
+        service="pusher",
+        image_name="pusher",
+        expected_env=(("GOOGLE_CLOUD_PROJECT", "{project}"),),
+        required_secret_name=True,
+    ),
     DeploymentContract(
         service="agent-proxy",
         image_name="agent-proxy",

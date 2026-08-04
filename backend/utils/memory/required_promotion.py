@@ -1,9 +1,8 @@
-"""Compatibility helpers for explicit canonical memory submissions.
+"""Required-processing helpers for explicit canonical memory submissions.
 
 Explicit ``create_memory`` calls retain their durable product contract, but the
 submitted text must be processed before it becomes eligible for Long-term.  The
-legacy function name remains as a narrow compatibility alias while callers are
-migrated to the clearer required-processing vocabulary.
+submission itself always enters the canonical system as Short-term.
 """
 
 from __future__ import annotations
@@ -22,6 +21,7 @@ REQUIRED_PROMOTION_STATUS_FAILED_RETRYABLE = "failed_retryable"
 REQUIRED_PROCESSING_STATUS_PENDING = "pending_processing"
 REQUIRED_PROCESSING_STATUS_PROCESSED = "processed"
 REQUIRED_PROCESSING_STATUS_FAILED_RETRYABLE = "processing_failed_retryable"
+REQUIRED_PROCESSING_STATUS_REJECTED = "processing_rejected"
 ADMISSION_CANDIDATE_STATUS_PENDING = "pending_admission"
 REQUIRED_PROMOTION_STATUSES = {
     REQUIRED_PROMOTION_STATUS_PENDING,
@@ -79,8 +79,3 @@ def required_processing_payload(data: Dict[str, Any], *, source_surface: str) ->
     )
     payload["promotion"] = promotion
     return payload
-
-
-def required_promotion_payload(data: Dict[str, Any], *, source_surface: str) -> Dict[str, Any]:
-    """Backward-compatible alias for callers using the old helper name."""
-    return required_processing_payload(data, source_surface=source_surface)

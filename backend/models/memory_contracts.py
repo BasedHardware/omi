@@ -464,13 +464,26 @@ class DurableMemoryPatch(BaseModel):
     subject_entity_id: Optional[str] = None
     subject_label: Optional[str] = None
     aboutness: Literal["primary_user", "user_owned_project", "user_relationship", "third_party", "unclear"] = "unclear"
-    initial_tier: MemoryTier = MemoryTier.long_term
+    initial_tier: MemoryTier = MemoryTier.short_term
     target_tier: Optional[MemoryTier] = None
+    target_visibility: Optional[str] = None
+    target_user_asserted: Optional[bool] = None
+    clear_graph_assertion: bool = False
+    mutation_metadata: Optional[Dict[str, Any]] = None
     visibility: str = "private"
     user_asserted: bool = False
 
+    @field_validator("target_visibility")
+    @classmethod
+    def validate_target_visibility(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in {"private", "public", "shared"}:
+            raise ValueError("target_visibility must be private, public, or shared")
+        return value
+
     @model_validator(mode="after")
     def validate_decision_contract(self):
+        if self.initial_tier == MemoryTier.long_term:
+            raise ValueError("Long-term memory cannot be created directly; promote an existing Short-term item")
         if (
             self.decision
             in {

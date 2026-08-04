@@ -8,7 +8,6 @@ import json
 import subprocess
 import sys
 
-
 UNRELEASED_CHANGELOG_PREFIX = "desktop/macos/changelog/unreleased/"
 CHANGELOG_PREFIX = "desktop/macos/changelog/"
 DESKTOP_PREFIX = "desktop/macos/"
@@ -16,28 +15,62 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/CHANGELOG.json",
     "desktop/macos/AGENTS.md",
     "desktop/macos/docs/release.md",
+    "desktop/macos/docs/qualification-environment.md",
     "desktop/macos/scripts/qualify-desktop-beta.sh",
+    # Capacity/lease authority for the same internal qualification runner.
+    "desktop/macos/scripts/qualification-cache-reclaim.py",
+    # M1 self-clean / lost-communication recovery for the qualification runner
+    # (#10759). Internal release infrastructure; post-merge push must not demand
+    # a user-facing changelog fragment (FC-push-gate-internal-path-scope).
+    "desktop/macos/scripts/qualification-runner-self-clean.py",
+    "desktop/macos/scripts/qualification-watchdog.py",
     # Sibling qualification-runner helper to qualify-desktop-beta.sh: internal
     # release infrastructure with no user-facing app surface.
     "desktop/macos/scripts/qualification-swift-cache.sh",
+    # Lease transport for the same qualification runner: it only moves
+    # machine-readable lease evidence and never ships in the desktop app.
+    "desktop/macos/scripts/qualification-lease-command.sh",
     # Pre-tag readiness gate script: internal release infrastructure (runs on the
     # trusted M1 before tagging), no user-facing app surface.
     "desktop/macos/scripts/pre-tag-readiness.sh",
+    # CI-only offline M1 qualification lifecycle proof: internal release
+    # infrastructure (pre-dispatch before canonical qualification), no
+    # user-facing app surface.
+    "desktop/macos/scripts/qualification-local-proof.sh",
+    # Release-keyvalue metadata tooling: internal release-channel metadata,
+    # never ships in the desktop app.
+    "desktop/macos/scripts/release-keyvalue.py",
+    # Internal qualification environment documentation for CI runners; not a
+    # user-facing app note.
+    "desktop/macos/docs/qualification-environment.md",
+    # Manual cleanup inventory for deprecated per-version host qual artifacts.
+    "desktop/macos/docs/qualification-cleanup.md",
+    # Portable tag-arg qualification babysitter: host-local release
+    # infrastructure, never ships in the desktop app.
+    "desktop/macos/scripts/qualify-desktop-beta-service.py",
+    # CI-only flow-validation script and its shared action-source inventory do
+    # not alter the desktop application a user receives.
+    "desktop/macos/scripts/desktop-flow-lint.py",
+    "desktop/macos/scripts/desktop_flow_contract.py",
 }
-# Server-side Rust backend changes are internal reliability work, not user-facing app notes.
 # Test and release-infra changes are likewise never user-facing app notes; the
 # `no-changelog-needed` PR label only satisfies the PR run, so post-merge push
 # runs of this gate must exempt these paths by path or they redden main
 # (qualify-desktop-beta.sh timeout bump #10374 tripped tests/ on the merge push).
 EXEMPT_DESKTOP_PATH_PREFIXES = (
-    "desktop/macos/Backend-Rust/",
     "desktop/macos/tests/",
+    "desktop/macos/Desktop/Tests/",
     # Generated Swift (e.g. Sources/Generated/OmiApi.generated.swift) is
     # deterministically derived from the backend OpenAPI contract, never a
     # user-facing app note. Regenerating it after a spec change must not demand
     # a changelog fragment, and — like tests/ above — the post-merge push run
     # would otherwise redden main. Same directory the swift-format linter skips.
     "desktop/macos/Desktop/Sources/Generated/",
+    # E2E flow definitions and their docs are CI/harness test artifacts that never
+    # ship in the desktop app. Registering a new source file in a flow's `covers:`
+    # is exactly the kind of internal-only edit that reddened main on the merge
+    # push for #11039.
+    "desktop/macos/e2e/",
 )
 
 
@@ -83,7 +116,9 @@ def validate_unreleased_fragment(head_ref: str, path: str) -> None:
 
     if isinstance(data.get("change"), str) and data["change"].strip():
         return
-    if isinstance(data.get("changes"), list) and any(isinstance(entry, str) and entry.strip() for entry in data["changes"]):
+    if isinstance(data.get("changes"), list) and any(
+        isinstance(entry, str) and entry.strip() for entry in data["changes"]
+    ):
         return
 
     raise SystemExit(f"FAIL: {path} must contain a non-empty 'change' string or 'changes' list")

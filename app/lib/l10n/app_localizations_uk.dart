@@ -4712,7 +4712,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Конкретний доступ до даних не налаштовано.';
 
   @override
-  String get basicPlanDescription => '1 200 преміум хвилин + необмежено на пристрої';
+  String get basicPlanDescription => '300 преміум хвилин + необмежено на пристрої';
 
   @override
   String get minutes => 'хвилин';
@@ -9791,4 +9791,7 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Не вдалося підключитися до цього мікрофона. Переконайтеся, що його підключено в параметрах iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Занадто старий для синхронізації — Omi не може його прийняти';
 }

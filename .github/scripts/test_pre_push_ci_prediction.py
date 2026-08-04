@@ -10,13 +10,44 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from pre_push_ci_prediction import select_checks  # noqa: E402
+from pre_push_ci_prediction import (  # noqa: E402
+    DESKTOP_FLOW_LINT_INPUTS,
+    github_outputs,
+    resolve_impact,
+    select_checks,
+)
 
 
 class PrePushCiPredictionTests(unittest.TestCase):
-    def select(self, paths: list[str], contents: dict[str, str | None] | None = None) -> list[str]:
+    def select(
+        self,
+        paths: list[str],
+        contents: dict[str, str | None] | None = None,
+        base_contents: dict[str, str | None] | None = None,
+    ) -> list[str]:
         source_contents = contents or {}
-        return select_checks(paths, read_text=lambda path: source_contents.get(path))
+        base_source_contents = base_contents if base_contents is not None else source_contents
+        return select_checks(
+            paths,
+            read_text=lambda path: source_contents.get(path),
+            read_base_text=lambda path: base_source_contents.get(path),
+        )
+
+    def plan(
+        self,
+        paths: list[str],
+        contents: dict[str, str | None] | None = None,
+        base_contents: dict[str, str | None] | None = None,
+        event: str = "local",
+    ):
+        source_contents = contents or {}
+        base_source_contents = base_contents if base_contents is not None else source_contents
+        return resolve_impact(
+            paths,
+            read_text=lambda path: source_contents.get(path),
+            read_base_text=lambda path: base_source_contents.get(path),
+            event=event,
+        )
 
     def test_regular_app_dart_change_does_not_start_build_runner(self) -> None:
         self.assertEqual(
@@ -41,6 +72,22 @@ class PrePushCiPredictionTests(unittest.TestCase):
             ["app-dart-format", "flutter-codegen", "app-ci-only"],
         )
 
+    def test_removing_last_generator_marker_selects_build_runner(self) -> None:
+        path = "app/lib/models/task.dart"
+        self.assertIn(
+            "flutter-codegen",
+            self.select(
+                [path],
+                {path: "class Task {}"},
+                {path: "@JsonSerializable()\nclass Task {}"},
+            ),
+        )
+
+    def test_asset_change_is_an_explicit_codegen_input(self) -> None:
+        plan = self.plan(["app/assets/icons/omi.png"])
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertEqual(github_outputs(plan)["has_app_codegen"], "true")
+
     def test_l10n_and_generated_dart_have_the_right_local_contracts(self) -> None:
         self.assertEqual(
             self.select(["app/lib/l10n/app_en.arb", "app/lib/l10n/app_localizations.dart"]),
@@ -51,6 +98,44 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertEqual(
             self.select(["desktop/macos/e2e/flows/new-flow.yaml"]),
             ["desktop-flow-lint", "desktop-ci-only"],
+        )
+
+    def test_every_desktop_flow_reader_input_selects_flow_lint(self) -> None:
+        for path in DESKTOP_FLOW_LINT_INPUTS:
+            with self.subTest(path=path):
+                self.assertTrue(self.plan([path]).includes("desktop-flow-lint"))
+
+    def test_canonical_swift_driver_selects_the_expensive_test_phase(self) -> None:
+        plan = self.plan(["desktop/macos/scripts/run-swift-ci.sh"])
+        self.assertTrue(plan.includes("desktop-swift-tests"))
+        self.assertEqual(github_outputs(plan)["should_run_tests"], "true")
+
+    def test_unknown_component_paths_select_the_normal_component_lane(self) -> None:
+        app = self.plan(["app/tooling/unknown-input.txt"])
+        desktop = self.plan(["desktop/macos/Resources/unknown-input.txt"])
+        self.assertTrue(app.includes("app-analysis-tests"))
+        self.assertTrue(desktop.includes("desktop-ci-only"))
+
+    def test_selector_change_exercises_broad_resolver_fixtures(self) -> None:
+        plan = self.plan(["scripts/pre_push_ci_prediction.py"])
+        for phase in (
+            "flutter-codegen",
+            "flutter-l10n",
+            "desktop-flow-lint",
+            "desktop-swift-tests",
+            "app-analysis-tests",
+        ):
+            with self.subTest(phase=phase):
+                self.assertTrue(plan.includes(phase))
+
+    def test_release_compile_preserves_pr_and_main_asymmetry(self) -> None:
+        paths = ["desktop/macos/Resources/Info.plist"]
+        self.assertFalse(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertTrue(self.plan(paths, event="push").includes("desktop-swift-release-compile"))
+        self.assertTrue(
+            self.plan(["desktop/macos/Desktop/Package.resolved"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            )
         )
 
     def test_windows_kgworker_closure_inputs_select_only_the_targeted_test(self) -> None:

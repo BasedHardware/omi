@@ -3,7 +3,25 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+
+@pytest.fixture
+def memory_maintenance_job(monkeypatch):
+    monkeypatch.setenv(
+        "ENCRYPTION_SECRET",
+        "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+    )
+    entry_path = Path(__file__).resolve().parents[2] / "modal" / "memory_maintenance_job.py"
+    spec = importlib.util.spec_from_file_location("_memory_maintenance_job_behavior_test", entry_path)
+    assert spec is not None and spec.loader is not None
+    job = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(job)
+    return job
 
 
 def test_start_job_source_does_not_invoke_memory_maintenance():
@@ -20,9 +38,7 @@ def test_start_job_source_does_not_invoke_memory_maintenance():
                 imported_names.add(alias.asname or alias.name)
 
     assert "run_canonical_short_term_maintenance_cron" not in imported_names
-    assert "should_run_canonical_short_term_maintenance_cron" not in imported_names
     assert "run_canonical_short_term_maintenance_cron" not in source
-    assert "should_run_canonical_short_term_maintenance_cron" not in source
 
 
 def test_memory_maintenance_job_entrypoint_calls_cron_runner():
@@ -43,3 +59,14 @@ def test_memory_maintenance_job_entrypoint_calls_cron_runner():
             # top-level if __name__ is fine; bare initialize_app calls are not
             pass
     assert "os.environ[" not in source
+
+
+def test_memory_maintenance_job_exits_with_failure_when_cron_reports_outbox_error(monkeypatch, memory_maintenance_job):
+    async def failed_cron(**_kwargs):
+        return SimpleNamespace(errors=["uid=test: outbox_delivery_failed"])
+
+    monkeypatch.setattr(memory_maintenance_job, "_init_firebase", lambda: None)
+    monkeypatch.setattr(memory_maintenance_job, "run_canonical_short_term_maintenance_cron", failed_cron)
+
+    with pytest.raises(RuntimeError, match=r"completed with 1 error\(s\)"):
+        memory_maintenance_job.main()

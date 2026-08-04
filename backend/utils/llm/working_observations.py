@@ -35,17 +35,34 @@ _CLIENT_IMPORT_ERROR = CLIENT_IMPORT_ERROR
 
 logger = logging.getLogger(__name__)
 
+# One canonical conversation replacement journals source/evidence/item,
+# commit, outbox, and receipt writes in a single 500-mutation transaction.
+# Thirty-two one-evidence candidates leave margin to retract the preceding
+# bounded source set in the same atomic commit.
+MAX_WORKING_OBSERVATION_ITEMS = 32
+
 
 def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
     return []
 
 
 class WorkingObservationBatch(BaseModel):
-    items: List[WorkingObservationArchiveItem] = Field(default_factory=_empty_archive_items)
+    items: List[WorkingObservationArchiveItem] = Field(
+        default_factory=_empty_archive_items,
+        description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
+    )
 
 
 # Backward-compatible alias for callers/tests that still use the L1 name.
 L1MemoryArchiveItems = WorkingObservationBatch
+
+
+class WorkingObservationExtractionError(RuntimeError):
+    """A strict L1 extraction failed before producing a valid batch."""
+
+    def __init__(self, stage: str):
+        self.stage = stage
+        super().__init__(f"working observation extraction failed during {stage}")
 
 
 def _source_type_instructions(source_type: str, user_name: str) -> str:
@@ -104,6 +121,8 @@ def _build_l1_messages(
         f"- Facts about projects or ongoing endeavors {user_name} is invested in.\n"
         f"- Facts about recurring places, pets, or entities in {user_name}'s life.\n"
         f"- Each item must be grounded in a quote from the source.\n\n"
+        f"Return at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items. If the source contains more, "
+        f"keep the highest-value durable facts and decisions first.\n\n"
         f"What NOT to extract:\n"
         f"- AI assistant chatter, nudges, generic praise (\"great job!\", \"you can do it!\")\n"
         f"- Third-party storytelling, movie plots, game narration, article content {user_name}\n"
@@ -149,24 +168,47 @@ def _with_deterministic_archive_ids(
     items: List[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
 ) -> List[WorkingObservationArchiveItem]:
     normalized: list[WorkingObservationArchiveItem] = []
-    for index, item in enumerate(items):
+    for item in items:
         updates = {
             "user_id": item.user_id or uid,
             "source_id": item.source_id or source_id,
             "source_type": item.source_type or source_type,
         }
-        if not item.archive_id:
-            payload = {
-                "uid": uid,
-                "source_id": source_id,
-                "source_type": source_type,
-                "index": index,
-                "text": item.text,
-                "evidence_quotes": item.evidence_quotes,
-            }
-            updates["archive_id"] = "l1_" + deterministic_contract_id("l1-archive-item", payload)[:20]
+        payload = {
+            "uid": updates["user_id"],
+            "source_id": updates["source_id"],
+            "source_type": updates["source_type"],
+            "text": item.text,
+            "evidence_quotes": item.evidence_quotes,
+            "about": item.about,
+            "speaker_label": item.speaker_label,
+            "speaker_scope": item.speaker_scope,
+        }
+        updates["archive_id"] = "l1_" + deterministic_contract_id("l1-archive-item", payload)[:20]
         normalized.append(item.model_copy(update=updates))
     return normalized
+
+
+def _bounded_archive_items(
+    items: List[WorkingObservationArchiveItem],
+) -> List[WorkingObservationArchiveItem]:
+    """Preserve provider order while deduplicating within one attributed subject."""
+    bounded: List[WorkingObservationArchiveItem] = []
+    seen_propositions: set[tuple[str, str, str]] = set()
+    for item in items:
+        normalized_content = " ".join(item.text.casefold().split())
+        proposition_key = (
+            normalized_content,
+            " ".join(item.about.casefold().split()),
+            " ".join((item.speaker_label or "").casefold().split()),
+        )
+        if proposition_key in seen_propositions:
+            continue
+        seen_propositions.add(proposition_key)
+        bounded.append(item)
+        if len(bounded) == MAX_WORKING_OBSERVATION_ITEMS:
+            break
+    return bounded
 
 
 def extract_l1_memory_archive_items_from_text(
@@ -181,10 +223,16 @@ def extract_l1_memory_archive_items_from_text(
     persist_route_outcomes: bool = True,
     db_client: Any = None,
     llm: LlmInvoker | None = None,
+    strict: bool = False,
 ) -> List[WorkingObservationArchiveItem]:
     stripped_text = text.strip() if text else ""
-    low_text_is_security_relevant = source_type in {"screenshot_ocr", "ocr_screenshot_text", "desktop_rewind"}
-    if not stripped_text or (len(stripped_text) < 25 and not low_text_is_security_relevant):
+    normalized_source_type = (source_type or "").casefold()
+    low_text_is_capture_relevant = "voice" in normalized_source_type or normalized_source_type in {
+        "screenshot_ocr",
+        "ocr_screenshot_text",
+        "desktop_rewind",
+    }
+    if not stripped_text or (len(stripped_text) < 25 and not low_text_is_capture_relevant):
         return []
 
     name = user_name or "the user"
@@ -200,18 +248,44 @@ def extract_l1_memory_archive_items_from_text(
     if llm is not None:
         model = llm
     elif get_llm is not None:
-        model = cast(LlmInvoker, get_llm("memory_l1"))
+        try:
+            model = cast(LlmInvoker, get_llm("memory_l1"))
+        except Exception as exc:
+            logger.error("Error extracting memory L1 archive items: client_initialization_failed")
+            if strict:
+                raise WorkingObservationExtractionError("client_initialization") from exc
+            return []
     else:
         logger.error("Error extracting memory L1 archive items: missing_llm_client")
+        if strict:
+            raise WorkingObservationExtractionError("client_initialization") from CLIENT_IMPORT_ERROR
         return []
 
     try:
         with track_usage(uid, Features.MEMORIES):
             response = model.invoke(messages)
-        parsed = parser.parse(_content_from_response(response))
-        items = _with_deterministic_archive_ids(parsed.items, uid, source_id, source_type)
     except Exception as exc:
-        logger.error("Error extracting memory L1 archive items: %s", type(exc).__name__)
+        logger.error("Error extracting memory L1 archive items: invoke_failed:%s", type(exc).__name__)
+        if strict:
+            raise WorkingObservationExtractionError("invoke") from exc
+        return []
+
+    try:
+        parsed = parser.parse(_content_from_response(response))
+        bounded_items = _bounded_archive_items(parsed.items)
+        if len(bounded_items) < len(parsed.items):
+            logger.info(
+                "working observation extraction bounded uid=%s source_id=%s emitted=%d accepted=%d",
+                uid,
+                source_id,
+                len(parsed.items),
+                len(bounded_items),
+            )
+        items = _with_deterministic_archive_ids(bounded_items, uid, source_id, source_type)
+    except Exception as exc:
+        logger.error("Error extracting memory L1 archive items: parse_failed:%s", type(exc).__name__)
+        if strict:
+            raise WorkingObservationExtractionError("parse") from exc
         return []
 
     if persist_route_outcomes:

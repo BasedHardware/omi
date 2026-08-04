@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 премиум минути + неограничено на уред",
+    "basicPlanDescription": "300 премиум минути + неограничено на уред",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7265,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.",
+    "premiumMinutesInfo": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7376,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ",
+    "premiumMinutesMonth": "300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Чека синхронизација",
     "syncStatusRetrying": "Обработката не успеа — нов обид",
     "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
+    "syncStatusTooOld": "Премногу стар за синхронизација — Omi не може да го прифати",
     "syncStatusFileUnavailable": "Датотеката е недостапна",
     "syncStatusUploaded": "Поставено · се обработува на Omi",
     "noRecordingsYet": "Сè уште нема снимки",

@@ -139,9 +139,9 @@ def test_negative_offset_is_clamped_not_500():
 
 
 def test_huge_limit_is_capped():
-    # offset != 0 so the first-page override does not apply; limit must be capped at 5000.
+    # Hard page cap is 500 (no first-page 5000 expansion — prod GET 504s).
     limit, _ = _call(99999, 10)
-    assert limit == 5000
+    assert limit == 500
 
 
 def test_negative_limit_is_floored():

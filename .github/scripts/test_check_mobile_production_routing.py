@@ -20,6 +20,43 @@ class MobileProductionRoutingContractTests(unittest.TestCase):
     def test_current_config_is_pinned(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 
+    def test_rejects_reintroduction_of_retired_gke_desktop_backend_manifests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "codemagic.yaml").write_text(
+                (ROOT / "codemagic.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            for relative_path, manifest in {
+                "desktop/macos/charts/desktop-backend/Chart.yaml": "apiVersion: v2\nname: desktop-backend\n",
+                "backend/charts/desktop-backend-v2/Chart.yaml": "apiVersion: v2\nname: desktop-backend\n",
+                ".github/workflows/desktop_backend_prod.yaml": "run: gcloud container clusters get-credentials prod\n# desktop-backend\n",
+            }.items():
+                with self.subTest(relative_path=relative_path):
+                    retired_manifest = root / relative_path
+                    retired_manifest.parent.mkdir(parents=True, exist_ok=True)
+                    retired_manifest.write_text(manifest, encoding="utf-8")
+
+                    errors = CHECKER.validate(root)
+
+                    self.assertTrue(any("retired GKE desktop-backend ownership" in error for error in errors), errors)
+                    retired_manifest.unlink()
+
+    def test_allows_non_deployment_desktop_backend_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "codemagic.yaml").write_text(
+                (ROOT / "codemagic.yaml").read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            fixture = root / ".github/workflows/desktop_backend_images.yml"
+            fixture.parent.mkdir(parents=True)
+            fixture.write_text(
+                'run: gcloud container images describe "desktop-backend"\n', encoding="utf-8"
+            )
+
+            errors = CHECKER.validate(root)
+
+        self.assertFalse(any("retired GKE desktop-backend ownership" in error for error in errors), errors)
+
     def test_rejects_production_family_mutation_to_development_or_arbitrary_url(self) -> None:
         original = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
         for bad in ("https://api.omi.dev/", "https://staging.example.test/"):

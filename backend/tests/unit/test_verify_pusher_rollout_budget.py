@@ -15,6 +15,7 @@ FIXTURE_FILES = (
     "backend/charts/pusher/dev_omi_pusher_values.yaml",
     "backend/charts/pusher/prod_omi_pusher_values.yaml",
     "backend/charts/pusher/templates/deployment.yaml",
+    "backend/charts/pusher/templates/backendconfig.yaml",
     ".github/workflows/gcp_backend_pusher.yml",
     ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
 )
@@ -220,3 +221,67 @@ def test_rejects_template_that_does_not_render_the_chart_deadline(
         for error in errors
     )
     assert any("Deployment spec must render minReadySeconds from .Values.minReadySeconds" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("environment", "probe", "before", "after"),
+    [
+        ("dev", "readinessProbe", "path: /ready", "path: /health"),
+        ("prod", "readinessProbe", "path: /ready", "path: /health"),
+        ("prod", "livenessProbe", "path: /health", "path: /ready"),
+        ("prod", "startupProbe", "path: /health", "path: /ready"),
+    ],
+)
+def test_rejects_probe_routed_away_from_its_contract_path(
+    verifier: SimpleNamespace,
+    rollout_fixture: Path,
+    environment: str,
+    probe: str,
+    before: str,
+    after: str,
+) -> None:
+    values = rollout_fixture / "backend/charts/pusher" / f"{environment}_omi_pusher_values.yaml"
+    replace_probe_once(values, probe, before, after)
+
+    errors = verifier.validate(rollout_fixture)
+
+    expected_path = {"readinessProbe": "/ready", "livenessProbe": "/health", "startupProbe": "/health"}[probe]
+    assert any(f"{probe}/httpGet/path must be '{expected_path}'" in error for error in errors)
+
+
+def test_rejects_backendconfig_without_connection_draining(verifier: SimpleNamespace, rollout_fixture: Path) -> None:
+    template = rollout_fixture / "backend/charts/pusher/templates/backendconfig.yaml"
+    replace_once(
+        template,
+        "  connectionDraining:\n    drainingTimeoutSec: {{ .Values.backendConfig.connectionDraining.drainingTimeoutSec | default 60 }}\n",
+        "",
+    )
+
+    errors = verifier.validate(rollout_fixture)
+
+    assert any(
+        "BackendConfig must render connectionDraining.drainingTimeoutSec from .Values" in error for error in errors
+    )
+
+
+def test_rejects_drain_timeout_exceeding_grace(verifier: SimpleNamespace, rollout_fixture: Path) -> None:
+    values = rollout_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
+    replace_once(values, "    drainingTimeoutSec: 60", "    drainingTimeoutSec: 999")
+
+    errors = verifier.validate(rollout_fixture)
+
+    assert any(
+        "connectionDraining.drainingTimeoutSec=999s must be <= terminationGracePeriodSeconds=120s" in error
+        for error in errors
+    )
+
+
+def test_rejects_backendconfig_healthcheck_routed_to_ready(verifier: SimpleNamespace, rollout_fixture: Path) -> None:
+    # Routing the LB healthCheck to /ready would flip the backend unhealthy during
+    # a readiness drain and defeat connectionDraining — the highest-value invariant.
+    template = rollout_fixture / "backend/charts/pusher/templates/backendconfig.yaml"
+    replace_once(template, "requestPath: /health", "requestPath: /ready")
+
+    errors = verifier.validate(rollout_fixture)
+
+    assert any("healthCheck.requestPath must render to /health" in error for error in errors)

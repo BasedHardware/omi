@@ -782,18 +782,6 @@ extension RealtimeHubController {
         message: message))
   }
 
-  @discardableResult
-  func enqueueTurnPersistence(
-    idempotencyKey: String,
-    retainingReceipt: Bool = false,
-    _ operation: @escaping @MainActor () async -> Bool
-  ) -> Task<Bool, Never> {
-    turnPersistenceLedger.enqueue(
-      continuityKey: idempotencyKey,
-      retainingReceipt: retainingReceipt,
-      operation)
-  }
-
   /// A deterministic screen-verification failure becomes visible before the provider can
   /// continue. Successful reports do not use this path: they keep provider narration open.
   /// Register its canonical journal obligation through the same retained receipt
@@ -835,6 +823,33 @@ extension RealtimeHubController {
     let kernelOwnsExchange = RealtimeHubContinuityRestore.kernelOwnsExchange(
       continuityKey: idempotencyKey,
       kernelTurnIDs: prefetchedVoiceContextTurnIDs)
+    if acceptedSpawnOwnerID == ownerID
+      || (kernelOwnsExchange && !streamingJournalWriteLedger.contains(continuityKey: idempotencyKey))
+    {
+      return await RealtimeTurnJournalAuthority.persist(
+        turnOwnerID: ownerID,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        kernelOwnsExchange: kernelOwnsExchange,
+        refreshAcceptedSpawn: {
+          guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else { return false }
+          await FloatingControlBarManager.shared.refreshKernelJournal(surface: surface)
+          return AuthorizedToolExecution.isOwnerCurrent(ownerID)
+        },
+        recordProviderExchange: { false })
+    }
+
+    switch await finalizeStreamingRealtimeProjection(
+      ownerID: ownerID,
+      userText: userText,
+      assistantText: assistantText,
+      continuityKey: idempotencyKey
+    ) {
+    case .completed(let accepted):
+      return accepted
+    case .absent, .recordRejected:
+      break
+    }
+
     return await RealtimeTurnJournalAuthority.persist(
       turnOwnerID: ownerID,
       acceptedSpawnOwnerID: acceptedSpawnOwnerID,
@@ -916,15 +931,6 @@ extension RealtimeHubController {
     legacyVoiceJournalImportTask = nil
   }
 
-  func awaitTurnPersistenceFence() async {
-    while !Task.isCancelled {
-      let observedGeneration = turnPersistenceLedger.generation
-      await turnPersistenceLedger.awaitPendingObligations()
-      guard observedGeneration == turnPersistenceLedger.generation else { continue }
-      return
-    }
-  }
-
   /// Completes the reducer-owned journal fence only after the canonical kernel
   /// has acknowledged this turn's stable idempotency key. Merely enqueueing the
   /// durable outbox entry is not logical success.
@@ -975,7 +981,9 @@ extension RealtimeHubController {
     // identity fence that guarded the original PTT turn.
     voiceResponseID = RealtimeHubReconnectIdentityPolicy.responseIDAfterSessionDetach(
       preservingReconnectAudio: preservingReconnectAudio,
-      pendingReconnect: reconnectAudioBuffer)
+      pendingReconnect: reconnectAudioBuffer,
+      preservingBargeInReplacement: preservingBargeInReplacement,
+      pendingBargeInReplacement: replacementAudioBuffer)
     sessionProvider = nil
     sessionAuth = nil
     sessionOwnerBinding = nil

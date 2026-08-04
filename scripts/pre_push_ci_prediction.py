@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""Select the bounded local checks that predict PR CI from a file diff.
+"""Resolve CI impact from a changed-file list without non-stdlib dependencies.
 
-This intentionally describes only checks that are cheap enough to run before a
-push.  The full app test/compile matrix and release/platform work stay in CI.
+The pre-push hook consumes the bounded local phases while GitHub Actions
+consumes the same plan for component and expensive macOS phases.  The executor
+chooses its own budget; path ownership lives here.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import json
+import subprocess
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-CHECK_ORDER = (
+LOCAL_CHECK_ORDER = (
     "app-dart-format",
     "flutter-l10n",
     "flutter-codegen",
@@ -21,6 +26,16 @@ CHECK_ORDER = (
     "windows-kgworker-native-closure",
     "app-ci-only",
     "desktop-ci-only",
+)
+
+PHASE_ORDER = (
+    *LOCAL_CHECK_ORDER,
+    "app-analysis-tests",
+    "app-compile-smoke",
+    "desktop-agent-runtime",
+    "desktop-swift-tests",
+    "desktop-swift-release-compile",
+    "desktop-swift-notification-release-regression",
 )
 
 CODEGEN_CONFIG_INPUTS = {
@@ -43,16 +58,6 @@ CODEGEN_MARKERS = (
     'part "',
 )
 
-DESKTOP_FLOW_LINT_INPUTS = {
-    "desktop/macos/scripts/desktop-core-harness.sh",
-    "desktop/macos/scripts/desktop-flow-lint.py",
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift",
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
-    "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
-}
-
 WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS = {
     "desktop/windows/scripts/kgworker-native-closure.mjs",
     "desktop/windows/scripts/kgworker-native-closure.test.mjs",
@@ -60,6 +65,62 @@ WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS = {
     "desktop/windows/package.json",
     "desktop/windows/pnpm-lock.yaml",
 }
+
+ROUTING_INPUTS = {
+    ".github/checks-manifest.yaml",
+    ".github/scripts/run_checks.py",
+    ".github/scripts/test_run_checks.py",
+    ".github/scripts/test_desktop_manifest_routes.py",
+    ".github/scripts/test_desktop_swift_ci_contract.py",
+    ".github/actions/detect-changes/action.yml",
+    ".github/workflows/desktop-swift-ci.yml",
+    ".github/workflows/mobile-app-checks.yml",
+    "scripts/pre_push_ci_prediction.py",
+    ".github/scripts/test_pre_push_ci_prediction.py",
+}
+
+DESKTOP_SWIFT_TEST_INPUTS = {
+    "desktop/macos/Desktop/Package.swift",
+    "desktop/macos/Desktop/Package.resolved",
+    "desktop/macos/test.sh",
+    "desktop/macos/scripts/run-swift-ci.sh",
+    "desktop/macos/scripts/swift-test-suites.sh",
+    "desktop/macos/scripts/swift-test-skip-ratchet.py",
+    "desktop/macos/scripts/check_desktop_test_quality.py",
+    "desktop/macos/scripts/check-main-actor-xctest-hooks.py",
+}
+
+DESKTOP_NOTIFICATION_REGRESSION_INPUTS = {
+    "desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift",
+    "desktop/macos/Desktop/Sources/OmiApp.swift",
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift",
+    "desktop/macos/Desktop/Sources/Providers/DeviceProvider.swift",
+}
+
+DESKTOP_AGENT_RUNTIME_INPUTS = {
+    "desktop/macos/run.sh",
+    "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
+    "desktop/macos/scripts/prepare-agent-runtime.sh",
+    "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+    "desktop/macos/scripts/test-tool-surfaces.sh",
+    "desktop/macos/scripts/agent-logic-harness.sh",
+    "codemagic.yaml",
+    "scripts/pre-push",
+}
+
+
+def _load_desktop_flow_lint_inputs() -> frozenset[str]:
+    """Load the lint's own source inventory without importing PyYAML."""
+    path = REPO_ROOT / "desktop/macos/scripts/desktop_flow_contract.py"
+    spec = importlib.util.spec_from_file_location("desktop_flow_contract", path)
+    if spec is None or spec.loader is None:  # pragma: no cover - repository corruption
+        raise RuntimeError(f"cannot load desktop flow contract from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return frozenset(module.FLOW_LINT_INPUTS)
+
+
+DESKTOP_FLOW_LINT_INPUTS = _load_desktop_flow_lint_inputs()
 
 
 def _default_read_text(path: str) -> str | None:
@@ -69,59 +130,245 @@ def _default_read_text(path: str) -> str | None:
         return None
 
 
+def read_text_at_revision(revision: str) -> Callable[[str], str | None]:
+    """Return a stdlib-only reader for paths as they existed at *revision*."""
+
+    def read(path: str) -> str | None:
+        result = subprocess.run(
+            ["git", "show", f"{revision}:{path}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode:
+            return None
+        try:
+            return result.stdout.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+    return read
+
+
 def _is_generated_dart(path: str) -> bool:
     return path.endswith((".g.dart", ".gen.dart", ".freezed.dart")) or path.startswith("app/lib/l10n/app_localizations")
 
 
-def _is_codegen_input(path: str, read_text: Callable[[str], str | None]) -> bool:
-    if path in CODEGEN_CONFIG_INPUTS:
+def _contains_codegen_marker(source: str | None) -> bool:
+    return source is not None and any(marker in source for marker in CODEGEN_MARKERS)
+
+
+def _is_codegen_input(
+    path: str,
+    read_text: Callable[[str], str | None],
+    read_base_text: Callable[[str], str | None],
+) -> bool:
+    if path in CODEGEN_CONFIG_INPUTS or path.startswith("app/assets/"):
         return True
     if not path.startswith("app/lib/") or not path.endswith(".dart") or _is_generated_dart(path):
         return False
 
-    # A deleted Dart library might have owned generated output.  Regenerate in
-    # that case rather than guessing from a file that no longer exists.
     source = read_text(path)
-    if source is None:
-        return True
-    return any(marker in source for marker in CODEGEN_MARKERS)
+    base_source = read_base_text(path)
+    # A deleted library or a removed final generator marker has no post-change
+    # annotation to inspect. The base revision is the ownership proof.
+    return (
+        source is None
+        or base_source is None
+        or _contains_codegen_marker(source)
+        or _contains_codegen_marker(base_source)
+    )
 
 
-def select_checks(paths: Iterable[str], read_text: Callable[[str], str | None] = _default_read_text) -> list[str]:
-    """Return selected checks in stable, agent-readable order."""
+def _is_app_l10n_input(path: str) -> bool:
+    return (path.startswith("app/lib/l10n/") and path.endswith(".arb")) or path == "app/l10n.yaml"
 
+
+def _is_app_compile_smoke_input(path: str) -> bool:
+    if path.startswith("app/lib/l10n/app_") and (path.endswith(".arb") or path.endswith(".dart")):
+        return False
+    return path.startswith(
+        (
+            "app/lib/",
+            "app/android/",
+            "app/ios/",
+            "app/setup/prebuilt/",
+            "app/setup/scripts/",
+            "app/config/",
+            "app/assets/",
+        )
+    ) or path in {
+        "app/pubspec.yaml",
+        "app/pubspec.lock",
+        "app/build.yaml",
+        "app/analysis_options.yaml",
+        "app/l10n.yaml",
+        "app/flavorizr.yaml",
+    }
+
+
+def _is_releasable_desktop_path(path: str) -> bool:
+    if path.startswith("desktop/macos/changelog/"):
+        return False
+    if path in {"desktop/macos/CHANGELOG.json", "desktop/macos/AGENTS.md"}:
+        return False
+    return path.startswith("desktop/macos/") or path in {
+        "codemagic.yaml",
+        ".github/scripts/plan-desktop-release.py",
+        ".github/workflows/desktop_auto_release.yml",
+        ".github/workflows/desktop-swift-ci.yml",
+    }
+
+
+def _is_desktop_swift_test_input(path: str) -> bool:
+    return (
+        path in DESKTOP_SWIFT_TEST_INPUTS
+        or (
+            path.startswith(("desktop/macos/Desktop/Sources/", "desktop/macos/Desktop/Tests/"))
+            and path.endswith(".swift")
+        )
+        or (path.startswith("desktop/macos/tests/") and path.endswith(".sh"))
+    )
+
+
+def _is_desktop_notification_input(path: str) -> bool:
+    return (
+        path in DESKTOP_NOTIFICATION_REGRESSION_INPUTS
+        or (path.startswith("desktop/macos/Desktop/Sources/") and path.endswith(".swift") and "Notification" in path)
+        or (path.startswith("desktop/macos/Desktop/Tests/") and path.endswith(".swift") and "Notification" in path)
+    )
+
+
+def _is_desktop_agent_runtime_input(path: str) -> bool:
+    return path in DESKTOP_AGENT_RUNTIME_INPUTS or path.startswith(
+        ("desktop/macos/agent/", "desktop/macos/pi-mono-extension/")
+    )
+
+
+@dataclass(frozen=True)
+class ImpactPlan:
+    """Selected phase IDs in stable display order."""
+
+    phases: frozenset[str]
+
+    def includes(self, phase: str) -> bool:
+        return phase in self.phases
+
+    def ordered(self) -> list[str]:
+        return [phase for phase in PHASE_ORDER if phase in self.phases]
+
+
+def resolve_impact(
+    paths: Iterable[str],
+    *,
+    read_text: Callable[[str], str | None] = _default_read_text,
+    read_base_text: Callable[[str], str | None] | None = None,
+    event: str = "local",
+) -> ImpactPlan:
+    """Resolve component and expensive CI phases for a changed path set."""
+    # Callers that only need the current-tree behavior (for example a focused
+    # unit fixture) can omit the base reader. Diff callers pass one so deleted
+    # inputs and marker removals remain conservative.
+    read_base_text = read_base_text or read_text
     selected: set[str] = set()
-    for raw_path in paths:
-        path = raw_path.strip()
-        if not path:
-            continue
+    normalized_paths = [raw_path.strip() for raw_path in paths if raw_path.strip()]
+    selector_changed = any(
+        path in ROUTING_INPUTS or path.startswith(".github/actions/detect-changes/") for path in normalized_paths
+    )
 
+    for path in normalized_paths:
         if path.startswith("app/"):
-            selected.add("app-ci-only")
+            # Unknown paths within a component remain conservative: they wake
+            # its normal analyzer/test lane rather than silently doing nothing.
+            selected.update({"app-ci-only", "app-analysis-tests"})
+            if _is_app_compile_smoke_input(path):
+                selected.add("app-compile-smoke")
+            if path.endswith(".dart") and not _is_generated_dart(path):
+                selected.add("app-dart-format")
+            if _is_app_l10n_input(path):
+                selected.add("flutter-l10n")
+            if _is_codegen_input(path, read_text, read_base_text):
+                selected.add("flutter-codegen")
+
         if path.startswith("desktop/macos/"):
-            selected.add("desktop-ci-only")
-
-        if path.startswith("app/") and path.endswith(".dart") and not _is_generated_dart(path):
-            selected.add("app-dart-format")
-
-        if path.startswith("app/lib/l10n/") and path.endswith(".arb") or path == "app/l10n.yaml":
-            selected.add("flutter-l10n")
-
-        if _is_codegen_input(path, read_text):
-            selected.add("flutter-codegen")
-
-        if path.startswith("desktop/macos/e2e/") or path in DESKTOP_FLOW_LINT_INPUTS:
-            selected.add("desktop-flow-lint")
+            if _is_releasable_desktop_path(path):
+                selected.add("desktop-ci-only")
+            if _is_desktop_swift_test_input(path):
+                selected.add("desktop-swift-tests")
+            if _is_desktop_notification_input(path):
+                selected.add("desktop-swift-notification-release-regression")
+            if _is_desktop_agent_runtime_input(path):
+                selected.add("desktop-agent-runtime")
+            if path.startswith("desktop/macos/e2e/") or path in DESKTOP_FLOW_LINT_INPUTS:
+                selected.add("desktop-flow-lint")
 
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
-    return [check for check in CHECK_ORDER if check in selected]
+    if selector_changed:
+        # The selector is the boundary. A change to it runs all of its fixtures
+        # and conservatively wakes each component lane it can influence.
+        selected.update(
+            {
+                "app-ci-only",
+                "app-analysis-tests",
+                "app-compile-smoke",
+                "flutter-l10n",
+                "flutter-codegen",
+                "desktop-ci-only",
+                "desktop-flow-lint",
+                "desktop-swift-tests",
+            }
+        )
+
+    releasable_desktop = any(_is_releasable_desktop_path(path) for path in normalized_paths) or selector_changed
+    package_changed = any(
+        path in {"desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Package.resolved"}
+        for path in normalized_paths
+    )
+    if releasable_desktop:
+        selected.add("desktop-ci-only")
+    if releasable_desktop and (event == "push" or package_changed):
+        selected.add("desktop-swift-release-compile")
+
+    return ImpactPlan(frozenset(selected))
+
+
+def select_checks(
+    paths: Iterable[str],
+    read_text: Callable[[str], str | None] = _default_read_text,
+    read_base_text: Callable[[str], str | None] | None = None,
+) -> list[str]:
+    """Return the bounded local subset in stable, agent-readable order."""
+    plan = resolve_impact(paths, read_text=read_text, read_base_text=read_base_text)
+    return [phase for phase in LOCAL_CHECK_ORDER if plan.includes(phase)]
+
+
+def github_outputs(plan: ImpactPlan) -> dict[str, str]:
+    """Map shared phases to the established detect-changes action contract."""
+    return {
+        "has_app_codegen": str(plan.includes("flutter-codegen")).lower(),
+        "has_app_l10n": str(plan.includes("flutter-l10n")).lower(),
+        "has_flutter_generated": str(plan.includes("flutter-codegen") or plan.includes("flutter-l10n")).lower(),
+        "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
+        "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
+        "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
+        "should_run": str(plan.includes("desktop-ci-only")).lower(),
+        "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),
+        "should_release_compile": str(plan.includes("desktop-swift-release-compile")).lower(),
+        "should_notification_release_regression": str(
+            plan.includes("desktop-swift-notification-release-regression")
+        ).lower(),
+    }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--changed-files", type=Path, required=True)
+    parser.add_argument("--base", help="Optional Git revision used to detect deleted inputs and marker removals.")
+    parser.add_argument("--event", choices=("local", "pull_request", "push"), default="local")
+    parser.add_argument("--github-output", type=Path, help="Append established detect-changes outputs to this file.")
+    parser.add_argument("--output", choices=("lines", "json"), default="lines")
     args = parser.parse_args()
 
     try:
@@ -129,7 +376,20 @@ def main() -> int:
     except FileNotFoundError:
         parser.error(f"changed-files list not found: {args.changed_files}")
 
-    print("\n".join(select_checks(paths)))
+    plan = resolve_impact(
+        paths,
+        read_base_text=read_text_at_revision(args.base) if args.base else None,
+        event=args.event,
+    )
+    if args.github_output:
+        with args.github_output.open("a", encoding="utf-8") as output:
+            for name, value in github_outputs(plan).items():
+                output.write(f"{name}={value}\n")
+
+    if args.output == "json":
+        print(json.dumps({"phases": plan.ordered(), "github_outputs": github_outputs(plan)}, sort_keys=True))
+    else:
+        print("\n".join(plan.ordered()))
     return 0
 
 

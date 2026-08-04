@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Memory atlas so unlinked canonical memories are kept out of the relationship map instead of appearing as disconnected dots"
+}

@@ -18,6 +18,22 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      mode:
+        description: 'deploy applies the chart; rollback restores an earlier Helm revision'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - rollback
+      image_tag:
+        description: 'Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.'
+        required: false
+        default: ''
+      helm_revision:
+        description: 'Helm revision to roll back to (blank = previous). See the Helm history step output.'
+        required: false
+        default: ''
 
 # This chart path mutates backend-listen and shared backend-secrets, which are
 # also applied by the full backend deploy for the same environment.
@@ -87,18 +103,76 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Resolve deployed backend-listen image tag
+      - name: Show Helm release history
         run: |
-          IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}')"
-          TAG="${IMAGE##*:}"
-          if [[ -z "$TAG" || "$TAG" == "$IMAGE" || "$TAG" == "latest" ]]; then
-            echo "backend-listen is not currently pinned to an immutable image tag: ${IMAGE:-<missing>}" >&2
-            echo "Run the backend deploy workflow first so chart-only upgrades preserve a short-SHA image tag." >&2
+          echo "Rollback targets for ${{ vars.ENV }}-omi-backend-listen:"
+          helm -n ${{ vars.ENV }}-omi-backend history ${{ vars.ENV }}-omi-backend-listen --max 20 \
+            || echo "No existing release found"
+
+      - name: Resolve backend-listen image tag
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)"
+          RUNNING_TAG="${IMAGE##*:}"
+          if [[ -z "${REQUESTED_TAG}" ]]; then
+            # Chart-only upgrade: keep whatever is serving. This is the auto-push path.
+            if [[ -z "$RUNNING_TAG" || "$RUNNING_TAG" == "$IMAGE" || "$RUNNING_TAG" == "latest" ]]; then
+              echo "ERROR: backend-listen is not pinned to an immutable tag (${IMAGE:-<missing>}) and no image_tag was given." >&2
+              echo "Pass image_tag=<short-sha> to set one explicitly." >&2
+              exit 1
+            fi
+            echo "Keeping the running image tag: $RUNNING_TAG"
+            echo "BACKEND_LISTEN_IMAGE_TAG=$RUNNING_TAG" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          # An explicit tag advances or rewinds the deployed code, so it must be a
+          # reviewed commit. Prod admits only ancestors of main; the same rule the
+          # source checkout is held to above.
+          if ! git cat-file -e "${REQUESTED_TAG}^{commit}" 2>/dev/null; then
+            echo "ERROR: image_tag ${REQUESTED_TAG} is not a commit in this repository." >&2
             exit 1
           fi
-          echo "BACKEND_LISTEN_IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
+          if [[ "${{ github.event.inputs.environment }}" == prod ]]; then
+            if ! git merge-base --is-ancestor "${REQUESTED_TAG}" origin/main; then
+              echo "ERROR: image_tag ${REQUESTED_TAG} is not an ancestor of origin/main." >&2
+              exit 1
+            fi
+          fi
+          RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
+          if ! gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG}" >/dev/null 2>&1; then
+            echo "ERROR: gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG} does not exist." >&2
+            echo "The image is built by the backend deploy workflow; run that for this commit first." >&2
+            exit 1
+          fi
+          echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
+          echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
+
+      - name: Carry forward config this workflow does not own
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        run: |
+          set -euo pipefail
+          # deploy-backend-config.sh requires these in prod, but only the full backend
+          # deploy derives them (from live Cloud Run state). This workflow refreshes the
+          # same shared ConfigMap, so read the current values back rather than dropping
+          # them or duplicating that derivation.
+          CM=${{ vars.ENV }}-omi-backend-config
+          NS=${{ vars.ENV }}-omi-backend
+          for key in ACCOUNT_DELETION_HANDLER_URL SYNC_TASKS_HANDLER_URL SYNC_TASKS_INVOKER_SA; do
+            value="$(kubectl -n "$NS" get configmap "$CM" -o jsonpath="{.data.$key}" 2>/dev/null || true)"
+            if [[ -z "$value" ]]; then
+              echo "ERROR: $key is absent from configmap $CM; run the full backend deploy first." >&2
+              exit 1
+            fi
+            echo "$key=$value" >> "$GITHUB_ENV"
+            echo "Carried $key"
+          done
 
       - name: Apply non-secret backend runtime config
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         env:
           ENVIRONMENT: ${{ vars.ENV }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
@@ -114,17 +188,27 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: modulate-velma-2,parakeet
-          STT_SERVICE_MODELS: modulate-velma-2,parakeet
+          ACCOUNT_DELETION_HANDLER_URL: ${{ env.ACCOUNT_DELETION_HANDLER_URL }}
+          SYNC_TASKS_HANDLER_URL: ${{ env.SYNC_TASKS_HANDLER_URL }}
+          SYNC_TASKS_INVOKER_SA: ${{ env.SYNC_TASKS_INVOKER_SA }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
           TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
           TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
           X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
           X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
-        run: backend/scripts/deploy-backend-config.sh
+        run: |
+          python3 -m pip install -q pyyaml
+          backend/scripts/deploy-backend-config.sh
+
+      - name: Ensure dev parity-pack bucket (development only)
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && (github.event.inputs.environment || 'development') == 'development' }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/ensure_dev_parity_pack_bucket.py
 
       - name: Helm diff (dry run)
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         run: |
           echo "=== Current release values ==="
           helm -n ${{ vars.ENV }}-omi-backend get values ${{ vars.ENV }}-omi-backend-listen || echo "No existing release found"
@@ -145,6 +229,7 @@ jobs:
       # never reaches K8s, and the deployment's secretKeyRef resolves to an
       # empty value — code reads os.getenv(...) as None.
       - name: Upgrade backend-secrets Helm chart
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         env:
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -155,6 +240,7 @@ jobs:
           backend/scripts/deploy-backend-secrets.sh
 
       - name: Upgrade backend-listen Helm chart
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
@@ -163,6 +249,28 @@ jobs:
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}"
+
+      - name: Roll back backend-listen Helm release
+        if: ${{ github.event.inputs.mode == 'rollback' }}
+        env:
+          TARGET_REVISION: ${{ github.event.inputs.helm_revision }}
+        run: |
+          set -euo pipefail
+          RELEASE=${{ vars.ENV }}-omi-backend-listen
+          NS=${{ vars.ENV }}-omi-backend
+          BEFORE="$(kubectl -n "$NS" get deploy/"$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          echo "Image before rollback: $BEFORE"
+          # Helm rollback, not kubectl rollout undo: undo reverts the pod template while
+          # leaving Helm's stored release ahead of the cluster, so the next chart upgrade
+          # would silently reapply the bad revision.
+          if [[ -n "$TARGET_REVISION" ]]; then
+            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 30m
+          else
+            helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m
+          fi
+          AFTER="$(kubectl -n "$NS" get deploy/"$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          echo "Image after rollback: $AFTER"
+          helm -n "$NS" history "$RELEASE" --max 10
 
       - name: Verify rollout
         run: |

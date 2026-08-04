@@ -1,10 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from database.memory_vector_metadata import (
+    CANONICAL_MEMORY_PROVIDER_ID_PREFIX,
     build_archive_memory_vector_filter,
+    build_canonical_memory_vector_delete_filter,
     build_default_memory_vector_filter,
     build_memory_vector_metadata,
-    deterministic_memory_vector_id,
+    canonical_memory_provider_id,
     parse_search_vector_hit,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
@@ -55,14 +59,44 @@ def _item(
     )
 
 
-def test_deterministic_memory_vector_ids_are_prefixed_and_tier_revision_scoped():
-    short_id = deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 3)
-    archive_id = deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.archive, 3)
-    next_revision_id = deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 4)
+def test_canonical_memory_provider_ids_are_stable_and_user_scoped():
+    first = canonical_memory_provider_id("uid-1", "same-memory")
+    second_user = canonical_memory_provider_id("uid-2", "same-memory")
 
-    assert short_id == deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 3)
-    assert short_id.startswith("memvec:")
-    assert len({short_id, archive_id, next_revision_id, "uid-1-same-memory"}) == 4
+    assert first == canonical_memory_provider_id("uid-1", "same-memory")
+    assert first.startswith(f"{CANONICAL_MEMORY_PROVIDER_ID_PREFIX}:")
+    assert first != second_user
+    assert first != "same-memory"
+    assert first != "uid-1-same-memory"
+
+
+@pytest.mark.parametrize(
+    ("uid", "memory_id", "message"),
+    [
+        ("", "memory", "uid is required"),
+        ("uid", "", "memory_id is required"),
+    ],
+)
+def test_canonical_memory_provider_id_rejects_blank_identity(uid, memory_id, message):
+    with pytest.raises(ValueError, match=message):
+        canonical_memory_provider_id(uid, memory_id)
+
+
+def test_canonical_memory_vector_delete_filters_are_uid_fenced_across_schema_versions():
+    one_memory = build_canonical_memory_vector_delete_filter("uid-1", "memory-1")
+    whole_account = build_canonical_memory_vector_delete_filter("uid-1")
+
+    assert one_memory == {
+        "$and": [
+            {"uid": {"$eq": "uid-1"}},
+            {"memory_id": {"$eq": "memory-1"}},
+        ]
+    }
+    assert whole_account == {
+        "$and": [
+            {"uid": {"$eq": "uid-1"}},
+        ]
+    }
 
 
 def test_memory_vector_metadata_carries_required_hydration_and_filter_fields():

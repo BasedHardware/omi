@@ -22,8 +22,19 @@ Future<bool> arePermissionsGranted() async {
 
 /// Interstitial screen shown when onboarding was completed (from backend)
 /// but permissions haven't been granted on this device (fresh install).
-class PermissionsInterstitialPage extends StatelessWidget {
+class PermissionsInterstitialPage extends StatefulWidget {
   const PermissionsInterstitialPage({super.key});
+
+  @override
+  State<PermissionsInterstitialPage> createState() => _PermissionsInterstitialPageState();
+}
+
+class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPage> {
+  @override
+  void initState() {
+    super.initState();
+    PlatformManager.instance.analytics.permissionsInterstitialShown();
+  }
 
   void _goHome(BuildContext context) {
     SharedPreferencesUtil().permissionsCompleted = true;

@@ -8238,7 +8238,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[30m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[30m])), 1e-9)",
+          "expr": "sum(rate(llm_gateway_requests_total{route_serving_class=\"actual_fallback\",fallback_used=\"true\",fallback_reason!=\"none\",outcome=\"success\"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total{outcome=~\"success|error\"}[30m])), 1e-9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8639,7 +8639,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m]))",
+          "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure\"}))[30m:]), 0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8659,7 +8659,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m])), 1)",
+          "expr": "clamp_min(delta((max(listen_finalization_durable_jobs{state=\"failure\"}))[30m:]), 0) / clamp_min(sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure\"}))[30m:]), 0)), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8755,6 +8755,30 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
+    "record": null
+  },
+  {
+    "uid": "omi-capture-finalization-dead-emission",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Capture finalization - durable terminal emission stalled",
+    "condition": "D",
+    "data": [
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "clamp_min(delta((max(listen_finalization_durable_jobs{state=\"accepted\"}))[30m:]), 0)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}},
+      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 5 && $B == 0", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}},
+      {"refId": "D", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}}
+    ],
+    "updated": "2026-07-25T00:00:00Z",
+    "noDataState": "NoData",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {"__dashboardUid__": "omi-resilience-fallbacks", "__panelId__": "9", "summary": "At least five durable capture jobs were accepted in 30m with no durable terminal movement", "threshold": "accepted movement >= 5; success + failure + stale movement = 0", "user_impact": "Capture finalization can be accepted without reaching a customer-visible terminal outcome.", "scope": "The durable Firestore capture-finalization projection on backend-listen.", "verification": "Confirm the replicated gauge with max across listener pods and inspect nonterminal age before intervention.", "safe_next_action": "Use the capture-finalization runbook; do not infer terminal counts from process-local counters or logs."},
+    "labels": {"severity": "warning", "instatus_component": "speech-processing", "alert_identity": "omi-capture-finalization-dead-emission", "component": "speech-processing", "impact": "user-experience"},
+    "isPaused": false,
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
     "record": null
   },
   {
@@ -9061,7 +9085,7 @@
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
     "ruleGroup": "Resilience",
-    "title": "Live transcription - terminal failure rate elevated",
+  "title": "Live transcription - attempt failure rate elevated",
     "condition": "D",
     "data": [
       {
@@ -9077,7 +9101,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"live_transcription\",outcome=~\"success|failure\"}[30m]))",
+        "expr": "sum(increase(omi_live_stt_accepted_total[30m]))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -9097,7 +9121,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_journey_terminal_total{journey=\"live_transcription\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"live_transcription\",outcome=~\"success|failure\"}[30m])), 1)",
+        "expr": "sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_live_stt_accepted_total[30m])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -9174,9 +9198,9 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
-      "__panelId__": "7",
-      "summary": "Live-transcription terminal failures exceed 10% with at least 20 terminal real requests in 30m",
-      "threshold": "failure share > 0.10; terminal outcomes >= 20",
+      "__panelId__": "10",
+      "summary": "Live-transcription failures exceed 10% with at least 20 accepted real attempts in 30m",
+      "threshold": "failure share > 0.10; accepted attempts >= 20",
       "user_impact": "Users may not receive live transcript text or may experience degraded results.",
       "scope": "The Omi live-transcription production service path.",
       "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { withRowLimit } from "@/lib/posthog";
 import { getOptionalStripe } from "@/lib/stripe";
+import { MRR_STATUSES, fetchOmiSubscriptions, monthlyAmount } from "@/lib/stripe-subscriptions";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
 import { getPayload, setPayload } from "@/lib/payload-cache";
 import { computeInfraCosts, type InfraCostsPayload } from "@/app/api/omi/stats/infra-costs/route";
@@ -435,9 +436,7 @@ async function fetchStripeSnapshot(
   userPlatforms: Map<string, UserPlatformInfo>,
 ): Promise<StripeSnapshot | null> {
   const stripe = getOptionalStripe();
-  const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
-  const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
-  if (!stripe || !monthlyPriceId || !annualPriceId) return null;
+  if (!stripe) return null;
 
   const mrrByPlatform: Record<Platform, number> = { desktop: 0, mobile: 0, unknown: 0 };
   const newPaidByDayByPlatform: Record<Platform, Record<string, number>> = {
@@ -455,59 +454,26 @@ async function fetchStripeSnapshot(
 
   const results = await Promise.allSettled([
     (async () => {
-      for (const priceId of [monthlyPriceId, annualPriceId]) {
-        const monthlyDivider = priceId === annualPriceId ? 12 : 1;
-        let startingAfter: string | undefined;
-        for (;;) {
-          const page: Stripe.ApiList<Stripe.Subscription> = await stripe.subscriptions.list({
-            status: "active",
-            price: priceId,
-            limit: 100,
-            expand: ["data.items.data.price"],
-            ...(startingAfter ? { starting_after: startingAfter } : {}),
-          });
-          for (const sub of page.data) {
-            const uid = sub.metadata?.uid;
-            const platform = lookupPlatform(uid);
-            let amount = 0;
-            for (const item of sub.items.data) {
-              const price = typeof item.price === "string" ? null : item.price;
-              if (!price) continue;
-              amount += ((price.unit_amount || 0) * (item.quantity || 1)) / 100;
-            }
-            const monthlyMrr = amount / monthlyDivider;
-            mrrByPlatform[platform] += monthlyMrr;
-            if (sub.created) {
-              activeSubs.push({ createdAt: sub.created, monthlyMrr, platform });
-            }
-          }
-          if (!page.has_more || page.data.length === 0) break;
-          startingAfter = page.data[page.data.length - 1].id;
+      const { subscriptions } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
+      for (const sub of subscriptions) {
+        const platform = lookupPlatform(sub.metadata?.uid);
+        const monthlyMrr = monthlyAmount(sub);
+        mrrByPlatform[platform] += monthlyMrr;
+        if (sub.created) {
+          activeSubs.push({ createdAt: sub.created, monthlyMrr, platform });
         }
       }
     })(),
     (async () => {
-      for (const priceId of [monthlyPriceId, annualPriceId]) {
-        let startingAfter: string | undefined;
-        for (;;) {
-          const page = await stripe.subscriptions.list({
-            price: priceId,
-            status: "all",
-            limit: 100,
-            created: { gte: windowStart },
-            ...(startingAfter ? { starting_after: startingAfter } : {}),
-          });
-          for (const sub of page.data) {
-            if (!sub.created) continue;
-            const day = formatDate(new Date(sub.created * 1000));
-            const uid = sub.metadata?.uid;
-            const platform = lookupPlatform(uid);
-            const bucket = newPaidByDayByPlatform[platform];
-            bucket[day] = (bucket[day] ?? 0) + 1;
-          }
-          if (!page.has_more || page.data.length === 0) break;
-          startingAfter = page.data[page.data.length - 1].id;
-        }
+      // Conversion counts every new paid subscription in the window, including ones already
+      // cancelled, so this leg reads all statuses.
+      const { subscriptions } = await fetchOmiSubscriptions(stripe, ['all'], { created: { gte: windowStart } });
+      for (const sub of subscriptions) {
+        if (!sub.created) continue;
+        const day = formatDate(new Date(sub.created * 1000));
+        const platform = lookupPlatform(sub.metadata?.uid);
+        const bucket = newPaidByDayByPlatform[platform];
+        bucket[day] = (bucket[day] ?? 0) + 1;
       }
     })(),
   ]);

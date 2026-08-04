@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -290,30 +291,27 @@ class CliOutputContractTests(unittest.TestCase):
         import tempfile
 
         script = Path(retry.__file__).resolve()
-        root = script.parent
-        release_path = root / "_tmp_retry_release.json"
-        runs_path = root / "_tmp_retry_runs.json"
-        out_path = root / "_tmp_retry_decision.json"
-        try:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release_path = root / "release.json"
+            runs_path = root / "runs.json"
+            out_path = root / "decision.json"
             release_path.write_text(json.dumps(_release()), encoding="utf-8")
             runs_path.write_text(json.dumps([_run(conclusion="failure")]), encoding="utf-8")
             import subprocess
 
             result = subprocess.run(
-                ["python3", str(script), "decide",
+                [sys.executable, str(script), "decide",
                  "--release-json", str(release_path),
                  "--runs-json", str(runs_path),
                  "--release-tag", TAG, "--tag-sha", SHA,
                  "--output", str(out_path)],
-                check=True, text=True, capture_output=True,
+                check=True, encoding="utf-8", capture_output=True,
             )
             decision = json.loads(out_path.read_text(encoding="utf-8"))
             self.assertTrue(decision["should_retry"])
             self.assertEqual(decision["release_tag"], TAG)
             self.assertIn("retrying", result.stdout)
-        finally:
-            for p in (release_path, runs_path, out_path):
-                p.unlink(missing_ok=True)
 
 
 class WorkflowContractTests(unittest.TestCase):

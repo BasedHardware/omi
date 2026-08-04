@@ -25,6 +25,98 @@ def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
     assert "memory_archive" not in collection_groups
 
     assert (
+        "conversations",
+        "COLLECTION",
+        (("source", "ASCENDING"), ("status", "ASCENDING"), ("created_at", "DESCENDING"), ("__name__", "DESCENDING")),
+    ) in signatures
+    assert (
+        "conversations",
+        "COLLECTION",
+        (
+            ("discarded", "ASCENDING"),
+            ("source", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("created_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
+        ),
+    ) in signatures
+
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("tier", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("processing_state", "ASCENDING"),
+            ("promotion.required", "ASCENDING"),
+            ("promotion.processing_status", "ASCENDING"),
+            ("captured_at", "ASCENDING"),
+            ("memory_id", "ASCENDING"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("account_generation", "ASCENDING"),
+            ("tier", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("processing_state", "ASCENDING"),
+            ("graph_ready", "ASCENDING"),
+            ("updated_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (("source_ids", "CONTAINS"), ("__name__", "ASCENDING")),
+    ) not in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("status", "ASCENDING"),
+            ("canonical_memory_id", "ASCENDING"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("status", "ASCENDING"),
+            ("superseded_by", "ASCENDING"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("tier", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("processing_state", "ASCENDING"),
+            ("source_state", "ASCENDING"),
+            ("captured_at", "ASCENDING"),
+            ("memory_id", "ASCENDING"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
+        (
+            ("tier", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("processing_state", "ASCENDING"),
+            ("expires_at", "ASCENDING"),
+            ("memory_id", "ASCENDING"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) in signatures
+    assert (
         "memory_items",
         "COLLECTION",
         (("tier", "ASCENDING"), ("status", "ASCENDING"), ("updated_at", "DESCENDING"), ("__name__", "ASCENDING")),
@@ -52,5 +144,31 @@ def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
             ("status", "ASCENDING"),
             ("lease_expires_at", "ASCENDING"),
             ("__name__", "ASCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_review_queue",
+        "COLLECTION",
+        (
+            ("fact_id", "ASCENDING"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) not in signatures
+    assert (
+        "memory_review_queue",
+        "COLLECTION",
+        (
+            ("conflict_with", "CONTAINS"),
+            ("__name__", "ASCENDING"),
+        ),
+    ) not in signatures
+    assert (
+        "memory_review_queue",
+        "COLLECTION",
+        (
+            ("status", "ASCENDING"),
+            ("impact", "DESCENDING"),
+            ("created_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
         ),
     ) in signatures

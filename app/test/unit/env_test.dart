@@ -87,7 +87,9 @@ void main() {
     test('development startup remains configurable', () {
       expect(
         () => validateApplicationStartupRouting(
-            environment: Environment.dev, configuredApiBaseUrl: 'https://api.omi.dev/'),
+          environment: Environment.dev,
+          configuredApiBaseUrl: 'https://api.omi.dev/',
+        ),
         returnsNormally,
       );
     });
@@ -97,7 +99,9 @@ void main() {
     // Static wiring tripwire: the behavioral cases above call the exact seam.
     final mainSource = File('lib/main.dart').readAsStringSync();
     expect(mainSource, contains('validateApplicationStartupRouting();'));
-    expect(mainSource.indexOf('validateApplicationStartupRouting();'),
-        lessThan(mainSource.indexOf('ServiceManager.init()')));
+    expect(
+      mainSource.indexOf('validateApplicationStartupRouting();'),
+      lessThan(mainSource.indexOf('ServiceManager.init()')),
+    );
   });
 }

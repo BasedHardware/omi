@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -16,17 +17,23 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 CLI = REPOSITORY_ROOT / "scripts" / "failure-class"
 SEED_DIRECTORY = REPOSITORY_ROOT / ".github" / "failure-classes"
 REPORT_FIXTURE = REPOSITORY_ROOT / "scripts" / "fixtures" / "failure_class" / "report-events.json"
-SEED_IDS = {
-    "FC-malformed-doc-read",
-    "FC-unbounded-module-cache",
-    "FC-trapping-dict-merge",
-    "FC-per-hop-timeout",
-    "FC-split-mutation-authority",
-}
+# The registry grows as classes are declared; derive the seed set instead of
+# pinning a count that goes stale the next time a class is added.
+SEED_IDS = {path.stem for path in SEED_DIRECTORY.glob("*.json")}
+
+
+# Disposable repositories must not inherit the caller's git context. Under a
+# pre-commit or pre-push hook, GIT_DIR and core.hooksPath point at the real
+# checkout, so an unisolated `git init`/`git config`/`git add .` in a temp
+# directory writes to the repository under test.
+GIT_ISOLATION = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=cwd, check=False, text=True, capture_output=True)
+    if command and command[0] == "git":
+        command = [command[0], *GIT_ISOLATION, *command[1:]]
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+    return subprocess.run(command, cwd=cwd, check=False, text=True, capture_output=True, env=environment)
 
 
 class FailureClassCliTests(unittest.TestCase):
@@ -36,12 +43,27 @@ class FailureClassCliTests(unittest.TestCase):
         definitions = self.root / ".github" / "failure-classes"
         definitions.parent.mkdir(parents=True)
         shutil.copytree(SEED_DIRECTORY, definitions)
+        self.seed_canonical_prevention_artifacts(definitions)
         run(["git", "init", "-q"], self.root)
         run(["git", "config", "user.email", "failure-class@example.test"], self.root)
         run(["git", "config", "user.name", "Failure Class Test"], self.root)
         self.write("src/example.txt", "initial\n")
         self.commit("chore: seed failure classes")
         self.base = self.git("rev-parse", "HEAD")
+
+    def seed_canonical_prevention_artifacts(self, definitions: Path) -> None:
+        """Materialize the guard artifacts the copied registry declares.
+
+        `canonical_prevention_artifact` paths are validated against the CLI's
+        --root, so the synthetic repository must contain them for the seed
+        definitions to stay valid outside the real checkout.
+        """
+        for definition_path in sorted(definitions.glob("*.json")):
+            data = json.loads(definition_path.read_text(encoding="utf-8"))
+            for relative in data.get("canonical_prevention_artifact", []):
+                artifact = self.root / relative
+                artifact.parent.mkdir(parents=True, exist_ok=True)
+                artifact.touch()
 
     def tearDown(self) -> None:
         self.temp_directory.cleanup()
@@ -85,8 +107,39 @@ class FailureClassCliTests(unittest.TestCase):
         payload = self.payload(result)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["validation"]["definition_count"], 5)
-        self.assertEqual({path.stem for path in SEED_DIRECTORY.glob("*.json")}, SEED_IDS)
+        self.assertEqual(payload["validation"]["definition_count"], len(SEED_IDS))
+        self.assertIn("FC-split-mutation-authority", SEED_IDS)
+
+    def set_definition_field(self, class_id: str, field: str, value: object) -> None:
+        path = self.root / ".github" / "failure-classes" / f"{class_id}.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data[field] = value
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    def test_canonical_prevention_artifact_accepts_an_existing_path(self) -> None:
+        self.write("backend/guards/read_boundary.py", "# guard\n")
+        self.set_definition_field(
+            "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/read_boundary.py"]
+        )
+        result = self.validate(self.body("## Summary\n"))
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertTrue(self.payload(result)["ok"])
+
+    def test_canonical_prevention_artifact_must_exist(self) -> None:
+        self.set_definition_field(
+            "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/absent.py"]
+        )
+        result = self.validate(self.body("## Summary\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing_canonical_prevention_artifact", [item["code"] for item in payload["errors"]])
+
+    def test_canonical_prevention_artifact_rejects_a_malformed_value(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "canonical_prevention_artifact", [])
+        result = self.validate(self.body("## Summary\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid_canonical_prevention_artifact", [item["code"] for item in payload["errors"]])
 
     def test_valid_existing_declaration(self) -> None:
         self.add_fix_commit()
@@ -133,6 +186,18 @@ class FailureClassCliTests(unittest.TestCase):
         payload = self.payload(result)
         self.assertEqual(result.returncode, 1)
         self.assertIn("instance_fix_mutates_registry", [item["code"] for item in payload["errors"]])
+
+    def test_instance_fix_may_record_guard_artifact_for_declared_class(self) -> None:
+        self.write("backend/guards/read_boundary.py", "# guard\n")
+        self.set_definition_field(
+            "FC-malformed-doc-read", "canonical_prevention_artifact", ["backend/guards/read_boundary.py"]
+        )
+        self.add_fix_commit()
+
+        result = self.validate(self.body("Failure-Class: FC-malformed-doc-read\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(payload["ok"])
 
     def test_registry_only_dormant_transition_is_valid(self) -> None:
         definition_path = self.root / ".github" / "failure-classes" / "FC-malformed-doc-read.json"
@@ -181,7 +246,7 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertTrue(payload["requires_declaration"])
         self.assertEqual(payload["pr_body_patch"]["operation"], "append")
         self.assertEqual(payload["pr_body_patch"]["text"], "Failure-Class: none\n")
-        self.assertEqual(len(payload["advisory_candidates"]), 5)
+        self.assertEqual(len(payload["advisory_candidates"]), len(SEED_IDS))
         self.assertIn("no class was inferred", payload["candidate_source"])
 
     def test_explain_emits_versioned_definition(self) -> None:

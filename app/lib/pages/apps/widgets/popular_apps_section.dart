@@ -107,8 +107,10 @@ class PopularAppsSection extends StatelessWidget {
                       child: Container(
                         width: 60,
                         height: 60,
-                        decoration:
-                            BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF35343B),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: CachedNetworkImage(
                           imageUrl: app.getImageUrl(),
                           httpHeaders: const {

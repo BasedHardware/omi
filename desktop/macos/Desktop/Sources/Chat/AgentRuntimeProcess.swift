@@ -1,13 +1,6 @@
 import Foundation
 import OmiSupport
 
-/// Sendable carrier for `[String: Any]` JSON payloads that must cross actor or
-/// isolation boundaries. The dictionary is parsed once and treated as immutable
-/// thereafter, so unchecked Sendable conformance is safe.
-struct RuntimeJSONPayloadBox: @unchecked Sendable {
-  let value: [String: Any]
-  init(_ value: [String: Any]) { self.value = value }
-}
 extension Notification.Name {
   /// Posted on MainActor after the runtime handshake makes direct control
   /// tools admissible. Carries no owner id or request content.
@@ -99,19 +92,6 @@ final class AgentRuntimeStdoutChunkReader: @unchecked Sendable {
       nextSequence &+= 1
     }
     return (sequence, data)
-  }
-}
-
-/// Journal writes use SQLite `BEGIN IMMEDIATE`, whose configured busy window is
-/// five seconds. Keep the client deadline strictly beyond that database window
-/// so a successful commit still has time to traverse the JSONL IPC boundary.
-struct AgentRuntimeJournalTimeoutPolicy {
-  static let sqliteBusyWindowNanoseconds: UInt64 = 5_000_000_000
-  static let ipcSlackNanoseconds: UInt64 = 5_000_000_000
-  static let deadlineNanoseconds = sqliteBusyWindowNanoseconds + ipcSlackNanoseconds
-
-  static func allowsCorrelatedResult(elapsedNanoseconds: UInt64) -> Bool {
-    elapsedNanoseconds < deadlineNanoseconds
   }
 }
 
@@ -249,6 +229,7 @@ actor AgentRuntimeProcess {
   nonisolated static let requiredRuntimeCapabilities: Set<String> = [
     "journal_import_remote_turn",
     "runtime_adapter_availability",
+    "chat_first_capability_projection",
   ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
 
@@ -350,6 +331,7 @@ actor AgentRuntimeProcess {
       case journalBackendSync
       case journalBackendDelete
       case journalBackendReconcile
+      case chatFirstDeferralDelivery
       case defaultExecutionProfileConfigured
       case surfaceSessionResolved
       case sessionExecutionProfileMigrated
@@ -359,6 +341,7 @@ actor AgentRuntimeProcess {
       case externalSurfaceRunBeginResult
       case externalSurfaceToolResult
       case externalSurfaceRunCompleteResult
+      case chatFirstHarnessExecutorResult
       case ownerRuntimeRevoked
       case unknown(String)
     }
@@ -410,6 +393,7 @@ actor AgentRuntimeProcess {
       case "journal_backend_sync": return .journalBackendSync
       case "journal_backend_delete": return .journalBackendDelete
       case "journal_backend_reconcile": return .journalBackendReconcile
+      case "chat_first_deferral_delivery": return .chatFirstDeferralDelivery
       case "default_execution_profile_configured": return .defaultExecutionProfileConfigured
       case "surface_session_resolved": return .surfaceSessionResolved
       case "session_execution_profile_migrated": return .sessionExecutionProfileMigrated
@@ -419,6 +403,7 @@ actor AgentRuntimeProcess {
       case "external_surface_run_begin_result": return .externalSurfaceRunBeginResult
       case "external_surface_tool_result": return .externalSurfaceToolResult
       case "external_surface_run_complete_result": return .externalSurfaceRunCompleteResult
+      case "chat_first_harness_executor_result": return .chatFirstHarnessExecutorResult
       case "owner_runtime_revoked": return .ownerRuntimeRevoked
       default: return .unknown(type)
       }
@@ -511,17 +496,6 @@ actor AgentRuntimeProcess {
     let timedOutAtUptime: TimeInterval
   }
 
-  struct JournalOperationResult: Sendable {
-    let operation: String
-    let conversationId: String
-    let turn: KernelJournalTurn?
-    let turns: [KernelJournalTurn]
-    let clearedCount: Int
-    let highWaterTurnSeq: Int
-    let conversationGeneration: Int
-    let generationBaseTurnSeq: Int
-  }
-
   typealias JournalTurnChangedHandler = @Sendable (KernelJournalTurn) -> Void
   typealias AuthorizedRealtimeToolHandler =
     @Sendable (AuthorizedToolExecution) async -> AuthorizedRealtimeToolExecutionResult
@@ -542,6 +516,13 @@ actor AgentRuntimeProcess {
   /// an actor blocked writing to the frozen process. See DebugSuspendControl.
   private nonisolated let debugSuspend = DebugSuspendControl()
   private var lastExitWasOOM = false
+  private var startupBeganAt: Date?
+  private var startupBinaryPresent = false
+  private var startupBinaryPresentChecked = false
+  private var startupPermissionGrantedChecked = false
+  private var pendingStartFailureDiagnostics: DesktopErrorDiagnosticContext?
+  private var startupPermissionGranted = false
+  private var startupExitCode: Int32?
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
@@ -840,7 +821,7 @@ actor AgentRuntimeProcess {
     }
   }
 
-  private func assertAuthorization(
+  func assertAuthorization(
     _ snapshot: RuntimeOwnerAuthorizationSnapshot,
     expectedOwnerID: String? = nil
   ) throws {
@@ -904,6 +885,7 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     title: String?,
     creationProfile: AgentSessionCreationProfile?,
+    chatFirstCapability: ChatFirstCapabilityProjection? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentSurfaceSession {
     try assertAuthorization(authorizationSnapshot)
@@ -913,7 +895,8 @@ actor AgentRuntimeProcess {
       ownerId: authorizationSnapshot.ownerID,
       surface: surface,
       title: title,
-      creationProfile: creationProfile
+      creationProfile: creationProfile,
+      chatFirstCapability: chatFirstCapability
     )
     let result = try await kernelContractRequest(
       payload: payload,
@@ -1413,7 +1396,8 @@ actor AgentRuntimeProcess {
     ownerId: String?,
     surface: AgentSurfaceReference,
     title: String?,
-    creationProfile: AgentSessionCreationProfile? = nil
+    creationProfile: AgentSessionCreationProfile? = nil,
+    chatFirstCapability: ChatFirstCapabilityProjection? = nil
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "resolve_surface_session",
@@ -1426,6 +1410,7 @@ actor AgentRuntimeProcess {
     message["externalRefId"] = surface.externalRefId
     if let title { message["title"] = title }
     if let creationProfile { message["creationProfile"] = creationProfile.dictionary }
+    if let chatFirstCapability { message["chatFirstCapability"] = chatFirstCapability.dictionary }
     return message
   }
 
@@ -1589,6 +1574,7 @@ actor AgentRuntimeProcess {
     requestId: String,
     ownerId: String?,
     sessionId: String,
+    surfaceKind: String,
     prompt: String,
     mode: String?,
     imageData: Data?,
@@ -1604,6 +1590,7 @@ actor AgentRuntimeProcess {
       ownerId: ownerId
     )
     message["sessionId"] = sessionId
+    message["surfaceKind"] = surfaceKind
     message["prompt"] = prompt
     if let mode { message["mode"] = mode }
     if let imageData { message["imageBase64"] = imageData.base64EncodedString() }
@@ -1619,7 +1606,7 @@ actor AgentRuntimeProcess {
     return message
   }
 
-  private static func protocolEnvelope(
+  static func protocolEnvelope(
     type: String,
     clientId: String,
     requestId: String,
@@ -1635,7 +1622,7 @@ actor AgentRuntimeProcess {
     return message
   }
 
-  private func kernelContractRequest(
+  func kernelContractRequest(
     payload: [String: Any],
     expectedKind: RuntimeMessage.Kind,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
@@ -1868,6 +1855,26 @@ actor AgentRuntimeProcess {
     return turn
   }
 
+  func repairJournalTurns(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    turnIDs: [String],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> [KernelJournalTurn] {
+    let result = try await journalOperation(
+      type: "journal_repair_turns",
+      operation: "repair",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["turnIds": Array(Set(turnIDs)).sorted()],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    result.turns.forEach(recordLifecycleJournalMutation)
+    return result.turns
+  }
+
   func listJournalTurns(
     clientId: String,
     surface: AgentSurfaceReference,
@@ -1937,7 +1944,10 @@ actor AgentRuntimeProcess {
     ).clearedCount
   }
 
-  private func journalOperation(
+  /// Shared only with the Chat-first journal extension. Its callers must retain
+  /// the capability's main-Chat and generation checks before constructing a
+  /// kernel operation; this low-level transport does not grant authority.
+  func journalOperation(
     type: String,
     operation: String,
     clientId: String,
@@ -2407,6 +2417,7 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         ownerId: authorizationSnapshot.ownerID,
         sessionId: sessionId,
+        surfaceKind: surface.surfaceKind,
         prompt: prompt,
         mode: mode,
         imageData: imageData,
@@ -2484,6 +2495,12 @@ actor AgentRuntimeProcess {
     admissionAuthorityEpoch: UInt64,
     requiresCredentials: Bool
   ) async throws -> StartupReceipt {
+    startupBeganAt = Date()
+    startupBinaryPresent = false
+    startupBinaryPresentChecked = false
+    startupPermissionGrantedChecked = false
+    startupPermissionGranted = false
+    startupExitCode = nil
     // `startProcess` owns the launch through `startupSingleFlight`. Do not use
     // the reducer's `.starting` state as a join signal here: the launch owner
     // intentionally sets it *before* this operation is scheduled.
@@ -2531,6 +2548,8 @@ actor AgentRuntimeProcess {
 
     let nodeExists = FileManager.default.isExecutableFile(atPath: nodePath)
     let bridgeExists = FileManager.default.fileExists(atPath: bridgePath)
+    startupBinaryPresentChecked = true
+    startupBinaryPresent = nodeExists && bridgeExists
     let bridgeDir = (bridgePath as NSString).deletingLastPathComponent
     let pkgJsonPath = ((bridgeDir as NSString).deletingLastPathComponent as NSString)
       .appendingPathComponent("package.json")
@@ -2554,7 +2573,7 @@ actor AgentRuntimeProcess {
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
     #if DEBUG
-      if AppBuild.isNonProduction {
+      if AppBuild.allowsLocalAutomation {
         env["OMI_AGENT_ALLOW_CONTROL_ONLY"] = "1"
       }
     #endif
@@ -2620,8 +2639,11 @@ actor AgentRuntimeProcess {
     } else if let authHeader,
       let token = Self.bearerToken(from: authHeader)
     {
+      startupPermissionGrantedChecked = requiresPiMonoCredentials
+      startupPermissionGranted = requiresPiMonoCredentials
       env["OMI_AUTH_TOKEN"] = token
     } else if requiresPiMonoCredentials {
+      startupPermissionGrantedChecked = true
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     } else if preferredAdapterId == .piMono {
@@ -2903,7 +2925,9 @@ actor AgentRuntimeProcess {
   /// A terminal kernel turn is a durable replay boundary. Feed the reducer at
   /// the runtime boundary rather than maintaining a second ad-hoc set in each
   /// chat or PTT surface.
-  private func recordLifecycleJournalMutation(_ turn: KernelJournalTurn) {
+  /// Shared only with the Chat-first journal extension so every journal-owned
+  /// mutation reaches the same lifecycle reducer boundary.
+  func recordLifecycleJournalMutation(_ turn: KernelJournalTurn) {
     _ = bridgeLifecycle.reduce(
       .kernelJournalWrite(
         turnID: turn.turnId,
@@ -2924,6 +2948,50 @@ actor AgentRuntimeProcess {
         "recovery_action": "retry_start",
         "recovery_result": "exhausted",
       ])
+    pendingStartFailureDiagnostics = bridgeStartFailureContext(failure)
+  }
+
+  func consumePendingStartFailureDiagnostics() -> DesktopErrorDiagnosticContext? {
+    defer { pendingStartFailureDiagnostics = nil }
+    return pendingStartFailureDiagnostics
+  }
+
+  private func bridgeStartFailureContext(
+    _ failure: AgentRuntimeBridgeLifecycle.StartFailure
+  ) -> DesktopErrorDiagnosticContext {
+    let elapsedMs = startupBeganAt.map { Int(Date().timeIntervalSince($0) * 1_000) } ?? -1
+    return Self.startFailureDiagnostics(
+      failure: failure,
+      elapsedMs: elapsedMs,
+      exitCode: startupExitCode,
+      binaryPresent: startupBinaryPresent,
+      binaryPresentChecked: startupBinaryPresentChecked,
+      permissionGrantedChecked: startupPermissionGrantedChecked,
+      permissionGranted: startupPermissionGranted)
+  }
+
+  nonisolated static func startFailureDiagnostics(
+    failure: AgentRuntimeBridgeLifecycle.StartFailure,
+    elapsedMs: Int,
+    exitCode: Int32?,
+    binaryPresent: Bool,
+    binaryPresentChecked: Bool,
+    permissionGrantedChecked: Bool,
+    permissionGranted: Bool
+  ) -> DesktopErrorDiagnosticContext {
+    DesktopErrorDiagnosticContext([
+      "startup_stage": failure.rawValue,
+      "exit_code": exitCode.map(Int.init) ?? -1,
+      "elapsed_ms": elapsedMs,
+      "configured_timeout_ms": 30_000,
+      "binary_present_checked": binaryPresentChecked,
+      "binary_present": binaryPresent,
+      // The JSONL bridge has no TCP listener; report that the port precondition was not checked.
+      "port_bound_checked": false,
+      "port_bound": false,
+      "permission_granted_checked": permissionGrantedChecked,
+      "permission_granted": permissionGranted,
+    ])
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {
@@ -3218,11 +3286,15 @@ actor AgentRuntimeProcess {
     case .journalBackendReconcile:
       if messageOwnerIsCurrentlyAuthorized(message) { handleJournalBackendReconcile(message) }
 
+    case .chatFirstDeferralDelivery:
+      if messageOwnerIsCurrentlyAuthorized(message) { handleChatFirstDeferralDelivery(message) }
+
     case .defaultExecutionProfileConfigured, .surfaceSessionResolved,
       .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
       .legacyMainChatSessionsImported,
       .externalSurfaceRunBeginResult, .externalSurfaceToolResult,
-      .externalSurfaceRunCompleteResult, .ownerRuntimeRevoked:
+      .externalSurfaceRunCompleteResult, .chatFirstHarnessExecutorResult,
+      .ownerRuntimeRevoked:
       completeKernelContractRequest(message)
 
     case .result:
@@ -3347,7 +3419,11 @@ actor AgentRuntimeProcess {
             ? AgentClientScope.floatingPill
             : nil,
           originatingSurfaceRef: surface,
+          originatingSessionID: command.sessionID,
           originatingRunId: command.runID,
+          originatingAttemptId: command.attemptID,
+          toolCapabilityRef: command.capabilityRef,
+          chatFirstControlGeneration: command.chatFirstControlGeneration,
           originatingUserText: command.originatingUserText,
           isOnboardingSurface: command.surfaceKind == "onboarding",
           expectedOwnerID: command.ownerID,
@@ -3617,7 +3693,20 @@ actor AgentRuntimeProcess {
         clearedCount: message.payload["clearedCount"] as? Int ?? 0,
         highWaterTurnSeq: highWaterTurnSeq,
         conversationGeneration: conversationGeneration,
-        generationBaseTurnSeq: generationBaseTurnSeq
+        generationBaseTurnSeq: generationBaseTurnSeq,
+        accepted: message.payload["accepted"] as? Bool,
+        duplicate: message.payload["duplicate"] as? Bool,
+        continuityKey: message.payload["continuityKey"] as? String,
+        suppressedByTailQuestion: message.payload["suppressedByTailQuestion"] as? Bool ?? false,
+        suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
+        materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
+        materializationReceipts: Self.chatFirstMaterializationReceipts(
+          from: message.payload["materializationReceipts"]
+        ),
+        coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
+          from: message.payload["coldStartSequenceTerminalReceipts"]
+        ),
+        acknowledgedReceiptCount: message.payload["acknowledgedReceiptCount"] as? Int ?? 0
       ))
   }
 
@@ -3966,7 +4055,7 @@ actor AgentRuntimeProcess {
   }
 
   @discardableResult
-  private func sendJson(_ dict: [String: Any]) -> Bool {
+  func sendJson(_ dict: [String: Any]) -> Bool {
     guard let stdinPipe else { return false }
     do {
       let data = try JSONSerialization.data(withJSONObject: dict)
@@ -4006,6 +4095,9 @@ actor AgentRuntimeProcess {
     }
 
     let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)
+    if bridgeLifecycle.state == .starting {
+      startupExitCode = exitCode
+    }
     let error: BridgeError = likelyOOM ? .outOfMemory : .processExited
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
@@ -4155,7 +4247,7 @@ actor AgentRuntimeProcess {
       append(
         bundleURL
           .appendingPathComponent("Contents/Resources")
-          .appendingPathComponent(bundleName)
+          .appendingPathComponent("\(bundleName)/Contents/Resources")
           .appendingPathComponent(resourceName))
       append(
         bundleURL

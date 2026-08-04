@@ -21,11 +21,13 @@ class IntegrationProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final responses = await Future.wait([getIntegration('google_calendar')]);
+      final responses = await Future.wait([getIntegration('google_calendar'), getIntegration('gmail')]);
       if (generation != _sessionGeneration) return;
 
       _integrations['google_calendar'] = responses[0]?.connected ?? false;
-      _integrations['gmail'] = false;
+      // Gmail shares the Google grant; the backend reports it connected only when
+      // that grant carries the Gmail scope.
+      _integrations['gmail'] = responses[1]?.connected ?? false;
 
       // Sync SharedPreferences for backward compatibility with services
       // This ensures services that read from SharedPreferences stay in sync

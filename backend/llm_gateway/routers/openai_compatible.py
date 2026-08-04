@@ -43,6 +43,8 @@ from llm_gateway.gateway.executor import (
     provider_request_for,
     selected_serving_route,
     selected_serving_route_artifact_id,
+    selected_route_is_lkg,
+    selected_route_serving_class,
 )
 from llm_gateway.gateway.metrics import (
     observe_error,
@@ -56,12 +58,17 @@ from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_s
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
-from llm_gateway.gateway.schemas import RouteArtifact
+from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
 from llm_gateway.gateway.sse import SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
 router = APIRouter()
 _image_generation_client: httpx.AsyncClient | None = None
+
+# The provider throttled the caller's own key. These reach the router as a
+# credential failure, but they are not a bad credential: answering 401 tells
+# callers the key is invalid and makes a transient failure look permanent.
+_THROTTLED_FAILURE_CLASSES = frozenset({FailureClass.BYOK_RATE_LIMIT, FailureClass.BYOK_QUOTA})
 
 
 @router.post('/v1/chat/completions', response_model=None)
@@ -134,8 +141,9 @@ async def create_chat_completion(
                     provider='none',
                     model='none',
                     credential_source=credential_source,
-                    used_lkg=route is resolved_route.last_known_good_route,
-                    fallback_used=route is resolved_route.last_known_good_route,
+                    route_serving_class=selected_route_serving_class(resolved_route),
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    fallback_used=False,
                     fallback_reason=None,
                     outcome='cancelled',
                     error_class='client_cancelled',
@@ -161,6 +169,8 @@ async def create_chat_completion(
                     credential_source=credential_source,
                     request_id=request_id,
                     streaming=is_streaming,
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    route_serving_class=selected_route_serving_class(resolved_route),
                 ),
                 request_id=request_id,
                 api_surface='openai_chat_completions',
@@ -189,8 +199,9 @@ async def create_chat_completion(
                     provider='none',
                     model='none',
                     credential_source=credential_source,
-                    used_lkg=route is resolved_route.last_known_good_route,
-                    fallback_used=route is resolved_route.last_known_good_route,
+                    route_serving_class=selected_route_serving_class(resolved_route),
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    fallback_used=False,
                     fallback_reason=None,
                     outcome='error',
                     error_class='unexpected_internal',
@@ -244,7 +255,7 @@ def _error_response(exc: GatewayError) -> JSONResponse:
     content: dict[str, object] = {
         'error': {
             'message': exc.message,
-            'type': _error_type_for_code(exc.code),
+            'type': _error_type_for_code(exc.code, exc.failure_class),
             'param': exc.param,
             'code': exc.code.value,
         }
@@ -255,13 +266,15 @@ def _error_response(exc: GatewayError) -> JSONResponse:
     )
 
 
-def _error_type_for_code(code: GatewayErrorCode) -> str:
+def _error_type_for_code(code: GatewayErrorCode, failure_class: FailureClass | None = None) -> str:
     """Map an internal error code to an OpenAI API error category.
 
     OpenAI distinguishes ``type`` (a broad error category) from ``code`` (the
     specific identifier). Without this distinction clients that categorize
     errors by ``type`` cannot classify them correctly.
     """
+    if failure_class in _THROTTLED_FAILURE_CLASSES:
+        return 'rate_limit_error'
     if code == GatewayErrorCode.CREDENTIAL_FAILURE:
         return 'authentication_error'
     if code in {
@@ -276,6 +289,8 @@ def _error_type_for_code(code: GatewayErrorCode) -> str:
 
 
 def _status_code_for_error(exc: GatewayError) -> int:
+    if exc.failure_class in _THROTTLED_FAILURE_CLASSES:
+        return 429
     if exc.code == GatewayErrorCode.MODEL_NOT_FOUND:
         return 404
     if exc.code in {
@@ -449,7 +464,7 @@ async def _prepared_streaming_iterator(
 ) -> _PreparedStream:
     last_error: GatewayError | None = None
     first_failure: str | None = None
-    for index, provider_ref in enumerate([route.primary, *route.fallbacks]):
+    for provider_ref in [route.primary, *route.fallbacks]:
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
@@ -475,7 +490,7 @@ async def _prepared_streaming_iterator(
                 stream=stream,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
-                fallback_used=index > 0 or route is resolved_route.last_known_good_route,
+                fallback_used=first_failure is not None,
                 fallback_reason=first_failure,
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
@@ -500,7 +515,7 @@ async def _prepared_streaming_iterator(
             stream=stream,
             provider=provider_ref.provider,
             model=provider_ref.model,
-            fallback_used=index > 0 or route is resolved_route.last_known_good_route,
+            fallback_used=first_failure is not None,
             fallback_reason=first_failure,
             cache_requested=cache_requested_for_openai_request(provider_request),
         )
@@ -537,11 +552,17 @@ async def _stream_with_terminal_metrics(
         if terminal_observed:
             return
         terminal_observed = True
+        # Per the PR behavioral contract, actual fallback requires a subsequent
+        # successful provider/route.  Only stamp the actual-fallback labels when
+        # the terminal outcome is success; an error or cancellation means the
+        # failover did not complete, so dashboards and ad-hoc queries must not
+        # count it as a completed failover.
+        completed_fallback = prepared.fallback_used and outcome == 'success'
         trace.record(
             provider=prepared.provider,
             configured_model=prepared.model,
             route_artifact_id=route.route_artifact_id,
-            fallback_reason=prepared.fallback_reason,
+            fallback_reason=prepared.fallback_reason if completed_fallback else None,
             retry_ordinal=1,
             outcome=outcome,
             error_class=error_class,
@@ -562,9 +583,16 @@ async def _stream_with_terminal_metrics(
                 provider=prepared.provider,
                 model=prepared.model,
                 credential_source=credentials.source.value,
-                used_lkg=route is resolved_route.last_known_good_route,
-                fallback_used=prepared.fallback_used,
-                fallback_reason=prepared.fallback_reason,
+                route_serving_class=(
+                    RouteServingClass.ACTUAL_FALLBACK
+                    if completed_fallback
+                    else selected_route_serving_class(resolved_route)
+                ),
+                used_lkg=selected_route_is_lkg(resolved_route),
+                fallback_used=completed_fallback,
+                fallback_reason=prepared.fallback_reason if completed_fallback else None,
+                fallback_from_route_artifact_id=route.route_artifact_id if completed_fallback else None,
+                fallback_to_route_artifact_id=route.route_artifact_id if completed_fallback else None,
                 outcome=outcome,
                 error_class=error_class,
                 request_id=request_id,

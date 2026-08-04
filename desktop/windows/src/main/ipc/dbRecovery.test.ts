@@ -193,8 +193,10 @@ describe('archiving the corrupt database', () => {
   it('keeps only the 5 newest backups', () => {
     const made: string[] = []
     for (let i = 0; i < 8; i++) {
-      // A fresh database each time (the archive MOVES it), one minute apart.
-      buildDb(dbFile)
+      // Retention only needs a real file to move. Distinct sentinel bytes keep
+      // this contract fast under worker contention; the next test proves that a
+      // complete SQLite database is preserved byte-for-byte.
+      writeFileSync(dbFile, `corrupt-${i}`)
       made.push(archiveCorruptDb(dbFile, backupsDir, new Date(2026, 0, 1, 12, i, 0)))
     }
     const kept = backupNames()
@@ -209,6 +211,7 @@ describe('archiving the corrupt database', () => {
     ])
     expect(existsSync(made[0])).toBe(false)
     expect(existsSync(made[7])).toBe(true)
+    expect(readFileSync(made[7], 'utf8')).toBe('corrupt-7')
   })
 
   // THE GUARDRAIL: a copy that fails halfway followed by a delete loses everything.

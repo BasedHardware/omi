@@ -166,6 +166,19 @@ def _days_to_due(due_at: Any, now: datetime) -> Optional[float]:
     return float(int(seconds // 86400) if seconds >= 0 else -int((-seconds) // 86400))
 
 
+def _stored_confidence(value: Any) -> float:
+    """Coerce a stored confidence to a float, treating anything malformed as 0.0.
+
+    Mirrors ``database.candidates._stored_confidence``, which already reads these very
+    fields off ``action_items`` documents. ``dict.get(key, default)`` returns ``None``
+    when the key is present with a null value, so the default never fires and a bare
+    ``float(...)`` raises TypeError; booleans must not be promoted to 1.0/0.0 either.
+    """
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return 0.0
+
+
 def _recent(updated_at: Any, now: datetime) -> bool:
     updated = _as_aware(updated_at)
     return updated is not None and now - updated <= timedelta(days=7)
@@ -341,7 +354,7 @@ def _build_subjects(
         raw_owner = task.get('owner')
         owner = raw_owner.value if isinstance(raw_owner, TaskOwner) else str(raw_owner or '')
         trusted_manual_task = str(task.get('source') or '') == 'manual' and owner == TaskOwner.user.value
-        capture_confidence = 1.0 if trusted_manual_task else float(task.get('capture_confidence', 0.0))
+        capture_confidence = 1.0 if trusted_manual_task else _stored_confidence(task.get('capture_confidence'))
         facts = DeterministicFacts(
             days_to_due=_days_to_due(task.get('due_at'), now),
             someone_blocked=False,
@@ -392,8 +405,8 @@ def _build_subjects(
         proposal: dict[str, Any] = raw_proposal if isinstance(raw_proposal, dict) else {}
         headline = str(task_change.get('description') or proposal.get('title') or 'Review suggested work')
         goal_id = str(candidate.get('goal_id') or '')
-        confidence = float(candidate.get('capture_confidence', 0))
-        ownership_confidence = float(candidate.get('ownership_confidence', 0))
+        confidence = _stored_confidence(candidate.get('capture_confidence'))
+        ownership_confidence = _stored_confidence(candidate.get('ownership_confidence'))
         facts = DeterministicFacts(
             days_to_due=_days_to_due(task_change.get('due_at'), now),
             has_concrete_next_action=bool(headline.strip()),

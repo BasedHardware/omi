@@ -105,8 +105,8 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         'captured_at': captured_at,
         'updated_at': now - timedelta(minutes=10),
         'expires_at': captured_at + timedelta(days=30) if tier == MemoryTier.short_term else None,
-        'ledger_commit_id': 'commit-1' if tier == MemoryTier.long_term else None,
-        'ledger_sequence': 1 if tier == MemoryTier.long_term else None,
+        'ledger_commit_id': 'commit-1',
+        'ledger_sequence': 1,
         'item_revision': 1,
         'source_commit_id': 'source-commit-1',
         'content_hash': f'hash-{memory_id}',
@@ -119,11 +119,11 @@ def _stored_item(item):
     return item.model_dump(mode='json')
 
 
-def _hit(item, *, score, projection_commit_id='projection-1', vector_id=None, **overrides):
+def _hit(item, *, score, projection_commit_id=None, vector_id=None, **overrides):
     data = {
         'memory_id': item.memory_id,
         'score': score,
-        'projection_commit_id': projection_commit_id,
+        'projection_commit_id': projection_commit_id or item.ledger_commit_id,
         'vector_updated_at': item.updated_at + timedelta(minutes=1),
         'uid': item.uid,
         'account_generation': item.account_generation,
@@ -233,7 +233,7 @@ def test_default_memory_vector_search_rejects_hits_missing_mandatory_freshness_f
                 SearchVectorHit(
                     memory_id=item.memory_id,
                     score=0.99,
-                    projection_commit_id='projection-1',
+                    projection_commit_id=item.ledger_commit_id,
                     vector_updated_at=item.updated_at + timedelta(minutes=1),
                 )
             ],
@@ -386,7 +386,7 @@ def test_default_memory_vector_search_writes_deterministic_repair_purge_outbox_r
     assert record['vector_id'] == 'memvec:stale-projection'
     assert record['memory_id'] == 'stale-projection'
     assert record['reason'] == VectorRepairPurgeReason.stale_projection_commit
-    assert record['required_projection_commit_id'] == 'projection-1'
+    assert record['required_projection_commit_id'] == stale_projection.ledger_commit_id
     assert record['observed_projection_commit_id'] == 'projection-old'
     assert record['required_account_generation'] == 0
     assert record['outbox_path'] == f"users/u1/memory_outbox/{record['record_id']}"

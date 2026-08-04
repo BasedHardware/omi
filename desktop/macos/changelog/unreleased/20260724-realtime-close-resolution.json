@@ -1,3 +1,0 @@
-{
-  "change": "Improved beta realtime diagnostics by recording each provider-close recovery decision and managed token-mint fallback outcome without collecting customer content"
-}

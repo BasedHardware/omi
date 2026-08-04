@@ -118,17 +118,31 @@ class FairUseSuccessHarness extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(l10n.fairUseSpeechUsage,
-                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500)),
+                  Text(
+                    l10n.fairUseSpeechUsage,
+                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 16),
-                  _bar(l10n.fairUseToday, speechToday, (limits['daily_hours'] as num?)?.toDouble() ?? 2.0,
-                      (usagePct['daily'] as num?)?.toDouble() ?? 0),
+                  _bar(
+                    l10n.fairUseToday,
+                    speechToday,
+                    (limits['daily_hours'] as num?)?.toDouble() ?? 2.0,
+                    (usagePct['daily'] as num?)?.toDouble() ?? 0,
+                  ),
                   const SizedBox(height: 14),
-                  _bar(l10n.fairUse3Day, speech3day, (limits['three_day_hours'] as num?)?.toDouble() ?? 8.0,
-                      (usagePct['three_day'] as num?)?.toDouble() ?? 0),
+                  _bar(
+                    l10n.fairUse3Day,
+                    speech3day,
+                    (limits['three_day_hours'] as num?)?.toDouble() ?? 8.0,
+                    (usagePct['three_day'] as num?)?.toDouble() ?? 0,
+                  ),
                   const SizedBox(height: 14),
-                  _bar(l10n.fairUseWeekly, speechWeekly, (limits['weekly_hours'] as num?)?.toDouble() ?? 10.0,
-                      (usagePct['weekly'] as num?)?.toDouble() ?? 0),
+                  _bar(
+                    l10n.fairUseWeekly,
+                    speechWeekly,
+                    (limits['weekly_hours'] as num?)?.toDouble() ?? 10.0,
+                    (usagePct['weekly'] as num?)?.toDouble() ?? 0,
+                  ),
                 ],
               ),
             ),
@@ -148,8 +162,10 @@ class FairUseSuccessHarness extends StatelessWidget {
                       const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 16),
                       const SizedBox(width: 10),
                       Expanded(
-                        child:
-                            Text(message, style: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 13, height: 1.4)),
+                        child: Text(
+                          message,
+                          style: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 13, height: 1.4),
+                        ),
                       ),
                     ],
                   ),
@@ -163,11 +179,15 @@ class FairUseSuccessHarness extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(l10n.fairUseAboutTitle,
-                      style: const TextStyle(color: Color(0xFF636366), fontSize: 12, fontWeight: FontWeight.w500)),
+                  Text(
+                    l10n.fairUseAboutTitle,
+                    style: const TextStyle(color: Color(0xFF636366), fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 4),
-                  Text(l10n.fairUseAboutBody,
-                      style: const TextStyle(color: Color(0xFF48484A), fontSize: 12, height: 1.4)),
+                  Text(
+                    l10n.fairUseAboutBody,
+                    style: const TextStyle(color: Color(0xFF48484A), fontSize: 12, height: 1.4),
+                  ),
                 ],
               ),
             ),
@@ -203,10 +223,7 @@ class FairUseSuccessHarness extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: dotColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
             Container(
@@ -299,10 +316,14 @@ class FairUseSuccessHarness extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(l10n.fairUseDailyTranscription,
-                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500)),
-                Text(l10n.fairUseBudgetUsed('$usedMin', '$limitMin'),
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(
+                  l10n.fairUseDailyTranscription,
+                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  l10n.fairUseBudgetUsed('$usedMin', '$limitMin'),
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -317,8 +338,10 @@ class FairUseSuccessHarness extends StatelessWidget {
             ),
             if (exhausted) ...[
               const SizedBox(height: 10),
-              Text(l10n.fairUseBudgetExhausted,
-                  style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.w500)),
+              Text(
+                l10n.fairUseBudgetExhausted,
+                style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.w500),
+              ),
             ],
             if (resetLabel.isNotEmpty) ...[
               const SizedBox(height: 4),
@@ -339,8 +362,10 @@ class FairUseSuccessHarness extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13)),
-            Text('${hours.toStringAsFixed(1)}h / ${limit.toStringAsFixed(0)}h',
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(
+              '${hours.toStringAsFixed(1)}h / ${limit.toStringAsFixed(0)}h',
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -375,8 +400,11 @@ class FairUseErrorHarness extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(l10n.fairUseLoadError,
-                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15), textAlign: TextAlign.center),
+              Text(
+                l10n.fairUseLoadError,
+                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: onRetry,
@@ -486,11 +514,7 @@ void main() {
   //    no banner for normal state.
   // -----------------------------------------------------------------------
   group('Success render - status banner', () {
-    Map<String, dynamic> makeStatus({
-      String stage = 'none',
-      String caseRef = '',
-      String message = '',
-    }) {
+    Map<String, dynamic> makeStatus({String stage = 'none', String caseRef = '', String message = ''}) {
       return {
         'stage': stage,
         'case_ref': caseRef,
@@ -592,7 +616,11 @@ void main() {
 
     testWidgets('case_ref shown when non-empty on elevated stage', (tester) async {
       await tester.pumpWidget(
-        buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'warning', caseRef: 'CASE-1234'))),
+        buildTestApp(
+          FairUseSuccessHarness(
+            status: makeStatus(stage: 'warning', caseRef: 'CASE-1234'),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -601,15 +629,26 @@ void main() {
     });
 
     testWidgets('case_ref hidden when empty', (tester) async {
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'warning', caseRef: ''))));
+      await tester.pumpWidget(
+        buildTestApp(
+          FairUseSuccessHarness(
+            status: makeStatus(stage: 'warning', caseRef: ''),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.copy), findsNothing);
     });
 
     testWidgets('no copy icon in normal stage (no banner)', (tester) async {
-      await tester
-          .pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatus(stage: 'none', caseRef: 'CASE-999'))));
+      await tester.pumpWidget(
+        buildTestApp(
+          FairUseSuccessHarness(
+            status: makeStatus(stage: 'none', caseRef: 'CASE-999'),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       // case_ref is not shown because status banner is hidden for 'none'
@@ -694,29 +733,30 @@ void main() {
     testWidgets('tap copies case_ref to clipboard and shows snackbar', (tester) async {
       // Set up a mock clipboard handler to capture written data.
       String? copiedText;
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (MethodCall methodCall) async {
-          if (methodCall.method == 'Clipboard.setData') {
-            copiedText = (methodCall.arguments as Map)['text'] as String?;
-          }
-          return null;
-        },
-      );
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (
+        MethodCall methodCall,
+      ) async {
+        if (methodCall.method == 'Clipboard.setData') {
+          copiedText = (methodCall.arguments as Map)['text'] as String?;
+        }
+        return null;
+      });
 
       await tester.pumpWidget(
-        buildTestApp(const FairUseSuccessHarness(
-          status: {
-            'stage': 'warning',
-            'case_ref': 'FU-99887',
-            'message': '',
-            'usage_pct': {'daily': 85.0},
-            'limits': {'daily_hours': 2.0},
-            'speech_hours_today': 1.7,
-            'speech_hours_3day': 0,
-            'speech_hours_weekly': 0,
-          },
-        )),
+        buildTestApp(
+          const FairUseSuccessHarness(
+            status: {
+              'stage': 'warning',
+              'case_ref': 'FU-99887',
+              'message': '',
+              'usage_pct': {'daily': 85.0},
+              'limits': {'daily_hours': 2.0},
+              'speech_hours_today': 1.7,
+              'speech_hours_3day': 0,
+              'speech_hours_weekly': 0,
+            },
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -785,9 +825,9 @@ void main() {
     });
 
     testWidgets('shows used/limit in minutes', (tester) async {
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
-        status: makeStatusWithBudget(dailyLimitMs: 600000, usedMs: 300000),
-      )));
+      await tester.pumpWidget(
+        buildTestApp(FairUseSuccessHarness(status: makeStatusWithBudget(dailyLimitMs: 600000, usedMs: 300000))),
+      );
       await tester.pumpAndSettle();
 
       // 300000ms = 5min, 600000ms = 10min
@@ -795,18 +835,18 @@ void main() {
     });
 
     testWidgets('shows exhausted message when budget exhausted', (tester) async {
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
-        status: makeStatusWithBudget(exhausted: true, usedMs: 600000, dailyLimitMs: 600000),
-      )));
+      await tester.pumpWidget(
+        buildTestApp(
+          FairUseSuccessHarness(status: makeStatusWithBudget(exhausted: true, usedMs: 600000, dailyLimitMs: 600000)),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Daily transcription limit reached'), findsOneWidget);
     });
 
     testWidgets('no exhausted message when budget not exhausted', (tester) async {
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
-        status: makeStatusWithBudget(exhausted: false),
-      )));
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatusWithBudget(exhausted: false))));
       await tester.pumpAndSettle();
 
       expect(find.text('Daily transcription limit reached'), findsNothing);
@@ -814,9 +854,7 @@ void main() {
 
     testWidgets('exhausted bar is red, normal bar is purple', (tester) async {
       // Normal (not exhausted)
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
-        status: makeStatusWithBudget(exhausted: false),
-      )));
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatusWithBudget(exhausted: false))));
       await tester.pumpAndSettle();
 
       // 4 bars total: 3 usage + 1 budget
@@ -827,9 +865,11 @@ void main() {
       expect(normalColor.value, const Color(0xFF8B5CF6)); // purple
 
       // Exhausted
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
-        status: makeStatusWithBudget(exhausted: true, usedMs: 600000, dailyLimitMs: 600000),
-      )));
+      await tester.pumpWidget(
+        buildTestApp(
+          FairUseSuccessHarness(status: makeStatusWithBudget(exhausted: true, usedMs: 600000, dailyLimitMs: 600000)),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final bars2 = tester.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).toList();
@@ -848,9 +888,7 @@ void main() {
     });
 
     testWidgets('hides budget section when daily_limit_ms is 0', (tester) async {
-      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(
-        status: makeStatusWithBudget(dailyLimitMs: 0),
-      )));
+      await tester.pumpWidget(buildTestApp(FairUseSuccessHarness(status: makeStatusWithBudget(dailyLimitMs: 0))));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('budget_section')), findsNothing);

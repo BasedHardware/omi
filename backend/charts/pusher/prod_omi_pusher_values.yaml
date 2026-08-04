@@ -19,6 +19,10 @@ image:
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
+  # Build-once promotion: set `digest: sha256:<64 lowercase hex>` (and clear
+  # `tag`, set `pullPolicy: IfNotPresent`) to promote the exact dev-qualified
+  # image by content address. Malformed/ambiguous identity is rejected at
+  # render time. See backend/scripts/verify_pusher_rollout_gate.py.
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -31,7 +35,7 @@ serviceAccount:
   # Specifies whether a service account should be created
   create: true
   # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -51,7 +55,13 @@ podLabels: {}
 podSecurityContext: {}
   # fsGroup: 2000
 
-securityContext: {}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 10001
   # capabilities:
   #   drop:
   #   - ALL
@@ -69,6 +79,12 @@ service:
   annotations:
     cloud.google.com/neg: '{"ingress": true}'
     cloud.google.com/backend-config: '{"default": "prod-pusher-backend-config"}'  # Link to BackendConfig
+
+# BackendConfig connectionDraining: bounds how long the LB waits before cutting
+# in-flight WS on endpoint removal (must be <= terminationGracePeriodSeconds 120).
+backendConfig:
+  connectionDraining:
+    drainingTimeoutSec: 60
 
 # This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
 ingress:
@@ -173,11 +189,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: ENCRYPTION_SECRET
     valueFrom:
       secretKeyRef:
@@ -256,7 +267,7 @@ env:
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
-    value: "modulate-velma-2,parakeet"
+    value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,parakeet"
   - name: RAPID_API_KEY
@@ -325,7 +336,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /health
+    path: /ready
     port: 8080
   failureThreshold: 3
   initialDelaySeconds: 0
@@ -386,7 +397,9 @@ terminationGracePeriodSeconds: 120
 lifecycle:
   preStop:
     exec:
-      command: ["sh", "-c", "sleep 15"]
+      # preStop flips readiness (via Lane A /__internal/drain) so the kubelet removes the endpoint
+      # early; sleep covers NEG->backend-service->ALB reprogram convergence before SIGTERM.
+      command: ["sh", "-c", "curl -sf -m 5 -X POST http://localhost:8080/__internal/drain || true; sleep 15"]
 
 # Additional volumes on the output Deployment definition.
 volumes: []

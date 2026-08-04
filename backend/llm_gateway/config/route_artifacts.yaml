@@ -55,15 +55,15 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:707331066d53439c5abd3a3614c5a5f3972880713e53b68fe470b0bf2a930104
+    artifact_digest: sha256:2ef9eea0738cd58dfdf9a70b89f8fc5aaf6ae1b2278e67987fe1d3d6a17c0c2e
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     primary:
       provider: openai
-      model: gpt-5.4-nano
+      model: gpt-5.6-luna
     fallbacks:
       - provider: openai
-        model: gpt-5.4-nano
+        model: gpt-5.6-luna
     provider_options:
       reasoning_effort: low
     timeouts:
@@ -115,14 +115,14 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:7a8c23fbb2bae7e005b69844c84191f4852e97f56cb99dd3bca75360c430a273
+    artifact_digest: sha256:13b7df3652fd6015ef5578deda43bd0e97f914c6cf66deb60e296c167a497507
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     # The gateway LKG mirrors the active model so shadow serving and fallback use
     # the same gateway-only model policy without changing legacy chat extraction.
     primary:
       provider: openai
-      model: gpt-5.4-nano
+      model: gpt-5.6-luna
     fallbacks: []
     provider_options:
       reasoning_effort: low

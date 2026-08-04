@@ -86,44 +86,83 @@ function isQuotaClose(code: number, reason: string): boolean {
 const QUOTA_MESSAGE =
   'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
 
-/**
- * Start an Omi v4/listen session for one source. Resolves the handle once the
- * socket connects, or null on an initial failure (connect timeout, fatal WS
- * error, no signed-in user, or quota exhausted before connect). `onLost` fires
- * when a CONNECTED session can no longer continue (quota exhausted or socket
- * dropped) so the caller can surface an error to the user.
- */
+type OmiStartOutcome = {
+  handle: OmiListenHandle | null
+  error: Error | null
+}
+
+function startupAbortError(): Error {
+  const error = new Error('Transcription startup cancelled')
+  error.name = 'AbortError'
+  return error
+}
+
+/** Start one Omi lane and return its handle or the exact startup failure. */
 async function startWithOmi(
   source: ListenSource,
   cb: TranscriptionCallbacks,
   onLost: (reason: string) => void,
   mode: TranscriptionMode,
-  clientConversationId?: string
-): Promise<OmiListenHandle | null> {
-  if (!auth.currentUser) return null
-  let outcome: 'pending' | 'omi' | 'failed' = 'pending'
-  return new Promise<OmiListenHandle | null>((resolve) => {
+  clientConversationId?: string,
+  signal?: AbortSignal
+): Promise<OmiStartOutcome> {
+  if (!auth.currentUser) {
+    return {
+      handle: null,
+      error: new Error('Omi transcription unavailable (not signed in)')
+    }
+  }
+  return new Promise<OmiStartOutcome>((resolve) => {
+    let outcome: 'pending' | 'omi' | 'failed' = 'pending'
     let handle: OmiListenHandle | null = null
-    const timeout = setTimeout(() => {
-      if (outcome !== 'pending') return
-      outcome = 'failed'
+    let readySignaled = false
+    let timeout: ReturnType<typeof setTimeout> | null = null
+
+    const stopHandle = (): void => {
       try {
         handle?.stop()
       } catch {
         /* ignore */
       }
-      resolve(null)
+    }
+    const cleanupStartup = (): void => {
+      if (timeout) clearTimeout(timeout)
+      timeout = null
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const fail = (error: Error): void => {
+      if (outcome !== 'pending') return
+      outcome = 'failed'
+      cleanupStartup()
+      stopHandle()
+      resolve({ handle: null, error })
+    }
+    const maybeSucceed = (): void => {
+      if (outcome !== 'pending' || !readySignaled || !handle) return
+      outcome = 'omi'
+      cleanupStartup()
+      cb.onBackend('omi')
+      resolve({ handle, error: null })
+    }
+    const onAbort = (): void => fail(startupAbortError())
+
+    if (signal?.aborted) {
+      onAbort()
+      return
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    timeout = setTimeout(() => {
+      const error = new Error('Omi transcription unavailable (connection or audio timed out)')
+      error.name = 'TimeoutError'
+      fail(error)
     }, CONNECT_TIMEOUT_MS)
 
     startOmiListen(
       source,
       {
         onConnected: () => {
-          if (outcome !== 'pending') return
-          outcome = 'omi'
-          clearTimeout(timeout)
-          cb.onBackend('omi')
-          resolve(handle)
+          readySignaled = true
+          maybeSucceed()
         },
         onSegments: (segs) => {
           if (outcome !== 'omi') return
@@ -136,14 +175,7 @@ async function startWithOmi(
           // Free quota is used up — the cloud STT will never emit transcripts.
           if (outcome === 'pending') {
             // Never connected as the winner yet: treat as an initial failure.
-            outcome = 'failed'
-            clearTimeout(timeout)
-            try {
-              handle?.stop()
-            } catch {
-              /* ignore */
-            }
-            resolve(null)
+            fail(new Error(QUOTA_MESSAGE))
           } else if (outcome === 'omi') {
             // Already connected and committed: tell the caller the session is over.
             onLost('Omi free quota exhausted')
@@ -162,15 +194,8 @@ async function startWithOmi(
         },
         onError: (err, fatal) => {
           if (outcome === 'pending' && fatal) {
-            outcome = 'failed'
-            clearTimeout(timeout)
-            try {
-              handle?.stop()
-            } catch {
-              /* ignore */
-            }
             console.warn(`[v4/listen ${source}] initial failure:`, err.message)
-            resolve(null)
+            fail(err)
             return
           }
           // Only surface post-connect errors when Omi actually connected.
@@ -202,14 +227,13 @@ async function startWithOmi(
           }
         } else {
           handle = h
+          maybeSucceed()
         }
       })
       .catch((err) => {
         if (outcome !== 'pending') return
-        outcome = 'failed'
-        clearTimeout(timeout)
         console.warn(`[v4/listen ${source}] start threw:`, err)
-        resolve(null)
+        fail(err instanceof Error ? err : new Error(String(err)))
       })
   })
 }
@@ -233,31 +257,30 @@ export async function startTranscription(
   source: ListenSource,
   cb: TranscriptionCallbacks,
   mode: TranscriptionMode = 'conversation',
-  clientConversationId?: string
+  clientConversationId?: string,
+  signal?: AbortSignal
 ): Promise<TranscriptionHandle> {
   let active: OmiListenHandle | null = null
 
-  const omi = await startWithOmi(
+  const startup = await startWithOmi(
     source,
     cb,
     (reason) => {
       cb.onError(new Error(`Omi transcription stopped: ${reason}`))
     },
     mode,
-    clientConversationId
+    clientConversationId,
+    signal
   )
 
-  if (omi) {
-    active = omi
-  } else {
-    cb.onError(
-      new Error(
-        auth.currentUser
-          ? 'Omi transcription unavailable (could not connect)'
-          : 'Omi transcription unavailable (not signed in)'
-      )
-    )
+  if (!startup.handle) {
+    const error =
+      startup.error ??
+      new Error('Omi transcription unavailable (could not connect or acquire audio)')
+    cb.onError(error)
+    throw error
   }
+  active = startup.handle
 
   return {
     stop: (): void => {

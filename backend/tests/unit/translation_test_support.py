@@ -89,7 +89,6 @@ def profile(
         providers=providers,
         nllb_url='http://nllb.test',
         nllb_timeout_seconds=1.0,
-        google_project_id='test-project',
         cache_ttl_seconds=600,
         negative_cache_ttl_seconds=300,
         configured_providers=providers,

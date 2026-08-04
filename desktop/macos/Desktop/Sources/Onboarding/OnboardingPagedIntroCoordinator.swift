@@ -4,6 +4,31 @@ import Foundation
 @preconcurrency import GRDB
 import SwiftUI
 
+/// Serializes the two Google browser-cookie imports during legacy onboarding.
+/// Calendar and Gmail share the same Chromium Safe Storage grant, so launching
+/// both readers at once can produce duplicate Chrome Keychain consent sheets.
+/// This gate releases Gmail after Calendar reaches *any* terminal result — a
+/// Calendar failure must never prevent Gmail from making progress.
+actor OnboardingGoogleInsightGate {
+  private var calendarFinished = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func waitForCalendar() async {
+    if calendarFinished { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func markCalendarFinished() {
+    guard !calendarFinished else { return }
+    calendarFinished = true
+    let pending = waiters
+    waiters.removeAll()
+    for waiter in pending {
+      waiter.resume()
+    }
+  }
+}
+
 @MainActor
 final class OnboardingPagedIntroCoordinator: ObservableObject {
   struct ScanSnapshot: Equatable {
@@ -92,6 +117,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published private(set) var gmailInsightsFinished = false
   @Published private(set) var calendarInsightsFinished = false
   @Published private(set) var appleNotesInsightsFinished = false
+  @Published private(set) var gmailInsightsDeferred = false
+  @Published private(set) var calendarInsightsDeferred = false
   @Published private(set) var gmailInsightsFailed = false
   @Published private(set) var calendarInsightsFailed = false
   @Published private(set) var appleNotesInsightsFailed = false
@@ -386,7 +413,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     defer { isSyncingAppleNotes = false }
 
     do {
-      let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+      let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+        maxResults: 250,
+        userInitiated: true
+      )
       if notes.isEmpty {
         appleNotesInsightCount = 0
         appleNotesSummary = ""
@@ -601,8 +631,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     scanState = .scanning
     scanStatusText = "Scanning your projects and apps..."
 
-    // Start Gmail/Calendar/web research in parallel with the file scan
-    // so insights are ready by the time the user reaches the research step.
+    // Start local/web enrichment in parallel with the file scan. Connected
+    // account imports stay behind an explicit Apps/Settings action.
     // Must use Task.detached to avoid @MainActor serialization with the scan.
     Task.detached { await self.startBackgroundInsightsIfNeeded() }
 
@@ -619,7 +649,20 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     scanStatusText = "Your workspace is mapped."
   }
 
-  func refreshSnapshotIfAvailable() async {
+  func refreshSnapshotIfAvailable(
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async {
+    func isAuthorized() -> Bool {
+      guard !Task.isCancelled else { return false }
+      if let authorizationSnapshot {
+        return authorizationSnapshot.ownerID == expectedOwnerID
+          && RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      }
+      return ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID)
+    }
+
+    guard isAuthorized() else { return }
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return }
 
     do {
@@ -752,12 +795,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         )
       }
 
-      guard let snapshot else { return }
+      guard isAuthorized(), let snapshot else { return }
       let previousSnapshot = scanSnapshot
       scanSnapshot = snapshot
       suggestedGoals = buildSuggestedGoals(from: snapshot)
 
-      guard previousSnapshot != snapshot else { return }
+      guard isAuthorized(), previousSnapshot != snapshot else { return }
 
       var nodes: [[String: Any]] = []
       var edges: [[String: Any]] = []
@@ -786,35 +829,73 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         edges.append(["source_id": "user", "target_id": id, "label": "stores_work_in"])
       }
 
-      if !nodes.isEmpty {
-        await saveGraph(nodes: nodes, edges: edges)
+      if !nodes.isEmpty, isAuthorized() {
+        await saveGraph(
+          nodes: nodes,
+          edges: edges,
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
       }
 
-      localFileMemoriesSaved = await importLocalFileMemories(from: snapshot)
+      guard isAuthorized() else { return }
+      localFileMemoriesSaved = await importLocalFileMemories(
+        from: snapshot,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot)
     } catch {
       logError("OnboardingPagedIntroCoordinator: Failed to load scan snapshot", error: error)
     }
   }
 
-  func startBackgroundInsightsIfNeeded() async {
+  func startBackgroundInsightsIfNeeded(userInitiated: Bool = false) async {
     guard !insightsStarted else { return }
     insightsStarted = true
     isLoadingInsights = true
     isResearchComplete = false
-    insightStatusText = "Reading Gmail, calendar, and Apple Notes..."
+    insightStatusText =
+      userInitiated
+      ? "Reading the selected data sources..."
+      : "Preparing your local profile..."
     gmailInsightsFinished = false
     calendarInsightsFinished = false
     appleNotesInsightsFinished = false
+    gmailInsightsDeferred = false
+    calendarInsightsDeferred = false
     gmailInsightsFailed = false
     calendarInsightsFailed = false
     appleNotesInsightsFailed = false
     webResearchSummary = ""
 
+    // Onboarding itself is not consent to read connected accounts. In
+    // particular, an existing browser Safe Storage grant must not turn a
+    // passive scan into a year-long Gmail/Calendar import. The Apps/Settings
+    // connectors own explicit imports; mark these sources complete so the
+    // local onboarding flow can continue without touching their data.
+    guard userInitiated else {
+      gmailInsightsDeferred = true
+      calendarInsightsDeferred = true
+      gmailInsightsFinished = true
+      calendarInsightsFinished = true
+      appleNotesInsightsFinished = true
+      insightStatusText = "Connect data sources from Apps when you are ready."
+      await maybeStartWebResearch()
+      return
+    }
+
+    // Calendar and Gmail read the same browser Safe Storage item. Keep the
+    // first consent/request singular; BrowserKeychainCache still coalesces
+    // profile-level reads, while this onboarding gate prevents two import
+    // processes from racing the one user-visible authorization prompt.
+    let googleInsightGate = OnboardingGoogleInsightGate()
+
     gmailTask = Task {
+      await googleInsightGate.waitForCalendar()
+      guard !Task.isCancelled else { return }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: 300,
-          query: "newer_than:365d"
+          query: "newer_than:365d",
+          userInitiated: userInitiated
         )
         guard !Task.isCancelled else { return }
 
@@ -868,11 +949,15 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
 
     calendarTask = Task {
+      defer {
+        Task { await googleInsightGate.markCalendarFinished() }
+      }
       do {
         let events = try await CalendarReaderService.shared.readEvents(
           daysBack: 365,
           daysForward: 90,
-          maxResults: 1000
+          maxResults: 1000,
+          userInitiated: userInitiated
         )
         guard !Task.isCancelled else { return }
 
@@ -943,7 +1028,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       }
 
       do {
-        let notes = try await AppleNotesReaderService.shared.readRecentNotes(maxResults: 250)
+        let notes = try await AppleNotesReaderService.shared.readRecentNotes(
+          maxResults: 250,
+          userInitiated: false
+        )
         guard !Task.isCancelled else { return }
 
         if notes.isEmpty {
@@ -1451,22 +1539,50 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     return Array(NSOrderedSet(array: suggestions).array as? [String] ?? suggestions)
   }
 
-  private func executeTool(name: String, arguments: [String: Any]) async -> String {
+  private func executeTool(
+    name: String,
+    arguments: [String: Any],
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> String {
     await ChatToolExecutor.execute(
       ToolCall(name: name, arguments: arguments, thoughtSignature: nil),
-      isOnboardingSurface: true
+      isOnboardingSurface: true,
+      expectedOwnerID: expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
-  private func saveGraph(nodes: [[String: Any]], edges: [[String: Any]]) async {
+  private func saveGraph(
+    nodes: [[String: Any]],
+    edges: [[String: Any]],
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async {
     guard !nodes.isEmpty else { return }
     _ = await executeTool(
       name: "save_knowledge_graph",
-      arguments: ["nodes": nodes, "edges": edges]
+      arguments: ["nodes": nodes, "edges": edges],
+      expectedOwnerID: expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 
-  private func importLocalFileMemories(from snapshot: ScanSnapshot) async -> Int {
+  private func importLocalFileMemories(
+    from snapshot: ScanSnapshot,
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> Int {
+    func isAuthorized() -> Bool {
+      guard !Task.isCancelled else { return false }
+      if let authorizationSnapshot {
+        return authorizationSnapshot.ownerID == expectedOwnerID
+          && RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+      }
+      return ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID)
+    }
+
+    guard isAuthorized() else { return 0 }
     if localFileMemoriesSaved > 0 {
       return localFileMemoriesSaved
     }
@@ -1476,8 +1592,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
 
     let task = Task<Int, Never> {
+      guard isAuthorized() else { return 0 }
       let drafts = await buildLocalFileMemoryDrafts(from: snapshot)
-      guard !drafts.isEmpty else { return 0 }
+      guard isAuthorized(), !drafts.isEmpty else { return 0 }
 
       // Batch the drafts through the import evidence ingress. The previous
       // implementation fanned out 12 concurrent POST /v3/memories calls
@@ -1512,15 +1629,19 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         artifacts,
         sourceType: "local_files",
         logPrefix: "OnboardingPagedIntroCoordinator",
-        legacyMemories: legacyMemories
+        legacyMemories: legacyMemories,
+        authorizationSnapshot: authorizationSnapshot
       )
+      guard isAuthorized() else { return 0 }
       let savedCount = result.saved
       log("OnboardingPagedIntroCoordinator: Saved \(savedCount) local file import evidence artifacts")
       return savedCount
     }
 
     localFileMemoryImportTask = task
-    let saved = await task.value
+    let saved = await withTaskCancellationHandler(
+      operation: { await task.value },
+      onCancel: { task.cancel() })
     localFileMemoryImportTask = nil
     return saved
   }

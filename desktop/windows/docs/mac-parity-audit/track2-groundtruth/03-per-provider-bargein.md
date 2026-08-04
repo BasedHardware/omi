@@ -2,7 +2,7 @@
 
 Mac source: frozen tag v0.12.72, `desktop/macos/Desktop/Sources/FloatingControlBar/{RealtimeHubController,RealtimeHubSession}.swift` (worktree `mac-ref`).
 Windows source: `desktop/windows/src/renderer/src/lib/voice/{openaiSession,geminiSession,tokenMint,sessionMachine,voiceController}.ts` (worktree `track2-voice-bar`).
-Backend contract: `desktop/macos/Backend-Rust/src/routes/realtime.rs` (shared Rust backend — serves both Mac and Windows; no platform discrimination).
+Backend contract: `backend/routers/desktop_realtime.py` (shared Python backend — serves both Mac and Windows; no platform discrimination).
 
 ## 0. Architectural framing — this is not an apples-to-apples port
 
@@ -115,7 +115,7 @@ That is the *entire* mechanism. No PTT boundary, no session replace, no audio bu
 
 ## 4. Backend contract (`/v2/realtime/session`)
 
-`desktop/macos/Backend-Rust/src/routes/realtime.rs` (shared Rust backend, used by both Mac and Windows clients — confirmed no platform discrimination anywhere in the route: auth is `PaywalledAuthUser` extractor only, no `platform` field read from the request).
+`backend/routers/desktop_realtime.py` (shared Python backend, used by both Mac and Windows clients — auth applies the desktop paywall with no platform branching).
 
 - `POST /v2/realtime/session` body: `{ "provider": "openai" | "gemini" }` (`MintRequest`, line 44-48).
 - 200 response: `{ provider, token, expires_at? }` — OpenAI: `token` = `"ek_…"` (OpenAI's `client_secrets` `value` field, used as Bearer). Gemini: `token` = `"auth_tokens/…"` (Gemini's `auth_tokens.name`, used as `?access_token=` / SDK `apiKey`).

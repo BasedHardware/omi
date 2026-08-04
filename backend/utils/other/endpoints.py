@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import time
@@ -42,17 +43,41 @@ def verify_token(token: str) -> str:
     Raises:
         InvalidIdTokenError: If the token is invalid
     """
-    # Check for ADMIN_KEY format
+    # ADMIN_KEY impersonation: token format is "<ADMIN_KEY><uid>" (kept as-is —
+    # this exact concatenation is depended on by this repo's own integration
+    # tests, the listen/sync test stacks, and the production
+    # memory-continuity-gauntlet smoke test, so changing the format would
+    # break first-party tooling, not just close a hole). What actually
+    # changes: the prefix compare is constant-time instead of `startswith`
+    # (closes a timing side-channel on ADMIN_KEY itself), every successful
+    # use is logged so impersonation is auditable instead of silent, and
+    # ADMIN_KEY_AUTH_ENABLED lets an operator who doesn't need this feature
+    # turn it off entirely — default stays "true" so existing deployments
+    # and CI that already rely on it keep working unchanged.
     admin_key = os.getenv('ADMIN_KEY')
-    if admin_key and token.startswith(admin_key):
-        return token[len(admin_key) :]
+    if admin_key and os.getenv('ADMIN_KEY_AUTH_ENABLED', 'true').lower() == 'true':
+        if len(admin_key) < 16:
+            logger.warning('ADMIN_KEY is under 16 chars — trivially guessable if this deployment is internet-facing')
+        candidate = token[: len(admin_key)].encode()
+        if hmac.compare_digest(candidate, admin_key.encode()) and len(token) > len(admin_key):
+            impersonated_uid = token[len(admin_key) :]
+            logger.warning('ADMIN_KEY auth used to impersonate uid=%s', impersonated_uid)
+            return impersonated_uid
 
     # Verify Firebase token
     try:
         decoded_token = cast(Any, auth.verify_id_token(token))  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
         return decoded_token['uid']
     except InvalidIdTokenError:
-        if os.getenv('LOCAL_DEVELOPMENT') == 'true':
+        # Only honored when no real Firebase credential is configured — every
+        # legitimate LOCAL_DEVELOPMENT=true path (hermetic e2e harness, the
+        # auth-emulator dev harness) already unsets or never sets these, and
+        # every real deployment sets one to talk to the real project (see
+        # main.py's firebase_admin.initialize_app branches). This keeps the
+        # bypass inert the moment real credentials are present, without
+        # requiring test paths to change what they already do.
+        no_real_credential = not (os.getenv('SERVICE_ACCOUNT_JSON') or os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
+        if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise
 
@@ -338,7 +363,10 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
 
         # Check if the time window has expired
         if current_time - timestamp >= window_seconds:
-            remaining = requests_per_window - 1  # Reset the counter for the new window
+            # A new window starts with the full quota; the shared decrement below charges
+            # this request, matching the first-request branch. Subtracting here too spent
+            # one slot twice and left every window after the first one request short.
+            remaining = requests_per_window
             timestamp = current_time
         elif remaining == 0:
             raise HTTPException(status_code=429, detail="Too Many Requests")

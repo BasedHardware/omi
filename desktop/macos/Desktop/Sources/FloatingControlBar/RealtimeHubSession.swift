@@ -59,6 +59,7 @@ enum RealtimeHubBargeInStrategy: Equatable {
   struct RealtimeHubInputLifecycleSnapshot: Equatable {
     let isOpen: Bool
     let activityOpen: Bool
+    let pendingTextInputCount: Int
     let pendingAudioChunkCount: Int
     let pendingVideoFrameCount: Int
     let pendingCommit: Bool
@@ -96,7 +97,16 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   var task: URLSessionWebSocketTask?
   var completedURLTaskIDs = Set<Int>()
   var urlTaskTerminalWaiters: [Int: [CheckedContinuation<Void, Never>]] = [:]
-  private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+  private var _session: URLSession?
+  /// Created lazily only on the URLSession-backed (OpenAI) transport path; Gemini
+  /// uses the injected raw websocket and never touches this. Retired in
+  /// `beginTransportTerminationOnQueue` to break the URLSession -> delegate cycle.
+  private var session: URLSession {
+    if let existing = _session { return existing }
+    let created = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    _session = created
+    return created
+  }
   // Gemini's Live endpoint rejects both of Apple's WebSocket stacks, so it uses a
   // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
   var rawWS: RealtimeRawWebSocketTransport?
@@ -113,6 +123,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     private var testingResponseCreateCount = 0
     private var testingLastResponseToolChoice: String?
     private var testingLastResponseInstruction: String?
+    /// When set, the testing transport reports this error from `send`, so a
+    /// confirmed-delivery caller can be tested against a failed provider send.
+    private var testingForcedSendError: Error?
+
+    func setTestingForcedSendError(_ error: Error?) {
+      q.async { [weak self] in self?.testingForcedSendError = error }
+    }
   #endif
   private var activeEventIdentity: RealtimeHubEventIdentity?
   private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
@@ -284,6 +301,16 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     task?.cancel(with: .goingAway, reason: nil)
     rawWS?.close()
     isOpen = false
+    // Break the URLSession -> delegate(self) retain cycle. URLSession holds its
+    // delegate strongly until invalidated, so without this a drained/failed
+    // session self-retains and never deallocates — leaking one RealtimeHubSession
+    // per reconnect / 60-min rotation / failover, defeating the drain-and-release
+    // design. finishTasksAndInvalidate lets the just-cancelled task's terminal
+    // delegate callback still fire (resolving urlTaskTerminalWaiters) before the
+    // delegate ref is released, so the drain path is unaffected. Only touch a
+    // URLSession that was actually created (Gemini never makes one).
+    _session?.finishTasksAndInvalidate()
+    _session = nil
   }
 
   private func notifyError(_ failure: RealtimeHubTransportFailure) {
@@ -354,6 +381,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
             returning: RealtimeHubInputLifecycleSnapshot(
               isOpen: self.isOpen,
               activityOpen: self.activityOpen,
+              pendingTextInputCount: self.pendingTextInputs.count,
               pendingAudioChunkCount: self.pendingAudio.count,
               pendingVideoFrameCount: self.pendingVideo.count,
               pendingCommit: self.pendingCommit,
@@ -448,6 +476,38 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
   func sendTestTextInput(_ text: String) async -> Bool {
     await sendTextInput(text, logLabel: "test text input")
+  }
+
+  /// True when the session can accept injected (non-PTT) context *right now*.
+  /// Evaluated on `q`. OpenAI accepts on any open socket; Gemini needs an open
+  /// speech-activity window (opened per turn by `beginInputTurn`).
+  private var canAcceptInjectedContext: Bool {
+    isOpen && (provider == .openai || activityOpen)
+  }
+
+  /// Silently appends completed background-agent context to the conversation.
+  /// No response is requested — the model uses it on its next turn.
+  ///
+  /// Unlike ordinary PTT text input this does NOT buffer: the caller advances an
+  /// exactly-once kernel checkpoint on a `true` return, so `true` must mean
+  /// "confirmed delivered," never "buffered" (a buffered item is dropped by
+  /// `stopOnQueue`/`abandonInputTurn` — an acked-but-lost completion). When the
+  /// session can't accept context yet it returns `false` and the checkpoint
+  /// stays unadvanced; the delivery service retries when the session next
+  /// becomes ready (`hubDidOpenInputWindow`). When it can, `true` follows the
+  /// provider send's completion, not a fire-and-forget enqueue.
+  func sendBackgroundAgentContext(_ text: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self, self.canAcceptInjectedContext else {
+          continuation.resume(returning: false)
+          return
+        }
+        self.send(json: self.textInputWire(text)) { error in
+          continuation.resume(returning: error == nil)
+        }
+      }
+    }
   }
 
   /// A provider can complete a tool-only response after accepting the final tool
@@ -571,20 +631,27 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     }
   }
 
-  private func sendTextInputNow(_ text: String, logLabel: String) {
+  /// Per-provider wire form of a user text-input message. Shared by the buffered
+  /// PTT path (`sendTextInputNow`) and the confirmed, non-buffering background
+  /// path (`sendBackgroundAgentContext`).
+  private func textInputWire(_ text: String) -> [String: Any] {
     switch provider {
     case .gemini:
-      send(json: ["realtimeInput": ["text": text]])
+      return ["realtimeInput": ["text": text]]
     case .openai:
-      send(json: [
+      return [
         "type": "conversation.item.create",
         "item": [
           "type": "message",
           "role": "user",
           "content": [["type": "input_text", "text": text]],
         ],
-      ])
+      ]
     }
+  }
+
+  private func sendTextInputNow(_ text: String, logLabel: String) {
+    send(json: textInputWire(text))
     log("\(tag): \(logLabel) sent (\(text.count) chars)")
   }
 
@@ -621,6 +688,11 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.flushPendingAudioIfReady()
         self.flushPendingTextInputs()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
+        // The activity window is open — the session can now accept injected
+        // context. Signal delivery so a background completion left unadvanced
+        // while warm-idle is retried at this natural turn boundary.
+        let delegate = self.delegate
+        Task { @MainActor in delegate?.hubDidOpenInputWindow(source: self) }
         if self.pendingCommit {
           self.pendingCommit = false
           self.commitInputTurnNow()
@@ -1489,7 +1561,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           testingLastResponseToolChoice = (json["response"] as? [String: Any])?["tool_choice"] as? String
           testingLastResponseInstruction = (json["response"] as? [String: Any])?["instructions"] as? String
         }
-        completion?(nil)
+        // Lets tests exercise a failed send so callers that gate on delivery
+        // (sendBackgroundAgentContext → exactly-once checkpoint) can be verified.
+        completion?(testingForcedSendError)
         return
       }
     #endif

@@ -57,6 +57,14 @@ function isAlreadyCovered(name) {
   return ALREADY_COVERED_PREFIXES.some((p) => name === p || name.startsWith(p))
 }
 
+export function globToPackageName(glob) {
+  return glob.replace(/^node_modules\//, '').replace(/\/\*\*$/, '')
+}
+
+function globForPackageName(name) {
+  return `node_modules/${name}/**`
+}
+
 // Resolve a package's on-disk directory by walking node_modules up from `fromDir`
 // (node's own algorithm). Returns the real (symlink-collapsed) directory, or null
 // if the package is not installed (an optionalDependency for another platform, or
@@ -95,6 +103,7 @@ function readPkg(pkgDir) {
 export function computeUnpackGlobs() {
   const visitedDirs = new Set()
   const names = new Set() // canonical package names in the closure
+  const optionalSiblingNames = new Set() // optionalDependencies keys from visited packages
   const unresolvedRoots = []
   let closureSize = 0
 
@@ -122,6 +131,7 @@ export function computeUnpackGlobs() {
     // Use the authoritative name from package.json (falls back to the resolver key).
     names.add(pkg?.name ?? name)
     if (!pkg) continue
+    for (const dep of Object.keys(pkg.optionalDependencies || {})) optionalSiblingNames.add(dep)
     const deps = { ...(pkg.dependencies || {}), ...(pkg.optionalDependencies || {}) }
     for (const dep of Object.keys(deps)) queue.push([dep, pkgDir])
   }
@@ -149,11 +159,22 @@ export function computeUnpackGlobs() {
       skippedCovered.add(name)
       continue
     }
-    globs.add(`node_modules/${name}/**`)
+    globs.add(globForPackageName(name))
   }
+  // Optional platform-native siblings (e.g. @mariozechner/clipboard-*) may only
+  // install on one OS, but the committed closure list must cover every host.
+  for (const name of optionalSiblingNames) {
+    if (names.has(name) || isAlreadyCovered(name)) continue
+    globs.add(globForPackageName(name))
+  }
+
+  const optionalPlatformSiblingGlobs = [...optionalSiblingNames]
+    .filter((name) => !names.has(name) && !isAlreadyCovered(name))
+    .map(globForPackageName)
 
   return {
     globs: [...globs].sort(),
+    optionalPlatformSiblingGlobs,
     closureSize,
     coveredCount: skippedCovered.size
   }

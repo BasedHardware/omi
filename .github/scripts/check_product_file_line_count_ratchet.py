@@ -50,6 +50,9 @@ def _clean_git_env() -> dict[str, str]:
 
 LEGACY_BASELINE_RELATIVE = ".github/scripts/product_file_line_count_ratchet_baseline.json"
 BASELINE_DIRECTORY_RELATIVE = ".github/scripts/product_file_line_count_ratchet_baseline"
+RETIRED_BASELINE_SHARDS = {
+    f"{BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json",
+}
 DESKTOP_ROOT = "desktop/macos/"
 BACKEND_ROOT = "backend/"
 VENDORED_PARTS = {
@@ -110,8 +113,6 @@ def baseline_shard_relative(relative: str) -> str:
         group = parts[1] if len(parts) > 2 and parts[1] in {"database", "routers", "utils"} else "other"
         return f"{BASELINE_DIRECTORY_RELATIVE}/backend-{group}.json"
 
-    if relative.startswith("desktop/macos/Backend-Rust/"):
-        return f"{BASELINE_DIRECTORY_RELATIVE}/desktop-rust.json"
 
     sources_prefix = ("desktop", "macos", "Desktop", "Sources")
     if parts[:4] != sources_prefix:
@@ -137,7 +138,9 @@ def validate_baseline(value: Any, shard_relative: str | None = None) -> dict[str
         if not isinstance(relative, str) or not is_product_source(relative):
             raise ValueError(f"baseline contains unsupported source path: {relative!r}")
         if shard_relative is not None and baseline_shard_relative(relative) != shard_relative:
-            raise ValueError(f"baseline path {relative!r} belongs in {baseline_shard_relative(relative)}, not {shard_relative}")
+            raise ValueError(
+                f"baseline path {relative!r} belongs in {baseline_shard_relative(relative)}, not {shard_relative}"
+            )
         if not isinstance(count, int) or isinstance(count, bool) or count < THRESHOLD:
             raise ValueError(f"baseline count for {relative} must be an integer at least {THRESHOLD}")
     for relative, justification in justifications.items():
@@ -164,6 +167,11 @@ def load_baseline_file(path: Path, shard_relative: str | None = None) -> dict[st
         raise ValueError(f"invalid line-count ratchet baseline {path}: {error}") from error
 
 
+def _expected_shard(shard_relative: str) -> str | None:
+    """Keep merge-base-only retired shards valid while their removal is reviewed."""
+    return None if shard_relative in RETIRED_BASELINE_SHARDS else shard_relative
+
+
 def load_baseline_shards(root: Path) -> dict[str, dict[str, Any]]:
     """Load sharded baselines, falling back to the monolith only for migration."""
     directory = baseline_directory(root)
@@ -172,23 +180,23 @@ def load_baseline_shards(root: Path) -> dict[str, dict[str, Any]]:
         if not paths:
             raise ValueError(f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE}")
         return {
-            path.relative_to(root).as_posix(): load_baseline_file(path, path.relative_to(root).as_posix())
+            path.relative_to(root).as_posix(): load_baseline_file(
+                path, _expected_shard(path.relative_to(root).as_posix())
+            )
             for path in paths
         }
 
     legacy = baseline_path(root)
     if legacy.is_file():
         return {LEGACY_BASELINE_RELATIVE: load_baseline_file(legacy)}
-    raise ValueError(
-        f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE} and legacy baseline is absent"
-    )
+    raise ValueError(f"no baseline shards found under {BASELINE_DIRECTORY_RELATIVE} and legacy baseline is absent")
 
 
 def aggregate_baseline_shards(shards: dict[str, dict[str, Any]]) -> dict[str, Any]:
     """Validate and merge shards into the checker-facing baseline shape."""
     aggregate = empty_baseline()
     for shard_relative, shard in sorted(shards.items()):
-        expected = None if shard_relative == LEGACY_BASELINE_RELATIVE else shard_relative
+        expected = None if shard_relative == LEGACY_BASELINE_RELATIVE else _expected_shard(shard_relative)
         validate_baseline(shard, expected)
         for relative, count in shard["files"].items():
             if relative in aggregate["files"]:
@@ -315,7 +323,7 @@ def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
         ["git", "ls-tree", "-r", "--name-only", ref, "--", BASELINE_DIRECTORY_RELATIVE],
         cwd=root,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
         env=env,
     )
@@ -333,14 +341,16 @@ def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
                 ["git", "show", f"{ref}:{shard_relative}"],
                 cwd=root,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=False,
                 env=env,
             )
             if result.returncode:
                 raise ValueError(f"unable to read baseline shard {shard_relative} at {ref}")
             try:
-                shards[shard_relative] = validate_baseline(json.loads(result.stdout), shard_relative)
+                shards[shard_relative] = validate_baseline(
+                    json.loads(result.stdout), _expected_shard(shard_relative)
+                )
             except (json.JSONDecodeError, ValueError) as error:
                 raise ValueError(f"invalid baseline shard {shard_relative} at {ref}: {error}") from error
         return aggregate_baseline_shards(shards)
@@ -349,7 +359,7 @@ def baseline_at_ref(root: Path, ref: str) -> dict[str, Any] | None:
         ["git", "show", f"{ref}:{LEGACY_BASELINE_RELATIVE}"],
         cwd=root,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
         env=env,
     )
@@ -444,7 +454,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", help="Repository root (default: inferred from this script)")
     parser.add_argument("--changed-files", type=Path, help="Newline-delimited repository-relative changed paths")
     parser.add_argument("--base", help="Git ref used to validate explicit baseline raises")
-    parser.add_argument("--bootstrap", action="store_true", help="Create initial sharded snapshots when no baseline exists")
+    parser.add_argument(
+        "--bootstrap", action="store_true", help="Create initial sharded snapshots when no baseline exists"
+    )
     parser.add_argument(
         "--update-baseline",
         action="store_true",

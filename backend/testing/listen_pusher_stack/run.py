@@ -33,6 +33,7 @@ import redis
 import websockets
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from websockets.exceptions import ConnectionClosed
 
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
@@ -42,11 +43,14 @@ PYTHON = BACKEND / '.venv' / 'bin' / 'python'
 ADMIN_KEY = 'omi-listen-pusher-stack-admin-'
 PROJECT = 'demo-omi-listen-stack'
 LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'
+METRICS_SECRET = 'listen-pusher-stack-metrics'
 REST_FINALIZATION_RACE_ENV = (
     'OMI_STACK_FINALIZATION_RACE_UID',
     'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
     'OMI_STACK_FINALIZATION_RACE_PARTIES',
 )
+RECORDING_LIFECYCLE_FAULT_ENV = 'OMI_STACK_RECORDING_LIFECYCLE_FAULT'
+RECORDING_LIFECYCLE_FAULT_KEYS = frozenset({'uid', 'recording_session_id', 'conversation_id', 'phase'})
 
 
 class StackFailure(AssertionError):
@@ -133,6 +137,8 @@ class Stack:
         hold_inline_finalization: bool = False,
         rest_finalization_race_uid: str | None = None,
         rest_finalization_race_parties: int = 0,
+        recording_session_mode: str = 'dual_write',
+        recording_lifecycle_fault: dict[str, str] | None = None,
     ):
         if finalization_mode not in {'inline', 'cloud_tasks'}:
             raise ValueError(f'unsupported finalization mode: {finalization_mode}')
@@ -144,6 +150,15 @@ class Stack:
             raise ValueError('REST finalization race party count cannot be negative')
         if rest_finalization_race_uid and rest_finalization_race_parties < 2:
             raise ValueError('REST finalization race requires at least two parties')
+        if recording_session_mode not in {'shadow', 'dual_write', 'enforce'}:
+            raise ValueError(f'unsupported recording session mode: {recording_session_mode}')
+        if recording_lifecycle_fault is not None:
+            if set(recording_lifecycle_fault) != RECORDING_LIFECYCLE_FAULT_KEYS:
+                raise ValueError(
+                    f'recording lifecycle fault must contain exactly {sorted(RECORDING_LIFECYCLE_FAULT_KEYS)}'
+                )
+            if not all(recording_lifecycle_fault[key] for key in RECORDING_LIFECYCLE_FAULT_KEYS):
+                raise ValueError('recording lifecycle fault values must be non-empty')
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.finalization_mode = finalization_mode
@@ -155,6 +170,9 @@ class Stack:
         self.rest_finalization_race_conversation_id = (
             str(uuid.uuid4()) if rest_finalization_race_uid is not None else None
         )
+        self.recording_session_mode = recording_session_mode
+        self.recording_lifecycle_fault = recording_lifecycle_fault
+        self.recording_lifecycle_retry_file = self.state_dir / 'release-recording-lifecycle-retry'
         self.redis_port = _free_port()
         self.backend_port = _free_port()
         self.finalization_worker_port = _free_port()
@@ -195,6 +213,7 @@ class Stack:
                 'FIRESTORE_DATABASE_ID': '(default)',
                 'ENCRYPTION_SECRET': 'omi_listen_pusher_stack_test_secret_32_bytes',
                 'ADMIN_KEY': ADMIN_KEY,
+                'METRICS_SECRET': METRICS_SECRET,
                 'REDIS_DB_HOST': '127.0.0.1',
                 'REDIS_DB_PORT': str(self.redis_port),
                 'HOSTED_PUSHER_API_URL': f'http://127.0.0.1:{self.pusher_port}',
@@ -202,6 +221,7 @@ class Stack:
                 'STT_SERVICE_MODELS': 'parakeet',
                 'TRIAL_PAYWALL_ENABLED': 'false',
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
+                'RECORDING_SESSION_MODE': self.recording_session_mode,
                 'OMI_STACK_STATE_DIR': str(self.state_dir),
                 'PYTHONPATH': str(BACKEND),
                 # Child logs are evidence when a process fails to bind; avoid
@@ -233,6 +253,8 @@ class Stack:
                     'OMI_STACK_FINALIZATION_RACE_PARTIES': str(self.rest_finalization_race_parties),
                 }
             )
+        if self.recording_lifecycle_fault is not None:
+            env[RECORDING_LIFECYCLE_FAULT_ENV] = json.dumps(self.recording_lifecycle_fault, sort_keys=True)
         return env
 
     @property
@@ -345,7 +367,9 @@ class Stack:
 
     def _start_backend(self, *, enable_rest_finalization_race: bool = True) -> None:
         backend_app = (
-            'testing.listen_pusher_stack.listener_app:app' if self.finalization_mode == 'cloud_tasks' else 'main:app'
+            'testing.listen_pusher_stack.listener_app:app'
+            if self.finalization_mode == 'cloud_tasks' or self.recording_lifecycle_fault is not None
+            else 'main:app'
         )
         backend_child = self._start(
             'backend',
@@ -408,6 +432,10 @@ class Stack:
     @property
     def finalization_task_events(self) -> list[dict[str, Any]]:
         return _read_events(self.state_dir / TASK_EVENTS_FILE)
+
+    @property
+    def recording_lifecycle_fault_events(self) -> list[dict[str, Any]]:
+        return _read_events(self.state_dir / 'recording_lifecycle_fault.jsonl')
 
     @property
     def finalization_tasks(self) -> list[dict[str, Any]]:
@@ -497,6 +525,16 @@ class Stack:
         )
         return snapshot.to_dict() if snapshot.exists else None
 
+    def recording_session(self, uid: str, recording_session_id: str) -> dict[str, Any] | None:
+        snapshot = (
+            self.firestore.collection('users')
+            .document(uid)
+            .collection('recording_sessions')
+            .document(recording_session_id)
+            .get()
+        )
+        return snapshot.to_dict() if snapshot.exists else None
+
     def jobs_for(self, uid: str, conversation_id: str) -> list[dict[str, Any]]:
         query = self.firestore.collection('conversation_finalization_jobs').where(filter=FieldFilter('uid', '==', uid))
         jobs: list[dict[str, Any]] = []
@@ -508,6 +546,44 @@ class Stack:
             jobs.append(job)
         return jobs
 
+    def seed_orphan_in_progress(self, uid: str, conversation_id: str, *, idle_seconds: int) -> None:
+        """Write an in_progress row no session owns (#9809's stuck shape).
+
+        Seeded directly because production orphans predate any single cause
+        (crashed sessions, pre-#9960 code); recovery must handle the row
+        regardless of how it was stranded. The recovery session itself runs
+        through the real listener.
+        """
+        now = datetime.now(timezone.utc)
+        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).set(
+            {
+                'id': conversation_id,
+                'created_at': now - timedelta(seconds=idle_seconds + 60),
+                'started_at': now - timedelta(seconds=idle_seconds + 60),
+                'finished_at': now - timedelta(seconds=idle_seconds),
+                'status': 'in_progress',
+                'discarded': False,
+                'deleted': False,
+                'has_content': True,
+                'language': 'en',
+                'source': 'desktop',
+                'structured': {'title': '', 'overview': '', 'emoji': '', 'category': 'other'},
+                'transcript_segments': [
+                    {
+                        'id': 'orphan-segment-1',
+                        'speaker': 'SPEAKER_00',
+                        'speaker_id': 0,
+                        'start': 0.0,
+                        'end': 0.1,
+                        'text': 'orphaned stack transcript',
+                        'is_user': False,
+                        'person_id': None,
+                    }
+                ],
+                'photos': [],
+            }
+        )
+
     def age_conversation(self, uid: str, conversation_id: str) -> None:
         self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
             {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
@@ -517,6 +593,85 @@ class Stack:
         if not self.hold_inline_finalization:
             raise StackFailure('inline finalization hold was not configured')
         self.inline_finalization_release_file.touch()
+
+    def release_recording_lifecycle_retry(self) -> None:
+        if self.recording_session_mode != 'enforce' or self.recording_lifecycle_fault is None:
+            raise StackFailure('recording lifecycle retry release requires an enforce fault scenario')
+        self.recording_lifecycle_retry_file.touch()
+
+    def seed_bare_processing_conversation(
+        self,
+        uid: str,
+        conversation_id: str,
+        *,
+        admitted_at: datetime,
+        finalization_job_id: str | None = None,
+        legacy: bool = False,
+        deferred: bool = False,
+    ) -> None:
+        """Seed the crash-window state: a bare `processing` row with no durable job.
+
+        Mirrors what the synchronous legacy route leaves behind when the process
+        hard-crashes between admission and completion. ``admitted_at`` controls the
+        admission age the reconciler thresholds on. ``legacy`` omits the
+        server-owned ``processing_admitted_at`` stamp (a pre-fence stranded row the
+        reconciler must migrate, never complete on first sight). ``deferred`` marks
+        a desktop lazy row that intentionally lives on ``processing`` and must be
+        excluded from the sweep.
+        """
+        document = {
+            'id': conversation_id,
+            'created_at': admitted_at,
+            'started_at': admitted_at,
+            'finished_at': admitted_at,
+            'status': 'processing',
+            'source': 'omi',
+            'language': 'en',
+            'has_content': True,
+            'transcript_segments': [],
+            'structured': {
+                'title': 'Stale orphan recording',
+                'overview': '',
+                'emoji': '🧠',
+                'category': 'other',
+                'action_items': [],
+                'events': [],
+            },
+        }
+        if not legacy:
+            document['processing_admitted_at'] = admitted_at
+        if finalization_job_id:
+            document['finalization_job_id'] = finalization_job_id
+        if deferred:
+            document['deferred'] = True
+        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).set(
+            document
+        )
+
+    async def conversation_via_api(self, uid: str, conversation_id: str) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            response = await client.get(
+                f'http://127.0.0.1:{self.backend_port}/v1/conversations/{conversation_id}',
+                headers={'Authorization': f'Bearer {ADMIN_KEY}{uid}'},
+            )
+        if response.status_code != 200:
+            raise StackFailure(
+                f'GET /v1/conversations/{conversation_id} returned {response.status_code}: {response.text[:160]}'
+            )
+        body = response.json()
+        if not isinstance(body, dict):
+            raise StackFailure(f'GET /v1/conversations/{conversation_id} returned non-object JSON')
+        return body
+
+    async def listener_metrics(self) -> str:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            response = await client.get(
+                f'http://127.0.0.1:{self.backend_port}/metrics',
+                headers={'Authorization': f'Bearer {METRICS_SECRET}'},
+            )
+        if response.status_code != 200:
+            raise StackFailure(f'listener metrics endpoint returned {response.status_code}')
+        return response.text
 
 
 def _one_job(stack: Stack, uid: str, conversation_id: str) -> dict[str, Any]:
@@ -545,6 +700,30 @@ async def _receive_until(websocket: Any, predicate: Callable[[Any], bool], *, la
     raise StackFailure(f'timed out waiting for {label}; observed {len(seen)} JSON messages')
 
 
+async def _assert_no_event(
+    websocket: Any,
+    predicate: Callable[[Any], bool],
+    *,
+    label: str,
+    timeout: float = 1.0,
+) -> None:
+    """Assert a bounded client stream contains no matching lifecycle event."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            message = await asyncio.wait_for(websocket.recv(), timeout=max(0.05, deadline - time.monotonic()))
+        except asyncio.TimeoutError:
+            continue
+        except ConnectionClosed as error:
+            raise StackFailure(f'client disconnected while checking for suppressed {label}') from error
+        if not isinstance(message, str):
+            continue
+        with suppress(json.JSONDecodeError):
+            payload = json.loads(message)
+            if predicate(payload):
+                raise StackFailure(f'unexpected {label}: {payload!r}')
+
+
 async def _connect(stack: Stack, uid: str, session_id: str | None) -> tuple[Any, dict[str, Any]]:
     parameters: dict[str, Any] = {
         'language': 'en',
@@ -558,7 +737,10 @@ async def _connect(stack: Stack, uid: str, session_id: str | None) -> tuple[Any,
     params = urlencode(parameters)
     websocket = await websockets.connect(
         f'ws://127.0.0.1:{stack.backend_port}/v4/listen?{params}',
-        extra_headers={'Authorization': f'Bearer {ADMIN_KEY}{uid}'},
+        extra_headers={
+            'Authorization': f'Bearer {ADMIN_KEY}{uid}',
+            'X-App-Platform': 'desktop',
+        },
         max_size=10 * 1024 * 1024,
     )
     session = await _receive_until(
@@ -585,6 +767,28 @@ async def _record_audio(websocket: Any) -> None:
         lambda payload: isinstance(payload, list) and bool(payload) and payload[0].get('id') == 'stack-segment-1',
         label='streamed transcript',
     )
+
+
+async def _assert_live_stt_attempt_metrics(stack: Stack) -> None:
+    """Exercise the real listener/provider seam without exposing audio or transcript text."""
+
+    metrics = await stack.listener_metrics()
+    accepted = [line for line in metrics.splitlines() if line.startswith('omi_live_stt_accepted_total{')]
+    terminals = [line for line in metrics.splitlines() if line.startswith('omi_live_stt_terminal_total{')]
+    expected_labels = ('client_platform="desktop"', 'deployment_environment="offline"', 'provider="parakeet"')
+    if (
+        len(accepted) != 1
+        or not all(label in accepted[0] for label in expected_labels)
+        or not accepted[0].endswith(' 1.0')
+    ):
+        raise StackFailure(f'expected one bounded accepted live-STT attempt, observed {accepted!r}')
+    expected_terminal_labels = (*expected_labels, 'outcome="success"', 'phase="transcript_delivery"')
+    if (
+        len(terminals) != 1
+        or not all(label in terminals[0] for label in expected_terminal_labels)
+        or not terminals[0].endswith(' 1.0')
+    ):
+        raise StackFailure(f'expected one bounded successful live-STT terminal, observed {terminals!r}')
 
 
 async def _request_rest_finalization(
@@ -679,6 +883,7 @@ async def _normal_and_terminal_reconnect(stack: Stack) -> None:
         timeout=25.0,
     )
     await websocket.close(code=1000)
+    await _assert_live_stt_attempt_metrics(stack)
     job = _wait_for_job(stack, uid, session_id, 'completed')
     conversation = stack.conversation(uid, session_id)
     if not conversation or conversation.get('status') != 'completed' or not conversation.get('has_content'):
@@ -705,6 +910,123 @@ async def _normal_and_terminal_reconnect(stack: Stack) -> None:
     jobs = stack.jobs_for(uid, session_id)
     if len(jobs) != 1 or jobs[0].get('id') != job.get('id'):
         raise StackFailure('terminal reconnect changed the original durable finalization job')
+
+
+def _selected_fault_operation(stack: Stack) -> tuple[str, str]:
+    fault = stack.recording_lifecycle_fault
+    if fault is None:
+        raise StackFailure('recording lifecycle fault scenario requires an operation selector')
+    if fault['recording_session_id'] != fault['conversation_id'] or fault['phase'] != 'completed':
+        raise StackFailure('recording lifecycle fault scenario requires one completed native-session write')
+    return fault['uid'], fault['recording_session_id']
+
+
+def _is_matching_memory_created(payload: Any, *, conversation_id: str) -> bool:
+    return (
+        isinstance(payload, dict)
+        and payload.get('type') == 'memory_created'
+        and payload.get('conversation_id') == conversation_id
+    )
+
+
+async def _recording_lifecycle_fault_enforce(stack: Stack) -> None:
+    """Enforce fails closed, then a fault-free controller retry succeeds once."""
+    if stack.recording_session_mode != 'enforce':
+        raise StackFailure('enforce lifecycle fault scenario requires RECORDING_SESSION_MODE=enforce')
+    uid, conversation_id = _selected_fault_operation(stack)
+    stack.seed_user(uid)
+    websocket, _ = await _connect(stack, uid, conversation_id)
+    await _record_audio(websocket)
+    stack.age_conversation(uid, conversation_id)
+
+    _wait_until(
+        lambda: len(stack.recording_lifecycle_fault_events) == 1,
+        label='selected enforce lifecycle write failure',
+        timeout=25.0,
+    )
+    _wait_for_job(stack, uid, conversation_id, 'completed')
+    failed_state = stack.recording_session(uid, conversation_id)
+    if not failed_state or (
+        failed_state.get('lifecycle_phase'),
+        failed_state.get('lifecycle_sequence'),
+    ) != ('processing', 1):
+        raise StackFailure(f'enforce fault advanced durable lifecycle state: {failed_state!r}')
+    await _assert_no_event(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label='enforce memory_created before durable completion',
+    )
+
+    stack.release_recording_lifecycle_retry()
+    retry_event = await _receive_until(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label='fault-free enforce completion retry',
+    )
+    expected_envelope = {
+        'recording_session_id': conversation_id,
+        'conversation_id': conversation_id,
+        'lifecycle_version': 1,
+        'lifecycle_phase': 'completed',
+        'lifecycle_sequence': 2,
+    }
+    if {key: retry_event.get(key) for key in expected_envelope} != expected_envelope:
+        raise StackFailure(f'fault-free retry emitted the wrong durable envelope: {retry_event!r}')
+    accepted_state = stack.recording_session(uid, conversation_id)
+    if not accepted_state or (
+        accepted_state.get('lifecycle_phase'),
+        accepted_state.get('lifecycle_sequence'),
+    ) != ('completed', 2):
+        raise StackFailure(f'fault-free retry did not advance exactly one durable envelope: {accepted_state!r}')
+    if len(stack.recording_lifecycle_fault_events) != 1:
+        raise StackFailure('one-shot lifecycle fault fired more than once')
+    await _assert_no_event(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label='duplicate enforce memory_created after retry',
+        timeout=0.5,
+    )
+    await websocket.close(code=1000)
+
+
+async def _recording_lifecycle_fault_compatibility(stack: Stack) -> None:
+    """Migration modes retain only their unsequenced legacy compatibility event."""
+    if stack.recording_session_mode not in {'shadow', 'dual_write'}:
+        raise StackFailure('compatibility lifecycle fault scenario requires shadow or dual_write mode')
+    uid, conversation_id = _selected_fault_operation(stack)
+    stack.seed_user(uid)
+    websocket, _ = await _connect(stack, uid, conversation_id)
+    await _record_audio(websocket)
+    stack.age_conversation(uid, conversation_id)
+
+    event = await _receive_until(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label=f'{stack.recording_session_mode} legacy completion fallback',
+        timeout=25.0,
+    )
+    _wait_for_job(stack, uid, conversation_id, 'completed')
+    _wait_until(
+        lambda: len(stack.recording_lifecycle_fault_events) == 1,
+        label=f'selected {stack.recording_session_mode} lifecycle write failure',
+    )
+    if any(event.get(key) is not None for key in ('lifecycle_version', 'lifecycle_phase', 'lifecycle_sequence')):
+        raise StackFailure(
+            f'{stack.recording_session_mode} fault incorrectly claimed a sequenced durable envelope: {event!r}'
+        )
+    durable_state = stack.recording_session(uid, conversation_id)
+    if not durable_state or (
+        durable_state.get('lifecycle_phase'),
+        durable_state.get('lifecycle_sequence'),
+    ) != ('processing', 1):
+        raise StackFailure(f'{stack.recording_session_mode} fallback advanced durable lifecycle: {durable_state!r}')
+    await _assert_no_event(
+        websocket,
+        lambda payload: _is_matching_memory_created(payload, conversation_id=conversation_id),
+        label=f'duplicate {stack.recording_session_mode} legacy completion fallback',
+        timeout=0.5,
+    )
+    await websocket.close(code=1000)
 
 
 async def _inline_finalization_survives_source_close(stack: Stack) -> None:
@@ -955,7 +1277,7 @@ async def _rest_finalization_survives_listener_restart(stack: Stack) -> None:
     if (
         not process_events[0].get('persisted')
         or not process_events[0].get('force_process')
-        or not process_events[0].get('defer_memory_extraction')
+        or not process_events[0].get('defer_derived_effects')
     ):
         raise StackFailure('REST finalization lost its persisted processing and extraction policy')
     if len(_provider_events(stack, conversation_id, 'integration', 'completed')) != 1:
@@ -1020,7 +1342,11 @@ async def _shutdown_window_retries_through_cloud_tasks(stack: Stack) -> None:
         raise StackFailure(f'retry Cloud Tasks delivery did not complete: {(status_code, body)}')
     completed_job = _one_job(stack, uid, conversation_id)
     completed_conversation = stack.conversation(uid, conversation_id)
-    if completed_job.get('status') != 'completed' or completed_job.get('attempt_count') != 2:
+    if (
+        completed_job.get('status') != 'completed'
+        or completed_job.get('terminal_outcome') != 'success'
+        or completed_job.get('attempt_count') != 2
+    ):
         raise StackFailure('successful retry did not complete the exact durable job')
     if completed_job.get('fanout_status') != 'completed':
         raise StackFailure('successful retry did not complete durable fanout')
@@ -1055,6 +1381,7 @@ async def _terminal_cloud_tasks_failure_dead_letters(stack: Stack) -> None:
     conversation = stack.conversation(uid, conversation_id)
     if (
         dead_letter.get('status') != 'dead_letter'
+        or dead_letter.get('terminal_outcome') != 'failure'
         or dead_letter.get('attempt_count') != 2
         or dead_letter.get('task_retry_count') != 2
     ):
@@ -1120,6 +1447,211 @@ async def _integration_retry_preserves_processed_conversation(stack: Stack) -> N
         raise StackFailure('integration retry did not preserve one idempotency key across both delivery attempts')
 
 
+async def _stale_processing_orphan_reconciled(stack: Stack) -> None:
+    """#10461: a bare-`processing` row orphaned by a sync-route crash reaches one terminal.
+
+    Covers the revised authority/saturation contract: eligibility is bounded by
+    the server-owned admission fence (never caller-controlled created_at), legacy
+    rows migrate before they complete, deferred rows are excluded, a backlog of
+    excluded rows cannot starve a later eligible orphan, and every outcome is
+    reached through the lifecycle CAS alone — no durable job, worker, or fanout.
+    """
+    if stack.finalization_mode != 'cloud_tasks':
+        raise StackFailure('stale-processing orphan recovery requires the Cloud Tasks stack')
+
+    uid = 'stack-stale-orphan'
+    saturation_uid = 'stack-stale-saturation'
+    stack.seed_user(uid)
+    stack.seed_user(saturation_uid)
+
+    now = datetime.now(timezone.utc)
+    aged_id = 'stale-orphan-aged'
+    fresh_id = 'stale-orphan-fresh'
+    durable_id = 'stale-orphan-durable-job'
+    legacy_id = 'stale-orphan-legacy'
+    deferred_id = 'stale-orphan-deferred'
+
+    # Aged admission: admitted long enough ago that only a genuine crash could
+    # still be on `processing` with no durable job.
+    stack.seed_bare_processing_conversation(uid, aged_id, admitted_at=now - timedelta(seconds=1000))
+    # Fresh admission under the conservative threshold: must be left alone.
+    stack.seed_bare_processing_conversation(uid, fresh_id, admitted_at=now - timedelta(seconds=10))
+    # A durable job still owns this row: the orphan sweep must never double-finalize it.
+    stack.seed_bare_processing_conversation(
+        uid, durable_id, admitted_at=now - timedelta(seconds=1000), finalization_job_id='stale-orphan-durable-job-id'
+    )
+    # A legacy row predating the admission fence: must be migrated (stamped), never
+    # completed on first sight even though its caller-controlled created_at is ancient.
+    stack.seed_bare_processing_conversation(uid, legacy_id, admitted_at=now - timedelta(days=30), legacy=True)
+    # A desktop lazy row that intentionally lives on `processing`: must be excluded.
+    stack.seed_bare_processing_conversation(uid, deferred_id, admitted_at=now - timedelta(seconds=1000), deferred=True)
+    # Saturation: 120 excluded (deferred) rows ahead of one aged eligible orphan. The
+    # sweep must page past the excluded first page and still reach the orphan.
+    for i in range(120):
+        stack.seed_bare_processing_conversation(
+            saturation_uid, f'saturation-deferred-{i:03d}', admitted_at=now - timedelta(seconds=1000), deferred=True
+        )
+    saturation_orphan_id = 'saturation-orphan'
+    stack.seed_bare_processing_conversation(
+        saturation_uid, saturation_orphan_id, admitted_at=now - timedelta(seconds=1000)
+    )
+
+    # The startup drain re-runs on restart and is the deterministic reconciler trigger.
+    stack.restart_backend()
+
+    def completed(target_uid: str, target_id: str) -> Callable[[], bool]:
+        def check() -> bool:
+            conversation = stack.conversation(target_uid, target_id)
+            return bool(conversation and conversation.get('status') == 'completed')
+
+        return check
+
+    _wait_until(completed(uid, aged_id), label='aged orphan reconciled to completed', timeout=30.0)
+    _wait_until(
+        completed(saturation_uid, saturation_orphan_id),
+        label='saturation orphan reached past the excluded backlog',
+        timeout=30.0,
+    )
+
+    aged = stack.conversation(uid, aged_id)
+    if not aged or aged.get('status') != 'completed':
+        raise StackFailure('stale processing reconciler did not close the aged orphan')
+    # Exactly one terminal, reached through the lifecycle CAS alone — no durable
+    # job is created and no worker/enrichment runs (re-enrichment is a follow-up).
+    if stack.jobs_for(uid, aged_id):
+        raise StackFailure('stale processing reconciler created a durable job for the orphan')
+    if _provider_events(stack, aged_id, 'process', 'completed'):
+        raise StackFailure('stale processing reconciler invoked the durable finalization worker')
+    if _provider_events(stack, aged_id, 'integration', 'completed'):
+        raise StackFailure('stale processing reconciler duplicated an integration fanout')
+
+    # The conservative threshold is respected: a too-recent admission is left on `processing`.
+    fresh = stack.conversation(uid, fresh_id)
+    if not fresh or fresh.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler swept an admission under the conservative threshold')
+
+    # A durable job still owns its row: the orphan sweep never double-finalizes it.
+    durable = stack.conversation(uid, durable_id)
+    if not durable or durable.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler touched a durable-job-owned conversation')
+
+    # Deferred rows are excluded in every case — single and across the saturation backlog.
+    deferred = stack.conversation(uid, deferred_id)
+    if not deferred or deferred.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler swept a deferred desktop row')
+    leftover_deferred = stack.conversation(saturation_uid, 'saturation-deferred-000')
+    if not leftover_deferred or leftover_deferred.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler swept a backlog deferred row')
+
+    # The legacy row is migrated, not completed on first sight: it now carries the
+    # server-owned admission fence but is still on `processing`.
+    legacy = stack.conversation(uid, legacy_id)
+    if not legacy or legacy.get('status') != 'processing':
+        raise StackFailure('stale processing reconciler terminalized a legacy row on first sight')
+    if not legacy.get('processing_admitted_at'):
+        raise StackFailure('stale processing reconciler did not stamp the admission fence on the legacy row')
+
+    # The terminal conversation is retrievable through the public read path.
+    retrieved = await stack.conversation_via_api(uid, aged_id)
+    if retrieved.get('status') != 'completed' or retrieved.get('id') != aged_id:
+        raise StackFailure('GET /v1/conversations/{id} did not return the reconciled terminal conversation')
+
+    # The legacy row, once its stamped admission has aged, is recovered on a later
+    # sweep — proving the two-phase legacy path without waiting the real threshold.
+    stack.firestore.collection('users').document(uid).collection('conversations').document(legacy_id).update(
+        {'processing_admitted_at': datetime.now(timezone.utc) - timedelta(seconds=1000)}
+    )
+    stack.restart_backend()
+    _wait_until(completed(uid, legacy_id), label='legacy row recovered after its fence aged', timeout=30.0)
+    if _provider_events(stack, legacy_id, 'process', 'completed') or _provider_events(
+        stack, legacy_id, 'integration', 'completed'
+    ):
+        raise StackFailure('legacy row recovery produced a worker or integration fanout')
+
+    # Re-running the sweep is a no-op: completed orphans stay on their single terminal.
+    stack.restart_backend()
+    _wait_until(completed(uid, aged_id), label='aged orphan still completed after re-sweep', timeout=30.0)
+    if stack.conversation(uid, aged_id).get('status') != 'completed' or stack.jobs_for(uid, aged_id):
+        raise StackFailure('stale processing reconciler was not idempotent across sweeps')
+
+
+async def _stale_processing_orphan_reconciled_inline(stack: Stack) -> None:
+    """The orphan reconciler also runs without Cloud Tasks (inline deployments).
+
+    Proves the periodic/startup sweep is not gated on durable dispatch: an aged
+    orphan reaches one terminal, a fresh admission is left alone, a legacy row is
+    migrated, and a deferred row is excluded.
+    """
+    uid = 'stack-inline-stale-orphan'
+    stack.seed_user(uid)
+    now = datetime.now(timezone.utc)
+    aged_id = 'inline-aged'
+    fresh_id = 'inline-fresh'
+    legacy_id = 'inline-legacy'
+    deferred_id = 'inline-deferred'
+    stack.seed_bare_processing_conversation(uid, aged_id, admitted_at=now - timedelta(seconds=1000))
+    stack.seed_bare_processing_conversation(uid, fresh_id, admitted_at=now - timedelta(seconds=10))
+    stack.seed_bare_processing_conversation(uid, legacy_id, admitted_at=now - timedelta(days=30), legacy=True)
+    stack.seed_bare_processing_conversation(uid, deferred_id, admitted_at=now - timedelta(seconds=1000), deferred=True)
+
+    stack.restart_backend()
+
+    def aged_completed() -> bool:
+        conversation = stack.conversation(uid, aged_id)
+        return bool(conversation and conversation.get('status') == 'completed')
+
+    _wait_until(aged_completed, label='inline aged orphan reconciled to completed', timeout=30.0)
+
+    def legacy_migrated() -> bool:
+        row = stack.conversation(uid, legacy_id)
+        return bool(row and row.get('status') == 'processing' and row.get('processing_admitted_at'))
+
+    _wait_until(legacy_migrated, label='inline legacy row migrated with admission stamp', timeout=30.0)
+
+    if stack.conversation(uid, fresh_id).get('status') != 'processing':
+        raise StackFailure('inline reconciler swept a fresh admission')
+    legacy = stack.conversation(uid, legacy_id)
+    if legacy.get('status') != 'processing' or not legacy.get('processing_admitted_at'):
+        raise StackFailure('inline reconciler did not migrate the legacy row without completing it')
+    if stack.conversation(uid, deferred_id).get('status') != 'processing':
+        raise StackFailure('inline reconciler swept a deferred row')
+
+
+async def _orphaned_in_progress_recovers_at_session_boundary(stack: Stack) -> None:
+    """#9809: an aged in_progress row no session owns is recovered at the next
+    session boundary through the normal durable finalization path."""
+    if stack.finalization_mode != 'cloud_tasks':
+        raise StackFailure('orphan recovery scenario requires the Cloud Tasks stack')
+    uid = 'stack-cloud-orphan-recovery'
+    orphan_id = str(uuid.uuid4())
+    stack.seed_user(uid)
+    stack.seed_orphan_in_progress(uid, orphan_id, idle_seconds=7200)
+
+    # A real session opens; its process_pending pass (a finite task started at
+    # session begin, after its built-in 7s delay) must find the orphan. The
+    # session stays open while we wait — teardown cancels finite tasks.
+    websocket, _ = await _connect(stack, uid, None)
+
+    def orphan_job_enqueued() -> bool:
+        return bool(stack.jobs_for(uid, orphan_id))
+
+    _wait_until(orphan_job_enqueued, label='orphan durable finalization job admission', timeout=30.0)
+    await websocket.close(code=1000)
+    job = _one_job(stack, uid, orphan_id)
+    task = stack.wait_for_finalization_task(count=1, timeout=30.0)
+    _assert_opaque_task(task, job, stack)
+
+    delivery = await stack.deliver_finalization_task(task, retry_count=0)
+    if delivery != (200, {'status': 'done'}):
+        raise StackFailure(f'orphan finalization delivery did not complete: {delivery}')
+    recovered = stack.conversation(uid, orphan_id)
+    if not recovered or recovered.get('status') != 'completed' or not recovered.get('has_content'):
+        raise StackFailure('orphaned in_progress conversation was not recovered to completed with content')
+    completed_job = _one_job(stack, uid, orphan_id)
+    if completed_job.get('status') != 'completed':
+        raise StackFailure('orphan recovery did not complete its durable finalization job')
+
+
 async def run_inline_scenarios(stack: Stack) -> None:
     await _normal_and_terminal_reconnect(stack)
     await _empty_recording(stack)
@@ -1134,6 +1666,8 @@ def _run_stack_scenario(
     hold_inline_finalization: bool = False,
     rest_finalization_race_uid: str | None = None,
     rest_finalization_race_parties: int = 0,
+    recording_session_mode: str = 'dual_write',
+    recording_lifecycle_fault: dict[str, str] | None = None,
     scenario: Callable[[Stack], Any],
 ) -> None:
     stack = Stack(
@@ -1143,6 +1677,8 @@ def _run_stack_scenario(
         hold_inline_finalization=hold_inline_finalization,
         rest_finalization_race_uid=rest_finalization_race_uid,
         rest_finalization_race_parties=rest_finalization_race_parties,
+        recording_session_mode=recording_session_mode,
+        recording_lifecycle_fault=recording_lifecycle_fault,
     )
     try:
         stack.start()
@@ -1175,6 +1711,34 @@ def main() -> int:
             scenario=_inline_finalization_survives_source_close,
         )
         _run_stack_scenario(
+            state_dir / 'inline-stale-orphan',
+            finalization_mode='inline',
+            finalizer_failures=None,
+            scenario=_stale_processing_orphan_reconciled_inline,
+        )
+        for mode, uid, conversation_id in (
+            ('enforce', 'stack-lifecycle-enforce', '7bc7ca9b-570a-4b02-8ff9-66c1465beeba'),
+            ('shadow', 'stack-lifecycle-shadow', '55f1b279-c1e5-41bd-a999-b04f9329b976'),
+            ('dual_write', 'stack-lifecycle-dual-write', 'd847dff1-6c8b-46e6-a80c-dc60ece1e0e0'),
+        ):
+            _run_stack_scenario(
+                state_dir / f'lifecycle-fault-{mode.replace("_", "-")}',
+                finalization_mode='inline',
+                finalizer_failures=None,
+                recording_session_mode=mode,
+                recording_lifecycle_fault={
+                    'uid': uid,
+                    'recording_session_id': conversation_id,
+                    'conversation_id': conversation_id,
+                    'phase': 'completed',
+                },
+                scenario=(
+                    _recording_lifecycle_fault_enforce
+                    if mode == 'enforce'
+                    else _recording_lifecycle_fault_compatibility
+                ),
+            )
+        _run_stack_scenario(
             state_dir / 'cloud-rest-restart',
             finalization_mode='cloud_tasks',
             finalizer_failures=None,
@@ -1199,6 +1763,18 @@ def main() -> int:
             finalization_mode='cloud_tasks',
             finalizer_failures={'integration': 1},
             scenario=_integration_retry_preserves_processed_conversation,
+        )
+        _run_stack_scenario(
+            state_dir / 'cloud-stale-orphan',
+            finalization_mode='cloud_tasks',
+            finalizer_failures=None,
+            scenario=_stale_processing_orphan_reconciled,
+        )
+        _run_stack_scenario(
+            state_dir / 'cloud-orphan-recovery',
+            finalization_mode='cloud_tasks',
+            finalizer_failures=None,
+            scenario=_orphaned_in_progress_recovers_at_session_boundary,
         )
         print(f'listen-pusher stack gauntlet passed; evidence: {state_dir}')
         return 0

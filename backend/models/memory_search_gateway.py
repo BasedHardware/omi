@@ -99,7 +99,12 @@ def hydrate_and_filter_vector_hits(
                 )
             )
             continue
-        if hit.projection_commit_id != required_projection_commit_id:
+        authoritative_projection_commit_id = (
+            item.ledger_commit_id.strip()
+            if isinstance(item.ledger_commit_id, str) and item.ledger_commit_id.strip()
+            else required_projection_commit_id
+        )
+        if hit.projection_commit_id != authoritative_projection_commit_id:
             decisions[hit.memory_id] = SearchDecision.stale_projection
             repair_purge_candidates.append(
                 _repair_purge_candidate(
@@ -263,12 +268,19 @@ def _repair_purge_candidate(
     )
     if reason == VectorRepairPurgeReason.stale_projection_commit:
         decision = SearchDecision.stale_projection
+    authoritative_projection_commit_id = (
+        authoritative_item.ledger_commit_id.strip()
+        if authoritative_item is not None
+        and isinstance(authoritative_item.ledger_commit_id, str)
+        and authoritative_item.ledger_commit_id.strip()
+        else required_projection_commit_id
+    )
     return {
         "vector_id": hit.vector_id or hit.memory_id,
         "memory_id": hit.memory_id,
         "reason": reason.value,
         "decision": decision.value,
-        "required_projection_commit_id": required_projection_commit_id,
+        "required_projection_commit_id": authoritative_projection_commit_id,
         "observed_projection_commit_id": hit.projection_commit_id,
         "required_account_generation": required_account_generation,
         "observed_account_generation": hit.account_generation,

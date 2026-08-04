@@ -72,7 +72,12 @@ vi.mock('../lib/sync/conversationSync', () => ({
   syncLocalConversation: (row: unknown) => syncLocalConversation(row)
 }))
 
-import { startLiveMicSession, isLiveMicSessionActive } from './liveMicSession'
+import {
+  getLiveMicSessionHealth,
+  isLiveMicSessionActive,
+  startLiveMicSession,
+  waitForLiveMicSessionReady
+} from './liveMicSession'
 import { MAX_RECONNECT_ATTEMPTS } from './liveRescue'
 
 const insertLocalConversation = vi.fn(async (_row: unknown) => {})
@@ -191,10 +196,28 @@ describe('startLiveMicSession', () => {
   it('reports active while running and clears on stop (C6 defer signal)', async () => {
     const ctrl = startLiveMicSession()
     expect(isLiveMicSessionActive()).toBe(true)
+    expect(getLiveMicSessionHealth()).toBe('connecting')
     await vi.advanceTimersByTimeAsync(0)
+    const ready = waitForLiveMicSessionReady()
+    latest().cb.onBackend('omi')
+    await expect(ready).resolves.toBe(true)
+    expect(getLiveMicSessionHealth()).toBe('ready')
     ctrl.stop()
     expect(isLiveMicSessionActive()).toBe(false)
+    expect(getLiveMicSessionHealth()).toBe('inactive')
     ctrl.stop() // idempotent — must not drive the count negative
     expect(isLiveMicSessionActive()).toBe(false)
+  })
+
+  it('reports terminal startup failure to delegated meeting readiness', async () => {
+    const ctrl = startLiveMicSession()
+    await vi.advanceTimersByTimeAsync(0)
+    const ready = waitForLiveMicSessionReady()
+
+    latest().cb.onError(new Error('Omi transcription unavailable (not signed in)'))
+
+    await expect(ready).resolves.toBe(false)
+    expect(getLiveMicSessionHealth()).toBe('failed')
+    ctrl.stop()
   })
 })

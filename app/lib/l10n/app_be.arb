@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1 200 прэміум мін + неабмежавана на прыладзе",
+    "basicPlanDescription": "300 прэміум мін + неабмежавана на прыладзе",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Чакае сінхранізацыі",
     "syncStatusRetrying": "Не атрымалася апрацаваць — паўтор",
     "syncStatusFailed": "Памылка — націсніце «Паўтарыць»",
+    "syncStatusTooOld": "Занадта старое для сінхранізацыі — Omi не можа яго прыняць",
     "syncStatusFileUnavailable": "Файл недаступны",
     "syncStatusUploaded": "Запампавана · апрацоўка ў Omi",
     "noRecordingsYet": "Запісаў пакуль няма",

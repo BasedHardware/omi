@@ -1,5 +1,7 @@
 @preconcurrency import AVFoundation
 import AppKit
+@preconcurrency import ApplicationServices
+import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 @preconcurrency import UserNotifications
@@ -55,6 +57,13 @@ private final class CancellablePermissionContinuation<Value: Sendable>: @uncheck
 /// Tools: execute_sql (read/write SQL on omi.db), semantic_search (vector similarity)
 @MainActor
 class ChatToolExecutor {
+
+  struct CanonicalGoalCreationInput: Equatable {
+    let title: String
+    let desiredOutcome: String
+    let whyItMatters: String?
+    let successCriteria: [String]
+  }
 
   nonisolated static var currentOwnerAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? {
     ChatToolOwnerAuthorization.snapshot
@@ -132,7 +141,11 @@ class ChatToolExecutor {
     originatingChatMode: ChatMode? = nil,
     originatingClientScope: String? = nil,
     originatingSurfaceRef: AgentSurfaceReference? = nil,
+    originatingSessionID: String? = nil,
     originatingRunId: String? = nil,
+    originatingAttemptId: String? = nil,
+    toolCapabilityRef: String? = nil,
+    chatFirstControlGeneration: Int? = nil,
     originatingUserText: String? = nil,
     isOnboardingSurface: Bool = false,
     expectedOwnerID: String? = nil,
@@ -169,7 +182,12 @@ class ChatToolExecutor {
         originatingChatMode: originatingChatMode,
         originatingClientScope: originatingClientScope,
         originatingSurfaceRef: originatingSurfaceRef,
+        originatingSessionID: originatingSessionID,
         originatingRunId: originatingRunId,
+        originatingAttemptId: originatingAttemptId,
+        toolCapabilityRef: toolCapabilityRef,
+        chatFirstControlGeneration: chatFirstControlGeneration,
+        originatingUserText: originatingUserText,
         isOnboardingSurface: isOnboardingSurface,
         expectedOwnerID: pinnedOwnerID,
         backendAPIClient: backendAPIClient)
@@ -185,7 +203,12 @@ class ChatToolExecutor {
     originatingChatMode: ChatMode?,
     originatingClientScope: String?,
     originatingSurfaceRef: AgentSurfaceReference?,
+    originatingSessionID: String?,
     originatingRunId: String?,
+    originatingAttemptId: String?,
+    toolCapabilityRef: String?,
+    chatFirstControlGeneration: Int?,
+    originatingUserText: String?,
     isOnboardingSurface: Bool,
     expectedOwnerID: String?,
     backendAPIClient: APIClient
@@ -232,6 +255,57 @@ class ChatToolExecutor {
       return await executeDeleteTask(
         toolCall.arguments,
         expectedOwnerID: expectedOwnerID)
+
+    case .renderChatBlocks:
+      return await ChatFirstBlockToolExecutor.execute(
+        toolCall.arguments,
+        surface: originatingSurfaceRef,
+        sessionID: originatingSessionID,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
+        capabilityRef: toolCapabilityRef,
+        controlGeneration: chatFirstControlGeneration,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
+    case .getCanonicalGoals:
+      return await executeGetCanonicalGoals(
+        toolCall.arguments,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
+    case .createCanonicalGoal:
+      return await executeCreateCanonicalGoal(
+        toolCall.arguments,
+        controlGeneration: chatFirstControlGeneration,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
+    case .createMemory:
+      return await executeCreateMemory(
+        toolCall.arguments,
+        originatingUserText: originatingUserText,
+        originatingSurface: originatingSurfaceRef,
+        originatingClientScope: originatingClientScope,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot,
+        api: backendAPIClient)
+
+    case .showRewindEvidence:
+      return await executeShowRewindEvidence(
+        toolCall.arguments,
+        context: telemetryContext,
+        surface: originatingSurfaceRef,
+        sessionID: originatingSessionID,
+        runID: originatingRunId,
+        attemptID: originatingAttemptId,
+        capabilityRef: toolCapabilityRef,
+        controlGeneration: chatFirstControlGeneration,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
 
     // Onboarding tools
     case .requestPermission:
@@ -390,10 +464,79 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
-      if toolCall.name == "get_file_scan_results" || toolCall.name == "start_file_scan" {
-        return await executeScanFiles(toolCall.arguments, expectedOwnerID: expectedOwnerID)
-      }
       return "Unknown tool: \(toolCall.name)"
+    }
+  }
+
+  private static func executeGetCanonicalGoals(
+    _ arguments: [String: Any],
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    api: APIClient
+  ) async -> String {
+    guard let expectedOwnerID, let authorizationSnapshot else { return authorizedOwnerChangedResult() }
+    let includeEnded = (arguments["include_ended"] as? Bool) ?? false
+    do {
+      let goals = try await api.getCanonicalGoals(
+        includeEnded: includeEnded,
+        expectedOwnerId: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
+      let result = goals.prefix(20).map { goal -> [String: Any] in
+        var value: [String: Any] = [
+          "goal_id": goal.id,
+          "title": goal.title,
+          "status": goal.status.rawValue,
+        ]
+        if !goal.desiredOutcome.isEmpty { value["description"] = goal.desiredOutcome }
+        if let focusRank = goal.focusRank { value["focus_rank"] = focusRank }
+        return value
+      }
+      let data = try JSONSerialization.data(withJSONObject: ["goals": result])
+      return String(data: data, encoding: .utf8) ?? #"{"goals":[]}"#
+    } catch {
+      return #"{"ok":false,"error":"canonical_goals_unavailable"}"#
+    }
+  }
+
+  private static func executeCreateCanonicalGoal(
+    _ arguments: [String: Any],
+    controlGeneration: Int?,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
+    api: APIClient
+  ) async -> String {
+    guard let expectedOwnerID, let authorizationSnapshot, let controlGeneration else {
+      return #"{"ok":false,"error":"chat_first_capability_unavailable"}"#
+    }
+    guard let input = canonicalGoalCreationInput(arguments) else {
+      return #"{"ok":false,"error":"invalid_canonical_goal"}"#
+    }
+    do {
+      let goal = try await api.createCanonicalGoal(
+        title: input.title,
+        desiredOutcome: input.desiredOutcome,
+        whyItMatters: input.whyItMatters,
+        successCriteria: input.successCriteria,
+        accountGeneration: controlGeneration,
+        idempotencyKey: "chat-first-goal:\(UUID().uuidString.lowercased())"
+      )
+      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
+      let data = try JSONSerialization.data(
+        withJSONObject: [
+          "goal_id": goal.goalId,
+          "title": goal.title,
+          "status": goal.status.rawValue,
+        ]
+      )
+      return String(data: data, encoding: .utf8) ?? #"{"ok":false,"error":"canonical_goal_unavailable"}"#
+    } catch {
+      return #"{"ok":false,"error":"canonical_goal_unavailable"}"#
     }
   }
 
@@ -495,7 +638,7 @@ class ChatToolExecutor {
     toolName: String
   ) -> PhysicalExecutionPrecondition {
     switch toolName {
-    case "capture_screen", "get_screenshot":
+    case "capture_screen", "get_screenshot", "show_rewind_evidence":
       if isChatScreenshotSharingEnabled {
         return .satisfied
       }
@@ -625,6 +768,145 @@ class ChatToolExecutor {
       fullPath: capture.fullImageURL.path,
       tiles: capture.tiles.map { (label: $0.label, rect: $0.rect, path: $0.url.path) }
     )
+  }
+
+  private static func executeShowRewindEvidence(
+    _ arguments: [String: Any],
+    context: ScreenContextTelemetryContext,
+    surface: AgentSurfaceReference?,
+    sessionID: String?,
+    runID: String?,
+    attemptID: String?,
+    capabilityRef: String?,
+    controlGeneration: Int?,
+    expectedOwnerID: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async -> String {
+    guard
+      let expectedOwnerID,
+      let authorizationSnapshot,
+      let surface,
+      surface.surfaceKind == "main_chat",
+      let sessionID,
+      let runID,
+      let attemptID,
+      let capabilityRef,
+      let controlGeneration,
+      controlGeneration >= 0,
+      isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+    else { return authorizedOwnerChangedResult() }
+    let rawID = arguments["screenshot_id"]
+    let screenshotID: Int64?
+    if let value = rawID as? Int64 {
+      screenshotID = value
+    } else if let value = rawID as? Int {
+      screenshotID = Int64(value)
+    } else if let value = rawID as? Double, value.rounded() == value {
+      screenshotID = Int64(value)
+    } else if let value = rawID as? String {
+      screenshotID = Int64(value.trimmingCharacters(in: .whitespacesAndNewlines))
+    } else {
+      screenshotID = nil
+    }
+    guard let screenshotID, screenshotID >= 0 else {
+      return "Error: screenshot_id is required"
+    }
+
+    do {
+      guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID) else {
+        ScreenContextToolTelemetry.trackToolResult(
+          toolName: "show_rewind_evidence",
+          context: context,
+          ok: false,
+          failureCode: .imageUnavailable,
+          permissionTCCGranted: CGPreflightScreenCaptureAccess())
+        return "Error: Screenshot not found"
+      }
+      let data: Data
+      do {
+        data = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+      } catch {
+        try await RewindStorage.shared.initialize()
+        data = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+      }
+      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+        return authorizedOwnerChangedResult()
+      }
+      // Journal resources must survive cache eviction, and their paths must
+      // never alias across signed-in owners. Hashing the owner and attempt
+      // keeps raw account IDs out of the filesystem while preserving a stable
+      // snapshot for this exact producing turn.
+      let ownerDigest = SHA256.hash(data: Data(expectedOwnerID.utf8))
+        .prefix(12)
+        .map { String(format: "%02x", $0) }
+        .joined()
+      let evidenceDigest = SHA256.hash(
+        data: Data("\(attemptID)\u{0}\(screenshotID)".utf8)
+      )
+      .prefix(12)
+      .map { String(format: "%02x", $0) }
+      .joined()
+      let applicationSupport = try FileManager.default.url(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask,
+        appropriateFor: nil,
+        create: true
+      )
+      let evidenceRoot =
+        applicationSupport
+        .appendingPathComponent("Omi", isDirectory: true)
+        .appendingPathComponent("ChatEvidence", isDirectory: true)
+        .appendingPathComponent(ownerDigest, isDirectory: true)
+      try FileManager.default.createDirectory(
+        at: evidenceRoot,
+        withIntermediateDirectories: true,
+        attributes: [.posixPermissions: NSNumber(value: Int16(0o700))]
+      )
+      try FileManager.default.setAttributes(
+        [.posixPermissions: NSNumber(value: Int16(0o700))],
+        ofItemAtPath: evidenceRoot.path
+      )
+      let outputURL = evidenceRoot.appendingPathComponent("rewind-\(evidenceDigest).jpg")
+      try data.write(to: outputURL, options: .atomic)
+      try FileManager.default.setAttributes(
+        [.posixPermissions: NSNumber(value: Int16(0o600))],
+        ofItemAtPath: outputURL.path
+      )
+      let resource = ChatResource.localGeneratedFile(
+        id: "rewind-evidence:\(evidenceDigest)",
+        title: "Rewind evidence",
+        subtitle: "Screenshot evidence",
+        mimeType: "image/jpeg",
+        uri: outputURL.absoluteString
+      )
+      _ = try await AgentRuntimeProcess.shared.appendChatFirstEvidence(
+        clientId: "chat-first-rewind-evidence",
+        surface: surface,
+        ownerID: expectedOwnerID,
+        sessionID: sessionID,
+        runID: runID,
+        attemptID: attemptID,
+        capabilityRef: capabilityRef,
+        controlGeneration: controlGeneration,
+        resource: resource,
+        authorizationSnapshot: authorizationSnapshot
+      )
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "show_rewind_evidence",
+        context: context,
+        ok: true,
+        imageBytes: data.count,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess())
+      return #"{"ok":true,"evidence_attached":true}"#
+    } catch {
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "show_rewind_evidence",
+        context: context,
+        ok: false,
+        failureCode: .imageUnavailable,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess())
+      return "Error: Failed to load screenshot evidence"
+    }
   }
 
   /// Format the capture_screen tool result: the full-screen path first (the
@@ -1012,6 +1294,30 @@ class ChatToolExecutor {
       guard ownerIsCurrent(expectedOwnerID) else { return false }
     }
     return true
+  }
+
+  /// Backend tools that write the user's tasks to the server. Unlike the local
+  /// `execute_sql` write path (handled above), the `create_action_item` /
+  /// `update_action_item` backend tools had no post-write refresh — so an
+  /// agent-created task was persisted on the server but never pulled into the
+  /// local TasksStore, leaving it invisible in the task list until a manual
+  /// reload (while the "+" button, which writes through TasksStore, showed up
+  /// immediately). Returns false when the expected owner is no longer current.
+  static func backendToolWritesTasks(_ toolName: String) -> Bool {
+    toolName == "create_action_item" || toolName == "update_action_item"
+  }
+
+  static func executeBackendTaskWritePostEffects(
+    toolName: String,
+    expectedOwnerID: String?,
+    ownerIsCurrent: (String?) -> Bool = { isExpectedOwnerCurrent($0) },
+    refreshTasksFromServer: () async -> Void
+  ) async -> Bool {
+    guard backendToolWritesTasks(toolName) else { return true }
+    guard ownerIsCurrent(expectedOwnerID) else { return false }
+    log("Tool \(toolName): backend task write, refreshing TasksStore from server")
+    await refreshTasksFromServer()
+    return ownerIsCurrent(expectedOwnerID)
   }
 
   // MARK: - Local Status
@@ -1429,6 +1735,16 @@ class ChatToolExecutor {
   /// helper without hopping the actor.
   nonisolated static func rowInt(_ value: Any?) -> Int? {
     (value as? Int64).map(Int.init) ?? (value as? Int)
+  }
+
+  /// Resolve the action-item id from `update_action_item` args across surfaces.
+  /// Realtime-voice advertises the param as `id` (schemaOverride in
+  /// omi-tool-manifest.ts); chat/pi-mono/stdio advertise `action_item_id`.
+  /// Accept either so a voice update doesn't hard-fail on its own schema.
+  /// Returns nil for missing/empty/non-string, which the caller maps to an error.
+  nonisolated static func resolveActionItemID(_ args: [String: Any]) -> String? {
+    guard let id = (args["action_item_id"] ?? args["id"]) as? String, !id.isEmpty else { return nil }
+    return id
   }
 
   // MARK: - Task Search
@@ -2005,7 +2321,7 @@ class ChatToolExecutor {
         expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
     else { return }
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
     let granted = AXIsProcessTrustedWithOptions(options)
     if !granted {
       _ = openPermissionPrivacySettings(
@@ -2168,7 +2484,10 @@ class ChatToolExecutor {
     return outcome.summaryText
   }
 
-  static func scanLocalFiles(expectedOwnerID: String? = nil) async -> LocalFileScanOutcome {
+  static func scanLocalFiles(
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async -> LocalFileScanOutcome {
     func ownerChangedOutcome() -> LocalFileScanOutcome {
       LocalFileScanOutcome(
         hasReadableUserFileTarget: false,
@@ -2177,7 +2496,12 @@ class ChatToolExecutor {
         deniedUserFolders: [],
         summaryText: authorizedOwnerChangedResult())
     }
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+    func isAuthorized() -> Bool {
+      !Task.isCancelled
+        && isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+    }
+
+    guard isAuthorized() else { return ownerChangedOutcome() }
     let fm = FileManager.default
     let homeDir = fm.homeDirectoryForCurrentUser
     let scanTargets: [(label: String, pathForUser: String, url: URL, countsAsUserFileAccess: Bool)] = {
@@ -2224,7 +2548,7 @@ class ChatToolExecutor {
     var accessibleFolders: [URL] = []
     var readableUserFileTargetCount = 0
     for target in scanTargets {
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+      guard isAuthorized() else { return ownerChangedOutcome() }
       do {
         _ = try fm.contentsOfDirectory(
           at: target.url,
@@ -2251,9 +2575,17 @@ class ChatToolExecutor {
     }
 
     // Actually scan accessible folders (blocking)
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
-    let count = await FileIndexerService.shared.scanFolders(accessibleFolders)
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+    guard isAuthorized() else { return ownerChangedOutcome() }
+    let shouldContinue: @Sendable () -> Bool = {
+      !Task.isCancelled
+        && ChatToolExecutor.isExpectedOwnerCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+    }
+    let count = await FileIndexerService.shared.scanFolders(
+      accessibleFolders,
+      shouldContinue: shouldContinue)
+    guard isAuthorized() else { return ownerChangedOutcome() }
     log(
       "Onboarding file scan completed: \(count) files indexed, \(deniedFolders.count) folders denied"
     )
@@ -2263,7 +2595,7 @@ class ChatToolExecutor {
     var out: String
     do {
       out = try await getFileScanResultsFromDB(expectedOwnerID: expectedOwnerID)
-      guard isExpectedOwnerCurrent(expectedOwnerID) else { return ownerChangedOutcome() }
+      guard isAuthorized() else { return ownerChangedOutcome() }
     } catch {
       didCompleteSuccessfully = false
       out = "Error: \(error.localizedDescription)"
@@ -2798,10 +3130,20 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        guard
+          await executeBackendTaskWritePostEffects(
+            toolName: "create_action_item",
+            expectedOwnerID: expectedOwnerID,
+            refreshTasksFromServer: {
+              await TasksStore.shared.refreshDashboardTasksFromServer(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+            })
+        else { return authorizedOwnerChangedResult() }
         return resp.resultText
 
       case "update_action_item":
-        guard let itemId = args["action_item_id"] as? String, !itemId.isEmpty else {
+        guard let itemId = resolveActionItemID(args) else {
           return "Error: action_item_id is required"
         }
         var validatedUpdateDueAt: String? = nil
@@ -2818,6 +3160,16 @@ class ChatToolExecutor {
           expectedOwnerId: expectedOwnerID,
           authorizationSnapshot: currentOwnerAuthorizationSnapshot
         )
+        guard
+          await executeBackendTaskWritePostEffects(
+            toolName: "update_action_item",
+            expectedOwnerID: expectedOwnerID,
+            refreshTasksFromServer: {
+              await TasksStore.shared.refreshDashboardTasksFromServer(
+                expectedOwnerID: expectedOwnerID,
+                authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+            })
+        else { return authorizedOwnerChangedResult() }
         return resp.resultText
 
       case "create_calendar_event":

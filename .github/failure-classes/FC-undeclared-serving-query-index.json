@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-undeclared-serving-query-index",
+  "violated_contract": "A serving Firestore query's required composite index must be declared in the repository index registry; an index that exists only as a hand-created live index (or not at all) leaves the query failing closed with FailedPrecondition in production.",
+  "canonical_prevention": "Derive the required index signature from the production query builder itself in a behavioral test \u2014 record the equality filters and orderings the real read path builds, and assert the generated manifest declares the matching composite \u2014 so a new equality/ordering combination cannot ship without its index.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_firestore_query_contract.py"
+  ],
+  "evidence_prs": [
+    10778,
+    10781
+  ],
+  "scope_hints": [
+    "backend/database/**",
+    "firestore.indexes.json"
+  ],
+  "status": "open"
+}

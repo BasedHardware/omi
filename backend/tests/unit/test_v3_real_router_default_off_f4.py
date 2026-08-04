@@ -212,9 +212,9 @@ def test_production_default_dependency_is_disabled_and_preserves_legacy_get_beha
     assert client.get("/v3/memories?limit=17&offset=3").status_code == 200
 
     assert counters.legacy_calls == [
-        {"uid": "secret-uid-123", "limit": 5000, "offset": 0},
-        {"uid": "secret-uid-123", "limit": 5000, "offset": 0},
-        {"uid": "secret-uid-123", "limit": 5000, "offset": 0},
+        {"uid": "secret-uid-123", "limit": 100, "offset": 0},
+        {"uid": "secret-uid-123", "limit": 17, "offset": 0},
+        {"uid": "secret-uid-123", "limit": 17, "offset": 0},
         {"uid": "secret-uid-123", "limit": 17, "offset": 3},
     ]
     assert module.get_v3_get_runtime().enabled is False
@@ -233,7 +233,7 @@ def test_test_enabled_non_enrolled_legacy_primary_calls_legacy_once_and_projecti
     response = client.get("/v3/memories?limit=22&offset=0")
 
     assert response.status_code == 200
-    assert counters.legacy_calls == [{"uid": "secret-uid-123", "limit": 5000, "offset": 0}]
+    assert counters.legacy_calls == [{"uid": "secret-uid-123", "limit": 22, "offset": 0}]
     assert runtime.service.calls == []
     assert counters.projection_calls == 0
 

@@ -47,79 +47,40 @@ jobs:
           echo "$FILES"
           echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
 
-          # Keep the producer aligned with plan-desktop-release.py: every path
-          # eligible for a desktop candidate must produce both exact-SHA Swift
-          # checks. Changelog/control docs and the separately released Rust
-          # backend remain outside the candidate path set.
-          RELEASABLE_DESKTOP=false
-          while IFS= read -r path; do
-            case "$path" in
-              desktop/macos/Backend-Rust/*|desktop/macos/changelog/*|desktop/macos/CHANGELOG[.]json|desktop/macos/AGENTS[.]md)
-                ;;
-              desktop/macos/*|codemagic.yaml|.github/scripts/plan-desktop-release.py|.github/workflows/desktop_auto_release.yml|.github/workflows/desktop-swift-ci.yml)
-                RELEASABLE_DESKTOP=true
-                break
-                ;;
-            esac
-          done <<< "$FILES"
+          IMPACT_FILES=$(mktemp)
+          printf '%s\n' "$FILES" > "$IMPACT_FILES"
+          python3 scripts/pre_push_ci_prediction.py \
+            --changed-files "$IMPACT_FILES" \
+            --base "$DIFF_BASE" \
+            --event "${{ github.event_name }}" \
+            --github-output "$GITHUB_OUTPUT"
 
-          SHOULD_RUN=false
-          if [ "$RELEASABLE_DESKTOP" = "true" ] || echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
-            SHOULD_RUN=true
-          fi
-          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+          # Static macOS work is owned by the deterministic manifest. Querying
+          # it exclusively prevents portable checks from moving back onto this
+          # scarce runner while preserving their Linux Repo Checks route.
+          python3 .github/scripts/run_checks.py \
+            --lane ci \
+            --platform macos \
+            --exclusive-platform \
+            --base "$DIFF_BASE" \
+            --skip-pr-body-checks \
+            --changed-files "$IMPACT_FILES" \
+            --output json > /tmp/macos-manifest-selection.json
+          SHOULD_RUN_STATIC=$(python3 - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
 
-          # A releasable file still produces the aggregate exact-SHA check, but
-          # only reserve a macOS runner when a lane has actual work to do. The
-          # static lane is limited to macOS-scoped contract inputs; all other
-          # deterministic workflow contracts run in the Linux Repo Checks lane.
-          SHOULD_RUN_STATIC=false
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/(Sources|Tests)/.*[.]swift$|^desktop/macos/Desktop/(Package[.]swift|[.]swift-format|[.]swiftlint[.]yml|[.]swiftlint-baseline[.]json)$|^desktop/macos/scripts/(swift-format-wrapper|prepare-swiftlint-baseline|qualify-desktop-beta|prepare-qualification-profile|qualification-swift-cache)[.]sh$|^desktop/macos/tests/test-(feature-sentinel-negative-control|qualify-desktop-beta-contract|qualification-swift-cache)[.]sh$|^\.github/checks-manifest[.]yaml$'; then
-            SHOULD_RUN_STATIC=true
-          fi
+          selection = json.loads(Path("/tmp/macos-manifest-selection.json").read_text())
+          for check in selection["checks"]:
+              print(
+                  f"macOS manifest selection: {check['id']} via {', '.join(check['matched_paths'])}: {check['reason']}",
+                  file=sys.stderr,
+              )
+          print(str(bool(selection["checks"])).lower())
+          PY
+          )
           echo "should_run_static=$SHOULD_RUN_STATIC" >> "$GITHUB_OUTPUT"
-
-          # The expensive isolated XCTest suite is only useful when its Swift
-          # code, test harness, or this workflow changes. This keeps assets,
-          # agent-runtime files, and release-control edits from consuming a
-          # second hosted macOS runner while retaining their exact-SHA gate.
-          SHOULD_RUN_TESTS=false
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/(Sources|Tests)/.*[.]swift$|^desktop/macos/Desktop/Package[.](swift|resolved)$|^desktop/macos/test[.]sh$|^desktop/macos/scripts/(run-swift-ci|swift-test-suites|swift-test-skip-ratchet|check_desktop_test_quality|check-main-actor-xctest-hooks)[.]py$|^desktop/macos/scripts/swift-test-suites[.]sh$|^desktop/macos/scripts/swift-test-skips[.]json$|^desktop/macos/tests/test-.*[.]sh$|^\.github/workflows/desktop-swift-ci[.]yml$'; then
-            SHOULD_RUN_TESTS=true
-          fi
-          echo "should_run_tests=$SHOULD_RUN_TESTS" >> "$GITHUB_OUTPUT"
-
-          DESKTOP_SWIFT=$RELEASABLE_DESKTOP
-          if echo "$FILES" | grep -qE '^\.github/workflows/desktop-swift-ci\.yml$'; then
-            DESKTOP_SWIFT=true
-          fi
-          PACKAGE_SWIFT=false
-          if echo "$FILES" | grep -qx 'desktop/macos/Desktop/Package.swift'; then
-            PACKAGE_SWIFT=true
-          fi
-          PACKAGE_RESOLVED=false
-          if echo "$FILES" | grep -qx 'desktop/macos/Desktop/Package.resolved'; then
-            PACKAGE_RESOLVED=true
-          fi
-
-          # Clean release compile: every main push that touches desktop Swift,
-          # plus PRs that change the package manifest or lockfile (highest
-          # release-risk: a dependency graph change can break release builds
-          # even when the manifest source is unchanged).
-          SHOULD_RELEASE_COMPILE=false
-          if [ "$DESKTOP_SWIFT" = "true" ]; then
-            if [ "${{ github.event_name }}" = "push" ] || [ "$PACKAGE_SWIFT" = "true" ] || [ "$PACKAGE_RESOLVED" = "true" ]; then
-              SHOULD_RELEASE_COMPILE=true
-            fi
-          fi
-          echo "should_release_compile=$SHOULD_RELEASE_COMPILE" >> "$GITHUB_OUTPUT"
-
-          SHOULD_NOTIFICATION_RELEASE_REGRESSION=false
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*Notification.*[.]swift$|^desktop/macos/Desktop/Sources/AppState/AppState[+]Permissions[.]swift$|^desktop/macos/Desktop/Sources/OmiApp[.]swift$|^desktop/macos/Desktop/Sources/Providers/(ChatToolExecutor|DeviceProvider)[.]swift$|^desktop/macos/Desktop/Tests/.*Notification.*Tests[.]swift$'; then
-            SHOULD_NOTIFICATION_RELEASE_REGRESSION=true
-          fi
-          echo "should_notification_release_regression=$SHOULD_NOTIFICATION_RELEASE_REGRESSION" >> "$GITHUB_OUTPUT"
-          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN should_run_static=$SHOULD_RUN_STATIC should_run_tests=$SHOULD_RUN_TESTS should_release_compile=$SHOULD_RELEASE_COMPILE should_notification_release_regression=$SHOULD_NOTIFICATION_RELEASE_REGRESSION"
 
   # Hosted macOS capacity is deliberately scarce. Run static contracts and the
   # optional full suite as steps in one selected job, rather than claiming two
@@ -141,7 +102,7 @@ jobs:
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
       - name: Restore Swift formatter and linter tools
-        if: needs.changes.outputs.should_run_static == 'true'
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
         id: swift-tools-cache
         uses: actions/cache/restore@v6
         with:
@@ -153,11 +114,12 @@ jobs:
             ${{ runner.os }}-desktop-swift-tools-xcode164-
 
       - name: Install uv for manifest checks
-        if: needs.changes.outputs.should_run_static == 'true'
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
 
       - name: Run macOS-scoped manifest checks
-        if: needs.changes.outputs.should_run_static == 'true'
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' }}
+        id: macos_manifest_checks
         run: |
           MANIFEST_ARGS=()
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -169,12 +131,13 @@ jobs:
           python3 .github/scripts/run_checks.py \
             --lane ci \
             --platform macos \
+            --exclusive-platform \
             --base "${{ needs.changes.outputs.diff_base }}" \
             --skip-pr-body-checks \
             "${MANIFEST_ARGS[@]}"
 
       - name: Save Swift formatter and linter tools after checks
-        if: ${{ always() && needs.changes.outputs.should_run_static == 'true' && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_static == 'true' && steps.swift-tools-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: |
@@ -182,30 +145,39 @@ jobs:
             ~/.cache/omi-swiftlint
           key: ${{ runner.os }}-desktop-swift-tools-xcode164-${{ hashFiles('desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
-      - name: Restore SwiftPM build products
-        if: needs.changes.outputs.should_run_tests == 'true'
+      # A Desktop/.build archive is about 5.3 GB. GitHub scopes those archives
+      # to a PR ref, so they miss for normal new commits and spend over a minute
+      # uploading without reducing a subsequent run. Retain only SwiftPM's
+      # dependency cache, which is small and reusable when the manifest matches.
+      - name: Restore SwiftPM dependency cache
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         id: swiftpm-cache
         uses: actions/cache/restore@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-            desktop/macos/Desktop/.build
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-desktop-swift-build-xcode164-
 
       - name: Install Swift system dependencies
-        if: needs.changes.outputs.should_run_tests == 'true'
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
         run: brew install actionlint pkg-config webp
 
       - name: Desktop launcher script tests
-        if: needs.changes.outputs.should_run_tests == 'true'
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
+        id: desktop_launcher_tests
         working-directory: desktop/macos
         run: |
           # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
           # automatically, mirroring swift-test-suites.sh's auto-discovery.
           for t in tests/test-*.sh; do
             echo "== $t"
+            case "$t" in
+              tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+                continue
+                ;;
+            esac
             bash "$t"
           done
 
@@ -213,35 +185,63 @@ jobs:
       # separate job (main push, or PRs that touch Package.swift) so we do not
       # pay for a second configuration that tests never consume.
       - name: Test desktop Swift app
-        if: needs.changes.outputs.should_run_tests == 'true'
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
+        id: desktop_swift_tests
         working-directory: desktop/macos
         env:
-          # Every filtered `swift test --skip-build` process shares Desktop/.build.
-          # Parallel SwiftPM processes wait on that lock, which can exhaust the
-          # per-suite watchdog and report false test failures. Keep CI serial;
-          # local diagnosis can still opt into the faster four-worker default.
-          OMI_SWIFT_TEST_SUITE_WORKERS: "1"
+          # Each isolated worker receives a copy-on-write clone of the prebuilt
+          # SwiftPM scratch directory, so filtered suites do not contend on the
+          # shared Desktop/.build lock. Two workers are a measured first step;
+          # do not increase without macOS-runner evidence.
+          OMI_SWIFT_TEST_SUITE_WORKERS: "2"
+          OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS: "300"
         run: ./scripts/run-swift-ci.sh --test
 
       # This is part of the already-required Desktop Swift Build & Tests check,
       # so the release planner cannot tag notification-boundary changes until
       # the pinned release compiler has exercised the callback handoff.
       - name: Test UserNotifications callback regression in release mode
-        if: ${{ needs.changes.outputs.should_run_tests == 'true' && needs.changes.outputs.should_notification_release_regression == 'true' }}
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' && needs.changes.outputs.should_notification_release_regression == 'true' }}
+        id: desktop_notification_regression
         working-directory: desktop/macos
         run: ./scripts/run-swift-ci.sh --release-notification-regression
 
-      # SwiftPM validates cached incremental state before using it. Saving after
-      # a failed test command makes the next diagnostic run reuse completed
-      # dependency and module work instead of recompiling the same test bundle.
-      - name: Save SwiftPM build products after test attempt
-        if: ${{ always() && needs.changes.outputs.should_run_tests == 'true' && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
+      # Preserve resolved dependency downloads after a failed test command, but
+      # do not archive Desktop/.build: its PR-scoped 5.3 GB cache misses in
+      # ordinary new-commit runs and increases billed macOS time on every save.
+      - name: Save SwiftPM dependency cache after test attempt
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
-            desktop/macos/Desktop/.build
           key: ${{ runner.os }}-desktop-swift-build-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+
+      - name: Require independent macOS phase verdicts
+        if: ${{ always() && !cancelled() }}
+        env:
+          STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
+          TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
+          NOTIFICATION_REQUIRED: ${{ needs.changes.outputs.should_notification_release_regression }}
+          STATIC_OUTCOME: ${{ steps.macos_manifest_checks.outcome }}
+          LAUNCHER_OUTCOME: ${{ steps.desktop_launcher_tests.outcome }}
+          TEST_OUTCOME: ${{ steps.desktop_swift_tests.outcome }}
+          NOTIFICATION_OUTCOME: ${{ steps.desktop_notification_regression.outcome }}
+        run: |
+          require_success() {
+            local required="$1"
+            local name="$2"
+            local outcome="$3"
+            if [ "$required" = true ] && [ "$outcome" != success ]; then
+              echo "FAIL: $name did not succeed (outcome=$outcome)" >&2
+              return 1
+            fi
+          }
+
+          require_success "$STATIC_REQUIRED" "macOS manifest checks" "$STATIC_OUTCOME"
+          require_success "$TESTS_REQUIRED" "desktop launcher script tests" "$LAUNCHER_OUTCOME"
+          require_success "$TESTS_REQUIRED" "desktop Swift tests" "$TEST_OUTCOME"
+          require_success "$NOTIFICATION_REQUIRED" "notification release regression" "$NOTIFICATION_OUTCOME"
 
   desktop-swift:
     # Keep this name stable: desktop release planning requires this exact

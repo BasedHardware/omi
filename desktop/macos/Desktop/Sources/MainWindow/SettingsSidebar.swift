@@ -256,6 +256,11 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["floating bar", "ask omi", "show bar"], section: .floatingBar, icon: "sparkles",
       settingId: "floatingbar.show"),
     SettingsSearchItem(
+      name: "Notification Previews",
+      subtitle: "Show assistant notifications under the Floating Bar",
+      keywords: ["notification preview", "floating bar notification", "mute preview", "focus", "dnd"],
+      section: .floatingBar, icon: "sparkles", settingId: "floatingbar.notificationpreviews"),
+    SettingsSearchItem(
       name: "Background Style", subtitle: "Toggle between solid and transparent background",
       keywords: ["background", "solid", "transparent", "blur"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.background"),
@@ -319,6 +324,12 @@ struct SettingsSearchItem: Identifiable {
   ]
 }
 
+enum SettingsSidebarMetrics {
+  static let expandedWidth: CGFloat = 260
+  static let horizontalInset: CGFloat = OmiSpacing.sm
+  static let itemAvailableWidth = expandedWidth - 2 * horizontalInset
+}
+
 /// Settings sidebar that replaces the main sidebar when in settings
 struct SettingsSidebar: View {
   @Binding var selectedSection: SettingsContentView.SettingsSection
@@ -329,7 +340,6 @@ struct SettingsSidebar: View {
   @State private var searchQuery = ""
   @FocusState private var isSearchFocused: Bool
 
-  private let expandedWidth: CGFloat = 260
   private let iconWidth: CGFloat = 20
   // Merged nav: `.account` hosts Account & Plan (renders `.planUsage` content
   // too) and `.notifications` hosts Notifications & Privacy (renders `.privacy`
@@ -411,7 +421,7 @@ struct SettingsSidebar: View {
 
       Spacer()
     }
-    .frame(width: expandedWidth)
+    .frame(width: SettingsSidebarMetrics.expandedWidth)
     .background(OmiColors.backgroundPrimary)
   }
 
@@ -548,6 +558,9 @@ struct SettingsSidebarItem: View {
             Text(section.displayTitle)
               .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+              .lineLimit(1)
+              .truncationMode(.tail)
+              .layoutPriority(1)
 
             Spacer()
           }

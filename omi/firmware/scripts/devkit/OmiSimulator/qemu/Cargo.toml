@@ -1,0 +1,13 @@
+[package]
+name = "omi-firmware-qemu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+cortex-m-semihosting = "0.5"
+omi-firmware-core = { path = "../firmware-core" }
+panic-semihosting = "0.6"

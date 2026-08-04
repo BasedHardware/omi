@@ -10,7 +10,7 @@ USER_PROFILE="${1:-alice}"
 
 PYTHON_BIN="$(dev_harness_python)"
 
-PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'PY' "$USER_PROFILE"
+PYTHONPATH="$(dev_harness_pythonpath "$PYTHON_BIN" scripts/dev-harness)" "$PYTHON_BIN" - <<'PY' "$USER_PROFILE"
 from __future__ import annotations
 
 import os

@@ -1467,7 +1467,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get payYourSttProvider => 'Слободно користите omi. Плаћате само добављачу STT директно.';
 
   @override
-  String get freeMinutesMonth => '1.200 слободних минута/месец укључено. Неограничено са ';
+  String get freeMinutesMonth => '300 слободних минута/месец укључено. Неограничено са ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4714,7 +4714,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Нема конфигурисаног специфичног приступа подаците.';
 
   @override
-  String get basicPlanDescription => '1.200 премиум минута + без ограничења на уређају';
+  String get basicPlanDescription => '300 премиум минута + без ограничења на уређају';
 
   @override
   String get minutes => 'минута';
@@ -6004,7 +6004,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.';
+      '300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.';
 
   @override
   String get viewUsage => 'Погледајте утрошак';
@@ -6086,7 +6086,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ';
+      '300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9785,4 +9785,7 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Повезивање са тим микрофоном није успело. Проверите да ли је повезан у подешавањима iPhone-а.';
+
+  @override
+  String get syncStatusTooOld => 'Превише стара за синхронизацију — Omi не може да је прихвати';
 }

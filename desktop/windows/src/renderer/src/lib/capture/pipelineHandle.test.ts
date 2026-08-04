@@ -13,7 +13,7 @@ describe('makePipelineHandle', () => {
     const pipeStop = vi.fn()
     const { stream, stops } = fakeStream()
     const handle = makePipelineHandle(stream, Promise.resolve({ stop: pipeStop }))
-    await Promise.resolve() // let the setup .then run
+    await expect(handle.ready).resolves.toEqual({ ok: true })
     handle.stop()
     expect(pipeStop).toHaveBeenCalledOnce()
     for (const s of stops) expect(s).toHaveBeenCalledOnce()
@@ -31,15 +31,16 @@ describe('makePipelineHandle', () => {
     expect(pipeStop).not.toHaveBeenCalled() // nothing to tear down yet
 
     resolveSetup({ stop: pipeStop })
-    await Promise.resolve()
+    await expect(handle.ready).resolves.toEqual({ ok: true })
     expect(pipeStop).toHaveBeenCalledOnce() // late pipeline torn down on arrival
   })
 
-  it('still releases the mic when setup rejects (pipeline failed to start)', async () => {
+  it('reports setup failure and still releases the mic when stopped', async () => {
     const { stream, stops } = fakeStream()
     const handle = makePipelineHandle(stream, Promise.reject(new Error('addModule failed')))
-    await Promise.resolve()
-    await Promise.resolve()
+    const result = await handle.ready
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.message).toBe('addModule failed')
     handle.stop()
     expect(stops[0]).toHaveBeenCalledOnce()
   })
@@ -48,7 +49,7 @@ describe('makePipelineHandle', () => {
     const pipeStop = vi.fn()
     const { stream, stops } = fakeStream()
     const handle = makePipelineHandle(stream, Promise.resolve({ stop: pipeStop }))
-    await Promise.resolve()
+    await handle.ready
     handle.stop()
     handle.stop()
     expect(pipeStop).toHaveBeenCalledOnce()

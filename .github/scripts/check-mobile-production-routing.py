@@ -18,7 +18,15 @@ WORKFLOWS = (
 DESKTOP_WORKFLOW = "omi-desktop-swift-release"
 PIN = "https://api.omi.me/"
 DESKTOP_PIN = "https://api.omi.me"
-DESKTOP_RUST_PIN = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
+DESKTOP_BACKEND_PIN = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
+RETIRED_GKE_DESKTOP_BACKEND_CHART_ROOTS = (
+    "backend/charts",
+    "desktop/macos/charts",
+)
+RETIRED_GKE_DESKTOP_BACKEND_WORKFLOW_ROOT = ".github/workflows"
+RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES = {".tpl", ".yaml", ".yml"}
+RETIRED_GKE_DESKTOP_BACKEND_MARKERS = ("desktop-api.omi.me", "desktop-backend")
+GKE_WORKFLOW_MARKERS = ("gcloud container clusters", "helm ", "kubectl ")
 LEGACY_BETA_ROUTING_PATHS = (
     "codemagic.yaml",
     "app/lib/env/dev_env.dart",
@@ -57,9 +65,38 @@ def _workflow_block(text: str, workflow: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _retired_gke_desktop_backend_manifests(root: Path) -> list[Path]:
+    retired_manifests = []
+    for chart_root in RETIRED_GKE_DESKTOP_BACKEND_CHART_ROOTS:
+        manifests_root = root / chart_root
+        if not manifests_root.is_dir():
+            continue
+        for manifest in manifests_root.rglob("*"):
+            if not manifest.is_file() or manifest.suffix not in RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES:
+                continue
+            source = manifest.read_text(encoding="utf-8")
+            if any(marker in source for marker in RETIRED_GKE_DESKTOP_BACKEND_MARKERS):
+                retired_manifests.append(manifest.relative_to(root))
+
+    workflow_root = root / RETIRED_GKE_DESKTOP_BACKEND_WORKFLOW_ROOT
+    if workflow_root.is_dir():
+        for workflow in workflow_root.glob("*.y*ml"):
+            source = workflow.read_text(encoding="utf-8")
+            if (
+                any(marker in source for marker in RETIRED_GKE_DESKTOP_BACKEND_MARKERS)
+                and any(marker in source for marker in GKE_WORKFLOW_MARKERS)
+            ):
+                retired_manifests.append(workflow.relative_to(root))
+    return retired_manifests
+
+
 def validate(root: Path) -> list[str]:
     text = (root / "codemagic.yaml").read_text(encoding="utf-8")
     errors: list[str] = []
+    for manifest in _retired_gke_desktop_backend_manifests(root):
+        errors.append(
+            f"{manifest} declares retired GKE desktop-backend ownership; production desktop-backend is Cloud Run"
+        )
     for workflow in WORKFLOWS:
         block = _workflow_block(text, workflow)
         assignments = re.findall(r"(?m)^\s*echo API_BASE_URL=([^\s]+) >> \.env\s*$", block or "")
@@ -81,10 +118,10 @@ def validate(root: Path) -> list[str]:
         errors.append(
             f"{DESKTOP_WORKFLOW} must contain exactly one immutable OMI_PYTHON_API_URL=https://api.omi.me assignment"
         )
-    desktop_rust_assignments = re.findall(
+    desktop_backend_assignments = re.findall(
         r"(?m)^\s*OMI_DESKTOP_API_URL:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or ""
     )
-    if desktop_rust_assignments != [DESKTOP_RUST_PIN]:
+    if desktop_backend_assignments != [DESKTOP_BACKEND_PIN]:
         errors.append(
             f"{DESKTOP_WORKFLOW} must contain exactly one immutable "
             "OMI_DESKTOP_API_URL=https://desktop-backend-hhibjajaja-uc.a.run.app/ assignment"

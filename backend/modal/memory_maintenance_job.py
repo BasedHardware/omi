@@ -2,7 +2,8 @@
 
 Concurrency: Cloud Run Jobs default to max-retries / single-execution semantics per
 execution ID. Overlapping Scheduler + manual runs are still possible; maintenance
-ops are designed to be idempotent (TTL/consolidation/promotion + watermarks), and
+ops are designed to be idempotent (required normalization, TTL, total L2 routing,
+and leased projection-outbox delivery), and
 operators should prefer ``gcloud run jobs execute ... --wait`` before asserting
 state. A distributed lease can be added later if overlap becomes observable.
 """
@@ -42,12 +43,14 @@ def _init_firebase() -> None:
 def main() -> None:
     _init_firebase()
     logger.info("Starting memory-maintenance-job...")
-    asyncio.run(
+    summary = asyncio.run(
         run_canonical_short_term_maintenance_cron(
             recurrence_signal_persister=persist_recurrence_signals_for_maintenance,
             recurrence_signal_consumer=drain_recurrence_inbox_for_maintenance,
         )
     )
+    if summary.errors:
+        raise RuntimeError(f"memory-maintenance-job completed with {len(summary.errors)} error(s)")
 
 
 if __name__ == "__main__":

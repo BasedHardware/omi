@@ -78,7 +78,7 @@ final class ConnectorImportOperationsTests: XCTestCase {
 
   func testMemoryLogNoDurableMemoriesGuidesPasteFix() {
     let outcome = ConnectorImportOperations.memoryLogOutcome(.noDurableMemories, source: .chatgpt)
-    guard case .failure(let message) = outcome else {
+    guard case .failure(let message, failureClass: _) = outcome else {
       return XCTFail("expected failure, got \(outcome)")
     }
     XCTAssertEqual(
@@ -89,7 +89,7 @@ final class ConnectorImportOperationsTests: XCTestCase {
 
   func testMemoryLogFailedGuidesRetry() {
     let outcome = ConnectorImportOperations.memoryLogOutcome(.failed, source: .claude)
-    guard case .failure(let message) = outcome else {
+    guard case .failure(let message, failureClass: _) = outcome else {
       return XCTFail("expected failure, got \(outcome)")
     }
     XCTAssertEqual(message, "The import couldn't run. Try again.")

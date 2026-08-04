@@ -46,7 +46,7 @@ function checkResultMessage(r: UpdateCheckResult): string {
     case 'up-to-date':
       return `You're on the latest version (${r.version ?? 'current'}).`
     case 'update-available':
-      return `Update available${r.version ? ` (version ${r.version})` : ''} — it will install the next time you restart Omi.`
+      return `Update available${r.version ? ` (version ${r.version})` : ''} — downloading in the background. Omi will offer to restart once it's ready.`
     case 'error':
       return `Couldn't check for updates${r.message ? `: ${r.message}` : '.'}`
     default:
@@ -82,13 +82,27 @@ export function AboutTab(): React.JSX.Element {
     setCheckMsg(null)
     try {
       const res = await window.omi?.checkForUpdates?.()
-      if (res) {
-        setCheckMsg(checkResultMessage(res))
-        if (res.status === 'update-available' && res.version) setPending(res.version)
-      }
+      // Only report the result here. `update-available` means a newer version
+      // exists in the feed, NOT that it is downloaded — promoting it to the
+      // "Update ready / Restart to update" affordance made the button quit the
+      // app with nothing staged, so it reopened on the same version (#10509).
+      // The staged state comes from main alone (getPendingUpdate/onUpdateReady).
+      if (res) setCheckMsg(checkResultMessage(res))
     } finally {
       setChecking(false)
     }
+  }
+
+  // Install the staged update and relaunch on the new version. Quitting alone
+  // relies on install-on-quit, which never brings the app back up. If main says
+  // nothing is staged, keep the app open and say so rather than quitting.
+  const restartToUpdate = async (): Promise<void> => {
+    const installing = await window.omi?.installUpdateNow?.().catch(() => false)
+    if (installing) return
+    setPending(null)
+    setCheckMsg(
+      'That update is no longer staged. Omi will offer to restart once it downloads again.'
+    )
   }
 
   // Opt in/out of pre-release (beta) builds. The pref is persisted in main and the
@@ -194,7 +208,7 @@ export function AboutTab(): React.JSX.Element {
           control={
             <button
               type="button"
-              onClick={() => window.omi?.quitApp?.()}
+              onClick={() => void restartToUpdate()}
               className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black transition-opacity hover:opacity-90"
             >
               Restart to update

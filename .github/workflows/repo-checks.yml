@@ -12,7 +12,13 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: repo-checks-${{ github.event.pull_request.number || github.ref }}
+  # Metadata events (edited/labeled/unlabeled) and code events (push/synchronize)
+  # run disjoint job sets: `metadata-preflight` for the former, `changes`/`hygiene`
+  # for the latter. Sharing one cancel-in-progress group let a PR-title/body edit
+  # cancel an in-flight code run it shares no work with, and cancelled jobs render
+  # as red "fail" checks on the PR — flaky red with no code cause. Key the group by
+  # lane so newer-cancels-older still holds within each lane, but never across them.
+  group: repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action) && 'metadata' || 'code' }}
   cancel-in-progress: true
 
 jobs:
@@ -50,8 +56,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          # The PR event payload's base-branch SHA field is frozen at whatever PR
+          # event last delivered it; a metadata-only edited/labeled/unlabeled event
+          # days later can carry a value main has long since moved past. actions/checkout
+          # already fetched origin/${{ github.base_ref }} live (fetch-depth: 0
+          # above), so diff against that instead of the stale payload field.
           scripts/pr-preflight \
-            --base "${{ github.event.pull_request.base.sha }}" \
+            --base "origin/${{ github.base_ref }}" \
             --repository "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}"
 
@@ -110,15 +121,6 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
-      - name: Test package architecture map guardrail
-        run: python3 .github/scripts/test_check_package_architecture_maps.py
-
-      - name: Test product invariant PR-body checker
-        run: python3 .github/scripts/test_check_product_invariants.py
-
-      - name: Test PR preflight contracts
-        run: python3 .github/scripts/test_pr_preflight.py
-
       - name: Run shared PR contract preflight
         if: github.event_name == 'pull_request'
         env:
@@ -134,17 +136,8 @@ jobs:
         if: github.event_name != 'pull_request'
         run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
 
-      - name: Test brand UI ratchet helper
-        run: python3 .github/scripts/test_check_brand_ui.py
-
       - name: Check typed error flow-control ratchet
         run: python3 .github/scripts/check_isinstance_return_ratchet.py
-
-      - name: Test lifecycle header checker
-        run: python3 .github/scripts/test_check_lifecycle_headers.py
-
-      - name: Test version-prefixed filename lint
-        run: python3 .github/scripts/test_check_version_prefixed_filenames.py
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
@@ -158,13 +151,8 @@ jobs:
       - name: Test desktop qualification metadata writer
         run: python3 desktop/macos/scripts/release-keyvalue.py self-test
 
-      - name: Test automatic desktop beta candidate gate
-        run: python3 .github/scripts/test_check_desktop_auto_beta_candidate.py
-
       - name: Check release process guards
-        run: |
-          pip install -q pyyaml
-          python3 .github/scripts/check-release-process-guards.py
+        run: bash scripts/run-release-process-guards.sh
 
       - name: Check GitHub Actions workflows
         if: needs.changes.outputs.has_workflows == 'true'
@@ -196,6 +184,8 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Keep formatter output reproducible across runner images and local hooks.
+          flutter-version: 3.44.5
           cache: true
 
       - name: Resolve Flutter dependencies for formatting
@@ -208,7 +198,7 @@ jobs:
         run: |
           FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
+            echo "$FILES" | xargs "$FLUTTER_ROOT/bin/cache/dart-sdk/bin/dart" format --line-length 120 --set-exit-if-changed --output=none
           fi
 
       - name: Check Python formatting

@@ -24,7 +24,11 @@
 // conversation, via either the continuous session or this meeting's mic lane), so
 // saving mic lines here too would duplicate it.
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
-import { isLiveMicSessionActive } from './liveMicSession'
+import {
+  getLiveMicSessionHealth,
+  onLiveMicSessionHealth,
+  waitForLiveMicSessionReady
+} from './liveMicSession'
 import type { ListenSource, TranscriptLine } from '../../../shared/types'
 
 export type MeetingSessionHandle = {
@@ -45,10 +49,24 @@ export function formatMeetingTranscript(system: TranscriptLine[]): string {
 export async function startMeetingSession(args: {
   appName: string
   onError: (message: string) => void
+  signal?: AbortSignal
 }): Promise<MeetingSessionHandle> {
   const startedAt = Date.now()
   const systemLines: TranscriptLine[] = []
-  let stopped = false
+  let stopped = args.signal?.aborted ?? false
+  const startingHandles = new Set<TranscriptionHandle>()
+
+  const stopStartingHandles = (): void => {
+    stopped = true
+    for (const handle of startingHandles) {
+      try {
+        handle.stop()
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  args.signal?.addEventListener('abort', stopStartingHandles, { once: true })
 
   // Both lanes ride the normal capture path: startTranscription opens the
   // main-process listen WS and issues the audio-start command that
@@ -72,49 +90,68 @@ export async function startMeetingSession(args: {
           if (!stopped) args.onError(`${source}: ${e.message}`)
         }
       },
-      mode
-    )
+      mode,
+      undefined,
+      args.signal
+    ).then((handle) => {
+      if (stopped) {
+        handle.stop()
+        const error = new Error('Meeting capture startup cancelled')
+        error.name = 'AbortError'
+        throw error
+      }
+      startingHandles.add(handle)
+      return handle
+    })
 
   // The remote/system side is always captured. The mic lane is opened here only
   // if no continuous mic session already owns the mic (C6) — otherwise we'd open a
   // second, racing /v4/listen for the same audio.
-  const lanes: { source: ListenSource; mode: 'conversation' | 'transcribe' }[] = [
-    { source: 'system', mode: 'transcribe' }
-  ]
-  if (!isLiveMicSessionActive()) lanes.push({ source: 'mic', mode: 'conversation' })
+  const starts: Promise<TranscriptionHandle | null>[] = [startLane('system', 'transcribe')]
+  const liveMicHealth = getLiveMicSessionHealth()
+  const delegatedMic = liveMicHealth === 'connecting' || liveMicHealth === 'ready'
+  if (liveMicHealth === 'connecting') {
+    starts.push(
+      waitForLiveMicSessionReady(args.signal).then((ready) => {
+        if (!ready) throw new Error('continuous microphone transcription did not become ready')
+        return null
+      })
+    )
+  } else if (liveMicHealth !== 'ready') {
+    starts.push(startLane('mic', 'conversation'))
+  }
 
   // allSettled (not all): if one lane fails to start, the sibling lane has
   // ALREADY opened its WS + acquired its stream — Promise.all's reject would
   // strand that resolved handle with no reference (a hot mic with no way to
   // stop it). Collect every fulfilled handle so a failure can tear them ALL
   // down before rethrowing.
-  const results = await Promise.allSettled(lanes.map((l) => startLane(l.source, l.mode)))
-  const handles = results
-    .filter((r): r is PromiseFulfilledResult<TranscriptionHandle> => r.status === 'fulfilled')
-    .map((r) => r.value)
+  const results = await Promise.allSettled(starts)
   const failed = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined
   if (failed) {
-    for (const h of handles) {
-      try {
-        h.stop()
-      } catch {
-        /* ignore */
-      }
-    }
+    stopStartingHandles()
+    args.signal?.removeEventListener('abort', stopStartingHandles)
     throw failed.reason
   }
+  if (delegatedMic && getLiveMicSessionHealth() !== 'ready') {
+    stopStartingHandles()
+    args.signal?.removeEventListener('abort', stopStartingHandles)
+    throw new Error('continuous microphone transcription did not remain ready')
+  }
+  args.signal?.removeEventListener('abort', stopStartingHandles)
+  const offLiveMicHealth = delegatedMic
+    ? onLiveMicSessionHealth((health) => {
+        if (!stopped && health !== 'ready') {
+          args.onError('microphone: continuous transcription stopped')
+        }
+      })
+    : () => {}
 
   return {
     stop: async (): Promise<void> => {
       if (stopped) return
-      stopped = true
-      for (const h of handles) {
-        try {
-          h.stop()
-        } catch {
-          /* ignore */
-        }
-      }
+      stopStartingHandles()
+      offLiveMicHealth()
       const transcript = formatMeetingTranscript(systemLines)
       // Nothing on the system lane worth saving (mic already went to the
       // backend's own conversation pipeline) — skip the empty row.

@@ -22,6 +22,8 @@ from typing import Any, Optional
 
 import tomli_w
 
+from omi_cli._secure_file import open_owner_only
+
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover — exercised only on 3.10
@@ -176,12 +178,9 @@ def load(path: Optional[Path] = None) -> Config:
 def save(config: Config) -> None:
     """Persist the config to disk with secure (owner-only) permissions.
 
-    The temp file is **created** with mode ``0o600`` via :func:`os.open`, not
-    chmodded after the fact — this closes a TOCTOU window where another local
-    user could read bearer credentials between file creation (default umask,
-    typically ``0o644``) and the chmod call. We also temporarily clamp the
-    process umask to ``0o077`` so any platform that ANDs the requested mode
-    against the umask still ends up with owner-only perms.
+    The temp file is created with owner-only access before any credential is
+    written. POSIX uses mode ``0o600``; Windows uses a protected owner-rights
+    DACL supplied directly to ``CreateFileW``.
     """
     config.path.parent.mkdir(parents=True, exist_ok=True)
     # Tighten parent dir perms too — credentials live underneath. Best-effort:
@@ -197,16 +196,16 @@ def save(config: Config) -> None:
     }
 
     tmp_path = config.path.with_suffix(config.path.suffix + ".tmp")
-    # Belt-and-suspenders: clamp umask AND pass an explicit 0o600 mode to os.open.
+    # Clamp the umask for POSIX. The Windows helper applies an equivalent DACL.
     old_umask = os.umask(0o077)
     try:
         # O_EXCL guards against following an attacker-planted symlink at this path.
         try:
-            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            fd = open_owner_only(tmp_path)
         except FileExistsError:
             # Stale temp from a previous interrupted save — remove and retry once.
             os.unlink(tmp_path)
-            fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            fd = open_owner_only(tmp_path)
         try:
             with os.fdopen(fd, "wb") as fh:
                 tomli_w.dump(payload, fh)

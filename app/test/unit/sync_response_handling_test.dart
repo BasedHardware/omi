@@ -78,10 +78,7 @@ void main() {
     });
 
     test('handles missing optional fields gracefully', () {
-      final json = {
-        'new_memories': [],
-        'updated_memories': [],
-      };
+      final json = {'new_memories': [], 'updated_memories': []};
 
       final response = SyncLocalFilesResponse.fromJson(json);
       expect(response.failedSegments, 0);

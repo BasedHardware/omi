@@ -10,7 +10,7 @@ from typing import Any, Optional, List, Dict, Literal, Tuple
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import RedirectResponse, Response, HTMLResponse
+from fastapi.responses import Response, HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from database.desktop_previews import delist_preview, get_current_preview, get_preview_manifest, publish_preview
@@ -58,6 +58,15 @@ class DesktopUpdatePolicyResponse(BaseModel):
     platforms: Optional[List[str]] = Field(
         default=None, description='Platforms this policy applies to (empty/None = all).'
     )
+
+
+class DesktopWindowsUpdateFeedResponse(BaseModel):
+    """Platform-scoped electron-updater feed selected by the backend."""
+
+    requested_channel: Literal["beta", "stable"]
+    served_channel: Literal["beta", "stable"]
+    version: str
+    feed_url: str
 
 
 class ClearCacheResponse(BaseModel):
@@ -355,6 +364,17 @@ def _get_windows_installer_download_url(release: Dict) -> Optional[str]:
     return None
 
 
+def _get_windows_update_feed_url(release: Dict) -> Optional[str]:
+    """Return the immutable GitHub directory containing one Windows latest.yml."""
+    tag_name = release.get("tag_name", "")
+    version_info = _parse_desktop_version(tag_name)
+    if not version_info or not tag_name.lower().endswith("-windows"):
+        return None
+    if not any(asset.get("name") == "latest.yml" for asset in release.get("assets", [])):
+        return None
+    return f"https://github.com/BasedHardware/omi/releases/download/{tag_name}/"
+
+
 def _get_installer_download_url(release: Dict, platform: str) -> Optional[str]:
     """Resolve the manual-download installer asset for one platform."""
     if platform == "windows":
@@ -572,6 +592,17 @@ def _pick_installer_entry(desktop_releases: List[Dict], platform: str, channel: 
         installer_url = _get_installer_download_url(entry["release"], platform)
         if installer_url:
             return entry, installer_url
+    return None
+
+
+def _pick_windows_update_feed_entry(entries: List[Dict], channel: str) -> Optional[Tuple[Dict, str]]:
+    """Pick the newest release in one channel that carries updater metadata."""
+    for entry in entries:
+        if entry["channel"] != channel:
+            continue
+        feed_url = _get_windows_update_feed_url(entry["release"])
+        if feed_url:
+            return entry, feed_url
     return None
 
 
@@ -950,6 +981,53 @@ async def download_beta_desktop_release(
     side-by-side Omi Beta identity once a live beta release ships it.
     """
     return await download_latest_desktop_release(platform=platform, channel="beta", identity="beta")
+
+
+@router.get(
+    "/v2/desktop/update-feed/windows",
+    response_model=DesktopWindowsUpdateFeedResponse,
+)
+async def get_windows_desktop_update_feed(
+    response: Response,
+    channel: str = Query(default="stable", pattern="^(beta|stable)$"),
+):
+    """Resolve one immutable, platform-scoped electron-updater feed.
+
+    The GitHub provider's repository-wide ``/releases/latest`` endpoint can
+    select a macOS release in this multi-platform repository. Windows clients
+    use this endpoint first, then point the generic provider at the selected
+    release directory. Stable never falls through to beta. Beta may fall back
+    to stable while the prerelease slot is empty after a promotion.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    desktop_releases = await _get_live_desktop_releases("windows")
+    picked = _pick_windows_update_feed_entry(desktop_releases, channel)
+    served_channel = channel
+    if picked is None and channel == "beta":
+        picked = _pick_windows_update_feed_entry(desktop_releases, "stable")
+        if picked is not None:
+            served_channel = "stable"
+            record_fallback(
+                component="other",
+                from_mode="desktop_windows_update_feed_beta",
+                to_mode="desktop_windows_update_feed_stable",
+                reason="other",
+                outcome="recovered",
+                log=logger,
+            )
+    if picked is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No Windows update feed found for channel: {channel}",
+            headers={"Cache-Control": "no-store"},
+        )
+    entry, feed_url = picked
+    return {
+        "requested_channel": channel,
+        "served_channel": served_channel,
+        "version": entry["version_info"]["version"],
+        "feed_url": feed_url,
+    }
 
 
 @router.get("/v2/desktop/download/windows")

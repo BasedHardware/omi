@@ -17,6 +17,7 @@ struct OnboardingVoiceShortcutStepView: View {
   @State private var showContinue = false
   @State private var isRecordingCustomShortcut = false
   @State private var captureError: String?
+  @State private var pendingModifierOnlyShortcut: ShortcutSettings.KeyboardShortcut?
   @State private var localKeyMonitor: Any?
   @State private var globalKeyMonitor: Any?
 
@@ -46,39 +47,45 @@ struct OnboardingVoiceShortcutStepView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, OmiSpacing.xl)
 
-      Spacer()
+      OnboardingContentWithPinnedActions {
+        VStack(spacing: OmiSpacing.xxl) {
+          Text("Let's set \"Audio ask a question\" shortcut.\nPress and hold to test. Does the button light up?")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundColor(OmiColors.textPrimary)
+            .multilineTextAlignment(.center)
 
-      VStack(spacing: OmiSpacing.xxl) {
-        Text("Let's set \"Audio ask a question\" shortcut.\nPress and hold to test. Does the button light up?")
-          .font(.system(size: 22, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
-          .multilineTextAlignment(.center)
-
-        RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
-          .frame(height: 128)
-          .frame(maxWidth: 420)
-          .overlay {
-            shortcutKeyPreview
-          }
-
-        VStack(spacing: OmiSpacing.md) {
-          Text("Try another shortcut if it doesn't react:")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(OmiColors.textSecondary)
-
-          HStack(spacing: OmiSpacing.sm) {
-            ForEach(ShortcutSettings.pttPresets, id: \.self) { shortcut in
-              shortcutChoiceButton(shortcut)
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+            .frame(height: 128)
+            .frame(maxWidth: 420)
+            .overlay {
+              shortcutKeyPreview
             }
-            customShortcutButton
+
+          VStack(spacing: OmiSpacing.md) {
+            Text("Try another shortcut if it doesn't react:")
+              .font(.system(size: 14, weight: .medium))
+              .foregroundColor(OmiColors.textSecondary)
+
+            LazyVGrid(
+              columns: [GridItem(.adaptive(minimum: 92), spacing: OmiSpacing.sm)],
+              alignment: .center,
+              spacing: OmiSpacing.sm
+            ) {
+              ForEach(ShortcutSettings.pttPresets, id: \.self) { shortcut in
+                shortcutChoiceButton(shortcut)
+              }
+              customShortcutButton
+            }
+
+            if isRecordingCustomShortcut || shortcutSettings.pttUsesCustomShortcut || captureError != nil {
+              customShortcutRecorder
+            }
           }
 
-          if isRecordingCustomShortcut || shortcutSettings.pttUsesCustomShortcut || captureError != nil {
-            customShortcutRecorder
-          }
         }
-
+        .frame(maxWidth: 420)
+      } actions: {
         HStack(spacing: OmiSpacing.md) {
           OnboardingBackButton()
 
@@ -99,9 +106,8 @@ struct OnboardingVoiceShortcutStepView: View {
             .transition(.move(edge: .trailing).combined(with: .opacity))
           }
         }
+        .frame(maxWidth: 420)
       }
-
-      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(OmiColors.backgroundPrimary)
@@ -109,7 +115,7 @@ struct OnboardingVoiceShortcutStepView: View {
       FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
       FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
       resetFloatingBarConversation()
-      FloatingControlBarManager.shared.hide()
+      FloatingControlBarManager.shared.hideForOnboardingDemo()
       PushToTalkManager.shared.cleanup()
       installKeyMonitor()
     }
@@ -240,7 +246,7 @@ struct OnboardingVoiceShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.pttShortcut == shortcut && !shortcutSettings.pttUsesCustomShortcut
     return Button {
-      shortcutSettings.pttShortcut = shortcut
+      Self.selectPreset(shortcut, settings: shortcutSettings)
       isRecordingCustomShortcut = false
       captureError = nil
       resetDetectionState()
@@ -262,9 +268,14 @@ struct OnboardingVoiceShortcutStepView: View {
     .buttonStyle(.plain)
   }
 
+  static func selectPreset(_ shortcut: ShortcutSettings.KeyboardShortcut, settings: ShortcutSettings) {
+    settings.pttShortcut = shortcut
+  }
+
   private func beginCustomShortcutCapture() {
     isRecordingCustomShortcut = true
     captureError = nil
+    pendingModifierOnlyShortcut = nil
     resetDetectionState()
   }
 
@@ -317,6 +328,7 @@ struct OnboardingVoiceShortcutStepView: View {
       NSApp.mainMenu = menu
       Self.savedMenu = nil
     }
+    pendingModifierOnlyShortcut = nil
   }
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
@@ -344,14 +356,27 @@ struct OnboardingVoiceShortcutStepView: View {
   }
 
   private func captureCustomShortcut(from event: NSEvent) -> Bool {
-    guard let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(event, allowModifierOnly: true) else {
-      if event.type == .flagsChanged, event.modifierFlags.intersection(.deviceIndependentFlagsMask).isEmpty {
-        return false
+    if event.type == .flagsChanged {
+      let activeModifiers = ShortcutSettings.KeyboardShortcut.normalizedModifiers(event.modifierFlags)
+      if activeModifiers.isEmpty {
+        guard let shortcut = pendingModifierOnlyShortcut else { return true }
+        shortcutSettings.pttShortcut = shortcut
+        isRecordingCustomShortcut = false
+        captureError = nil
+        return true
       }
+      pendingModifierOnlyShortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+        event,
+        allowModifierOnly: true
+      )
+      return true
+    }
+    guard let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(event, allowModifierOnly: true) else {
       captureError = "Press the key combination you want to use."
       return false
     }
 
+    pendingModifierOnlyShortcut = nil
     shortcutSettings.pttShortcut = shortcut
     isRecordingCustomShortcut = false
     captureError = nil

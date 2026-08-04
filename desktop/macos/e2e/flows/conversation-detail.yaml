@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/LiveTranscriptView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TranscriptDetailView.swift
@@ -39,16 +40,14 @@ steps:
       name: open_latest_conversation
       params:
         showTranscript: "true"
-        settleMs: "500"
     expect:
       ok: true
+      result.detail.detail_open: "true"
 
   - id: S4
     name: Conversation detail snapshot
     bridge.action:
       name: conversation_detail_snapshot
-      params:
-        settleMs: "500"
     expect:
       result.detail.detail_open: "true"
       result.detail.transcript_drawer_open: "true"

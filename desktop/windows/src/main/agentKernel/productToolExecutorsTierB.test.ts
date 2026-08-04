@@ -143,7 +143,7 @@ describe('get_memories', () => {
     const req = call.mock.calls[0][0]
     expect(req.method).toBe('GET')
     expect(req.path).toBe('/v1/tools/memories')
-    expect(req.query!.limit).toBe(5000) // clamped to max
+    expect(req.query!.limit).toBe(500) // clamped to max
     expect(req.query!.offset).toBe(3)
   })
 

@@ -24,7 +24,7 @@ class TestDeleteAllConversationRecordings:
         with patch.object(storage_mod, "memories_recordings_bucket", None), patch.object(
             storage_mod, "_get_storage_client"
         ) as get_client:
-            storage_mod.delete_all_conversation_recordings("uid1")
+            assert storage_mod.delete_all_conversation_recordings("uid1") == 0
         get_client.assert_not_called()
 
     def test_configured_bucket_purges_the_uid_prefix(self):
@@ -36,7 +36,7 @@ class TestDeleteAllConversationRecordings:
         with patch.object(storage_mod, "memories_recordings_bucket", "memories-recordings"), patch.object(
             storage_mod, "_get_storage_client", return_value=client
         ):
-            storage_mod.delete_all_conversation_recordings("uid1")
+            assert storage_mod.delete_all_conversation_recordings("uid1") == 1
         client.bucket.assert_called_once_with("memories-recordings")
         bucket.list_blobs.assert_called_once_with(prefix="uid1/")
         blob.delete.assert_called_once()

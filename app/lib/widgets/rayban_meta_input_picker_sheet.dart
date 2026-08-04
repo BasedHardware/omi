@@ -9,7 +9,6 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 typedef BluetoothHfpInputLoader = Future<List<BluetoothHfpInput>> Function();
@@ -108,7 +107,6 @@ class _RayBanMetaInputPickerSheetState extends State<RayBanMetaInputPickerSheet>
       await deviceProvider.setConnectedDevice(connection.device);
       deviceProvider.setIsConnected(true);
       preferences.deviceName = connection.device.name;
-      PlatformManager.instance.analytics.deviceConnected();
     } catch (_) {
       await preferences.btDeviceSet(previousDevice);
       rethrow;

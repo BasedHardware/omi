@@ -31,6 +31,10 @@ def _write_credentials_file(raw_credentials: str) -> None:
     except json.JSONDecodeError as exc:
         raise RuntimeError('Google service account credentials are not valid JSON') from exc
 
+    fchmod = getattr(os, 'fchmod', None)
+    if not callable(fchmod):
+        raise RuntimeError('Google service account credentials require owner-only file permissions')
+
     RUNTIME_GOOGLE_CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_path = tempfile.mkstemp(
         dir=RUNTIME_GOOGLE_CREDENTIALS_PATH.parent,
@@ -38,7 +42,7 @@ def _write_credentials_file(raw_credentials: str) -> None:
         text=True,
     )
     try:
-        os.fchmod(fd, 0o600)
+        fchmod(fd, 0o600)
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
             fd = -1
             json.dump(service_account_info, handle)

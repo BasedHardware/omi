@@ -7,6 +7,7 @@ import SwiftUI
 struct ChatBubble: View {
   let message: ChatMessage
   let app: OmiApp?
+  let showsOmiMark: Bool
   let onRate: (Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
   var isDuplicate: Bool = false
@@ -16,8 +17,10 @@ struct ChatBubble: View {
   var onCancelTurn: (() -> Void)? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
+  /// only the capability-gated main shell is allowed to turn them into controls.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
 
-  @State private var isTimestampHovering = false
   @State private var isRowHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
@@ -30,39 +33,50 @@ struct ChatBubble: View {
   @FocusState private var isMetadataControlFocused: Bool
 
   init(
-    message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
+    message: ChatMessage, app: OmiApp?, showsOmiMark: Bool, onRate: @escaping (Int?) -> Void,
     onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
-    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
+    chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   ) {
     self.message = message
     self.app = app
+    self.showsOmiMark = showsOmiMark
     self.onRate = onRate
     self.onCitationTap = onCitationTap
     self.isDuplicate = isDuplicate
     self.onCancelTurn = onCancelTurn
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
+    self.chatFirstRichBlockContext = chatFirstRichBlockContext
     _lastSubmittedRating = State(initialValue: message.rating)
   }
 
   /// Messages longer than this are truncated with a "Show more" button
-  private static let truncationThreshold = 500
+  private static let truncationThreshold = ChatBubbleTruncation.threshold
+
+  /// Readable width shared by the bubble and its metadata row. Keeping this
+  /// explicit lets the metadata row expand to the message column even when
+  /// the Markdown body has only a few words.
+  private static let messageColumnMaxWidth: CGFloat = 640
 
   /// Whether this message should be truncated
   private var shouldTruncate: Bool {
-    !message.isStreaming && message.text.count > Self.truncationThreshold && !isExpanded
+    ChatBubbleTruncation.shouldTruncate(
+      text: message.text,
+      isStreaming: message.isStreaming,
+      isExpanded: isExpanded
+    )
   }
 
   /// The text to display (truncated or full) — keeps the start of the message visible
   private var displayText: String {
-    if shouldTruncate {
-      return String(message.text.prefix(Self.truncationThreshold)).trimmingCharacters(
-        in: .whitespacesAndNewlines
-      ) + "…"
-    }
-    return message.text
+    ChatBubbleTruncation.displayText(
+      message.text,
+      isStreaming: message.isStreaming,
+      isExpanded: isExpanded
+    )
   }
 
   private var backgroundAgentSummary: BackgroundAgentSummary? {
@@ -87,46 +101,78 @@ struct ChatBubble: View {
   }
 
   var body: some View {
-    let groupedBlocks = ContentBlockGroup.visibleChatGroups(
-      message.contentBlocks,
-      isStreaming: message.isStreaming
-    )
+    Group {
+      if message.hidesEmptyStreamingPlaceholder,
+        message.isStreaming,
+        message.text.isEmpty,
+        message.contentBlocks.isEmpty
+      {
+        EmptyView()
+          .accessibilityHidden(true)
+      } else {
+        let groupedBlocks = ContentBlockGroup.visibleChatGroups(
+          message.contentBlocks,
+          isStreaming: message.isStreaming,
+          richBlockRenderingEnabled: chatFirstRichBlockContext != nil
+        )
 
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
-      // Omi texts you: its replies carry the Omi mark on the left, and it spins
-      // while it's thinking of a response. App personas keep their own image.
-      if message.sender == .ai {
-        if let app = app {
-          AsyncImage(url: URL(string: app.image)) { phase in
-            switch phase {
-            case .success(let image):
-              image
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-            default:
-              Circle()
-                .fill(OmiColors.backgroundTertiary)
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          // Default omi replies render avatar-free for a quieter timeline; only
+          // app personas keep their identity mark.
+          if message.sender == .ai, let app = app {
+            AsyncImage(url: URL(string: app.image)) { phase in
+              switch phase {
+              case .success(let image):
+                image
+                  .resizable()
+                  .aspectRatio(contentMode: .fill)
+              default:
+                Circle()
+                  .fill(OmiColors.backgroundTertiary)
+              }
             }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
           }
-          .frame(width: 32, height: 32)
-          .clipShape(Circle())
-        } else {
-          SBLogo(size: 22, spinning: message.isStreaming)
-            .frame(width: 32, height: 32, alignment: .center)
-        }
-      }
 
-      // Bubbles hug their content up to a readable cap — omi replies sit
-      // left, user messages sit right, neither spans the full column.
-      VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-        messageContentView(groupedBlocks)
+          // Bubbles hug their content up to a readable cap — omi replies sit
+          // left, user messages sit right, neither spans the full column.
+          VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
+            messageContentView(groupedBlocks)
+          }
+          // A max-width frame alone preserves the body's intrinsic width in
+          // an unconstrained HStack. Expand first, then cap it, so metadata
+          // has a stable trailing edge for short assistant replies too.
+          .frame(
+            maxWidth: message.sender == .ai ? .infinity : Self.messageColumnMaxWidth,
+            alignment: message.sender == .user ? .trailing : .leading
+          )
+          .frame(
+            maxWidth: Self.messageColumnMaxWidth,
+            alignment: message.sender == .user ? .trailing : .leading
+          )
+        }
+        .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+        .contentShape(Rectangle())
+        .onHover { isRowHovering = $0 }
       }
-      .frame(
-        maxWidth: 640,
-        alignment: message.sender == .user ? .trailing : .leading
-      )
     }
-    .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+    .frame(
+      maxWidth: .infinity,
+      minHeight: ChatOmiMarkPlacement.rowHeight(
+        showsMark: message.sender == .ai && app == nil && showsOmiMark),
+      alignment: message.sender == .user ? .trailing : .leading
+    )
+    .overlay(alignment: .topLeading) {
+      if message.sender == .ai, app == nil, showsOmiMark {
+        ChatOmiMark(
+          motion: message.isStreaming ? ChatWorkingStatus.motion(for: message) : nil,
+          size: 24
+        )
+        .frame(width: 32, height: 32)
+        .offset(x: -(32 + OmiSpacing.md))
+      }
+    }
     .contentShape(Rectangle())
     .onHover { isRowHovering = $0 }
   }
@@ -193,31 +239,39 @@ struct ChatBubble: View {
         if let backgroundAgentSummary {
           BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
         } else if !message.text.isEmpty {
-          OmiMarkdown(text: displayText, sender: message.sender)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(
-              message.sender == .user
-                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+          if message.sender == .ai, shouldTruncate {
+            // Keep the expansion affordance on the same baseline as the
+            // visible truncation ellipsis. The text gets the remaining width,
+            // so the control cannot fall onto a detached row.
+            HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.xs) {
+              messageTextBubble(displayText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(0)
+              showMoreButton
+            }
+            .frame(
+              maxWidth: .infinity,
+              alignment: .leading
             )
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-                .stroke(
-                  message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
-                  lineWidth: 1
-                )
-            )
-            .padding(.top, OmiSpacing.hairline)
+          } else {
+            messageTextBubble(displayText)
+          }
         }
 
         if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
-          Button(action: { isExpanded.toggle() }) {
-            Text(isExpanded ? "Show less" : "Show more")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(.white)
+          if isExpanded {
+            Button(action: { isExpanded.toggle() }) {
+              Text("Show less")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(.white)
+            }
+            .buttonStyle(.plain)
+          } else if message.sender == .user, shouldTruncate {
+            // Keep the pre-existing user-bubble layout. Only assistant replies
+            // need the inline treatment; moving this control beside a user
+            // bubble would pull its trailing edge left by the button width.
+            showMoreButton
           }
-          .buttonStyle(.plain)
         }
 
         if message.sender != .user, let resourceStrip {
@@ -246,6 +300,36 @@ struct ChatBubble: View {
     } else if !message.isStreaming || !message.text.isEmpty {
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
     }
+  }
+
+  @ViewBuilder
+  private func messageTextBubble(_ text: String) -> some View {
+    OmiMarkdown(text: text, sender: message.sender)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        message.sender == .user
+          ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+      )
+      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+          .stroke(
+            message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
+            lineWidth: 1
+          )
+      )
+      .padding(.top, OmiSpacing.hairline)
+  }
+
+  private var showMoreButton: some View {
+    Button(action: { isExpanded = true }) {
+      Text("Show more")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(.white)
+    }
+    .buttonStyle(.plain)
+    .accessibilityHint("Expand the full message")
   }
 
   private var agentOpenClosure: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? {
@@ -288,6 +372,73 @@ struct ChatBubble: View {
       return AnyView(EmptyView())
     case .discoveryCard(_, let title, let summary, let fullText):
       return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
+    case .questionCard(_, let questionID, let text, let options, let selectedOptionID):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        QuestionCardView(
+          questionID: questionID,
+          text: text,
+          options: options,
+          selectedOptionID: selectedOptionID,
+          isActionable: chatFirstRichBlockContext.chatProvider.isQuestionCardActionable(
+            messageID: message.id,
+            questionID: questionID,
+            selectedOptionID: selectedOptionID
+          ),
+          onSelect: { optionID, isDeferral in
+            Task { @MainActor in
+              AnalyticsManager.shared.chatFirst(
+                .question(lifecycle: isDeferral ? .deferred : .answered)
+              )
+              AnalyticsManager.shared.chatFirst(
+                .richBlock(kind: .questionCard, outcome: .acted, action: .select)
+              )
+              await chatFirstRichBlockContext.chatProvider.selectQuestionCardOption(
+                questionID: questionID,
+                optionID: optionID
+              )
+            }
+          }
+        )
+      )
+    case .taskCard(_, let taskID):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        TaskCardView(
+          taskID: taskID,
+          tasksStore: chatFirstRichBlockContext.tasksStore,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
+    case .goalLink(_, let goalID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        GoalLinkView(
+          goalID: goalID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation,
+          goalsStore: chatFirstRichBlockContext.canonicalGoalsStore
+        )
+      )
+    case .captureLink(_, let conversationID, let momentTimestampMs, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        CaptureLinkView(
+          conversationID: conversationID,
+          momentTimestampMs: momentTimestampMs,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
+    case .memoryLink(_, let memoryID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        MemoryLinkView(
+          memoryID: memoryID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
     case .agentSpawn(
       _, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):
@@ -318,31 +469,30 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      if includeRatingButtons {
-        ratingButtons
+    HStack(alignment: .center, spacing: OmiSpacing.sm) {
+      if includeRatingButtons || includeCopyButton {
+        HStack(spacing: OmiSpacing.sm) {
+          if includeRatingButtons {
+            ratingButtons
+          }
+
+          if includeCopyButton {
+            copyButton
+          }
+
+          if includeCopyButton, message.metadata != nil {
+            infoButton
+          }
+        }
       }
 
-      if includeCopyButton {
-        copyButton
-      }
+      Spacer(minLength: 0)
 
-      if includeCopyButton, message.metadata != nil {
-        infoButton
-      }
-
-      Text(message.createdAt, format: .dateTime.hour().minute())
-        .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
-        .onHover { isTimestampHovering = $0 }
-
-      if isTimestampHovering {
-        Text(message.createdAt, format: .dateTime.month(.abbreviated).day())
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .transition(.opacity)
-      }
+      ChatMessageTimestamp(date: message.createdAt)
     }
+    // Keep the timestamp on the message column's trailing edge rather than
+    // the intrinsic width of a short reply.
+    .frame(maxWidth: .infinity, alignment: .trailing)
     // Quiet timeline: actions and timestamps only surface while the reader
     // is on the message — by pointer hover or keyboard focus — or
     // mid-interaction with them.
@@ -353,7 +503,6 @@ struct ChatBubble: View {
         transientFeedback: showRatingFeedback || showCopied || showInfoPopover
       ) ? 1 : 0
     )
-    .omiAnimation(.easeInOut(duration: 0.12), value: isTimestampHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }
@@ -455,59 +604,6 @@ struct ChatBubble: View {
         MessageMetadataPopover(metadata: metadata)
       }
     }
-  }
-}
-
-/// Visibility rule for the quiet timeline's per-message metadata row
-/// (rating / copy / info / timestamp). Keyboard parity is part of the
-/// contract: focus on any metadata control must reveal the row, otherwise
-/// Tab / Full Keyboard Access ends up on an invisible button.
-enum ChatBubbleMetadataReveal {
-  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
-    hovering || controlFocused || transientFeedback
-  }
-}
-
-struct BackgroundAgentSummary: Equatable {
-  let agentID: UUID?
-  let prompt: String
-  let output: String
-
-  static func parse(_ text: String) -> BackgroundAgentSummary? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.hasPrefix("[Background agent") else { return nil }
-    guard let close = trimmed.firstIndex(of: "]") else { return nil }
-
-    let headerStart = trimmed.index(trimmed.startIndex, offsetBy: 1)
-    let header = String(trimmed[headerStart..<close])
-    guard header.hasPrefix("Background agent") else { return nil }
-
-    var remainder = String(header.dropFirst("Background agent".count))
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    var agentID: UUID?
-
-    if remainder.hasPrefix("id=") {
-      remainder.removeFirst(3)
-      let idEnd = remainder.firstIndex { $0 == " " || $0 == "—" } ?? remainder.endIndex
-      let idText = String(remainder[..<idEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
-      agentID = UUID(uuidString: idText)
-      remainder = String(remainder[idEnd...]).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    if remainder.hasPrefix("—") {
-      remainder.removeFirst()
-      remainder = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    let outputStart = trimmed.index(after: close)
-    let output = String(trimmed[outputStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !output.isEmpty else { return nil }
-
-    return BackgroundAgentSummary(
-      agentID: agentID,
-      prompt: remainder.isEmpty ? "Background agent" : remainder,
-      output: output
-    )
   }
 }
 
@@ -891,6 +987,7 @@ extension ChatBubble: @preconcurrency Equatable {
       && lhs.message.text == rhs.message.text
       && lhs.message.rating == rhs.message.rating
       && lhs.app?.id == rhs.app?.id
+      && lhs.showsOmiMark == rhs.showsOmiMark
       && lhs.isDuplicate == rhs.isDuplicate
   }
 }
@@ -903,6 +1000,11 @@ enum ContentBlockGroup: Identifiable {
   case toolCalls(id: String, calls: [ChatContentBlock])
   case thinking(id: String, text: String)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
+  case questionCard(id: String, questionID: String, text: String, options: [[String: Any]], selectedOptionID: String?)
+  case taskCard(id: String, taskID: String)
+  case goalLink(id: String, goalID: String, summary: String)
+  case captureLink(id: String, conversationID: String, momentTimestampMs: Int?, summary: String)
+  case memoryLink(id: String, memoryID: String, summary: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -929,13 +1031,21 @@ enum ContentBlockGroup: Identifiable {
     case .toolCalls(let id, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
+    case .questionCard(let id, _, _, _, _): return id
+    case .taskCard(let id, _): return id
+    case .goalLink(let id, _, _): return id
+    case .captureLink(let id, _, _, _): return id
+    case .memoryLink(let id, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
   }
 
   /// Groups consecutive `.toolCall` blocks together; passes other blocks through
-  static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
+  static func group(
+    _ blocks: [ChatContentBlock],
+    richBlockRenderingEnabled: Bool = false
+  ) -> [ContentBlockGroup] {
     var groups: [ContentBlockGroup] = []
     var pendingToolCalls: [ChatContentBlock] = []
 
@@ -959,6 +1069,35 @@ enum ContentBlockGroup: Identifiable {
       case .discoveryCard(let id, let title, let summary, let fullText):
         flushToolCalls()
         groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
+      case .questionCard(let id, let questionID, let text, _, _, let options, let selectedOptionID):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(
+          .questionCard(
+            id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
+      case .taskCard(let id, let taskID):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.taskCard(id: id, taskID: taskID))
+      case .goalLink(let id, let goalID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.goalLink(id: id, goalID: goalID, summary: summary))
+      case .captureLink(let id, let conversationID, let momentTimestampMs, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(
+          .captureLink(
+            id: id,
+            conversationID: conversationID,
+            momentTimestampMs: momentTimestampMs,
+            summary: summary
+          )
+        )
+      case .memoryLink(let id, let memoryID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.memoryLink(id: id, memoryID: memoryID, summary: summary))
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -998,7 +1137,11 @@ enum ContentBlockGroup: Identifiable {
 
   /// Main chat keeps a durable tool trace, so streamed answers do not appear to lose completed work.
   /// A structured `.agentSpawn` replaces only its duplicate raw spawn call (INV-6 structured identity).
-  static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
+  static func visibleChatGroups(
+    _ blocks: [ChatContentBlock],
+    isStreaming: Bool,
+    richBlockRenderingEnabled: Bool = false
+  ) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
     // matching raw `spawn_agent` tool row is lifecycle plumbing, not a second
@@ -1022,11 +1165,12 @@ enum ContentBlockGroup: Identifiable {
         return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
       }
     )
-    return group(blocks).compactMap { group in
+    return group(blocks, richBlockRenderingEnabled: richBlockRenderingEnabled).compactMap { group in
       switch group {
       case .text(_, let text):
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
-      case .discoveryCard, .agentSpawn, .agentCompletion:
+      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink, .agentSpawn,
+        .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil

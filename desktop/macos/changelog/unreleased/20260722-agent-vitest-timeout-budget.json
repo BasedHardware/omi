@@ -1,3 +1,0 @@
-{
-  "change": "Prevent transient shared-runner contention from timing out the macOS agent release test suite."
-}

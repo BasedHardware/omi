@@ -21,6 +21,18 @@ inputs:
     description: Optional newline-delimited runtime environment entries supplied by the owning workflow.
     required: false
     default: ""
+  require_gateway_url:
+    description: Require a non-empty HTTP(S) OMI_LLM_GATEWAY_URL in runtime_env_vars.
+    required: false
+    default: "false"
+  network:
+    description: Optional Cloud Run direct-VPC network required by internal services.
+    required: false
+    default: ""
+  subnet:
+    description: Optional Cloud Run direct-VPC subnet required by internal services.
+    required: false
+    default: ""
 outputs:
   service:
     description: Cloud Run service deployed from the checked-in target contract.
@@ -86,11 +98,26 @@ runs:
         credentials_json: ${{ inputs.gcp_credentials }}
 
     - name: Preflight declared Cloud Run runtime
+      id: runtime-preflight
       shell: bash
       run: |
+        set -euo pipefail
+        if [[ -n '${{ inputs.network }}' && -z '${{ inputs.subnet }}' ]] ||
+           [[ -z '${{ inputs.network }}' && -n '${{ inputs.subnet }}' ]]; then
+          echo "network and subnet must be supplied together" >&2
+          exit 1
+        fi
+        if [[ '${{ inputs.require_gateway_url }}' == 'true' ]]; then
+          gateway_url="$(printf '%s\n' '${{ inputs.runtime_env_vars }}' | sed -n 's/^OMI_LLM_GATEWAY_URL=//p')"
+          if [[ ! "$gateway_url" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "OMI_LLM_GATEWAY_URL must be a non-empty HTTP(S) URL when gateway mode is required" >&2
+            exit 1
+          fi
+        fi
         python3 .github/scripts/preflight_public_build_runtime.py \
           --target "${{ inputs.target }}" \
-          --project-id "${{ inputs.project_id }}"
+          --project-id "${{ inputs.project_id }}" \
+          --github-output "$GITHUB_OUTPUT"
 
     - name: Compute immutable candidate identity
       id: candidate
@@ -133,13 +160,18 @@ runs:
           --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
           --tag=${{ steps.candidate.outputs.tag }}
           ${{ inputs.service_account != '' && format('--service-account={0}', inputs.service_account) || '' }}
+          ${{ inputs.network != '' && format('--network={0}', inputs.network) || '' }}
+          ${{ inputs.subnet != '' && format('--subnet={0}', inputs.subnet) || '' }}
+          ${{ inputs.network != '' && inputs.subnet != '' && '--vpc-egress=private-ranges-only' || '' }}
           ${{ steps.contract.outputs.remove_runtime_secrets }}
           ${{ steps.contract.outputs.flags }}
         env_vars: |-
           ${{ steps.contract.outputs.runtime_env_vars }}
           ${{ inputs.runtime_env_vars }}
         env_vars_update_strategy: merge
-        secrets: ${{ steps.contract.outputs.runtime_secrets }}
+        secrets: |-
+          ${{ steps.contract.outputs.runtime_secrets }}
+          ${{ steps.runtime-preflight.outputs.fallback_runtime_secrets }}
         secrets_update_strategy: merge
 
     - name: Promote browser-accepted candidate

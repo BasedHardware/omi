@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-import sys
+import re
 import types
 import importlib
 from dataclasses import dataclass
@@ -61,6 +61,18 @@ def _empty_vector_query(*args, **kwargs):
     return _EmptyVectorResult()
 
 
+@dataclass(frozen=True)
+class _VectorHit:
+    memory_id: str
+    score: float
+
+
+@dataclass
+class _VectorResult:
+    hits: list[_VectorHit]
+    rejected_count: int = 0
+
+
 @pytest.fixture(scope="module", autouse=True)
 def _ws_m_import_isolation():
     saved = snapshot_sys_modules(["database._client"])
@@ -75,11 +87,14 @@ def _ws_m_import_isolation():
 
 
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
+from database.memory_vector_metadata import canonical_memory_provider_id
+from models.memory_apply import MemoryControlState
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import (
     AtomKeywordRebuildReport,
     build_atom_keyword_document,
+    delete_atom_keyword_doc,
     is_indexable_long_term_atom,
     keyword_search_memory_ids,
     memories_collection_name,
@@ -102,6 +117,10 @@ LEGACY_UID = "uid-legacy-ws-m"
 NEEDLE = "CONFIRM-XYZZY-99182"
 
 
+def _provider_id(item: MemoryItem) -> str:
+    return canonical_memory_provider_id(item.uid, item.memory_id)
+
+
 def _evidence(*, source_id: str = "conv-1") -> MemoryEvidence:
     return MemoryEvidence(
         evidence_id="ev_ws_m",
@@ -121,13 +140,16 @@ def _long_term_item(
     tier: MemoryTier = MemoryTier.long_term,
     status: MemoryItemStatus = MemoryItemStatus.active,
     processing_state: ProcessingState = ProcessingState.processed,
+    canonical_memory_id: str | None = None,
+    observed_at: datetime | None = None,
 ) -> MemoryItem:
-    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    now = observed_at or datetime(2026, 6, 1, tzinfo=timezone.utc)
     expires_at = now + timedelta(days=30) if tier == MemoryTier.short_term else None
     ledger_commit_id = "commit_ws_m" if tier == MemoryTier.long_term and status == MemoryItemStatus.active else None
     return MemoryItem(
         memory_id=memory_id,
         uid=uid,
+        canonical_memory_id=canonical_memory_id,
         version=1,
         tier=tier,
         status=status,
@@ -171,6 +193,7 @@ def _canonical_cohort(monkeypatch):
         {
             "AtomKeywordRebuildReport": atom_index.AtomKeywordRebuildReport,
             "build_atom_keyword_document": atom_index.build_atom_keyword_document,
+            "delete_atom_keyword_doc": atom_index.delete_atom_keyword_doc,
             "is_indexable_long_term_atom": atom_index.is_indexable_long_term_atom,
             "keyword_search_memory_ids": atom_index.keyword_search_memory_ids,
             "memories_collection_name": atom_index.memories_collection_name,
@@ -198,23 +221,37 @@ def mock_typesense():
     docs_store: dict = {}
     typesense_client = MagicMock()
 
+    def _quoted_filter_values(filter_by):
+        values = re.findall(r"`((?:\\.|[^`])*)`", filter_by)
+        return [re.sub(r"\\(.)", r"\1", value) for value in values]
+
     def _upsert(doc):
         docs_store[doc["id"]] = doc
         return doc
 
     def _delete_filter(params):
         filter_by = params.get("filter_by", "")
-        if f"userId:={CANONICAL_UID}" in filter_by:
-            to_delete = [doc_id for doc_id, doc in docs_store.items() if doc.get("userId") == CANONICAL_UID]
-            for doc_id in to_delete:
-                docs_store.pop(doc_id, None)
-            return {"num_deleted": len(to_delete)}
-        return {"num_deleted": 0}
+        quoted_values = _quoted_filter_values(filter_by)
+        user_id = quoted_values[0] if quoted_values else None
+        identity_ids = set(quoted_values[1:]) if "id:=[" in filter_by else None
+        to_delete = [
+            doc_id
+            for doc_id, doc in docs_store.items()
+            if doc.get("userId") == user_id and (identity_ids is None or doc_id in identity_ids)
+        ]
+        for doc_id in to_delete:
+            docs_store.pop(doc_id, None)
+        return {"num_deleted": len(to_delete)}
 
     def _search(params):
         query = (params.get("q") or "").lower()
+        filter_by = params.get("filter_by", "")
+        quoted_values = _quoted_filter_values(filter_by)
+        user_id = quoted_values[0] if quoted_values else None
         hits = []
         for doc in docs_store.values():
+            if user_id is not None and doc.get("userId") != user_id:
+                continue
             haystack = " ".join(
                 [
                     doc.get("content", ""),
@@ -262,6 +299,14 @@ class TestIndexability:
         item = _long_term_item(status=MemoryItemStatus.tombstoned, memory_id="mem_tomb")
         assert is_indexable_long_term_atom(item) is False
 
+    def test_restricted_sensitivity_excluded(self):
+        item = _long_term_item(memory_id="mem_financial").model_copy(update={"sensitivity_labels": ["financial"]})
+        assert is_indexable_long_term_atom(item) is False
+
+    def test_inactive_source_excluded(self):
+        item = _long_term_item(memory_id="mem_missing_source").model_copy(update={"source_state": SourceState.missing})
+        assert is_indexable_long_term_atom(item) is False
+
 
 class TestMergeMemorySearchIds:
     def test_keyword_first_deduplicated(self):
@@ -298,14 +343,60 @@ class TestKeywordSearchAndHybrid:
         assert docs_store == {}
         typesense_client.collections.create.assert_not_called()
 
+    def test_upsert_fails_closed_when_legacy_identity_cleanup_fails(self, mock_typesense):
+        typesense_client, docs_store = mock_typesense
+        documents = typesense_client.collections.__getitem__.return_value.documents
+        documents.delete.side_effect = RuntimeError("typesense cleanup unavailable")
+        documents.upsert.reset_mock()
+
+        assert upsert_atom_keyword_doc(_long_term_item(memory_id="mem-cleanup-failed")) is False
+
+        assert docs_store == {}
+        documents.upsert.assert_not_called()
+
     def test_canonical_keyword_search_returns_exact_needle(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
         item = _long_term_item()
         upsert_atom_keyword_doc(item)
-        assert item.memory_id in docs_store
+        assert _provider_id(item) in docs_store
 
         ids = keyword_search_memory_ids(CANONICAL_UID, NEEDLE, limit=5)
         assert ids == [item.memory_id]
+
+    def test_same_memory_id_isolated_by_uid_across_typesense_upsert_search_and_delete(
+        self,
+        mock_typesense,
+        monkeypatch,
+    ):
+        _, docs_store = mock_typesense
+        memory_id = "content-derived-shared-id"
+        first = _long_term_item(uid="uid-first", memory_id=memory_id)
+        second = _long_term_item(uid="uid-second", memory_id=memory_id)
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.user_allows_atom_keyword_index",
+            lambda *args, **kwargs: True,
+        )
+
+        legacy_doc = build_atom_keyword_document(first)
+        docs_store[memory_id] = {**legacy_doc, "id": memory_id}
+        assert upsert_atom_keyword_doc(first) is True
+        assert memory_id not in docs_store
+        assert upsert_atom_keyword_doc(second) is True
+
+        first_provider_id = _provider_id(first)
+        second_provider_id = _provider_id(second)
+        assert first_provider_id != second_provider_id
+        assert set(docs_store) == {first_provider_id, second_provider_id}
+        assert docs_store[first_provider_id]["memory_id"] == memory_id
+        assert docs_store[second_provider_id]["memory_id"] == memory_id
+        assert keyword_search_memory_ids(first.uid, NEEDLE) == [memory_id]
+        assert keyword_search_memory_ids(second.uid, NEEDLE) == [memory_id]
+
+        docs_store[memory_id] = {**legacy_doc, "id": memory_id}
+        assert delete_atom_keyword_doc(first.uid, memory_id) is True
+        assert set(docs_store) == {second_provider_id}
+        assert keyword_search_memory_ids(first.uid, NEEDLE) == []
+        assert keyword_search_memory_ids(second.uid, NEEDLE) == [memory_id]
 
     def test_legacy_user_indexes_nothing(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
@@ -351,7 +442,7 @@ class TestKeywordSearchAndHybrid:
             return _EmptyVectorResult()
 
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.keyword_search_memory_ids",
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
             lambda uid, query, limit=5, db_client=None: ["mem_active", "mem_superseded"],
         )
         monkeypatch.setattr(
@@ -366,6 +457,123 @@ class TestKeywordSearchAndHybrid:
             db_client=_data_protection_db(),
         )
         assert [row["memory_id"] for row in results] == ["mem_active"]
+
+    def test_search_includes_processed_visible_short_term_and_long_term(self, mock_typesense, monkeypatch):
+        now = datetime.now(timezone.utc)
+        short_term = _long_term_item(
+            memory_id="mem_fresh_st",
+            content="Fresh coffee preference evidence",
+            tier=MemoryTier.short_term,
+            observed_at=now,
+        )
+        long_term = _long_term_item(
+            memory_id="mem_stable_lt",
+            content="Stable coffee preference",
+            observed_at=now - timedelta(days=2),
+        )
+        pending = _long_term_item(
+            memory_id="mem_pending_st",
+            content="Pending coffee submission",
+            tier=MemoryTier.short_term,
+            processing_state=ProcessingState.pending,
+            observed_at=now,
+        )
+
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            lambda *args, **kwargs: [],
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [pending, long_term, short_term],
+        )
+
+        def _vector_query(*args, **kwargs):
+            return _VectorResult(
+                hits=[
+                    _VectorHit(memory_id=short_term.memory_id, score=0.95),
+                    _VectorHit(memory_id=pending.memory_id, score=0.92),
+                    _VectorHit(memory_id=long_term.memory_id, score=0.85),
+                ]
+            )
+
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            "coffee",
+            limit=5,
+            vector_query=_vector_query,
+            db_client=_data_protection_db(),
+        )
+
+        assert [row["memory_id"] for row in results] == [short_term.memory_id, long_term.memory_id]
+        assert [row["tier"] for row in results] == [MemoryTier.short_term.value, MemoryTier.long_term.value]
+
+    def test_search_prefers_long_term_canonical_survivor_and_keeps_unique_short_term(self, mock_typesense, monkeypatch):
+        now = datetime.now(timezone.utc)
+        survivor = _long_term_item(
+            memory_id="mem_canonical_survivor",
+            content="Project Beacon uses weekly planning",
+            canonical_memory_id="mem_canonical_survivor",
+            observed_at=now - timedelta(days=5),
+        )
+        duplicate_short_term = _long_term_item(
+            memory_id="mem_duplicate_st",
+            content="Fresh duplicate: Project Beacon uses weekly planning",
+            tier=MemoryTier.short_term,
+            canonical_memory_id=survivor.memory_id,
+            observed_at=now,
+        )
+        unique_short_term = _long_term_item(
+            memory_id="mem_unique_st",
+            content="Project Beacon launch review is tomorrow",
+            tier=MemoryTier.short_term,
+            observed_at=now,
+        )
+
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            lambda *args, **kwargs: [],
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [unique_short_term, duplicate_short_term, survivor],
+        )
+
+        def _vector_query(*args, **kwargs):
+            return _VectorResult(
+                hits=[
+                    _VectorHit(memory_id=duplicate_short_term.memory_id, score=0.99),
+                    _VectorHit(memory_id=unique_short_term.memory_id, score=0.9),
+                ]
+            )
+
+        first = search_canonical_memories(
+            CANONICAL_UID,
+            "Project Beacon",
+            limit=5,
+            vector_query=_vector_query,
+            db_client=_data_protection_db(),
+        )
+        second = search_canonical_memories(
+            CANONICAL_UID,
+            "Project Beacon",
+            limit=5,
+            vector_query=_vector_query,
+            db_client=_data_protection_db(),
+        )
+        default_list = search_canonical_memories(
+            CANONICAL_UID,
+            "",
+            limit=5,
+            vector_query=_vector_query,
+            db_client=_data_protection_db(),
+        )
+
+        assert [row["memory_id"] for row in first] == [survivor.memory_id, unique_short_term.memory_id]
+        assert [row["memory_id"] for row in second] == [survivor.memory_id, unique_short_term.memory_id]
+        assert [row["memory_id"] for row in default_list] == [survivor.memory_id, unique_short_term.memory_id]
+        assert duplicate_short_term.memory_id not in {row["memory_id"] for row in first}
+        assert first[1]["tier"] == MemoryTier.short_term.value
 
     def test_memory_service_search_hybrid_for_canonical(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
@@ -440,6 +648,63 @@ class TestKeywordSearchAndHybrid:
 
 
 class TestPurgeAndRebuild:
+    def test_sync_deletes_existing_keyword_doc_when_user_policy_is_revoked(
+        self,
+        mock_typesense,
+        monkeypatch,
+    ):
+        _, docs_store = mock_typesense
+        item = _long_term_item(memory_id="mem-policy-revoked")
+        assert upsert_atom_keyword_doc(item) is True
+        assert _provider_id(item) in docs_store
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.user_allows_atom_keyword_index",
+            lambda *args, **kwargs: False,
+        )
+
+        assert sync_atom_keyword_index_for_item(item) is True
+        assert _provider_id(item) not in docs_store
+
+    def test_sync_does_not_acknowledge_revocation_when_exact_delete_fails(self, monkeypatch):
+        item = _long_term_item(memory_id="mem-policy-delete-failed")
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.user_allows_atom_keyword_index",
+            lambda *args, **kwargs: False,
+        )
+        delete = MagicMock(return_value=False)
+        monkeypatch.setattr("utils.memory.atom_keyword_index.delete_atom_keyword_doc", delete)
+
+        assert sync_atom_keyword_index_for_item(item) is False
+        delete.assert_called_once_with(item.uid, item.memory_id, db_client=None)
+
+    def test_delete_attempts_exact_remote_removal_even_after_index_eligibility_is_revoked(
+        self,
+        mock_typesense,
+        monkeypatch,
+    ):
+        typesense_client, _ = mock_typesense
+        documents = typesense_client.collections.__getitem__.return_value.documents
+        documents.delete.reset_mock()
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.user_allows_atom_keyword_index",
+            lambda *args, **kwargs: False,
+        )
+
+        assert delete_atom_keyword_doc(CANONICAL_UID, "mem-previously-indexed") is True
+        documents.delete.assert_called_once()
+        delete_filter = documents.delete.call_args.args[0]["filter_by"]
+        assert f"`{CANONICAL_UID}`" in delete_filter
+        assert "`mem-previously-indexed`" in delete_filter
+        assert f"`{canonical_memory_provider_id(CANONICAL_UID, 'mem-previously-indexed')}`" in delete_filter
+
+    def test_delete_missing_keyword_doc_is_idempotent_success(self, mock_typesense):
+        typesense_client, _ = mock_typesense
+        documents = typesense_client.collections.__getitem__.return_value.documents
+        documents.delete.reset_mock()
+
+        assert delete_atom_keyword_doc(CANONICAL_UID, "mem-already-absent") is True
+        documents.delete.assert_called_once()
+
     def test_strict_keyword_purge_raises_on_typesense_failure(self, monkeypatch):
         monkeypatch.setattr(
             "utils.memory.atom_keyword_index._typesense_client",
@@ -453,7 +718,12 @@ class TestPurgeAndRebuild:
         collections, docs_store = mock_typesense
         item = _long_term_item()
         upsert_atom_keyword_doc(item)
-        assert item.memory_id in docs_store
+        assert _provider_id(item) in docs_store
+        legacy_doc = build_atom_keyword_document(item)
+        docs_store[item.memory_id] = {**legacy_doc, "id": item.memory_id}
+        other_user = _long_term_item(uid="uid-other", memory_id=item.memory_id)
+        other_doc = build_atom_keyword_document(other_user)
+        docs_store[other_doc["id"]] = other_doc
 
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.resolve_memory_system",
@@ -464,8 +734,8 @@ class TestPurgeAndRebuild:
             lambda uid, db_client=None: [item],
         )
         monkeypatch.setattr(
-            "database.vector_db.delete_pinecone_memory_vectors_by_id",
-            lambda ids: len(ids),
+            "database.vector_db.delete_canonical_memory_vectors",
+            lambda uid, memory_id=None: True,
         )
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
@@ -473,12 +743,17 @@ class TestPurgeAndRebuild:
         )
         delete_kg = MagicMock()
         monkeypatch.setattr("utils.memory.canonical_memory_adapter.kg_db.delete_knowledge_graph", delete_kg)
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.read_account_deletion_projection_fence",
+            lambda *args, **kwargs: types.SimpleNamespace(blocks_projection_writes=True),
+        )
 
         db_client = MagicMock()
+        db_client.collection.return_value.where.return_value.limit.return_value.stream.return_value = []
         result = purge_canonical_derived_user_data(CANONICAL_UID, db_client=db_client)
         assert result["purged"] is True
         assert result["keyword_docs_deleted"] >= 0
-        assert item.memory_id not in docs_store
+        assert set(docs_store) == {other_doc["id"]}
         delete_kg.assert_called_once_with(CANONICAL_UID, db_client=db_client)
 
     def test_conversation_cascade_deletes_keyword_doc(self, mock_typesense, monkeypatch):
@@ -486,19 +761,42 @@ class TestPurgeAndRebuild:
         item = _long_term_item(memory_id="mem_cascade")
         item = item.model_copy(update={"evidence": [_evidence(source_id="conv-1")]})
         upsert_atom_keyword_doc(item)
-        assert item.memory_id in docs_store
+        assert _provider_id(item) in docs_store
+        control = MemoryControlState(
+            uid=CANONICAL_UID,
+            head_commit_id="head0",
+            account_generation=1,
+            source_generation=1,
+        )
+        committed_control = control.model_copy(
+            update={
+                "head_commit_id": "head1",
+                "source_generation": 2,
+                "commit_sequence": 1,
+            }
+        )
 
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
-            lambda uid, db_client=None: [item],
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items_for_source",
+            lambda uid, source_id, db_client=None: [item],
         )
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
-            lambda **_: types.SimpleNamespace(account_generation=1, head_commit_id="head0", read_error_reason=None),
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_superseded_memory_items_for_targets",
+            lambda uid, target_memory_ids, db_client=None: [],
         )
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.atomic_bump_source_generation",
-            lambda uid, db_client=None: types.SimpleNamespace(source_generation=2),
+            "utils.memory.canonical_memory_adapter._read_replacement_control",
+            lambda uid, db_client=None: control,
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.replace_conversation_source_firestore",
+            lambda **_: types.SimpleNamespace(
+                control_state=committed_control,
+                retracted_memory_ids=[item.memory_id],
+                committed_memory_ids=[],
+                reactivated_memory_ids=[],
+                tombstoned_evidence_ids=[item.evidence[0].evidence_id],
+            ),
         )
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.kg_db.prune_memory_citations_from_kg",
@@ -506,7 +804,7 @@ class TestPurgeAndRebuild:
         )
 
         retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=MagicMock())
-        assert item.memory_id not in docs_store
+        assert _provider_id(item) not in docs_store
 
     def test_rebuild_reconstructs_index_count_verified(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
@@ -515,6 +813,11 @@ class TestPurgeAndRebuild:
             _long_term_item(memory_id="mem_b", content="beta token"),
             _long_term_item(memory_id="mem_st", tier=MemoryTier.short_term, content="short"),
         ]
+        legacy_doc = build_atom_keyword_document(items[0])
+        docs_store[items[0].memory_id] = {**legacy_doc, "id": items[0].memory_id}
+        other_user = _long_term_item(uid="uid-other", memory_id="mem_other", content="other")
+        other_doc = build_atom_keyword_document(other_user)
+        docs_store[other_doc["id"]] = other_doc
         monkeypatch.setattr(
             "utils.memory.atom_keyword_index.fetch_authoritative_product_memory_items",
             lambda uid, db_client=None: items,
@@ -525,17 +828,97 @@ class TestPurgeAndRebuild:
         assert report.expected_count == 2
         assert report.indexed_count == 2
         assert report.verified is True
-        assert set(docs_store.keys()) == {"mem_a", "mem_b"}
+        assert set(docs_store) == {
+            *(_provider_id(item) for item in items[:2]),
+            other_doc["id"],
+        }
+
+    def test_rebuild_never_sends_restricted_or_inactive_source_content(self, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        safe = _long_term_item(memory_id="mem_safe", content="safe token")
+        restricted = _long_term_item(memory_id="mem_restricted", content="Bank routing number 012345678").model_copy(
+            update={"sensitivity_labels": ["financial"]}
+        )
+        missing_source = _long_term_item(
+            memory_id="mem_missing_source",
+            content="Provider must not retain missing-source text",
+        ).model_copy(update={"source_state": SourceState.missing})
+        assert upsert_atom_keyword_doc(restricted.model_copy(update={"sensitivity_labels": []}))
+        assert _provider_id(restricted) in docs_store
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [restricted, missing_source, safe],
+        )
+
+        report = rebuild_atom_keyword_index(CANONICAL_UID)
+
+        assert report.expected_count == 1
+        assert report.indexed_count == 1
+        assert report.verified is True
+        assert set(docs_store) == {_provider_id(safe)}
+
+    def test_rebuild_fails_closed_when_provider_purge_fails(self, monkeypatch):
+        purge = MagicMock(side_effect=RuntimeError("typesense unavailable"))
+        fetch = MagicMock()
+        upsert = MagicMock()
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.user_allows_atom_keyword_index",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.purge_user_atom_keyword_index",
+            purge,
+        )
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.fetch_authoritative_product_memory_items",
+            fetch,
+        )
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.upsert_atom_keyword_doc",
+            upsert,
+        )
+
+        report = rebuild_atom_keyword_index(CANONICAL_UID)
+
+        assert report.verified is False
+        assert report.failure_reason == "purge_failed"
+        purge.assert_called_once()
+        purge_args, purge_kwargs = purge.call_args
+        assert purge_args == (CANONICAL_UID,)
+        assert purge_kwargs["force"] is True
+        assert purge_kwargs["raise_on_failure"] is True
+        fetch.assert_not_called()
+        upsert.assert_not_called()
+
+    def test_rebuild_purges_prior_docs_after_user_becomes_ineligible(
+        self,
+        mock_typesense,
+        monkeypatch,
+    ):
+        _, docs_store = mock_typesense
+        prior = _long_term_item(memory_id="mem_prior")
+        assert upsert_atom_keyword_doc(prior)
+        assert _provider_id(prior) in docs_store
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.user_allows_atom_keyword_index",
+            lambda *args, **kwargs: False,
+        )
+
+        report = rebuild_atom_keyword_index(CANONICAL_UID)
+
+        assert report.skipped_reason == "not_indexable_user"
+        assert report.verified is True
+        assert docs_store == {}
 
     def test_sync_removes_short_term_from_index(self, mock_typesense):
         _, docs_store = mock_typesense
         long_item = _long_term_item(memory_id="mem_lt")
         upsert_atom_keyword_doc(long_item)
-        assert "mem_lt" in docs_store
+        assert _provider_id(long_item) in docs_store
 
         short_item = _long_term_item(memory_id="mem_lt", tier=MemoryTier.short_term, content="gone")
         sync_atom_keyword_index_for_item(short_item)
-        assert "mem_lt" not in docs_store
+        assert _provider_id(long_item) not in docs_store
 
 
 class TestDocumentShape:
@@ -545,6 +928,7 @@ class TestDocumentShape:
         assert doc["status"] == MemoryItemStatus.active.value
         assert doc["schema_version"] == 1
         assert doc["userId"] == CANONICAL_UID
+        assert doc["id"] == canonical_memory_provider_id(CANONICAL_UID, doc["memory_id"])
         assert NEEDLE in doc["content"]
 
     def test_build_document_indexes_flat_subject_predicate_arguments(self):

@@ -5,6 +5,36 @@ import SwiftUI
 
 // MARK: - Memory Graph Page
 
+/// One explicit compatibility boundary: canonical-memory users get the atlas,
+/// while the established graph remains available until a user is migrated.
+enum MemoryGraphPresentationMode: Equatable {
+  case canonicalAtlas
+  case legacyBrainMap
+  /// The account's capability has not been established yet. Distinct from
+  /// `legacyBrainMap`: mounting either real surface here is a guess, and the
+  /// legacy graph is not an inert guess — it owns shared view-model state and
+  /// runs a rebuild bootstrap, both of which corrupt the surface that replaces
+  /// it a frame later.
+  case undetermined
+
+  /// Local QA can exercise the canonical-only surface without changing the
+  /// server-owned rollout state. Production bundles always remain gate-driven.
+  static var localQAOverrideEnabled: Bool {
+    AppBuild.isNonProduction
+      && ProcessInfo.processInfo.environment["OMI_FORCE_CANONICAL_MEMORY_ATLAS"] == "1"
+  }
+
+  static func resolve(
+    canonicalLifecycleExposed: Bool,
+    forceCanonicalAtlasForLocalQA: Bool = false,
+    capabilityEstablished: Bool = true
+  ) -> Self {
+    if forceCanonicalAtlasForLocalQA { return .canonicalAtlas }
+    guard capabilityEstablished else { return .undetermined }
+    return canonicalLifecycleExposed ? .canonicalAtlas : .legacyBrainMap
+  }
+}
+
 struct MemoryGraphPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
 
@@ -72,70 +102,6 @@ struct MemoryGraphPage: View {
   }
 }
 
-struct MemoryGraphInlineCard: View {
-  @ObservedObject var viewModel: MemoryGraphViewModel
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
-      HStack(alignment: .center, spacing: OmiSpacing.md) {
-        Text("Brain Map")
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-
-        Spacer()
-
-        Button {
-          Task { await viewModel.rebuildGraph() }
-        } label: {
-          Image(systemName: "arrow.clockwise")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(viewModel.isRebuilding ? OmiColors.textTertiary : OmiColors.textSecondary)
-            .frame(width: 32, height: 32)
-            .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 12)
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isRebuilding)
-        .help("Rebuild brain map")
-      }
-
-      ZStack {
-        OmiColors.backgroundSecondary
-
-        if !viewModel.isEmpty {
-          MemoryGraphSceneView(viewModel: viewModel)
-        }
-
-        if viewModel.isLoading || viewModel.isRebuilding {
-          ProgressView()
-            .scaleEffect(1.1)
-            .tint(.white.opacity(0.45))
-        } else if viewModel.isEmpty {
-          VStack(spacing: OmiSpacing.sm) {
-            Image(systemName: "brain")
-              .scaledFont(size: OmiType.heading)
-              .foregroundColor(OmiColors.textTertiary)
-            Text("Brain map will appear once enough linked memories are available.")
-              .scaledFont(size: 12.5)
-              .foregroundColor(OmiColors.textSecondary)
-              .multilineTextAlignment(.center)
-          }
-          .padding(OmiSpacing.lg)
-        }
-      }
-      .frame(height: 350)
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-    }
-    .padding(OmiSpacing.lg)
-    .omiPanel(
-      fill: OmiColors.backgroundSecondary, radius: 24, stroke: OmiColors.border.opacity(0.14),
-      shadowOpacity: 0.14, shadowRadius: 12, shadowY: 8
-    )
-    .task {
-      await viewModel.prepareGraph()
-    }
-  }
-}
-
 // MARK: - SceneKit View
 
 struct MemoryGraphSceneView: NSViewRepresentable {
@@ -189,10 +155,18 @@ struct MemoryGraphSceneView: NSViewRepresentable {
 
 @MainActor
 class MemoryGraphViewModel: ObservableObject {
+  typealias CanonicalGraphFetcher =
+    (RuntimeOwnerAuthorizationSnapshot) async throws -> KnowledgeGraphResponse
+
   @Published var isLoading = false
   @Published var isRebuilding = false
   @Published var isEmpty = true
   @Published var selectedNodeId: String?
+  @Published private(set) var graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
+  /// Prepared off the main actor and retained for the complete lifetime of a
+  /// canonical graph revision. The SwiftUI Brain Map can re-render freely
+  /// without rebuilding the relationship layout or losing its gesture cache.
+  @Published private(set) var canonicalAtlasProjection: MemoryAtlasProjection?
 
   let scene = SCNScene()
   let cameraNode = SCNNode()
@@ -207,11 +181,28 @@ class MemoryGraphViewModel: ObservableObject {
   // the fetched graph is unchanged.
   private var lastLoadedAt = Date.distantPast
   private var isPreparing = false
+  private var hasLoadedCanonicalAtlas = false
   private var hasRunEmptyBootstrap = false
   private var loadedGraphSignature: Int?
   private var sessionGeneration = 0
+  private let canonicalGraphFetcher: CanonicalGraphFetcher
 
   init() {
+    canonicalGraphFetcher = { authorizationSnapshot in
+      try await APIClient.shared.getKnowledgeGraph(
+        authorizationSnapshot: authorizationSnapshot)
+    }
+    setupCamera()
+    setupLighting()
+  }
+
+  init(
+    canonicalGraphFetcher: @escaping CanonicalGraphFetcher,
+    initialGraphResponse: KnowledgeGraphResponse
+  ) {
+    self.canonicalGraphFetcher = canonicalGraphFetcher
+    graphResponse = initialGraphResponse
+    isEmpty = initialGraphResponse.nodes.isEmpty
     setupCamera()
     setupLighting()
   }
@@ -267,10 +258,14 @@ class MemoryGraphViewModel: ObservableObject {
       return
     }
 
-    await loadGraph(generation: generation)
+    let didLoadAuthoritatively = await loadGraph(generation: generation)
     guard generation == sessionGeneration else { return }
 
-    if isEmpty && !hasRunEmptyBootstrap {
+    // `isEmpty` starts true and only a successful load clears it, so a failed
+    // or cancelled fetch is indistinguishable from a genuinely empty graph.
+    // Bootstrapping on that difference asked the backend to DELETE and rebuild
+    // a healthy graph because the view was torn down mid-fetch.
+    if didLoadAuthoritatively && isEmpty && !hasRunEmptyBootstrap {
       // First-session bootstrap for sparse accounts: ask the backend to build
       // the graph, then poll for it. Run once per session — not per visit.
       guard await rebuildGraph(generation: generation) else { return }
@@ -284,11 +279,147 @@ class MemoryGraphViewModel: ObservableObject {
     }
   }
 
+  /// Load graph data for the canonical atlas without invoking the legacy
+  /// empty-graph rebuild path or paying the SceneKit simulation cost.
+  func prepareCanonicalAtlas() async {
+    guard !isPreparing else { return }
+    let generation = sessionGeneration
+    if !hasLoadedCanonicalAtlas {
+      // The shared view model may still contain a local onboarding or legacy
+      // projection. Canonical Brain Map must remain empty until a complete
+      // server graph has been fetched.
+      graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
+      canonicalAtlasProjection = nil
+      isEmpty = true
+    }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      log("Memory atlas: canonical load skipped while owner authorization is unavailable")
+      return
+    }
+    isPreparing = true
+    defer {
+      if generation == sessionGeneration {
+        isPreparing = false
+      }
+    }
+
+    if hasLoadedCanonicalAtlas,
+      !graphResponse.nodes.isEmpty,
+      !PollingConfig.shouldAllowActivationRefresh(lastRefresh: lastLoadedAt)
+    {
+      return
+    }
+
+    let showSpinner = graphResponse.nodes.isEmpty
+    if showSpinner { isLoading = true }
+    defer {
+      if showSpinner && generation == sessionGeneration {
+        isLoading = false
+      }
+    }
+
+    do {
+      let response = try await canonicalGraphFetcher(authorizationSnapshot)
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+        return
+      }
+      let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let projection = await Task.detached(priority: .userInitiated) {
+        MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
+      }.value
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+        return
+      }
+      canonicalAtlasProjection = projection
+      graphResponse = response
+      isEmpty = response.atlasNodes.isEmpty
+      hasLoadedCanonicalAtlas = true
+      lastLoadedAt = Date()
+      log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
+    } catch {
+      log("Failed to load memory atlas: \(error.localizedDescription)")
+    }
+  }
+
+  /// Rebuild the canonical atlas graph, polling until the replacement appears.
+  ///
+  /// The backend rebuild is a background task; a fixed 2-second sleep (as used
+  /// by the legacy `rebuildGraph`) receives an empty or stale graph whenever
+  /// processing the account takes longer. This polls until the new graph has
+  /// at least one node or the poll budget is exhausted.
+  @discardableResult
+  func rebuildCanonicalAtlas() async -> Bool {
+    let generation = sessionGeneration
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      log("Memory atlas: canonical rebuild skipped while owner authorization is unavailable")
+      return false
+    }
+    isRebuilding = true
+    defer {
+      if generation == sessionGeneration {
+        isRebuilding = false
+      }
+    }
+
+    do {
+      _ = try await APIClient.shared.rebuildKnowledgeGraph(
+        authorizationSnapshot: authorizationSnapshot)
+
+      // Poll for the replacement graph — the backend rebuild is async.
+      let maxAttempts = 10
+      for attempt in 1...maxAttempts {
+        try await Task.sleep(nanoseconds: 3_000_000_000)
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return false
+        }
+
+        let response = try await canonicalGraphFetcher(authorizationSnapshot)
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return false
+        }
+
+        if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
+          let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let projection = await Task.detached(priority: .userInitiated) {
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
+          }.value
+          guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+            return false
+          }
+          canonicalAtlasProjection = projection
+          graphResponse = response
+          isEmpty = response.atlasNodes.isEmpty
+          hasLoadedCanonicalAtlas = true
+          lastLoadedAt = Date()
+          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.atlasNodes.count) nodes")
+          return true
+        }
+      }
+
+      log("Memory atlas: rebuild poll budget exhausted, graph still empty after \(maxAttempts) attempts")
+      return false
+    } catch {
+      log("Failed to rebuild memory atlas: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  private func isCanonicalLoadCurrent(
+    generation: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> Bool {
+    guard !Task.isCancelled, generation == sessionGeneration else { return false }
+    return RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+  }
+
   func loadGraph() async {
     await loadGraph(generation: sessionGeneration)
   }
 
-  private func loadGraph(generation: Int) async {
+  /// Returns whether the graph was authoritatively loaded in this generation.
+  /// Callers that act on emptiness must not treat a failure as an empty graph.
+  @discardableResult
+  private func loadGraph(generation: Int) async -> Bool {
     // Only surface the spinner while there's no scene to show — freshness
     // checks over a rendered graph stay invisible.
     let showSpinner = isEmpty
@@ -301,20 +432,21 @@ class MemoryGraphViewModel: ObservableObject {
 
     do {
       let response = try await fetchGraph()
-      guard generation == sessionGeneration else { return }
+      guard generation == sessionGeneration else { return false }
 
       log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
+      graphResponse = response
       isEmpty = response.nodes.isEmpty
       lastLoadedAt = Date()
 
-      guard !isEmpty else { return }
+      guard !isEmpty else { return true }
 
       // Same graph as last time → keep the settled scene. Re-simulating and
       // recreating scene nodes for identical data is what made every page
       // visit visibly "reload" the brain map.
       let signature = Self.graphSignature(of: response)
       if signature == loadedGraphSignature {
-        return
+        return true
       }
       loadedGraphSignature = signature
 
@@ -347,14 +479,14 @@ class MemoryGraphViewModel: ObservableObject {
         await Task.detached(priority: .userInitiated) { [simulation] in
           simulation.runSync(ticks: 800)
         }.value
-        guard generation == sessionGeneration else { return }
+        guard generation == sessionGeneration else { return false }
         saveLayoutCache(signature: signature)
       }
       logPerf(
         "MemoryGraph: layout (restored=\(restoredLayout))",
         duration: CFAbsoluteTimeGetCurrent() - layoutStart)
 
-      guard generation == sessionGeneration else { return }
+      guard generation == sessionGeneration else { return false }
 
       // Create scene nodes
       let sceneStart = CFAbsoluteTimeGetCurrent()
@@ -371,8 +503,10 @@ class MemoryGraphViewModel: ObservableObject {
           await MainActor.run { isAnimating = false }
         }
       }
+      return true
     } catch {
       log("Failed to load knowledge graph: \(error.localizedDescription)")
+      return false
     }
   }
 
@@ -569,10 +703,13 @@ class MemoryGraphViewModel: ObservableObject {
     isRebuilding = false
     isEmpty = true
     selectedNodeId = nil
+    graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
+    canonicalAtlasProjection = nil
     isAnimating = false
     lastLoadedAt = .distantPast
     isPreparing = false
     hasRunEmptyBootstrap = false
+    hasLoadedCanonicalAtlas = false
     loadedGraphSignature = nil
     cameraNode.position = SCNVector3(0, 0, 2000)
   }

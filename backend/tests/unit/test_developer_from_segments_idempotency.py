@@ -353,3 +353,33 @@ def test_client_session_id_aliases_and_trimming():
 
     assert request.client_session_id == 'local-client-1'
     assert desktop_request.client_session_id == 'local-conversation-1'
+
+
+def test_from_segments_renews_processing_lease_during_live_processing(monkeypatch):
+    """A from-segments conversation admitted to processing must keep its admission
+    lease fresh while process_conversation runs, so the crash-orphan sweep never
+    terminalizes active work (#10461 ownership fence for every live producer)."""
+    import threading
+
+    lease_renewed = threading.Event()
+
+    def fake_renew(_uid, _conversation_id):
+        lease_renewed.set()
+        return True
+
+    monkeypatch.setattr(developer.lifecycle_service.jobs_db, 'renew_processing_lease', fake_renew)
+    monkeypatch.setattr(developer.lifecycle_service, '_processing_lease_renewal_interval', lambda: 0.001)
+
+    def blocking_process(_uid, _language, conversation):
+        assert lease_renewed.wait(timeout=5.0), 'lease not renewed during from-segments processing'
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(developer, 'process_conversation', blocking_process)
+
+    developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-lease'))
+
+    assert lease_renewed.is_set()

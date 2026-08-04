@@ -46,9 +46,13 @@ def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
-    expected = 'modulate-velma-2,parakeet'
-    for surface in STTServingSurface:
-        assert canonical_model_config(surface) == expected
+    expected = {
+        STTServingSurface.STREAMING: 'modulate-velma-2,parakeet',
+        STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
+        STTServingSurface.PTT: 'modulate-velma-2,parakeet',
+    }
+    for surface, model_order in expected.items():
+        assert canonical_model_config(surface) == model_order
         assert provider_is_enabled(PARAKEET_PROVIDER, surface)
         assert provider_is_enabled(MODULATE_PROVIDER, surface)
 

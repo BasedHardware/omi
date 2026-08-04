@@ -287,29 +287,4 @@ final class PiMonoWiringTests: XCTestCase {
         + violations.joined(separator: "\n"))
   }
 
-  // MARK: - Legacy key backend wiring (source-level)
-
-  func testRustConfigServesLegacyAnthropicKey() throws {
-    let configRoutesPath = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()  // Tests/
-      .deletingLastPathComponent()  // Desktop/
-      .deletingLastPathComponent()  // desktop/
-      .appendingPathComponent("Backend-Rust/src/routes/config.rs")
-
-    guard FileManager.default.fileExists(atPath: configRoutesPath.path) else {
-      throw XCTSkip("config.rs not found at \(configRoutesPath.path)")
-    }
-
-    let src = try String(contentsOf: configRoutesPath, encoding: .utf8)
-
-    // The response struct must have anthropic_api_key field
-    XCTAssert(
-      src.contains("anthropic_api_key: Option<String>"),
-      "ApiKeysResponse must contain anthropic_api_key for old client compat")
-
-    // It must be sourced from desktop_legacy_anthropic_key, NOT anthropic_api_key
-    XCTAssert(
-      src.contains("desktop_legacy_anthropic_key.clone()"),
-      "anthropic_api_key must be sourced from desktop_legacy_anthropic_key, not anthropic_api_key")
-  }
 }

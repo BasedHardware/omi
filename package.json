@@ -7,6 +7,12 @@
     "test:desktop-beta-admission:emulator": "bash backend/testing/desktop_beta_admission/run.sh",
     "test:listen-pusher-stack:emulator": "backend/testing/listen_pusher_stack/run.sh",
     "test:sync-cloud-tasks-stack:emulator": "backend/testing/sync_cloud_tasks_stack/run.sh",
+    "test:replay-harness-phase0a:emulator": "backend/testing/replay_harness_phase0a/run.sh",
+    "test:replay-stt-wire-fidelity": "backend/testing/replay_harness_stt_wire_fidelity/run.sh",
+    "test:replay-lc3-frame-timing": "backend/testing/replay_harness_lc3_frame_timing/run.sh",
+    "test:replay-llm-fake-upstream": "backend/testing/replay_harness_llm_gateway_fake_upstream/run.sh",
+    "test:replay-llm-streaming-wire-fidelity": "backend/testing/replay_harness_llm_streaming_wire_fidelity/run.sh",
+    "test:parity-pack-v0": "backend/testing/parity_pack_v0/run.sh",
     "test:memory-vector-repair-outbox:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/vector_repair_outbox_emulator_test.py\"",
     "test:memory-vector-repair-outbox-rules:emulator": "firebase emulators:exec --only firestore --project demo-memory \"node backend/scripts/firestore_rules_emulator_test.mjs\"",
     "test:memory-vector-repair-outbox-lease:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/vector_repair_outbox_lease_emulator_test.py\"",
@@ -27,14 +33,17 @@
     "firebase-tools": "15.22.0"
   },
   "overrides": {
+    "@hono/node-server": "~2.0.5",
+    "hono": "~4.12.27",
+    "brace-expansion": "~5.0.8",
     "@xmldom/xmldom": "^0.9.8",
-    "tar": "^7.5.11",
-    "postcss": "^8.5.10",
+    "tar": "~7.5.21",
+    "postcss": "~8.5.18",
     "shell-quote": ">=1.8.4",
     "uuid": ">=11.1.1",
     "ws": ">=8.17.0",
     "@babel/core": "^7.26.0",
-    "fast-uri": "^3.1.4"
+    "fast-uri": "~3.1.4"
   },
   "name": "omi-memory-ingestion-pipeline"
 }

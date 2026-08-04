@@ -418,6 +418,41 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
     assert all((item['policy']['archive_capability'] is False for item in results))
 
 
+def test_mcp_default_memory_adapter_collapses_short_term_alias_to_long_term_survivor():
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    survivor = _memory_item(
+        'canonical-survivor',
+        tier=MemoryTier.long_term,
+        now=now,
+        captured_at=now - timedelta(days=3),
+        content='coffee Project Beacon canonical survivor',
+        canonical_memory_id='canonical-survivor',
+        updated_at=now - timedelta(days=2),
+    )
+    alias = _memory_item(
+        'duplicate-short-term',
+        now=now,
+        content='coffee Project Beacon duplicate alias',
+        canonical_memory_id=survivor.memory_id,
+        updated_at=now - timedelta(hours=1),
+    )
+    db_client = _FirestoreFake(
+        {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [alias, survivor]}
+    )
+
+    results = search_default_mcp_memories(
+        uid='u1',
+        query='Project Beacon',
+        limit=10,
+        db_client=db_client,
+        rollout_capabilities=_read_capabilities(),
+        now=now,
+    )
+
+    assert [item['id'] for item in results] == [survivor.memory_id]
+    assert results[0]['content'] == survivor.content
+
+
 def test_mcp_default_memory_adapter_excludes_pending_admission_text():
     now = datetime.now(timezone.utc).replace(microsecond=0)
     pending = _memory_item(
@@ -499,7 +534,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
                 SearchVectorHit(
                     memory_id='long-term',
                     score=0.88,
-                    projection_commit_id='projection-1',
+                    projection_commit_id=long_term.ledger_commit_id,
                     vector_updated_at=now,
                     uid=long_term.uid,
                     account_generation=long_term.account_generation,
@@ -640,7 +675,7 @@ def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_r
                 SearchVectorHit(
                     memory_id='long-term',
                     score=0.88,
-                    projection_commit_id='projection-1',
+                    projection_commit_id=long_term.ledger_commit_id,
                     vector_updated_at=now,
                     uid=long_term.uid,
                     account_generation=long_term.account_generation,

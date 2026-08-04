@@ -6,11 +6,14 @@ import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 const MEMORY_PROTECTED_COLLECTIONS = [
   'memory_items',
   'memory_operations',
+  'memory_source_replacements',
   'memory_outbox',
   'memory_control',
   'memory_state',
   'memory_commits',
   'memory_evidence',
+  'memory_graph_assertions',
+  'memory_review_queue',
   'v3_compatibility_projection',
   'v3_compatibility_projection_items',
   'short_term_lifecycle_transitions',
@@ -162,7 +165,7 @@ try {
   await assertClientDeniedForV3CanaryApprovalSource(db);
   await assertAdminCanReadV3CanaryApprovalSource(testEnv);
 
-  assert.equal(MEMORY_PROTECTED_COLLECTIONS.length, 10);
+  assert.equal(MEMORY_PROTECTED_COLLECTIONS.length, 13);
   console.log(
     `PASS: signed-in client read/write denial asserted for ${MEMORY_PROTECTED_COLLECTIONS.length} memory collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, users/{uid}/memory_state/apply_control, memory app/key memory grant self-grant path, and system/v3_canary_approvals/routes/get_v3_memories; Admin-context read fixture proved for canary approval source`,
   );

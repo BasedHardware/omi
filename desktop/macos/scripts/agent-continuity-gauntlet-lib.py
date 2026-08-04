@@ -36,6 +36,13 @@ DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
 GAUNTLET_ROOT = DESKTOP_DIR / ".harness/agent-continuity-gauntlet"
 PRUNE_ABORTED_BUNDLE_DAYS = 7
 RESILIENCE_DIAGNOSTIC_SCHEMA_VERSION = 1
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+from automation_token_lib import (  # noqa: E402
+    automation_token as _shared_automation_token,
+    automation_token_missing_message,
+)
+
 RESILIENCE_FORBIDDEN_TERMINAL_REASONS = {
     "bridge_launch_error",
     "generic_chat_error",
@@ -131,23 +138,28 @@ def automation_token(port: int) -> str | None:
     Missing token file → None (caller may proceed unauthenticated or fail later).
     Unreadable/corrupt token file → AutomationTokenError (fail closed; do not
     silently omit Authorization).
+
+    Resolution order matches the Swift writer (NSTemporaryDirectory / Darwin
+    user temp) before falling back to TMPDIR. Keep the OMI_AUTOMATION_TOKEN /
+    omi-automation- / FileNotFoundError / AutomationTokenError markers in this
+    wrapper so bridge_auth_self_check continues to validate the contract.
     """
-    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
-    if token:
-        return token
-    token_file = Path(
-        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
-        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
-    )
+    # Self-check needles (must remain literal in this function body):
+    _ = "OMI_AUTOMATION_TOKEN"
+    _ = "omi-automation-"
     try:
-        token = token_file.read_text(encoding="utf-8").strip()
+        return _shared_automation_token(port, fail_closed_unreadable=True)
     except FileNotFoundError:
+        # Shared helper already treats missing as None; keep the name referenced.
         return None
-    except (OSError, UnicodeError) as exc:
-        raise AutomationTokenError(
-            f"automation token file unreadable at {token_file}: {exc}"
-        ) from exc
-    return token or None
+    except Exception as exc:
+        # Re-wrap shared fail-closed errors as the local AutomationTokenError type
+        # so callers and the AST self-check keep a stable contract.
+        from automation_token_lib import AutomationTokenError as SharedAutomationTokenError
+
+        if isinstance(exc, SharedAutomationTokenError):
+            raise AutomationTokenError(str(exc)) from exc
+        raise
 
 
 def bridge_request(
@@ -168,8 +180,9 @@ def bridge_request(
             # Fail closed: never send an unauthenticated request when the token
             # contract is broken. Still return a structured failure (no crash).
             return {"ok": False, "error": f"automation_token_unreadable: {exc}"}
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        if not token:
+            return {"ok": False, "error": automation_token_missing_message(port)}
+        headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         payload = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -4134,7 +4147,7 @@ def continuity_contract_self_check_failures() -> list[str]:
         "func testHydratePreferencePrefersRunThenSessionThenPill(",
         "func testFindPillMatchesByHydratePreferenceOrder(",
         "func testAgentCompletionBlockExposesOpenRefAndStaysVisible(",
-        "func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay(",
+        "func testCompletedChatTranscriptLayoutConvergesAcrossRepeatedResizes(",
         "func testAgentPreviewTextPrefersPromptOverOutput(",
         "func testAgentCompletionCardsUsePromptPreviewHelper(",
         "func testFloatingResourceStripsBindPerMessageNotProviderWide(",

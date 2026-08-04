@@ -178,11 +178,11 @@
 - **PR-stack coverage:** N/A (baseline).
 - **Value / notes:** Confirms Windows already has the "Omi AI" tier; the gap is the *other* providers + the agent runtime around them.
 
-## agent-cloud (hosted always-on agent VM)
+## agent VM (hosted always-on agent VM)
 
 - **What it is:** A separate cloud-hosted variant of the agent that runs on a per-user VM (the `agent-proxy` → `ws://<ip>:8080/ws` flow in the backend service map) for always-on / remote use.
-- **Where (Mac):** `desktop/macos/agent-cloud/agent.mjs` + `package.json` (`omi-agent-cloud`).
-- **How it works:** A long-lived Node WebSocket/HTTP server built directly on `@anthropic-ai/claude-agent-sdk` (not ACP), with a local SQLite DB synced from the desktop over an allowlisted `SYNC_TABLES` set (screenshots, action_items, transcription sessions/segments, memories, staged_tasks, focus_sessions, observations, live_notes, ai_user_profiles). Exposes `execute_sql`, `semantic_search`, `get_daily_recap`, Playwright browser tools, and backend tools; 30-min idle auto-stop. Self-contained — does not share `agent/src`'s kernel/adapter code.
+- **Where (Mac):** `backend/agent_vm/main.py` + `backend/agent_vm/Dockerfile`.
+- **How it works:** A long-lived Python WebSocket/HTTP server built on `claude-agent-sdk`, with a local SQLite DB synced from the desktop over an allowlisted `SYNC_TABLES` set (screenshots, action_items, transcription sessions/segments, memories, staged_tasks, focus_sessions, observations, live_notes, ai_user_profiles). Exposes `execute_sql`, `semantic_search`, `get_daily_recap`, Playwright browser tools, and backend tools; 30-min idle auto-stop. Self-contained — does not share `agent/src`'s kernel/adapter code.
 - **Windows status:** **Absent** (and is a backend/VM concern more than a client one).
 - **PR-stack coverage:** **No.**
 - **Value / notes:** Low for the desktop client itself; noted for completeness.

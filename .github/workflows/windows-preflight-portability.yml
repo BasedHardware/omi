@@ -1,0 +1,71 @@
+name: Windows Preflight Portability
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/checks-manifest.yaml'
+      - '.github/scripts/preflight_runner.py'
+      - '.github/scripts/pr_preflight.py'
+      - '.github/scripts/run_checks.py'
+      - '.github/scripts/test_preflight_runner.py'
+      - '.github/scripts/test_run_checks.py'
+      - '.github/workflows/windows-preflight-portability.yml'
+      - 'backend/.python-version'
+      - 'scripts/pre-push'
+      - 'scripts/pre-push-singleflight'
+      - 'scripts/pr-preflight'
+      - 'scripts/test-pre-push-worktree-fallback.sh'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/checks-manifest.yaml'
+      - '.github/scripts/preflight_runner.py'
+      - '.github/scripts/pr_preflight.py'
+      - '.github/scripts/run_checks.py'
+      - '.github/scripts/test_preflight_runner.py'
+      - '.github/scripts/test_run_checks.py'
+      - '.github/workflows/windows-preflight-portability.yml'
+      - 'backend/.python-version'
+      - 'scripts/pre-push'
+      - 'scripts/pre-push-singleflight'
+      - 'scripts/pr-preflight'
+      - 'scripts/test-pre-push-worktree-fallback.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  portability:
+    name: Native Windows process and launcher contracts
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Resolve supported Python minor
+        id: python-version
+        shell: pwsh
+        run: |
+          $parts = (Get-Content backend/.python-version -Raw).Trim().Split('.')
+          if ($parts.Count -lt 2) {
+            throw 'backend/.python-version must contain at least major.minor'
+          }
+          "version=$($parts[0]).$($parts[1])" >> $env:GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ steps.python-version.outputs.version }}
+
+      - name: Run Windows portability checks from the manifest
+        run: >-
+          python .github/scripts/run_checks.py
+          --lane ci
+          --base HEAD
+          --head HEAD
+          --platform windows
+          --check-id pre-push-worktree-fallback
+          --check-id preflight-runner-portability
+          --check-id check-manifest-contract

@@ -547,6 +547,32 @@ final class KernelTurnProjection {
     }
   }
 
+  @discardableResult
+  func repairNonterminalTurns(
+    surface: AgentSurfaceReference,
+    turnIDs: [String],
+    ownerID: String
+  ) async -> Int {
+    guard !turnIDs.isEmpty,
+      let lease = captureOwnerLease(ownerID: ownerID),
+      let host
+    else { return 0 }
+    guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return 0 }
+    do {
+      let repaired = try await client.repairJournalTurns(
+        surface: surface,
+        ownerID: lease.ownerID,
+        turnIDs: turnIDs
+      )
+      guard isCurrent(lease) else { return 0 }
+      _ = await refresh(surface: surface, lease: lease, publishPartialResults: true)
+      return isCurrent(lease) ? repaired.count : 0
+    } catch {
+      log("KernelTurnProjection: journal repair failed (code=journal_repair_failed)")
+      return 0
+    }
+  }
+
   /// The query result is the authoritative final material. The streaming row is
   /// an optimistic projection and can lag its terminal callback; use it only
   /// when the final result intentionally contains no text.

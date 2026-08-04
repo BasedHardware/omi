@@ -127,12 +127,7 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  | 'local_only'
-  | 'pending'
-  | 'posting'
-  | 'done'
-  | 'failed'
-  | 'unconfirmed'
+  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -293,8 +288,8 @@ export type CaptureCommand =
   // Meeting detection (Phase 5, sent by MAIN): start/stop the auto-capture
   // session (mic + system lanes) for a detected meeting. Serviced by
   // MeetingSessionHost in the capture window.
-  | { type: 'meeting-capture-start'; meetingId: string; appName: string }
-  | { type: 'meeting-capture-stop'; meetingId: string }
+  | { type: 'meeting-capture-start'; meetingId: string; attemptId: number; appName: string }
+  | { type: 'meeting-capture-stop'; meetingId: string; attemptId: number }
 
 /** A mutation to the shared live-conversation store, emitted by the capture
  *  window as it owns the always-on mic session. UI windows apply these via
@@ -312,6 +307,8 @@ export type LiveStoreOp =
 export type CaptureEvent =
   // Live-conversation store mirror (broadcast).
   | { type: 'live'; op: LiveStoreOp }
+  // An audio lane acquired its source and built the PCM pipeline (routed to the owner).
+  | { type: 'audio-source-ready'; sessionId: string }
   // An audio lane's source (mic/system stream) failed (routed to the owner).
   | { type: 'audio-source-error'; sessionId: string; name: string; message: string }
   // Push-to-talk streamed data / lifecycle (routed to the owner).
@@ -333,7 +330,8 @@ export type CaptureEvent =
   | {
       type: 'meeting-capture-status'
       meetingId: string
-      status: 'started' | 'error' | 'saved'
+      attemptId: number
+      status: 'started' | 'startup-error' | 'runtime-error' | 'saved' | 'save-error'
       message?: string
     }
 
@@ -1019,7 +1017,13 @@ export type OmiBridgeApi = {
    *  deletes, idempotent). Resolves to the number of rows rebuilt. */
   rewindRebuildIndex: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
-  rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
+  /** Display source containing the foreground window, with cursor/primary fallbacks. */
+  rewindCaptureSourceId: () => Promise<string | null>
+  rewindSaveFrame: (
+    data: Uint8Array,
+    sourceId: string
+  ) => Promise<{ captured: boolean; reason?: string }>
+  onRewindCaptureNow: (cb: () => void) => () => void
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
   /** Runtime capture directive (pause + effective cadence) the main process derives
    *  from OS power/lock state; the capture host prefers it over the base interval. */
@@ -1213,6 +1217,9 @@ export type OmiBridgeApi = {
   /** The update staged for install-on-quit, if any (query on Settings mount —
    *  the one-shot update:ready event usually fires while Settings is unmounted). */
   getPendingUpdate: () => Promise<{ version: string } | null>
+  /** Install the staged update and relaunch on the new version. Resolves false
+   *  when nothing is staged (nothing downloaded yet) — the app stays open. */
+  installUpdateNow: () => Promise<boolean>
   /** App display name + version (from Electron's app metadata). Shown in About. */
   getAppVersion: () => Promise<{ name: string; version: string }>
   /** Manually trigger an update check (Settings → About "Check for updates").
@@ -1703,13 +1710,7 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  | 'document'
-  | 'code'
-  | 'image'
-  | 'media'
-  | 'archive'
-  | 'application'
-  | 'other'
+  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,14 +1804,7 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  | 'project'
-  | 'app'
-  | 'technology'
-  | 'person'
-  | 'org'
-  | 'interest'
-  | 'file_group'
-  | 'card' // background-synthesized natural-language overview served to the chat floor
+  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
@@ -2061,6 +2055,11 @@ export type RewindSearchGroup = {
  *  treat 'unknown' as not-granted — never as a grant. */
 export type MicPermissionState = 'granted' | 'denied' | 'unknown'
 
+/** Resolution/JPEG tier the capture host samples at. The live stream is decoded
+ *  continuously while capture is on, so this is the one setting that trades CPU
+ *  and disk for OCR-readable small text. 'standard' is the proven 720p default. */
+export type RewindCaptureQuality = 'standard' | 'high' | 'max'
+
 export type RewindSettings = {
   captureEnabled: boolean
   intervalMs: number
@@ -2068,6 +2067,7 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+  captureQuality: RewindCaptureQuality
 }
 
 /** Runtime capture directive pushed main→renderer, derived from OS power/lock state.
@@ -2535,8 +2535,10 @@ export type MeetingSettings = {
 export type MeetingToastPayload = {
   meetingId: string
   appName: string
-  /** 'ask' → "Meeting detected — start capturing?"; 'capturing' → live notice. */
-  kind: 'ask' | 'capturing'
+  /** Ask, startup progress, confirmed live capture, or a retryable startup failure. */
+  kind: 'ask' | 'starting' | 'capturing' | 'error'
+  /** Distinguishes a failed start, interrupted capture, and final-save failure. */
+  errorKind?: 'startup' | 'runtime' | 'save'
   /** Show the one-time first-run hint line. */
   firstRun?: boolean
 }

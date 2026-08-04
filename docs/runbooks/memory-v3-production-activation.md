@@ -9,7 +9,10 @@ Candidate `1294773c8 feat(memory): wire default-off v3 rollout runtime` is clear
 
 Production activation remains NO-GO.
 
-A production deployment with `MEMORY_V3_GET_ENABLED` absent or false is a dark deployment only. It does not prove enabled behavior and must not be cited as functional proof.
+A production deployment that declares `MEMORY_V3_GET_ENABLED=false` is
+approved only as a dark deployment. This env value does not control request
+routing and cannot prove darkness by itself; the code cohort and persisted
+control/head/grant state must also remain unactivated.
 
 ## Preconditions before this runbook can execute
 
@@ -20,6 +23,33 @@ All must be true:
 - Independent review accepted the Gate 2 bundle.
 - No behavior-affecting code/dependency/config/index/IAM/schema changes occurred since Gate 2; otherwise Gate 2 rerun or explicit reviewer waiver is required.
 - Production owner, change window, rollback owner, monitoring owner, and approval artifact are named.
+
+## Scheduler contract before any production deploy
+
+The manual memory-maintenance deploy workflow does not create or mutate Cloud
+Scheduler or IAM. It updates the Cloud Run Job and then fails unless the
+existing `memory-maintenance-hourly` trigger is:
+
+- `projects/<prod-project>/locations/us-central1/jobs/memory-maintenance-hourly`;
+- targeted exactly at
+  `https://run.googleapis.com/v2/projects/<prod-project>/locations/us-central1/jobs/memory-maintenance-job:run`;
+- `POST`, `0 * * * *`, `Etc/UTC`, and `ENABLED`; and
+- configured with a nonempty OAuth service-account email.
+
+Provisioning or repairing this production resource is a separately approved
+production write and must happen before dispatching the deploy workflow. The
+workflow only runs `gcloud scheduler jobs describe` plus the pure checked-in
+validator. If validation fails, the GitHub deployment gate is red even though
+the preceding Cloud Run Job update may already have completed.
+
+The enabled Scheduler trigger does not itself activate canonical production
+memory. While the checked-in prod job has `MEMORY_MODE=off`, an empty
+`MEMORY_ENABLED_USERS`, and
+`MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`, each hourly execution exits
+without processing a user. These values are maintenance/readiness controls,
+not product entitlement; Gate 3 also requires the reviewed code cohort and
+persisted controls. Do not pause or delete the Scheduler to represent product
+disablement.
 
 ## Production-only evidence required
 
@@ -44,13 +74,24 @@ All must be true:
 5. Prepare explicit rollback/kill-switch plan.
 6. Obtain named human approval.
 7. Apply the smallest possible production activation delta:
-   - exact `MEMORY_V3_GET_ENABLED=true` only when approved;
-   - exact `MEMORY_MODE=read` only when approved;
-   - one/small approved allowlist entry only;
+   - declare `MEMORY_V3_GET_ENABLED=true` only when its proof is approved;
+   - declare `MEMORY_MODE=read` only when the deployment is ready;
+   - add the tiny cohort to the code-owned entitlement and mirror it in the
+     runtime inventory only through reviewed changes;
    - required server-owned control/grant/head/projection docs only through approved production path;
-   - **required:** flip the same `MEMORY_*` values on `cloud_run.jobs.memory-maintenance-job` (cron + fast-track + allowlist) — ST→LT is **not** hosted by `notifications-job`;
-   - deploy `memory-maintenance-job` via `.github/workflows/gcp_memory_maintenance_job.yml` (`environment=prod`) and confirm live job env;
-   - create/update Cloud Scheduler → Run Job Execute hourly for prod `memory-maintenance-job` (same pattern as the [dev runbook](memory-v3-dev-cloud-proof.md)).
+   - **required:** flip the same `MEMORY_*` values on
+     `cloud_run.jobs.memory-maintenance-job`
+     (`MEMORY_CANONICAL_MAINTENANCE_ENABLED=true`,
+     the allowlist, and the already-validated hourly Cloud Scheduler cadence) —
+     canonical terminal routing is **not** hosted by `notifications-job`;
+   - after separately approved Scheduler provisioning/repair, deploy
+     `memory-maintenance-job` via
+     `.github/workflows/gcp_memory_maintenance_job.yml`
+     (`environment=prod`) and require its post-deploy Scheduler validation to
+     pass;
+   - confirm live job env and separately verify that an hourly execution can
+     invoke `memory-maintenance-job` (same pattern as the
+     [dev runbook](memory-v3-dev-cloud-proof.md)).
 8. Run tiny canary:
    - confirm the canary UID has known pending short-term work (or seed one);
    - capture a pre-execution baseline (pending ST count / watermark fields only — no raw content);
@@ -60,7 +101,10 @@ All must be true:
 10. Exercise kill switch / rollback observation as approved.
 11. Record evidence and final decision.
 
-`backend/scripts/validate-backend-runtime-env.py` mechanically rejects `MEMORY_MODE=read` on request-path surfaces while `memory-maintenance-job` remains off/cron-false. Do not bypass that check for Gate 3.
+`backend/scripts/validate-backend-runtime-env.py` mechanically rejects a
+`MEMORY_MODE=read` readiness declaration on request-path surfaces while
+`memory-maintenance-job` remains off/maintenance-false. This validates rollout
+coordination; it is not the request router. Do not bypass the check for Gate 3.
 
 ## Non-claims
 

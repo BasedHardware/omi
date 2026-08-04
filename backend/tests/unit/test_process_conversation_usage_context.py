@@ -277,7 +277,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     )
 
     llm_memories = add("utils.llm.memories", AutoMockModule("utils.llm.memories"))
-    for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:
+    for attr in [
+        "resolve_memory_conflict",
+        "extract_canonical_l1_memory_candidates",
+        "extract_memories_from_text",
+        "new_memories_extractor",
+    ]:
         setattr(llm_memories, attr, MagicMock())
 
     llm_external = add("utils.llm.external_integrations", AutoMockModule("utils.llm.external_integrations"))
@@ -426,6 +431,66 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     create_audio_files.assert_not_called()
     update_conversation.assert_not_called()
     assert observed_persistence == [False]
+
+
+def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch):
+    """#10468 r5: with defer_derived_effects=True, process_conversation persists
+    the result and hands back the entire derived-effect bundle as a deferred
+    runner, emitting zero side effects inline.  Only invoking the runner (after
+    the durable finalizer has transactionally claimed ownership) emits calendar,
+    usage/app, vector, action/goal, audio, webhook, and memory work.  A losing
+    claim that never invokes the runner is a no-side-effect outcome."""
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+
+    completed_conversation = MagicMock()
+    completed_conversation.id = "conversation-deferred"
+    completed_conversation.dict.return_value = {"id": "conversation-deferred", "status": "completed"}
+    completed_conversation.structured = None  # skip analytics counting
+    completed_conversation.apps_results = []
+    completed_conversation.suggested_summarization_apps = []
+    completed_conversation.private_cloud_sync_enabled = False
+    completed_conversation.folder_id = "existing-folder"  # skip folder assignment
+
+    persistence = MagicMock(return_value=True)
+    submit = MagicMock()
+    trigger_apps = MagicMock()
+    create_audio_files = MagicMock()
+    update_conversation = MagicMock()
+    extract_memories = MagicMock()
+    captured: list = []
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
+    monkeypatch.setattr(process_conversation, "submit_with_context", submit)
+    monkeypatch.setattr(process_conversation, "_trigger_apps", trigger_apps)
+    monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
+    monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
+    monkeypatch.setattr(process_conversation, "_extract_memories", extract_memories)
+
+    result = process_conversation.process_conversation(
+        "uid",
+        "en",
+        input_conversation,
+        defer_derived_effects=True,
+        derived_effects_observer=captured.append,
+    )
+
+    assert result is completed_conversation
+    persistence.assert_called_once()
+    # ZERO side effects emitted inline — the entire bundle is deferred.
+    submit.assert_not_called()
+    trigger_apps.assert_not_called()
+    create_audio_files.assert_not_called()
+    update_conversation.assert_not_called()
+    extract_memories.assert_not_called()
+    assert len(captured) == 1, "exactly one derived-effects runner must be captured"
+
+    # Invoking the runner (ownership proven) emits every derived effect.
+    captured[0]()
+    trigger_apps.assert_called_once()
+    assert submit.call_count >= 4  # vectors, memory, action items, goals, webhook
 
 
 def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
@@ -739,6 +804,49 @@ def test_action_items_skipped_on_discard():
     assert discarded is True
     # extract_action_items should NOT have been called
     extract_mock.assert_not_called()
+
+
+def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
+    action_item = MagicMock()
+    action_item.description = 'Send the forecast'
+    action_item.completed = False
+    action_item.created_at = None
+    action_item.updated_at = None
+    action_item.due_at = None
+    action_item.completed_at = None
+
+    conversation = MagicMock()
+    conversation.id = 'conversation-1'
+    conversation.is_locked = False
+    conversation.structured.action_items = [action_item]
+
+    monkeypatch.setattr(process_conversation.conversation_capture, 'process_before_legacy', lambda *args: False)
+    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_fields', lambda *args: {})
+    monkeypatch.setattr(process_conversation.conversation_capture, 'legacy_document_ids', lambda *args: None)
+    monkeypatch.setattr(process_conversation.conversation_capture, 'reconcile_after_legacy', lambda *args: None)
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
+    monkeypatch.setattr(
+        process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: None
+    )
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'create_action_items_batch',
+        lambda *args, **kwargs: ['task-1'],
+    )
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
+    submitted_to = []
+    monkeypatch.setattr(
+        process_conversation,
+        'submit_with_context',
+        lambda executor, function: submitted_to.append(executor),
+    )
+
+    process_conversation._save_action_items('user-1', conversation)
+
+    assert submitted_to == [process_conversation.postprocess_executor], (
+        'conversation task auto-sync must run on postprocess_executor so its Firestore '
+        'children can acquire db_executor workers'
+    )
 
 
 def test_llm_calls_use_omi_qos_tier_system():
@@ -1103,3 +1211,56 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert results[0]['app_id'] == 'app-1'
     assert results[0]['content'] == 'APP SUMMARY'
     assert written.get('suggested_summarization_apps') == ['app-1']
+
+
+def test_dedup_candidates_exclude_own_and_merge_source_items():
+    """Regression: on reprocess/merge, the conversation's own previous action
+    items (and the merge sources') came back as dedup candidates — the LLM
+    suppressed re-extracting them and the save step then deleted them, so
+    tasks silently vanished. Items from the conversation being processed or
+    its merge sources must never be dedup candidates."""
+    import sys
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    items = [
+        {'id': 'own', 'conversation_id': 'conv-1', 'completed': False, 'updated_at': now},
+        {'id': 'merged', 'conversation_id': 'src-conv', 'completed': False, 'updated_at': now},
+        {'id': 'unrelated', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now},
+    ]
+    similar = [{'action_item_id': item['id'], 'score': 0.9} for item in items]
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
+
+    conversation = SimpleNamespace(
+        id='conv-1',
+        external_data={'merge_metadata': {'source_conversation_ids': ['src-conv']}},
+    )
+    structured = SimpleNamespace(overview='discussed follow-ups')
+
+    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+        eligible = process_conversation._fetch_dedup_candidates('user-1', structured, conversation)
+
+    assert [item['id'] for item in eligible] == ['unrelated']
+
+
+def test_dedup_candidates_unchanged_without_conversation_context():
+    """Without a conversation (new-conversation path has a fresh id), all open
+    recent items remain candidates."""
+    import sys
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+
+    now = datetime.now(timezone.utc)
+    items = [{'id': 'open-item', 'conversation_id': 'other-conv', 'completed': False, 'updated_at': now}]
+    action_items_mod = sys.modules["database.action_items"]
+    action_items_mod.get_action_items_by_ids = MagicMock(return_value=items)
+
+    similar = [{'action_item_id': 'open-item', 'score': 0.9}]
+    structured = SimpleNamespace(overview='discussed follow-ups')
+
+    with patch.object(process_conversation, "find_similar_action_items", MagicMock(return_value=similar)):
+        eligible = process_conversation._fetch_dedup_candidates('user-1', structured)
+
+    assert [item['id'] for item in eligible] == ['open-item']

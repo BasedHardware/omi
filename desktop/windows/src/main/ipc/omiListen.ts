@@ -169,6 +169,11 @@ type Session = {
 }
 
 const sessions = new Map<string, Session>()
+// Ownership outlives the WebSocket itself. A socket can close before the
+// renderer sends audio-stop; retaining this record lets the same renderer tear
+// down its local capture pipeline without opening control to other windows.
+const sessionOwners = new Map<string, number>()
+const ownersWithDestroyHook = new Set<number>()
 
 // Base headers every v4/listen WS carries: auth plus the platform/device
 // identity the backend's platform normalization reads (X-App-Platform,
@@ -273,10 +278,23 @@ function killSession(id: string, s: Session, why: string): void {
 }
 
 function startSession(args: ListenStartArgs, owner: WebContents): void {
+  const registeredOwner = sessionOwners.get(args.sessionId)
+  if (registeredOwner !== undefined && registeredOwner !== owner.id) {
+    console.warn('[omi-listen] rejected cross-owner session replacement')
+    return
+  }
   const existing = sessions.get(args.sessionId)
   if (existing) {
     // Already running under the same id — caller bug; tear down to avoid leaks.
     killSession(args.sessionId, existing, 'replace')
+  }
+  sessionOwners.set(args.sessionId, owner.id)
+  if (!ownersWithDestroyHook.has(owner.id)) {
+    ownersWithDestroyHook.add(owner.id)
+    owner.once('destroyed', () => {
+      ownersWithDestroyHook.delete(owner.id)
+      killSessionsForOwner(owner.id)
+    })
   }
   const mode: ListenMode = args.mode ?? 'conversation'
 
@@ -490,9 +508,11 @@ function finalizeSession(sessionId: string): void {
   }
 }
 
-function stopSession(sessionId: string): void {
+function stopSession(sessionId: string, ownerId?: number): void {
+  if (ownerId !== undefined && sessionOwners.get(sessionId) !== ownerId) return
   const s = sessions.get(sessionId)
   if (s) killSession(sessionId, s, 'stop')
+  sessionOwners.delete(sessionId)
 }
 
 /** Close every session owned by a webContents that no longer exists — a crashed
@@ -502,9 +522,18 @@ export function killSessionsForOwner(ownerId: number): void {
   for (const [id, s] of sessions) {
     if (s.ownerId === ownerId) killSession(id, s, `owner ${ownerId} gone`)
   }
+  for (const [id, registeredOwner] of sessionOwners) {
+    if (registeredOwner === ownerId) sessionOwners.delete(id)
+  }
 }
 
-export function registerOmiListenHandlers(): void {
+/** Authorization seam for captureBridge: an audio command may only control the
+ * listen session opened by that same renderer. */
+export function isListenSessionOwnedBy(sessionId: string, ownerId: number): boolean {
+  return sessionOwners.get(sessionId) === ownerId
+}
+
+export function registerOmiListenHandlers(canStartSession: (ownerId: number) => boolean): void {
   // Expose the byte counters to the E2E harnesses (VAD-playback / soak) so a
   // Playwright electronApp.evaluate can read them from the main process. Gated on
   // OMI_E2E — inert in production.
@@ -512,16 +541,21 @@ export function registerOmiListenHandlers(): void {
     ;(globalThis as Record<string, unknown>).__omiGetListenStats = getListenStats
   }
   ipcMain.handle('omi-listen:start', (e, args: ListenStartArgs) => {
+    if (!canStartSession(e.sender.id)) {
+      throw new Error('listen session is not allowed from this window')
+    }
     startSession(args, e.sender)
   })
-  ipcMain.handle('omi-listen:stop', (_e, sessionId: string) => {
-    stopSession(sessionId)
+  ipcMain.handle('omi-listen:stop', (e, sessionId: string) => {
+    stopSession(sessionId, e.sender.id)
   })
   // `on` (not `handle`) — feed is fire-and-forget to keep audio throughput cheap.
-  ipcMain.on('omi-listen:feed', (_e, sessionId: string, pcm: ArrayBuffer) => {
+  ipcMain.on('omi-listen:feed', (e, sessionId: string, pcm: ArrayBuffer) => {
+    if (!isListenSessionOwnedBy(sessionId, e.sender.id)) return
     feedSession(sessionId, pcm)
   })
-  ipcMain.on('omi-listen:finalize', (_e, sessionId: string) => {
+  ipcMain.on('omi-listen:finalize', (e, sessionId: string) => {
+    if (!isListenSessionOwnedBy(sessionId, e.sender.id)) return
     finalizeSession(sessionId)
   })
 }

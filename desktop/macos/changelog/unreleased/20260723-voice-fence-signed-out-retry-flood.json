@@ -1,3 +1,0 @@
-{
-  "change": "Fixed excessive CPU use and error-log spam when the app is left signed out"
-}

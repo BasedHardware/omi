@@ -1483,7 +1483,7 @@
     "exportConfiguration": "Izvozite nastavitve",
     "bringYourOwn": "Prinesite svoje",
     "payYourSttProvider": "Prostorocno uporabite omi. Plačujete samo svojemu STT ponudniku.",
-    "freeMinutesMonth": "1.200 brezplačnih minut/mesec vključenih. Neomejeno z ",
+    "freeMinutesMonth": "300 brezplačnih minut/mesec vključenih. Neomejeno z ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Potreben je gostitelj",
     "validPortRequired": "Potreben je veljaven port",
@@ -5490,7 +5490,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 premium minut + neomejeno na naprava",
+    "basicPlanDescription": "300 premium minut + neomejeno na naprava",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7265,7 +7265,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo.",
+    "premiumMinutesInfo": "300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7376,7 +7376,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo. ",
+    "premiumMinutesMonth": "300 premijskih minut/mesec. Zavihek Na napravi ponuja neomejeno brezplačno transkripcijo. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10567,6 +10567,7 @@
     "syncStatusWaiting": "Čaka na sinhronizacijo",
     "syncStatusRetrying": "Obdelava ni uspela — vnovični poskus",
     "syncStatusFailed": "Ni uspelo — tapnite Poskusi znova",
+    "syncStatusTooOld": "Prestaro za sinhronizacijo — Omi ga ne more sprejeti",
     "syncStatusFileUnavailable": "Datoteka ni na voljo",
     "syncStatusUploaded": "Naloženo · obdelava v Omi",
     "noRecordingsYet": "Še ni posnetkov",

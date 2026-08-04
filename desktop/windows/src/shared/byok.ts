@@ -1,7 +1,7 @@
 // BYOK (Bring Your Own Keys) header + fingerprint helpers.
 //
 // Mirrors the backend contract in `backend/utils/byok.py` (BYOK_HEADERS,
-// SHA-256 fingerprints) and the Rust `Backend-Rust/src/byok.rs`. The desktop
+// SHA-256 fingerprints). The desktop
 // client sends user-provided provider keys as per-request headers; the backend
 // reads them case-insensitively (`x-byok-{provider}`) but clients send the
 // canonical casing below. The backend enforces ALL-OR-NOTHING enrollment via

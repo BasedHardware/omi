@@ -6,11 +6,18 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 
 def validate_qualification_run(run: object, repository: str, release_tag: str, candidate_sha: str) -> None:
-    """Require a successful same-repository workflow dispatched on the candidate tag."""
+    """Require a successful trusted qualification run for the candidate.
+
+    A workflow dispatch can start from the candidate tag (the normal planner
+    path) or from ``main`` (a manual dispatch). The workflow's own isolated
+    checkout and the evidence artifact bind the latter to the exact tag; only
+    the tag-dispatched path can use GitHub's workflow-run SHA as that proof.
+    """
     if not isinstance(run, dict):
         raise ValueError("qualification run must be an object")
     required = {
@@ -18,17 +25,21 @@ def validate_qualification_run(run: object, repository: str, release_tag: str, c
         "conclusion": "success",
         "event": "workflow_dispatch",
         "path": ".github/workflows/desktop_qualify_beta.yml",
-        "head_branch": release_tag,
-        "head_sha": candidate_sha,
         "name": "Qualify Desktop Beta Candidate",
     }
     for key, expected in required.items():
         if run.get(key) != expected:
-            if key == "head_branch":
-                raise ValueError("qualification run must execute the candidate tag controls")
-            if key == "head_sha":
-                raise ValueError("qualification run must execute the candidate source SHA")
             raise ValueError(f"qualification run {key} must equal {expected!r}")
+    head_branch = run.get("head_branch")
+    head_sha = run.get("head_sha")
+    if head_branch == release_tag:
+        if head_sha != candidate_sha:
+            raise ValueError("qualification run must execute the candidate source SHA")
+    elif head_branch == "main":
+        if not isinstance(head_sha, str) or re.fullmatch(r"[0-9a-f]{40}", head_sha) is None:
+            raise ValueError("manual qualification run must have an immutable dispatch SHA")
+    else:
+        raise ValueError("qualification run must execute the candidate tag controls or trusted main controls")
     for key in ("repository", "head_repository"):
         value = run.get(key)
         if not isinstance(value, dict) or value.get("full_name") != repository:

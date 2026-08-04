@@ -6,6 +6,8 @@ import shutil
 import subprocess
 import sys
 
+from testing.shell import bash_command, bash_path
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUNNER_SOURCE = REPO_ROOT / 'backend' / 'scripts' / 'run-unit-ci.sh'
 TYPECHECK_PREDICATE_SOURCE = REPO_ROOT / 'backend' / 'scripts' / 'needs-typecheck.sh'
@@ -30,7 +32,7 @@ def test_runner_executes_the_same_selected_contract_as_ci(tmp_path):
 
     log_path = tmp_path / 'runner.log'
     changed_files = tmp_path / 'changed-files.txt'
-    changed_files.write_text('backend/routers/example.py\n', encoding='utf-8')
+    changed_files.write_text('backend/routers/example.py\n', encoding='utf-8', newline='\n')
 
     _write_executable(
         scripts / 'select_backend_unit_tests.py',
@@ -57,7 +59,7 @@ with open(os.environ['RUNNER_LOG'], 'a', encoding='utf-8') as log:
         '''
 #!/usr/bin/env bash
 set -euo pipefail
-echo "preflight:$PYTHON" >> "$RUNNER_LOG"
+echo "preflight:$PYTHON" >> "$RUNNER_SHELL_LOG"
 '''.lstrip(),
     )
     _write_executable(
@@ -65,7 +67,7 @@ echo "preflight:$PYTHON" >> "$RUNNER_LOG"
         '''
 #!/usr/bin/env bash
 set -euo pipefail
-echo "typecheck:$PYTHON" >> "$RUNNER_LOG"
+echo "typecheck:$PYTHON" >> "$RUNNER_SHELL_LOG"
 '''.lstrip(),
     )
     _write_executable(
@@ -80,13 +82,18 @@ printf 'test:%s:%s:%s:%s:%s:%s\\n' \\
   "$BACKEND_PYTEST_FILE_ISOLATION" \\
   "$BACKEND_PYTEST_MARK_EXPR" \\
   "$BACKEND_PYTEST_XDIST" \\
-  "$BACKEND_PYTEST_WORKERS" >> "$RUNNER_LOG"
+  "$BACKEND_PYTEST_WORKERS" >> "$RUNNER_SHELL_LOG"
 '''.lstrip(),
     )
 
-    environment = os.environ | {'PYTHON': sys.executable, 'RUNNER_LOG': str(log_path)}
+    shell_python = bash_path(Path(sys.executable), cwd=REPO_ROOT)
+    environment = os.environ | {
+        'PYTHON': shell_python,
+        'RUNNER_LOG': str(log_path),
+        'RUNNER_SHELL_LOG': bash_path(log_path, cwd=REPO_ROOT),
+    }
     result = subprocess.run(
-        ['bash', str(runner), '--changed-files', str(changed_files)],
+        bash_command(runner, '--changed-files', changed_files, cwd=REPO_ROOT),
         cwd=backend,
         env=environment,
         check=False,
@@ -98,7 +105,7 @@ printf 'test:%s:%s:%s:%s:%s:%s\\n' \\
     assert 'Selected 1 backend unit test file(s): fixture selection' in result.stdout
 
     all_result = subprocess.run(
-        ['bash', str(runner), '--all'],
+        bash_command(runner, '--all', cwd=REPO_ROOT),
         cwd=backend,
         env=environment,
         check=False,
@@ -109,11 +116,11 @@ printf 'test:%s:%s:%s:%s:%s:%s\\n' \\
     assert all_result.returncode == 0, all_result.stderr
     assert log_path.read_text(encoding='utf-8').splitlines() == [
         'select',
-        f'preflight:{sys.executable}',
-        f'typecheck:{sys.executable}',
+        f'preflight:{shell_python}',
+        f'typecheck:{shell_python}',
         'test:0.1:1.0:1:not integration and not slow:auto:auto',
         'select',
-        f'preflight:{sys.executable}',
-        f'typecheck:{sys.executable}',
+        f'preflight:{shell_python}',
+        f'typecheck:{shell_python}',
         'test:0.1:1.0:1:not integration and not slow:auto:auto',
     ]

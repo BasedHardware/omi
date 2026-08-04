@@ -36,6 +36,7 @@ import type { CaptureCommand, MeetingToastAction } from '../../shared/types'
 
 const DEBOUNCE_MS = 3000
 const COALESCE_MS = 250
+const CAPTURE_START_TIMEOUT_MS = 5000
 
 type Deps = { getCaptureWc: () => WebContents | null }
 
@@ -47,11 +48,18 @@ let unsubForeground: (() => void) | null = null
 let unsubCaptureEvents: (() => void) | null = null
 let coalesceTimer: NodeJS.Timeout | null = null
 let deadlineTimer: NodeJS.Timeout | null = null
+let captureStartupTimer: NodeJS.Timeout | null = null
 let running = false
 
 // The meeting currently being surfaced/captured (set on 'meeting-started').
-let currentMeeting: { id: string; appName: string; capturing: boolean } | null = null
+let currentMeeting: {
+  id: string
+  appName: string
+  capturing: boolean
+  captureAttemptId: number | null
+} | null = null
 let nextMeetingSeq = 1
+let nextCaptureAttemptSeq = 1
 
 // E2E only (OMI_E2E=1): when set, evaluate() uses these signals instead of the
 // native sources, so the whole pipeline (machine → toast → capture command) is
@@ -122,23 +130,60 @@ function sendCaptureCommand(cmd: CaptureCommand): boolean {
   return true
 }
 
-function startCapture(): void {
-  if (!currentMeeting || currentMeeting.capturing) return
+function startCapture(): boolean {
+  if (!currentMeeting) return false
+  if (currentMeeting.capturing) return true
+  const attemptId = nextCaptureAttemptSeq++
   // Only mark capturing once the command actually reached a live capture
   // window — otherwise `capturing` would latch true (toast lying "Omi is
   // capturing") with nothing recording when the capture window is absent.
   const sent = sendCaptureCommand({
     type: 'meeting-capture-start',
     meetingId: currentMeeting.id,
+    attemptId,
     appName: currentMeeting.appName
   })
-  if (sent) currentMeeting.capturing = true
+  if (sent) {
+    currentMeeting.capturing = true
+    currentMeeting.captureAttemptId = attemptId
+    armCaptureStartupTimeout(currentMeeting.id, attemptId)
+  }
+  return sent
+}
+
+function clearCaptureStartupTimeout(): void {
+  if (captureStartupTimer) clearTimeout(captureStartupTimer)
+  captureStartupTimer = null
+}
+
+function armCaptureStartupTimeout(meetingId: string, attemptId: number): void {
+  clearCaptureStartupTimeout()
+  captureStartupTimer = setTimeout(() => {
+    captureStartupTimer = null
+    if (
+      !currentMeeting?.capturing ||
+      currentMeeting.id !== meetingId ||
+      currentMeeting.captureAttemptId !== attemptId
+    )
+      return
+    console.warn('[meeting] capture startup timed out')
+    stopCapture()
+    showMeetingToast({
+      meetingId: currentMeeting.id,
+      appName: currentMeeting.appName,
+      kind: 'error',
+      errorKind: 'startup'
+    })
+  }, CAPTURE_START_TIMEOUT_MS)
 }
 
 function stopCapture(): void {
-  if (!currentMeeting?.capturing) return
+  if (!currentMeeting?.capturing || currentMeeting.captureAttemptId === null) return
+  clearCaptureStartupTimeout()
+  const attemptId = currentMeeting.captureAttemptId
   currentMeeting.capturing = false
-  sendCaptureCommand({ type: 'meeting-capture-stop', meetingId: currentMeeting.id })
+  currentMeeting.captureAttemptId = null
+  sendCaptureCommand({ type: 'meeting-capture-stop', meetingId: currentMeeting.id, attemptId })
 }
 
 /** Hide the shared toast window ONLY if the meeting card currently on it belongs
@@ -160,16 +205,18 @@ function handleEffect(effect: DetectorEffect): void {
     currentMeeting = {
       id: `meeting-${Date.now()}-${nextMeetingSeq++}`,
       appName: effect.match.name,
-      capturing: false
+      capturing: false,
+      captureAttemptId: null
     }
     console.log(
       `[meeting] started: ${effect.match.name} (${effect.match.tier2Key}) mode=${effect.mode}`
     )
-    if (effect.mode === 'auto') startCapture()
+    const captureSent = effect.mode === 'auto' ? startCapture() : false
     showMeetingToast({
       meetingId: currentMeeting.id,
       appName: currentMeeting.appName,
-      kind: effect.mode === 'auto' ? 'capturing' : 'ask',
+      kind: effect.mode === 'auto' ? (captureSent ? 'starting' : 'error') : 'ask',
+      ...(effect.mode === 'auto' && !captureSent ? { errorKind: 'startup' as const } : {}),
       firstRun: takeFirstRun()
     })
   } else {
@@ -224,8 +271,13 @@ export function meetingToastAction(meetingId: string, action: MeetingToastAction
     return
   }
   if (action === 'start') {
-    startCapture()
-    showMeetingToast({ meetingId: currentMeeting.id, appName: currentMeeting.appName, kind: 'capturing' })
+    const sent = startCapture()
+    showMeetingToast({
+      meetingId: currentMeeting.id,
+      appName: currentMeeting.appName,
+      kind: sent ? 'starting' : 'error',
+      ...(!sent ? { errorKind: 'startup' as const } : {})
+    })
   } else if (action === 'stop') {
     stopCapture()
     hideMeetingToast()
@@ -256,8 +308,16 @@ export function startMeetingMonitor(d: Deps): void {
     // toast keeps claiming capture.
     if (ev.type === 'capture-window-restarted') {
       if (currentMeeting?.capturing) {
+        clearCaptureStartupTimeout()
         currentMeeting.capturing = false // startCapture re-sets it on a live send
-        startCapture()
+        currentMeeting.captureAttemptId = null
+        const sent = startCapture()
+        showMeetingToast({
+          meetingId: currentMeeting.id,
+          appName: currentMeeting.appName,
+          kind: sent ? 'starting' : 'error',
+          ...(!sent ? { errorKind: 'startup' as const } : {})
+        })
       }
       return
     }
@@ -266,10 +326,43 @@ export function startMeetingMonitor(d: Deps): void {
     if (ev.type !== 'meeting-capture-status') return
     if (process.env.OMI_E2E === '1') statusLog.push(`${ev.meetingId}:${ev.status}`)
     if (!currentMeeting || ev.meetingId !== currentMeeting.id) return
-    if (ev.status === 'error') {
+    if (ev.status === 'save-error') {
+      // A save can finish after Stop cleared the active attempt. Never let an
+      // older save failure overwrite a newer capture attempt.
+      if (currentMeeting.captureAttemptId === null) {
+        showMeetingToast({
+          meetingId: currentMeeting.id,
+          appName: currentMeeting.appName,
+          kind: 'error',
+          errorKind: 'save'
+        })
+      }
+      return
+    }
+    if (ev.attemptId !== currentMeeting.captureAttemptId) return
+    if (ev.status === 'started') {
+      clearCaptureStartupTimeout()
+      if (currentMeeting.capturing && getCurrentMeetingToast()?.meetingId === currentMeeting.id) {
+        // Do not resurrect a success notice the user dismissed, or replace an
+        // insight that took over the shared toast while startup was pending.
+        showMeetingToast({
+          meetingId: currentMeeting.id,
+          appName: currentMeeting.appName,
+          kind: 'capturing'
+        })
+      }
+    } else if (ev.status === 'startup-error' || ev.status === 'runtime-error') {
+      clearCaptureStartupTimeout()
       console.warn('[meeting] capture failed:', ev.message)
-      currentMeeting.capturing = false
-      hideOwnMeetingToast()
+      // Stop every sibling lane before clearing the state. Otherwise one lane
+      // can keep recording after the other fails while the notice is gone.
+      stopCapture()
+      showMeetingToast({
+        meetingId: currentMeeting.id,
+        appName: currentMeeting.appName,
+        kind: 'error',
+        errorKind: ev.status === 'startup-error' ? 'startup' : 'runtime'
+      })
     }
   })
   // Pick up a meeting already in progress at app start — coalesced, so the
@@ -291,6 +384,7 @@ export function stopMeetingMonitor(): void {
   coalesceTimer = null
   if (deadlineTimer) clearTimeout(deadlineTimer)
   deadlineTimer = null
+  clearCaptureStartupTimeout()
   stopCapture()
   currentMeeting = null
   state = initialDetectorState

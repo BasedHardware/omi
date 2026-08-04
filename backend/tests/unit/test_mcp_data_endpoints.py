@@ -181,7 +181,7 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     auth_context = SimpleNamespace(uid="auth-user")
     authorization = SimpleNamespace(allowed=True)
     memory_service = MagicMock()
-    memory_service.read.return_value = []
+    memory_service.read_pinned.return_value = []
     with (
         patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
         patch.object(rest, "pin_memory_system", return_value=rest.MemorySystem.CANONICAL) as pin,
@@ -191,7 +191,12 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
 
     pin.assert_called_once_with("auth-user", db_client=rest.db)
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
+    memory_service.read_pinned.assert_called_once_with(
+        "auth-user",
+        rest.MemorySystem.CANONICAL,
+        100,
+        0,
+    )
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -602,3 +607,123 @@ class TestToolRegistry:
                     sse.execute_tool(UID, name, {})
                 except sse.ToolExecutionError as e:
                     assert 'Unknown tool' not in e.message
+
+
+# --- denied memory reads are distinguishable from empty accounts (#10735) -----------------
+# A denied default-memory read returned an empty result set with a success status on every
+# MCP surface, so a client could not tell "this key is not authorized" from "you have no
+# memories". That is the failure mode most likely to make a user believe their data was
+# deleted, and support could not separate the two without a per-account Firestore trace.
+#
+# The issue named two sites (mcp_sse get_memories / search_memories). There are four: the
+# REST surface in routers/mcp.py has the identical shape.
+#
+# SHADOW_ONLY deliberately keeps returning empty. It is not an authorization denial - in
+# shadow mode legacy is authoritative - so reporting it as an auth error would be wrong in
+# the other direction. That state is tracked separately.
+
+_DENY_REASONS_REPORTED = [
+    'malformed_rollout_state',
+    'rollout_read_failed',
+    'missing_mcp_default_memory_grant',
+    'uid_mismatch',
+    'unsupported_consumer',
+    'unsupported_rollout_schema',
+    'memory_reads_disabled',
+]
+
+
+def _denied_result(reason, read_decision=None):
+    return SimpleNamespace(
+        read_decision=read_decision or rest.MemoryReadDecision.DENY_MEMORY,
+        memories=[],
+        fallback_reason=reason,
+    )
+
+
+def _shadow_result():
+    return SimpleNamespace(
+        read_decision=rest.MemoryReadDecision.SHADOW_ONLY, memories=[], fallback_reason='shadow_only'
+    )
+
+
+def _rest_legacy_patches(adapter_attr, result):
+    return (
+        patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=SimpleNamespace(allowed=True)),
+        patch.object(rest, 'pin_memory_system', return_value=rest.MemorySystem.LEGACY),
+        patch.object(rest, 'read_default_read_rollout', return_value=SimpleNamespace()),
+        patch.object(rest, adapter_attr, return_value=result),
+    )
+
+
+def _sse_legacy_patches(adapter_attr, result):
+    return (
+        patch.object(sse, 'authorize_memory_external_default_memory_read', return_value=SimpleNamespace(allowed=True)),
+        patch.object(sse, 'pin_memory_system', return_value=sse.MemorySystem.LEGACY),
+        patch.object(sse, 'read_default_read_rollout', return_value=SimpleNamespace()),
+        patch.object(sse, adapter_attr, return_value=result),
+    )
+
+
+def _run_rest_list(result):
+    a, b, c, d = _rest_legacy_patches('list_default_mcp_memories', result)
+    with a, b, c, d:
+        return rest.get_memories(auth_context=SimpleNamespace(uid=UID))
+
+
+def _run_rest_search(result):
+    a, b, c, d = _rest_legacy_patches('search_default_mcp_memories_vector', result)
+    with a, b, c, d:
+        return rest.search_memories(query='espresso', auth_context=SimpleNamespace(uid=UID))
+
+
+def _sse_auth_context():
+    return SimpleNamespace(uid=UID, consumer='mcp', surface='mcp', app_id='app-1', key_id='key-1')
+
+
+def _run_sse_list(result):
+    a, b, c, d = _sse_legacy_patches('list_default_mcp_memories', result)
+    with a, b, c, d:
+        return sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+
+def _run_sse_search(result):
+    a, b, c, d = _sse_legacy_patches('search_default_mcp_memories_vector', result)
+    with a, b, c, d:
+        return sse.execute_tool(UID, 'search_memories', {'query': 'espresso'}, auth_context=_sse_auth_context())
+
+
+_REST_SURFACES = [pytest.param(_run_rest_list, id='rest_list'), pytest.param(_run_rest_search, id='rest_search')]
+_SSE_SURFACES = [pytest.param(_run_sse_list, id='sse_list'), pytest.param(_run_sse_search, id='sse_search')]
+
+
+@pytest.mark.parametrize('reason', _DENY_REASONS_REPORTED)
+@pytest.mark.parametrize('run_surface', _REST_SURFACES)
+def test_rest_denied_memory_read_raises_with_reason_instead_of_empty_success(run_surface, reason):
+    with pytest.raises(rest.HTTPException) as raised:
+        run_surface(_denied_result(reason))
+
+    assert raised.value.status_code == 403
+    assert raised.value.detail['reason'] == reason
+    assert raised.value.detail['enabled'] is False
+    assert raised.value.detail['consumer'] == 'mcp'
+
+
+@pytest.mark.parametrize('reason', _DENY_REASONS_REPORTED)
+@pytest.mark.parametrize('run_surface', _SSE_SURFACES)
+def test_sse_denied_memory_read_raises_with_reason_instead_of_empty_success(run_surface, reason):
+    with pytest.raises(sse.ToolExecutionError) as raised:
+        run_surface(_denied_result(reason))
+
+    assert raised.value.code == -32009
+    assert reason in raised.value.message
+
+
+@pytest.mark.parametrize('run_surface', _REST_SURFACES)
+def test_rest_shadow_only_still_returns_empty_without_error(run_surface):
+    assert run_surface(_shadow_result()) == []
+
+
+@pytest.mark.parametrize('run_surface', _SSE_SURFACES)
+def test_sse_shadow_only_still_returns_empty_without_error(run_surface):
+    assert run_surface(_shadow_result()) == {"memories": []}

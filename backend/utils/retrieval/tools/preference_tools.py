@@ -17,6 +17,7 @@ import logging
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from testing.parity_pack_v0.live_capture import capture_memory_write
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,12 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
             )
         else:
             memory_db.create_memory(uid, memory_data)
+        capture_memory_write(
+            principal_id=uid,
+            source="agent_preference_memory_create",
+            session_id=memory_id,
+            memories=[memory_data],
+        )
         logger.info(f"Saved user preference: {preference[:80]}")
         return f"Preference saved: {preference}"
     except Exception as e:

@@ -554,11 +554,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               }
                                               provider.applyFilters();
                                             },
-                                            icon: const Icon(
-                                              Icons.search,
-                                              color: Colors.white60,
-                                              size: 20,
-                                            ),
+                                            icon: const Icon(Icons.search, color: Colors.white60, size: 20),
                                             padding: EdgeInsets.zero,
                                           ),
                                         ),
@@ -572,11 +568,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 hintText: context.l10n.searchAppsPlaceholder,
                                                 leading: const Padding(
                                                   padding: EdgeInsets.only(left: 6.0),
-                                                  child: Icon(
-                                                    Icons.search,
-                                                    color: Colors.white60,
-                                                    size: 20,
-                                                  ),
+                                                  child: Icon(Icons.search, color: Colors.white60, size: 20),
                                                 ),
                                                 backgroundColor: WidgetStateProperty.all(
                                                   AppStyles.backgroundSecondary,
@@ -655,7 +647,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(FontAwesomeIcons.solidUser, size: 16, color: Colors.white),
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.solidUser,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
                                           label: Text(
                                             context.l10n.myApps,
                                             style: const TextStyle(
@@ -692,7 +688,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(FontAwesomeIcons.solidUser, size: 16, color: Colors.white),
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.solidUser,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
                                           padding: EdgeInsets.zero,
                                         ),
                                       ),
@@ -723,7 +723,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(FontAwesomeIcons.download, size: 16, color: Colors.white),
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.download,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
                                           label: Text(
                                             (state.visibleFilterCount > 0 && !state.isSearchActive)
                                                 ? context.l10n.installed
@@ -762,7 +766,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               !wasSelected,
                                             );
                                           },
-                                          icon: const FaIcon(FontAwesomeIcons.download, size: 16, color: Colors.white),
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.download,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
                                           padding: EdgeInsets.zero,
                                         ),
                                       ),
@@ -793,7 +801,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               builder: (context) => const FilterBottomSheet(),
                                             );
                                           },
-                                          icon: const FaIcon(FontAwesomeIcons.filter, size: 16, color: Colors.white),
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.filter,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
                                           label: Text(
                                             context.l10n.filters,
                                             style: const TextStyle(
@@ -835,8 +847,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                   builder: (context) => const FilterBottomSheet(),
                                                 );
                                               },
-                                              icon:
-                                                  const FaIcon(FontAwesomeIcons.filter, size: 16, color: Colors.white),
+                                              icon: const FaIcon(
+                                                FontAwesomeIcons.filter,
+                                                size: 16,
+                                                color: Colors.white,
+                                              ),
                                               padding: EdgeInsets.zero,
                                             ),
                                           ),

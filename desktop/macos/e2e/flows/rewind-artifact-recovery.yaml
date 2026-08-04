@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindAbandonedVideoChunkRecovery.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/StorageFailureDiagnostics.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift

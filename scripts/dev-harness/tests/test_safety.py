@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -136,6 +137,64 @@ def _write_manifests(layout: safety.HarnessLayout, process: dict[str, object], p
     layout.process_manifest.parent.mkdir(parents=True, exist_ok=True)
     layout.process_manifest.write_text(json.dumps({"processes": [process]}) + "\n", encoding="utf-8")
     layout.port_manifest.write_text(json.dumps({"ports": [port]}) + "\n", encoding="utf-8")
+
+
+def test_process_exists_observes_live_and_exited_processes() -> None:
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        assert safety.process_exists(os.getpid())
+        assert safety.process_exists(proc.pid)
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+    assert not safety.process_exists(proc.pid)
+
+
+def test_windows_process_probe_closes_each_open_handle(monkeypatch: pytest.MonkeyPatch) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows process handles are not used on this platform")
+
+    closed: list[int] = []
+    monkeypatch.setattr(safety, "_open_process", lambda _access, _inherit, _pid: 123)
+    monkeypatch.setattr(safety, "_close_handle", lambda handle: closed.append(handle) or True)
+    for wait_result, expected in ((safety._WAIT_OBJECT_0, False), (safety._WAIT_TIMEOUT, True)):
+        monkeypatch.setattr(safety, "_wait_for_single_object", lambda _handle, _timeout, result=wait_result: result)
+        assert safety.process_exists(456) is expected
+
+    assert closed == [123, 123]
+
+
+def test_windows_process_probe_reports_close_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows process handles are not used on this platform")
+
+    monkeypatch.setattr(safety, "_open_process", lambda _access, _inherit, _pid: 123)
+    monkeypatch.setattr(safety, "_wait_for_single_object", lambda _handle, _timeout: safety._WAIT_TIMEOUT)
+    monkeypatch.setattr(safety, "_close_handle", lambda _handle: False)
+    monkeypatch.setattr(safety.ctypes, "get_last_error", lambda: 6)
+
+    with pytest.raises(OSError):
+        safety.process_exists(456)
+
+
+def test_windows_command_line_probe_ignores_path_shadowing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    if os.name != "nt":
+        pytest.skip("Windows PowerShell lookup is not used on this platform")
+
+    marker = "omi-harness-system-powershell-marker"
+    proc = subprocess.Popen([sys.executable, "-c", f"import time; time.sleep(60)  # {marker}"])
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    shutil.copy2(sys.executable, fake_bin / "powershell.exe")
+    monkeypatch.setenv("PATH", str(fake_bin) + os.pathsep + os.environ.get("PATH", ""))
+    try:
+        assert marker in safety.command_line_for_pid(proc.pid)
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
 
 
 def test_foreign_pid_and_port_are_rejected(tmp_path: Path) -> None:

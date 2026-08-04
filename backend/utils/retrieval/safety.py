@@ -4,7 +4,8 @@ Safety guards for agentic chat system.
 Prevents infinite loops, context overflow, and excessive tool usage.
 """
 
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+import os
 import time
 import logging
 
@@ -205,3 +206,183 @@ class AgentSafetyGuard:
             return "⚠️ Processing a large amount of data. Almost done..."
 
         return None
+
+
+# ---------------------------------------------------------------------------
+# Oversized chat-input guard.
+#
+# An extremely long chat message (or a long conversation history) can exceed the chat model's
+# context window. When that happens the Anthropic call raises an input-too-long error which the
+# agent loop swallows into a streamed text chunk without a terminal ``done:`` frame, so the mobile
+# client never finalizes a reply and the user sees "no response" (or a generic error). The decision
+# logic below is kept pure and import-light (the token counter is injected) so it can be unit-tested
+# without the heavy chat/LLM stack: trim the oldest turns to fit the budget and, when the newest
+# turn alone is too large, return a clear message through the normal streaming contract instead of
+# calling the model with input that cannot fit.
+# ---------------------------------------------------------------------------
+
+
+def _int_from_env(name: str, default: int) -> int:
+    """Read a positive int from the environment, falling back to ``default``."""
+    try:
+        value = int(os.environ.get(name, ''))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+# claude-sonnet-4-6 (the chat_agent model) has a 200k-token context window. Cap the conversation
+# input well below it so the system prompt, tool schemas, accumulated tool results and the reply
+# tokens all still fit. 120k tokens is ~90k words of conversation — far beyond any legitimate
+# mobile chat, so real usage is never rejected, only pathological paste-dumps.
+MAX_CHAT_INPUT_TOKENS = _int_from_env('MAX_CHAT_INPUT_TOKENS', 120_000)
+
+# Delivered to the user (and persisted) when the newest message alone is over the budget. Sent
+# through the same streaming/done: contract as any normal reply so the client renders it in-line.
+INPUT_TOO_LONG_MESSAGE = (
+    "That message is too long for me to process in one go. "
+    "Please shorten it or split it into a few smaller messages and send again."
+)
+
+
+def message_text(content: Any) -> str:
+    """Best-effort plain text of a message's content.
+
+    Handles a plain string, an Anthropic-style list of content blocks (dicts with a ``text``
+    field, e.g. ``{"type": "text", "text": ...}``), or a bare list of strings. Non-text blocks
+    (images, tool results) contribute nothing to the text token estimate.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: List[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get('text')
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(block, str):
+                parts.append(block)
+        return "\n".join(parts)
+    return ""
+
+
+def fit_within_budget(
+    items: Sequence[Any],
+    text_of: Callable[[Any], str],
+    counter: Callable[[str], int],
+    limit: int = MAX_CHAT_INPUT_TOKENS,
+) -> Tuple[list, bool]:
+    """Trim the oldest items so the cumulative token estimate fits within ``limit``.
+
+    Keeps the most recent items and always preserves the final (current) item. ``text_of`` maps
+    an item to its text and ``counter`` estimates that text's token count.
+
+    Returns ``(kept_items, newest_exceeds_limit)``. When the newest item alone is over ``limit``
+    the input cannot fit the context window, so this returns ``([], True)`` and the caller should
+    reject with a clear message rather than call the model. Otherwise ``newest_exceeds_limit`` is
+    ``False`` and ``kept_items`` is the trimmed, in-order list to send.
+    """
+    items = list(items)
+    if not items:
+        return items, False
+
+    if counter(text_of(items[-1])) > limit:
+        return [], True
+
+    kept: list = []
+    total = 0
+    for item in reversed(items):
+        tokens = counter(text_of(item))
+        if kept and total + tokens > limit:
+            break
+        kept.append(item)
+        total += tokens
+    kept.reverse()
+    return kept, False
+
+
+# Matched on class name, not type, so this stays import-light and still covers the raw httpx
+# exceptions that escape the SDK once the response body is already streaming.
+TRANSIENT_PROVIDER_ERROR_NAMES = frozenset(
+    {
+        'APIConnectionError',
+        'APITimeoutError',
+        'ConnectError',
+        'ConnectTimeout',
+        'InternalServerError',
+        'PoolTimeout',
+        'ReadError',
+        'ReadTimeout',
+        'RemoteProtocolError',
+        'WriteError',
+        'WriteTimeout',
+    }
+)
+
+# 429 is deliberately absent: a rate limit does not clear within one turn's budget.
+TRANSIENT_PROVIDER_STATUS_CODES = frozenset({500, 502, 503, 504, 529})
+
+_TIMEOUT_ERROR_NAMES = frozenset({'APITimeoutError', 'ConnectTimeout', 'PoolTimeout', 'ReadTimeout', 'WriteTimeout'})
+
+
+def _provider_status_code(error: BaseException) -> Optional[int]:
+    """HTTP status carried by a provider exception, if it has one."""
+    status_code = getattr(error, 'status_code', None)
+    if isinstance(status_code, int):
+        return status_code
+
+    response = getattr(error, 'response', None)
+    response_status = getattr(response, 'status_code', None)
+    if isinstance(response_status, int):
+        return response_status
+    return None
+
+
+def is_transient_provider_error(error: BaseException) -> bool:
+    """Whether ``error`` is a transport-class provider failure worth re-issuing.
+
+    A status-carrying error is judged by its status alone: a 4xx describes the request we just
+    sent, so repeating it cannot help.
+    """
+    status_code = _provider_status_code(error)
+    if status_code is not None:
+        return status_code in TRANSIENT_PROVIDER_STATUS_CODES
+    return type(error).__name__ in TRANSIENT_PROVIDER_ERROR_NAMES
+
+
+def provider_fallback_reason(error: BaseException) -> str:
+    """Map a provider exception onto the bounded ``record_fallback`` reason set."""
+    status_code = _provider_status_code(error)
+    if status_code is not None:
+        if 500 <= status_code < 600:
+            return 'provider_5xx'
+        if status_code == 429:
+            return 'provider_429'
+        return 'other'
+    return 'timeout' if type(error).__name__ in _TIMEOUT_ERROR_NAMES else 'other'
+
+
+def should_retry_provider_error(
+    error: BaseException,
+    *,
+    attempts_made: int,
+    max_attempts: int,
+    text_already_streamed: bool,
+    seconds_remaining: float,
+    min_headroom_seconds: float,
+) -> bool:
+    """Whether the agent's streaming model call may be re-issued after ``error``.
+
+    Safe only while nothing from this attempt has reached the user: streamed text cannot be
+    un-sent, and tool calls run after a stream closes cleanly, so a failed attempt leaves
+    nothing to undo. A retry with less than ``min_headroom_seconds`` of the request budget left
+    would be cancelled mid-flight, so it is not started.
+    """
+    if text_already_streamed:
+        return False
+    if attempts_made >= max_attempts:
+        return False
+    if seconds_remaining < min_headroom_seconds:
+        return False
+    return is_transient_provider_error(error)

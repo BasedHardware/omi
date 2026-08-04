@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-firestore-readiness-project-mismatch",
+  "violated_contract": "A deployment's read-only Firestore readiness credential and its runtime project setting must identify the same GCP project, so readiness proves the schema that the deployment will serve.",
+  "canonical_prevention": "After authenticating the read-only Firestore credential and before evaluating index readiness, compare its configured GCP project with RUNTIME_GCP_PROJECT_ID and fail the deployment when they differ. Preserve that ordering with the backend release-vector workflow contract test.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_verify_backend_release_vector.py"
+  ],
+  "evidence_prs": [
+    9756
+  ],
+  "scope_hints": [
+    ".github/workflows/gcp_backend_auto_dev.yml",
+    "backend/tests/unit/test_verify_backend_release_vector.py"
+  ],
+  "status": "open"
+}

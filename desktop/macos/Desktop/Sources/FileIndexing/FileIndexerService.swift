@@ -67,7 +67,9 @@ actor FileIndexerService {
     guard activeScanOperations == 0 else { return }
     let waiters = scanCompletionWaiters
     scanCompletionWaiters.removeAll()
-    waiters.forEach { $0.resume() }
+    for waiter in waiters {
+      waiter.resume()
+    }
   }
 
   /// Returns the total number of indexed files in the database
@@ -163,9 +165,14 @@ actor FileIndexerService {
   /// Scan folders and store file metadata in indexed_files table
   /// Returns total number of files indexed
   @discardableResult
-  func scanFolders(_ folders: [URL], incremental: Bool = false) async -> Int {
+  func scanFolders(
+    _ folders: [URL],
+    incremental: Bool = false,
+    shouldContinue: @escaping @Sendable () -> Bool = { !Task.isCancelled }
+  ) async -> Int {
     activeScanOperations += 1
     defer { finishScanOperation() }
+    guard shouldContinue() else { return 0 }
     let db: DatabasePool
     do {
       db = try await ensureDB()
@@ -198,6 +205,7 @@ actor FileIndexerService {
     ]
 
     for folder in folders {
+      guard shouldContinue() else { return 0 }
       guard fm.fileExists(atPath: folder.path) else { continue }
 
       let folderName = folder.lastPathComponent
@@ -215,17 +223,19 @@ actor FileIndexerService {
         db: db,
         existingIndex: existingIndex,
         scannedPaths: &scannedPaths,
-        failedDirectories: &failedDirectories
+        failedDirectories: &failedDirectories,
+        shouldContinue: shouldContinue
       )
+      guard shouldContinue() else { return 0 }
     }
 
     // Flush remaining batch
-    if !batch.isEmpty {
+    if !batch.isEmpty, shouldContinue() {
       insertBatch(batch, into: db)
     }
 
     // For incremental scans, remove files that no longer exist on disk
-    if incremental && !existingIndex.isEmpty {
+    if incremental && !existingIndex.isEmpty, shouldContinue() {
       deleteRemovedFiles(
         scannedPaths: scannedPaths,
         existingPaths: Set(existingIndex.keys),
@@ -249,8 +259,10 @@ actor FileIndexerService {
     db: DatabasePool,
     existingIndex: [String: Date?],
     scannedPaths: inout Set<String>,
-    failedDirectories: inout Set<String>
+    failedDirectories: inout Set<String>,
+    shouldContinue: @escaping @Sendable () -> Bool
   ) {
+    guard shouldContinue() else { return }
     guard scanPolicy.shouldScanDirectory(atDepth: depth) else { return }
 
     let contents: [URL]
@@ -270,6 +282,7 @@ actor FileIndexerService {
     }
 
     for item in contents {
+      guard shouldContinue() else { return }
       // Check directory
       let resourceValues = try? item.resourceValues(forKeys: Set(resourceKeys))
       if resourceValues == nil {
@@ -332,7 +345,8 @@ actor FileIndexerService {
             db: db,
             existingIndex: existingIndex,
             scannedPaths: &scannedPaths,
-            failedDirectories: &failedDirectories
+            failedDirectories: &failedDirectories,
+            shouldContinue: shouldContinue
           )
           continue
         }

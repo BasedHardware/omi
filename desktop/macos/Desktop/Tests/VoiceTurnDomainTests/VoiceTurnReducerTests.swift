@@ -344,6 +344,155 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
   }
 
+  /// Barge-in replacement is the sibling of the reconnect path above and must
+  /// honour the same capture-ownership contract. A press that lands on a
+  /// still-speaking reply routes through `.hubWarmWait`, so PushToTalkManager —
+  /// not the controller — holds the PCM. When the replacement socket became
+  /// ready, the reducer rewrote the route to `.hub`, which suppressed the
+  /// `hubReady` -> `prepareHubInput` flush the manager was waiting on and left
+  /// the released turn parked in `.finalizing` (observed: a PTT that would not
+  /// stop for 150s, until the provider's idle socket teardown).
+  func testReplacementReadyKeepsManagerOwnedWarmCaptureRoutable() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    // Physical release while the replacement socket is still connecting: the
+    // manager holds the captured audio and has not claimed a hub commit.
+    model = reduce(model, .finalize(turnID: turnID)).model
+    XCTAssertEqual(model.turn?.phase, .finalizing)
+    XCTAssertFalse(model.turn?.hubCommitPending == true)
+
+    let replacementReady = reduce(
+      model,
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: sessionID,
+        responseID: replacementResponseID))
+
+    XCTAssertEqual(replacementReady.model.turn?.providerConnection, .ready)
+    XCTAssertEqual(replacementReady.model.turn?.sessionID, sessionID)
+    XCTAssertEqual(replacementReady.model.turn?.route, .hubWarmWait)
+    XCTAssertEqual(replacementReady.model.turn?.phase, .finalizing)
+    XCTAssertEqual(replacementReady.model.staleEventCount, 0)
+
+    let ready = reduce(
+      replacementReady.model, .hubReady(turnID: turnID, sessionID: sessionID))
+    XCTAssertEqual(ready.model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
+    XCTAssertTrue(ready.effects.contains(.cancelDeadline(turnID: turnID, deadline: .hubWarm)))
+  }
+
+  /// The route rewrite also disarmed the only remaining rescue: `.hubWarm` is
+  /// admitted by `deadlineMatchesCurrentState` solely while the route reads
+  /// `.hubWarmWait`, so the fired deadline was dropped as stale and the turn had
+  /// no path to a terminal at all. A replacement that never delivers
+  /// `hubReady` must still fall back to transcription within the warm window.
+  func testWarmWaitRescueDeadlineSurvivesReplacementReady() {
+    let turnID = VoiceTurnID()
+    let replacementResponseID = VoiceResponseID("replacement-response")
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model =
+      reduce(
+        reservation.model,
+        .providerReplacementStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousResponseID: nil,
+          nextResponseID: replacementResponseID)
+      ).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model =
+      reduce(
+        model,
+        .providerReplacementReady(
+          turnID: turnID,
+          identity: reservation.identity,
+          sessionID: VoiceSessionID(),
+          responseID: replacementResponseID)
+      ).model
+
+    XCTAssertTrue(model.turn?.deadlines.contains(.hubWarm) == true)
+
+    let timedOut = reduce(model, .deadlineFired(turnID: turnID, deadline: .hubWarm))
+
+    XCTAssertEqual(timedOut.model.staleEventCount, 0)
+    XCTAssertEqual(timedOut.model.turn?.route, .deepgramBatch)
+    XCTAssertEqual(timedOut.model.turn?.phase, .finalizing)
+    XCTAssertTrue(timedOut.model.turn?.deadlines.contains(.transcription) == true)
+    XCTAssertTrue(
+      timedOut.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
+  }
+
+  /// Reusable guard for the class: every provider-ready admission binds the hub
+  /// route through one helper, so no future admission path can silently take a
+  /// manager-owned warm capture away from its `prepareHubInput` flush.
+  func testNoProviderReadyTransitionClobbersAManagerOwnedWarmCapture() {
+    let sessionID = VoiceSessionID()
+    let responseID = VoiceResponseID("provider-ready")
+
+    for readyFact in ["reconnected", "replacement_ready"] {
+      let turnID = VoiceTurnID()
+      var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+      model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+      let reservation = reserveIdentity(model, turnID: turnID)
+      let ready: VoiceTurnReduction
+      switch readyFact {
+      case "reconnected":
+        model =
+          reduce(
+            reservation.model,
+            .providerReconnectStarted(
+              turnID: turnID,
+              identity: reservation.identity,
+              previousSessionID: nil)
+          ).model
+        ready = reduce(
+          model,
+          .providerReconnected(
+            turnID: turnID, identity: reservation.identity, sessionID: sessionID))
+      default:
+        model =
+          reduce(
+            reservation.model,
+            .providerReplacementStarted(
+              turnID: turnID,
+              identity: reservation.identity,
+              previousResponseID: nil,
+              nextResponseID: responseID)
+          ).model
+        ready = reduce(
+          model,
+          .providerReplacementReady(
+            turnID: turnID,
+            identity: reservation.identity,
+            sessionID: sessionID,
+            responseID: responseID))
+      }
+
+      XCTAssertEqual(
+        ready.model.turn?.route, .hubWarmWait,
+        "\(readyFact) must leave the manager-owned warm capture routable")
+      XCTAssertEqual(ready.model.turn?.providerConnection, .ready, "\(readyFact)")
+      XCTAssertEqual(ready.model.turn?.sessionID, sessionID, "\(readyFact)")
+    }
+  }
+
   func testTransportReadyBindsHubRouteAndPreparesContext() {
     let turnID = VoiceTurnID()
     let sessionID = VoiceSessionID()

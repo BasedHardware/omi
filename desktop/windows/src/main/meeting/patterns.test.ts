@@ -44,21 +44,24 @@ describe('meeting patterns', () => {
     expect(m).toEqual([{ id: 'zoom', name: 'Zoom', exe: 'zoom.exe', via: 'process' }])
   })
 
-  it('matches browser meeting titles only for known browsers', () => {
-    const meet = matchTier1(
-      [],
-      { exePath: 'C:\\Program Files\\Google\\Chrome\\chrome.exe', title: 'Meet - abc-defg-hij' },
-      p
-    )
-    expect(meet[0]).toMatchObject({ id: 'meet-web', exe: 'chrome.exe', via: 'title' })
+  it('matches current Google Meet join and in-call titles only for known browsers', () => {
+    const chrome = 'C:\\Program Files\\Google\\Chrome\\chrome.exe'
+    for (const title of [
+      'Meet',
+      'Google Meet',
+      'Meet - abc-defg-hij',
+      'Google Meet - abc-defg-hij'
+    ]) {
+      const meet = matchTier1([], { exePath: chrome, title }, p)
+      expect(meet[0]).toMatchObject({ id: 'meet-web', exe: 'chrome.exe', via: 'title' })
+    }
 
     // Same title in a non-browser (an editor with a weird filename) — no match.
-    const editor = matchTier1(
-      [],
-      { exePath: 'C:\\tools\\notepad.exe', title: 'Meet - notes.txt' },
-      p
-    )
+    const editor = matchTier1([], { exePath: 'C:\\tools\\notepad.exe', title: 'Meet' }, p)
     expect(editor).toEqual([])
+
+    // Do not broaden the exact-title form into ordinary "meeting" documents.
+    expect(matchTier1([], { exePath: chrome, title: 'Meeting notes' }, p)).toEqual([])
   })
 
   it('matches Teams / Zoom / Webex browser titles', () => {
@@ -66,9 +69,9 @@ describe('meeting patterns', () => {
       exePath: 'C:\\x\\msedge.exe',
       title
     })
-    expect(matchTier1([], fg('Standup | Microsoft Teams - Profile 1 - Microsoft Edge'), p)[0].id).toBe(
-      'teams-web'
-    )
+    expect(
+      matchTier1([], fg('Standup | Microsoft Teams - Profile 1 - Microsoft Edge'), p)[0].id
+    ).toBe('teams-web')
     expect(matchTier1([], fg('Zoom Meeting - Google Chrome'), p)[0].id).toBe('zoom-web')
     expect(matchTier1([], fg('Cisco Webex Meetings'), p)[0].id).toBe('webex-web')
   })

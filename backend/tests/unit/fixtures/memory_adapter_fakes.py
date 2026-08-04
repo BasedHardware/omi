@@ -142,11 +142,14 @@ def stored_item(item: MemoryItem) -> dict:
     return item.model_dump(mode="json")
 
 
-def vector_hit(item: MemoryItem, *, score, projection_commit_id="projection-1") -> SearchVectorHit:
+def vector_hit(item: MemoryItem, *, score, projection_commit_id=None) -> SearchVectorHit:
+    authoritative_projection_commit_id = projection_commit_id
+    if authoritative_projection_commit_id is None:
+        authoritative_projection_commit_id = item.ledger_commit_id or "projection-1"
     return SearchVectorHit(
         memory_id=item.memory_id,
         score=score,
-        projection_commit_id=projection_commit_id,
+        projection_commit_id=authoritative_projection_commit_id,
         vector_updated_at=item.updated_at + timedelta(minutes=1),
         uid=item.uid,
         account_generation=item.account_generation,

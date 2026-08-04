@@ -10,12 +10,19 @@ from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
-from utils.apps import fetch_app_chat_tools_from_manifest
-from utils.executors import db_executor, llm_executor, storage_executor, run_blocking, start_background_task
+from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    llm_executor,
+    storage_executor,
+    run_blocking,
+    start_background_task,
+)
 from utils.http_client import get_webhook_client
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
@@ -695,10 +702,9 @@ def search_apps(
 
         # Calculate average from reviews
         reviews = apps_reviews.get(app_dict['id'], {})
-        sorted_reviews = list(reviews.values())
-        rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
-        app_dict['rating_avg'] = rating_avg
-        app_dict['rating_count'] = len(sorted_reviews)
+        scores = [_clamp_review_score(x['score']) for x in reviews.values()]
+        app_dict['rating_avg'] = sum(scores) / len(scores) if scores else None
+        app_dict['rating_count'] = len(scores)
 
         # Skip a malformed/legacy app document rather than 500 the whole search page.
         try:
@@ -1680,7 +1686,38 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'], response_model=AppMigrationResponse)
-async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+async def migrate_app_owner(
+    old_id,
+    source_token: Optional[str] = Body(default=None, embed=True),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    # The client captures this token while it still owns the anonymous Firebase
+    # session, then calls this route after signing into the destination account.
+    # A providerless UserRecord is not affirmative proof of anonymity (for example,
+    # custom-token accounts can be providerless), so a bare ``old_id`` never grants
+    # access.  The source token must be a currently valid Firebase credential for
+    # that exact uid and attest to the anonymous sign-in provider.
+    if old_id == uid:
+        raise HTTPException(status_code=400, detail='Source identity must differ from the authenticated identity')
+    if not source_token:
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
+    try:
+        source_claims = await run_blocking(
+            critical_executor, auth.auth.verify_id_token, source_token, check_revoked=True
+        )
+        source_user = await run_blocking(critical_executor, auth.get_user, old_id)
+    except Exception:
+        # Invalid/revoked tokens, missing/deleted users, and Admin lookup failures
+        # are deliberately indistinguishable to callers. Neither may mutate state.
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
+    source_uid = source_claims.get('uid')
+    firebase_claims = source_claims.get('firebase')
+    source_provider = firebase_claims.get('sign_in_provider') if isinstance(firebase_claims, dict) else None
+    if source_uid != old_id or source_provider != 'anonymous' or source_user.disabled or source_user.provider_data:
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
     # Tracked background tasks (not bare asyncio.create_task): keeps a live reference
@@ -2041,6 +2078,20 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 # ******************************************************
 
 
+def _setup_completed_from_response(res: httpx.Response) -> bool:
+    """Read `is_setup_completed` from a third-party setup_completed_url response.
+
+    The body is developer-controlled, so it may be non-JSON or a JSON scalar/array
+    rather than the documented object. Anything that is not an object carrying a
+    truthy `is_setup_completed` means setup is not completed.
+    """
+    try:
+        payload: object = res.json()
+    except ValueError:
+        return False
+    return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
+
+
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
@@ -2059,7 +2110,7 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
         client = get_webhook_client()
         res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
-        if res.status_code != 200 or not res.json().get('is_setup_completed', False):
+        if res.status_code != 200 or not _setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status

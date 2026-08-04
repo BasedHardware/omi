@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, cast
 
 from database.product_memory_items import filter_default_product_memory_items
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
+from utils.memory.canonical_lineage import collapse_canonical_lineages
 from models.memory_contracts import (
     L1MemoryArchiveClass,
     WorkingObservationArchiveItem,
@@ -148,11 +149,19 @@ def query_default_product_memory_items(
     report = filter_default_product_memory_items(items, policy=policy, now=now)
     current_time = now or datetime.now(timezone.utc)
     visible_items = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
-    results: List[MemoryResult] = []
+    matching_items: List[MemoryItem] = []
     for item in visible_items:
         content = item.content or ""
         if not _matches(query, content):
             continue
+        matching_items.append(item)
+
+    results: List[MemoryResult] = []
+    for item in collapse_canonical_lineages(
+        matching_items,
+        lineage_context=items,
+        survivor_context=visible_items,
+    ):
         decision = report.decisions[item.memory_id]
         access_reason = decision.reason if decision.allowed else "default_memory_allowed"
         results.append(_product_memory_result(item, agent_use="default_access_memory", access_reason=access_reason))

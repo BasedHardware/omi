@@ -62,3 +62,22 @@ struct TypingIndicator: View {
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
   }
 }
+
+enum ChatWorkingStatus {
+  static func motion(for message: ChatMessage?) -> ChatMarkMotion {
+    guard let name = inFlightToolName(for: message) else { return .gather }
+    return ChatMarkMotion.forTool(name)
+  }
+
+  private static func inFlightToolName(for message: ChatMessage?) -> String? {
+    guard let message, message.sender == .ai else { return nil }
+    let inFlight = message.contentBlocks.last { block in
+      if case .toolCall(_, _, let status, _, _, _) = block {
+        return status.isInFlight
+      }
+      return false
+    }
+    guard case .toolCall(_, let name, _, _, _, _) = inFlight else { return nil }
+    return name
+  }
+}

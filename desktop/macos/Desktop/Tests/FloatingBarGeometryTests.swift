@@ -400,11 +400,45 @@ final class FloatingBarGeometryTests: XCTestCase {
       ))
   }
 
-  func testNotchHoverMenuHasNoHeightWithoutSubagents() {
+  /// The hover surface used to collapse to nothing without subagents. It now always
+  /// carries the shortcut legend and capture controls, so hovering the notch is never a
+  /// no-op — but it must still be tall enough for the agent rows when there are any.
+  func testNotchHoverMenuAlwaysReservesRoomForTheControlPanel() {
     XCTAssertEqual(
       FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),
-      0
+      FloatingControlBarWindow.notchControlPanelHeight
+        + FloatingControlBarWindow.notchHoverMenuBottomMargin
     )
+  }
+
+  /// Spawned agents own the top of the hover surface; the control panel stacks beneath
+  /// them. If the surface stopped growing per agent the panel would be drawn on top of
+  /// the agent rows.
+  func testControlPanelStacksBelowAgentRowsRatherThanOverlappingThem() {
+    XCTAssertEqual(FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: 0), 0)
+
+    for count in 1...8 {
+      let offset = FloatingControlBarWindow.notchControlPanelTopOffset(agentCount: count)
+      XCTAssertEqual(
+        offset,
+        FloatingControlBarWindow.notchAgentListHeight(agentCount: count),
+        "panel must start below all \(count) agent row(s)"
+      )
+      XCTAssertEqual(
+        FloatingControlBarWindow.notchHoverMenuHeight(agentCount: count),
+        offset + FloatingControlBarWindow.notchControlPanelHeight
+          + FloatingControlBarWindow.notchHoverMenuBottomMargin,
+        "surface must be tall enough for the rows plus the whole panel"
+      )
+    }
+  }
+
+  func testNotchHoverMenuGrowsWithEachAdditionalSubagent() {
+    let empty = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0)
+    let one = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 1)
+    let many = FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 8)
+    XCTAssertGreaterThan(one, empty)
+    XCTAssertGreaterThan(many, one, "eight agent rows must not be clipped")
   }
 
   func testNotchChromeHeightUsesMeasuredAuxiliaryAreaHeight() {

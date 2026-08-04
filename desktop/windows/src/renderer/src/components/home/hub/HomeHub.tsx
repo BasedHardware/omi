@@ -71,6 +71,7 @@ export function HomeHub(): React.JSX.Element {
   // the ask bar, not the shell and every mounted page.
   const [input, setInput] = useState('')
   const stageRef = useRef<HTMLDivElement>(null)
+  const hubRef = useRef<HTMLDivElement>(null)
 
   const dispatch = useCallback((event: HomeStageEvent): void => {
     setMode((m) => nextStage(m, event))
@@ -105,8 +106,15 @@ export function HomeHub(): React.JSX.Element {
   )
 
   // Esc leaves any panel. Click-outside does the same — but only from a panel, and
-  // only for clicks that land outside the stage content, so a click on the paper
-  // around the panel dismisses it while a click inside does not.
+  // only for clicks that land on the Hub's own paper around the stage content, so a
+  // click inside the stage does not dismiss it.
+  //
+  // The paper test is a containment test against the Hub root, NOT just "outside the
+  // stage": UI the panel raises through a portal (the chat-history popover, the app
+  // picker, modals, toasts) is mounted on <body>, outside the Hub's tree entirely, so
+  // "outside the stage" read a mousedown on the popover's "+"/rename as a dismiss —
+  // which unmounted the popover mid-click, so the button never got its click and the
+  // user landed back on the resting hub instead (#10895, #10896).
   useEffect(() => {
     if (!isPanelMode(mode)) return
     const onKey = (e: KeyboardEvent): void => {
@@ -114,7 +122,11 @@ export function HomeHub(): React.JSX.Element {
     }
     const onDown = (e: MouseEvent): void => {
       const stage = stageRef.current
-      if (stage && !stage.contains(e.target as Node)) dispatch({ type: 'dismissed' })
+      const hub = hubRef.current
+      if (!stage || !hub) return
+      const target = e.target as Node
+      if (!hub.contains(target)) return
+      if (!stage.contains(target)) dispatch({ type: 'dismissed' })
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onDown)
@@ -143,7 +155,7 @@ export function HomeHub(): React.JSX.Element {
   )
 
   return (
-    <div className="relative h-full overflow-hidden">
+    <div ref={hubRef} className="relative h-full overflow-hidden">
       <HomeCanvasBackground />
 
       {/* The header FLOATS over the stage; it does not sit in the column.
@@ -208,6 +220,7 @@ export function HomeHub(): React.JSX.Element {
                 <HubChatPanel
                   messages={chat.history}
                   sending={chat.sending}
+                  onDismiss={() => dispatch({ type: 'dismissed' })}
                   header={
                     <>
                       <ChatAppPicker />

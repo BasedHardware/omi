@@ -1,8 +1,341 @@
 {
-  "unreleased": [
-    "Chat now searches the web for natural research requests like \"find out who X is online\" or \"look them up on the web\", not just explicit \"search the web\" phrasings."
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.12.148",
+      "date": "2026-07-31",
+      "changes": [
+        "Choose your microphone in Settings → Transcription — including Ray-Ban Meta glasses, which now show as the capture source on the Listening button",
+        "Fixed a conflict where push-to-talk could fight the active transcription microphone (e.g. Ray-Ban Meta glasses) over the same audio device — push-to-talk now uses the built-in mic while another capture is running",
+        "Push-to-talk now responds instantly on consecutive presses — the microphone stays warm between turns instead of reopening the audio device each time",
+        "Updated test-quality source-inspection baseline to match current site count",
+        "Fixed corrupted import statement in OmiApp.swift",
+        "Advanced desktop release path past hygiene-failed candidate SHA to unblock release planner",
+        "Advanced desktop release path past hygiene-failed candidate SHA",
+        "Fixed byte-level test-install workflow contract fixture",
+        "Release candidate source touch for v0.12.148",
+        "Fixed stale test-install workflow contract fixture blocking Swift CI",
+        "Validated test-install workflow fixture for Swift CI gate",
+        "Real source change for CI trigger",
+        "Advanced desktop release path for v0.12.148 candidate",
+        "Internal release-tooling cleanup; no user-facing changes."
+      ]
+    },
+    {
+      "version": "0.12.147",
+      "date": "2026-07-30",
+      "changes": [
+        "Updated desktop dependencies to patch security vulnerabilities."
+      ]
+    },
+    {
+      "version": "0.12.146",
+      "date": "2026-07-30",
+      "changes": [
+        "Make pre-push and preflight contracts portable on Windows (MSYS/UTF-8 paths, Git Bash routing)",
+        "Fixed Windows meeting prompts that could claim capture started when audio or transcription was unavailable.",
+        "Fixed desktop qualification harness auth so local automation flows can reach the running app again"
+      ]
+    },
+    {
+      "version": "0.12.145",
+      "date": "2026-07-30",
+      "changes": [
+        "Improved macOS device pairing diagnostics and reliability reporting.",
+        "Fixed a stale sign-in prompt that could remain visible after switching accounts.",
+        "Stream push-to-talk responses into the shared chat timeline as they arrive"
+      ]
+    },
+    {
+      "version": "0.12.144",
+      "date": "2026-07-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.143",
+      "date": "2026-07-28",
+      "changes": [
+        "Improved desktop cloud reliability and agent startup"
+      ]
+    },
+    {
+      "version": "0.12.142",
+      "date": "2026-07-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.141",
+      "date": "2026-07-27",
+      "changes": [
+        "Added a canonical-entity Memory Atlas with a lightweight Memories-page preview, a dedicated full-page explorer, and adaptive zoom that only adds detail and ends with every visible entity labelled",
+        "Added a time axis to the memory atlas — press play to watch your memory grow, or scrub to see it as of any date; collapsed the duplicate center node into a single 'you'",
+        "Made Memory Atlas smoother to explore with compact controls, scroll zoom, keyboard shortcuts, and clearer replay pacing",
+        "Stopping an agent now also stops the delegated sub-agents it was waiting on",
+        "Chat errors now say what actually went wrong (out of credits, expired sign-in, connection lost, oversized attachment) instead of a generic \"Something went wrong\" — and only suggest retrying when a retry can help",
+        "Fixed Brain Map opening blank, and stopped it triggering an unrequested knowledge-graph rebuild, when the account's cohort had not been resolved yet",
+        "Selecting an entity in Brain Map now opens a side inspector with its connections and source memories instead of jumping to Memories, and opening a memory uses the same side panel rather than a popup",
+        "Brain Map now places single-connection entities as small burrs next to their one relationship and parks unconnected entities in a margin, instead of scattering them through the type constellations",
+        "Brain Map now merges duplicate connections between the same two entities into a single Connections row instead of showing one row per verb",
+        "The Brain Map now places entities by how related they are, so people, projects and places you actually think about together appear together",
+        "Omi can now surface live suggestions in the notch as you work — grounded in your memories, open commitments, and what you saw earlier. Off by default; turn it on in Settings.",
+        "Memory → Brain Map now opens the Memory Atlas for canonical-memory accounts, while other accounts keep the existing graph",
+        "Memory Atlas now names every entity on a small graph instead of leaving a third of them as unlabeled dots",
+        "Made the Memory Atlas readable on smaller accounts: entities spread across the canvas, every one is named, and the timeline is now a slim footer instead of taking a third of the window",
+        "A memory now opens in a side panel that shows where it came from, and cited memories in the Brain Map open straight to it",
+        "Crowded areas of the Brain Map now separate into distinct neighbourhoods instead of overlapping into one mess, and you are given room at the centre rather than being buried under everything connected to you",
+        "Escape now backs out of the Brain Map one step at a time — first the search, then the selection, then the neighbourhood you went into, then the map itself — and the island you are inside keeps its outline and shading while you zoom in and pick entities off it",
+        "Fixed the Brain Map header reporting a different entity and connection count than the map below it",
+        "Every Brain Map island now carries its name, written on the island itself and shortened to a single landmark; entities standing on a named island give up their own labels until you go into it, and going into one shows that island alone with its entities named",
+        "Brain Map neighbourhoods are drawn as islands with real coastlines instead of overlapping ovals, so a group that lives in two places shows as two islands and ground two groups share is left as water between them",
+        "The Brain Map now names the neighbourhoods it finds after the entities in them, so you can read your territories at a glance and click one to zoom straight into it",
+        "The Brain Map now groups your entities into visible neighbourhoods instead of gathering everything around you, so projects, places and the people you work with each read as their own cluster",
+        "The Brain Map now draws every connection instead of a few dozen, brighter inside a neighbourhood than between two, and fits the map to a square rather than stretching it across the window",
+        "The Brain Map no longer lets a handful of entities that appear in everything — your main project, your tools — crowd out the relationships that actually distinguish one part of your life from another",
+        "Brain Map neighbourhoods are now visible as territories rather than implied by position alone, the ones that genuinely own their ground are outlined, and unconnected entities ring the map from just outside it instead of the far edge of the canvas",
+        "Fixed the app freezing at the start of a push-to-talk turn when an audio driver stops responding",
+        "Improved Brain Map responsiveness by preparing graph layouts off the UI path and isolating the map from background memory refreshes",
+        "Fixed a chat rendering freeze that could occur while sending or scrolling through a conversation"
+      ]
+    },
+    {
+      "version": "0.12.140",
+      "date": "2026-07-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.139",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.138",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.137",
+      "date": "2026-07-26",
+      "changes": [
+        "Added privacy-safe analytics for macOS integration connect/import outcomes (Calendar, Gmail, Apple Notes, Local Files, X, ChatGPT, Claude) across the Apps tab and onboarding — attempts, successes, reconnect-required, and classified failures by build — so the connect funnel is finally measurable on macOS; no screen content, cookies, tokens, account IDs, or raw errors are sent."
+      ]
+    },
+    {
+      "version": "0.12.136",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.135",
+      "date": "2026-07-26",
+      "changes": [
+        "Made macOS Beta qualification detect unsafe runner listener state before the long behavioral suite."
+      ]
+    },
+    {
+      "version": "0.12.134",
+      "date": "2026-07-26",
+      "changes": [
+        "Fixed chat and push-to-talk turns that could remain stuck after web searches or rapid voice interruptions."
+      ]
+    },
+    {
+      "version": "0.12.133",
+      "date": "2026-07-26",
+      "changes": [
+        "Fixed chat failures so backend status codes are clearly identified as HTTP errors"
+      ]
+    },
+    {
+      "version": "0.12.132",
+      "date": "2026-07-26",
+      "changes": [
+        "Improved internal diagnostics so failed chat tool calls are recorded alongside successful ones",
+        "Improved reliability of macOS Beta qualification cleanup."
+      ]
+    },
+    {
+      "version": "0.12.131",
+      "date": "2026-07-26",
+      "changes": [
+        "Improved reliability of macOS Beta qualification on cold build runners."
+      ]
+    },
+    {
+      "version": "0.12.130",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.129",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.128",
+      "date": "2026-07-26",
+      "changes": [
+        "Fixed chat silently skipping the action it promised after a web search — the follow-up tool call was dropped, so nothing happened"
+      ]
+    },
+    {
+      "version": "0.12.127",
+      "date": "2026-07-26",
+      "changes": [
+        "Improved reliability of macOS Beta qualification on the dedicated M1 Studio"
+      ]
+    },
+    {
+      "version": "0.12.126",
+      "date": "2026-07-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.125",
+      "date": "2026-07-26",
+      "changes": [
+        "Fixed typed chat getting stuck while Omi searched the public web"
+      ]
+    },
+    {
+      "version": "0.12.124",
+      "date": "2026-07-25",
+      "changes": [
+        "Voice conversations now learn when a background agent finishes, so Omi can mention the result and answer follow-up questions about it",
+        "Improved conversation navigation reliability when switching between memory and conversation views",
+        "Improved the reliability of macOS Beta qualification on the dedicated M1 Studio",
+        "Improved Memory with full-width conversations, a single navigation menu, consistent search, and tighter chat spacing",
+        "Added privacy-safe analytics for the memory assistant and transcript memory extraction (activation, analysis outcomes, and recording-to-memory success) so their reliability and funnel can be measured; no screen content, memory text, or identifiers are sent",
+        "Refined the top navigation with a tighter pill group and Omi-style Memory menu, narrowed Memories and Conversations for easier reading, and kept copy actions focused on code blocks",
+        "Fixed a failure-diagnostics change that prevented new desktop builds from being produced",
+        "Improved crash-report context when Rewind storage or the AI bridge fails to start",
+        "Fixed chat showing web-search activity for unrelated long prompts and restored live lookup routing for recent news and newly released products"
+      ]
+    },
+    {
+      "version": "0.12.122",
+      "date": "2026-07-25",
+      "changes": [
+        "Add GET /v1/conversations/{conversation_id}/analytics to the generated Omi API client.",
+        "Add GET /v1/goals/{goal_id} to the generated Omi API client.",
+        "Made the app category filter scrollable by using SearchableDropdown for long category lists",
+        "Fixed macOS desktop build compatibility with Xcode Beta / Swift 6.4",
+        "Chat message actions and timestamps now also reveal on keyboard focus, not only mouse hover",
+        "The floating bar's Continue in Omi button now lands on the chat in the main window instead of whatever page was last open",
+        "Fixed a stray click or Esc on the Home greeting unexpectedly opening the chat",
+        "Fixed onboarding and dashboard integration icons (Notion, ChatGPT, Claude) showing as generic symbols when the app isn't installed — bundled brand logos now always display, and installed apps are found wherever they live",
+        "Onboarding now ends by dropping you into the real Chat tab with a personalized opener (your name, today's calendar) and tappable starter questions, so your first action is a real conversation with Omi",
+        "New conversational onboarding, a redesigned sign-in, and live notch \"moments\" — the notch shows a receipt as Omi writes something down and a \"follow-ups ready\" card when a conversation ends",
+        "Fixed active Zoom/Teams/Meet screen shares stopping when Omi captured a screenshot — Omi now pauses its screen capture while you are presenting",
+        "Fixed a rare crash caused by a data race on Rewind's per-user database identifier during app termination or account switching",
+        "Second Brain chat: Omi's replies now carry the Omi mark on the left and it spins while thinking (texting feel), and tool-call chips only show while tools are being called — they clear once the reply is done",
+        "Second Brain home: the suggestion cards now auto-rotate, cycling through fresh tasks/insights/asks (with a cross-fade) while you're on the resting hub, so the hub stays alive",
+        "Second Brain Insights: redesigned as an annotated stream — a vertical timeline of realizations with connector dots, category tag, relative time, and the insight quoted, with a quiet confidence/source footnote",
+        "Second Brain: list pages (Conversations, Memories, Tasks, Apps) now use a centered, width-capped column instead of stretching full-width; tightened the home suggestion cards; and the Ask-Omi shortcut reliably brings the app to the front and opens chat from any page",
+        "Second Brain: Capture and Listening now live in a persistent top bar across content pages (hover Capture for a Rewind shortcut); the Memory rail item opens Memories first; and the Apps imports/exports are shown as cards instead of a list",
+        "Second Brain: Tasks gets a Notion-style status board (default) — columns per time bucket (Today/Tomorrow/Later/No Deadline) with count badges, task cards with colored priority pills and due-date chips (overdue in red), and a Board/List toggle that keeps the classic keyboard-driven list",
+        "Prevent transient shared-runner contention from timing out the macOS agent release test suite.",
+        "Saved chat history now opens as a complete conversation instead of visibly replaying message by message.",
+        "Improved macOS Beta qualification reliability for cold builds.",
+        "Improved reliability of macOS Beta release qualification.",
+        "Made the post-onboarding starter suggestions larger and clearly clickable, with hover highlighting",
+        "Brain Map now fills the Memory page while keeping its familiar initial framing, and its canvas blends with the app background as you pan and zoom",
+        "Task receipts now confirm that a task was saved and offer a direct Review link to Tasks.",
+        "The Conversations tab now scrolls as one — the live transcript scrolls with the search bar and list instead of staying pinned — and clicking the live transcript expands it to full screen",
+        "Exports on the Apps page now use the same full-size cards as Imports, with untruncated descriptions and connection status",
+        "Improved the speed and reliability of macOS Beta qualification retries.",
+        "Fixed sign-in and sign-out crashing when the app's Firebase configuration is unavailable",
+        "Fixed a launch crash on fresh installs of v0.12.110",
+        "Fixed background agents that fail to start showing a misleading \"check OpenClaw setup\" message even when OpenClaw was never used",
+        "Fixed a Rewind crash on some Intel Macs when starting HEVC video capture",
+        "Fixed a timing issue that could reopen Home chat after explicitly returning to the hub.",
+        "Improved reliability of returning from Home chat to the hub.",
+        "API client: memories now expose a batch delete endpoint (up to 100 ids per request); added to the generated desktop API client, not yet wired into desktop UI",
+        "Fixed the notch hover surface so it shows active subagents only, while an idle notch click opens the main Omi chat",
+        "After signing in on macOS, Omi now returns to the app automatically with an Open Omi fallback; onboarding also links directly to Omi's GitHub repository.",
+        "Omi Beta is again a separate app that installs and auto-updates alongside stable Omi",
+        "Onboarding now detects installed coding agents up front, so it no longer offers Connect and then says the agent is not installed",
+        "Onboarding shows Apple Notes as connected when Full Disk Access already covers it, instead of a Connect button that does nothing",
+        "Onboarding now advances automatically the moment you grant a permission, instead of waiting for a Continue click",
+        "Fixed onboarding ChatGPT and Claude connect chips not flipping to connected after authorizing in the browser",
+        "Onboarding connectors show their brand icons, Full Disk Access gets the drag-to-grant helper, and Claude Code shows a restart prompt once connected",
+        "Onboarding no longer shows Continue on the screen demo until Omi has actually answered you",
+        "Onboarding now greets you by your real name automatically instead of a generic placeholder",
+        "Onboarding now primes system-audio permission so Omi no longer re-asks to record your screen and audio after setup",
+        "Restarting onboarding no longer deletes your chat history — the reset now clears only the local view and your conversation is restored from the cloud",
+        "The open-Omi shortcut is now shown as keycaps in onboarding rather than plain text",
+        "Beta nightly tags now pass a fail-closed trusted-M1 pre-tag readiness gate (exact-source checkout, Swift cache prep, offline backend stack) before the immutable tag is created, so checkout and Firebase readiness failures surface before signed publication rather than after.",
+        "Push-to-talk now records privacy-safe capture-lifecycle diagnostics so a silent-mic failure can be classified and diagnosed (capture never started, zero samples, released too early, or a recovery that did/did not restore audio) without sending any audio, device names, or transcripts",
+        "Restored Listening and Capture after reopening the desktop app when permissions are already granted.",
+        "Restored the desktop Swift package manifest (Package.swift/Package.resolved) that a stray test fixture had replaced with a stub, unblocking desktop release builds",
+        "Sharpened the drag-to-Applications instructions in the macOS installer on Retina displays.",
+        "Fixed Rewind recovery after a failed video write so abandoned chunks cannot leave broken timeline frames behind",
+        "Improved reliability of macOS Beta qualification when Rewind settings are busy.",
+        "Second Brain home now opens directly in the continuous chat (no greeting hero or knows-cards); a small set of auto-rotating suggestion chips sits above the ask bar while the chat is empty",
+        "Second Brain: hide Insights/Focus from navigation, hide the Tasks board view (Tasks is a list), and bring back the Brain Map as its own Memory tab beside Memories and Conversations",
+        "Second Brain onboarding: a just-onboarded user lands on Home showing the personalized opener with its starter questions instead of the generic rolling suggestion chips.",
+        "Second Brain onboarding: it now resumes where you left off if you quit mid-flow (e.g. after stepping away to grant a permission) instead of restarting, and already-granted permissions show as done; press a summon or push-to-talk shortcut directly to select it (no more pick-the-row-then-test two-step); restored ⌘O as an open-Omi option; connecting Calendar or Gmail now opens Google sign-in when you're not signed into a browser instead of silently flipping to Retry; and agent rows show 'checking…' while detecting installs so a not-installed agent no longer briefly offers a dead Connect button",
+        "Second Brain polish: the home hub now surfaces learned insights (not just tasks and asks); the chat drops the redundant typing-dots since Omi's spinning mark already signals thinking; ⌘O now summons Omi (fronts the app and opens chat) from anywhere via an NSEvent watcher; and the Brain Map has been removed from the Memory view",
+        "Second Brain: the top bar's new-item counter now has data on home (memories and tasks are warmed at startup and counted from their stores), and the Brain Map tab drops its leftover close (X) button",
+        "Second Brain: replace the left nav rail with a constant floating top bar — primary nav (Home/Memory/Tasks/Apps), Capture/Listening, and a counter of new conversations/memories/tasks added since Omi was last in front",
+        "Improved Omi and Omi Beta installer release reliability",
+        "Improved macOS Beta qualification reliability while Rewind settings transition between cached and live state.",
+        "Fixed chat freezes when a Claude-backed session needs sign-in: the app now stops the turn immediately with a clear message instead of spinning for a minute or showing the Pro upgrade sheet",
+        "Fixed chat copying so it excludes hidden reasoning, avoids hangs in selectable messages, and adds one-click copy buttons to code blocks",
+        "Fixed typed chat getting stuck after a previous web lookup and restored responses to personal-history questions",
+        "Fixed a chat freeze where a single corrupt sync record could wedge the agent forever, leaving replies stuck mid-stream with a spinning loader",
+        "Fixed chat syncing after Omi restarts during a response.",
+        "Fixed chat web searches failing when the assistant tried to look something up online",
+        "Improved response speed and efficiency in long desktop chats by reusing conversation context across turns",
+        "Fixed the home chat bar so it grows to fit multi-line messages instead of scrolling the text out of view",
+        "Fixed a large empty gap above the Home chat so messages sit close to the top bar",
+        "Onboarding copy is clearer and less alarming: dropped confusing \"the notch\" wording, reframed Automation from \"control your other apps\" to \"help with tasks in the apps you choose,\" and Full Disk Access now says it's read-only, stays on your Mac, and can be turned off anytime",
+        "Fixed the Files connector showing as connected after onboarding while nothing was actually indexed — onboarding no longer prematurely marks indexing complete, so your files get scanned and become searchable",
+        "Onboarding no longer leaves artifacts in your real data: the screen-demo conversation stays isolated instead of appearing in the Chat tab, and the \"Run omi for two days\" placeholder task is no longer added to your Tasks",
+        "Smoother permission granting in onboarding: the drag-to-grant helper now waits for System Settings to open and points its arrow at the actual list, and the screen-capture consent is requested up front so it no longer interrupts the live screen demo",
+        "Onboarding role picker now offers Analyst and Other so non-technical users have a fit, and the open-Omi shortcut choices drop the arbitrary ⌘J in favor of the intuitive ⌘O",
+        "The onboarding screen demo now advances once Omi answers your spoken question — the Continue button appears on voice answers (not just typed ones), and the fallback Skip is a clear button instead of an easily-missed link",
+        "Improved first-launch voice reliability, chat response completion, and Home history loading",
+        "Added a push-to-talk microphone setting so you can keep using your preferred input device",
+        "Release-health diagnostics are now attributed to the exact app version/build and distinguish normal lifecycle (short taps, quiet discards, expected session rotation) from real issues, so a stability signal reflects an actual regression rather than healthy behavior",
+        "Prevent chat freezes when the agent stdout pipe backs up: the agent queues JSONL on drain instead of blocking, and the app keeps reading while the agent process is still alive",
+        "Fixed excessive CPU use and error-log spam when the app is left signed out",
+        "Added per-tool voice response latency diagnostics to pinpoint slow voice tools",
+        "Fixed Google Calendar imports incorrectly treating a valid browser session as expired when profiles contain host-scoped Google cookies",
+        "Improved chat so its input is ready whenever you open it",
+        "Improved desktop test reliability by isolating owner-transition fixtures and bounding stalled suites",
+        "Reduced first-launch disruption by removing system-wide icon cache maintenance",
+        "Fixed Push-to-Talk so it still reveals the floating bar while the bar is snoozed",
+        "Updated desktop API compatibility for the latest memory changes",
+        "Fixed loading indicators shifting content on Tasks, Focus, conversation details, and Settings",
+        "Improved desktop stability during memory pressure, Rewind text recognition, realtime voice reconnects, and notification handling",
+        "Fixed ChatGPT memory import routing and made Google connector failures actionable",
+        "Fixed setup conversations and sample tasks appearing in normal chat and task history",
+        "Added Return-key support for onboarding Continue and setup actions",
+        "Improved beta realtime diagnostics by recording each provider-close recovery decision and managed token-mint fallback outcome without collecting customer content",
+        "Fixed the Screen Recording drag helper appearing detached from System Settings during onboarding",
+        "Fixed chats freezing after Markdown tables appear",
+        "Fixed system audio permission being requested again after setup",
+        "Fixed Settings so Check Now is unavailable while an app update downloads in the background"
+      ]
+    },
     {
       "version": "0.12.94",
       "date": "2026-07-21",

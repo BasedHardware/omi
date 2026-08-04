@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a rare crash caused by a data race on Rewind's per-user database identifier during app termination or account switching"
-}

@@ -58,7 +58,7 @@ For local development with the full backend stack:
 
 ```bash
 xcode-select --install
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+uv --version
 ```
 
 2. Clone and configure
@@ -66,7 +66,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```bash
 git clone https://github.com/BasedHardware/omi.git
 cd omi/desktop/macos
-cp Backend-Rust/.env.example Backend-Rust/.env
+cp ../../backend/.env.example ../../backend/.env
 ```
 
 3. Build and run
@@ -106,7 +106,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 │                                                         │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │ Omi      │  │ macOS App    │  │ Mobile App        │  │
-│  │ Wearable │  │ (Swift/Rust) │  │ (Flutter)         │  │
+│  │ Wearable │  │ (Swift/Python) │  │ (Flutter)         │  │
 │  └────┬─────┘  └──────┬───────┘  └────────┬──────────┘  │
 │       │    BLE         │   HTTPS/WS        │             │
 └───────┼────────────────┼───────────────────┼─────────────┘
@@ -129,12 +129,12 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 | Component | Path | Stack |
 |-----------|------|-------|
-| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
+| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Python desktop backend |
 | Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
 | Omi Glass | [`omiGlass/`](omiGlass/) | ESP32-S3, C |
-| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
+| SDKs | [`sdks/`](sdks/) | Device (Python/Swift/RN + multi-lang protocol) |
 | AI Personas | [`web/personas-open-source/`](web/personas-open-source/) | Next.js |
 
 </details>
@@ -158,9 +158,10 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 ### API & SDKs
 - [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
-- [Python SDK](sdks/python/)
-- [Swift SDK](sdks/swift/)
-- [React Native SDK](sdks/react-native/)
+- [Device multi-lang protocol SDKs](sdks/device/) — shared BLE UUIDs/packet framing for TS/Go/Rust/C++/Dart
+- [Python device SDK](sdks/python/) — full BLE + Opus + Deepgram
+- [Swift device SDK](sdks/swift/)
+- [React Native device SDK](sdks/react-native/)
 - [MCP Server](mcp/) — Model Context Protocol integration
 
 ### Architecture

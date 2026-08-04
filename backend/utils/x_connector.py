@@ -38,6 +38,7 @@ from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils import social
@@ -390,6 +391,12 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
                         for m in memory_dbs
                     ],
                 )
+            capture_memory_write(
+                principal_id=uid,
+                source="twitter_x_connector",
+                session_id=source_id,
+                memories=memory_dbs,
+            )
             total += len(memory_dbs)
 
         # Do not acknowledge this raw source until every write above succeeds.

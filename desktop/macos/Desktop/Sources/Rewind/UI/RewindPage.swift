@@ -200,29 +200,29 @@ struct RewindPage: View {
       }
     }
     // Global keyboard handlers
-    .onKeyPress(.escape) {
+    .onEscapeKey {
       // Expanded transcript → collapse
       if isTranscriptExpanded {
         isTranscriptExpanded = false
         LiveTranscriptMonitor.shared.clearSaved()
-        return .handled
+        return true
       }
       // Timeline mode → go back to results list
       if searchViewMode == .timeline {
         searchViewMode = .results
-        return .handled
+        return true
       }
       // In search mode → clear search
       if viewModel.activeSearchQuery != nil {
         viewModel.searchQuery = ""
         searchViewMode = nil
-        return .handled
+        return true
       }
       if isSearchFocused {
         isSearchFocused = false
-        return .handled
+        return true
       }
-      return .ignored
+      return false
     }
     .onKeyPress(.leftArrow) {
       // Arrow keys only work in timeline mode

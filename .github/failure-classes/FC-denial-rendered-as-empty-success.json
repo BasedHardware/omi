@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-denial-rendered-as-empty-success",
+  "violated_contract": "A read refused by authorization or an indeterminate rollout state must be reported as a refusal carrying its reason; it must not be returned as a successful empty collection, which the caller cannot distinguish from a genuinely empty account.",
+  "canonical_prevention": "Classify a refused read once at the shared boundary into report-with-reason versus legitimately-empty, and have every serving surface raise from that single classification instead of each deciding on its own to return an empty collection.",
+  "canonical_prevention_artifact": [
+    "backend/utils/mcp_memories.py",
+    "backend/tests/unit/test_mcp_data_endpoints.py"
+  ],
+  "evidence_prs": [
+    10743
+  ],
+  "scope_hints": [
+    "backend/routers/mcp.py",
+    "backend/routers/mcp_sse.py",
+    "backend/utils/mcp_memories.py"
+  ],
+  "status": "open"
+}

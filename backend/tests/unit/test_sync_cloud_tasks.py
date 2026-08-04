@@ -926,6 +926,7 @@ def _load_sync_router_for_fast_path():
         'models',
         'models.conversation',
         'models.conversation_enums',
+        'models.sync_contract',
         'models.sync_audio',
         'models.transcript_segment',
         'utils',
@@ -2054,6 +2055,80 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery():
+    """A permanent failure must not spend the retry budget returning 5xx."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    from utils.stt.outcomes import TranscriptionFailure
+
+    request = _configure_task_handler(
+        module,
+        pipeline_error=TranscriptionFailure(
+            module.TranscriptionOutcome.CONFIG_ERROR,
+            retryable=False,
+        ),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'unknown',
+            'stt_model': 'unknown',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'failed_final'}
+        module._finalize_sync_job_failure.assert_awaited_once()
+        assert (
+            module._finalize_sync_job_failure.await_args.kwargs['outcome'] == module.TranscriptionOutcome.CONFIG_ERROR
+        )
+        module.fenced_mark_job_queued_for_retry.assert_not_called()
+        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_retryable_failure_still_retries_before_exhaustion():
+    """The non-retryable short circuit must not collapse genuine transient retries."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = _configure_task_handler(
+        module,
+        pipeline_error=TimeoutError('transient upstream detail'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'parakeet',
+            'stt_model': 'parakeet',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        assert json.loads(response.body) == {'status': 'retry'}
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

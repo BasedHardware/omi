@@ -45,7 +45,13 @@ def format_keyvalue_lines(metadata: dict[str, str]) -> list[str]:
     return [f"{key}: {metadata[key]}" for key in metadata]
 
 
+def validate_macos_release_tag(tag: str) -> None:
+    if not MACOS_RELEASE_TAG_RE.fullmatch(tag):
+        raise SystemExit(f"not a macOS release tag: {tag}")
+
+
 def preflight_release(release_json_path: Path, tag: str) -> None:
+    validate_macos_release_tag(tag)
     release = json.loads(release_json_path.read_text(encoding="utf-8"))
     if not isinstance(release, dict):
         raise SystemExit("release JSON must be an object")
@@ -88,8 +94,6 @@ def preflight_release(release_json_path: Path, tag: str) -> None:
         raise SystemExit(f"candidate isLive must be false, got {metadata.get('isLive')!r}")
     if metadata.get("channel") == "beta" and is_live not in {"true", "1", "yes"}:
         raise SystemExit(f"beta isLive must be true, got {metadata.get('isLive')!r}")
-    if not MACOS_RELEASE_TAG_RE.match(tag):
-        raise SystemExit(f"not a macOS release tag: {tag}")
 
 
 def check_manifest(manifest_path: Path) -> None:
@@ -102,6 +106,14 @@ def check_manifest(manifest_path: Path) -> None:
     provider_mode = manifest.get("provider_mode")
     if provider_mode != "offline":
         raise SystemExit(f"manifest provider_mode must be 'offline', got {provider_mode!r}")
+
+
+def check_fault_manifest(manifest_path: Path) -> None:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("passed") is not True:
+        raise SystemExit("fault-suite manifest passed=false")
+    if manifest.get("tier") != "fault":
+        raise SystemExit(f"fault-suite manifest tier must be 'fault', got {manifest.get('tier')!r}")
 
 
 def update_qualification_keys(
@@ -181,6 +193,10 @@ def _self_test() -> int:
         json.dumps({"passed": True, "tier": 1, "provider_mode": "offline"}),
         encoding="utf-8",
     )
+    passing_fault_manifest = Path("/tmp/release-keyvalue-pass-fault-manifest.json")
+    failing_fault_manifest = Path("/tmp/release-keyvalue-fail-fault-manifest.json")
+    passing_fault_manifest.write_text(json.dumps({"passed": True, "tier": "fault"}), encoding="utf-8")
+    failing_fault_manifest.write_text(json.dumps({"passed": False, "tier": "fault"}), encoding="utf-8")
 
     try:
         check_manifest(passing_manifest)
@@ -214,6 +230,21 @@ def _self_test() -> int:
             ok("check-manifest rejects non-T2 tier")
         else:
             fail("check-manifest wrong tier", f"unexpected exit: {exc}")
+
+    try:
+        check_fault_manifest(passing_fault_manifest)
+        ok("check-fault-manifest passing manifest exits 0")
+    except SystemExit as exc:
+        fail("check-fault-manifest passing manifest", f"unexpected exit {exc.code}: {exc}")
+
+    try:
+        check_fault_manifest(failing_fault_manifest)
+        fail("check-fault-manifest failing manifest", "expected SystemExit")
+    except SystemExit as exc:
+        if exc.code != 0 and str(exc) == "fault-suite manifest passed=false":
+            ok("check-fault-manifest rejects a failed user-visible fault flow")
+        else:
+            fail("check-fault-manifest failing manifest", f"unexpected exit {exc.code}: {exc}")
 
     sample_body = """Release notes
 
@@ -333,9 +364,13 @@ def main(argv: list[str] | None = None) -> int:
     preflight = sub.add_parser("preflight-release", help="Validate a macOS beta release from gh JSON")
     preflight.add_argument("release_json")
     preflight.add_argument("tag")
+    validate_tag = sub.add_parser("validate-tag", help="Validate canonical macOS release-tag syntax")
+    validate_tag.add_argument("tag")
 
     check = sub.add_parser("check-manifest", help="Exit 0 when harness manifest passed")
     check.add_argument("manifest")
+    check_fault = sub.add_parser("check-fault-manifest", help="Exit 0 when the user-visible fault suite passed")
+    check_fault.add_argument("manifest")
 
     update = sub.add_parser(
         "update-qualified-beta",
@@ -354,8 +389,15 @@ def main(argv: list[str] | None = None) -> int:
         preflight_release(Path(args.release_json), args.tag)
         print("release preflight OK")
         return 0
+    if args.command == "validate-tag":
+        validate_macos_release_tag(args.tag)
+        print("release tag OK")
+        return 0
     if args.command == "check-manifest":
         check_manifest(Path(args.manifest))
+        return 0
+    if args.command == "check-fault-manifest":
+        check_fault_manifest(Path(args.manifest))
         return 0
     if args.command == "update-qualified-beta":
         update_qualification_keys(

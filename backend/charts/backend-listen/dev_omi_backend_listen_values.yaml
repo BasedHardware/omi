@@ -29,8 +29,11 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Development-only parity-pack exporter GSA (WI). Runtime JSON SA remains
+  # nik-164 via SERVICE_ACCOUNT_JSON; both have objectAdmin on the pack bucket.
+  annotations:
+    iam.gke.io/gcp-service-account: dev-omi-listen-parity-pack@based-hardware-dev.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -43,10 +46,18 @@ podAnnotations:
   prometheus.io/path: "/metrics"
 # This is for setting Kubernetes Labels to a Pod.
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
-podLabels: {}
+podLabels:
+  env: dev
+  # Reconnect and circuit-breaker aggregates are emitted by backend-listen.
+  # Keep those scrape targets in the same development-only evidence plane as
+  # the Pusher targets.
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  # The image runs as omi:omi (10001:10001). Kubernetes mounts emptyDir as
+  # root-owned, so the parity-pack cassette root needs this supplemental group
+  # before the non-root listener can create its cassettes/ directory.
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
 
 securityContext: {}
   # capabilities:
@@ -117,12 +128,25 @@ env:
     value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "dev"
+  # Development-only dogfood capture. The capture runtime compares this exact
+  # Firebase UID; do not replace it with an email or a broad user allowlist.
+  - name: OMI_PARITY_PACK_CAPTURE
+    value: "1"
+  - name: OMI_PARITY_PACK_ALLOWED_PRINCIPALS
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: OMI_PARITY_PACK_ROOT
+    value: "/var/omi-parity-pack"
+  # Durable export target (private dev bucket). Export is fail-open.
+  - name: OMI_PARITY_PACK_GCS_URI
+    value: "gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0"
+  - name: OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS
+    value: "3600"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
     value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
@@ -147,10 +171,10 @@ env:
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: MEMORY_V3_GET_ENABLED
     value: "true"
-  - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
+  - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
-  - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
-    value: "true"
+  - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
+    value: "900"
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -179,7 +203,7 @@ env:
   - name: HOSTED_TRANSLATION_API_URL
     value: "http://nllb.omiapi.com"
   - name: TRANSLATION_SERVICE_MODELS
-    value: "nllb,google"
+    value: "nllb,gemini"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -202,7 +226,7 @@ env:
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
-    value: "modulate-velma-2,parakeet"
+    value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,parakeet"
   - name: NO_SOCKET_TIMEOUT
@@ -340,7 +364,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.1"
+    value: "gpt-5.6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS
@@ -458,15 +482,21 @@ lifecycle:
     exec:
       command: ["sh", "-c", "sleep 15"]
 
-# Additional volumes on the output Deployment definition.
-volumes: []
+# Local scratch for parity-pack capture. Cassettes are also best-effort exported
+# to gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0 on persist and on
+# the hourly reconcile loop. emptyDir is still lost on pod restart before export.
+volumes:
+  - name: parity-pack
+    emptyDir: {}
 # - name: foo
 #   secret:
 #     secretName: mysecret
 #     optional: false
 
 # Additional volumeMounts on the output Deployment definition.
-volumeMounts: []
+volumeMounts:
+  - name: parity-pack
+    mountPath: "/var/omi-parity-pack"
 # - name: foo
 #   mountPath: "/etc/foo"
 #   readOnly: true

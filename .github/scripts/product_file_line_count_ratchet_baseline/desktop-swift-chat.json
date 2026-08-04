@@ -1,11 +1,11 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2216,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4304
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2184,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4396
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "deleteBackend flag threaded through both clearJournalTurns variants so a reset is local-only",
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Keep stdout readabilityHandler while the agent child is alive so a full pipe cannot deadlock mid-turn; deleteBackend remains on journal_clear_turns."
+    "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Named non-production fault bundle supplies an inert hermetic model token so fault injection reaches the configured remote 5xx backend without Firebase auth. deleteBackend flag threaded through both clearJournalTurns variants so a reset is local-only",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Chat-first evidence attachment stays with the owner-bound runtime bridge so run, attempt, and capability fences remain atomic. Typed failed-start context records checked binary/permission/port facts, elapsed timeout, and exit code at the existing runtime owner; surfaceKind travels through the existing query wire boundary so each surface retains its interaction identity; the one-time diagnostics handoff keeps the UI owner as the sole Sentry event surface."
   },
   "threshold": 1500
 }

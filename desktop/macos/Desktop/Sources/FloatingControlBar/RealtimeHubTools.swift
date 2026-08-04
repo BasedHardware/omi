@@ -247,8 +247,10 @@ enum RealtimeHubTools {
   static func escalationSystemPrompt() -> String {
     """
     You are Omi, a knowledgeable assistant. Answer the user's question accurately and \
-    usefully. A voice assistant will relay your answer aloud and adapt the phrasing for \
-    speech, so be clear and well-structured; you don't need to pre-shorten it.
+    usefully. When the question needs current facts (news, weather, prices, scores, \
+    schedules), use your web search tool and ground the answer in what it returns. A \
+    voice assistant will relay your answer aloud and adapt the phrasing for speech, so \
+    be clear and well-structured; you don't need to pre-shorten it.
     """
   }
 
@@ -296,6 +298,10 @@ enum RealtimeHubTools {
       "max_tokens": 1024,
       "messages": messages,
       "stream": false,
+      // Escalations carry no client tools, so opt in to the gateway's
+      // server-side web_search injection explicitly — voice escalations are
+      // exactly the "current facts" turns that need a live lookup.
+      "omi_web_search": true,
     ]
   }
 }

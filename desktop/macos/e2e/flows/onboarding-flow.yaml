@@ -25,6 +25,7 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingWelcomeStepView.swift
   - desktop/macos/Desktop/Sources/PostOnboardingPromptViews.swift
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexingView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingAnswerWriteGate.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift

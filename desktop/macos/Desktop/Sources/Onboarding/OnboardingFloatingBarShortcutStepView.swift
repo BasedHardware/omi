@@ -52,39 +52,45 @@ struct OnboardingFloatingBarShortcutStepView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.top, OmiSpacing.xl)
 
-      Spacer()
+      OnboardingContentWithPinnedActions {
+        VStack(spacing: OmiSpacing.xxl) {
+          Text("Let's set the \"Open Omi\" shortcut.\nPress this shortcut. Do the buttons light up?")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundColor(OmiColors.textPrimary)
+            .multilineTextAlignment(.center)
 
-      VStack(spacing: OmiSpacing.xxl) {
-        Text("Let's set the \"Open Omi\" shortcut.\nPress this shortcut. Do the buttons light up?")
-          .font(.system(size: 22, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
-          .multilineTextAlignment(.center)
-
-        RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
-          .frame(height: 152)
-          .frame(maxWidth: 480)
-          .overlay {
-            shortcutKeyPreview
-          }
-
-        VStack(spacing: OmiSpacing.md) {
-          Text("Choose a different shortcut:")
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(OmiColors.textSecondary)
-
-          HStack(spacing: OmiSpacing.sm) {
-            ForEach(ShortcutSettings.askOmiPresets, id: \.self) { shortcut in
-              shortcutChoiceButton(shortcut)
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+            .frame(height: 152)
+            .frame(maxWidth: 480)
+            .overlay {
+              shortcutKeyPreview
             }
-            customShortcutButton
+
+          VStack(spacing: OmiSpacing.md) {
+            Text("Choose a different shortcut:")
+              .font(.system(size: 14, weight: .medium))
+              .foregroundColor(OmiColors.textSecondary)
+
+            LazyVGrid(
+              columns: [GridItem(.adaptive(minimum: 92), spacing: OmiSpacing.sm)],
+              alignment: .center,
+              spacing: OmiSpacing.sm
+            ) {
+              ForEach(ShortcutSettings.askOmiPresets, id: \.self) { shortcut in
+                shortcutChoiceButton(shortcut)
+              }
+              customShortcutButton
+            }
+
+            if isRecordingCustomShortcut || shortcutSettings.askOmiUsesCustomShortcut || captureError != nil {
+              customShortcutRecorder
+            }
           }
 
-          if isRecordingCustomShortcut || shortcutSettings.askOmiUsesCustomShortcut || captureError != nil {
-            customShortcutRecorder
-          }
         }
-
+        .frame(maxWidth: 480)
+      } actions: {
         HStack(spacing: OmiSpacing.md) {
           OnboardingBackButton()
 
@@ -105,9 +111,8 @@ struct OnboardingFloatingBarShortcutStepView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
           }
         }
+        .frame(maxWidth: 480)
       }
-
-      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(OmiColors.backgroundPrimary)
@@ -238,7 +243,7 @@ struct OnboardingFloatingBarShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.askOmiShortcut == shortcut && !shortcutSettings.askOmiUsesCustomShortcut
     return Button {
-      shortcutSettings.askOmiShortcut = shortcut
+      Self.selectPreset(shortcut, settings: shortcutSettings)
       isRecordingCustomShortcut = false
       captureError = nil
       resetDetectionState()
@@ -258,6 +263,10 @@ struct OnboardingFloatingBarShortcutStepView: View {
       )
     }
     .buttonStyle(.plain)
+  }
+
+  static func selectPreset(_ shortcut: ShortcutSettings.KeyboardShortcut, settings: ShortcutSettings) {
+    settings.askOmiShortcut = shortcut
   }
 
   private func beginCustomShortcutCapture() {

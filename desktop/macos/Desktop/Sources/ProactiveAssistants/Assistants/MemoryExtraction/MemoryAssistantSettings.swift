@@ -231,6 +231,38 @@ class MemoryAssistantSettings {
     }
   }
 
+  // MARK: - User-Intent Setting Changes (telemetry)
+
+  /// Apply an explicit user-initiated change to one of the two telemetry-gated
+  /// settings (`enabled` / `notifications_enabled`), persisting it and recording
+  /// the bounded `Memory Assistant Setting Changed` event only when the persisted
+  /// value actually changes. Returns `true` when the change was real and the
+  /// event was recorded, `false` when it was a no-op (so callers/tests can tell).
+  ///
+  /// This is the **only** path that emits the activation-denominator event. The
+  /// raw property setters (`isEnabled` / `notificationsEnabled`) are deliberately
+  /// silent so that remote settings sync (`SettingsSyncManager.applyRemoteSettings`),
+  /// migrations/defaults, and programmatic resets cannot create denominator
+  /// events. Call this exclusively from explicit user-intent sites (UI toggles,
+  /// intentional user commands).
+  @discardableResult
+  func applyUserSettingChange(_ setting: MemoryAssistantTelemetry.Setting, value: Bool) -> Bool {
+    let previous: Bool
+    switch setting {
+    case .enabled:
+      previous = isEnabled
+      isEnabled = value
+    case .notificationsEnabled:
+      previous = notificationsEnabled
+      notificationsEnabled = value
+    }
+    guard MemoryAssistantTelemetry.settingChangeIsPersistedChange(oldValue: previous, newValue: value) else {
+      return false
+    }
+    AnalyticsManager.shared.memoryAssistantSettingChanged(setting: setting, value: value)
+    return true
+  }
+
   /// Apps excluded from memory extraction (user's custom list, on top of the shared built-in list)
   var excludedApps: Set<String> {
     get {

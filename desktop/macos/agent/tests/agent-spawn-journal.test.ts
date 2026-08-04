@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
-import { compactRealtimeSpawnToolResult } from "../src/runtime/agent-spawn-journal.js";
+import { compactRealtimeSpawnToolResult, stableAgentSpawnTurnId } from "../src/runtime/agent-spawn-journal.js";
+import { recordJournalTurn } from "../src/runtime/conversation-journal.js";
 import { handleAgentControlToolCall } from "../src/runtime/control-tools.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { resolveSurfaceSession } from "../src/runtime/surface-session.js";
@@ -371,6 +372,93 @@ describe("durable agent-spawn producer journal", () => {
       "Launch Risk Research started and is working in the background.",
     );
     expect(ensured.assistantTurn.contentBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "agentCompletion", status: "completed" }),
+    ]));
+    store.close();
+  });
+
+  it("promotes an optimistic streaming row to the canonical spawn exchange", async () => {
+    const root = newRoot();
+    const { store, kernel } = createKernelHarness(join(root, "streaming-promote.sqlite"), "acp");
+    const parent = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "voice_turn",
+        externalRefId: "voice-turn-stream",
+      },
+      defaultAdapterId: "acp",
+    }, () => 1);
+    const pillId = "10000000-0000-0000-0000-00000000000c";
+    const descriptor = {
+      ...producerDescriptor(pillId),
+      surface: {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "voice_turn",
+        externalRefId: "voice-turn-stream",
+      },
+      continuityKey: "realtime_spawn:voice-turn-stream",
+      assistantText: "The child is already complete.",
+    };
+    const accepted = await kernel.spawnBackgroundAgent({
+      ownerId: "owner",
+      callerSessionId: parent.agentSessionId,
+      clientId: "realtime",
+      requestId: "voice-spawn-stream",
+      prompt: descriptor.objective,
+      title: descriptor.title,
+      surfaceKind: "floating_bar",
+      externalRefKind: "pill",
+      externalRefId: pillId,
+      mode: "act",
+      metadata: { pillId, producerJournal: descriptor },
+    });
+    await waitUntil(() => String(store.getRow(
+      "SELECT status FROM runs WHERE run_id = ?",
+      [accepted.run.runId],
+    ).status) === "succeeded");
+
+    // Simulate the optimistic streaming projection admitting the assistant row
+    // before the canonical spawn receipt arrives. The background run created a
+    // completed assistant turn at this stable ID; replace it with a speculative
+    // streaming row that has no producing run, as the Swift streaming
+    // projection would.
+    const assistantTurnId = stableAgentSpawnTurnId(descriptor.continuityKey, "assistant");
+    store.execute(
+      "DELETE FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+      [parent.conversationId, assistantTurnId],
+    );
+    store.execute(
+      "DELETE FROM conversation_turn_revisions WHERE conversation_id = ? AND turn_id = ?",
+      [parent.conversationId, assistantTurnId],
+    );
+    recordJournalTurn(store, {
+      ownerId: "owner",
+      conversationId: parent.conversationId,
+      turnId: assistantTurnId,
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "realtime_voice",
+      status: "streaming",
+      content: "partial narration before spawn",
+      contentBlocks: [],
+      producingRunId: null,
+      createdAtMs: 50,
+    });
+
+    const ensured = kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: accepted.session.sessionId,
+      runId: accepted.run.runId,
+    });
+
+    // The streaming row must be replaced with the canonical spawn exchange,
+    // not rejected as a content collision.
+    expect(ensured.assistantTurn.status).toBe("completed");
+    expect(ensured.assistantTurn.producingRunId).toBe(accepted.run.runId);
+    expect(ensured.assistantTurn.content).not.toBe("partial narration before spawn");
+    expect(ensured.assistantTurn.contentBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "agentSpawn", pillId }),
       expect.objectContaining({ type: "agentCompletion", status: "completed" }),
     ]));
     store.close();

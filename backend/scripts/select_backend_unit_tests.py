@@ -68,6 +68,17 @@ FULL_RUN_GLOBS = (
     'backend/utils/encryption.py',
 )
 
+# These paths participate in the location-context contract below. They are
+# intentionally narrow exceptions to the generic model/database full-suite
+# fallback so local pre-push feedback remains focused; CI still owns --all.
+NARROW_LOCATION_CONTEXT_PATHS = frozenset(
+    {
+        'backend/database/users.py',
+        'backend/models/geolocation.py',
+        'backend/models/users.py',
+    }
+)
+
 MEMORY_POLICY_CORE_PATH_PREFIXES = ('backend/utils/memory/',)
 
 MEMORY_POLICY_CORE_PATH_GLOBS = (
@@ -84,6 +95,19 @@ MEMORY_POLICY_CORE_TESTS = (
 )
 
 AREA_TESTS = (
+    (
+        (
+            'backend/database/users.py',
+            'backend/models/geolocation.py',
+            'backend/models/users.py',
+            'backend/routers/developer.py',
+            'backend/routers/users.py',
+            'backend/utils/retrieval/agentic.py',
+            'backend/utils/retrieval/graph.py',
+        ),
+        (),
+        ('tests/unit/test_location_context_consent.py', 'tests/unit/test_chat_async_offload.py'),
+    ),
     (
         ('backend/llm_gateway/',),
         (),
@@ -252,6 +276,8 @@ def normalize_changed_path(path: str) -> str:
 
 
 def is_full_run_path(path: str) -> bool:
+    if path in NARROW_LOCATION_CONTEXT_PATHS:
+        return False
     if path in FULL_RUN_PATHS:
         return True
     if any(path.startswith(prefix) for prefix in FULL_RUN_PREFIXES):

@@ -125,7 +125,12 @@ def _build_fakes() -> dict[str, ModuleType]:
     utils_analytics.record_usage = MagicMock()
 
     llm_memories = add("utils.llm.memories")
-    for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:
+    for attr in [
+        "resolve_memory_conflict",
+        "extract_canonical_l1_memory_candidates",
+        "extract_memories_from_text",
+        "new_memories_extractor",
+    ]:
         setattr(llm_memories, attr, MagicMock())
 
     llm_conv = add("utils.llm.conversation_processing")
@@ -246,6 +251,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     for name in [
         "utils.conversations.factory",
         "utils.conversations.transcript_chunks",
+        "utils.conversations.memory_extraction_telemetry",
         "utils.memory.canonical_activation",
         "utils.memory.memory_service",
         "utils.memory.memory_system",

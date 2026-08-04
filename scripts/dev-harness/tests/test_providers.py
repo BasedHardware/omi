@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -12,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dev_harness import config, providers, safety
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+OPENAI_FAKE_RELATIVE_PATH = Path("backend") / "testing" / "e2e" / "fakes" / "llm.py"
 
 
 def _real_env(api_key: str = "sk-local-dev-test-key") -> dict[str, str]:
@@ -42,7 +42,7 @@ def test_credential_checker_real_and_offline_modes(monkeypatch: pytest.MonkeyPat
     assert offline.ok
     assert offline.enabled_external_providers == ()
     assert "openai" in offline.offline_fake_sources
-    assert "backend/testing/e2e/fakes/llm.py" in offline.offline_fake_sources["openai"]
+    assert Path(offline.offline_fake_sources["openai"]).relative_to(REPO_ROOT) == OPENAI_FAKE_RELATIVE_PATH
 
 
 def test_real_mode_reports_fingerprints_without_leaking_secrets() -> None:
@@ -145,7 +145,7 @@ def test_offline_mode_uses_hermetic_shared_fake_provider_wrapper() -> None:
     registry = providers.OfflineProviderRegistry(REPO_ROOT)
     fake_paths = registry.fake_source_paths()
 
-    assert fake_paths["openai"].endswith("backend/testing/e2e/fakes/llm.py")
+    assert Path(fake_paths["openai"]).relative_to(REPO_ROOT) == OPENAI_FAKE_RELATIVE_PATH
     llm_fake = registry.load_fake("openai")
     response = llm_fake.make_openai_chat_response()
     assert response["id"] == "chatcmpl-fake-e2e-test"
@@ -183,7 +183,10 @@ def test_provider_secrets_injected_into_child_env(tmp_path: Path) -> None:
     )
     env = os.environ.copy()
     env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
-    env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+    pythonpath = [str(REPO_ROOT / "scripts" / "dev-harness")]
+    if existing := env.get("PYTHONPATH"):
+        pythonpath.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath)
     for key in ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"):
         env.pop(key, None)
 

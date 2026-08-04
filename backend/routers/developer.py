@@ -14,7 +14,7 @@ import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
 from database._client import db
-from database.vector_db import upsert_memory_vectors_batch
+from database.vector_db import search_memories_by_vector, upsert_memory_vectors_batch
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
@@ -32,7 +32,7 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
-from models.geolocation import Geolocation
+from models.geolocation import Geolocation, GeolocationInput, validated_geolocation_or_none
 from models.structured import Structured
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from models.transcript_segment import TranscriptSegment
@@ -63,6 +63,7 @@ from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from utils.mcp_memories import collect_filtered_memories
@@ -370,7 +371,7 @@ def get_memories(
             lambda batch_offset, batch_limit: [
                 m.model_dump(mode='json')
                 for m in memorydb_list_with_locked_preview(
-                    MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+                    MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
                 )
             ],
             limit=limit,
@@ -432,6 +433,42 @@ def get_memories(
             )
             continue
     return valid_memories
+
+
+def _legacy_developer_vector_items(uid: str, query: str, limit: int) -> List[dict]:
+    """Relevance-ranked legacy `memories` results for a legacy-cohort vector search.
+
+    The default-read vector path returns USE_LEGACY_SAFE (or DENY + missing_rollout_state)
+    for an un-enrolled legacy account; that account's authoritative surface is the legacy
+    `memories` collection, so search it directly instead of failing closed. IDs come back
+    ordered by vector relevance; hydration preserves that order. Locked memories are
+    content-redacted exactly as GET /v1/dev/user/memories does. Scores aren't exposed by
+    the legacy index, so relevance_score is left null.
+    """
+    memory_ids = search_memories_by_vector(uid, query, limit)
+    if not memory_ids:
+        return []
+    hydrated = {
+        m['id']: m for m in memories_db.get_memories_by_ids(uid, memory_ids) if isinstance(m, dict) and m.get('id')
+    }
+    items: List[dict] = []
+    for memory_id in memory_ids:  # preserve vector-relevance order
+        memory = hydrated.get(memory_id)
+        if memory is None:
+            continue
+        content = str(memory.get('content') or '')
+        if memory.get('is_locked', False):
+            content = (content[:70] + '...') if len(content) > 70 else content
+        category = memory.get('category')
+        items.append(
+            {
+                'id': memory['id'],
+                'content': content,
+                'category': category if isinstance(category, str) and category.strip() else None,
+                'relevance_score': None,
+            }
+        )
+    return items
 
 
 @router.get(
@@ -508,11 +545,36 @@ def search_memories_vector(
         db_client=db,
         rollout_decision=memory_rollout,
     )
-    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
-        raise HTTPException(
-            status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
+    # A legacy-cohort account (explicit USE_LEGACY_SAFE, or an un-enrolled account whose
+    # only signal is missing_rollout_state) reads the legacy `memories` collection — the
+    # same recovery GET /v1/dev/user/memories and the MCP path already apply (#10094/#10095).
+    # Vector search previously failed closed with 403 here, so those accounts could list
+    # memories but not vector-search them (#10203).
+    serve_legacy = memory_result.should_use_legacy_fallback or (
+        memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}
+        and memory_result.fallback_reason == 'missing_rollout_state'
+    )
+    if serve_legacy:
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read_vector',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
         )
-    if memory_result.should_use_legacy_fallback:
+        legacy_items = _legacy_developer_vector_items(uid, query, limit)
+        return {
+            'items': legacy_items,
+            'returned_count': len(legacy_items),
+            'archive_default_visible': False,
+            'policy': {
+                'consumer': 'developer_api',
+                'app_has_default_memory_grant': True,
+                'archive_capability': False,
+                'raw_provenance_capability': False,
+            },
+        }
+    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
             status_code=403, detail=_developer_memory_access_not_ready_detail(memory_result.fallback_reason)
         )
@@ -577,6 +639,12 @@ def create_memory(
             upsert_vector=False,
             require_canonical_promotion=True,
         )
+        capture_memory_write(
+            principal_id=uid,
+            source="developer_memory_create",
+            session_id=memory_db.id,
+            memories=[memory_db],
+        )
         if memory.visibility == 'public':
             postprocess_executor.submit(update_personas_async, uid)
         return DeveloperMemory(
@@ -606,6 +674,12 @@ def create_memory(
         operation='create_memory',
         upsert_vector=False,
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="developer_memory_create",
+        session_id=memory_db.id,
+        memories=[memory_db],
     )
     if memory.visibility == 'public':
         postprocess_executor.submit(update_personas_async, uid)
@@ -680,6 +754,12 @@ def create_memories_batch(
         operation='batch_create_memories',
         upsert_vectors=memory_system != MemorySystem.CANONICAL,
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="developer_memory_batch_create",
+        session_id=str(uuid.uuid4()),
+        memories=created_dbs,
     )
     if has_public:
         postprocess_executor.submit(update_personas_async, uid)
@@ -1212,7 +1292,7 @@ class CreateConversationRequest(BaseModel):
         default=None, description="When the conversation finished (defaults to started_at + 5 minutes)"
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
 
 
 class ConversationResponse(BaseModel):
@@ -1268,7 +1348,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
         default=None, description="When conversation finished (calculated from segments duration if not provided)"
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
     client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
     client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
 
@@ -1477,7 +1557,7 @@ def create_conversation(
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
-    geolocation = resolve_geolocation(request.geolocation)
+    geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1657,7 +1737,7 @@ def _create_conversation_from_segments(
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
     # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
-    geolocation = resolve_geolocation(request.geolocation)
+    geolocation = resolve_geolocation(validated_geolocation_or_none(request.geolocation))
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1738,9 +1818,16 @@ def _create_conversation_from_segments(
             client_platform=resolved_client_platform,
         )
 
-    # Process conversation
+    # Process conversation. The idempotent (client_session_id) path creates a
+    # processing row; the admission guard's lease heartbeat keeps it fresh so the
+    # crash-orphan sweep can never terminalize active work. rollback_on_failure is
+    # False because this path owns its own recovery (delete on exception below).
     try:
-        conversation = process_conversation(uid, language_code, create_conversation_obj)
+        if conversation_id:
+            with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
+                conversation = process_conversation(uid, language_code, create_conversation_obj)
+        else:
+            conversation = process_conversation(uid, language_code, create_conversation_obj)
     except Exception:
         if request.client_session_id and conversation_id:
             conversations_db.delete_conversation(uid, conversation_id)

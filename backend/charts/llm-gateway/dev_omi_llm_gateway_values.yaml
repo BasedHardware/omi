@@ -62,7 +62,7 @@ env:
         name: dev-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: LLM_GATEWAY_ALLOWED_CALLERS
-    value: "backend"
+    value: "backend,omi-web,omi-admin-dashboard"
   - name: OPENAI_API_KEY
     valueFrom:
       secretKeyRef:

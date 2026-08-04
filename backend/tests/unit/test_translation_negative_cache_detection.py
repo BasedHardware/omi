@@ -25,7 +25,6 @@ _PROFILE = TranslationProfile(
     providers=(TranslationProvider.google,),
     nllb_url='',
     nllb_timeout_seconds=1.0,
-    google_project_id='test-project',
     cache_ttl_seconds=60,
     negative_cache_ttl_seconds=60,
 )

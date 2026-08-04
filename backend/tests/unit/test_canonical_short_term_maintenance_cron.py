@@ -1,282 +1,368 @@
-"""Tests for scheduled canonical short-term maintenance cron."""
+"""Tests for scheduled canonical Short-term maintenance orchestration."""
 
 from __future__ import annotations
 
+import asyncio
 import os
-import sys
-import types
-import importlib
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from typing import Any, cast
 from unittest.mock import MagicMock
-
-import pytest
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-_db_client_mod = types.ModuleType("database._client")
-_db_client_mod.db = MagicMock()
-
-from tests.unit.memory_import_isolation import (
-    ensure_utils_memory_packages_importable,
-    install_canonical_write_runtime_stubs,
-    install_database_client_stub,
-    restore_sys_modules,
-    snapshot_sys_modules,
-)
-
-_STUB_MODULE_NAMES = (
-    "database._client",
-    "firebase_admin",
-    "utils.subscription",
-    "database.users",
-    "pinecone",
-    "typesense",
-    "database.vector_db",
-)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _cron_import_isolation():
-    saved = snapshot_sys_modules(_STUB_MODULE_NAMES)
-    for name in ("database.vector_db",):
-        sys.modules.pop(name, None)
-    install_database_client_stub()
-    install_canonical_write_runtime_stubs()
-    yield
-    _clear_ws_b_runtime_modules()
-    restore_sys_modules(saved)
-
-
-ensure_utils_memory_packages_importable()
-
-from models.product_memory import MemoryTier
-from utils.memory.canonical_short_term_maintenance_cron import (
-    run_canonical_short_term_maintenance_for_cohort,
-    should_run_canonical_short_term_maintenance_cron,
-)
-from utils.memory.memory_system import list_canonical_cohort_uids
+from models.memory_recurrence import CanonicalRecurrenceSignal
+from models.product_memory import MemoryItem
+from utils.memory import canonical_short_term_maintenance_cron as cron
+from utils.memory.canonical_consolidation import ConsolidationReport
+from utils.memory.canonical_required_processing import RequiredMemoryProcessingReport
 from utils.memory.short_term_promotion import (
-    CanonicalShortTermMaintenanceReport,
-    ShortTermPromotionReport,
-    promotion_batch_threshold,
-)
-from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
-from tests.unit.test_ws_b_short_term_lifecycle import (
-    _clear_ws_b_runtime_modules,
-    _canonical_db_with_control,
-    _seed_canonical_short_term,
-    _set_canonical_cohort,
+    CanonicalShortTermMaintenanceReport as MaintenanceReport,
 )
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 CANONICAL_A = "uid-canonical-a"
 CANONICAL_B = "uid-canonical-b"
-LEGACY_UID = "uid-legacy-only"
 
 
-def _refresh_cron_runtime() -> None:
-    cron = importlib.import_module("utils.memory.canonical_short_term_maintenance_cron")
-    memory_system = importlib.import_module("utils.memory.memory_system")
-    short_term_promotion = importlib.import_module("utils.memory.short_term_promotion")
-    cron.list_canonical_cohort_uids = memory_system.list_canonical_cohort_uids
-    cron.run_canonical_short_term_maintenance = short_term_promotion.run_canonical_short_term_maintenance
-    globals().update(
-        {
-            "run_canonical_short_term_maintenance_for_cohort": cron.run_canonical_short_term_maintenance_for_cohort,
-            "should_run_canonical_short_term_maintenance_cron": cron.should_run_canonical_short_term_maintenance_cron,
-            "list_canonical_cohort_uids": memory_system.list_canonical_cohort_uids,
-            "CanonicalShortTermMaintenanceReport": short_term_promotion.CanonicalShortTermMaintenanceReport,
-            "ShortTermPromotionReport": short_term_promotion.ShortTermPromotionReport,
-            "promotion_batch_threshold": short_term_promotion.promotion_batch_threshold,
-        }
+def _enable_for(monkeypatch, *uids: str) -> None:
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "true")
+    monkeypatch.setattr(cron, "list_canonical_cohort_uids", lambda: list(uids))
+
+
+def test_disabled_cohort_runner_returns_empty_summary_without_running_maintenance(
+    monkeypatch,
+):
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "false")
+    list_uids = MagicMock(return_value=[CANONICAL_A])
+    run_maintenance = MagicMock()
+    monkeypatch.setattr(cron, "list_canonical_cohort_uids", list_uids)
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=object(),
+        now=NOW,
+        run_id="cron-disabled",
     )
 
-
-@pytest.fixture(autouse=True)
-def _clear_canonical_cohort(monkeypatch):
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
-
-    _refresh_cron_runtime()
-    clear_canonical_cohort(monkeypatch)
-    monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", raising=False)
-    monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS", raising=False)
+    assert summary == cron.CanonicalShortTermMaintenanceCronSummary(run_id="cron-disabled")
+    list_uids.assert_not_called()
+    run_maintenance.assert_not_called()
 
 
-def test_list_canonical_cohort_uids_reads_code_cohort_only(monkeypatch):
-    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+def test_cohort_summary_uses_consolidation_routes_and_promotions(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A, CANONICAL_B)
+    client = object()
+    recurrence_sink = MagicMock()
+    calls: list[tuple[str, dict[str, Any]]] = []
+    reports = {
+        CANONICAL_A: MaintenanceReport(
+            uid=CANONICAL_A,
+            consolidation=ConsolidationReport(
+                uid=CANONICAL_A,
+                trigger_reason="first_pending",
+                batched_memory_ids=["mem-a1", "mem-a2"],
+                promoted_memory_ids=["mem-a1"],
+                archived_memory_ids=["mem-a2"],
+            ),
+        ),
+        CANONICAL_B: MaintenanceReport(
+            uid=CANONICAL_B,
+            consolidation=ConsolidationReport(
+                uid=CANONICAL_B,
+                trigger_reason="first_pending",
+                batched_memory_ids=["mem-b1"],
+                promoted_memory_ids=["mem-b1"],
+            ),
+        ),
+    }
 
-    set_canonical_cohort(monkeypatch, CANONICAL_B, CANONICAL_A)
+    def run_maintenance(uid: str, **kwargs: Any) -> MaintenanceReport:
+        calls.append((uid, kwargs))
+        return reports[uid]
 
-    assert list_canonical_cohort_uids() == [CANONICAL_A, CANONICAL_B]
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
 
-
-def test_should_run_is_false_when_disabled_or_cohort_empty(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
-    assert should_run_canonical_short_term_maintenance_cron(now=NOW) is False
-
-    set_canonical_cohort(monkeypatch, CANONICAL_A)
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "false")
-    assert should_run_canonical_short_term_maintenance_cron(now=NOW) is False
-
-
-def test_should_run_is_true_when_enabled_with_cohort_on_interval_tick(monkeypatch):
-    set_canonical_cohort(monkeypatch, CANONICAL_A)
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS", "1")
-
-    assert should_run_canonical_short_term_maintenance_cron(now=NOW) is True
-
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS", "2")
-    assert should_run_canonical_short_term_maintenance_cron(now=NOW) is True
-    assert (
-        should_run_canonical_short_term_maintenance_cron(now=datetime(2026, 6, 24, 13, 0, tzinfo=timezone.utc)) is False
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=client,
+        now=NOW,
+        run_id="cron-routes",
+        recurrence_signal_persister=recurrence_sink,
     )
 
-
-def test_cohort_runner_noops_when_cron_disabled(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "false")
-    summary = run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-disabled")
-
-    assert summary.user_count == 0
-    assert summary.promoted_total == 0
+    assert summary.user_count == 2
+    assert summary.routed_total == 3
+    assert summary.promoted_total == 2
+    assert summary.skipped_users == 0
     assert summary.errors == []
+    assert [uid for uid, _kwargs in calls] == [CANONICAL_A, CANONICAL_B]
+    for _uid, kwargs in calls:
+        assert kwargs["db_client"] is client
+        assert kwargs["now"] == NOW
+        assert kwargs["run_id"] == "cron-routes"
+        assert kwargs["recurrence_signal_sink"] is recurrence_sink
+        assert callable(kwargs["required_processor"])
+        assert set(kwargs) == {
+            "db_client",
+            "now",
+            "run_id",
+            "recurrence_signal_sink",
+            "required_processor",
+        }
 
 
-def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypatch):
-    set_canonical_cohort(monkeypatch, CANONICAL_A, CANONICAL_B)
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
-    db = _canonical_db_with_control(CANONICAL_A)
+def test_consolidation_skipped_reason_is_logged_and_counted(monkeypatch, caplog):
+    consolidation = MaintenanceReport(
+        uid=CANONICAL_A,
+        consolidation=ConsolidationReport(
+            uid=CANONICAL_A,
+            skipped_reason="consolidation_not_due",
+        ),
+    )
 
+    _enable_for(monkeypatch, CANONICAL_A)
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_short_term_maintenance",
+        lambda *_args, **_kwargs: consolidation,
+    )
+    caplog.set_level("INFO", logger=cron.__name__)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-skipped")
+
+    assert summary.routed_total == 0
+    assert summary.promoted_total == 0
+    assert summary.skipped_users == 1
+    assert "skipped_reason=consolidation_not_due" in caplog.text
+
+
+def test_one_user_failure_does_not_block_remaining_cohort(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A, CANONICAL_B)
     invoked: list[str] = []
 
-    def _recording_maintenance(uid, **kwargs):
+    def run_maintenance(uid: str, **_kwargs: Any) -> MaintenanceReport:
         invoked.append(uid)
-        return CanonicalShortTermMaintenanceReport(
+        if uid == CANONICAL_A:
+            raise RuntimeError("broken user state")
+        return MaintenanceReport(
             uid=uid,
-            promotion=ShortTermPromotionReport(uid=uid, skipped_reason="promotion_not_due"),
+            consolidation=ConsolidationReport(
+                uid=uid,
+                batched_memory_ids=["mem-b"],
+                promoted_memory_ids=["mem-b"],
+            ),
         )
 
-    monkeypatch.setattr(
-        "utils.memory.canonical_short_term_maintenance_cron.run_canonical_short_term_maintenance",
-        _recording_maintenance,
-    )
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
 
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-1")
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-isolated")
 
     assert invoked == [CANONICAL_A, CANONICAL_B]
-    assert LEGACY_UID not in invoked
     assert summary.user_count == 2
-    assert summary.run_id == "cron-test-1"
-    assert summary.promoted_total == 0
-    assert summary.skipped_users == 2
-    assert summary.errors == []
-
-
-def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
-    set_canonical_cohort(monkeypatch, CANONICAL_A)
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
-    db = _canonical_db_with_control(CANONICAL_A)
-
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-2")
-
-    assert summary.user_count == 1
-    assert summary.promoted_total == 0
-    assert summary.skipped_users == 1
-    assert summary.errors == []
-
-
-def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch):
-    set_canonical_cohort(monkeypatch, CANONICAL_A)
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
-    db = _canonical_db_with_control(CANONICAL_A)
-    _set_canonical_cohort(monkeypatch, CANONICAL_A)
-    memory_id = _seed_canonical_short_term(
-        db,
-        uid=CANONICAL_A,
-        conversation_id="conv-cron-first-tick",
-        content="Single short-term fact",
-        monkeypatch=monkeypatch,
-    )
-
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-first-tick")
-
-    assert summary.promoted_total == 0
-    assert summary.skipped_users == 1
-    assert db.docs[f"users/{CANONICAL_A}/memory_items/{memory_id}"]["tier"] == MemoryTier.short_term.value
-
-
-@pytest.fixture
-def _consolidation_disabled_for_promotion_cron(monkeypatch):
-    """Promotion cron tests target batch-or-daily promotion, not the consolidation LLM path."""
-    monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_ENABLED", "false")
-    monkeypatch.setattr(
-        "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
-        lambda *args, **kwargs: {"nodes": [], "edges": []},
-    )
-
-
-def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation_disabled_for_promotion_cron):
-    set_canonical_cohort(monkeypatch, CANONICAL_A)
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
-    db = _canonical_db_with_control(CANONICAL_A)
-    _set_canonical_cohort(monkeypatch, CANONICAL_A)
-    threshold = promotion_batch_threshold()
-    for index in range(threshold):
-        _seed_canonical_short_term(
-            db,
-            uid=CANONICAL_A,
-            conversation_id=f"conv-cron-batch-{index}",
-            content=f"Batch fact {index}",
-            monkeypatch=monkeypatch,
-        )
-
-    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-batch")
-
-    assert summary.promoted_total == threshold
+    assert summary.routed_total == 1
+    assert summary.promoted_total == 1
     assert summary.skipped_users == 0
+    assert summary.errors == [f"uid={CANONICAL_A}: RuntimeError"]
 
 
-def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_disabled_for_promotion_cron):
-    set_canonical_cohort(monkeypatch, CANONICAL_A)
-    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
-    db = _canonical_db_with_control(CANONICAL_A)
-    _set_canonical_cohort(monkeypatch, CANONICAL_A)
-    threshold = promotion_batch_threshold()
-    for index in range(threshold):
-        _seed_canonical_short_term(
-            db,
+def test_malformed_memory_error_does_not_log_raw_payload(monkeypatch, caplog):
+    _enable_for(monkeypatch, CANONICAL_A)
+    private_text = "private-diagnosis-sentinel"
+
+    def run_maintenance(_uid: str, **_kwargs: Any) -> MaintenanceReport:
+        MemoryItem.model_validate(
+            {
+                "memory_id": "malformed",
+                "uid": CANONICAL_A,
+                "content": private_text,
+            }
+        )
+        raise AssertionError("validation should fail")
+
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
+    caplog.set_level("WARNING", logger=cron.__name__)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-malformed")
+
+    assert len(summary.errors) == 1
+    assert "ValidationError" in summary.errors[0]
+    assert "input_value" not in summary.errors[0]
+    assert private_text not in summary.errors[0]
+    assert private_text not in caplog.text
+
+
+def test_nonempty_outbox_errors_fail_cron_even_when_failure_counters_are_zero(
+    monkeypatch,
+):
+    _enable_for(monkeypatch, CANONICAL_A)
+    report = MaintenanceReport(
+        uid=CANONICAL_A,
+        outbox={
+            "delivered_count": 0,
+            "retryable_failure_count": 0,
+            "dead_letter_count": 0,
+            "ack_failed_count": 0,
+            "errors": [{"stage": "lease", "code": "lease_query_failed"}],
+        },
+    )
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=object(),
+        now=NOW,
+        run_id="cron-outbox-error",
+    )
+
+    assert summary.outbox_retryable_failures_total == 0
+    assert summary.outbox_dead_letters_total == 0
+    assert summary.outbox_ack_failures_total == 0
+    assert summary.errors == [f"uid={CANONICAL_A}: outbox_delivery_failed:retryable=0:dead_letter=0:ack=0:errors=1"]
+
+
+def test_blocked_consolidation_is_a_cohort_error_that_fails_the_job_contract(
+    monkeypatch,
+):
+    _enable_for(monkeypatch, CANONICAL_A)
+    report = MaintenanceReport(
+        uid=CANONICAL_A,
+        consolidation=ConsolidationReport(
             uid=CANONICAL_A,
-            conversation_id=f"conv-cron-daily-seed-{index}",
-            content=f"Seed fact {index}",
-            monkeypatch=monkeypatch,
+            watermark_blocked=True,
+            retryable_memory_ids=["mem-retry"],
+            quarantined_memory_ids=["mem-quarantined"],
+            errors=["output_invalid:partition_mismatch"],
+        ),
+    )
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=object(),
+        now=NOW,
+        run_id="cron-consolidation-error",
+    )
+
+    assert summary.errors == [f"uid={CANONICAL_A}: consolidation_failed:blocked=1:retryable=1:quarantined=1:errors=1"]
+
+
+def test_required_processing_failures_are_cohort_errors_that_fail_the_job_contract(
+    monkeypatch,
+):
+    _enable_for(monkeypatch, CANONICAL_A)
+    report = MaintenanceReport(
+        uid=CANONICAL_A,
+        required_processing=RequiredMemoryProcessingReport(
+            uid=CANONICAL_A,
+            failed_memory_ids=["mem-retry", "mem-quarantined"],
+            retryable_memory_ids=["mem-retry"],
+            quarantined_memory_ids=["mem-quarantined"],
+        ),
+    )
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", lambda *_args, **_kwargs: report)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=object(),
+        now=NOW,
+        run_id="cron-required-processing-error",
+    )
+
+    assert summary.errors == [f"uid={CANONICAL_A}: required_processing_failed:failed=2:retryable=1:quarantined=1"]
+
+
+def test_recurrence_consumer_failure_is_degraded_and_does_not_abort_user(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A)
+    client = object()
+    signal = cast(CanonicalRecurrenceSignal, object())
+    recurrence_sink = MagicMock()
+    consumer = MagicMock(side_effect=RuntimeError("candidate store unavailable"))
+    fallback = MagicMock()
+    maintenance_kwargs: dict[str, Any] = {}
+
+    def run_maintenance(uid: str, **kwargs: Any) -> MaintenanceReport:
+        maintenance_kwargs.update(kwargs)
+        return MaintenanceReport(
+            uid=uid,
+            consolidation=ConsolidationReport(
+                uid=uid,
+                batched_memory_ids=["mem-a"],
+                recurrence_signals=[signal],
+            ),
         )
 
-    first = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-daily-seed")
-    assert first.promoted_total == threshold
+    monkeypatch.setattr(cron, "run_canonical_short_term_maintenance", run_maintenance)
+    monkeypatch.setattr(cron, "record_fallback", fallback)
 
-    daily_memory_id = _seed_canonical_short_term(
-        db,
-        uid=CANONICAL_A,
-        conversation_id="conv-cron-daily",
-        content="Fact for daily promotion",
-        monkeypatch=monkeypatch,
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=client,
+        now=NOW,
+        run_id="cron-recurrence",
+        recurrence_signal_persister=recurrence_sink,
+        recurrence_signal_consumer=consumer,
     )
 
-    hold = run_canonical_short_term_maintenance_for_cohort(
-        db_client=db,
-        now=NOW + timedelta(hours=1),
-        run_id="cron-daily-hold",
+    assert maintenance_kwargs["recurrence_signal_sink"] is recurrence_sink
+    consumer.assert_called_once_with(
+        CANONICAL_A,
+        [signal],
+        firestore_client=client,
     )
-    assert hold.promoted_total == 0
-    assert db.docs[f"users/{CANONICAL_A}/memory_items/{daily_memory_id}"]["tier"] == MemoryTier.short_term.value
+    fallback.assert_called_once_with(
+        component="other",
+        from_mode="recurrence_maintenance",
+        to_mode="recurrence_inbox_retry",
+        reason="other",
+        outcome="degraded",
+    )
+    assert summary.routed_total == 1
+    assert summary.promoted_total == 0
+    assert summary.skipped_users == 0
+    assert summary.recurrence_candidates_total == 0
+    assert summary.errors == [f"uid={CANONICAL_A}: recurrence_consumer:RuntimeError"]
 
-    daily = run_canonical_short_term_maintenance_for_cohort(
-        db_client=db,
-        now=NOW + timedelta(hours=25),
-        run_id="cron-daily-fire",
+
+def test_async_entrypoint_offloads_sync_cohort_runner_to_db_executor(monkeypatch):
+    client = object()
+    executor = object()
+    recurrence_sink = MagicMock()
+    recurrence_consumer = MagicMock()
+    expected = cron.CanonicalShortTermMaintenanceCronSummary(
+        run_id="cron-async",
+        user_count=1,
+        routed_total=2,
+        promoted_total=1,
     )
-    assert daily.promoted_total == 1
-    assert db.docs[f"users/{CANONICAL_A}/memory_items/{daily_memory_id}"]["tier"] == MemoryTier.long_term.value
+    calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
+
+    async def run_blocking(executor_arg: Any, function: Any, *args: Any, **kwargs: Any):
+        calls.append((executor_arg, function, args, kwargs))
+        return expected
+
+    monkeypatch.setattr(cron, "db_executor", executor)
+    monkeypatch.setattr(cron, "run_blocking", run_blocking)
+
+    result = asyncio.run(
+        cron.run_canonical_short_term_maintenance_cron(
+            db_client=client,
+            now=NOW,
+            run_id="cron-async",
+            recurrence_signal_persister=recurrence_sink,
+            recurrence_signal_consumer=recurrence_consumer,
+        )
+    )
+
+    assert result is expected
+    assert calls == [
+        (
+            executor,
+            cron.run_canonical_short_term_maintenance_for_cohort,
+            (),
+            {
+                "db_client": client,
+                "now": NOW,
+                "run_id": "cron-async",
+                "recurrence_signal_persister": recurrence_sink,
+                "recurrence_signal_consumer": recurrence_consumer,
+            },
+        )
+    ]

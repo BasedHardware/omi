@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import re
+import sys
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -14,6 +15,23 @@ def _load_script(name: str):
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
+    return module
+
+
+def _load_repo_script(name: str):
+    path = BACKEND_DIR.parent / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    previous = sys.modules.get(name)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if previous is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
     return module
 
 
@@ -151,6 +169,24 @@ def test_mapped_source_with_direct_test_remains_narrow(selector_and_all_tests):
     assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
 
+def test_location_context_paths_select_their_focused_privacy_regressions(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+
+    for source_path in (
+        "backend/models/geolocation.py",
+        "backend/models/users.py",
+        "backend/database/users.py",
+        "backend/routers/developer.py",
+        "backend/utils/retrieval/agentic.py",
+        "backend/routers/users.py",
+    ):
+        selected, reason = selector.tests_for_changed_paths([source_path], all_tests)
+        assert "tests/unit/test_location_context_consent.py" in selected, source_path
+        assert "tests/unit/test_chat_async_offload.py" in selected, source_path
+        assert selected != all_tests, source_path
+        assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
 def test_removed_test_forces_full_discovered_suite(selector_and_all_tests):
     selector, all_tests = selector_and_all_tests
 
@@ -244,6 +280,21 @@ def test_pre_push_requires_backend_python_lazily():
         assert "require_backend_python" in pre_push[function_start:function_end], function_name
 
 
+def test_pre_push_selects_release_guard_and_focused_test_for_release_contract_changes():
+    """The fast lane catches qualification guard drift without cloning the backend suite."""
+    pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
+    function_start = pre_push.index("check_release_process_guards_if_needed()")
+    function_end = pre_push.index("\n}\n", function_start)
+    guard = pre_push[function_start:function_end]
+
+    assert ".github/workflows/desktop_qualify_beta.yml" in guard
+    assert ".github/scripts/check-release-process-guards.py" in guard
+    assert "scripts/run-release-process-guards.sh" in guard
+    assert "tests/unit/test_desktop_release_scripts.py" in guard
+    assert "bash scripts/run-release-process-guards.sh" in guard
+    assert "BACKEND_UNIT_TEST_FILE_LIST" in guard
+
+
 def test_pre_push_runs_each_named_check_phase_once():
     pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
     check_calls = re.findall(r"^run_step (check_[A-Za-z0-9_]+)$", pre_push, flags=re.MULTILINE)
@@ -267,7 +318,7 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
 
     assert 'FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)' in detect_changes
     assert "has_backend_isolation_gate" in detect_changes
-    assert 'scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD' in desktop_checks
+    assert "has_desktop_rust" not in desktop_checks
     assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
     assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
     assert "^backend/agent-proxy/Dockerfile$" in detect_changes
@@ -307,17 +358,30 @@ def test_backend_static_contract_job_uses_the_pinned_backend_environment():
 
 def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     repo = BACKEND_DIR.parent
-    detect_changes = (repo / '.github/actions/detect-changes/action.yml').read_text(encoding='utf-8')
     mobile_checks = (repo / '.github/workflows/mobile-app-checks.yml').read_text(encoding='utf-8')
     generated = mobile_checks.split('\n  generated-files:\n', 1)[1].split('\n  analyze:\n', 1)[0]
     android = mobile_checks.split('\n  android-compile-smoke:\n', 1)[1]
     changes = mobile_checks.split('\n  changes:\n', 1)[1].split('\n  generated-files:\n', 1)[0]
+    resolver = _load_repo_script("pre_push_ci_prediction")
 
-    assert 'if [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then' in detect_changes
-    assert (
-        'if [ "$has_dart" = "true" ] || [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then'
-        not in detect_changes
+    regular_dart = "app/lib/utils/date_formats.dart"
+    regular_plan = resolver.resolve_impact(
+        [regular_dart],
+        read_text=lambda path: {regular_dart: "class DateFormats {}"}.get(path),
     )
+    regular_outputs = resolver.github_outputs(regular_plan)
+    assert regular_outputs["has_app_codegen"] == "false"
+    assert regular_outputs["has_app_l10n"] == "false"
+    assert regular_outputs["has_flutter_generated"] == "false"
+
+    asset_plan = resolver.resolve_impact(["app/assets/icons/omi.png"])
+    asset_outputs = resolver.github_outputs(asset_plan)
+    assert asset_outputs["has_app_codegen"] == "true"
+    assert asset_outputs["has_flutter_generated"] == "true"
+
+    assert "if: needs.changes.outputs.has_flutter_generated == 'true'" in generated
+    assert "if: needs.changes.outputs.has_app_codegen == 'true'" in generated
+    assert "if: needs.changes.outputs.has_app_l10n == 'true'" in generated
     assert 'fetch-depth: 1' in generated
     assert 'fetch-depth: 1' in android
     assert 'fetch-depth: 0' in changes

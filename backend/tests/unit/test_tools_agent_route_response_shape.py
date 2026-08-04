@@ -1,5 +1,10 @@
 import asyncio
 import importlib
+import contextvars
+import functools
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 import os
 import sys
 import types
@@ -74,6 +79,7 @@ def _install_route_stubs(monkeypatch):
 
     fastapi_mod.HTTPException = _HTTPException
     fastapi_mod.BackgroundTasks = object
+    fastapi_mod.Response = MagicMock()
     monkeypatch.setitem(sys.modules, 'fastapi', fastapi_mod)
 
     vector_db_mod = types.ModuleType('database.vector_db')
@@ -307,3 +313,98 @@ def test_agent_execute_tool_route_fail_closed_response_shape_for_partial_memory_
     assert response.result == 'No memories available for this request.'
     assert response.error is None
     assert 'SYSTEM:' not in response.result
+
+
+class _BlockingTool:
+    """A sync LangChain-shaped tool, like every entry in CORE_TOOLS."""
+
+    def __init__(self, started, release):
+        self.name = 'blocking_tool'
+        self.description = ''
+        self.args_schema = None
+        self.coroutine = None
+        self._started = started
+        self._release = release
+
+    def invoke(self, params, config=None):
+        self._started.set()
+        self._release.wait(3)
+        return 'done'
+
+
+class _FailingTool(_FakeTool):
+    def invoke(self, params, config=None):
+        raise ValueError(f"invalid input_value={params['private_text']}")
+
+
+def test_execute_tool_does_not_echo_user_input_from_exceptions(loaded_route_modules):
+    _tools_router, agent_tools, agentic, _memories_service = loaded_route_modules
+    agentic.CORE_TOOLS[:] = [_FailingTool('failing_tool', None)]
+
+    raw_response = asyncio.run(
+        agent_tools.execute_tool(
+            agent_tools.ExecuteToolRequest(
+                tool_name='failing_tool',
+                params={'private_text': 'private medical note'},
+            ),
+            uid='uid-private',
+        )
+    )
+
+    assert raw_response == {'error': 'Tool execution failed'}
+    assert 'private medical note' not in str(raw_response)
+
+
+def test_execute_tool_runs_sync_tools_off_the_event_loop(loaded_route_modules):
+    """`execute_tool` used to call `target.invoke(...)` directly.
+
+    Every CORE_TOOLS entry is a sync @tool that fans out to Firestore/Pinecone,
+    so one agent VM calling /v1/agent/execute-tool parked the entire backend
+    event loop for the duration of that scan — every other connection, /health,
+    and the HPA metrics endpoint froze with it.
+
+    The seam: while the tool is still inside `invoke`, this coroutine must get
+    control back. If the tool runs on the loop it cannot, and the wait_for
+    below expires instead.
+    """
+    _tools_router, agent_tools, agentic, _memories_service = loaded_route_modules
+    started = threading.Event()
+    release = threading.Event()
+    agentic.CORE_TOOLS[:] = [_BlockingTool(started, release)]
+
+    # The shared fixture stubs `run_blocking` to call fn() inline, which would
+    # erase the very seam under test. Restore the real offload (including the
+    # contextvar copy `agent_config_context` depends on) for this case only.
+    pool = ThreadPoolExecutor(max_workers=2)
+
+    async def _real_run_blocking(executor, fn, *args, **kwargs):
+        loop = asyncio.get_running_loop()
+        ctx = contextvars.copy_context()
+        call = functools.partial(ctx.run, functools.partial(fn, *args, **kwargs))
+        return await loop.run_in_executor(executor, call)
+
+    agent_tools.run_blocking = _real_run_blocking
+    agent_tools.db_executor = pool
+
+    async def scenario():
+        task = asyncio.create_task(
+            agent_tools.execute_tool(
+                agent_tools.ExecuteToolRequest(tool_name='blocking_tool', params={}), uid='uid-block'
+            )
+        )
+        # Reached only if the loop is still scheduling while invoke() blocks.
+        # If the tool runs on the loop, this coroutine cannot resume until
+        # invoke() returns on its own 3s timeout, so `release` is set far too
+        # late and the elapsed time below records the full block.
+        while not started.is_set():
+            await asyncio.sleep(0.005)
+        release.set()
+        return await task
+
+    began = time.monotonic()
+    raw_response = asyncio.run(scenario())
+    elapsed = time.monotonic() - began
+
+    assert raw_response == {'result': 'done'}
+    pool.shutdown(wait=False)
+    assert elapsed < 1.0, f'event loop was blocked for {elapsed:.2f}s by a sync tool invoke'

@@ -99,6 +99,28 @@ def _utc_iso(ts: int) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
+def conversation_matches_speaker(conversation: Dict[str, Any], speaker_id: Optional[str]) -> bool:
+    """Whether a hydrated Firestore conversation has at least one segment from the requested speaker.
+
+    speaker_id == 'user' means the account owner (segment.is_user), any other value is a person id
+    (segment.person_id). Falsy speaker_id means "no speaker filter" and matches everything.
+    """
+    if not speaker_id:
+        return True
+    segments = conversation.get('transcript_segments') or []
+    if not isinstance(segments, list):
+        return False
+    for segment in segments:
+        if not isinstance(segment, dict):
+            continue
+        if speaker_id == 'user':
+            if segment.get('is_user'):
+                return True
+        elif segment.get('person_id') == speaker_id:
+            return True
+    return False
+
+
 def search_conversations(
     uid: str,
     query: str,
@@ -136,10 +158,14 @@ def search_conversations(
         if end_date is not None:
             filter_by = filter_by + f' && created_at:<={end_date}'
 
-        if speaker_id == 'user':
-            filter_by = filter_by + ' && transcript_segments.is_user:=true'
-        elif speaker_id:
-            filter_by = filter_by + f' && transcript_segments.person_id:={speaker_id}'
+        # No speaker clause is added to filter_by on purpose. transcript_segments is not part of the
+        # Typesense `conversations` schema (the Firestore -> Typesense sync only carries
+        # userId/created_at/discarded/started_at/finished_at/structured.*), so
+        # `transcript_segments.is_user` / `.person_id` made Typesense reject the whole query with
+        # 400 "Could not find a filter field named ... in the schema" and 500 every speaker-filtered
+        # search. The filter is applied by conversation_matches_speaker after the router hydrates the
+        # Firestore documents, which do carry transcript_segments; here speaker_id only widens the
+        # browse (see has_filter_only_browse above).
 
         search_parameters = {
             'q': stripped_query or '*',

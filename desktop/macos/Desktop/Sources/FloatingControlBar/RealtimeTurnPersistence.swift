@@ -43,6 +43,161 @@ struct RealtimeTurnPersistenceReceipt: Equatable {
   let accepted: Bool
 }
 
+/// The two stable journal IDs for an in-flight realtime turn. This is deliberately
+/// only an in-memory write coordinator: the kernel journal remains the transcript
+/// authority, including after process restart.
+struct RealtimeStreamingJournalProjection: Equatable {
+  let ownerID: String
+  let continuityKey: String
+  let userTurnID: String
+  let assistantTurnID: String
+  /// Pinned at admission so a mid-stream chat switch cannot redirect deltas
+  /// or finalization to a different conversation surface.
+  let admissionSurface: AgentSurfaceReference
+
+  init(ownerID: String, continuityKey: String, admissionSurface: AgentSurfaceReference) {
+    self.ownerID = ownerID
+    self.continuityKey = continuityKey
+    self.admissionSurface = admissionSurface
+    userTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
+    assistantTurnID = KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant")
+  }
+
+  func userMessage(text: String) -> ChatMessage {
+    ChatMessage(
+      id: userTurnID,
+      clientTurnId: continuityKey,
+      text: text,
+      sender: .user
+    )
+  }
+
+  func assistantMessage(text: String, isStreaming: Bool) -> ChatMessage {
+    ChatMessage(
+      id: assistantTurnID,
+      clientTurnId: continuityKey,
+      text: text,
+      sender: .ai,
+      isStreaming: isStreaming
+    )
+  }
+}
+
+/// Serializes journal writes for one or more realtime turns without retaining
+/// transcript content locally. A barge-in can finalize turn A while turn B is
+/// already recording, so each continuity key owns an independent write tail.
+@MainActor
+final class RealtimeStreamingJournalWriteLedger {
+  enum FinalizationResult: Equatable {
+    case absent
+    case recordRejected
+    case completed(Bool)
+  }
+
+  private struct Entry {
+    let id: UUID
+    let projection: RealtimeStreamingJournalProjection
+    let recordTask: Task<Bool, Never>
+    var tail: Task<Bool, Never>
+  }
+
+  private var entries: [String: Entry] = [:]
+  private(set) var generation: UInt64 = 0
+
+  var hasActiveProjections: Bool {
+    !entries.isEmpty
+  }
+
+  func contains(continuityKey: String) -> Bool {
+    entries[continuityKey] != nil
+  }
+
+  @discardableResult
+  func begin(
+    projection: RealtimeStreamingJournalProjection,
+    record: @escaping @MainActor (RealtimeStreamingJournalProjection) async -> Bool
+  ) -> Bool {
+    guard entries[projection.continuityKey] == nil else { return false }
+    generation &+= 1
+    let recordTask = Task { @MainActor in
+      await record(projection)
+    }
+    entries[projection.continuityKey] = Entry(
+      id: UUID(),
+      projection: projection,
+      recordTask: recordTask,
+      tail: recordTask
+    )
+    return true
+  }
+
+  func enqueueUpdate(
+    continuityKey: String,
+    update: @escaping @MainActor (RealtimeStreamingJournalProjection) async -> Bool
+  ) {
+    guard var entry = entries[continuityKey] else { return }
+    let previous = entry.tail
+    let recordTask = entry.recordTask
+    let projection = entry.projection
+    let task = Task { @MainActor in
+      guard await recordTask.value else { return false }
+      _ = await previous.value
+      return await update(projection)
+    }
+    entry.tail = task
+    entries[continuityKey] = entry
+  }
+
+  func finalize(
+    continuityKey: String,
+    complete: @escaping @MainActor (RealtimeStreamingJournalProjection) async -> Bool
+  ) async -> FinalizationResult {
+    guard var entry = entries[continuityKey] else { return .absent }
+    let recordTask = entry.recordTask
+    let previous = entry.tail
+    let projection = entry.projection
+    let entryID = entry.id
+    let task = Task { @MainActor in
+      guard await recordTask.value else { return false }
+      _ = await previous.value
+      return await complete(projection)
+    }
+    entry.tail = task
+    entries[continuityKey] = entry
+
+    let recorded = await recordTask.value
+    let completed = await task.value
+    if entries[continuityKey]?.id == entryID {
+      entries.removeValue(forKey: continuityKey)
+    }
+    generation &+= 1
+    return recorded ? .completed(completed) : .recordRejected
+  }
+
+  func awaitPendingWrites() async {
+    let tails = entries.values.map(\.tail)
+    for task in tails {
+      _ = await task.value
+    }
+  }
+
+  func cancelAll() {
+    let tasks = entries.values.flatMap { [$0.recordTask, $0.tail] }
+    entries.removeAll()
+    generation &+= 1
+    for task in tasks { task.cancel() }
+  }
+
+  /// Cancels a single continuity key's projection so a later canonical receipt
+  /// (e.g. an accepted spawn_agent) can take over without competing writes.
+  func cancel(continuityKey: String) {
+    guard let entry = entries.removeValue(forKey: continuityKey) else { return }
+    generation &+= 1
+    entry.recordTask.cancel()
+    entry.tail.cancel()
+  }
+}
+
 @MainActor
 final class RealtimeTurnPersistenceLedger {
   private struct Obligation {

@@ -4730,7 +4730,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Нема конфигуриран специфичен пристап до податоци.';
 
   @override
-  String get basicPlanDescription => '1.200 премиум минути + неограничено на уред';
+  String get basicPlanDescription => '300 премиум минути + неограничено на уред';
 
   @override
   String get minutes => 'минути';
@@ -6028,7 +6028,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.';
+      '300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција.';
 
   @override
   String get viewUsage => 'Преглед на користење';
@@ -6110,7 +6110,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ';
+      '300 премиум минути/месец. Картичката На-уред нуди неограничена бесплатна транскрипција. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9823,4 +9823,7 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Не може да се поврзе со тој микрофон. Проверете дали е поврзан во поставките на iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Премногу стар за синхронизација — Omi не може да го прифати';
 }

@@ -22,7 +22,9 @@ extension APIClient {
 
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.timeoutInterval = 30
+    // Escalations may run a server-side web search (pause_turn continuations),
+    // which routinely exceeds a bare completion's latency.
+    request.timeoutInterval = 60
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: true,
       expectedAuthOwnerId: expectedOwnerID)

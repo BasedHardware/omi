@@ -3,12 +3,19 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from jsonschema import ValidationError as JsonSchemaValidationError, validate
 
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateRecord, CandidateResolutionReceipt, CandidateStatus
 from models.task_intelligence import TaskWorkflowControl
 import routers.candidates as candidates_router
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+
+@pytest.fixture(autouse=True)
+def _canonical_candidate_test_user(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'user-1')
 
 
 def _proposal(**overrides):
@@ -35,10 +42,18 @@ def _record(*, candidate_id='candidate-1', proposal=None, created_at=None):
     )
 
 
-def test_candidate_router_publishes_complete_lifecycle_openapi():
+@pytest.fixture(scope='module')
+def candidate_router_openapi():
+    """Build the expensive schema once as shared file setup, not per-test work."""
+
     app = FastAPI()
     app.include_router(candidates_router.router)
-    paths = app.openapi()['paths']
+    return app.openapi()
+
+
+def test_candidate_router_publishes_complete_lifecycle_openapi(candidate_router_openapi):
+    spec = candidate_router_openapi
+    paths = spec['paths']
 
     assert set(paths['/v1/candidates']) == {'get', 'post'}
     assert set(paths['/v1/candidates/{candidate_id}']) == {'get'}
@@ -60,24 +75,169 @@ def test_candidate_router_publishes_complete_lifecycle_openapi():
     }
     list_parameters = paths['/v1/candidates']['get']['parameters']
     assert {'status', 'limit', 'offset', 'surface'}.issubset({parameter['name'] for parameter in list_parameters})
-    candidate_schema = app.openapi()['components']['schemas']['CandidateCreate']
+    candidate_schema = spec['components']['schemas']['CandidateCreate']
     assert 'oneOf' in candidate_schema
     assert candidate_schema['discriminator']['propertyName'] == 'subject_kind'
     assert candidate_schema['discriminator']['mapping'] == {
         'task': '#/components/schemas/TaskCandidate',
         'workstream': '#/components/schemas/WorkstreamCreateCandidate',
     }
-    task_union = app.openapi()['components']['schemas']['TaskCandidate']
+    task_union = spec['components']['schemas']['TaskCandidate']
     assert task_union['discriminator']['propertyName'] == 'proposed_action'
     assert len(task_union['oneOf']) == 5
-    assert len(app.openapi()['components']['schemas']['CandidateRecord']['oneOf']) == 6
+    assert len(spec['components']['schemas']['CandidateRecord']['oneOf']) == 6
+    workflow_control_schema = spec['components']['schemas']['TaskWorkflowControl']
+    assert 'chat_first_ui' in workflow_control_schema['properties']
+    assert 'chat_first_ui_enabled' not in workflow_control_schema['properties']
 
 
-def test_candidate_workflow_control_exposes_current_mode_and_generation(monkeypatch):
+def _workflow_control_client() -> TestClient:
+    app = FastAPI()
+    app.include_router(candidates_router.router)
+    app.dependency_overrides[candidates_router.auth.get_current_user_uid] = lambda: 'user-1'
+    return TestClient(app)
+
+
+@pytest.mark.parametrize('workflow_mode', ['off', 'read'])
+@pytest.mark.parametrize('legacy_ui_flag', [False, True])
+@pytest.mark.parametrize(
+    'env_values',
+    [
+        {},
+        {'MEMORY_MODE': 'off'},
+        {'MEMORY_MODE': 'read', 'MEMORY_ENABLED_USERS': ''},
+        {'MEMORY_MODE': 'read', 'MEMORY_ENABLED_USERS': 'someone-else'},
+    ],
+)
+def test_candidate_workflow_control_uses_whitelist_only_across_legacy_gates(
+    monkeypatch, workflow_mode, legacy_ui_flag, env_values
+):
+    set_canonical_cohort(monkeypatch, 'user-1')
+    for key in ('MEMORY_MODE', 'MEMORY_ENABLED_USERS'):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env_values.items():
+        monkeypatch.setenv(key, value)
+    control = TaskWorkflowControl.model_validate(
+        {
+            'workflow_mode': workflow_mode,
+            'account_generation': 8,
+            'chat_first_ui_enabled': legacy_ui_flag,
+        }
+    )
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'workflow_mode': 'read',
+        'account_generation': 8,
+        'chat_first_ui': True,
+    }
+
+
+def test_candidate_workflow_control_fails_closed_when_the_selector_raises(monkeypatch):
+    control = TaskWorkflowControl(workflow_mode='read', account_generation=8)
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+    monkeypatch.setattr(
+        candidates_router,
+        'resolve_task_intelligence_for_user',
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError('canonical selector unavailable')),
+    )
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json()['chat_first_ui'] is False
+    assert response.json()['workflow_mode'] == 'off'
+    assert 'chat_first_ui_enabled' not in response.json()
+
+
+def test_candidate_workflow_control_fails_closed_when_control_lookup_raises(monkeypatch):
+    def unavailable(_uid):
+        raise RuntimeError('task workflow control unavailable')
+
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', unavailable)
+    monkeypatch.setattr(
+        candidates_router,
+        'resolve_task_intelligence_for_user',
+        lambda **kwargs: pytest.fail('a missing control record must not attempt cohort resolution'),
+    )
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'workflow_mode': 'off',
+        'account_generation': 0,
+        'chat_first_ui': False,
+    }
+
+
+def test_noncanonical_user_cannot_read_canonical_candidates(monkeypatch):
+    set_canonical_cohort(monkeypatch)
+    monkeypatch.setattr(
+        candidates_router.task_control_db,
+        'get_task_workflow_control',
+        lambda _uid: TaskWorkflowControl(workflow_mode='read', account_generation=8),
+    )
+    monkeypatch.setattr(
+        candidates_router.candidates_db,
+        'list_candidates',
+        lambda *args, **kwargs: pytest.fail('noncanonical list must not touch the Candidate store'),
+    )
+    monkeypatch.setattr(
+        candidates_router.candidates_db,
+        'get_candidate',
+        lambda *args, **kwargs: pytest.fail('noncanonical get must not touch the Candidate store'),
+    )
+    client = _workflow_control_client()
+
+    assert client.get('/v1/candidates').status_code == 404
+    assert client.get('/v1/candidates/candidate-1').status_code == 404
+
+
+def test_candidate_workflow_control_ignores_a_missing_legacy_ui_flag(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'user-1')
     control = TaskWorkflowControl(workflow_mode='read', account_generation=8)
     monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
 
-    assert candidates_router.get_candidate_workflow_control(uid='user-1') == control
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json()['chat_first_ui'] is True
+    assert 'chat_first_ui_enabled' not in response.json()
+
+
+def test_candidate_workflow_control_keeps_non_whitelisted_users_legacy(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'someone-else')
+    control = TaskWorkflowControl.model_validate(
+        {'workflow_mode': 'read', 'account_generation': 8, 'chat_first_ui_enabled': True}
+    )
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'workflow_mode': 'off',
+        'account_generation': 8,
+        'chat_first_ui': False,
+    }
+
+
+def test_candidate_workflow_control_e2e_fixture_uses_real_transport_failure(monkeypatch):
+    monkeypatch.setattr(candidates_router.chat_first_e2e_fixture, 'is_control_unreachable', lambda uid: True)
+    monkeypatch.setattr(
+        candidates_router.task_control_db,
+        'get_task_workflow_control',
+        lambda uid: pytest.fail('fixture transport failure must precede control resolution'),
+    )
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'Control temporarily unavailable'}
 
 
 def test_candidate_record_serialization_satisfies_its_response_schema():
@@ -148,12 +308,6 @@ def test_create_and_list_candidate_router_forward_idempotency_and_pagination(mon
         'get_task_workflow_control',
         lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=3),
     )
-    monkeypatch.setattr(
-        candidates_router,
-        'resolve_task_intelligence_for_user',
-        lambda **kwargs: pytest.fail('generic Candidate listing must not use the product rollout gate'),
-    )
-
     created = candidates_router.create_candidate(
         _proposal(),
         idempotency_key='request-1',
@@ -631,27 +785,41 @@ def test_accept_reject_and_expire_return_stable_receipts(monkeypatch):
     )
 
 
-@pytest.mark.parametrize(
-    ('control', 'generation'),
-    [
-        (TaskWorkflowControl(workflow_mode='off', account_generation=3), 3),
-        (TaskWorkflowControl(workflow_mode='shadow', account_generation=3), 3),
-        (TaskWorkflowControl(workflow_mode='read', account_generation=4), 3),
-    ],
-)
-def test_candidate_router_rejects_disabled_or_stale_writes(monkeypatch, control, generation):
+@pytest.mark.parametrize('workflow_mode', ['off', 'shadow', 'read'])
+def test_candidate_router_old_workflow_modes_do_not_disable_whitelisted_writes(monkeypatch, workflow_mode):
+    control = TaskWorkflowControl(workflow_mode=workflow_mode, account_generation=3)
     monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
     monkeypatch.setattr(
         candidates_router.candidate_service,
         'create_candidate',
-        lambda *args, **kwargs: pytest.fail('disabled or stale writes must not reach persistence'),
+        lambda *args, **kwargs: _record(),
+    )
+
+    assert (
+        candidates_router.create_candidate(
+            _proposal(),
+            idempotency_key='request-1',
+            account_generation=3,
+            uid='user-1',
+        ).candidate_id
+        == 'candidate-1'
+    )
+
+
+def test_candidate_router_rejects_stale_writes(monkeypatch):
+    control = TaskWorkflowControl(workflow_mode='read', account_generation=4)
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+    monkeypatch.setattr(
+        candidates_router.candidate_service,
+        'create_candidate',
+        lambda *args, **kwargs: pytest.fail('stale writes must not reach persistence'),
     )
 
     with pytest.raises(HTTPException) as error:
         candidates_router.create_candidate(
             _proposal(),
             idempotency_key='request-1',
-            account_generation=generation,
+            account_generation=3,
             uid='user-1',
         )
 

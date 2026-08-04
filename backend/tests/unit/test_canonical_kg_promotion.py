@@ -241,16 +241,34 @@ def test_update_canonical_memory_content_invalidates_kg_until_reprocessed():
 
     item = _long_term_item(kg_extracted=True, memory_id="mem_edit")
     db = MagicMock()
-    db.document.return_value.get.return_value = MagicMock(exists=True, to_dict=lambda: item.model_dump(mode="json"))
+
+    def apply_mutation(_uid, _memory_id, *, mutation_kind, build_patch, db_client):
+        logical_updates, patch_updates = build_patch(item, NOW)
+        assert mutation_kind == "content_edit"
+        assert logical_updates["clear_graph_assertion"] is True
+        updated = item.model_copy(
+            update={
+                "content": logical_updates["memory_text"],
+                "tier": MemoryTier(logical_updates["target_tier"]),
+                "processing_state": ProcessingState.pending,
+                "promotion": patch_updates["promotion_audit"],
+                "kg_extracted": patch_updates["kg_extracted"],
+                "expires_at": patch_updates["expires_at"],
+            }
+        )
+        return item, updated
+
     with (
         patch("utils.memory.canonical_memory_adapter.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch("utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction") as mock_prune,
         patch(
+            "utils.memory.canonical_memory_adapter._apply_canonical_user_mutation",
+            side_effect=apply_mutation,
+        ),
+        patch(
             "utils.memory.canonical_kg_promotion.extract_kg_for_promoted_memory",
             return_value=CanonicalKgPromotionResult(attempted=True, success=True),
         ) as mock_extract,
-        patch("utils.memory.canonical_memory_adapter.delete_atom_keyword_doc"),
-        patch("utils.memory.canonical_memory_adapter.delete_canonical_memory_vector"),
     ):
         updated = update_canonical_memory_content("uid-canonical", "mem_edit", "Updated content", db_client=db)
 

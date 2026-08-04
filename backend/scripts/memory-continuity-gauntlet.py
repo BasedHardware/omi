@@ -292,7 +292,6 @@ class HermeticRuntime:
 
     def _start_canonical_patches(self) -> list[Any]:
         trusted = SimpleNamespace(account_generation=3, head_commit_id="head0", read_error_reason=None)
-        from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 
         patchers = [
             patch(
@@ -305,14 +304,9 @@ class HermeticRuntime:
                 create=True,
             ),
             patch(
-                "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
-                lambda *args, **kwargs: CanonicalKgPromotionResult(attempted=False, success=True),
-            ),
-            patch(
                 "utils.memory.canonical_consolidation.query_memory_vector_candidates",
                 lambda *args, **kwargs: SimpleNamespace(hits=[], rejected_count=0),
             ),
-            patch("utils.memory.short_term_promotion.promotion_batch_threshold", lambda: 1),
             patch("utils.memory.canonical_consolidation.consolidation_batch_threshold", lambda: 1),
         ]
         for patcher in patchers:
@@ -430,6 +424,8 @@ class MemoryContinuityGauntlet:
             content=f"Gauntlet capture probe {capture_nonce}",
         )
         payload["category"] = MemoryCategory.system.value
+        payload["subject_entity_id"] = "user"
+        payload["subject_attribution"] = "user"
         memory_id = write_canonical_extraction_memory(state.uid, payload, db_client=state.db)
         item_ref = state.db.collection("users").document(state.uid).collection("memory_items").document(memory_id)
         snapshot = item_ref.get().to_dict()
@@ -446,19 +442,36 @@ class MemoryContinuityGauntlet:
         )
 
     def run_promote_hermetic(self, state: HermeticState) -> None:
-        from utils.memory.canonical_consolidation import ConsolidationAgentBatch
+        from utils.memory.canonical_consolidation import ConsolidationAgentBatch, ConsolidationAgentDecision
         from utils.memory.short_term_promotion import run_canonical_short_term_maintenance
 
         if state.memory_id is None:
             self.run_capture_hermetic(state)
+        memory_id = state.memory_id
+        assert memory_id is not None
         promote_nonce = self.markers["promote"]
-        item_ref = state.db.collection("users").document(state.uid).collection("memory_items").document(state.memory_id)
+        item_ref = state.db.collection("users").document(state.uid).collection("memory_items").document(memory_id)
         prior = dict(item_ref.get().to_dict())
-        prior["content"] = f"{prior.get('content', '')} {promote_nonce}"
-        item_ref.set(prior)
+        promoted_text = f"{prior.get('content', '')} {promote_nonce}"
+        evidence_ids = [evidence["evidence_id"] for evidence in prior.get("evidence", [])]
 
         def scripted_llm(_prompt: str) -> str:
-            return json.dumps(ConsolidationAgentBatch(decisions=[], reasoning="no_changes").model_dump(mode="json"))
+            decision = ConsolidationAgentDecision(
+                source_memory_id=memory_id,
+                route="promote",
+                reconciliation="create",
+                memory_text=promoted_text,
+                evidence_ids=evidence_ids,
+                subject_entity_id="user",
+                predicate="remembered_gauntlet_probe",
+                arguments={"nonce": promote_nonce},
+                relationship_to_user="self",
+                aboutness="primary_user",
+                basis_for_memory="explicit",
+                confidence="high",
+                rationale="Hermetic promotion probe.",
+            )
+            return json.dumps(ConsolidationAgentBatch(decisions=[decision]).model_dump(mode="json"))
 
         now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
         maintenance = run_canonical_short_term_maintenance(
@@ -469,16 +482,17 @@ class MemoryContinuityGauntlet:
             llm_invoke=scripted_llm,
         )
         promoted = item_ref.get().to_dict()
-        assert maintenance.promotion.promoted_count >= 1, maintenance
+        assert maintenance.promoted_count >= 1, maintenance
         assert promoted["tier"] == "long_term", promoted
+        assert promoted["graph_ready"] is True, promoted
         assert promote_nonce in promoted.get("content", ""), promoted
         state.promote_nonce = promote_nonce
         self.record_step(
             "promote",
             "short_term_maintenance",
-            memory_id=state.memory_id,
+            memory_id=memory_id,
             tier=promoted["tier"],
-            promoted_count=maintenance.promotion.promoted_count,
+            promoted_count=maintenance.promoted_count,
             nonce=promote_nonce,
         )
 

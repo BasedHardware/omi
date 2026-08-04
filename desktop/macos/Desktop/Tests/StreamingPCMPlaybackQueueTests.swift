@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 
 @testable import Omi_Computer
@@ -83,5 +84,27 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
 
     XCTAssertEqual(queue.scheduledBuffers.count, 1)
     XCTAssertTrue(queue.scheduledBuffers[0] === second)
+  }
+}
+
+final class StreamingPCMPlayerLevelTests: XCTestCase {
+  func testRmsLevelMeasuresSignalAndBoundsToOne() throws {
+    let format = try XCTUnwrap(
+      AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: false))
+    let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 256))
+    buffer.frameLength = 256
+    let channel = try XCTUnwrap(buffer.floatChannelData)[0]
+
+    for i in 0..<256 { channel[i] = 0 }
+    XCTAssertEqual(StreamingPCMPlayer.rmsLevel(of: buffer), 0, accuracy: 0.001)
+
+    for i in 0..<256 { channel[i] = 0.5 }
+    XCTAssertEqual(StreamingPCMPlayer.rmsLevel(of: buffer), 0.5, accuracy: 0.01)
+
+    for i in 0..<256 { channel[i] = i % 2 == 0 ? 2.0 : -2.0 }
+    XCTAssertEqual(StreamingPCMPlayer.rmsLevel(of: buffer), 1, accuracy: 0.001)
+
+    buffer.frameLength = 0
+    XCTAssertEqual(StreamingPCMPlayer.rmsLevel(of: buffer), 0, accuracy: 0.001)
   }
 }

@@ -59,55 +59,41 @@ void main() {
     });
 
     test('returns null when error is not clock_skew', () {
-      final response = _make408(
-        body: jsonEncode({'error': 'timeout', 'skew_seconds': 900}),
-      );
+      final response = _make408(body: jsonEncode({'error': 'timeout', 'skew_seconds': 900}));
       expect(ClockSkewDetector.parseResponse(response), isNull);
     });
 
     test('returns null when error field is missing', () {
-      final response = _make408(
-        body: jsonEncode({'skew_seconds': 900}),
-      );
+      final response = _make408(body: jsonEncode({'skew_seconds': 900}));
       expect(ClockSkewDetector.parseResponse(response), isNull);
     });
 
     test('returns null when skew_seconds is missing', () {
-      final response = _make408(
-        body: jsonEncode({'error': 'clock_skew'}),
-      );
+      final response = _make408(body: jsonEncode({'error': 'clock_skew'}));
       expect(ClockSkewDetector.parseResponse(response), isNull);
     });
 
     test('returns null when skew_seconds is non-numeric string', () {
-      final response = _make408(
-        body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 'abc'}),
-      );
+      final response = _make408(body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 'abc'}));
       expect(ClockSkewDetector.parseResponse(response), isNull);
     });
 
     test('handles string skew_seconds', () {
-      final response = _make408(
-        body: jsonEncode({'error': 'clock_skew', 'skew_seconds': '900'}),
-      );
+      final response = _make408(body: jsonEncode({'error': 'clock_skew', 'skew_seconds': '900'}));
       final result = ClockSkewDetector.parseResponse(response);
       expect(result, isNotNull);
       expect(result!.skewSeconds, 900);
     });
 
     test('handles integer skew_seconds', () {
-      final response = _make408(
-        body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}),
-      );
+      final response = _make408(body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}));
       final result = ClockSkewDetector.parseResponse(response);
       expect(result, isNotNull);
       expect(result!.skewSeconds, 900);
     });
 
     test('rounds float skew_seconds to int', () {
-      final response = _make408(
-        body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 899.7}),
-      );
+      final response = _make408(body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 899.7}));
       final result = ClockSkewDetector.parseResponse(response);
       expect(result, isNotNull);
       expect(result!.skewSeconds, 900);
@@ -134,10 +120,7 @@ void main() {
     });
 
     test('returns null when content-type header is missing', () {
-      final response = http.Response(
-        jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}),
-        408,
-      );
+      final response = http.Response(jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}), 408);
       expect(ClockSkewDetector.parseResponse(response), isNull);
     });
 
@@ -175,9 +158,7 @@ void main() {
     });
 
     http.Response _makeValid408() {
-      return _make408(
-        body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}),
-      );
+      return _make408(body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}));
     }
 
     test('emits event on first valid 408', () async {
@@ -235,9 +216,7 @@ void main() {
       expect(events, hasLength(1));
 
       // Simulate cooldown expiry by backdating _lastEmittedAt
-      detector.setLastEmittedAtForTesting(
-        DateTime.now().subtract(const Duration(seconds: 46)),
-      );
+      detector.setLastEmittedAtForTesting(DateTime.now().subtract(const Duration(seconds: 46)));
 
       detector.checkResponse(_makeValid408());
       await Future.delayed(Duration.zero);
@@ -254,9 +233,7 @@ void main() {
       expect(events, hasLength(1));
 
       // Set _lastEmittedAt to 44s ago — still within 45s cooldown
-      detector.setLastEmittedAtForTesting(
-        DateTime.now().subtract(const Duration(seconds: 44)),
-      );
+      detector.setLastEmittedAtForTesting(DateTime.now().subtract(const Duration(seconds: 44)));
 
       detector.checkResponse(_makeValid408());
       await Future.delayed(Duration.zero);
@@ -273,9 +250,7 @@ void main() {
       expect(events, hasLength(1));
 
       // Set _lastEmittedAt to exactly 45s ago — code uses strict < so this is NOT suppressed
-      detector.setLastEmittedAtForTesting(
-        DateTime.now().subtract(const Duration(seconds: 45)),
-      );
+      detector.setLastEmittedAtForTesting(DateTime.now().subtract(const Duration(seconds: 45)));
 
       detector.checkResponse(_makeValid408());
       await Future.delayed(Duration.zero);

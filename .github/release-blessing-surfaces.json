@@ -7,14 +7,9 @@
       "depends_on": [],
       "promotion_workflows": [".github/workflows/gcp_backend.yml"]
     },
-    "desktop-rust-backend": {
-      "display_name": "Desktop Rust backend",
-      "depends_on": ["python-backend"],
-      "promotion_workflows": [".github/workflows/desktop_promote_prod.yml"]
-    },
     "desktop-macos": {
       "display_name": "macOS Desktop app",
-      "depends_on": ["desktop-rust-backend", "python-backend"],
+      "depends_on": ["python-backend"],
       "promotion_workflows": [".github/workflows/desktop_promote_prod.yml"]
     },
     "flutter-ios": {

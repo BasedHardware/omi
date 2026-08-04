@@ -1,4 +1,5 @@
 from copy import deepcopy
+from unittest.mock import patch
 
 import pytest
 
@@ -47,12 +48,12 @@ def test_fixture_setup_create_only_writes_the_minimal_control_document(monkeypat
     monkeypatch.setattr(task_control_db, '_control_ref', lambda _uid: control_ref)
 
     assert task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
-    assert control_ref.payload == expected.model_dump(mode='json')
-    assert control_ref.create_payloads == [expected.model_dump(mode='json')]
+    assert control_ref.payload == expected.persisted_payload()
+    assert control_ref.create_payloads == [expected.persisted_payload()]
 
 
 def test_fixture_setup_is_idempotent_when_expected_control_already_exists(monkeypatch):
-    expected = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='json')
+    expected = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).persisted_payload()
     control_ref = _CreateOnlyControlReference(expected)
 
     monkeypatch.setattr(task_control_db, '_control_ref', lambda _uid: control_ref)
@@ -60,6 +61,17 @@ def test_fixture_setup_is_idempotent_when_expected_control_already_exists(monkey
     assert not task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
     assert control_ref.payload == expected
     assert control_ref.create_payloads == [expected]
+
+
+def test_fixture_setup_treats_a_legacy_control_without_the_ui_flag_as_the_default_off_state(monkeypatch):
+    control_ref = _CreateOnlyControlReference({'workflow_mode': 'read', 'account_generation': 0})
+
+    monkeypatch.setattr(task_control_db, '_control_ref', lambda _uid: control_ref)
+
+    assert not task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
+    assert control_ref.create_payloads == [
+        TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).persisted_payload()
+    ]
 
 
 def test_fixture_setup_preserves_differing_existing_control_and_fails_smoke(monkeypatch):
@@ -73,8 +85,21 @@ def test_fixture_setup_preserves_differing_existing_control_and_fails_smoke(monk
 
     assert control_ref.payload == differing_control
     assert control_ref.create_payloads == [
-        TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='json')
+        TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).persisted_payload()
     ]
+
+
+def test_fixture_setup_treats_malformed_existing_control_as_differing_without_overwrite(monkeypatch):
+    malformed_control = {'workflow_mode': 'read', 'account_generation': 0, 'unexpected_legacy_field': True}
+    control_ref = _CreateOnlyControlReference(malformed_control)
+    monkeypatch.setattr(task_control_db, '_control_ref', lambda _uid: control_ref)
+
+    with patch('database.read_boundary.record_fallback') as fallback:
+        with pytest.raises(task_control_db.DevelopmentSmokeFixtureConflictError, match='differing state'):
+            task_control_db.ensure_development_smoke_fixture(task_control_db.WHAT_MATTERS_NOW_SMOKE_UID, stage='dev')
+
+    fallback.assert_called_once()
+    assert control_ref.payload == malformed_control
 
 
 def test_fixture_setup_fails_closed_without_a_development_runtime(monkeypatch):

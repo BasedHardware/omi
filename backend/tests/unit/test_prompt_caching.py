@@ -281,10 +281,10 @@ class TestPromptCacheRetention:
         # A renamed/future gpt-5 family model must still get routing + retention.
         assert mc.supports_prompt_cache("gpt-5.9-turbo"), "renamed gpt-5 should support prompt_cache_key"
         assert mc.supports_cache_retention("gpt-5.9-turbo"), "renamed gpt-5 should support 24h retention"
-        # gpt-5.1 must stay retention-capable after the refactor (the original hardcoded case).
-        assert mc.supports_cache_retention("gpt-5.1"), "gpt-5.1 must remain retention-capable"
-        # gpt-4.1 family: routing yes, 24h retention no.
-        assert mc.supports_prompt_cache("gpt-4.1-mini")
+        assert mc.supports_prompt_cache("gpt-5.6-luna")
+        assert mc.supports_cache_retention("gpt-5.6-luna")
+        # Retired product models are no longer treated as active cache targets.
+        assert not mc.supports_prompt_cache("gpt-4.1-mini")
         assert not mc.supports_cache_retention("gpt-4.1-mini")
         # Non-OpenAI models get neither.
         assert not mc.supports_prompt_cache("gemini-2.5-flash-lite")

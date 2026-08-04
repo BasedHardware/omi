@@ -1,3 +1,0 @@
-{
-  "change": "Add GET /v1/goals/{goal_id} to the generated Omi API client."
-}

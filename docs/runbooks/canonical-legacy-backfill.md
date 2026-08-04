@@ -6,6 +6,7 @@ For first-user dogfood, start with the **bucketed** inventory. The `stage-all-fo
 
 **Library:** `utils.memory.legacy_backfill.backfill_user_bucketed`
 **CLI:** `backend/scripts/backfill_legacy_memories.py`
+**Rollout controls:** [`canonical-memory-rollout-flags.md`](canonical-memory-rollout-flags.md)
 
 ## Safety contract
 
@@ -17,17 +18,153 @@ For first-user dogfood, start with the **bucketed** inventory. The `stage-all-fo
 - **Bucketed dogfood** — bucketed runs preserve legacy timestamps, stage only manual or positively reviewed rows for required processing, and hold unreviewed profile/noisy/sensitive rows out of durable memory.
 - **Reversible** — remove `uid` from `CANONICAL_MEMORY_USERS` and redeploy to return them to legacy reads; legacy rows remain intact.
 
-## Preconditions
+## Bulk automation
 
-1. **Target uid chosen** — first production dogfood user only; no bulk/cron.
+Use `scripts/bulk_backfill_legacy_memories.py` for governed inventory and
+write-only enrollment/staging across an explicit UID list. The command defaults
+to dry-run and emits only counts, bucket totals, and character/token proxies. It
+never returns memory text or bucket samples.
+
+The bulk worker stores its server-owned checkpoint at
+`users/{uid}/memory_control/legacy_canonical_backfill`. States progress through
+`not_started`, `inventory_done`, `enrolled`, `processing`, `staged`, and
+`read_ready`; a governor or operator pause uses `paused`, while isolated failures
+use `failed`. Re-entry is idempotent. A capped run resumes from the existing
+single-user apply checkpoint, and a failed run restarts deterministic staging so
+successful rows are skipped and failed rows can be retried.
+
+`read_ready` means enrollment and staging reconciled for that UID. It does not
+change `MEMORY_MODE`, add the UID to `CANONICAL_MEMORY_USERS`, grant default
+memory reads, or open the global read gate. Those remain explicit later rollout
+actions.
+
+### 1. Prepare an explicit UID file
+
+Use either repeatable `--uid` flags or a UTF-8 newline-delimited/JSON UID file:
+
+```text
+# cohort-uids.txt
+uid-canary-a
+uid-canary-b
+```
+
+Do not put email addresses, names, or memory content in this file. The bulk
+command does not query all users or silently expand the cohort.
+
+### 2. Inventory dry-run
+
+Point `--firestore-project` at the data-plane project. For local testing, start
+the Firestore emulator, export `FIRESTORE_EMULATOR_HOST`, and use a disposable
+project name with seeded fake users.
+
+```bash
+cd backend
+python scripts/bulk_backfill_legacy_memories.py \
+  --uid-file cohort-uids.txt \
+  --firestore-project based-hardware \
+  --max-users-per-run 10 \
+  --max-admitted-rows-per-user 100 \
+  --max-estimated-tokens-per-run 100000 \
+  --concurrency-limit 1
+```
+
+Review `source_count`, `bucket_counts`, `admitted_candidate_count`, and
+`admitted_candidate_estimated_tokens`. `actions` contains would-be enrollment
+and staging operations. Dry-run writes no enrollment or migration checkpoint
+documents.
+
+### 3. Canary apply
+
+Start with one UID and conservative caps. Apply mode requires both a fixed
+confirmation phrase and the exact deduplicated input count. A UID outside the
+code-owned cohort additionally requires both admin-override flags; the command
+prints a cohort patch suggestion but never edits the cohort.
+
+```bash
+python scripts/bulk_backfill_legacy_memories.py \
+  --uid uid-canary-a \
+  --firestore-project based-hardware \
+  --apply \
+  --confirm-apply bulk-canonical-memory-backfill \
+  --confirm-user-count 1 \
+  --allow-admin-override \
+  --i-understand-uids-not-whitelisted \
+  --max-users-per-run 1 \
+  --max-admitted-rows-per-user 25 \
+  --max-estimated-tokens-per-run 25000 \
+  --wall-clock-seconds 600 \
+  --concurrency-limit 1
+```
+
+If existing enrollment documents differ, inspect them first and rerun only with
+`--allow-existing-update` after confirming the requested write-stage payload.
+The worker always enrolls at `stage=write`; it has no read-stage flag.
+Bulk enrollment writes only the per-user `memory_control/state` document. It
+does not rewrite rollout-wide global read or write-convergence gates and does
+not fabricate `memory_state/head` or compatibility projection data.
+
+The default `stage-all-for-admission` path is Firestore-only. Optional reviewed
+bucket upgrades remain capped by the same per-user row budget:
+
+```bash
+python scripts/bulk_backfill_legacy_memories.py \
+  --uid uid-canary-a \
+  --firestore-project based-hardware \
+  --apply \
+  --confirm-apply bulk-canonical-memory-backfill \
+  --confirm-user-count 1 \
+  --allow-admin-override \
+  --i-understand-uids-not-whitelisted \
+  --process-bucket manual_required_promotion \
+  --max-users-per-run 1 \
+  --max-admitted-rows-per-user 25 \
+  --max-estimated-tokens-per-run 25000
+```
+
+This CLI does not invoke an LLM. Required `memory_l2` processing and promotion
+remain exclusively owned by `memory-maintenance-job`, which processes admitted
+rows under its own bounds. Never run L2 over `pending_admission`,
+`hold_noise`, or `hold_sensitive` rows.
+
+### Pause and resume
+
+Set `MEMORY_BULK_BACKFILL_PAUSED=true` on the maintenance shell for an immediate
+local pause, or set the server-owned Firestore document
+`memory_control/legacy_canonical_backfill_pause` to `{"paused": true}`. The
+worker checks pause before inventory and again before each enrollment/staging
+boundary. A pause-control read error fails closed.
+
+Clear the pause flag and rerun the exact command to resume. Do not delete or
+manually advance checkpoint documents. Row, token, user, and wall-clock limits
+stop cleanly; increase a cap only after reviewing the prior structured summary.
+
+### Rollback
+
+Before a read flip, rollback is simply: pause bulk work and do not add the UID to
+the code-owned cohort. If a later rollout already selected the UID, remove it
+from `backend/config/canonical_memory_cohort.py` and redeploy through the normal
+reviewed path. Canonical staged rows and checkpoints remain for idempotent
+resume; legacy memories remain untouched and must not be deleted or rewritten.
+
+## Single-user preconditions
+
+1. **Target uid chosen** — use this section for one-off dogfood; use the governed bulk command above for cohorts.
 2. **Backend env** — `GOOGLE_APPLICATION_CREDENTIALS` (or emulator) points at the intended project.
-3. **Cohort whitelist** — add uid to `CANONICAL_MEMORY_USERS` in `backend/utils/memory/memory_system.py` **before** backfill, then deploy:
+3. **Product entitlement** — confirm the uid is in `CANONICAL_MEMORY_USERS` in
+   `backend/config/canonical_memory_cohort.py` before a normal apply:
    ```python
    CANONICAL_MEMORY_USERS: frozenset[str] = frozenset({
        "your-firebase-uid",
    })
    ```
-4. **Control state** — `users/{uid}/memory_control/state` is created automatically on first real run (dry-run does not create it).
+   For a new enrollment, do not deploy this product-path selector merely to get
+   a dry-run. Use the CLI's explicit one-user admin-override ceremony for
+   staging, then coordinate entitlement deployment with persisted readiness and
+   maintenance as described in the rollout-controls runbook.
+4. **Runtime cohort** — add the same uid to `MEMORY_ENABLED_USERS` only in the
+   intended environment. This readiness fence does not replace the code-owned
+   product entitlement.
+5. **Control state** — `users/{uid}/memory_control/state` is created automatically on first real run (dry-run does not create it).
 
 ## Procedure
 
@@ -93,7 +230,10 @@ Re-run is safe: already-present and both-store-duplicate rows are skipped. Stage
 
 ## Historical remediation plan (read-only)
 
-Rows written by older backfill versions may already be active Long-term. Do **not** rerun backfill to clean them: deterministic ids make that a no-op and it can only repair side effects. Build a metadata-only plan first:
+Rows written by older backfill versions may already be active Long-term. Do
+**not** rerun backfill to clean them: deterministic ids make that a no-op, and
+normal backfill intentionally does not mutate projections or legacy KG state
+directly. Build a metadata-only plan first:
 
 ```bash
 cd backend
@@ -125,7 +265,8 @@ assert report.errors == []
 
 ## Rollback (kill-switch)
 
-1. Remove uid from `CANONICAL_MEMORY_USERS` in `memory_system.py` and redeploy.
+1. Remove the uid from `CANONICAL_MEMORY_USERS` in
+   `backend/config/canonical_memory_cohort.py` and redeploy.
 2. User immediately reads legacy `memories` again.
 3. Canonical `memory_items` written during backfill are **not** deleted and **not** copied back to legacy — accepted staleness per rollout policy.
 4. Re-whitelisting resumes canonical reads; backfill re-run is idempotent.
@@ -142,6 +283,12 @@ assert report.errors == []
 - **Stage-all checkpoint:** `backfill_user` and `--strategy stage-all-for-admission` use the legacy id-set checkpoint. Bucketed dogfood does not use that checkpoint; re-runs reconcile by deterministic canonical ids and can upgrade an existing candidate after positive review.
 - **Derived stores:** pending backfill rows create no keyword, vector, or KG projection. Those projections are built only after processing and Long-term promotion.
 
-## Short-term promotion (canonical cohort)
+## Canonical maintenance projection outbox
 
-Scheduled maintenance (`canonical_short_term_maintenance_cron`) promotes short-term items via the same vector sync path. After a promotion run, check `promotion.vector_sync_failures` on the maintenance report (and `vector_sync_failures_total` on the cron summary). Non-zero values mean Firestore tier flips succeeded but Pinecone metadata may still show `memory_layer=short_term` — investigate vector sync logs; re-run promotion does not re-upsert already-long-term items, so repair may require a targeted vector re-sync.
+Scheduled maintenance (`canonical_short_term_maintenance_cron`) deterministically selects a server-bounded set of eligible pending Short-term items, routes every selected item through consolidation, then drains the durable normal outbox that converges compatibility and vector projections. Overflow remains immediately eligible on the next Scheduler run; there is no 24-hour watermark delay. The authoritative Firestore mutation and its outbox event commit together; provider delivery is never part of the admission transaction.
+
+The datastore applies eligibility before each query cap: required processing selects active pending required rows (negative review is terminal `processing_rejected`), TTL selects active processed expired rows by `expires_at, memory_id`, and consolidation selects active processed source-active rows by `captured_at, memory_id`. If an eligible row is absent from one bounded result, unrelated or terminal rows cannot keep it hidden from later passes.
+
+After a per-user maintenance run, inspect `outbox.delivered_count`, `outbox.retryable_failure_count`, `outbox.dead_letter_count`, `outbox.ack_failed_count`, and `outbox.errors`. The cohort cron aggregates the same outcomes as `outbox_delivered_total`, `outbox_retryable_failures_total`, `outbox_dead_letters_total`, and `outbox_ack_failures_total`; any delivery failure also makes `errors` non-empty so the Cloud Run Job fails visibly.
+
+A retryable failure remains in `users/{uid}/memory_outbox` with a bounded `available_at` backoff and is retried by the next enabled maintenance run. A dead letter, acknowledgement failure, or worker error requires inspecting the outbox document's sanitized `status` and `last_error_code`, repairing the provider or lease failure, and following the outbox recovery procedure. Do not rerun the retired generic promotion path or issue a targeted vector upsert: the canonical item plus durable outbox event remain the repair authority.

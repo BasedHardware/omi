@@ -51,8 +51,15 @@ def _patch_db(monkeypatch, fetched):
 
 
 def _force_canonical(monkeypatch, *, existing_ids):
-    """Force the canonical cohort and stub its atomic batch adapter."""
+    """Force the canonical cohort and stub its atomic batch adapter.
+
+    Pins the post-read-cutover stage (MEMORY_MODE=read) explicitly instead of
+    inheriting whatever the ambient rollout config yields, so these cases stay about
+    batch-vs-single authorization parity. The pre-cutover dual-write stage, where a
+    delete must also clear the legacy read surface (#10446), has its own cases below.
+    """
     monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: True)
     existing = set(existing_ids)
 
     def delete_batch(uid, memory_ids, db_client=None):
@@ -245,42 +252,22 @@ class TestBatchDeleteCanonicalCohort:
                 uid='u1',
             )
 
-    def test_atomic_adapter_reads_entire_batch_before_queuing_writes(self, monkeypatch):
-        class Snapshot:
-            def __init__(self, payload=None):
-                self.exists = payload is not None
-                self._payload = payload
-
-            def to_dict(self):
-                return self._payload
-
-        class Document:
-            def __init__(self, path):
-                self.path = path
-
-            def get(self, transaction=None):
-                payload = _canonical_item('valid').model_dump(mode='json') if self.path.endswith('/valid') else None
-                return Snapshot(payload)
-
-        transaction = MagicMock()
+    def test_atomic_adapter_validates_entire_batch_before_store_call(self, monkeypatch):
         client = MagicMock()
-        client.transaction.return_value = transaction
-        client.document.side_effect = Document
-
-        def transactional_for_test(function):
-            def run(txn):
-                result = function(txn)
-                txn.commit()
-                return result
-
-            return run
-
-        monkeypatch.setattr(canonical_adapter, 'transactional', transactional_for_test)
+        control = SimpleNamespace(
+            head_commit_id='c1',
+            account_generation=1,
+            source_generation=1,
+            commit_sequence=1,
+        )
+        tombstone_store = MagicMock()
+        monkeypatch.setattr(canonical_adapter, '_read_replacement_control', lambda *args, **kwargs: control)
         monkeypatch.setattr(
             canonical_adapter,
-            'read_memory_v3_trusted_account_generation',
-            lambda **kwargs: SimpleNamespace(read_error_reason=None, account_generation=1, head_commit_id='c1'),
+            'fetch_authoritative_product_memory_items',
+            lambda **kwargs: [_canonical_item('valid')],
         )
+        monkeypatch.setattr(canonical_adapter, 'tombstone_memory_items_firestore', tombstone_store)
 
         with pytest.raises(ValueError, match='canonical memory not found: missing'):
             canonical_adapter.delete_canonical_memories_batch(
@@ -289,18 +276,18 @@ class TestBatchDeleteCanonicalCohort:
                 db_client=client,
             )
 
-        transaction.set.assert_not_called()
-        transaction.commit.assert_not_called()
+        tombstone_store.assert_not_called()
 
 
 class TestBatchDeleteRequestModel:
     def test_accepts_up_to_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_MAX
+        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
+        assert max_len == 100
         req = mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len)])
         assert len(req.memory_ids) == max_len
 
     def test_rejects_over_max(self):
-        max_len = mem_mod.MEMORIES_BATCH_MAX
+        max_len = mem_mod.MEMORIES_BATCH_DELETE_MAX
         with pytest.raises(ValidationError):
             mem_mod.BatchDeleteMemoriesRequest(memory_ids=[f'm{i}' for i in range(max_len + 1)])
 
@@ -331,3 +318,97 @@ class TestBatchDeleteRouteOrdering:
 
 
 # The atomic canonical regression above intentionally exercises read-before-write ordering.
+
+
+def _canonical_delete_stage(monkeypatch, *, read_cutover_done: bool):
+    """Canonical owns writes; `read_cutover_done` picks the rollout stage.
+
+    False models persisted write readiness before read cutover; True models
+    persisted read readiness, where both sides are canonical.
+    """
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete=lambda uid, mid: None))
+    legacy_delete = MagicMock()
+    monkeypatch.setattr(mem_mod.memories_db, 'delete_memories_batch', legacy_delete)
+    monkeypatch.setattr(mem_mod, 'delete_memory_vectors_batch', MagicMock())
+    return legacy_delete
+
+
+def test_delete_during_dual_write_also_clears_the_store_the_user_reads(monkeypatch):
+    """#10446: canonical write readiness may precede canonical read cutover. A
+    canonical-only delete is invisible in that window — the client drops the
+    row, the next refresh re-reads legacy where it still exists, and the memory
+    reappears seconds later. Deleting must mirror into legacy until cutover."""
+    legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=False)
+
+    assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
+
+    legacy_delete.assert_called_once_with('u1', ['mem-1'])
+
+
+def test_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
+    """After persisted read cutover both sides are canonical, so the mirror must
+    not fire; it exists only to keep the pre-cutover read surface consistent."""
+    legacy_delete = _canonical_delete_stage(monkeypatch, read_cutover_done=True)
+
+    assert mem_mod.delete_memory('mem-1', uid='u1') == {'status': 'ok'}
+
+    legacy_delete.assert_not_called()
+
+
+def test_single_delete_reports_atomic_lineage_limit_as_413(monkeypatch):
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *args, **kwargs: True)
+
+    def delete(_uid, _memory_id):
+        raise canonical_adapter.CanonicalBatchMutationLimitError("lineage exceeds transaction limit")
+
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete=delete))
+
+    with pytest.raises(HTTPException) as exc_info:
+        mem_mod.delete_memory('mem-large-lineage', uid='u1')
+
+    assert exc_info.value.status_code == 413
+    assert exc_info.value.detail == 'Memory lineage is too large to delete atomically'
+
+
+def _canonical_delete_all_stage(monkeypatch, *, read_cutover_done: bool):
+    """Canonical owns writes for DELETE /v3/memories; pick the rollout stage."""
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete_all=lambda uid: None))
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+    return purge
+
+
+def test_delete_all_during_dual_write_also_wipes_the_store_the_user_reads(monkeypatch):
+    """#10446 follow-up: before persisted read cutover a canonical delete-all is
+    invisible because GET /v3/memories still reads legacy. "Delete everything"
+    would leave the user's whole list intact on the next refresh, so the wipe
+    must reach the store they read."""
+    purge = _canonical_delete_all_stage(monkeypatch, read_cutover_done=False)
+
+    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
+
+    purge.assert_called_once_with('u1')
+
+
+def test_delete_all_after_read_cutover_leaves_legacy_alone(monkeypatch):
+    """Post-cutover both sides are canonical, so the mirror must not touch legacy."""
+    purge = _canonical_delete_all_stage(monkeypatch, read_cutover_done=True)
+
+    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
+
+    purge.assert_not_called()
+
+
+def test_legacy_cohort_delete_all_still_purges(monkeypatch):
+    """The legacy branch keeps its own behaviour after being factored into the helper."""
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: False)
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+
+    assert mem_mod.delete_memories(uid='u1') == {'status': 'ok'}
+
+    purge.assert_called_once_with('u1')

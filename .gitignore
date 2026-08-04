@@ -247,3 +247,28 @@ builds-snapshot.md
 .hermes/
 backend/.venv
 backend/.harness/
+
+# Rust / Cargo
+target/
+
+# Python bytecode
+*.pyc
+
+# Python test / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage output
+coverage/
+htmlcov/
+.coverage
+
+# Python packaging
+*.egg-info/
+
+# macOS finder (recursive)
+**/.DS_Store
+
+# pnpm store
+.pnpm-store/

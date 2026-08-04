@@ -36,9 +36,7 @@ PARAKEET_STREAMS_PER_READY_REPLICA = (
 PARAKEET_STREAM_CAPACITY_RUNBOOK = "backend/docs/runbooks/parakeet-stream-capacity.md"
 PARAKEET_CAPACITY_DASHBOARD = MONITORING / "dashboards/gke/parakeet-asr-monitoring.json"
 LIVE_TRANSCRIPTION_FAILURE_RULE = "omi-journey-live-transcription-fail"
-LIVE_TRANSCRIPTION_FAILURE_EXPR = (
-    'sum(increase(omi_journey_terminal_total{journey="live_transcription",outcome=~"success|failure"}[30m]))'
-)
+LIVE_TRANSCRIPTION_FAILURE_EXPR = 'sum(increase(omi_live_stt_accepted_total[30m]))'
 PARAKEET_READY_POD_NO_SUCCESS_RULE = "omi-parakeet-ready-pod-no-success"
 PARAKEET_READY_POD_NO_SUCCESS_EXPR = (
     '((sum by (pod) (increase(parakeet_requests_total{container="parakeet",namespace="prod-omi-backend",'
@@ -229,12 +227,26 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     assert "kube_endpoint_address_available" in endpoint_rule["data"][0]["model"]["expr"]
 
 
+def test_llm_gateway_fallback_ticket_counts_only_successful_actual_failover():
+    for rules in _all_rule_exports().values():
+        expression = rules["bfobs1llmgfb01"]["data"][0]["model"]["expr"]
+        assert 'llm_gateway_requests_total' in expression
+        assert 'route_serving_class="actual_fallback"' in expression
+        assert 'fallback_used="true"' in expression
+        assert 'fallback_reason!="none"' in expression
+        assert 'outcome="success"' in expression
+        assert 'used_lkg' not in expression
+        assert 'llm_gateway_chat_extraction_requests_total' not in expression
+
+
 def test_live_transcription_alert_is_traffic_gated_and_ignores_idle_no_data():
     """The real-traffic alert must not page before any live sessions exist."""
     for rules in _all_rule_exports().values():
         rule = rules[LIVE_TRANSCRIPTION_FAILURE_RULE]
         assert rule["noDataState"] == "OK"
         assert rule["data"][0]["model"]["expr"] == LIVE_TRANSCRIPTION_FAILURE_EXPR
+        assert 'omi_live_stt_terminal_total{outcome="failure"}' in rule["data"][1]["model"]["expr"]
+        assert 'omi_live_stt_accepted_total' in rule["data"][1]["model"]["expr"]
         assert rule["data"][2]["model"]["expression"] == "$A >= 20 && $B > 0.10"
         assert rule["annotations"]["__dashboardUid__"] == "omi-resilience-fallbacks"
-        assert rule["annotations"]["__panelId__"] == "7"
+        assert rule["annotations"]["__panelId__"] == "10"

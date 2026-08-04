@@ -32,9 +32,7 @@ void main() {
 
     setUp(() async {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      env.routeNextRequestTo(
-        'http://${server.address.host}:${server.port}/',
-      );
+      env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
     });
 
     tearDown(() async {
@@ -65,10 +63,7 @@ void main() {
         await request.response.close();
       });
 
-      await expectLater(
-        KnowledgeGraphApi.getKnowledgeGraph(),
-        throwsA(isA<Exception>()),
-      );
+      await expectLater(KnowledgeGraphApi.getKnowledgeGraph(), throwsA(isA<Exception>()));
 
       expect(attempts, 1);
     });

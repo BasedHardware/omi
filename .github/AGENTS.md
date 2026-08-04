@@ -20,6 +20,7 @@ These rules apply to GitHub Actions workflows and custom actions under `.github/
   retained and ordering is not guaranteed. Deploy workflows must not assume
   that every intermediate commit will run.
 - Use immutable image tags for deploys. Build and push the short SHA tag, then deploy that exact tag.
+- Development desktop-backend acceptance must stage `GCP_SERVICE_ACCOUNT` only in a mode-0600 runner file for Firebase probe signing, validate that its project matches `FIREBASE_AUTH_PROJECT_ID`, and delete it after the probe; never copy it into the image or deploy it as runtime configuration.
 - Do not deploy Cloud Run services from an untagged image path; use `image:...:${SHORT_SHA}` so revisions show the source commit.
 - Do not let Helm chart-only deploys reset GKE workloads to `latest`. Preserve the currently deployed immutable tag or require an explicit tag input.
 - Every GKE Deployment deploy must wait for rollout completion with `kubectl rollout status ... --timeout=...` and fail on timeout.

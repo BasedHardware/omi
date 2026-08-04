@@ -84,7 +84,9 @@ final class RewindStorageErrorClassificationTests: XCTestCase {
         #"VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))"#
       ))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame", error: error)"#))
-    XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process CGImage frame", error: error)"#))
+    // CGImage frame path carries structured StorageFailureDiagnostics context (multi-line call).
+    XCTAssertTrue(indexer.contains(#""RewindIndexer: Failed to process CGImage frame""#))
+    XCTAssertTrue(indexer.contains(#"error: error,"#))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame with metadata", error: error)"#))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to flush video chunk", error: error)"#))
     XCTAssertTrue(

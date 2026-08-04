@@ -2,7 +2,18 @@
 
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# Git invokes hooks with GIT_DIR pointed at the worktree's private git
+# directory. Resolve this test's source root from its own path rather than
+# asking Git for a work tree, which is precisely the linked-worktree condition
+# the final fixture below verifies.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Git exports repository-local environment variables to hooks. Clear them
+# before creating the fixture repository so `git init <path>` cannot re-open
+# and mutate the caller's shared repository (especially from a linked worktree).
+while IFS= read -r var; do
+  unset "$var"
+done < <(git rev-parse --local-env-vars)
 TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-make-setup.XXXXXX")"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -46,6 +57,26 @@ if [ "$actual" != "$expected" ]; then
 fi
 
 echo "make setup baseline prerequisites test passed."
+
+# The automatic linked-worktree bootstrap must use the same canonical setup
+# target. This is a static configuration check: it prevents the worktree
+# launcher from silently falling back to ambient pip installs that do not
+# install the shared Git hook dispatcher or the locked backend environment.
+python3 - "$ROOT/.cursor/worktrees.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+config_path = Path(sys.argv[1])
+config = json.loads(config_path.read_text(encoding="utf-8"))
+for name in ("setup-worktree", "setup-worktree-unix", "setup-worktree-windows"):
+    commands = config.get(name)
+    if not isinstance(commands, list) or not any(command.strip() == "make setup" for command in commands):
+        raise SystemExit(f"FAIL: {name} must invoke the canonical 'make setup' target")
+    if any("pip install -r requirements.txt" in command for command in commands):
+        raise SystemExit(f"FAIL: {name} still uses an ambient requirements.txt install")
+print("automatic worktree bootstrap uses canonical make setup")
+PY
 
 # The baseline target is intentionally safe to rerun: an agent should not have
 # to delete a healthy venv just to repeat setup after a branch change.
@@ -112,7 +143,12 @@ dev_harness_python() {
   printf '%s\n' python3
 }
 EOF
-: >"$FB_ROOT/backend/.venv/bin/python"
+# Git for Windows derives extensionless-file executability from a shebang;
+# chmod alone leaves an empty fixture non-executable on NTFS.
+cat >"$FB_ROOT/backend/.venv/bin/python" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
 chmod +x "$FB_ROOT/backend/.venv/bin/python"
 cat >>"$FB_ROOT/Makefile" <<'EOF'
 
@@ -120,11 +156,51 @@ print-resolved-python:
 	@printf 'PYTHON=%s\n' "$(PYTHON)"
 EOF
 git init -q --bare "$TMPDIR/fallback-bare.git"
-out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make print-resolved-python 2>/dev/null)"
-expected="PYTHON=$(cd "$FB_ROOT" && pwd)/backend/.venv/bin/python"
+# This contract also runs beneath `make preflight`; suppress nested Make's
+# directory banner so stdout remains the resolver value under both entrypoints.
+out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make --no-print-directory print-resolved-python 2>/dev/null)"
+# Resolve the physical path because Git Bash exposes /tmp as a logical mount
+# while BASH_SOURCE resolves the same directory through its Windows path.
+expected="PYTHON=$(cd "$FB_ROOT" && pwd -P)/backend/.venv/bin/python"
 if [ "$out" != "$expected" ]; then
   echo "FAIL: Makefile repo-root resolution collapsed when show-toplevel could not resolve a work tree." >&2
   printf 'Expected: %s\nGot:      %s\n' "$expected" "$out" >&2
   exit 1
 fi
 echo "linked-worktree repo-root fallback test passed."
+
+# Regression: mistaken core.bare=true on a primary checkout (directory .git) breaks
+# git status and worktree spawning from the main path.
+MISBARE_ROOT="$TMPDIR/misbare"
+git init -q --initial-branch=main "$MISBARE_ROOT"
+git -C "$MISBARE_ROOT" config core.bare true
+if [ "$(git -C "$MISBARE_ROOT" rev-parse --is-inside-work-tree)" = "true" ]; then
+  echo "FAIL: misbare fixture should not report inside-work-tree before repair." >&2
+  exit 1
+fi
+bash "$ROOT/scripts/repair-git-primary-worktree.sh" "$MISBARE_ROOT"
+if [ "$(git -C "$MISBARE_ROOT" config --get core.bare)" != "false" ]; then
+  echo "FAIL: repair-git-primary-worktree.sh did not clear core.bare." >&2
+  exit 1
+fi
+if [ "$(git -C "$MISBARE_ROOT" rev-parse --is-inside-work-tree)" != "true" ]; then
+  echo "FAIL: primary checkout still not a work tree after core.bare repair." >&2
+  exit 1
+fi
+echo "repair-git-primary-worktree test passed."
+
+# Regression: git accepts many true spellings (yes, on, 1, TRUE …). The repair
+# must canonicalise via --bool, not compare the raw value to "true".
+for spelling in yes on 1 TRUE; do
+  git -C "$MISBARE_ROOT" config core.bare "$spelling"
+  if [ "$(git -C "$MISBARE_ROOT" rev-parse --is-inside-work-tree)" = "true" ]; then
+    echo "FAIL: misbare fixture should not report inside-work-tree for spelling '$spelling'." >&2
+    exit 1
+  fi
+  bash "$ROOT/scripts/repair-git-primary-worktree.sh" "$MISBARE_ROOT"
+  if [ "$(git -C "$MISBARE_ROOT" config --get core.bare)" != "false" ]; then
+    echo "FAIL: repair did not clear core.bare spelling '$spelling'." >&2
+    exit 1
+  fi
+done
+echo "repair-git-primary-worktree boolean-spelling test passed."

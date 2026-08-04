@@ -10,6 +10,8 @@ from google.api_core.exceptions import AlreadyExists
 from pydantic import ValidationError
 
 import database.task_recommendations as recommendation_db
+from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.task_intelligence import (
     TaskIntelligenceFeedbackAction,
@@ -1005,6 +1007,83 @@ def test_accepted_task_capture_confidence_gates_shortlist_eligibility():
     assert [subject.subject_id for subject in shortlist] == ['task-accepted-high']
 
 
+def test_malformed_stored_capture_confidence_does_not_break_the_evaluation():
+    """A null or boolean capture_confidence must degrade to 0.0, not crash or score 1.0.
+
+    `dict.get(key, default)` returns None when the key is present holding null, so the
+    0.0 default never fired and `float(None)` raised TypeError out of _build_subjects —
+    taking down the entire What Matters Now projection, not just the offending row.
+    A stored `True` was worse than a crash: float(True) == 1.0 marked a poison row
+    maximally confident and shortlist-eligible. database.candidates._stored_confidence
+    already guards both cases when reading these same action_items fields.
+    """
+    canonical = EvidenceRef(
+        kind=EvidenceKind.conversation,
+        id='conversation-1',
+        scope=EvidenceScope.canonical,
+    ).model_dump(mode='json')
+    base = {
+        'status': 'active',
+        'due_at': NOW + timedelta(days=1),
+        'updated_at': NOW,
+        'provenance': [canonical],
+    }
+    state = {
+        'tasks': [
+            {**base, 'task_id': 'task-null-confidence', 'description': 'Null confidence', 'capture_confidence': None},
+            {**base, 'task_id': 'task-bool-confidence', 'description': 'Bool confidence', 'capture_confidence': True},
+            {**base, 'task_id': 'task-str-confidence', 'description': 'Str confidence', 'capture_confidence': 'high'},
+            {**base, 'task_id': 'task-good', 'description': 'Send the budget', 'capture_confidence': 0.95},
+        ],
+        'candidates': [],
+        'goals': [],
+        'workstreams': [],
+        'artifacts': [],
+    }
+
+    subjects = recommendations._build_subjects(state, context=None, open_loop_snapshots=[], now=NOW)
+    by_id = {subject.subject_id: subject for subject in subjects}
+
+    assert by_id['task-null-confidence'].facts.capture_confidence == 0.0
+    assert by_id['task-bool-confidence'].facts.capture_confidence == 0.0
+    assert by_id['task-str-confidence'].facts.capture_confidence == 0.0
+    for poisoned in ('task-null-confidence', 'task-bool-confidence', 'task-str-confidence'):
+        assert not by_id[poisoned].eligibility.passes_recommendation_gates
+
+    # The healthy row still evaluates — one bad document must not sink the projection.
+    assert by_id['task-good'].facts.capture_confidence == 0.95
+    shortlist = recommendations.filter_shortlist(subjects, set())
+    assert [subject.subject_id for subject in shortlist] == ['task-good']
+
+
+def test_malformed_candidate_confidence_does_not_break_the_evaluation():
+    """Same guard for the candidate reads (capture_confidence / ownership_confidence)."""
+    state = {
+        'tasks': [],
+        'candidates': [
+            {
+                'candidate_id': 'candidate-null',
+                'status': 'pending',
+                'subject_kind': 'task_change',
+                'task_change': {'description': 'Review the deck', 'due_at': NOW + timedelta(days=1)},
+                'capture_confidence': None,
+                'ownership_confidence': None,
+                'updated_at': NOW,
+                'evidence_refs': [],
+            }
+        ],
+        'goals': [],
+        'workstreams': [],
+        'artifacts': [],
+    }
+
+    subjects = recommendations._build_subjects(state, context=None, open_loop_snapshots=[], now=NOW)
+
+    by_id = {subject.subject_id: subject for subject in subjects}
+    assert by_id['candidate-null'].facts.capture_confidence == 0.0
+    assert not by_id['candidate-null'].eligibility.passes_recommendation_gates
+
+
 def test_recently_created_manual_task_qualifies_without_reanimating_old_edits_or_generated_rows():
     state = {
         'tasks': [
@@ -1372,6 +1451,36 @@ def test_feedback_validation_keeps_three_choice_reason_taxonomy_small():
         )
 
 
+def test_dev_deploy_smoke_uid_is_admitted_by_the_projection_store(fake_firestore):
+    """The deploy gate's uid must clear the store's cohort check, not only the route's.
+
+    Uses the shipped cohort deliberately: nothing here stubs
+    ``is_canonical_memory_user``, so dropping the smoke uid from
+    ``CANONICAL_MEMORY_USERS`` fails this test instead of the deploy lane.
+    """
+
+    fake_db = fake_firestore
+    fake_db.rows[
+        (
+            'users',
+            WHAT_MATTERS_NOW_SMOKE_UID,
+            recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
+            recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
+        )
+    ] = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='python')
+
+    projection = recommendations.evaluate(
+        WHAT_MATTERS_NOW_SMOKE_UID,
+        EvaluationRequest(),
+        judgment=RecordedJudgment([]),
+        now=NOW,
+        firestore_client=fake_db,
+    )
+
+    assert projection.recommendations == []
+    assert any(path[1] == WHAT_MATTERS_NOW_SMOKE_UID for path in fake_db.rows)
+
+
 def test_database_module_has_attribution_join_and_no_raw_content_fields():
     assert {'attribution_chain_id', 'subject_id', 'outcome_code'} <= set(recommendation_db.OutcomeCreate.model_fields)
     assert not {'task_text', 'prompt', 'reasoning', 'screenshot', 'window_text'}.intersection(
@@ -1379,7 +1488,8 @@ def test_database_module_has_attribution_join_and_no_raw_content_fields():
     )
 
 
-def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_chain(fake_firestore):
+def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_chain(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     intervention, created = recommendation_db.create_intervention(
         'u1',
@@ -1465,7 +1575,8 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
         )
 
 
-def test_firestore_generation_fences_reads_identities_snapshots_and_publication(fake_firestore):
+def test_firestore_generation_fences_reads_identities_snapshots_and_publication(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     control_path = (
         'users',
@@ -1580,24 +1691,28 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
         workflow_mode=TaskWorkflowMode.off,
         account_generation=8,
     ).model_dump(mode='python')
-    with pytest.raises(recommendation_db.RecommendationGenerationMismatchError, match='mode changed'):
+    persisted_mode_projection = stale_projection.model_copy(
+        update={
+            'evaluation_id': 'generation-8-evaluation',
+            'output_version': 'generation-8-output',
+            'material_version': 'generation-8-material',
+        }
+    )
+    assert (
         recommendation_db.save_projection(
             'u1',
             device_scope='device-1',
-            projection=stale_projection.model_copy(
-                update={
-                    'evaluation_id': 'generation-8-evaluation',
-                    'output_version': 'generation-8-output',
-                    'material_version': 'generation-8-material',
-                }
-            ),
+            projection=persisted_mode_projection,
             decisions=[],
             account_generation=8,
             firestore_client=fake_db,
         )
+        == persisted_mode_projection
+    )
 
 
-def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_firestore):
+def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     first = NormalizedContextSnapshot(
         device_id='device-1',
@@ -1646,7 +1761,8 @@ def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_f
     )
 
 
-def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_firestore):
+def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     subject = fixture_subject('task-1', {'capture_confidence': 1, 'has_concrete_next_action': True})
     projection = WhatMattersNowProjection(
@@ -1750,7 +1866,8 @@ def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_
     assert len(decision_paths) == 2
 
 
-def test_firestore_same_material_publication_returns_one_winner(fake_firestore):
+def test_firestore_same_material_publication_returns_one_winner(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     first = WhatMattersNowProjection(
         evaluation_id='evaluation-same',
         output_version='output-first',

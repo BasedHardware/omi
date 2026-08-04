@@ -19,6 +19,12 @@ import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.executors import run_blocking, db_executor
+from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
+from utils.retrieval.tools.google_utils import (
+    GMAIL_READONLY_SCOPE,
+    GOOGLE_INTEGRATION_KEY,
+    google_integration_has_scope,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,28 +38,6 @@ http_client: Optional[httpx.AsyncClient] = None
 
 # Templates
 templates = Jinja2Templates(directory="templates")
-
-# OAuth provider configurations
-OAUTH_CONFIGS = {
-    'google_calendar': {'name': 'Google Calendar'},
-}
-
-# Provider-specific OAuth URL configuration
-AUTH_PROVIDERS: Dict[str, Dict[str, Any]] = {
-    'google_calendar': {
-        'client_env': 'GOOGLE_CLIENT_ID',
-        'auth_base': 'https://accounts.google.com/o/oauth2/v2/auth',
-        'redirect_path': '/v2/integrations/google-calendar/callback',
-        'query': {
-            'response_type': 'code',
-            'scope': 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly',
-            'access_type': 'offline',
-            'prompt': 'consent',
-        },
-        'log_name': 'Google Calendar',
-        'error_detail': 'Google Calendar not configured - GOOGLE_CLIENT_ID missing',
-    },
-}
 
 
 def get_http_client() -> httpx.AsyncClient:
@@ -89,7 +73,8 @@ def render_oauth_response(
         redirect_url: Deep link URL to redirect to (for success case)
         error_type: Type of error (missing_code, invalid_state, config_error, server_error)
     """
-    config = OAUTH_CONFIGS.get(app_key, {'name': app_key.title()})
+    resolved = resolve_integration_provider(app_key)
+    config = resolved[1] if resolved else {'name': app_key.title()}
 
     if success:
         context: Dict[str, Any] = {
@@ -222,9 +207,26 @@ class AppleHealthSyncResponse(BaseModel):
 # *****************************
 
 
+# Integrations that are not stored under their own key: they are derived from another
+# grant, and each requires a specific scope on that grant.
+DERIVED_INTEGRATIONS = {
+    'gmail': (GOOGLE_INTEGRATION_KEY, GMAIL_READONLY_SCOPE),
+}
+
+
 @router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])
 def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Get integration connection status for the current user."""
+    """Get integration connection status for the current user.
+
+    Gmail has no grant of its own — it rides the Google Calendar OAuth grant and is
+    connected only when that grant actually carries the Gmail scope.
+    """
+    if app_key in DERIVED_INTEGRATIONS:
+        source_key, required_scope = DERIVED_INTEGRATIONS[app_key]
+        source = users_db.get_integration(uid, source_key)
+        connected = bool(source and source.get('connected')) and google_integration_has_scope(source, required_scope)
+        return IntegrationResponse(connected=connected, app_key=app_key)
+
     integration = users_db.get_integration(uid, app_key)
 
     if integration and integration.get('connected'):
@@ -246,7 +248,14 @@ def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(aut
 
 @router.delete("/v1/integrations/{app_key}", status_code=204, tags=['integrations'])
 def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
-    """Delete an integration connection."""
+    """Delete an integration connection.
+
+    Deleting a derived integration deletes the grant it rides on — there is no
+    separate token to revoke.
+    """
+    if app_key in DERIVED_INTEGRATIONS:
+        app_key = DERIVED_INTEGRATIONS[app_key][0]
+
     success = users_db.delete_integration(uid, app_key)
 
     if not success:
@@ -344,11 +353,23 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     Get OAuth authorization URL for an integration.
     Frontend opens this URL in browser to start OAuth flow.
     Uses secure random state tokens to prevent CSRF attacks.
+
+    A derived integration (Gmail) authorizes through the grant it rides on, so the
+    whole flow — state, provider config and callback — runs under the source key.
     """
+    if app_key in DERIVED_INTEGRATIONS:
+        app_key = DERIVED_INTEGRATIONS[app_key][0]
+
     base_url = os.getenv('BASE_API_URL')
     if not base_url:
         logger.error(f'ERROR: BASE_API_URL not configured for integration OAuth')
         raise HTTPException(status_code=500, detail="BASE_API_URL not configured")
+
+    resolved = resolve_integration_provider(app_key)
+    if not resolved or resolved[1]['kind'] != 'oauth':
+        raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
+    provider_key, provider = resolved
+    oauth = cast(Dict[str, Any], provider['oauth'])
 
     # Generate cryptographically secure random state token
     state_token = secrets.token_urlsafe(32)
@@ -356,43 +377,37 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     # Store state mapping in Redis with expiry
     try:
         state_key = f"oauth_state:{state_token}"
-        state_data = {'uid': uid, 'app_key': app_key, 'created_at': datetime.now(timezone.utc).isoformat()}
+        state_data = {'uid': uid, 'app_key': provider_key, 'created_at': datetime.now(timezone.utc).isoformat()}
         redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, json.dumps(state_data))
     except Exception as e:
         logger.error(f'ERROR: Failed to store OAuth state in Redis: {e}')
         raise HTTPException(status_code=500, detail=f"Failed to initialize OAuth flow: {str(e)}")
 
-    if app_key in AUTH_PROVIDERS:
-        cfg = AUTH_PROVIDERS[app_key]
-        client_id = os.getenv(cast(str, cfg['client_env']))
-        if not client_id:
-            logger.error(f"ERROR: {cfg['client_env']} not configured for {cfg['log_name']} integration OAuth")
-            raise HTTPException(status_code=500, detail=cfg['error_detail'])
+    client_id_env = cast(str, oauth['client_id_env'])
+    client_id = os.getenv(client_id_env)
+    if not client_id:
+        logger.error(f"ERROR: {client_id_env} not configured for {provider['name']} integration OAuth")
+        raise HTTPException(status_code=500, detail=f"{provider['name']} not configured - {client_id_env} missing")
 
-        base_url_clean = base_url.rstrip('/')
-        redirect_uri = f"{base_url_clean}{cfg['redirect_path']}"
+    base_url_clean = base_url.rstrip('/')
+    redirect_uri = f"{base_url_clean}{oauth['redirect_path']}"
 
-        params: Dict[str, str] = {
-            'client_id': client_id,
-            'redirect_uri': redirect_uri,
-            'state': state_token,
-        }
-        params.update(cast(Dict[str, str], cfg['query']))
+    params: Dict[str, str] = {
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'state': state_token,
+    }
+    params.update(oauth_authorization_query(provider))
 
-        if cfg.get('requires_pkce'):
-            code_verifier = secrets.token_urlsafe(32)
-            code_challenge = (
-                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
-            )
-            verifier_key = f"oauth_code_verifier:{state_token}"
-            redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
-            params['code_challenge'] = code_challenge
+    if oauth.get('requires_pkce'):
+        code_verifier = secrets.token_urlsafe(32)
+        code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode().rstrip('=')
+        verifier_key = f"oauth_code_verifier:{state_token}"
+        redis_db.r.setex(verifier_key, OAUTH_STATE_EXPIRY, code_verifier)
+        params['code_challenge'] = code_challenge
 
-        auth_url = f"{cfg['auth_base']}?{urlencode(params)}"
-        logger.info(f"Generated {cfg['log_name']} OAuth URL for user {uid}")
-
-    else:
-        raise HTTPException(status_code=400, detail=f"Unsupported integration: {app_key}")
+    auth_url = f"{oauth['auth_base']}?{urlencode(params)}"
+    logger.info(f"Generated {provider['name']} OAuth URL for user {uid}")
 
     return OAuthUrlResponse(auth_url=auth_url)
 
@@ -484,9 +499,12 @@ async def handle_oauth_callback(
                 logger.info(f'{app_key}: No access token received in response')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
-            integration_data = {
+            integration_data: Dict[str, Any] = {
                 'connected': True,
                 'access_token': access_token,
+                # Google returns only the scopes the user actually approved; store them so
+                # scope-derived integrations (Gmail) can tell granted from merely requested.
+                'granted_scopes': (token_data.get('scope') or '').split(),
             }
 
             if refresh_token:
@@ -530,46 +548,36 @@ async def oauth_callback(
     code: Optional[str] = Query(None),
     state: Optional[str] = Query(None),
 ):
-    key_map = {
-        'google-calendar': 'google_calendar',
-    }
-    normalized_key = key_map.get(app_key, app_key)
+    resolved = resolve_integration_provider(app_key)
+    if not resolved or resolved[1]['kind'] != 'oauth':
+        return render_oauth_response(request, app_key, success=False, error_type='config_error')
+    provider_key, provider = resolved
+    oauth = cast(Dict[str, Any], provider['oauth'])
 
-    client_envs = {
-        'google_calendar': ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'),
-    }
-
-    if normalized_key not in client_envs:
-        return render_oauth_response(request, normalized_key, success=False, error_type='config_error')
-
-    client_id_env, client_secret_env = client_envs[normalized_key]
+    client_id_env = cast(str, oauth['client_id_env'])
+    client_secret_env = cast(str, oauth['client_secret_env'])
     client_id = os.getenv(client_id_env)
     client_secret = os.getenv(client_secret_env)
     base_url = os.getenv('BASE_API_URL')
 
     if not client_id or not client_secret or not base_url:
-        return render_oauth_response(request, normalized_key, success=False, error_type='config_error')
+        return render_oauth_response(request, provider_key, success=False, error_type='config_error')
 
     base_url_clean = base_url.rstrip('/')
-    # Preserve existing redirect paths used during auth initiation
-    redirect_path_map = {
-        'google_calendar': '/v2/integrations/google-calendar/callback',
-    }
-    redirect_uri = f"{base_url_clean}{redirect_path_map[normalized_key]}"
+    redirect_uri = f"{base_url_clean}{oauth['redirect_path']}"
 
-    if normalized_key == 'google_calendar':
-        config = OAuthProviderConfig(
-            token_endpoint='https://oauth2.googleapis.com/token',
-            token_request_type='form',
-            token_request_data={
-                'code': code,
-                'client_id': client_id,
-                'client_secret': client_secret,
-                'redirect_uri': redirect_uri,
-                'grant_type': 'authorization_code',
-            },
-        )
-        return await handle_oauth_callback(request, normalized_key, code, state, config)
+    config = OAuthProviderConfig(
+        token_endpoint=cast(str, oauth['token_endpoint']),
+        token_request_type=cast(str, oauth.get('token_request_type', 'form')),
+        token_request_data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        },
+    )
+    return await handle_oauth_callback(request, provider_key, code, state, config)
 
 
 @router.on_event("shutdown")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring

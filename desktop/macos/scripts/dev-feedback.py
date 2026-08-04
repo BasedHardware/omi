@@ -29,16 +29,13 @@ SWIFT_WATCH_INPUTS = (
     "Desktop/ObjCExceptionCatcher",
     "Desktop/CWebP",
 )
-RUST_WATCH_INPUTS = (
-    "Backend-Rust/Cargo.toml",
-    "Backend-Rust/Cargo.lock",
-    "Backend-Rust/rust-toolchain.toml",
-    "Backend-Rust/build.rs",
-    "Backend-Rust/.cargo",
-    "Backend-Rust/src",
-    "Backend-Rust/fixtures",
-    "Backend-Rust/templates",
-    "Backend-Rust/tests",
+PYTHON_WATCH_INPUTS = (
+    "../../backend/desktop_backend.py",
+    "../../backend/routers",
+    "../../backend/database",
+    "../../backend/utils",
+    "../../backend/requirements.txt",
+    "../../backend/pylock.toml",
 )
 
 
@@ -107,12 +104,12 @@ def test_command_for(desktop_root: Path, language: str, test_filter: str) -> Tes
             ),
             cwd=desktop_root,
         )
-    if language == "rust":
+    if language == "python":
         return TestCommand(
             language=language,
             test_filter=selected_filter,
-            command=("cargo", "test", "--locked", selected_filter),
-            cwd=desktop_root / "Backend-Rust",
+            command=(".venv/bin/python", "-m", "pytest", selected_filter),
+            cwd=desktop_root.parent.parent / "backend",
         )
     raise ValueError(f"unsupported test language: {language!r}")
 
@@ -120,8 +117,8 @@ def test_command_for(desktop_root: Path, language: str, test_filter: str) -> Tes
 def watch_paths(desktop_root: Path, language: str) -> tuple[Path, ...]:
     """Return only source, test, and package inputs for the selected language."""
 
-    relative_inputs = SWIFT_WATCH_INPUTS if language == "swift" else RUST_WATCH_INPUTS
-    if language not in {"swift", "rust"}:
+    relative_inputs = SWIFT_WATCH_INPUTS if language == "swift" else PYTHON_WATCH_INPUTS
+    if language not in {"swift", "python"}:
         raise ValueError(f"unsupported test language: {language!r}")
     resolved_root = desktop_root.resolve()
     return tuple(resolved_root / relative_path for relative_path in relative_inputs)
@@ -292,12 +289,12 @@ def run_watch(
 
 def parser() -> argparse.ArgumentParser:
     argument_parser = argparse.ArgumentParser(
-        description="Run one explicit Swift or Rust desktop regression test with fast feedback.",
+        description="Run one explicit Swift or Python desktop regression test with fast feedback.",
         epilog=(
             "Examples:\n"
             "  python3 scripts/dev-feedback.py --once swift 'ChatTests/testSendsMessage'\n"
             "  python3 scripts/dev-feedback.py --watch swift 'ChatTests/testSendsMessage'\n"
-            "  python3 scripts/dev-feedback.py --watch rust 'handles_timeout'\n\n"
+            "  python3 scripts/dev-feedback.py --watch python 'tests/unit/test_desktop_chat.py'\n\n"
             "This is an opt-in inner loop. Run the existing full component suite before a PR."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -323,14 +320,15 @@ def parser() -> argparse.ArgumentParser:
         default=0.25,
         help="quiet time before rerunning after a save (default: 0.25)",
     )
-    argument_parser.add_argument("language", choices=("swift", "rust"), help="focused test runner")
-    argument_parser.add_argument("test_filter", metavar="FILTER", help="non-empty XCTest or cargo test filter")
+    argument_parser.add_argument("language", choices=("swift", "python"), help="focused test runner")
+    argument_parser.add_argument("test_filter", metavar="FILTER", help="non-empty XCTest or pytest test path")
     return argument_parser
 
 
 def validate_layout(desktop_root: Path, language: str) -> None:
-    expected_file = "Desktop/Package.swift" if language == "swift" else "Backend-Rust/Cargo.toml"
-    if not (desktop_root / expected_file).is_file():
+    expected_path = desktop_root / "Desktop/Package.swift" if language == "swift" else desktop_root.parent.parent / "backend/desktop_backend.py"
+    if not expected_path.is_file():
+        expected_file = "Desktop/Package.swift" if language == "swift" else "backend/desktop_backend.py"
         raise ValueError(f"{expected_file} was not found under desktop root {desktop_root}")
 
 

@@ -11,7 +11,7 @@
 #
 # Exports (an explicit override always wins — set any of these to opt out):
 #   OMI_INSTANCE      stable id (git worktree basename)
-#   RUST_PORT         desktop Rust backend port   (10201 + offset)
+#   RUST_PORT         desktop backend port        (10201 + offset)
 #   PYTHON_PORT       local Python backend port   (8080  + offset)
 #   AUTOMATION_PORT   in-app automation bridge     (47777 + offset)
 #   OMI_APP_NAME      named bundle                 (omi-<instance>)

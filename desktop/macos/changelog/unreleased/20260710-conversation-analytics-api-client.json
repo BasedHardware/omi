@@ -1,3 +1,0 @@
-{
-  "change": "Add GET /v1/conversations/{conversation_id}/analytics to the generated Omi API client."
-}

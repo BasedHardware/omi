@@ -32,14 +32,15 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
-import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/src/runtime/node-tools.ts";
+import { isSafeSkillName, loadSkillInstructions, searchSkills } from "../agent/dist/runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
   toolsForAdapter,
   type OmiToolInputSchema,
   type OmiToolManifestEntry,
-} from "../agent/src/runtime/omi-tool-manifest.ts";
+  type OmiToolProjectionContext,
+} from "../agent/dist/runtime/omi-tool-manifest.js";
 
 /**
  * Opaque, request-scoped correlation ids are the only context forwarded to
@@ -577,6 +578,19 @@ async function omiRelayCapabilityRef(): Promise<string | undefined> {
 
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
 export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
+export const OMI_CHAT_CONTRACT_VERSION = "1";
+
+export function applyOmiProviderHeaders(
+  headers: Record<string, string>,
+  relayContextRaw: string | undefined,
+): void {
+  headers["x-omi-chat-contract-version"] = OMI_CHAT_CONTRACT_VERSION;
+  if (relayContextRaw === undefined) return;
+  const requestId = omiRequestIdFromRelayContext(relayContextRaw);
+  if (requestId) headers["x-omi-request-id"] = requestId;
+  const reasoningEffort = omiReasoningEffortFromRelayContext(relayContextRaw);
+  if (reasoningEffort) headers["x-omi-reasoning-effort"] = reasoningEffort;
+}
 
 export { isSafeSkillName };
 
@@ -733,17 +747,29 @@ function searchSkillsTool() {
 }
 
 const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
-const projectionContext = { executionRole } as const;
+const chatFirstControlGeneration = Number(process.env.OMI_CHAT_FIRST_CONTROL_GENERATION);
+const projectionContext = {
+  executionRole,
+  surfaceKind: process.env.OMI_SURFACE_KIND,
+  chatFirstUi: process.env.OMI_CHAT_FIRST_UI === "true" && process.env.OMI_SURFACE_KIND === "main_chat",
+  controlGeneration: Number.isSafeInteger(chatFirstControlGeneration) && chatFirstControlGeneration >= 0
+    ? chatFirstControlGeneration
+    : null,
+} as const;
 
 export function omiToolsForExecutionRole(role: "coordinator" | "leaf") {
-  return toolsForAdapter("pi-mono", { executionRole: role }).map((tool) => {
+  return omiToolsForProjectionContext({ executionRole: role });
+}
+
+export function omiToolsForProjectionContext(context: OmiToolProjectionContext) {
+  return toolsForAdapter("pi-mono", context).map((tool) => {
     if (tool.name === "load_skill") return loadSkillTool();
     if (tool.name === "search_skills") return searchSkillsTool();
     return omiManifestTool(tool);
   });
 }
 
-export const OMI_TOOLS = omiToolsForExecutionRole(executionRole);
+export const OMI_TOOLS = omiToolsForProjectionContext(projectionContext);
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;
@@ -841,14 +867,10 @@ export default function omiProvider(pi: ExtensionAPI): void {
   // which preserves one safe correlation id across an upstream retry chain.
   pi.on("before_provider_headers", async (event) => {
     const raw = await omiRelayContextRaw();
-    if (raw === undefined) return;
-    const requestId = omiRequestIdFromRelayContext(raw);
-    if (requestId) event.headers["x-omi-request-id"] = requestId;
     // Per-turn effort lane: typed chat runs "adaptive" (the model decides its
     // own thinking depth), PTT runs "fast" (thinking off, low effort). The
     // gateway translates this into Anthropic thinking/effort parameters.
-    const reasoningEffort = omiReasoningEffortFromRelayContext(raw);
-    if (reasoningEffort) event.headers["x-omi-reasoning-effort"] = reasoningEffort;
+    applyOmiProviderHeaders(event.headers, raw);
   });
 
   pi.on("tool_call", async (event): Promise<ToolCallEventResult | void> => {

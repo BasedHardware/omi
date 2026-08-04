@@ -169,7 +169,9 @@ export function showMeetingToast(payload: MeetingToastPayload): void {
   }
   if (win.webContents.isLoading()) win.webContents.once('did-finish-load', send)
   else send()
-  armDismiss(payload.kind === 'ask' ? MEETING_ASK_DISMISS_MS : AUTO_DISMISS_MS)
+  armDismiss(
+    payload.kind === 'ask' || payload.kind === 'error' ? MEETING_ASK_DISMISS_MS : AUTO_DISMISS_MS
+  )
 }
 
 /** Show the post-update what's-new card in the shared toast window (Phase 8).

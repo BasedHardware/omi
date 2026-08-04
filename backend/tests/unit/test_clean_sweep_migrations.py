@@ -255,15 +255,15 @@ class TestLocationHttpxMigration:
 
 
 class TestActionItemsExecutorMigration:
-    """Verify action_items uses db_executor, not threading.Thread."""
+    """Verify action_items submits auto-sync work to the postprocess executor."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/action_items.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_db_executor(self):
+    def test_uses_postprocess_executor_with_request_context(self):
         src = _read_source('routers/action_items.py')
-        assert 'db_executor.submit(' in src
+        assert 'submit_with_context(postprocess_executor, _run_auto_sync)' in src
 
 
 class TestChatExecutorMigration:

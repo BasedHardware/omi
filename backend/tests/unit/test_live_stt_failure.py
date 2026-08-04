@@ -25,6 +25,7 @@ class FakeSession:
     active: bool = True
     close_code: int = 1001
     stt_terminal_failure: bool = False
+    live_transcription_attempt: Any = None
 
 
 class FakeClientSocket:
@@ -143,6 +144,37 @@ async def test_terminal_live_failure_sends_bounded_status_before_safe_close(
     )
     assert len(websocket.actions) == 2
     assert len(recorded) == 1
+
+
+@pytest.mark.asyncio
+async def test_accepted_live_attempt_terminals_once_with_the_same_failure_phase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = FakeClientSocket()
+    terminalized: list[tuple[str, str]] = []
+    session = FakeSession(
+        live_transcription_attempt=SimpleNamespace(
+            finish=lambda outcome, *, phase: terminalized.append((outcome, phase))
+        )
+    )
+    monkeypatch.setattr(live_failure, 'record_live_stt_failure', lambda **_labels: None)
+
+    await terminate_live_stt_session(
+        websocket,
+        session,
+        failure=TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet'),
+        reason='send_failed',
+        platform='ios',
+    )
+    await terminate_live_stt_session(
+        websocket,
+        session,
+        failure=TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='parakeet'),
+        reason='connection_lost',
+        platform='ios',
+    )
+
+    assert terminalized == [('failure', 'send')]
 
 
 @pytest.mark.asyncio

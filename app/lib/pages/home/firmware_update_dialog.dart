@@ -335,7 +335,8 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                         ],
                       ),
                       child: const Center(
-                          child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18)),
+                        child: FaIcon(FontAwesomeIcons.chevronRight, color: Color(0xFF2A2A2E), size: 18),
+                      ),
                     ),
                   ),
                 ),

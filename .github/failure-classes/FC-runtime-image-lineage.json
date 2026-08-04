@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-runtime-image-lineage",
+  "violated_contract": "A deployment identity gate must distinguish an immutable OCI image index from the platform image manifest selected by the runtime and prove their exact lineage instead of requiring digest equality or consulting a mutable tag.",
+  "canonical_prevention": "Inspect the exact immutable build image, select one supported runtime-platform descriptor, require the runtime's full immutable image reference to match that child in the same repository, and record both digests.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/verify_desktop_backend_image_lineage.py"
+  ],
+  "evidence_prs": [10670],
+  "scope_hints": [
+    ".github/workflows/desktop_backend_*.yml",
+    ".github/scripts/verify_desktop_backend_image_lineage.py"
+  ],
+  "status": "open"
+}

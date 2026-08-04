@@ -1,0 +1,192 @@
+name: Recover Production Desktop Backend Traffic
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: 'Exact retained desktop-backend Cloud Run revision to restore'
+        required: true
+      confirm:
+        description: 'Type recover-desktop-backend-prod'
+        required: true
+      reason:
+        description: 'Incident reason for restoring this revision'
+        required: true
+
+concurrency:
+  group: desktop-backend-prod
+  cancel-in-progress: false
+
+env:
+  SERVICE: desktop-backend
+  REGION: us-central1
+  EXPECTED_GCP_PROJECT_ID: based-hardware
+  PRODUCTION_DESKTOP_BACKEND_URL: https://desktop-backend-hhibjajaja-uc.a.run.app
+
+jobs:
+  recover:
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Admit exact retained revision
+        id: recovery
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REVISION: ${{ github.event.inputs.revision }}
+          CONFIRM: ${{ github.event.inputs.confirm }}
+          REASON: ${{ github.event.inputs.reason }}
+        run: |
+          set -euo pipefail
+          if [[ "$PROJECT_ID" != "$EXPECTED_GCP_PROJECT_ID" ]]; then
+            echo "ERROR: prod environment resolved project $PROJECT_ID, expected $EXPECTED_GCP_PROJECT_ID." >&2
+            exit 1
+          fi
+          service_json="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          SERVICE_JSON="$service_json" PRODUCTION_DESKTOP_BACKEND_URL="$PRODUCTION_DESKTOP_BACKEND_URL" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["SERVICE_JSON"])
+          if service.get("status", {}).get("url") != os.environ["PRODUCTION_DESKTOP_BACKEND_URL"]:
+              raise SystemExit("desktop-backend service URL is not the canonical production authority")
+          PY
+          if [[ "$CONFIRM" != "recover-desktop-backend-prod" ]]; then
+            echo "ERROR: confirm must be recover-desktop-backend-prod." >&2
+            exit 1
+          fi
+          if [[ -z "${REASON// }" || ! "$REVISION" =~ ^desktop-backend-[a-z0-9-]+$ ]]; then
+            echo "ERROR: reason must be non-empty and revision must be an exact desktop-backend revision." >&2
+            exit 1
+          fi
+          gcloud run revisions describe "$REVISION" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json > "$RUNNER_TEMP/recovery-revision.json"
+          REVISION="$REVISION" python3 - <<'PY'
+          import json
+          import os
+
+          revision = json.load(open(os.environ["RUNNER_TEMP"] + "/recovery-revision.json"))
+          labels = revision.get("metadata", {}).get("labels", {})
+          if labels.get("serving.knative.dev/service") != "desktop-backend":
+              raise SystemExit("target revision does not belong to desktop-backend")
+          ready = next(
+              (
+                  condition
+                  for condition in revision.get("status", {}).get("conditions", [])
+                  if condition.get("type") == "Ready"
+              ),
+              {},
+          )
+          if ready.get("status") != "True":
+              raise SystemExit("target revision is not Ready=True")
+          PY
+          current_revision="$(SERVICE_JSON="$service_json" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["SERVICE_JSON"])
+          targets = [
+              target.get("revisionName", "")
+              for target in service.get("status", {}).get("traffic", [])
+              if target.get("percent") == 100 and target.get("revisionName")
+          ]
+          if len(targets) != 1:
+              raise SystemExit("production desktop-backend must have exactly one 100% serving revision")
+          print(targets[0])
+          PY
+          )"
+          echo "previous_revision=$current_revision" >> "$GITHUB_OUTPUT"
+          reason_digest="$(printf '%s' "$REASON" | sha256sum | cut -d' ' -f1)"
+          echo "reason_digest=$reason_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Restore traffic to admitted retained revision
+        id: restore-traffic
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REVISION: ${{ github.event.inputs.revision }}
+        run: |
+          set -euo pipefail
+          echo "DESKTOP_BACKEND_RECOVERY_TRAFFIC_ATTEMPTED=true" >> "$GITHUB_ENV"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$REVISION=100" \
+            --quiet
+          serving_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.traffic[percent=100].revisionName)')"
+          if [[ "$serving_revision" != "$REVISION" ]]; then
+            echo "ERROR: serving revision is $serving_revision, expected $REVISION." >&2
+            exit 1
+          fi
+          curl -fsS --max-time 15 "$PRODUCTION_DESKTOP_BACKEND_URL/health" \
+            > "$RUNNER_TEMP/recovered-desktop-backend-health.json"
+          jq -e '.status == "healthy" and .service == "omi-desktop-backend"' \
+            "$RUNNER_TEMP/recovered-desktop-backend-health.json" >/dev/null
+          jq --arg revision "$REVISION" '{
+            backend_release_channel,
+            backend_release_sha,
+            chat_contract_version,
+            revision: $revision,
+            schema_version: 1,
+            service,
+            status
+          }' "$RUNNER_TEMP/recovered-desktop-backend-health.json" \
+            > "$RUNNER_TEMP/desktop-backend-recovery-evidence.json"
+
+      - name: Restore pre-recovery traffic if verification failed
+        if: failure() && env.DESKTOP_BACKEND_RECOVERY_TRAFFIC_ATTEMPTED == 'true'
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          PREVIOUS_REVISION: ${{ steps.recovery.outputs.previous_revision }}
+        run: |
+          set -euo pipefail
+          test -n "$PREVIOUS_REVISION"
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$PREVIOUS_REVISION=100" \
+            --quiet
+          restored_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.traffic[percent=100].revisionName)')"
+          if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
+            echo "ERROR: recovery rollback found $restored_revision, expected $PREVIOUS_REVISION." >&2
+            exit 1
+          fi
+
+      - name: Upload recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-backend-prod-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/desktop-backend-recovery-evidence.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Record recovery
+        if: success()
+        run: |
+          {
+            echo "### Desktop backend production recovery"
+            echo "- Restored revision: \`${{ github.event.inputs.revision }}\`"
+            echo "- Previous revision: \`${{ steps.recovery.outputs.previous_revision }}\`"
+            echo "- Reason SHA-256: \`${{ steps.recovery.outputs.reason_digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

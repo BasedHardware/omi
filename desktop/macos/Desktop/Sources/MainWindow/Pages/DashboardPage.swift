@@ -220,6 +220,13 @@ struct DashboardPage: View {
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   var taskChatCoordinator: TaskChatCoordinator? = nil
+  /// Present only for the capability-gated main-window Home chat. Shared
+  /// Dashboard callers leave this nil and keep journaled rich blocks inert.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// The cohort shell reuses dashboard content under More, but Chat itself
+  /// has one primary home. Legacy callers leave this nil and retain their
+  /// inline Home chat exactly as before.
+  var onOpenPrimaryChat: (() -> Void)? = nil
   @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @ObservedObject private var focusStorage = FocusStorage.shared
@@ -252,8 +259,12 @@ struct DashboardPage: View {
     AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   @State private var homeMode: HomeStageMode = .hub
+  @State private var didReportChatFirstTranscriptPage = false
   @FocusState private var homeAskFieldFocused: Bool
 
+  private var routesChatToPrimaryShell: Bool {
+    onOpenPrimaryChat != nil
+  }
   /// Rotation index for the home knows-list; a timer advances it so the hub
   /// cycles through fresh suggestions while you're looking at it.
   @State private var knowsRotation = 0
@@ -286,7 +297,7 @@ struct DashboardPage: View {
   private static let homeAskBarMinWidth: CGFloat = 560
   private static let homeAskBarMaxWidth: CGFloat = 980
   private static let homeStagePanelMaxWidth: CGFloat = 1280
-  private static let homeChatColumnMaxWidth: CGFloat = 900
+  private static let homeChatColumnMaxWidth = ChatComposerLayout.contentLaneMaxWidth
   private static let homeStageTopPadding: CGFloat = 74
   private static let homeStageBottomPadding: CGFloat = 26
   private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
@@ -374,7 +385,7 @@ struct DashboardPage: View {
 
   private var homeSurface: some View {
     Group {
-      if useLegacyHomeDesign {
+      if useLegacyHomeDesign && !routesChatToPrimaryShell {
         legacyHome
       } else {
         redesignedHome
@@ -598,6 +609,7 @@ struct DashboardPage: View {
 
       ChatMessagesView(
         messages: chatProvider.messages,
+        conversationIdentity: chatProvider.currentSessionId ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -618,9 +630,9 @@ struct DashboardPage: View {
         onOpenAgent: { agentID, completion in
           FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID, completion: completion)
         },
-        onOpenAgentRef: { ref, completion in
-          FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
-        },
+        onOpenAgentRef: FloatingControlBarManager.shared.openAgentChatFromTimeline(ref:completion:),
+        chatFirstRichBlockContext: chatFirstRichBlockContext,
+        contentColumnWidth: 760,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -747,7 +759,6 @@ struct DashboardPage: View {
   /// suggested questions under the bar while the hub is showing.
   private func homeStage(stageWidth: CGFloat, stageHeight: CGFloat) -> some View {
     let askBarWidth = homeAskBarWidth(for: stageWidth)
-
     return Group {
       if homeMode == .hub {
         homeHubStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
@@ -756,7 +767,7 @@ struct DashboardPage: View {
         homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
       }
     }
-    .padding(.top, homeMode == .hub ? Self.homeStageTopPadding : OmiSpacing.lg)
+    .padding(.top, homeMode.topPadding(hub: Self.homeStageTopPadding))
     .padding(.bottom, Self.homeStageBottomPadding)
   }
 
@@ -833,7 +844,7 @@ struct DashboardPage: View {
 
       homeAskBar
         .frame(width: askBarWidth)
-        .padding(.top, OmiSpacing.xl)
+        .padding(.top, OmiSpacing.xxs)
 
       dashboardChatErrorCard
         .frame(width: askBarWidth)
@@ -1095,6 +1106,7 @@ struct DashboardPage: View {
     VStack(spacing: 0) {
       ChatMessagesView(
         messages: chatProvider.messages,
+        conversationIdentity: chatProvider.currentSessionId ?? ChatConversationIdentity.mainChatDefault,
         isSending: chatProvider.isSending,
         hasMoreMessages: chatProvider.hasMoreMessages,
         isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -1120,29 +1132,40 @@ struct DashboardPage: View {
           FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
         },
         horizontalContentPadding: 0,
+        chatFirstRichBlockContext: chatFirstRichBlockContext,
+        verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
+        contentColumnWidth: 760,
+        timelineTrailingInset: 0,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .mask(
-        LinearGradient(
-          stops: [
-            .init(color: .clear, location: 0.0),
-            .init(color: .black, location: 0.05),
-            .init(color: .black, location: 0.97),
-            .init(color: .clear, location: 1.0),
-          ],
-          startPoint: .top,
-          endPoint: .bottom
-        )
-      )
-      .padding(.vertical, OmiSpacing.xs)
+      .onAppear { reportChatFirstTranscriptPageIfReady() }
+      .onChange(of: chatProvider.isMainChatJournalFirstPageReady) { _, _ in
+        reportChatFirstTranscriptPageIfReady()
+      }
+      .onDisappear {
+        didReportChatFirstTranscriptPage = false
+        chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptDidDisappear()
+      }
+      // The composer already has its own visual boundary. Masking this viewport
+      // fades the live edge and can cut off the first lines of an incoming reply.
+      .padding(.bottom, OmiSpacing.xs)
 
     }
     // Chat is the Home surface itself — no card chrome, it sits directly on
     // the ambient canvas. The column matches the ask bar's width exactly so
     // message edges align with the bar's edges.
     .frame(width: width)
+  }
+
+  private func reportChatFirstTranscriptPageIfReady() {
+    guard !didReportChatFirstTranscriptPage,
+      chatFirstRichBlockContext != nil,
+      chatProvider.isMainChatJournalFirstPageReady
+    else { return }
+    didReportChatFirstTranscriptPage = true
+    chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
   // MARK: Connect tray
@@ -1321,6 +1344,10 @@ struct DashboardPage: View {
     openHomeChat()
   }
   private func openHomeChat(focusInput: Bool = true) {
+    if let onOpenPrimaryChat {
+      onOpenPrimaryChat()
+      return
+    }
     if homeMode != .chat {
       OmiMotion.withGated(Self.homeStageAnimation) {
         homeMode = .chat
@@ -1391,6 +1418,17 @@ struct DashboardPage: View {
     // Text is required — ChatProvider.sendMessage no-ops on empty text, so
     // an attachment-only "send" would silently drop the turn.
     guard !text.isEmpty else { return }
+    if let onOpenPrimaryChat {
+      onOpenPrimaryChat()
+      guard !chatProvider.isSending else { return }
+      AnalyticsManager.shared.chatMessageSent(
+        messageLength: text.count,
+        hasSelectedAppContext: selectedApp != nil,
+        source: "home_ask_bar"
+      )
+      Task { await chatProvider.sendMainDraft(draft) }
+      return
+    }
     openHomeChat(focusInput: false)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: text.count,
@@ -1405,6 +1443,17 @@ struct DashboardPage: View {
   }
 
   private func askHomeSuggestion(_ suggestion: String) {
+    if let onOpenPrimaryChat {
+      onOpenPrimaryChat()
+      guard !chatProvider.isSending else { return }
+      AnalyticsManager.shared.chatMessageSent(
+        messageLength: suggestion.count,
+        hasSelectedAppContext: selectedApp != nil,
+        source: "home_suggested_question"
+      )
+      Task { await chatProvider.sendMessage(suggestion) }
+      return
+    }
     openHomeChat(focusInput: false)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: suggestion.count,
@@ -2207,22 +2256,6 @@ struct DashboardPage: View {
 
 // MARK: - Home Components
 
-enum HomePalette {
-  static let paper = Color(red: 0.018, green: 0.019, blue: 0.021)
-  static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)
-  static let tile = Color(red: 0.078, green: 0.078, blue: 0.088)
-  static let tileHover = Color(red: 0.108, green: 0.110, blue: 0.122)
-  static let ink = Color(red: 0.97, green: 0.97, blue: 0.975)
-  static let secondary = Color(red: 0.72, green: 0.73, blue: 0.75)
-  static let muted = Color(red: 0.46, green: 0.47, blue: 0.50)
-  static let faint = Color(red: 0.34, green: 0.35, blue: 0.37)
-  static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
-  static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-  // Neutral cool-grey key light (INV-UI-1 brand accent rules).
-  static let stageGlow = Color(red: 0.72, green: 0.74, blue: 0.78)
-  static let glow = stageGlow
-}
-
 private enum HomeRowStatus {
   case connect
   case connected
@@ -2332,11 +2365,12 @@ struct HomeAskBar: View {
       } else {
         RoundedRectangle(cornerRadius: 29, style: .continuous)
           .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
-          .blur(radius: 1.8)
       }
     }
-    .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.11 : 0.045), radius: isFocused ? 22 : 16, y: 8)
-    .shadow(color: .black.opacity(isFocused ? 0.45 : 0.34), radius: 24, y: 10)
+    // Keep the composer visually separate without casting a large, opaque bezel
+    // into the transcript. These are intentionally only 10% of the old shadow.
+    .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.011 : 0.0045), radius: isFocused ? 2.2 : 1.6)
+    .shadow(color: .black.opacity(isFocused ? 0.045 : 0.034), radius: 2.4, y: 1)
     .contentShape(.rect(cornerRadius: 29))
     .onTapGesture {
       onActivate()
@@ -3915,44 +3949,6 @@ private struct HomeSectionHeader: View {
         .scaledFont(size: OmiType.caption)
         .foregroundStyle(OmiColors.textTertiary)
     }
-  }
-}
-
-enum HomeStatusState {
-  case active
-  case inactive
-  case blocked
-
-  var indicator: Color {
-    switch self {
-    case .active:
-      return HomePalette.green
-    case .inactive:
-      return HomePalette.faint
-    case .blocked:
-      return Color(red: 1.0, green: 0.24, blue: 0.30)
-    }
-  }
-
-  var text: String {
-    switch self {
-    case .active:
-      return "On"
-    case .inactive:
-      return "Off"
-    case .blocked:
-      return "Blocked"
-    }
-  }
-
-  var isActive: Bool {
-    if case .active = self { return true }
-    return false
-  }
-
-  var isBlocked: Bool {
-    if case .blocked = self { return true }
-    return false
   }
 }
 

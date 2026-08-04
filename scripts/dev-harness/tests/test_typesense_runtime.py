@@ -116,13 +116,17 @@ def test_native_override_missing_binary_fails_loud(monkeypatch: pytest.MonkeyPat
         cli._typesense_command(cfg)
 
 
-def test_docker_command_keeps_pinned_image(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_docker_command_keeps_pinned_image_and_maps_host_port_to_typesense_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("OMI_TYPESENSE_RUNTIME", "docker")
+    monkeypatch.setenv("OMI_HARNESS_PORT_OFFSET", "1000")
     cfg = _cfg(tmp_path, monkeypatch)
 
     command = cli._typesense_command(cfg)
 
     assert command[0] == "docker"
+    assert f"127.0.0.1:{cfg.typesense_port}:8108" in command
     assert f"typesense/typesense:{config.TYPESENSE_PINNED_VERSION}" in command
 
 

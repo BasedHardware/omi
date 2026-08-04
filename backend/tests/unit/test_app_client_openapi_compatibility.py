@@ -418,3 +418,20 @@ def test_compatibility_check_is_wired_in_ci_and_pre_push():
     assert openapi_body.index('PRE_PUSH_SKIP_OPENAPI_CONTRACT') < openapi_body.index(
         'check_app_client_openapi_compatibility.py'
     )
+
+
+def test_pre_push_openapi_guard_is_limited_to_the_impacted_app_client_surface():
+    """API models/routes need the released-client check, not every OpenAPI surface locally."""
+    pre_push = (ROOT / 'scripts/pre-push').read_text(encoding='utf-8')
+    openapi_start = pre_push.index('check_openapi_contract_if_needed()')
+    openapi_end = pre_push.index('\n}\n', openapi_start)
+    openapi_body = pre_push[openapi_start:openapi_end]
+
+    assert 'backend/models/*.py' in openapi_body
+    assert 'backend/routers/*.py' in openapi_body
+    assert (
+        'scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json'
+        in openapi_body
+    )
+    assert 'scripts/export_openapi.py --check ../docs/api-reference/openapi.json' not in openapi_body
+    assert 'integration-public' not in openapi_body

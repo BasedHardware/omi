@@ -4,6 +4,15 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+enum SubscriptionPlanPresentation {
+  static func selectionLabel(planTitle: String, startingPrice: String?) -> String {
+    guard let startingPrice, !startingPrice.isEmpty else {
+      return "Select \(planTitle)"
+    }
+    return "Select \(planTitle) · \(startingPrice)"
+  }
+}
+
 extension SettingsContentView {
   var hasPaidSubscription: Bool {
     guard let subscription = userSubscription?.subscription else { return false }
@@ -140,6 +149,13 @@ extension SettingsContentView {
 
   func planSummaryText(for plan: SubscriptionPlanOption) -> String {
     preferredStartingPrice(for: plan)?.priceString ?? ""
+  }
+
+  func planSelectionLabel(for plan: SubscriptionPlanOption) -> String {
+    SubscriptionPlanPresentation.selectionLabel(
+      planTitle: plan.title,
+      startingPrice: preferredStartingPrice(for: plan)?.priceString
+    )
   }
 
   func preferredStartingPrice(for plan: SubscriptionPlanOption) -> SubscriptionPriceOption? {
@@ -431,16 +447,13 @@ extension SettingsContentView {
                         .scaledFont(size: OmiType.caption, weight: .bold)
                       Text(price.priceString)
                         .scaledFont(size: OmiType.caption)
-                        .foregroundColor(OmiColors.backgroundPrimary.opacity(0.92))
+                        .foregroundColor(OmiColors.textSecondary)
                     }
-                    .foregroundColor(OmiColors.backgroundPrimary)
                     .frame(maxWidth: .infinity)
                   }
                 }
-                .padding(.vertical, OmiSpacing.sm)
               }
-              .buttonStyle(.borderedProminent)
-              .tint(accent)
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(activeCheckoutPriceId != nil)
             }
           }
@@ -460,17 +473,15 @@ extension SettingsContentView {
           selectedPlanIdForCheckout = plan.id
         }) {
           HStack {
-            Text("Select \(plan.title)")
+            Text(planSelectionLabel(for: plan))
               .scaledFont(size: OmiType.caption, weight: .bold)
             Spacer()
             Image(systemName: "arrow.right")
               .scaledFont(size: OmiType.caption, weight: .bold)
           }
-          .foregroundColor(OmiColors.backgroundPrimary)
-          .padding(.vertical, OmiSpacing.sm)
+          .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(accent)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
     }
     .padding(OmiSpacing.xxl)

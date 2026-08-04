@@ -20,6 +20,7 @@ from utils.memory.default_read_surface import (
     parse_optional_default_read_datetime,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
+from utils.observability import record_fallback
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,30 @@ class ChatMemorySearchResult:
     @property
     def should_use_legacy_fallback(self) -> bool:
         return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+
+
+def chat_legacy_read_authorized(result: ChatMemorySearchResult) -> bool:
+    """Whether an Omi chat memory read may serve the legacy `memories` surface.
+
+    True for an explicit legacy-safe decision, and for a legacy-cohort account whose
+    `memory_control/state` doc was never created (#10736): callers reach this only on
+    the non-canonical branch after `pin_memory_system`, where the absent doc is the
+    expected un-enrolled state and legacy reads are authoritative. Mirrors
+    `mcp_legacy_read_authorized` (#10095) and the Developer API guard (#10094); every
+    other deny reason stays fail-closed.
+    """
+    if result.read_decision == MemoryReadDecision.USE_LEGACY_SAFE:
+        return True
+    if result.read_decision == MemoryReadDecision.DENY_MEMORY and result.fallback_reason == 'missing_rollout_state':
+        record_fallback(
+            component='other',
+            from_mode='memory_default_read',
+            to_mode='legacy_memories',
+            reason='policy',
+            outcome='recovered',
+        )
+        return True
+    return False
 
 
 CHAT_MEMORY_CONTENT_MAX_CHARS = 280

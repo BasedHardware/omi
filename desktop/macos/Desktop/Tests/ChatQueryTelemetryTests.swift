@@ -13,9 +13,78 @@ private final class ChatTestGenerationBox {
 }
 
 final class ChatQueryTelemetryTests: XCTestCase {
+  /// A failed tool call used to emit nothing at all: the call site removed the
+  /// start time and then gated the event on `toolStatus == .completed`, so 30
+  /// days of `chat_tool_call_completed` carried only successes and tool
+  /// reliability could not be measured. Every terminal bridge status must now
+  /// map to a bounded outcome.
+  func testEveryTerminalBridgeStatusReportsABoundedToolOutcome() {
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("failed"), "failed")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("cancelled"), "cancelled")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("interrupted"), "interrupted")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("completed"), "completed")
+
+    // Unknown adapter vocabulary must not leak or inflate successful calls.
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome("some_new_status"), "unknown")
+    XCTAssertEqual(ChatTelemetryDimension.toolOutcome(""), "unknown")
+  }
+
+  /// User Stop is not a tool defect. `ToolCallStatus` deliberately collapses
+  /// cancelled/interrupted into `.failed` for the UI, so the telemetry
+  /// dimension must stay independent of it or a Stop would count as a failure.
+  func testStopIsDistinguishableFromFailureEvenThoughBothMapToFailedStatus() {
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("cancelled"), .failed)
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("interrupted"), .failed)
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("failed"), .failed)
+
+    XCTAssertNotEqual(
+      ChatTelemetryDimension.toolOutcome("cancelled"),
+      ChatTelemetryDimension.toolOutcome("failed"))
+    XCTAssertNotEqual(
+      ChatTelemetryDimension.toolOutcome("interrupted"),
+      ChatTelemetryDimension.toolOutcome("failed"))
+  }
+
   func testKernelContextTimeoutDoesNotInterruptAnUnstartedAgentQuery() {
     XCTAssertFalse(ChatProvider.shouldInterruptTimedOutAgentQuery(queryStarted: false))
     XCTAssertTrue(ChatProvider.shouldInterruptTimedOutAgentQuery(queryStarted: true))
+  }
+
+  func testFailedPayloadCarriesBoundedErrorDetail() {
+    let detail = ChatQueryErrorDetail.from(
+      BridgeError.agentError("400 Your credit balance is too low to access the Anthropic API."))
+    let event = ChatQueryTelemetryEvent.failed(
+      ChatQueryTelemetryContext(attemptId: "attempt-detail", surface: "main_chat", harness: "acp"),
+      durationMs: 1200,
+      errorClass: .agentError,
+      partialResponse: false,
+      detail: detail
+    )
+    let properties = event.analyticsPayload.properties
+    XCTAssertEqual(properties["error_code"] as? String, "provider_billing_exhausted")
+    XCTAssertEqual(properties["retryable"] as? Bool, false)
+    // Bounded dimensions only: the raw provider text must never reach analytics.
+    XCTAssertFalse(
+      String(describing: properties).contains("credit balance"),
+      "raw exception text leaked into analytics properties")
+  }
+
+  func testRuntimeFailureDetailCarriesDaemonTaxonomy() {
+    let failure = AgentRuntimeFailure(
+      code: "adapter_execution_failed",
+      failureCode: .authentication,
+      userMessage: "Authentication required",
+      source: "adapter_execution",
+      adapterId: "openclaw",
+      provider: "anthropic",
+      retryable: false
+    )
+    let detail = ChatQueryErrorDetail.from(BridgeError.agentRuntimeFailure(failure))
+    XCTAssertEqual(detail?.errorCode, "authentication")
+    XCTAssertEqual(detail?.failureCode, "adapter_execution_failed")
+    XCTAssertEqual(detail?.failureSource, "adapter_execution")
+    XCTAssertEqual(detail?.adapterId, "openclaw")
+    XCTAssertEqual(detail?.retryable, false)
   }
 
   func testAnalyticsPayloadUsesTypedAllowlist() {
@@ -27,7 +96,8 @@ final class ChatQueryTelemetryTests: XCTestCase {
       ),
       durationMs: 900,
       errorClass: .timeout,
-      partialResponse: true
+      partialResponse: true,
+      detail: nil
     )
 
     let payload = event.analyticsPayload
@@ -533,7 +603,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
       eventSink: { browserEvents.append($0) }
     )
     XCTAssertTrue(browserAttempt.finish(stopReason: .browserExtensionMissing))
-    guard case .failed(_, _, let errorClass, _, _) = browserEvents.last else {
+    guard case .failed(_, _, let errorClass, _, _, _) = browserEvents.last else {
       return XCTFail("expected browser precondition failure")
     }
     XCTAssertEqual(errorClass, .browserExtensionMissing)
@@ -567,7 +637,7 @@ final class ChatQueryTelemetryTests: XCTestCase {
 
     XCTAssertTrue(attempt.fail(errorClass: .authentication))
     guard let terminal = events.last,
-      case .failed(_, _, let errorClass, _, let watchdogFired) = terminal
+      case .failed(_, _, let errorClass, _, _, let watchdogFired) = terminal
     else {
       return XCTFail("expected failed terminal event")
     }

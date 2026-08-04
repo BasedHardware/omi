@@ -1,0 +1,7 @@
+{
+  "version": "0.12.134",
+  "date": "2026-07-26",
+  "changes": [
+    "Fixed chat and push-to-talk turns that could remain stuck after web searches or rapid voice interruptions."
+  ]
+}

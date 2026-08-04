@@ -292,8 +292,15 @@ final class VoiceTurnCoordinator {
     return activeTurn?.activeLease == lease
   }
 
-  func configure(barState: FloatingControlBarState) {
-    presenter = FloatingControlBarState.PTTBarPresenter(barState: barState)
+  func configure(
+    barState: FloatingControlBarState,
+    resizeForPTT: @escaping @MainActor (Bool) -> Void = {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: $0)
+    }
+  ) {
+    presenter = FloatingControlBarState.PTTBarPresenter(
+      barState: barState,
+      resizeForPTT: resizeForPTT)
     presenter?.apply(projection)
   }
 

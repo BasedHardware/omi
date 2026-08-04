@@ -48,10 +48,15 @@ class DirectUse:
 
 
 DIRECT_PROVIDER_ALLOWLIST = {
+    DirectUse('agent_vm/main.py', 'GEMINI_API_KEY'),
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
-    DirectUse('utils/llm/app_generator.py', 'OpenAI'),
+    DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_tts_updates.py', 'OPENAI_API_KEY'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
@@ -65,7 +70,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/other/chat_file.py', 'openai.beta'),
     DirectUse('utils/other/chat_file.py', 'openai.files'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
-    DirectUse('utils/retrieval/tools/perplexity_tools.py', 'PERPLEXITY_API_KEY'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
@@ -110,19 +114,26 @@ def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
         assert route.provider_options == expected_options
 
 
+def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
+    overrides = load_generated_route_overrides()
+
+    assert overrides['persona_chat'].primary.model == 'gpt-5-nano'
+    assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
+
+
 def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():
     config = load_gateway_config(prod_mode=True)
 
     for feature in get_all_configured_features():
-        if get_provider(feature) == 'anthropic':
+        if get_provider(feature) == 'anthropic' and feature != 'chat_agent':
             lane = config.lanes[feature_lane_id(feature)]
-            if feature == 'chat_agent':
-                assert lane.surface == Surface.ANTHROPIC_MESSAGES
-                assert lane.capabilities.streaming is True
-                assert lane.capabilities.tools is True
-            else:
-                assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
-                assert lane.capabilities.streaming is False
+            assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
+            assert lane.capabilities.streaming is False
+
+    chat_agent = config.lanes[feature_lane_id('chat_agent')]
+    assert chat_agent.surface == Surface.OPENAI_CHAT_COMPLETIONS
+    assert chat_agent.capabilities.streaming is True
+    assert chat_agent.capabilities.tools is True
 
 
 def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():

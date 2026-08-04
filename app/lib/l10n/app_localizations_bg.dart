@@ -1470,7 +1470,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get payYourSttProvider => 'Използвайте omi свободно. Плащате само на вашия STT доставчик директно.';
 
   @override
-  String get freeMinutesMonth => '1 200 безплатни минути/месец включени. Неограничено с ';
+  String get freeMinutesMonth => '300 безплатни минути/месец включени. Неограничено с ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4720,7 +4720,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Няма конфигуриран специфичен достъп до данни.';
 
   @override
-  String get basicPlanDescription => '1 200 премиум минути + неограничено на устройството';
+  String get basicPlanDescription => '300 премиум минути + неограничено на устройството';
 
   @override
   String get minutes => 'минути';
@@ -9808,4 +9808,7 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Неуспешно свързване с този микрофон. Уверете се, че е свързан в настройките на iPhone.';
+
+  @override
+  String get syncStatusTooOld => 'Твърде стар за синхронизиране — Omi не може да го приеме';
 }

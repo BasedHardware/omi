@@ -111,12 +111,28 @@ final class HomeStageCloseSemanticsTests: XCTestCase {
   }
 
   private func methodBody(named name: String, in source: String) throws -> String {
-    let pattern = #"private func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n\s+\}"#
-    let regex = try NSRegularExpression(pattern: pattern)
-    let range = NSRange(source.startIndex..<source.endIndex, in: source)
-    let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))
-    let bodyRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
-    return String(source[bodyRange])
+    guard let declaration = source.range(of: "private func \(name)(") else {
+      throw NSError(domain: "HomeStageCloseSemanticsTests", code: 1)
+    }
+    guard let openingBrace = source[declaration.upperBound...].firstIndex(of: "{") else {
+      throw NSError(domain: "HomeStageCloseSemanticsTests", code: 2)
+    }
+
+    var depth = 0
+    var cursor = openingBrace
+    while cursor < source.endIndex {
+      switch source[cursor] {
+      case "{": depth += 1
+      case "}":
+        depth -= 1
+        if depth == 0 {
+          return String(source[source.index(after: openingBrace)..<cursor])
+        }
+      default: break
+      }
+      cursor = source.index(after: cursor)
+    }
+    throw NSError(domain: "HomeStageCloseSemanticsTests", code: 3)
   }
 
   private func computedPropertyBody(named name: String, in source: String) throws -> String {

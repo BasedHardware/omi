@@ -2,7 +2,7 @@
 # Deterministic dev-harness unit-test lane (checks-manifest: dev-harness-unit-tests).
 #
 # Prefers an interpreter that ALREADY has pytest + python-dotenv (the repo's
-# backend venv, then the ambient python3) so the check needs no uv cache,
+# backend venv (POSIX or Windows layout), then the ambient python3) so the check needs no uv cache,
 # network, or ~/.cache write — keeping `make preflight` green in restricted
 # local/agent environments. Only a truly bare environment falls back to uv,
 # and even then the cache is redirected to a writable temp dir. Real pytest
@@ -15,7 +15,12 @@ run_pytest() {
   exec "$@" -m pytest scripts/dev-harness/tests -q
 }
 
-for py in backend/.venv/bin/python backend/venv/bin/python python3; do
+for py in \
+  backend/.venv/bin/python \
+  backend/.venv/Scripts/python.exe \
+  backend/venv/bin/python \
+  backend/venv/Scripts/python.exe \
+  python3; do
   if [ -x "$py" ] || command -v "$py" >/dev/null 2>&1; then
     if "$py" -c 'import pytest, dotenv' >/dev/null 2>&1; then
       run_pytest "$py"

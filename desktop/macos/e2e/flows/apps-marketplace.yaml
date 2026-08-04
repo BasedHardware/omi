@@ -5,6 +5,7 @@ description: Apps tab — Imports, Exports, search, filters, Create App (v0.12.1
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SearchableDropdown.swift
   - desktop/macos/Desktop/Sources/Providers/AppProvider.swift
 preconditions:
   - auth_ready

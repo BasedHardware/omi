@@ -306,13 +306,14 @@ def perform_merge_async(
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         if reprocess:
             try:
-                processed_conversation = process_conversation(
-                    uid,
-                    new_conversation.language or 'en',
-                    new_conversation,
-                    force_process=True,
-                    is_reprocess=False,  # Not a reprocess - this is a new conversation
-                )
+                with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
+                    processed_conversation = process_conversation(
+                        uid,
+                        new_conversation.language or 'en',
+                        new_conversation,
+                        force_process=True,
+                        is_reprocess=False,  # Not a reprocess - this is a new conversation
+                    )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
                 # Even if processing fails, continue with cleanup

@@ -592,7 +592,9 @@ export function canonicalAdapterEventType(event: OutboundMessageDraft): string |
     case "tool_activity":
       if (event.status === "started") return "tool.started";
       if (event.status === "completed") return "tool.completed";
-      if (event.status === "failed") return "tool.failed";
+      if (event.status === "failed" || event.status === "cancelled" || event.status === "interrupted") {
+        return "tool.failed";
+      }
       return "tool.updated";
     case "tool_use":
       return "tool.started";

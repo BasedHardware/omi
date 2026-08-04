@@ -8,36 +8,33 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
+  { params }: { params: Promise<{ path: string[] }> },
 ) {
   return handleRequest(request, await params);
 }
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
+  { params }: { params: Promise<{ path: string[] }> },
 ) {
   return handleRequest(request, await params);
 }
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
+  { params }: { params: Promise<{ path: string[] }> },
 ) {
   return handleRequest(request, await params);
 }
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
+  { params }: { params: Promise<{ path: string[] }> },
 ) {
   return handleRequest(request, await params);
 }
 
-async function handleRequest(
-  request: NextRequest,
-  params: { path: string[] }
-) {
+async function handleRequest(request: NextRequest, params: { path: string[] }) {
   try {
     const path = params.path.join('/');
     const searchParams = request.nextUrl.searchParams.toString();
@@ -49,7 +46,7 @@ async function handleRequest(
     if (!authHeader) {
       return NextResponse.json(
         { error: 'Authorization header required' },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -59,7 +56,7 @@ async function handleRequest(
 
     // Build headers - don't set Content-Type for multipart (let fetch set it with boundary)
     const headers: HeadersInit = {
-      'Authorization': authHeader,
+      Authorization: authHeader,
     };
 
     // Forward custom headers for FCM token registration
@@ -82,7 +79,11 @@ async function handleRequest(
     };
 
     // Include body for POST/PATCH/DELETE requests
-    if (request.method === 'POST' || request.method === 'PATCH' || request.method === 'DELETE') {
+    if (
+      request.method === 'POST' ||
+      request.method === 'PATCH' ||
+      request.method === 'DELETE'
+    ) {
       if (isMultipart) {
         // For multipart, forward the FormData directly
         const formData = await request.formData();
@@ -106,8 +107,10 @@ async function handleRequest(
     const responseContentType = response.headers.get('content-type');
 
     // Handle streaming responses (for chat)
-    if (responseContentType?.includes('text/event-stream') ||
-        responseContentType?.includes('text/plain')) {
+    if (
+      responseContentType?.includes('text/event-stream') ||
+      responseContentType?.includes('text/plain')
+    ) {
       const text = await response.text();
       return new NextResponse(text, {
         status: response.status,
@@ -141,7 +144,8 @@ async function handleRequest(
         path.includes('app/plans')
       ) {
         // Static reference data - cache for 1 hour
-        cacheHeaders['Cache-Control'] = 'public, max-age=3600, stale-while-revalidate=86400';
+        cacheHeaders['Cache-Control'] =
+          'public, max-age=3600, stale-while-revalidate=86400';
       }
 
       return NextResponse.json(data, {
@@ -160,9 +164,6 @@ async function handleRequest(
     });
   } catch (error) {
     console.error('Proxy error:', error);
-    return NextResponse.json(
-      { error: 'Proxy request failed' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Proxy request failed' }, { status: 500 });
   }
 }

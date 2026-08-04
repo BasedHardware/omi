@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import importlib
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -19,12 +18,16 @@ from database.entities import USER_ENTITY_ID
 from models.memories import Memory, MemoryCategory, MemoryDB, SubjectAttribution
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier
-from utils.memory.canonical_memory_adapter import read_canonical_memories, write_canonical_extraction_memory
+from utils.memory.canonical_memory_adapter import (
+    extraction_memory_id,
+    read_canonical_memories,
+    write_canonical_extraction_memory,
+)
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.canonical_activation import CanonicalWriteDecision
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.memory.required_promotion import required_promotion_payload
+from utils.memory.required_promotion import required_processing_payload
 from utils.client_device import DeviceScopeRequest
 from tests.unit.test_ws_i_write_convergence import _FakeDb, _trusted_account_generation
 
@@ -121,6 +124,21 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
     assert stored["arguments"] == {"location": "San Francisco"}
 
 
+def test_extraction_memory_id_is_deterministic_and_partitions_non_user_subjects():
+    identity = {
+        "uid": "uid-subject-id",
+        "source_id": "conv-subject-id",
+        "content": "Prefers tea",
+    }
+
+    alice_id = extraction_memory_id(**identity, subject_entity_id="person:alice")
+    bob_id = extraction_memory_id(**identity, subject_entity_id="person:bob")
+
+    assert alice_id == extraction_memory_id(**identity, subject_entity_id="person:alice")
+    assert alice_id != bob_id
+    assert extraction_memory_id(**identity, subject_entity_id=USER_ENTITY_ID) == extraction_memory_id(**identity)
+
+
 def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_account):
     uid = "uid-manual-device-wire"
     device_id = "macos_a1b2c3d4"
@@ -141,7 +159,7 @@ def test_canonical_manual_memory_matches_its_request_device(monkeypatch_trusted_
     ):
         service.write(
             uid,
-            required_promotion_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
+            required_processing_payload(memory_db.model_dump(mode="json"), source_surface="v3_manual"),
         )
 
     current_device = read_canonical_memories(

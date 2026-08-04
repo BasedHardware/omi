@@ -129,7 +129,10 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
 # serving pod instead of maintaining independent listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
     STTServingSurface.STREAMING: ('modulate-velma-2', 'parakeet'),
-    STTServingSurface.PRERECORDED: ('modulate-velma-2', 'parakeet'),
+    # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
+    # user-visible failure it causes on the streaming surface. Prefer the self-hosted
+    # provider here and keep Velma as the overflow.
+    STTServingSurface.PRERECORDED: ('parakeet', 'modulate-velma-2'),
     STTServingSurface.PTT: ('modulate-velma-2', 'parakeet'),
 }
 

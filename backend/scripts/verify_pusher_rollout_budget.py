@@ -316,6 +316,77 @@ def validate_template(root: Path) -> list[str]:
     return errors
 
 
+def validate_probe_and_drain_contract(root: Path) -> list[str]:
+    """Fail closed on probe routing and BackendConfig drain regressions.
+
+    readinessProbe must point at /ready so a drain flips LB readiness without
+    restarting the pod; liveness/startup stay on /health. The BackendConfig
+    must render connectionDraining and its timeout must fit inside the pod
+    termination grace window so the LB drains before SIGTERM.
+    """
+
+    errors: list[str] = []
+    for environment in ENVIRONMENTS:
+        values_path = root / "backend" / "charts" / "pusher" / f"{environment}_omi_pusher_values.yaml"
+        try:
+            entries = _mapping_entries(values_path)
+        except ContractError as exc:
+            errors.append(str(exc))
+            continue
+
+        for probe, expected in (
+            ("readinessProbe", "/ready"),
+            ("livenessProbe", "/health"),
+            ("startupProbe", "/health"),
+        ):
+            try:
+                actual = _mapping_value(entries, (probe, "httpGet", "path"), values_path)
+            except ContractError as exc:
+                errors.append(str(exc))
+                continue
+            if actual != expected:
+                errors.append(f"{values_path}: {probe}/httpGet/path must be {expected!r}, got {actual!r}")
+
+        try:
+            grace = _nonnegative_int(
+                _mapping_value(entries, ("terminationGracePeriodSeconds",), values_path),
+                field="terminationGracePeriodSeconds",
+                source=values_path,
+            )
+            drain = _positive_int(
+                _mapping_value(entries, ("backendConfig", "connectionDraining", "drainingTimeoutSec"), values_path),
+                field="backendConfig/connectionDraining/drainingTimeoutSec",
+                source=values_path,
+            )
+        except ContractError as exc:
+            errors.append(str(exc))
+            continue
+        if drain > grace:
+            errors.append(
+                f"{values_path}: connectionDraining.drainingTimeoutSec={drain}s must be <= "
+                f"terminationGracePeriodSeconds={grace}s"
+            )
+
+    template = root / "backend" / "charts" / "pusher" / "templates" / "backendconfig.yaml"
+    try:
+        text = template.read_text(encoding="utf-8")
+    except OSError as exc:
+        errors.append(f"could not read {template}: {exc}")
+        return errors
+    if not re.search(r"connectionDraining:\s*\n\s*drainingTimeoutSec:\s*\{\{", text):
+        errors.append(f"{template}: BackendConfig must render connectionDraining.drainingTimeoutSec from .Values")
+    # The BackendConfig healthCheck MUST stay on /health (liveness semantics).
+    # Routing it to /ready would flip the backend unhealthy during a readiness
+    # drain, defeating connectionDraining so the LB cuts in-flight WS at once.
+    if not re.search(r"requestPath:\s*/health\b", text) or re.search(r"requestPath:\s*/ready\b", text):
+        errors.append(
+            f"{template}: BackendConfig healthCheck.requestPath must render to /health "
+            "(liveness semantics); routing it to /ready flips the backend unhealthy during "
+            "drain and defeats connectionDraining"
+        )
+    return errors
+
+
 def workflow_timeout_seconds(path: Path) -> int:
     try:
         text = path.read_text(encoding="utf-8")
@@ -331,6 +402,7 @@ def validate(root: Path = ROOT) -> list[str]:
     """Return every static contract violation for chart and workflow changes."""
 
     errors = validate_template(root)
+    errors.extend(validate_probe_and_drain_contract(root))
     budgets: dict[str, RolloutBudget] = {}
     for environment in ENVIRONMENTS:
         try:

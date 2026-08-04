@@ -39,17 +39,14 @@ beforeEach(() => {
   omiApiDelete.mockReset().mockResolvedValue({ data: { status: 'ok' } })
 })
 
-// Fakes the REAL GET /v3/memories pagination contract: offset===0 FORCES the
-// server to return min(total, 5000) items regardless of the requested limit;
-// only a non-zero offset honors the caller's limit. `header` rides on the
-// response so the hook can read the canonical-lifecycle capability flag.
+// Fakes GET /v3/memories pagination: hard page cap 500, no first-page expansion.
 function fakeBackend(total: number, header?: string) {
   return async (
     _path: string,
     config: { params: { limit: number; offset: number } }
   ): Promise<{ data: Partial<Memory>[]; headers?: Record<string, string> }> => {
     const { limit, offset } = config.params
-    const effectiveLimit = offset === 0 ? Math.min(total, 5000) : limit
+    const effectiveLimit = Math.min(limit, 500)
     const end = Math.min(offset + effectiveLimit, total)
     const data = (
       offset >= total
@@ -72,6 +69,18 @@ afterEach(cleanup)
 // per module lifetime (`if (cache.loaded) return`) — that keeps tests
 // order-independent regardless of what a prior test left in the cache.
 describe('useMemories — edit/visibility query-param contract (C9)', () => {
+  it('createMemory sends the requested manual category', async () => {
+    omiApiPost.mockResolvedValue({ data: memory('m2', 'Added memory', 'private') })
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.createMemory('Added memory', { category: 'manual' })
+    })
+    expect(omiApiPost).toHaveBeenCalledWith('/v3/memories', {
+      content: 'Added memory',
+      category: 'manual'
+    })
+  })
+
   it('editMemory sends the new content as a query param, not a JSON body', async () => {
     const { result } = renderHook(() => useMemories())
     await act(async () => {
@@ -124,25 +133,19 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
 })
 
 describe('useMemories — pagination, capability header, delete', () => {
-  it('pages past the forced 5000-item first page instead of stopping at it', async () => {
-    // Regression: fetchMemories used to do a single GET limit=500&offset=0.
-    // The backend forces limit=5000 at offset 0, so that one call returned the
-    // first ~5000 rows and NEVER requested a second page — an account with more
-    // than 5000 memories silently lost the tail on the Memories page. It must
-    // now page through the whole set.
-    omiApiGet.mockImplementation(fakeBackend(5200))
+  it('pages past the first server page instead of stopping at it', async () => {
+    // Backend hard-caps pages at 500. Display path must page the whole set.
+    omiApiGet.mockImplementation(fakeBackend(1200))
     const { result } = renderHook(() => useMemories())
 
     await act(async () => {
       await result.current.refresh()
     })
 
-    expect(result.current.memories).toHaveLength(5200)
-    expect(result.current.memories.some((m) => m.id === 'm5199')).toBe(true)
-    // Proves a second page was requested at the real resume offset (5000), not
-    // a naive offset=500 that would sit inside the already-collected first page.
+    expect(result.current.memories).toHaveLength(1200)
+    expect(result.current.memories.some((m) => m.id === 'm1199')).toBe(true)
     expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
-      params: { limit: 5000, offset: 5000 }
+      params: { limit: 500, offset: 500 }
     })
   })
 

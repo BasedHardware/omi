@@ -24,11 +24,15 @@ import type { ActionItemRecord } from '../../../shared/types'
 // async utils generous headroom; the MutationObserver still resolves them the
 // instant the DOM changes, so passing tests are never slowed. Restored after the
 // file so the raised ceiling can't bleed into other suites sharing the worker.
+// vitest captures each test's timeout when `it()` registers it, i.e. while this
+// module is collected — before any hook runs — so the raise has to happen here at
+// module scope. From inside beforeAll it is a no-op and every test keeps the 5000ms
+// default, which then fires *before* the 5000ms asyncUtilTimeout below can report.
+vi.setConfig({ testTimeout: 15000 })
 let prevAsyncUtilTimeout = 1000
 beforeAll(() => {
   prevAsyncUtilTimeout = getConfig().asyncUtilTimeout
   configure({ asyncUtilTimeout: 5000 })
-  vi.setConfig({ testTimeout: 15000 })
 })
 afterAll(() => {
   configure({ asyncUtilTimeout: prevAsyncUtilTimeout })
@@ -341,6 +345,29 @@ describe('Tasks — keyboard navigation (mac parity, flat list)', () => {
   const selectedText = (): string | null =>
     document.querySelector('[data-selected="true"]')?.textContent ?? null
 
+  // Regression: the document keydown handler reads the list through a ref. While that
+  // ref was synced in a passive effect (a task scheduled *after* the commit), a key
+  // pressed in the window between the rows appearing and that effect running was
+  // handled against the previous, empty navOrder and silently did nothing. The
+  // MutationObserver callback below is a microtask on the commit that paints the
+  // rows, so it lands squarely inside that window — deterministically, not by luck.
+  it('a key pressed the instant the rows paint still drives the list', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+
+    await new Promise<void>((resolve) => {
+      const obs = new MutationObserver(() => {
+        if (!screen.queryByText('first')) return
+        obs.disconnect()
+        fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+        resolve()
+      })
+      obs.observe(document.body, { childList: true, subtree: true })
+    })
+
+    await waitFor(() => expect(selectedText()).toContain('first'))
+  })
+
   it('Down selects the first row, Down again moves to the second; Up moves back', async () => {
     incomplete = twoRows()
     await renderTasks()
@@ -520,23 +547,19 @@ describe('Tasks — keyboard navigation (mac parity, flat list)', () => {
     expect(evt.defaultPrevented).toBe(false)
   })
 
-  it(
-    'Esc with a selection deselects and preventDefault (consumes it)',
-    async () => {
-      incomplete = twoRows()
-      await renderTasks()
-      await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+  it('Esc with a selection deselects and preventDefault (consumes it)', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
 
-      fireEvent.keyDown(document.body, { key: 'ArrowDown' })
-      await waitFor(() => expect(selectedText()).toContain('first'))
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
 
-      const evt = createEvent.keyDown(document.body, { key: 'Escape' })
-      fireEvent(document.body, evt)
-      expect(evt.defaultPrevented).toBe(true)
-      await waitFor(() => expect(selectedText()).toBeNull())
-    },
-    15_000
-  )
+    const evt = createEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent(document.body, evt)
+    expect(evt.defaultPrevented).toBe(true)
+    await waitFor(() => expect(selectedText()).toBeNull())
+  })
 
   it('Ctrl+D on the last row moves selection to the previous row', async () => {
     incomplete = twoRows()

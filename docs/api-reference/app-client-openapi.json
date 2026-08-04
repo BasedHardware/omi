@@ -4511,6 +4511,23 @@
         "title": "Body_import_limitless_data_v1_import_limitless_post",
         "type": "object"
       },
+      "Body_migrate_app_owner_v1_apps_migrate_owner_post": {
+        "properties": {
+          "source_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Token"
+          }
+        },
+        "title": "Body_migrate_app_owner_v1_apps_migrate_owner_post",
+        "type": "object"
+      },
       "Body_sync_local_files_v2_v2_sync_local_files_post": {
         "properties": {
           "files": {
@@ -5561,6 +5578,99 @@
         "title": "CandidateSubjectKind",
         "type": "string"
       },
+      "CanonicalKnowledgeGraphResponse": {
+        "properties": {
+          "catalog_nodes": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Catalog Nodes",
+            "type": "array"
+          },
+          "edges": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "nodes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Nodes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges",
+          "has_more"
+        ],
+        "title": "CanonicalKnowledgeGraphResponse",
+        "type": "object"
+      },
+      "CaptureLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "moment_timestamp_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moment Timestamp Ms"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "captureLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "conversation_id",
+          "summary"
+        ],
+        "title": "CaptureLinkSpec",
+        "type": "object"
+      },
       "CategoryEnum": {
         "enum": [
           "personal",
@@ -5700,6 +5810,34 @@
           "data_points"
         ],
         "title": "ChartDataset",
+        "type": "object"
+      },
+      "ChatFirstSubject": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "task",
+              "goal",
+              "capture",
+              "cold_start"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "ChatFirstSubject",
         "type": "object"
       },
       "ChatMessageCountResponse": {
@@ -6051,6 +6189,66 @@
           }
         },
         "title": "ClickUpTeamsResponse",
+        "type": "object"
+      },
+      "ColdStartSequence": {
+        "additionalProperties": false,
+        "description": "Explicit local-only identity for the fixed sparse cold-start script.",
+        "properties": {
+          "sequence_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Sequence Id",
+            "type": "string"
+          },
+          "step": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Step",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence_id",
+          "step"
+        ],
+        "title": "ColdStartSequence",
+        "type": "object"
+      },
+      "ColdStartSequenceTerminalReceipt": {
+        "additionalProperties": false,
+        "description": "A durable local-journal acknowledgement that sparse sequencing ended.",
+        "properties": {
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "sequence_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Sequence Id",
+            "type": "string"
+          },
+          "terminal_state": {
+            "enum": [
+              "completed",
+              "abandoned"
+            ],
+            "title": "Terminal State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence_id",
+          "receipt_id",
+          "terminal_state"
+        ],
+        "title": "ColdStartSequenceTerminalReceipt",
         "type": "object"
       },
       "ContextMatchSignal": {
@@ -7155,6 +7353,8 @@
       "CreateCheckoutRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },
@@ -7232,7 +7432,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -7313,7 +7513,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -8523,6 +8723,84 @@
           "default_app"
         ],
         "title": "DefaultTaskIntegrationResponse",
+        "type": "object"
+      },
+      "DeferralCreateRequest": {
+        "additionalProperties": false,
+        "description": "The idempotent server receiver for the kernel-owned deferral outbox.",
+        "properties": {
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "control_generation": {
+            "minimum": 0.0,
+            "title": "Control Generation",
+            "type": "integer"
+          },
+          "owner_fence": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Owner Fence",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/QuestionCardSpec"
+          },
+          "source_surface": {
+            "const": "main_chat",
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ChatFirstSubject"
+          }
+        },
+        "required": [
+          "source_surface",
+          "control_generation",
+          "owner_fence",
+          "continuity_key",
+          "subject",
+          "question"
+        ],
+        "title": "DeferralCreateRequest",
+        "type": "object"
+      },
+      "DeferralReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "deferral_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Deferral Id",
+            "type": "string"
+          },
+          "due_at": {
+            "format": "date-time",
+            "title": "Due At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "released"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deferral_id",
+          "due_at",
+          "state"
+        ],
+        "title": "DeferralReceipt",
         "type": "object"
       },
       "DeleteAccountRequest": {
@@ -11075,6 +11353,62 @@
             "title": "Google Place Id"
           },
           "latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "Geolocation",
+        "type": "object"
+      },
+      "GeolocationInput": {
+        "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "google_place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Place Id"
+          },
+          "latitude": {
             "title": "Latitude",
             "type": "number"
           },
@@ -11098,7 +11432,7 @@
           "latitude",
           "longitude"
         ],
-        "title": "Geolocation",
+        "title": "GeolocationInput",
         "type": "object"
       },
       "GoalCreate": {
@@ -11374,6 +11708,36 @@
           "relationship_disposition"
         ],
         "title": "GoalLifecycleRequest",
+        "type": "object"
+      },
+      "GoalLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "goalLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "goal_id",
+          "summary"
+        ],
+        "title": "GoalLinkSpec",
         "type": "object"
       },
       "GoalMetric": {
@@ -12369,6 +12733,22 @@
       },
       "KnowledgeGraphResponse": {
         "properties": {
+          "edge_count": {
+            "default": 0,
+            "title": "Edge Count",
+            "type": "integer"
+          },
+          "edge_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edge Limit"
+          },
           "edges": {
             "items": {
               "additionalProperties": true,
@@ -12377,6 +12757,22 @@
             "title": "Edges",
             "type": "array"
           },
+          "node_count": {
+            "default": 0,
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "node_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Limit"
+          },
           "nodes": {
             "items": {
               "additionalProperties": true,
@@ -12384,6 +12780,11 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -12488,6 +12889,142 @@
           "period_days"
         ],
         "title": "LlmUsageResponse",
+        "type": "object"
+      },
+      "LocationContextConsentResponse": {
+        "properties": {
+          "disclosed_providers": {
+            "default": [
+              "Google Maps",
+              "the configured AI chat provider"
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Disclosed Providers",
+            "type": "array"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "purpose": {
+            "default": "chat_city_context",
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LocationContextConsentResponse",
+        "type": "object"
+      },
+      "LocationContextConsentUpdate": {
+        "properties": {
+          "disclosure_accepted": {
+            "default": false,
+            "description": "Required to enable city context: Google Maps reverse-geocodes the device location and the configured AI chat provider receives city, region, and country only.",
+            "title": "Disclosure Accepted",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "LocationContextConsentUpdate",
+        "type": "object"
+      },
+      "MaterializePromptsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cold_start_sequence_terminal_receipts": {
+            "items": {
+              "$ref": "#/components/schemas/ColdStartSequenceTerminalReceipt"
+            },
+            "maxItems": 16,
+            "title": "Cold Start Sequence Terminal Receipts",
+            "type": "array"
+          },
+          "control_generation": {
+            "minimum": 0.0,
+            "title": "Control Generation",
+            "type": "integer"
+          },
+          "initial_page_loaded": {
+            "default": false,
+            "title": "Initial Page Loaded",
+            "type": "boolean"
+          },
+          "owner_fence": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Owner Fence",
+            "type": "string"
+          },
+          "receipts": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationReceipt"
+            },
+            "maxItems": 16,
+            "title": "Receipts",
+            "type": "array"
+          },
+          "source_surface": {
+            "const": "main_chat",
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "window_foreground": {
+            "default": false,
+            "title": "Window Foreground",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_surface",
+          "control_generation",
+          "owner_fence"
+        ],
+        "title": "MaterializePromptsRequest",
+        "type": "object"
+      },
+      "MaterializePromptsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveIntent"
+            },
+            "title": "Intents",
+            "type": "array"
+          }
+        },
+        "title": "MaterializePromptsResponse",
         "type": "object"
       },
       "McpAddServerResponse": {
@@ -13722,6 +14259,36 @@
         ],
         "title": "MemoryLayer",
         "type": "string"
+      },
+      "MemoryLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "memory_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Memory Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "memoryLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "memory_id",
+          "summary"
+        ],
+        "title": "MemoryLinkSpec",
+        "type": "object"
       },
       "MemoryMutationResponse": {
         "properties": {
@@ -15539,6 +16106,194 @@
         "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
+      "ProactiveIntent": {
+        "additionalProperties": false,
+        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains deliverable until that kernel has committed and\nacknowledged its stable ``intent_id``; cold-start intents make that\nexplicit as ``pending_kernel_receipt``.",
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "memoryLink": "#/components/schemas/MemoryLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/MemoryLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "pending_kernel_receipt",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "ProactiveIntent",
+        "type": "object"
+      },
+      "ProactiveMaterializationReceipt": {
+        "additionalProperties": false,
+        "description": "Content-free receipt emitted only after the local journal commits.",
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "receipt_id"
+        ],
+        "title": "ProactiveMaterializationReceipt",
+        "type": "object"
+      },
       "ProactiveNotification": {
         "properties": {
           "scopes": {
@@ -15734,6 +16489,96 @@
           "support_email"
         ],
         "title": "PublicFairUseCaseStatusResponse",
+        "type": "object"
+      },
+      "QuestionCardSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "cold_start_sequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ColdStartSequence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Options",
+            "type": "array"
+          },
+          "question_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ChatFirstSubject"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "questionCard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "question_id",
+          "text",
+          "subject",
+          "options"
+        ],
+        "title": "QuestionCardSpec",
+        "type": "object"
+      },
+      "QuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "defer": {
+            "default": false,
+            "title": "Defer",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "option_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "prepared_answer": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Prepared Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option_id",
+          "label",
+          "prepared_answer"
+        ],
+        "title": "QuestionOption",
         "type": "object"
       },
       "RateMessageRequest": {
@@ -16278,6 +17123,49 @@
           "type"
         ],
         "title": "ResponseMessage",
+        "type": "object"
+      },
+      "RestoreLegacyConversationItemsResponse": {
+        "description": "Outcome of the safe action-items recovery endpoint.",
+        "properties": {
+          "has_more": {
+            "default": false,
+            "description": "Whether more marked legacy rows remain after this recovery page.",
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exclusive recovery cursor for the next page, present only when has_more is true.",
+            "title": "Next Cursor"
+          },
+          "restored": {
+            "default": 0,
+            "description": "Number of action items safely restored.",
+            "title": "Restored",
+            "type": "integer"
+          },
+          "skipped_existing": {
+            "default": 0,
+            "description": "Rows left staged because an action item with that identity already exists.",
+            "title": "Skipped Existing",
+            "type": "integer"
+          },
+          "status": {
+            "default": "ok",
+            "description": "Ack status, e.g. \"ok\".",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "RestoreLegacyConversationItemsResponse",
         "type": "object"
       },
       "ReviewAppRequest": {
@@ -18519,6 +19407,53 @@
         "title": "SyncLocalFilesResultResponse",
         "type": "object"
       },
+      "SyncRecoveryWindowExceededResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "lane": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lane"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "SyncRecoveryWindowExceededResponse",
+        "type": "object"
+      },
+      "SyncRequestValidationErrorResponse": {
+        "description": "FastAPI's multipart/request validation shape for sync input failures.",
+        "properties": {
+          "detail": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "SyncRequestValidationErrorResponse",
+        "type": "object"
+      },
       "Targeting": {
         "description": "Controls who sees the announcement",
         "properties": {
@@ -18827,6 +19762,29 @@
             "$ref": "#/components/schemas/TaskSupersedeCandidate"
           }
         ]
+      },
+      "TaskCardSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "taskCard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "task_id"
+        ],
+        "title": "TaskCardSpec",
+        "type": "object"
       },
       "TaskChangePayload": {
         "additionalProperties": false,
@@ -19803,13 +20761,18 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Per-user universal-contract migration control; defaults preserve legacy behavior.",
+        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived only from\nthe canonical-memory selector; persistence excludes it so clients cannot\nturn a sampled response into later authority.",
         "properties": {
           "account_generation": {
             "default": 0,
             "minimum": 0.0,
             "title": "Account Generation",
             "type": "integer"
+          },
+          "chat_first_ui": {
+            "default": false,
+            "title": "Chat First Ui",
+            "type": "boolean"
           },
           "workflow_mode": {
             "$ref": "#/components/schemas/TaskWorkflowMode",
@@ -21101,6 +22064,8 @@
       "UpgradeSubscriptionRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },
@@ -23485,6 +24450,114 @@
           }
         ],
         "summary": "Get Pending Sync Items",
+        "tags": [
+          "action-items"
+        ]
+      }
+    },
+    "/v1/action-items/restore-legacy-conversation-items": {
+      "post": {
+        "description": "Safely restore rows moved by the now-retired desktop migration.",
+        "operationId": "restore_legacy_conversation_items_v1_action_items_restore_legacy_conversation_items_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreLegacyConversationItemsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Restore Legacy Conversation Items",
         "tags": [
           "action-items"
         ]
@@ -26784,6 +27857,15 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_migrate_app_owner_v1_apps_migrate_owner_post"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -30369,6 +31451,182 @@
         ]
       }
     },
+    "/v1/chat/deferrals": {
+      "post": {
+        "description": "Receive one idempotent kernel-outbox deferral without touching Chat state.",
+        "operationId": "record_chat_deferral_v1_chat_deferrals_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeferralCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeferralReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Chat Deferral",
+        "tags": [
+          "chat-first"
+        ]
+      }
+    },
+    "/v1/chat/materialize-prompts": {
+      "post": {
+        "description": "Fetch ready intents and accept kernel receipts; never writes a Chat row.",
+        "operationId": "materialize_prompts_v1_chat_materialize_prompts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterializePromptsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterializePromptsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Materialize Prompts",
+        "tags": [
+          "chat-first"
+        ]
+      }
+    },
     "/v1/conversations": {
       "get": {
         "description": "List responses may omit detail-only fields such as transcript_segments. Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript.",
@@ -30422,6 +31680,24 @@
               "default": true,
               "title": "Include Discarded",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+              "title": "Sources"
             }
           },
           {
@@ -30766,7 +32042,7 @@
             }
           },
           {
-            "description": "Comma-separated source filter (e.g. friend,omi)",
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
             "in": "query",
             "name": "sources",
             "required": false,
@@ -30779,7 +32055,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated source filter (e.g. friend,omi)",
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
               "title": "Sources"
             }
           },
@@ -31228,6 +32504,34 @@
             "schema": {
               "title": "Conversation Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Optional provenance constraint for a detail read",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional provenance constraint for a detail read",
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_discarded",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Discarded",
+              "type": "boolean"
             }
           },
           {
@@ -37070,6 +38374,98 @@
         ]
       }
     },
+    "/v1/goals/canonical/list": {
+      "get": {
+        "description": "List goals for enrolled canonical-memory task-system clients only.",
+        "operationId": "get_canonical_goals_v1_goals_canonical_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_ended",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Ended",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoalResponse"
+                  },
+                  "title": "Response Get Canonical Goals V1 Goals Canonical List Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Canonical Goals",
+        "tags": [
+          "goals"
+        ]
+      }
+    },
     "/v1/goals/extract-progress": {
       "post": {
         "description": "Extract goal progress from conversation/chat text and update if found.\nUses LLM to understand context and extract numeric progress.",
@@ -39150,7 +40546,7 @@
     },
     "/v1/integrations/{app_key}": {
       "delete": {
-        "description": "Delete an integration connection.",
+        "description": "Delete an integration connection.\n\nDeleting a derived integration deletes the grant it rides on — there is no\nseparate token to revoke.",
         "operationId": "delete_integration_v1_integrations__app_key__delete",
         "parameters": [
           {
@@ -39231,7 +40627,7 @@
         ]
       },
       "get": {
-        "description": "Get integration connection status for the current user.",
+        "description": "Get integration connection status for the current user.\n\nGmail has no grant of its own — it rides the Google Calendar OAuth grant and is\nconnected only when that grant actually carries the Gmail scope.",
         "operationId": "get_integration_v1_integrations__app_key__get",
         "parameters": [
           {
@@ -39416,7 +40812,7 @@
     },
     "/v1/integrations/{app_key}/oauth-url": {
       "get": {
-        "description": "Get OAuth authorization URL for an integration.\nFrontend opens this URL in browser to start OAuth flow.\nUses secure random state tokens to prevent CSRF attacks.",
+        "description": "Get OAuth authorization URL for an integration.\nFrontend opens this URL in browser to start OAuth flow.\nUses secure random state tokens to prevent CSRF attacks.\n\nA derived integration (Gmail) authorizes through the grant it rides on, so the\nwhole flow — state, provider config and callback — runs under the source key.",
         "operationId": "get_oauth_url_v1_integrations__app_key__oauth_url_get",
         "parameters": [
           {
@@ -39651,6 +41047,111 @@
           }
         ],
         "summary": "Get Knowledge Graph",
+        "tags": [
+          "knowledge_graph"
+        ]
+      }
+    },
+    "/v1/knowledge-graph/canonical": {
+      "get": {
+        "operationId": "get_canonical_knowledge_graph_v1_knowledge_graph_canonical_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanonicalKnowledgeGraphResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Canonical Knowledge Graph",
         "tags": [
           "knowledge_graph"
         ]
@@ -47532,7 +49033,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               }
             }
           },
@@ -47733,6 +49234,170 @@
           }
         ],
         "summary": "Set User Language",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/location-context-consent": {
+      "get": {
+        "description": "Return the current city-context disclosure and active server-side consent state.",
+        "operationId": "get_location_context_consent_v1_users_location_context_consent_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationContextConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Location Context Consent",
+        "tags": [
+          "v1"
+        ]
+      },
+      "put": {
+        "description": "Grant, renew, or revoke city-only location context for interactive chat.",
+        "operationId": "set_location_context_consent_v1_users_location_context_consent_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LocationContextConsentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationContextConsentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Set Location Context Consent",
         "tags": [
           "v1"
         ]
@@ -54286,11 +55951,19 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SyncRecoveryWindowExceededResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SyncRequestValidationErrorResponse"
+                    }
+                  ],
+                  "title": "Response 422 Sync Local Files V2 V2 Sync Local Files Post"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Automatic recovery window exceeded or malformed request"
           }
         },
         "security": [

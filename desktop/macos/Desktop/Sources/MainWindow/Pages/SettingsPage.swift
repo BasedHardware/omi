@@ -151,6 +151,7 @@ struct SettingsContentView: View {
   @State var glowOverlayEnabled: Bool
   @State var analysisDelay: Int
   @State var focusNotificationsEnabled: Bool
+  @State var liveSuggestionsEnabled: Bool
   @State var focusExcludedApps: Set<String>
 
   // Task Assistant states
@@ -476,6 +477,7 @@ struct SettingsContentView: View {
     _analysisDelay = State(initialValue: settings.analysisDelay)
     _focusNotificationsEnabled = State(
       initialValue: FocusAssistantSettings.shared.notificationsEnabled)
+    _liveSuggestionsEnabled = State(initialValue: SuggestionAssistantSettings.shared.isEnabled)
     _focusExcludedApps = State(initialValue: FocusAssistantSettings.shared.excludedApps)
     _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
     _taskChatAgentEnabled = State(initialValue: TaskAgentSettings.shared.isChatEnabled)

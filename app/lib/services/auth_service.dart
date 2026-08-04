@@ -40,6 +40,44 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
   Future<void> signOut() => FirebaseAuth.instance.signOut();
 }
 
+/// Source-bound proof captured before a credential-collision sign-in replaces
+/// the anonymous Firebase user.
+final class AnonymousSourceMigration {
+  const AnonymousSourceMigration({required this.uid, required this.token});
+
+  final String uid;
+  final String token;
+}
+
+/// The outcome of linking an external provider.
+///
+/// A credential collision signs in to the already-linked destination account
+/// inside [AuthService]. The caller must use [anonymousSourceMigration], rather
+/// than inspecting FirebaseAuth.currentUser after that switch, to migrate the
+/// anonymous source data.
+final class ProviderLinkResult {
+  const ProviderLinkResult({required this.destinationUid, this.anonymousSourceMigration});
+
+  final String? destinationUid;
+  final AnonymousSourceMigration? anonymousSourceMigration;
+}
+
+/// Captures an anonymous source proof before [establishDestination] can replace
+/// FirebaseAuth.currentUser, then returns both sides of the completed collision.
+@visibleForTesting
+Future<ProviderLinkResult> resolveProviderCredentialCollision({
+  required String sourceUid,
+  required bool sourceIsAnonymous,
+  required Future<String?> Function() captureSourceToken,
+  required Future<String?> Function() establishDestination,
+}) async {
+  final sourceToken = sourceIsAnonymous ? await captureSourceToken() : null;
+  final anonymousSourceMigration =
+      sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
+  final destinationUid = await establishDestination();
+  return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
+}
+
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   static AuthService get instance => _instance;
@@ -767,7 +805,7 @@ class AuthService {
     return base64Url.encode(digest.bytes).replaceAll('=', '');
   }
 
-  Future<UserCredential?> linkWithProvider(String provider) async {
+  Future<ProviderLinkResult?> linkWithProvider(String provider) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
@@ -857,11 +895,15 @@ class AuthService {
         await _updateUserPreferences(result, provider);
 
         Logger.debug('Firebase account linking successful');
-        return result;
+        return ProviderLinkResult(destinationUid: result.user?.uid);
       } catch (e) {
         if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-          // Handle existing credential case
-          return await _handleExistingCredential(e);
+          return await resolveProviderCredentialCollision(
+            sourceUid: currentUser.uid,
+            sourceIsAnonymous: currentUser.isAnonymous,
+            captureSourceToken: currentUser.getIdToken,
+            establishDestination: () async => (await _handleExistingCredential(e)).user?.uid,
+          );
         }
         rethrow;
       }
@@ -887,7 +929,7 @@ class AuthService {
   }
 
   /// Handle the case when credential is already in use
-  Future<UserCredential?> _handleExistingCredential(FirebaseAuthException e) async {
+  Future<UserCredential> _handleExistingCredential(FirebaseAuthException e) async {
     // Get existing user credentials
     final existingCred = e.credential;
 
@@ -909,11 +951,11 @@ class AuthService {
     return result;
   }
 
-  Future<UserCredential?> linkWithGoogle() async {
+  Future<ProviderLinkResult?> linkWithGoogle() async {
     return await linkWithProvider('google');
   }
 
-  Future<UserCredential?> linkWithApple() async {
+  Future<ProviderLinkResult?> linkWithApple() async {
     return await linkWithProvider('apple');
   }
 }

@@ -13,13 +13,18 @@ from utils.listen_pusher_session import (
 
 
 class FakePusherWebSocket:
-    def __init__(self, incoming=None):
+    def __init__(self, incoming=None, send_errors=None):
         self.sent = []
         self.incoming = list(incoming or [])
+        self.send_errors = list(send_errors or [])
         self.closed_codes = []
         self.on_recv = None
 
     async def send(self, data):
+        if self.send_errors:
+            error = self.send_errors.pop(0)
+            if error:
+                raise error
         self.sent.append(bytes(data))
 
     async def recv(self):
@@ -242,6 +247,101 @@ def test_bounded_audio_and_transcript_buffers():
     session.audio_bytes_send(b"123456789", received_at=3.0)
     assert b"".join(session.audio_chunks) == b"56789"
     assert session.audio_total_size == 5
+
+
+@pytest.mark.anyio
+async def test_failed_transcript_send_retains_buffer_for_retry():
+    ws = FakePusherWebSocket(send_errors=[RuntimeError("send failed"), None])
+    session = make_session(ws=ws)
+    await session.connect()
+    session.transcript_send([{"id": "seg-1"}])
+
+    await session._transcript_flush()
+    assert list(session.segment_buffers) == [{"id": "seg-1"}]
+
+    await session._transcript_flush()
+    assert list(session.segment_buffers) == []
+    transcript_frames = [frame for frame in ws.sent if frame_type(frame) == 102]
+    assert frame_json(transcript_frames[0])["segments"] == [{"id": "seg-1"}]
+
+
+@pytest.mark.anyio
+async def test_failed_audio_send_retains_buffer_for_retry():
+    ws = FakePusherWebSocket(send_errors=[None, RuntimeError("send failed"), None])
+    session = make_session(ws=ws)
+    await session.connect()
+    session.audio_bytes_send(b"abcd", received_at=100.0)
+
+    await session._audio_bytes_flush()
+    assert b"".join(session.audio_chunks) == b"abcd"
+    assert session.audio_total_size == 4
+
+    await session._audio_bytes_flush()
+    assert list(session.audio_chunks) == []
+    assert session.audio_total_size == 0
+    assert ws.sent[-1][12:] == b"abcd"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("flush", ["transcript", "audio"])
+async def test_cancelled_send_retains_buffer(flush):
+    ws = FakePusherWebSocket(send_errors=[asyncio.CancelledError()])
+    session = make_session(ws=ws, current_conversation_id=None)
+    await session.connect()
+    if flush == "transcript":
+        session.transcript_send([{"id": "seg-1"}])
+        with pytest.raises(asyncio.CancelledError):
+            await session._transcript_flush()
+        assert list(session.segment_buffers) == [{"id": "seg-1"}]
+    else:
+        session.audio_bytes_send(b"abcd", received_at=100.0)
+        with pytest.raises(asyncio.CancelledError):
+            await session._audio_bytes_flush()
+        assert b"".join(session.audio_chunks) == b"abcd"
+        assert session.audio_total_size == 4
+
+
+@pytest.mark.anyio
+async def test_close_waits_for_failed_transcript_flush_and_retries_before_closing():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingPusherWebSocket(FakePusherWebSocket):
+        async def send(self, data):
+            if not started.is_set():
+                started.set()
+                await release.wait()
+                raise RuntimeError("send failed")
+            await super().send(data)
+
+    ws = BlockingPusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+    session.transcript_send([{"id": "seg-1"}])
+
+    flush = asyncio.create_task(session._transcript_flush())
+    await started.wait()
+    close = asyncio.create_task(session.close())
+    await asyncio.sleep(0)
+    assert not close.done()
+    release.set()
+    await flush
+    await close
+
+    transcript_frames = [frame for frame in ws.sent if frame_type(frame) == 102]
+    assert frame_json(transcript_frames[0])["segments"] == [{"id": "seg-1"}]
+    assert ws.closed_codes == [1000]
+
+
+@pytest.mark.anyio
+async def test_failed_speaker_sample_replay_stays_buffered():
+    ws = FakePusherWebSocket(send_errors=[RuntimeError("send failed")])
+    session = make_session(ws=ws)
+    await session.send_speaker_sample_request("person-1", "conv-1", ["seg-1"])
+
+    await session.connect()
+
+    assert list(session.pending_speaker_sample_requests) == [("person-1", "conv-1", ["seg-1"])]
 
 
 @pytest.mark.anyio

@@ -59,7 +59,7 @@ enum ViewExporter {
               viewModel: DashboardViewModel(),
               appState: AppState(),
               appProvider: AppProvider(),
-              chatProvider: ChatProvider(),
+              chatProvider: previewChatProvider(),
               memoriesViewModel: MemoriesViewModel(),
               selectedIndex: .constant(0)))
         },
@@ -142,6 +142,30 @@ enum ViewExporter {
         },
         CGSize(width: 900, height: 700)
       ),
+
+      (
+        "16-memory-atlas",
+        { MemoryAtlasExportPreview.surface() },
+        CGSize(width: 1200, height: 820)
+      ),
+
+      (
+        "17-memory-atlas-single-type",
+        { MemoryAtlasExportPreview.singleTypeSurface() },
+        CGSize(width: 1200, height: 820)
+      ),
+
+      (
+        "18-brain-map-inspector",
+        { MemoryAtlasExportPreview.inspectorSurface() },
+        CGSize(width: 1400, height: 820)
+      ),
+
+      (
+        "19-brain-map-connection",
+        { MemoryAtlasExportPreview.connectionInspectorSurface() },
+        CGSize(width: 1400, height: 820)
+      ),
     ]
 
     guard index >= 0 && index < views.count else { return nil }
@@ -149,7 +173,7 @@ enum ViewExporter {
     return (entry.0, entry.1(), entry.2)
   }
 
-  static var standaloneViewCount: Int { 14 }
+  static var standaloneViewCount: Int { 18 }
 
   private static let onboardingExportSteps: [(String, Int)] = [
     ("01-name", 0),
@@ -287,12 +311,26 @@ enum ViewExporter {
         }
       ),
       (
+        "full-conversations", 1,
+        {
+          AnyView(
+            ConversationsPage(
+              appState: previewConversationsAppState(),
+              selectedConversation: .constant(nil)
+            ))
+        }
+      ),
+      (
         "full-ai-chat", 2,
         { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
       ),
       (
         "full-memories", 3,
-        { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel())) }
+        {
+          AnyView(
+            MemoriesPage(viewModel: previewMemoriesViewModel())
+          )
+        }
       ),
       (
         "full-tasks", 4,
@@ -324,31 +362,111 @@ enum ViewExporter {
     let entry = pages[index]
     let pageContent = entry.2()
 
-    // Compose: mock sidebar + rounded content area (mirrors DesktopHomeView layout)
+    let topBarAppState = AppState()
+    let topBarMemories = previewMemoriesViewModel()
+    let topBarTasks = TasksStore.shared
+
+    // Compose with the production top bar and rounded shell.
     let fullView = AnyView(
-      HStack(spacing: 0) {
-        ZStack {
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-            .fill(
-              Color(nsColor: NSColor(red: 0.09, green: 0.09, blue: 0.09, alpha: 1)).opacity(0.4)
-            )
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                .stroke(
-                  Color(nsColor: NSColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1)).opacity(
-                    0.3), lineWidth: 1)
-            )
+      ZStack {
+        RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+          .fill(Color(red: 0.050, green: 0.052, blue: 0.059))
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+              .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
+          )
+
+        VStack(spacing: 0) {
+          DesktopTopBar(
+            selectedIndex: .constant(entry.1),
+            memoryDestinationRawValue: .constant(MemoryHubDestination.memories.rawValue),
+            appState: topBarAppState,
+            memoriesViewModel: topBarMemories,
+            tasksStore: topBarTasks,
+            sinceDate: Date(),
+            onRewind: {}
+          )
           pageContent
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
         }
-        .padding(OmiSpacing.md)
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
+      .padding(OmiSpacing.md)
     )
 
-    return (entry.0, fullView, CGSize(width: 1200, height: 800))
+    return (entry.0, fullView, CGSize(width: 1600, height: 1000))
   }
 
-  static var fullPageCount: Int { 10 }
+  static var fullPageCount: Int { 11 }
+
+  private static func previewConversationsAppState() -> AppState {
+    let appState = AppState()
+    let now = Date()
+    let previews = [
+      (
+        "Product design review",
+        "We reviewed the desktop Memory experience and agreed to remove the nested navigation, widen the content, and make search behavior consistent.",
+        "✨"
+      ),
+      (
+        "Launch readiness check",
+        "The team covered beta health, release notes, and the final desktop smoke test before the next rollout.",
+        "🚀"
+      ),
+      (
+        "Weekly planning",
+        "Priorities this week are onboarding polish, a cleaner conversation reader, and fewer competing controls in the header.",
+        "🗓"
+      ),
+      (
+        "Customer feedback",
+        "Customers want transcripts to be easier to scan and Memory to feel like one coherent place instead of three separate tools.",
+        "💬"
+      ),
+      (
+        "Engineering sync",
+        "The search services now share the same debounce and cancellation policy while preserving each page's data source.",
+        "🛠"
+      ),
+      (
+        "Design system cleanup",
+        "We aligned search fields, filter pills, radii, and loading states around the existing Omi neutral palette.",
+        "◐"
+      ),
+    ]
+
+    appState.conversations = previews.enumerated().map { index, preview in
+      let createdAt = now.addingTimeInterval(Double(-index * 3_600))
+      return ServerConversation(
+        id: "conversation_preview_\(index)",
+        createdAt: createdAt,
+        startedAt: createdAt,
+        finishedAt: createdAt.addingTimeInterval(2_700),
+        structured: Structured(
+          title: preview.0,
+          overview: preview.1,
+          emoji: preview.2,
+          category: "other",
+          actionItems: [],
+          events: []
+        ),
+        transcriptSegments: [],
+        transcriptSegmentsIncluded: true,
+        geolocation: nil,
+        photos: [],
+        appsResults: [],
+        source: .desktop,
+        language: "en",
+        status: .completed,
+        discarded: false,
+        deleted: false,
+        isLocked: false,
+        starred: index == 0,
+        folderId: nil,
+        inputDeviceName: "MacBook Pro Microphone"
+      )
+    }
+    return appState
+  }
 
   private static func previewChatProvider() -> ChatProvider {
     let provider = ChatProvider()

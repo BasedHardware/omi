@@ -4712,7 +4712,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'কোনো নির্দিষ্ট ডেটা অ্যাক্সেস কনফিগার করা হয়নি।';
 
   @override
-  String get basicPlanDescription => '১,২০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড';
+  String get basicPlanDescription => '৩০০ প্রিমিয়াম মিনিট + ডিভাইসে আনলিমিটেড';
 
   @override
   String get minutes => 'মিনিট';
@@ -6004,7 +6004,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
+      'প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
 
   @override
   String get viewUsage => 'ব্যবহার দেখুন';
@@ -6086,7 +6086,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'প্রতি মাসে ১,২০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
+      'প্রতি মাসে ৩০০ প্রিমিয়াম মিনিট। অন-ডিভাইস ট্যাব আনলিমিটেড ফ্রি ট্রান্সক্রিপশন অফার করে।';
 
   @override
   String get audioProcessedLocally =>
@@ -9777,4 +9777,7 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'ওই মাইক্রোফোনে সংযোগ করা যায়নি। iPhone সেটিংসে এটি সংযুক্ত আছে কিনা নিশ্চিত করুন।';
+
+  @override
+  String get syncStatusTooOld => 'সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না';
 }

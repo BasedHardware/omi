@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
@@ -377,7 +377,11 @@ export function Tasks(): React.JSX.Element {
   }
 
   // Latest values the document keydown handler reads. Kept in a ref so the listener
-  // registers once (no add/remove churn) yet never sees a stale closure.
+  // registers once (no add/remove churn) yet never sees a stale closure. The sync
+  // runs in a *layout* effect: a passive effect is scheduled after the commit, so a
+  // key pressed in the window between "the reloaded rows are on screen" and "the
+  // passive effect ran" would be handled against the previous navOrder — an
+  // arrow/Ctrl+D that silently does nothing right after the list refreshes.
   const kbd = useRef({
     navOrder,
     selectedId: keyboardSelectedTaskId,
@@ -388,7 +392,7 @@ export function Tasks(): React.JSX.Element {
     deleteItem,
     startEdit
   })
-  useEffect(() => {
+  useLayoutEffect(() => {
     kbd.current = {
       navOrder,
       selectedId: keyboardSelectedTaskId,

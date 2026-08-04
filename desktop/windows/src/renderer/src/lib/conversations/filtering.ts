@@ -127,7 +127,7 @@ export function buildConversationQuery(
 export type DateSection = {
   /** Stable React key (the day's local-midnight epoch ms). */
   key: string
-  /** "Today" | "Yesterday" | "Jan 5, 2026". */
+  /** "Today" | "Yesterday" | a locale-formatted date. */
   label: string
   rows: ConversationRow[]
 }

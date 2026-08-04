@@ -35,10 +35,10 @@ MEMORY_MODE=read
 MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23
 # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
 MEMORY_V3_GET_ENABLED=true
-# Request-path CRON stays false; only memory-maintenance-job sets CRON=true.
-MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false   # request-path / GKE
-MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true
-# memory-maintenance-job: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
+# Request-path maintenance stays false; only memory-maintenance-job sets it true.
+MEMORY_CANONICAL_MAINTENANCE_ENABLED=false   # request-path / GKE
+# memory-maintenance-job: MEMORY_CANONICAL_MAINTENANCE_ENABLED=true
+# memory-maintenance-job: cadence is owned by Cloud Scheduler
 ```
 
 Dev dogfood cohort (code `CANONICAL_MEMORY_USERS` + env allowlist):
@@ -46,39 +46,75 @@ Dev dogfood cohort (code `CANONICAL_MEMORY_USERS` + env allowlist):
 - `vi7SA9ckQCe4ccobWNxlbdcNdC23` — david.d.zhang@gmail.com (active)
 - `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` — kodjima33@gmail.com (commented out for this PR; re-enable soon)
 
-Promotion/consolidation maintenance runs from the dedicated hourly `memory-maintenance-job` Cloud Run Job (not request-path backend, not `notifications-job`). That job is part of `backend/deploy/runtime_env.yaml` and is deployed via `.github/workflows/gcp_memory_maintenance_job.yml` (manual) and `.github/workflows/gcp_memory_maintenance_job_auto_dev.yml` (auto on push to `main` for `backend/**`) with the same whitelist-scoped `MEMORY_*` flags plus consolidation secrets (`OPENAI_API_KEY`, Pinecone, Typesense, `SERVICE_ACCOUNT_JSON`).
+Canonical maintenance runs from the dedicated hourly `memory-maintenance-job`
+Cloud Run Job (not request-path backend, not `notifications-job`). The job
+performs required normalization, TTL audit, then one terminal consolidation
+route per pending item; there is no separate promotion pass. That job is part
+of `backend/deploy/runtime_env.yaml` and is deployed via
+`.github/workflows/gcp_memory_maintenance_job.yml` (manual) and
+`.github/workflows/gcp_memory_maintenance_job_auto_dev.yml` (auto on push to
+`main` for `backend/**`) with the same whitelist-scoped `MEMORY_*` flags plus
+consolidation secrets (`OPENAI_API_KEY`, Pinecone, Typesense,
+`SERVICE_ACCOUNT_JSON`).
 
-### Post-merge dogfood checklist (dev only)
+The deploy workflows are deliberately read-only with respect to Cloud
+Scheduler. After updating the Cloud Run Job, they describe
+`memory-maintenance-hourly` and fail the deployment gate unless its full
+resource name and v2 Run Job target match the selected project and
+`us-central1`, the method is `POST`, the schedule is exactly `0 * * * *`, the
+time zone is `Etc/UTC`, the state is `ENABLED`, and an OAuth service account is
+present. A missing trigger therefore cannot produce a green deployment.
 
-1. Confirm auto-dev ran after merge (or dispatch: `gh workflow run "Deploy Memory Maintenance Job to Cloud RUN" -f environment=development -f branch=main`).
-2. Confirm live job env has `MEMORY_MODE=read`, cron/fast-track `true`, and secrets present.
-3. Capture a pre-execution baseline for the active dogfood UID (pending ST count / last watermark fields only — no raw memory content).
-4. Execute once and wait: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev --wait`
-5. Assert watermark / ST→LT movement vs the baseline for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
-6. Create or update Cloud Scheduler to run the job hourly (manual GCP; not IaC in-repo):
+Provision or repair that trigger separately before the first deploy (and only
+with the normal GCP change approval):
 
 ```bash
-# Create (first time) — adjust SA email to the Cloud Run Job runtime identity used in based-hardware-dev
+# Create once. The caller identity must already be authorized to invoke the
+# Cloud Run Job; this command does not grant IAM.
 gcloud scheduler jobs create http memory-maintenance-hourly \
   --location=us-central1 \
   --project=based-hardware-dev \
   --schedule="0 * * * *" \
-  --time-zone=UTC \
-  --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/based-hardware-dev/jobs/memory-maintenance-job:run" \
+  --time-zone=Etc/UTC \
+  --uri="https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/memory-maintenance-job:run" \
   --http-method=POST \
-  --oauth-service-account-email="<JOB_RUNTIME_SA>@based-hardware-dev.iam.gserviceaccount.com"
+  --oauth-service-account-email="<SCHEDULER_INVOKER_SA>@based-hardware-dev.iam.gserviceaccount.com"
 
-# Or update an existing scheduler target to the same URI
+# Or converge every checked field on an existing trigger.
 gcloud scheduler jobs update http memory-maintenance-hourly \
   --location=us-central1 \
   --project=based-hardware-dev \
-  --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/based-hardware-dev/jobs/memory-maintenance-job:run"
+  --schedule="0 * * * *" \
+  --time-zone=Etc/UTC \
+  --uri="https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/memory-maintenance-job:run" \
+  --http-method=POST \
+  --oauth-service-account-email="<SCHEDULER_INVOKER_SA>@based-hardware-dev.iam.gserviceaccount.com"
+gcloud scheduler jobs resume memory-maintenance-hourly \
+  --location=us-central1 \
+  --project=based-hardware-dev
 ```
+
+### Post-merge dogfood checklist (dev only)
+
+1. Confirm auto-dev ran after merge (or dispatch: `gh workflow run "Deploy Memory Maintenance Job to Cloud RUN" -f environment=development -f branch=main`).
+2. Confirm live job env has `MEMORY_MODE=read`,
+   `MEMORY_CANONICAL_MAINTENANCE_ENABLED=true`,
+   and secrets present. Confirm the workflow's post-deploy Scheduler validation
+   passed.
+3. Capture a pre-execution baseline for the active dogfood UID (pending ST count / last watermark fields only — no raw memory content).
+4. Execute once and wait: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev --wait`
+5. Assert watermark / ST→LT movement vs the baseline for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
+6. Confirm a later `memory-maintenance-hourly` execution completed successfully;
+   do not treat the deploy-time configuration check as proof of invocation IAM
+   or job execution.
 
 Do **not** dispatch `notifications-job` for memory maintenance.
 Its independent deploy workflow explicitly removes only stale canonical-maintenance and Typesense bindings left by historical revisions. It merges the declared notification/X-sync config so unrelated live dependencies are not globally overwritten.
 
-This is dev-only. Production remains `MEMORY_MODE=off`, `MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and promotion cron/fast-track disabled on `memory-maintenance-job`. Non-whitelisted users stay on legacy memory with Desktop lifecycle UI fail-closed.
+This is dev-only. Production remains `MEMORY_MODE=off`,
+`MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and canonical
+maintenance disabled on `memory-maintenance-job`. Non-whitelisted users stay
+on legacy memory with Desktop lifecycle UI fail-closed.
 
 ## First-user projection operator
 
@@ -253,9 +289,8 @@ Use one valid baseline and mutate one prerequisite at a time.
 
 | Case | Required result |
 |---|---|
-| Feature variable absent, false, or non-exact | Canonical memory path not selected; zero canonical-memory adapter calls; existing legacy/off contract unchanged. |
-| `MEMORY_MODE` not exactly `read` | Canonical memory path not selected; zero canonical-memory adapter calls. |
-| Authenticated UID not allowlisted | Canonical memory path not selected; no canonical-memory Firestore calls. |
+| Readiness declarations absent, false, non-exact, or inconsistent | Evidence invalid and deploy validation fails; request behavior is still determined by code entitlement plus persisted control state. |
+| Authenticated UID absent from `CANONICAL_MEMORY_USERS` | Canonical memory path not selected; no canonical-memory Firestore calls. |
 | Valid allowlisted user | Exact synthetic memories, ordering, pagination, generation, and headers expected by API contract. |
 | Client UID/query/body/mode/header spoof | No effect on authenticated UID or route selection. |
 | User A attempts to reference user B | No B data returned through query, header, path, or cursor. |

@@ -154,6 +154,29 @@ def format_changes(changes: list[str], output_format: str) -> str:
 
 
 def consolidate(version: str, release_date: str, *, write: bool) -> dict[str, object]:
+    """Fold unreleased fragments into releases/<version>.json.
+
+    If that version file already exists and there are no unreleased fragments,
+    leave it untouched. Retries after a partial tag-release must not clobber a
+    previously consolidated 0.12.N entry with the generic fallback string.
+    """
+
+    release_path = RELEASES_DIR / f"{version}.json"
+    fragments = unreleased_fragment_paths()
+    if release_path.is_file() and not fragments:
+        existing = read_json(release_path)
+        if not isinstance(existing, dict):
+            raise ChangelogError(f"{release_path} must contain a JSON object")
+        normalized = {
+            "version": str(existing.get("version", version)).strip() or version,
+            "date": str(existing.get("date", release_date)).strip() or release_date,
+            "changes": normalize_changes(existing.get("changes", []), release_path),
+        }
+        if write:
+            # Keep legacy CHANGELOG.json aligned without rewriting the release file.
+            write_json(LEGACY_CHANGELOG_PATH, legacy_changelog())
+        return normalized
+
     changes = unreleased_changes() or ["Bug fixes and improvements"]
     release = {
         "version": version,
@@ -162,8 +185,8 @@ def consolidate(version: str, release_date: str, *, write: bool) -> dict[str, ob
     }
 
     if write:
-        write_json(RELEASES_DIR / f"{version}.json", release)
-        for path in unreleased_fragment_paths():
+        write_json(release_path, release)
+        for path in fragments:
             path.unlink()
         write_json(LEGACY_CHANGELOG_PATH, legacy_changelog())
 

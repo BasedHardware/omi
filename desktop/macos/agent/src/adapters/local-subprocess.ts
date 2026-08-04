@@ -491,7 +491,14 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
           input: recordValue(event.input),
         };
       case "tool_activity": {
-        const status = event.status === "completed" || event.status === "failed" ? event.status : "started";
+        const status =
+          event.status === "progress"
+          || event.status === "completed"
+          || event.status === "failed"
+          || event.status === "cancelled"
+          || event.status === "interrupted"
+            ? event.status
+            : "started";
         return {
           type: "tool_activity",
           name: stringValue(event.name),

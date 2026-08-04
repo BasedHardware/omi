@@ -53,6 +53,7 @@ from utils.memory.memory_service import (
     resolve_external_memory_write_context,
 )
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
@@ -60,13 +61,21 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.memory.surface_routing import pin_memory_system
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_person,
+    clean_screen_activity_row,
+    end_of_day_utc,
+    parse_date_only_utc,
+)
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_denied_read_payload,
     mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
@@ -765,11 +774,17 @@ def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
 
 
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
-    """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
+    """Parse a yyyy-mm-dd MCP argument into a UTC-anchored datetime, or None when absent.
+
+    Data stores (Firestore conversation ``created_at``/action-item ``due_at``, the vector
+    index, screen-activity timestamps) all operate in UTC. A naive parse would be
+    interpreted in the server's local timezone and shift the filter window by the UTC
+    offset, so anchor to UTC midnight (matching the integration-router convention).
+    """
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%d")
+        return parse_date_only_utc(value)
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
@@ -831,7 +846,7 @@ def execute_tool(
             filtered = collect_filtered_memories(
                 lambda batch_offset, batch_limit: [
                     m.model_dump(mode='json')
-                    for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+                    for m in MemoryService(db_client=db).read_pinned(user_id, memory_system, batch_limit, batch_offset)
                 ],
                 limit=limit,
                 offset=offset,
@@ -864,6 +879,9 @@ def execute_tool(
         if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": memory_list_results.memories}
         if not mcp_legacy_read_authorized(memory_list_results):
+            denied = mcp_denied_read_payload(memory_list_results)
+            if denied is not None:
+                raise ToolExecutionError(str(denied), code=-32009)
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -924,6 +942,13 @@ def execute_tool(
             )
         except HTTPException as exc:
             _raise_tool_error_from_http(exc)
+
+        capture_memory_write(
+            principal_id=user_id,
+            source="mcp_tool_memory_create",
+            session_id=memory_db.id,
+            memories=[memory_db],
+        )
 
         exposure = (
             MemoryApiExposure.CANONICAL
@@ -996,20 +1021,11 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
 
         # Parse dates
-        start_dt = None
-        end_dt = None
-        if start_date:
-            try:
-                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        if end_dt is not None:
+            # Include the entire end day, matching the integration-router convention.
+            end_dt = end_of_day_utc(end_dt)
 
         # Validate categories
         valid_categories: List[str] = []
@@ -1092,6 +1108,9 @@ def execute_tool(
         if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
             return {"memories": vector_search_results.memories}
         if not mcp_legacy_read_authorized(vector_search_results):
+            denied = mcp_denied_read_payload(vector_search_results)
+            if denied is not None:
+                raise ToolExecutionError(str(denied), code=-32009)
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
@@ -1130,21 +1149,14 @@ def execute_tool(
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
 
-        # Parse dates to epoch for vector search
-        starts_at = None
-        ends_at = None
-        if start_date:
-            try:
-                starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        # Parse dates to epoch for vector search (UTC-anchored so the filter matches the
+        # vector index's UTC epoch created_at; end bound includes the full end day).
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        starts_at = int(start_dt.timestamp()) if start_dt is not None else None
+        if end_dt is not None:
+            end_dt = end_of_day_utc(end_dt)
+        ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
         conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
         if not conversation_ids:
@@ -1223,6 +1235,9 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
         due_start = _parse_mcp_date(arguments.get("due_start_date"), "due_start_date")
         due_end = _parse_mcp_date(arguments.get("due_end_date"), "due_end_date")
+        if due_end is not None:
+            # Include the entire end day, matching the integration-router convention.
+            due_end = end_of_day_utc(due_end)
         items = action_items_db.get_action_items(
             user_id,
             completed=completed,
@@ -1323,6 +1338,12 @@ def execute_tool(
     elif tool_name == "get_screen_activity":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
         end = _parse_mcp_date(arguments.get("end_date"), "end_date")
+        if end is not None:
+            # Include the entire end day, matching the integration-router
+            # convention. The DB layer formats the bound via strftime, so the
+            # end-of-day increment must be applied here (the parsed midnight
+            # would otherwise match only up to 00:00:00.999 of the end day).
+            end = end_of_day_utc(end)
         app = arguments.get("app")
         try:
             summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)

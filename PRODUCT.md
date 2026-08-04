@@ -23,6 +23,25 @@ landing PRs that change product behavior. Engineering standards live in
 5. **Taste floor.** Stay on-brand. Prefer deleting dual paths over
    feature-flagging them forever.
 
+## Proposed canonical memory lifecycle
+
+The enforceable design note is
+[`INV-MEM-4`](docs/product/invariants/memory-promotion-authority.md). It remains
+`proposed` for the required seven-day unchanged period.
+
+All new memory intake starts as broad Short-term capture. Maintenance gives
+each pending item exactly one consolidation route: promote, archive, review, or
+reject. Promotion is the only route into Long-term, and it is admitted only
+when one atomic ledger transaction records the server-authored promotion
+receipt and the memory's structured graph assertion. There is no direct,
+generic, or fast-track promotion path.
+
+Default retrieval includes eligible Short-term and Long-term memory, collapsed
+by canonical lineage so one logical memory appears once. Search/vector and
+compatibility projections are derived views: their updates are committed to
+the outbox with canonical state and retried from authoritative memory, never
+treated as memory authority themselves.
+
 ## Before you build
 
 - Large or ambiguous features start as a GitHub issue

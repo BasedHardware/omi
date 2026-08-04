@@ -2993,6 +2993,7 @@
     "syncStatusWaiting": "Menunggu untuk segerak",
     "syncStatusRetrying": "Gagal diproses — mencuba semula",
     "syncStatusFailed": "Gagal — ketik Cuba Lagi",
+    "syncStatusTooOld": "Terlalu lama untuk disegerakkan — Omi tidak boleh menerimanya",
     "syncStatusFileUnavailable": "Fail tidak tersedia",
     "syncStatusUploaded": "Dimuat naik · diproses di Omi",
     "noRecordingsYet": "Belum ada rakaman",

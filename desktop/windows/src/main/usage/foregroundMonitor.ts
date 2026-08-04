@@ -43,10 +43,14 @@ export function pruneUsageNow(): void {
   }
 }
 
+function supportsForegroundMonitor(): boolean {
+  return process.platform === 'win32' || process.platform === 'linux'
+}
+
 export function startForegroundMonitor(): void {
   if (pollTimer) return
   if (!getUsageSettings().enabled) return
-  if (process.platform !== 'win32') return
+  if (!supportsForegroundMonitor()) return
   // Bound the table: drop apps not foregrounded within the retention window.
   pruneUsageNow()
   accumulator = new UsageAccumulator(MAX_GAP_MS)

@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from utils.executors import db_executor, postprocess_executor
+from utils.mcp_data import date_only_to_utc_epoch
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -30,6 +31,7 @@ from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from dependencies import (
@@ -55,6 +57,7 @@ import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     list_default_mcp_memories,
+    mcp_denied_read_payload,
     mcp_legacy_read_authorized,
     parse_mcp_bool,
     parse_mcp_datetime,
@@ -137,6 +140,12 @@ def create_memory(
         consumer='mcp',
         operation="mcp_memory_create",
         require_canonical_promotion=True,
+    )
+    capture_memory_write(
+        principal_id=uid,
+        source="mcp_memory_create",
+        session_id=memory_db.id,
+        memories=[memory_db],
     )
     postprocess_executor.submit(update_personas_async, uid)
     return memory_db
@@ -301,6 +310,9 @@ def search_memories(
     if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return vector_search_results.memories
     if not mcp_legacy_read_authorized(vector_search_results):
+        denied = mcp_denied_read_payload(vector_search_results)
+        if denied is not None:
+            raise HTTPException(status_code=403, detail=denied)
         return []
 
     return memory_service.search_mcp(uid, query, limit=limit)
@@ -364,7 +376,7 @@ def get_memories(
         filtered = collect_filtered_memories(
             lambda batch_offset, batch_limit: [
                 m.model_dump(mode='json')
-                for m in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+                for m in MemoryService(db_client=db).read_pinned(uid, memory_system, batch_limit, batch_offset)
             ],
             limit=limit,
             offset=offset,
@@ -397,6 +409,9 @@ def get_memories(
     if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
         return memory_list_results.memories
     if not mcp_legacy_read_authorized(memory_list_results):
+        denied = mcp_denied_read_payload(memory_list_results)
+        if denied is not None:
+            raise HTTPException(status_code=403, detail=denied)
         return []
 
     result = collect_filtered_memories(
@@ -516,14 +531,14 @@ def search_conversations(
     ends_at = None
     if start_date:
         try:
-            starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+            starts_at = int(date_only_to_utc_epoch(start_date))
         except ValueError:
             raise HTTPException(
                 status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
             )
     if end_date:
         try:
-            ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
+            ends_at = int(date_only_to_utc_epoch(end_date, end_of_day=True))
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
 

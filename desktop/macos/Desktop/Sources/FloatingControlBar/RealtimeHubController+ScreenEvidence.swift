@@ -429,6 +429,11 @@ extension RealtimeHubController {
       "stale_event_count": "\(coordinator.model.staleEventCount)",
       "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
       "pending_tool_count": "\(turn?.pendingToolCallIDs.count ?? 0)",
+      // Live animation inputs — lets automation assert the notch waveform /
+      // speaking pulse actually receive audio levels during a real turn.
+      "live_mic_level": String(format: "%.4f", AudioLevelMonitor.shared.liveMicrophoneLevel),
+      "live_voice_playback_level": String(
+        format: "%.4f", AudioLevelMonitor.shared.liveVoicePlaybackLevel),
       "post_tool_continuation_required": turn?.postToolContinuationRequired == true ? "true" : "false",
       "provider_finished": turn?.providerFinished == true ? "true" : "false",
     ]

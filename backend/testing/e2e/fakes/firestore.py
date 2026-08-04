@@ -6,7 +6,6 @@ the same API surface as google.cloud.firestore — collections,
 subcollections, where filters, batch operations, get_all, etc.
 """
 
-import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Optional
@@ -18,6 +17,7 @@ from fake_firestore.document import FakeDocumentReference, NotFound, apply_trans
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
 _original_document_set = None
+_original_document_delete = None
 _delete_field_noop_patched = False
 
 
@@ -80,6 +80,23 @@ def _patch_delete_field_missing_key_noop():
     _delete_field_noop_patched = True
 
 
+def _patch_document_delete_missing_doc_noop():
+    """Match Firestore: deleting a document that does not exist succeeds."""
+    global _original_document_delete
+    if _original_document_delete is not None:
+        return
+
+    _original_document_delete = FakeDocumentReference.delete
+
+    def _delete(self, timeout: Optional[float] = None) -> None:
+        try:
+            _original_document_delete(self, timeout=timeout)
+        except KeyError:
+            self._written_docs.discard(tuple(self._path))
+
+    FakeDocumentReference.delete = _delete
+
+
 def get_mock_firestore() -> MockFirestore:
     """Return the shared MockFirestore instance. Raises if not initialized."""
     if _mock_store is None:
@@ -92,6 +109,7 @@ def setup_fake_firestore() -> MockFirestore:
     global _mock_store
     _patch_document_merge_preserves_subcollections()
     _patch_delete_field_missing_key_noop()
+    _patch_document_delete_missing_doc_noop()
     _mock_store = MockFirestore()
     return _mock_store
 

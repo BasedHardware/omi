@@ -1,3 +1,4 @@
+import AppKit
 import FirebaseAuth
 import FirebaseCore
 import OmiSupport
@@ -368,7 +369,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
-    NotificationRegistrationRepair.repairOnceForCurrentVersion(reason: "startup_version_registration")
+    // Notification registration repair is deliberately user-triggered from
+    // Settings. Launch must not restart usernoted/NotificationCenter or alter
+    // notification registration as a passive side effect.
 
     // Initialize Sparkle auto-updater early so the 10-minute check timer starts at launch
     // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"
@@ -506,6 +509,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
 
+    // Route completed background-agent results into live voice sessions.
+    AgentCompletionVoiceDelivery.shared.start()
+
     scheduleAppLifecycleMaintenance()
 
     // Identify user if already signed in
@@ -532,9 +538,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       Task {
         await TierManager.shared.checkTierIfNeeded()
       }
-
-      // Report comprehensive settings state (at most once per day)
-      AnalyticsManager.shared.reportAllSettingsIfNeeded()
 
       // File indexing now runs through FileIndexingView UI (user consent required)
       // No background scan — prevents race condition where scan finishes before UI listens
@@ -821,13 +824,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           icon.isTemplate = true
           button.image = icon
         }
-      } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_menu_bar_icon", withExtension: "png"),
-        let icon = NSImage(contentsOf: iconURL)
-      {
-        icon.isTemplate = true
-        icon.size = NSSize(width: 18, height: 18)
-        button.image = icon
+      } else {
+        button.image = omiMenuBarIcon()
       }
     }
     // Safety net: verify again after a short delay
@@ -889,22 +887,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           button.image = icon
           log("AppDelegate: [MENUBAR] Rewind icon set successfully")
         }
-      } else if let iconURL = Bundle.resourceBundle.url(
-        forResource: "omi_menu_bar_icon", withExtension: "png"),
-        let icon = NSImage(contentsOf: iconURL)
-      {
-        icon.isTemplate = true
-        icon.size = NSSize(width: 18, height: 18)
-        button.image = icon
-        button.imagePosition = .imageOnly
-        log("AppDelegate: [MENUBAR] Omi circle logo set successfully (size: \(icon.size))")
       } else {
-        // Fallback to SF Symbol
-        if let icon = NSImage(systemSymbolName: "waveform", accessibilityDescription: "omi") {
-          icon.isTemplate = true
-          button.image = icon
-        }
-        log("AppDelegate: [MENUBAR] WARNING - Failed to load omi_menu_bar_icon, using fallback")
+        button.image = omiMenuBarIcon()
+        button.imagePosition = .imageOnly
+        log("AppDelegate: [MENUBAR] Omi brand mark set successfully")
       }
       button.toolTip = OMIApp.launchMode == .rewind ? "omi Rewind" : displayName
     } else {
@@ -1008,6 +994,46 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     } else {
       log("AppDelegate: [MENUBAR] VERIFY - WARNING: button is nil after setup!")
     }
+  }
+
+  /// Use the packaged menu asset when available, then the shared eight-dot
+  /// mark, then the application's own branded icon. These are identity
+  /// fallbacks; waveform remains reserved for active listening UI only.
+  @MainActor private func omiMenuBarIcon() -> NSImage {
+    let icon =
+      OmiBrandMarkAsset.templateImage(named: "omi_menu_bar_icon")
+      ?? OmiBrandMarkAsset.templateImage()
+      ?? NSApp.applicationIconImage
+      ?? generatedOmiMenuBarFallback()
+    icon.isTemplate = true
+    icon.size = NSSize(width: 18, height: 18)
+    return icon
+  }
+
+  @MainActor private func generatedOmiMenuBarFallback() -> NSImage {
+    let iconSize = NSSize(width: 18, height: 18)
+    let image = NSImage(size: iconSize)
+    image.lockFocus()
+    NSColor.black.setFill()
+    let dotDiameter: CGFloat = 4.2
+    let orbitRadius: CGFloat = 5.6
+    for index in 0..<8 {
+      let angle = CGFloat(index) * .pi / 4 - .pi / 2
+      let center = NSPoint(
+        x: iconSize.width / 2 + cos(angle) * orbitRadius,
+        y: iconSize.height / 2 + sin(angle) * orbitRadius
+      )
+      NSBezierPath(
+        ovalIn: NSRect(
+          x: center.x - dotDiameter / 2,
+          y: center.y - dotDiameter / 2,
+          width: dotDiameter,
+          height: dotDiameter
+        )
+      ).fill()
+    }
+    image.unlockFocus()
+    return image
   }
 
   @MainActor @objc private func openOmiFromMenu() {
@@ -1164,35 +1190,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       action: enabled ? "screen_capture_on" : "screen_capture_off")
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
-    if enabled {
-      // Paywall gate: trial expired / usage limit hit. Refuse to enable,
-      // revert the toggle, and surface the same upgrade popup as everywhere else.
-      if AppState.isPaywalledEffective {
-        sender.state = .off
-        NotificationCenter.default.post(
-          name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
-        return
-      }
-      if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
-        // No permission — revert toggle, register + open preferences (PERM-02)
-        sender.state = .off
-        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
-        return
-      }
-      AssistantSettings.shared.screenAnalysisEnabled = true
-      ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
-        DispatchQueue.main.async {
-          if !success {
-            log("AppDelegate: [MENUBAR] Screen capture failed to start: \(error ?? "unknown")")
-            sender.state = .off
-            AssistantSettings.shared.screenAnalysisEnabled = false
-          }
-        }
-      }
-    } else {
-      AssistantSettings.shared.screenAnalysisEnabled = false
-      ProactiveAssistantsPlugin.shared.stopMonitoring()
+    // Paywall gate, permission gate, and start/rollback all live in
+    // SystemCaptureControls so the notch cluster cannot drift from this menu.
+    let outcome = SystemCaptureControls.setScreenCapture(enabled) { started in
+      if !started { sender.state = .off }
     }
+    sender.state = outcome.resultingIsOn ? .on : .off
   }
 
   @MainActor @objc private func audioRecordingToggled(_ sender: NSSwitch) {
@@ -1202,22 +1205,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       action: enabled ? "audio_recording_on" : "audio_recording_off")
     AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
 
-    // Paywall gate: trial expired / usage limit hit. Refuse to enable,
-    // revert the toggle, and surface the same upgrade popup as everywhere else.
-    if enabled && AppState.isPaywalledEffective {
-      sender.state = .off
-      NotificationCenter.default.post(
-        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
-      return
-    }
-
-    AssistantSettings.shared.transcriptionEnabled = enabled
-    // Request the main view to start/stop transcription (needs AppState)
-    NotificationCenter.default.post(
-      name: .toggleTranscriptionRequested,
-      object: nil,
-      userInfo: ["enabled": enabled]
-    )
+    let outcome = SystemCaptureControls.setAudioRecording(enabled)
+    sender.state = outcome.resultingIsOn ? .on : .off
   }
 
   // MARK: - NSMenuDelegate

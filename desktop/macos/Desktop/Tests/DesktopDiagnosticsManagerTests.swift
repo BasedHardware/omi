@@ -17,6 +17,50 @@ import XCTest
       super.tearDown()
     }
 
+    func testStateAuthorityDedupePreservesObservationAndResultDistinctions() {
+      let diagnostics = DesktopDiagnosticsManager.shared
+
+      XCTAssertTrue(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_or_derived",
+          to: "connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+      XCTAssertFalse(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_or_derived",
+          to: "connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+      XCTAssertTrue(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_after_check_failed",
+          to: "connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+      XCTAssertTrue(
+        diagnostics.recordStateAuthoritySignal(
+          seam: .connectorStatus,
+          from: "cached_or_derived",
+          to: "not_connected",
+          direction: "cloud_grant_status_inferred",
+          subject: "chatgpt"))
+
+      let signals = diagnostics.currentSnapshotsForSentry().filter {
+        $0["seam"] as? String == DesktopStateAuthoritySeam.connectorStatus.rawValue
+      }
+      XCTAssertEqual(signals.count, 3)
+      XCTAssertEqual(
+        Set(signals.compactMap { $0["from"] as? String }),
+        ["cached_or_derived", "cached_after_check_failed"])
+      XCTAssertEqual(
+        Set(signals.compactMap { $0["to"] as? String }),
+        ["connected", "not_connected"])
+    }
+
     func testDiagnosticsAttachmentUsesSafeOperationalFields() throws {
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
         source: "hub",
@@ -95,6 +139,37 @@ import XCTest
       XCTAssertFalse(json.contains("customer-specific private detail"))
       XCTAssertTrue(tail.contains("PTT capture started"))
       XCTAssertTrue(tail.contains("silent capture detected"))
+    }
+
+    func testBetaTrailPreservesBoundedFailureDiagnosticsForTransientStorageErrors() throws {
+      let context = StorageFailureDiagnostics.context(
+        pathClass: "rewind-db",
+        containingURL: FileManager.default.temporaryDirectory,
+        databaseURL: nil,
+        error: NSError(domain: NSPOSIXErrorDomain, code: 28),
+        appIsTerminating: false)
+
+      DesktopDiagnosticsManager.shared.recordBetaLogError(
+        message: "Rewind database write failed",
+        error: NSError(domain: NSPOSIXErrorDomain, code: 28),
+        failureDiagnostics: context.values,
+        enabled: true)
+
+      let url = try XCTUnwrap(
+        DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
+          area: "capture",
+          failureClass: "storage_exhausted",
+          phase: "persist",
+          includeBetaDiagnostics: true))
+      defer { try? FileManager.default.removeItem(at: url) }
+
+      let data = try Data(contentsOf: url)
+      let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+      let trail = try XCTUnwrap(
+        snapshots.first(where: { $0["event"] as? String == "beta_diagnostic_trail" }))
+      XCTAssertEqual(trail["path_class"] as? String, "rewind-db")
+      XCTAssertEqual(trail["error_code"] as? Int, 28)
     }
 
     func testBetaTrailIncludesTypedErrorContextWithoutRawMessage() throws {
@@ -626,8 +701,10 @@ import XCTest
     }
 
     func testFallbackNamedAreasAreNotCollapsedToOther() throws {
-      for area in ["screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow", "auth_storage"]
-      {
+      for area in [
+        "screen_capture", "memory_scope", "desktop_update", "tts_fallback", "task_workflow",
+        "auth_storage", "ptt_input_routing",
+      ] {
         DesktopDiagnosticsManager.shared.resetForTests()
         DesktopDiagnosticsManager.shared.recordFallback(
           area: area, from: "a", to: "b", reason: "capability_mismatch", outcome: .degraded)

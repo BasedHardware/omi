@@ -150,6 +150,8 @@ export type ExternalSurfaceAuthorityErrorCode =
   | "permission_route_rejected"
   | "permission_request_not_authorized"
   | "pill_management_intent_required"
+  | "memory_save_not_authorized"
+  | "memory_content_not_in_user_request"
   | "sql_write_rejected";
 
 export class ExternalSurfaceAuthorityError extends Error {
@@ -373,6 +375,12 @@ export interface SpawnBackgroundAgentInput {
   maxAttempts?: number;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
+  /**
+   * Restricts the child to the intersection of these canonical Omi tool
+   * names with its role/adapter-computed tool set. Empty intersection =
+   * no tools (fail closed).
+   */
+  toolPolicy?: { allowedToolNames: string[] };
   /** Kernel-admitted producer snapshot for trusted top-level surface spawns. */
   admittedContextSnapshot?: ContextSnapshotProjection;
   authoritySignal?: AbortSignal;
@@ -408,6 +416,12 @@ export interface DelegateAgentInput {
   maxAttempts?: number;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
   metadata?: Record<string, unknown>;
+  /**
+   * Restricts the child to the intersection of these canonical Omi tool
+   * names with its role/adapter-computed tool set. Empty intersection =
+   * no tools (fail closed).
+   */
+  toolPolicy?: { allowedToolNames: string[] };
   authoritySignal?: AbortSignal;
 }
 

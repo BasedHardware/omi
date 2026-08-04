@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=automation-token-path.sh
+source "$ROOT/scripts/automation-token-path.sh"
 APP_NAME="${OMI_APP_NAME:?Set OMI_APP_NAME to the running named bundle (omi-*)}"
 case "$APP_NAME" in
   omi-*) ;;
@@ -20,7 +22,8 @@ ctl() {
 
 capture_window() {
   local output="$1"
-  local token_file="${OMI_AUTOMATION_TOKEN_FILE:-${TMPDIR:-/tmp}/omi-automation-${OMI_AUTOMATION_PORT:-47777}.token}"
+  local token_file
+  token_file="$(omi_automation_token_file "${OMI_AUTOMATION_PORT:-47777}")"
   local token="${OMI_AUTOMATION_TOKEN:-}"
   [ -n "$token" ] || token="$(tr -d '\r\n' < "$token_file")"
   local body

@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from html import escape
 from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
 
@@ -20,7 +21,7 @@ from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
 from utils.llm.usage_tracker import track_usage, Features
-from utils.llm.temporal import date_in_tz
+from utils.llm.temporal import MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS, date_in_tz, normalize_extracted_dates
 
 from .clients import get_llm
 import logging
@@ -480,7 +481,7 @@ def get_user_timezone(uid: str) -> str:
         return "UTC"
 
 
-def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
+def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Optional[str] = None) -> str:
     """Build the current-datetime block injected into the user turn.
 
     Kept out of the cached system prefix so the cached bytes stay stable across requests
@@ -497,10 +498,12 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
         tz = "UTC"
     current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
     current_datetime_iso = current_datetime_user.isoformat()
+    location_line = f"Current city-level location: {escape(location, quote=False)}\n" if location else ""
     return (
         "<current_datetime>\n"
         f"Current date time in {tz}: {current_datetime_str}\n"
         f"Current date time ISO format: {current_datetime_iso}\n"
+        f"{location_line}"
         "</current_datetime>"
     )
 
@@ -1189,6 +1192,7 @@ def retrieve_metadata_fields_from_transcript(
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     full_context = "\n\n".join(context_parts)
+    today = date_in_tz(created_at, tz)
 
     # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
@@ -1198,12 +1202,12 @@ def retrieve_metadata_fields_from_transcript(
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
-    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
+    For context when extracting dates, today is {today} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
     If one says "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Do not include dates more than {MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS} days after {today}.
 
     Content:
     ```
@@ -1224,17 +1228,8 @@ def retrieve_metadata_fields_from_transcript(
         people=[normalize_filter(p) for p in result.people],
         topics=[normalize_filter(t) for t in result.topics],
         entities=[normalize_filter(e) for e in result.entities],
-        dates=[],
+        dates=normalize_extracted_dates(result.dates, today),
     ).to_vector_metadata()
-    # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
-    for date in result.dates:
-        try:
-            date = datetime.strptime(date, '%Y-%m-%d')
-            # if date.year > 2025:
-            #    continue
-            metadata['dates'].append(date.strftime('%Y-%m-%d'))
-        except Exception as e:
-            logger.error(f'Error parsing date: {e}')
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)
@@ -1253,6 +1248,7 @@ def retrieve_metadata_from_message(
 ) -> dict[str, Any]:
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
+    today = date_in_tz(created_at, tz)
 
     prompt = f'''
     You will be given the content of a message or conversation {source_context}.
@@ -1265,13 +1261,13 @@ def retrieve_metadata_from_message(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {today} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the message mentions "today", it means the current day.
     If the message mentions "tomorrow", it means the next day after today.
     If the message mentions "yesterday", it means the day before today.
     If the message mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Do not include dates more than {MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS} days after {today}.
 
     Message Content:
     ```
@@ -1279,7 +1275,7 @@ def retrieve_metadata_from_message(
     ```
     '''.replace('    ', '')
 
-    return _process_extracted_metadata(uid, prompt)
+    return _process_extracted_metadata(uid, prompt, today)
 
 
 def retrieve_metadata_from_text(
@@ -1287,6 +1283,7 @@ def retrieve_metadata_from_text(
 ) -> dict[str, Any]:
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
+    today = date_in_tz(created_at, tz)
 
     prompt = f'''
     You will be given the content of a text {source_context}.
@@ -1299,13 +1296,13 @@ def retrieve_metadata_from_text(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {date_in_tz(created_at, tz)} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {today} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the text mentions "today", it means the current day.
     If the text mentions "tomorrow", it means the next day after today.
     If the text mentions "yesterday", it means the day before today.
     If the text mentions "next week", it means the next monday.
-    Do not include dates greater than 2025.
+    Do not include dates more than {MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS} days after {today}.
 
     Text Content:
     ```
@@ -1313,10 +1310,10 @@ def retrieve_metadata_from_text(
     ```
     '''.replace('    ', '')
 
-    return _process_extracted_metadata(uid, prompt)
+    return _process_extracted_metadata(uid, prompt, today)
 
 
-def _process_extracted_metadata(uid: str, prompt: str) -> dict[str, Any]:
+def _process_extracted_metadata(uid: str, prompt: str, reference_date: str) -> dict[str, Any]:
     """Process the extracted metadata from any source"""
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
@@ -1332,17 +1329,8 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict[str, Any]:
         people=[normalize_filter(p) for p in result.people],
         topics=[normalize_filter(t) for t in result.topics],
         entities=[normalize_filter(e) for e in result.entities],
-        dates=[],
+        dates=normalize_extracted_dates(result.dates, reference_date),
     ).to_vector_metadata()
-
-    for date in result.dates:
-        try:
-            date = datetime.strptime(date, '%Y-%m-%d')
-            if date.year > 2025:
-                continue
-            metadata['dates'].append(date.strftime('%Y-%m-%d'))
-        except Exception as e:
-            logger.error(f'Error parsing date: {e}')
 
     for p in metadata['people']:
         add_filter_category_item(uid, 'people', p)

@@ -5,8 +5,10 @@ description: Typed wrap of memory_log_import_probe connector import seam
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingImportEvidenceService.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingMemoryLogImportService.swift
   - desktop/macos/Desktop/Sources/PipeProcessRunner.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
 preconditions:
   - automation_bridge_ready
 

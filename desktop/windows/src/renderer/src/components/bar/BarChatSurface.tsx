@@ -7,6 +7,7 @@
 // window.omiBar.sendChat). This component owns NO chat engine.
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { ChatMessages } from '../chat/ChatMessages'
+import { useLiveEdgeFollow } from '../../hooks/useLiveEdgeFollow'
 import { displayLabel, displayTintToken, isFinished, type AgentPill } from './agentPills'
 import { pillChipClasses } from './agentPillTranscript'
 import type { BarChatState } from '../../../../shared/types'
@@ -278,7 +279,6 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
-  const followRef = useRef(true)
   // Monotonic submit id — a refused send may only restore its text if it is still
   // the last thing the user asked (see submit()).
   const submitSeq = useRef(0)
@@ -313,33 +313,13 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   }, [props.draft, view])
 
   // Keep the list pinned to the live edge while streaming, but disengage when the
-  // reader scrolls up (re-engage on returning to the bottom).
+  // reader scrolls up (re-engage on returning to the bottom). Re-runs on
+  // `hasHistory` because the scroller only mounts once the thread has messages.
   const hasHistory = chat.messages.length > 0
-  useEffect(() => {
-    if (view !== 'conversation') return
-    const el = scrollRef.current
-    const content = messagesRef.current
-    if (!el || !content) return
-    const pin = (): void => {
-      if (followRef.current) el.scrollTop = el.scrollHeight
-    }
-    pin()
-    const ro = new ResizeObserver(pin)
-    ro.observe(content)
-    const onWheel = (e: WheelEvent): void => {
-      if (e.deltaY < 0 && el.scrollHeight > el.clientHeight + 8) followRef.current = false
-    }
-    const onScroll = (): void => {
-      if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) followRef.current = true
-    }
-    el.addEventListener('wheel', onWheel, { passive: true })
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      ro.disconnect()
-      el.removeEventListener('wheel', onWheel)
-      el.removeEventListener('scroll', onScroll)
-    }
-  }, [hasHistory, view])
+  const { resumeFollow } = useLiveEdgeFollow(scrollRef, messagesRef, {
+    enabled: view === 'conversation',
+    resetKey: hasHistory
+  })
 
   // The single send path. Whether it navigates is DERIVED from the view: a hub
   // send (view 'list') opens the conversation — the ONLY moment the surface
@@ -353,7 +333,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
     const text = p.draft.trim()
     if (!text) return
     p.setDraft('')
-    followRef.current = true
+    resumeFollow()
     // Flip to the conversation BEFORE awaiting the send so the reply streams into
     // the response state (always the shared Omi thread). A send refused by the
     // usage limit still lands here and surfaces its notice + restored text inline,
@@ -375,7 +355,7 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
       if (!notice || seq !== submitSeq.current) return
       p.setDraft((current) => (current.trim() ? current : text))
     })
-  }, [])
+  }, [resumeFollow])
 
   // Textarea key handling, one stable handler per surface flavor. Both let PTT
   // claim Space first (hold-to-talk while focused) and send on Enter. The hub

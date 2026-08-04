@@ -16,6 +16,7 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.memory.chat_memory_adapter import (
+    chat_legacy_read_authorized,
     list_default_chat_memories_decision_text,
     search_memory_default_chat_memories_vector_decision_text,
 )
@@ -81,7 +82,7 @@ def get_memories_text(
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("get_memories_text - using memory default chat memory list results")
         return default_memories.text or "No memory default memories found."
-    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not chat_legacy_read_authorized(default_memories):
         logger.info(
             "get_memories_text - memory default memory list denied without legacy fallback: "
             f"{default_memories.fallback_reason}"
@@ -170,7 +171,7 @@ def search_memories_text(
     if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
         logger.info("search_memories_text - using memory default chat vector memory results")
         return default_memories.text or f"No memory vector memories found matching '{query}'."
-    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+    if not chat_legacy_read_authorized(default_memories):
         logger.info(
             "search_memories_text - memory default memory vector search denied without legacy fallback: "
             f"{default_memories.fallback_reason}"

@@ -114,6 +114,50 @@ enum AppsCatalogInitialSection {
   case exports
 }
 
+enum AppsPageCategoryFilter {
+  static let allCategoriesOptionId = ""
+  static let allCategoriesTitle = "All Categories"
+
+  enum Selection: Equatable {
+    case allCategories
+    case category(String)
+  }
+
+  static func categoryDropdownOptions(categories: [OmiAppCategory]) -> [SearchableDropdownOption] {
+    [SearchableDropdownOption(id: allCategoriesOptionId, title: allCategoriesTitle)]
+      + categories.map { SearchableDropdownOption(id: $0.id, title: $0.title) }
+  }
+
+  static func selectedCategoryDropdownId(_ selectedCategory: String?) -> String {
+    selectedCategory ?? allCategoriesOptionId
+  }
+
+  static func categorySelection(forOptionId optionId: String) -> Selection {
+    optionId.isEmpty ? .allCategories : .category(optionId)
+  }
+}
+
+enum AppsFilteredResultsPresentation: Equatable {
+  case loading
+  case empty
+  case results
+  case failure
+
+  static func resolve(
+    queryState: AppFilterResultsQueryState,
+    resultsCount: Int
+  ) -> AppsFilteredResultsPresentation {
+    switch queryState {
+    case .unknown, .loading:
+      return .loading
+    case .completed:
+      return resultsCount == 0 ? .empty : .results
+    case .failed:
+      return .failure
+    }
+  }
+}
+
 struct AppsPage: View {
   @ObservedObject var appProvider: AppProvider
   var appState: AppState? = nil
@@ -141,8 +185,8 @@ struct AppsPage: View {
       searchBar
         .padding()
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      Color.white.opacity(0.08)
+        .frame(height: 1)
 
       // Content
       if appProvider.isLoading {
@@ -155,73 +199,7 @@ struct AppsPage: View {
         ScrollView {
           LazyVStack(alignment: .leading, spacing: OmiSpacing.xxl) {
             if hasActiveFilters {
-              // Show filtered/search results in a flat grid
-              if appProvider.isSearching {
-                // Loading state for category filter
-                VStack(spacing: OmiSpacing.lg) {
-                  ProgressView()
-                    .scaleEffect(1.2)
-                  Text("Loading...")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textTertiary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-              } else if filteredApps.isEmpty {
-                VStack(spacing: OmiSpacing.md) {
-                  Image(systemName: "magnifyingglass")
-                    .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.textTertiary)
-                  Text("No apps found")
-                    .scaledFont(size: OmiType.subheading, weight: .medium)
-                    .foregroundColor(OmiColors.textSecondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 200)
-              } else {
-                // Back button for "See more" view
-                if viewAllSection != nil {
-                  Button(action: { viewAllSection = nil }) {
-                    HStack(spacing: OmiSpacing.xs) {
-                      Image(systemName: "chevron.left")
-                        .scaledFont(size: OmiType.caption, weight: .medium)
-                      Text("Back")
-                        .scaledFont(size: OmiType.body, weight: .medium)
-                    }
-                    .foregroundColor(OmiColors.textSecondary)
-                  }
-                  .buttonStyle(.plain)
-                }
-
-                AppGridSection(
-                  title: filterResultsTitle,
-                  apps: filteredApps,
-                  appProvider: appProvider,
-                  onSelectApp: selectApp
-                )
-
-                // Infinite scroll: load more when reaching bottom
-                if appProvider.hasMoreFilteredApps {
-                  HStack {
-                    Spacer()
-                    if appProvider.isLoadingMore {
-                      ProgressView()
-                        .scaleEffect(0.8)
-                      Text("Loading more...")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textTertiary)
-                    } else {
-                      Color.clear
-                        .frame(height: 1)
-                        .onAppear {
-                          Task {
-                            await appProvider.loadMoreFilteredApps()
-                          }
-                        }
-                    }
-                    Spacer()
-                  }
-                  .padding(.vertical, OmiSpacing.lg)
-                }
-              }
+              filteredAppsContent
             } else {
               switch initialSection {
               case .imports:
@@ -470,52 +448,48 @@ struct AppsPage: View {
   }
 
   private var searchBar: some View {
-    ViewThatFits(in: .horizontal) {
-      HStack(spacing: OmiSpacing.sm) {
-        searchField
-          .layoutPriority(1)
-        filterControls
-        Spacer(minLength: 8)
-        createAppButton
-        dismissControl
-      }
-
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        HStack(spacing: OmiSpacing.sm) {
-          searchField
-          dismissControl
-        }
-
-        HStack(spacing: OmiSpacing.sm) {
-          filterControls
-          Spacer(minLength: 8)
-          createAppButton
-        }
-      }
-    }
+    AppsHeaderRow(
+      search: { searchField },
+      filters: { filterControls },
+      create: { createAppButton },
+      dismiss: { dismissControl }
+    )
   }
 
   private var searchField: some View {
-    HStack {
+    HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .frame(width: AppsHeaderMetrics.controlIconSize, height: AppsHeaderMetrics.controlIconSize)
         .foregroundColor(OmiColors.textTertiary)
 
       TextField("Search apps...", text: $searchText)
         .textFieldStyle(.plain)
+        .scaledFont(size: OmiType.body)
         .foregroundColor(OmiColors.textPrimary)
         .accessibilityLabel("Search apps")
 
       if !searchText.isEmpty {
         Button(action: { searchText = "" }) {
           Image(systemName: "xmark.circle.fill")
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
+        .help("Clear search")
+        .accessibilityLabel("Clear search")
       }
     }
-    .padding(OmiSpacing.sm)
-    .background(OmiColors.backgroundSecondary)
-    .cornerRadius(OmiChrome.smallControlRadius)
+    .padding(.horizontal, OmiSpacing.md)
+    .frame(height: AppsHeaderMetrics.controlHeight)
+    .background(
+      Capsule(style: .continuous)
+        .fill(Color.white.opacity(0.06))
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    )
   }
 
   private var filterControls: some View {
@@ -535,58 +509,24 @@ struct AppsPage: View {
   }
 
   private var categoryMenu: some View {
-    Menu {
-      Button(action: {
-        viewAllSection = nil
+    SearchableDropdown(
+      title: "Category",
+      label: "Category",
+      options: AppsPageCategoryFilter.categoryDropdownOptions(categories: appProvider.categories),
+      selectedId: AppsPageCategoryFilter.selectedCategoryDropdownId(appProvider.selectedCategory),
+      minWidth: 180,
+      controlHeight: AppsHeaderMetrics.controlHeight,
+      usesHeaderChrome: true
+    ) { option in
+      viewAllSection = nil
+      switch AppsPageCategoryFilter.categorySelection(forOptionId: option.id) {
+      case .allCategories:
         appProvider.clearCategoryFilter()
-        Task { await appProvider.searchApps() }
-      }) {
-        HStack {
-          Text("All Categories")
-          if appProvider.selectedCategory == nil {
-            Image(systemName: "checkmark")
-          }
-        }
+      case .category(let categoryId):
+        appProvider.selectedCategory = categoryId
       }
-
-      Divider()
-
-      ForEach(appProvider.categories) { category in
-        Button(action: {
-          viewAllSection = nil
-          appProvider.selectedCategory = category.id
-          Task { await appProvider.searchApps() }
-        }) {
-          HStack {
-            Text(category.title)
-            if appProvider.selectedCategory == category.id {
-              Image(systemName: "checkmark")
-            }
-          }
-        }
-      }
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "line.3.horizontal.decrease.circle")
-          .scaledFont(size: OmiType.caption)
-        Text(selectedCategoryLabel)
-          .scaledFont(size: OmiType.body)
-          .lineLimit(1)
-        Image(systemName: "chevron.down")
-          .scaledFont(size: OmiType.micro, weight: .medium)
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundSecondary)
-      .foregroundColor(OmiColors.textPrimary)
-      .cornerRadius(OmiChrome.elementRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(appProvider.selectedCategory != nil ? OmiColors.border : Color.clear, lineWidth: 1)
-      )
+      Task { await appProvider.searchApps() }
     }
-    .menuStyle(.borderlessButton)
-    .tint(OmiColors.textPrimary)
     .fixedSize()
   }
 
@@ -611,15 +551,6 @@ struct AppsPage: View {
 
   private var hasActiveFilters: Bool {
     appProvider.hasActiveFilters || viewAllSection != nil
-  }
-
-  private var selectedCategoryLabel: String {
-    if let categoryId = appProvider.selectedCategory,
-      let category = appProvider.categories.first(where: { $0.id == categoryId })
-    {
-      return category.title
-    }
-    return "Category"
   }
 
   /// Apps for the selected filter/search result set or "See more" section.
@@ -658,6 +589,106 @@ struct AppsPage: View {
       return "\(category.title) (\(apps.count))"
     }
     return "Results (\(apps.count))"
+  }
+
+  private var filteredAppsPresentation: AppsFilteredResultsPresentation {
+    let queryState: AppFilterResultsQueryState =
+      viewAllSection == nil
+      ? appProvider.filteredAppsQueryState
+      : .completed
+    return AppsFilteredResultsPresentation.resolve(
+      queryState: queryState,
+      resultsCount: filteredApps.count
+    )
+  }
+
+  @ViewBuilder
+  private var filteredAppsContent: some View {
+    switch filteredAppsPresentation {
+    case .loading:
+      VStack(spacing: OmiSpacing.lg) {
+        ProgressView()
+          .scaleEffect(1.2)
+        Text("Searching...")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+      .frame(maxWidth: .infinity, minHeight: 200)
+    case .empty:
+      VStack(spacing: OmiSpacing.md) {
+        Image(systemName: "magnifyingglass")
+          .scaledFont(size: 32)
+          .foregroundColor(OmiColors.textTertiary)
+        Text("No apps found")
+          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+      }
+      .frame(maxWidth: .infinity, minHeight: 200)
+    case .failure:
+      VStack(spacing: OmiSpacing.md) {
+        Image(systemName: "exclamationmark.circle")
+          .scaledFont(size: 32)
+          .foregroundColor(OmiColors.textTertiary)
+        Text("Couldn't load apps")
+          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+        Button("Try Again") {
+          Task { await appProvider.searchApps() }
+        }
+        .buttonStyle(.bordered)
+      }
+      .frame(maxWidth: .infinity, minHeight: 200)
+    case .results:
+      filteredAppsGrid
+    }
+  }
+
+  @ViewBuilder
+  private var filteredAppsGrid: some View {
+    // Back button for "See more" view.
+    if viewAllSection != nil {
+      Button(action: { viewAllSection = nil }) {
+        HStack(spacing: OmiSpacing.xs) {
+          Image(systemName: "chevron.left")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+          Text("Back")
+            .scaledFont(size: OmiType.body, weight: .medium)
+        }
+        .foregroundColor(OmiColors.textSecondary)
+      }
+      .buttonStyle(.plain)
+    }
+
+    AppGridSection(
+      title: filterResultsTitle,
+      apps: filteredApps,
+      appProvider: appProvider,
+      onSelectApp: selectApp
+    )
+
+    // Infinite scroll: load more when reaching bottom.
+    if appProvider.hasMoreFilteredApps {
+      HStack {
+        Spacer()
+        if appProvider.isLoadingMore {
+          ProgressView()
+            .scaleEffect(0.8)
+          Text("Loading more...")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
+        } else {
+          Color.clear
+            .frame(height: 1)
+            .onAppear {
+              Task {
+                await appProvider.loadMoreFilteredApps()
+              }
+            }
+        }
+        Spacer()
+      }
+      .padding(.vertical, OmiSpacing.lg)
+    }
   }
 
   private var loadingShimmerView: some View {
@@ -813,6 +844,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     var lastSyncedAt: Date?
     var lastDeltaCount: Int?
     var availabilityText: String?
+    var requiresVerification = false
   }
 
   struct Snapshot {
@@ -888,6 +920,7 @@ final class ImportConnectorStatusStore: ObservableObject {
       defaults.set(metrics.memoryCount, forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
     }
     metrics.lastSyncedAt = syncedAt
+    metrics.requiresVerification = false
     defaults.set(
       syncedAt.timeIntervalSince1970,
       forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
@@ -960,6 +993,11 @@ final class ImportConnectorStatusStore: ObservableObject {
         let timestamp = defaults.double(forKey: lastSyncedAtKey)
         if timestamp > 0 {
           metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
+          // Apple Notes access is revocable and its security-scoped folder
+          // grant can disappear between launches. A persisted import proves
+          // history, not current readability, so require an explicit refresh
+          // before displaying it as connected.
+          metrics.requiresVerification = connector.id == "apple-notes"
         }
       }
       if defaults.bool(forKey: hasLastDeltaKey) {
@@ -1107,36 +1145,18 @@ final class ImportConnectorStatusStore: ObservableObject {
   }
 
   private func refreshAppleNotesMetrics() async {
-    let status = await AppleNotesReaderService.shared.connectionStatus(maxResults: 250)
-    switch status {
-    case .connected(let noteCount, _):
-      var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
-      metrics.sourceCount = noteCount
-      defaults.set(
-        noteCount,
-        forKey: storageKey(prefix: sourceCountKeyPrefix, connectorID: "apple-notes")
-      )
-      if metrics.lastSyncedAt == nil {
-        let syncedAt = Date()
-        metrics.lastSyncedAt = syncedAt
-        defaults.set(
-          syncedAt.timeIntervalSince1970,
-          forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: "apple-notes")
-        )
-      }
-      metrics.availabilityText = "Private notes accessible"
-      defaults.set(
-        "Private notes accessible",
-        forKey: storageKey(prefix: availabilityTextKeyPrefix, connectorID: "apple-notes")
-      )
-      metricsByID["apple-notes"] = metrics
-    case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
-      log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
-      clearStoredMetrics(for: "apple-notes")
-    }
+    // Reading NoteStore.sqlite is reserved for the explicit Connect/Import
+    // action. Marking a persisted import as unverified keeps passive refreshes
+    // honest without opening the protected Notes store.
+    guard var metrics = metricsByID["apple-notes"], metrics.lastSyncedAt != nil else { return }
+    metrics.requiresVerification = true
+    metricsByID["apple-notes"] = metrics
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
+    if metrics.requiresVerification {
+      return false
+    }
     if metrics.lastSyncedAt != nil {
       return true
     }
@@ -1149,6 +1169,10 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String {
+    if connector.id == "apple-notes", metrics.requiresVerification {
+      return "Reconnect to verify access"
+    }
+
     if let sourceCount = metrics.sourceCount {
       if let memoryCount = metrics.memoryCount, memoryCount > 0 {
         return
@@ -1175,6 +1199,12 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String? {
+    if connector.id == "apple-notes", metrics.requiresVerification,
+      let lastSyncedAt = metrics.lastSyncedAt
+    {
+      return "Last imported \(relativeTimestamp(lastSyncedAt))"
+    }
+
     if let lastSyncedAt = metrics.lastSyncedAt {
       var text = "Synced \(relativeTimestamp(lastSyncedAt))"
       if let lastDeltaCount = metrics.lastDeltaCount, lastDeltaCount > 0 {
@@ -1680,6 +1710,9 @@ struct ImportConnectorSheet: View {
   ) {
     let connectorID = connector.id
     let statusStore = statusStore
+    // Capture first-sync state before markSynced flips the persisted latch, so
+    // the terminal telemetry can separate first-ever connects from re-syncs.
+    let wasFirstSync = !statusStore.snapshot(for: connector).isConnected
     ConnectorImportRunner.shared.start(
       connectorID: connectorID,
       progressTitle: title,
@@ -1694,9 +1727,22 @@ struct ImportConnectorSheet: View {
           lastDeltaCount: result.newItems,
           availabilityText: availabilityText
         )
-        return .success(message: message)
-      case .failure(let message):
-        return .failure(message: message)
+        return .success(
+          message: message,
+          metrics: ConnectorImportRunner.RunMetrics(
+            sourceCount: result.sourceCount,
+            memoryCount: result.memoryCount,
+            wasFirstSync: wasFirstSync
+          )
+        )
+      case .failure(let message, let failureClass):
+        return .failure(
+          message: message,
+          metrics: ConnectorImportRunner.RunMetrics(
+            failureClass: failureClass,
+            wasFirstSync: wasFirstSync
+          )
+        )
       }
     }
   }
@@ -1820,70 +1866,6 @@ struct ShimmerAppCard: View {
         .cornerRadius(OmiChrome.stripRadius)
     }
     .frame(width: 100)
-  }
-}
-
-// MARK: - Filter Toggle
-
-struct FilterToggle: View {
-  let icon: String
-  let label: String
-  let isActive: Bool
-  let action: () -> Void
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: icon)
-          .scaledFont(size: OmiType.caption)
-        Text(label)
-          .scaledFont(size: OmiType.body)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(isActive ? Color.white : OmiColors.backgroundSecondary)
-      .foregroundColor(isActive ? Color.black : OmiColors.textSecondary)
-      .cornerRadius(OmiChrome.elementRadius)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
-      )
-      .fixedSize(horizontal: true, vertical: false)
-    }
-    .buttonStyle(.plain)
-  }
-}
-
-// MARK: - Small Header Button
-
-struct SmallHeaderButton: View {
-  let icon: String
-  let label: String
-  let color: Color
-  let action: () -> Void
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: icon)
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(color)
-        Text(label)
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
-          .lineLimit(1)
-      }
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-      .cornerRadius(OmiChrome.badgeRadius)
-      .fixedSize(horizontal: true, vertical: false)
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
   }
 }
 
@@ -3394,73 +3376,6 @@ struct FlowLayout: Layout {
 // MARK: - Dismissable Sheet
 /// A sheet that can be dismissed by clicking outside the content area.
 /// This provides macOS-friendly modal behavior where clicking the dimmed background dismisses the sheet.
-
-/// Maps Esc to a dismiss closure for custom overlay modals. These overlays are
-/// ZStack layers, not NSWindow sheets, so AppKit gives them no cancel handling,
-/// `onExitCommand` needs focus they never receive, and hidden SwiftUI buttons
-/// with a cancel key equivalent get culled from key-equivalent dispatch. A
-/// local key-down monitor scoped to the hosting window delivers Esc
-/// deterministically. Render it only while its overlay is the topmost modal.
-struct OverlayModalEscapeCatcher: NSViewRepresentable {
-  let action: () -> Void
-
-  func makeNSView(context: Context) -> EscapeCatcherView {
-    let view = EscapeCatcherView()
-    view.onEscape = action
-    return view
-  }
-
-  func updateNSView(_ nsView: EscapeCatcherView, context: Context) {
-    nsView.onEscape = action
-  }
-
-  final class EscapeCatcherView: NSView {
-    var onEscape: (() -> Void)?
-    private nonisolated(unsafe) var monitor: Any?
-
-    override func viewDidMoveToWindow() {
-      super.viewDidMoveToWindow()
-      if window != nil {
-        installMonitor()
-      } else {
-        removeMonitor()
-      }
-    }
-
-    // Never intercept mouse events — this view exists only for the monitor.
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    private func installMonitor() {
-      guard monitor == nil else { return }
-      monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        guard
-          let self,
-          event.keyCode == 53,  // Esc
-          let window = self.window,
-          event.window === window
-        else { return event }
-        self.onEscape?()
-        // Consume the event — while the overlay is up it owns Esc.
-        return nil
-      }
-    }
-
-    private func removeMonitor() {
-      if let monitor {
-        NSEvent.removeMonitor(monitor)
-        self.monitor = nil
-      }
-    }
-
-    deinit {
-      // Deinitialization is nonisolated. The monitor is main-thread-only,
-      // while NSEvent.removeMonitor is safe to invoke from this boundary.
-      if let monitor {
-        NSEvent.removeMonitor(monitor)
-      }
-    }
-  }
-}
 
 struct DismissableSheetModifier<SheetContent: View>: ViewModifier {
   @Binding var isPresented: Bool

@@ -142,10 +142,21 @@ enum NotchHoverSurfacePolicy {
   }
 }
 
-/// The compact idle notch has an explicit route to the main chat, while its
-/// expanded hover surface remains reserved for actionable subagents only.
+/// The compact idle notch has an explicit route to the main chat. Its expanded hover
+/// surface shows actionable subagents when there are any, and always shows the shortcut
+/// legend and capture controls — so hovering the notch is never a no-op.
+///
+/// The surface was previously agent-only because the rows it carried were duplicate entry
+/// points into chat and settings (`FC-split-mutation-authority`). The legend is a
+/// read-only reference and the capture toggles route through the single
+/// `SystemCaptureControls` owner, so neither reintroduces a second authority.
 enum NotchAgentMenuPresentation {
   static func shouldPresent(agentCount: Int) -> Bool {
+    true
+  }
+
+  /// Whether the agent row list itself has anything to draw.
+  static func hasAgentRows(agentCount: Int) -> Bool {
     agentCount > 0
   }
 }
@@ -178,6 +189,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
   let assistantId: String
   let context: FloatingBarNotificationContext?
   let action: FloatingBarNotificationAction?
+  /// Optional opaque proactive-suggestion join keys. No card content or screen
+  /// provenance enters notification analytics through this field.
+  let suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   /// Screenshot JPEG data from the moment the notification was generated (not shown in UI)
   let screenshotData: Data?
 
@@ -188,6 +202,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     assistantId: String,
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
+    suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     screenshotData: Data? = nil
   ) {
     self.ownerID = ownerID
@@ -196,6 +211,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.assistantId = assistantId
     self.context = context
     self.action = action
+    self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.screenshotData = screenshotData
   }
 
@@ -266,9 +282,14 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @MainActor
   final class PTTBarPresenter {
     private weak var barState: FloatingControlBarState?
+    private let resizeForPTT: @MainActor (Bool) -> Void
 
-    init(barState: FloatingControlBarState) {
+    init(
+      barState: FloatingControlBarState,
+      resizeForPTT: @escaping @MainActor (Bool) -> Void
+    ) {
       self.barState = barState
+      self.resizeForPTT = resizeForPTT
     }
 
     func apply(_ projection: VoiceTurnUIProjection) {
@@ -281,11 +302,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
       // compete with the reducer-owned voice presentation.
       barState.dismissNotchHoverForVoicePresentation()
 
+      // Onboarding uses this same renderer. Its PTT demo must receive the
+      // same surface transition as a completed user's first voice turn.
       if shouldExpandForVoice != wasExpandedForVoice,
-        !barState.showingAIConversation,
-        UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
+        !barState.showingAIConversation
       {
-        FloatingControlBarManager.shared.resizeForPTT(expanded: shouldExpandForVoice)
+        resizeForPTT(shouldExpandForVoice)
       }
     }
   }
@@ -790,6 +812,11 @@ extension ChatContentBlock {
     case .toolCall(let id, let name, let status, _, _, _): return "c:\(id):\(name):\(status)"
     case .thinking(let id, _): return "h:\(id)"
     case .discoveryCard(let id, _, _, _): return "d:\(id)"
+    case .questionCard(let id, _, _, _, _, _, _): return "q:\(id)"
+    case .taskCard(let id, _): return "t:\(id)"
+    case .goalLink(let id, _, _): return "g:\(id)"
+    case .captureLink(let id, _, _, _): return "c:\(id)"
+    case .memoryLink(let id, _, _): return "m:\(id)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
     case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
     }

@@ -119,23 +119,23 @@ withApp('auto mode: idle → candidate → active (toast + capture cmd) → endi
   await meeting.inject(app, zoomAgreed)
   await pollUntil(async () => (await meeting.phase(app)) === 'active', 'phase=active')
 
-  // The toast rendered the capturing notice (auto mode is never silent).
   const toast = await findPage(app, 'insight-toast')
-  await pollUntil(
-    async () => (await toast.textContent('body'))?.includes('Omi is capturing'),
-    'capturing toast text'
-  )
 
   // The capture window received meeting-capture-start, ran the session host,
   // failed its unauthenticated listen start, and reported back to main.
   const log = await pollUntil(
     async () => {
       const l = await meeting.statusLog(app)
-      return l.some((s) => s.endsWith(':error')) ? l : null
+      return l.some((s) => s.endsWith(':startup-error')) ? l : null
     },
     'meeting-capture-status round trip'
   )
   assert.ok(log[0].startsWith('meeting-'), `status carries the meeting id: ${log[0]}`)
+  await pollUntil(
+    async () => (await toast.textContent('body'))?.includes("Capture didn't start"),
+    'failure toast text'
+  )
+  assert.equal((await toast.textContent('body'))?.includes('Omi is capturing'), false)
 
   // Tier 2 quiet → ending → (grace) → idle.
   await meeting.inject(app, quiet)
@@ -165,11 +165,12 @@ withApp('ask mode: toast buttons drive capture start/stop', async (app) => {
     async () => (await meeting.statusLog(app)).length > 0,
     'capture round trip after Start click'
   )
-  // The toast swapped to the capturing notice.
+  // The unauthenticated harness must fail closed rather than claiming capture.
   await pollUntil(
-    async () => (await toast.textContent('body'))?.includes('Omi is capturing'),
-    'toast swapped to capturing'
+    async () => (await toast.textContent('body'))?.includes("Capture didn't start"),
+    'toast swapped to retryable failure'
   )
+  assert.equal(await meeting.capturing(app), false)
 })
 
 withApp('false positive: media playing without a Tier 1 match never activates', async (app) => {

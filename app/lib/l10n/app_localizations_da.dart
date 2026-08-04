@@ -1469,7 +1469,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get payYourSttProvider => 'Betal din STT-udbyder';
 
   @override
-  String get freeMinutesMonth => 'Gratis minutter/måned';
+  String get freeMinutesMonth => '300 gratis minutter/måned inkluderet. Ubegrænset med ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4694,7 +4694,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Ingen specifik dataadgang konfigureret.';
 
   @override
-  String get basicPlanDescription => '1.200 premium minutter + ubegrænset on-device';
+  String get basicPlanDescription => '300 premium minutter + ubegrænset on-device';
 
   @override
   String get minutes => 'minutter';
@@ -5983,8 +5983,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get cloudProvider => 'Cloud-udbyder';
 
   @override
-  String get premiumMinutesInfo =>
-      '1.200 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
+  String get premiumMinutesInfo => '300 premium minutter/måned. Lokal-fanen tilbyder ubegrænset gratis transskription.';
 
   @override
   String get viewUsage => 'Se forbrug';
@@ -6065,7 +6064,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1.200 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ';
+      '300 premium minutter/måned. Fanen På enheden tilbyder ubegrænset gratis transskription. ';
 
   @override
   String get audioProcessedLocally => 'Lyd behandles lokalt. Fungerer offline, mere privat, men bruger mere batteri.';
@@ -9758,4 +9757,7 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get rayBanMetaMicPickerConnectError =>
       'Der kunne ikke oprettes forbindelse til mikrofonen. Sørg for, at den er tilsluttet i iPhone-indstillinger.';
+
+  @override
+  String get syncStatusTooOld => 'For gammel til at synkronisere — Omi kan ikke acceptere den';
 }

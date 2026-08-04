@@ -278,3 +278,40 @@ def test_content_key_avoids_separator_collision():
     a = action_items_router._content_idempotency_key('org', 'user:task')
     b = action_items_router._content_idempotency_key('org:user', 'task')
     assert a != b
+
+
+def test_create_dispatches_auto_sync_outside_the_database_pool(monkeypatch):
+    postprocess_pool = object()
+    submitted_to = []
+    database_submissions = []
+
+    monkeypatch.setattr(action_items_router, 'postprocess_executor', postprocess_pool, raising=False)
+    monkeypatch.setattr(
+        action_items_router,
+        'submit_with_context',
+        lambda executor, function: submitted_to.append(executor),
+        raising=False,
+    )
+    legacy_db_executor = getattr(action_items_router, 'db_executor', MagicMock())
+    monkeypatch.setattr(legacy_db_executor, 'submit', lambda function: database_submissions.append(function))
+    monkeypatch.setattr(action_items_router, 'db_executor', legacy_db_executor, raising=False)
+    monkeypatch.setattr(action_items_router.task_links, 'validate_task_links', lambda *args, **kwargs: None)
+    monkeypatch.setattr(action_items_db, 'create_action_item', lambda *args, **kwargs: 'task-1')
+    monkeypatch.setattr(
+        action_items_db,
+        'get_action_item',
+        lambda *args, **kwargs: {'id': 'task-1', 'description': 'Plan launch', 'completed': False},
+    )
+    monkeypatch.setattr(action_items_router, 'upsert_action_item_vector', lambda *args, **kwargs: None)
+
+    result = action_items_router.create_action_item(
+        action_items_router.CreateActionItemRequest(description='Plan launch'),
+        uid='user-1',
+    )
+
+    assert result.id == 'task-1'
+    assert submitted_to == [postprocess_pool], (
+        'the task auto-sync coordinator must run on postprocess_executor so its Firestore '
+        'children can acquire db_executor workers'
+    )
+    assert database_submissions == [], 'the task auto-sync coordinator must never occupy a db_executor worker'
