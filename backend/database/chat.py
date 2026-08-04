@@ -10,6 +10,8 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.firestore_index_registry import CURRENT_CHAT_SESSION_QUERY
+
 from models.chat import Message
 from utils import encryption
 from ._client import db
@@ -662,10 +664,11 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
     conversation across sessions.
     """
     session_ref = (
-        db.collection('users')
-        .document(uid)
-        .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+        CURRENT_CHAT_SESSION_QUERY.build(
+            db.collection('users').document(uid).collection('chat_sessions'),
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
     )
