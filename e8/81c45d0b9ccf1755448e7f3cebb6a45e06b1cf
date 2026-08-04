@@ -1,0 +1,79 @@
+desktop/context-for-claude/Tests/ContextAppTests/TutorialTests.swift
+  s_6753c03801cb1c::t_4fe1cd16301382 1745-1750
+  s_6753c03801cb1c::t_f1c7b86a52607e 65-69
+  s_6753c03801cb1c::t_3c548891ca2743 1793-1799
+  s_6753c03801cb1c::t_4018ebef1252a0 117
+  s_6753c03801cb1c::t_693c1c518995f3 1061-1062
+  s_6753c03801cb1c::t_a0cfa8a5117099 1872-1909,1946-1967
+  s_6753c03801cb1c::t_87dea5e0e0c5e2 1661-1744,1751-1762,1765-1792,1800-1830
+  s_6753c03801cb1c::t_809b22fa32739e 1763-1764
+  s_6753c03801cb1c::t_fb6d629a8ab53f 1831,1910-1945,1968
+  s_6753c03801cb1c::t_f21907f087941c 1832
+  s_6753c03801cb1c::t_23142ed542c210 1969
+desktop/context-for-claude/Tests/ContextAppTests/TutorialRenderHarness.swift
+  s_6753c03801cb1c::t_7c8832e6a9b469 343-345,351-362,365-371
+  s_6753c03801cb1c::t_d7997cd534c3f0 319-323
+  s_6753c03801cb1c::t_a81f858cf2ed3e 47
+  s_6753c03801cb1c::t_f48ad67a0ad398 20-28
+  s_56918216f0e901::t_3b425e9192ff5f 106,109,112,121,131,142,153,161,169
+  s_6753c03801cb1c::t_898bb0e8a590f0 88-104
+  s_6753c03801cb1c::t_0207919eccad46 80-82
+  s_6753c03801cb1c::t_158bbc92f3cc7c 392
+  s_6753c03801cb1c::t_ab52f55b13cea4 324
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialModel.swift
+  s_6753c03801cb1c::t_4b134b867120b0 94-105
+  s_6753c03801cb1c::t_6349703f544614 677-688,691
+  s_6753c03801cb1c::t_fe4cace12487a1 650-660
+  s_6753c03801cb1c::t_a64debf69b7019 661
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialDemonstrations.swift
+  s_6753c03801cb1c::t_7e9196fb3229bd 3,7-17,25-180,182-184,188-189,191-200,208-210,214-216,232-236,410-415,422,428-434,449-463,465-466,468,473-548,550-554,557,569-570,574,584-601,622-671,674-680,682-691,693-695,698-700,703-704,708,717-750,752-775,779-786,789-794,796-800,806-807,809,821-822,825,830,837-838,840-841
+  s_6753c03801cb1c::t_17cbd31be1d2b3 181,185-187,190
+  s_6753c03801cb1c::t_717296ba5c5ce6 751
+  s_6753c03801cb1c::t_2ae38d00e455dc 602-621
+  s_6753c03801cb1c::t_46c9d883dced6b 464,467,469-472
+  s_6753c03801cb1c::t_e3a67e9e5c1579 549
+  s_6753c03801cb1c::t_5bbf339e990419 419-420
+  s_6753c03801cb1c::t_8d3bdad99c8749 787-788,795
+  s_6753c03801cb1c::t_b8fd7b634ad85f 776-778
+  s_1833483671ebc5::t_5cacafdd31e1bd 377-378,440-443
+  s_6753c03801cb1c::t_0284b9577b4ac4 421
+desktop/context-for-claude/Tests/ContextAppTests/InkAccentTests.swift
+  s_6753c03801cb1c::t_d8a8d7d90faa83 54,56-62
+  s_6753c03801cb1c::t_1b54a7c522399c 80-82,85,101-132
+  s_6753c03801cb1c::t_057f2e1cc10e94 133-134
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialCardView.swift
+  s_6753c03801cb1c::t_5cc219cb2f387c 21-24
+  s_6753c03801cb1c::t_c668eaad7fe3df 154-156,158-165,168-172,181-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "e881c45d0b9ccf1755448e7f3cebb6a45e06b1cf",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_56918216f0e901": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7584d688-d556-4ef2-ade6-accc8869adf3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_6753c03801cb1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72b90662-7c98-40c1-97b6-59916a7ca4ee",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
