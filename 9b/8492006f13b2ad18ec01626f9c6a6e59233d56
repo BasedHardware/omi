@@ -1,0 +1,39 @@
+desktop/lock-in/Sources/LockInApp/Views/TodayView.swift
+  s_acebfdccb4f1d0::t_7af7a7f90b128b 133-138,141-145
+  s_acebfdccb4f1d0::t_90aa2032d32753 149,151,153
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingView.swift
+  s_acebfdccb4f1d0::t_b5296417ccb7d8 65-69
+  s_acebfdccb4f1d0::t_17b373ae94947d 47-54,56-59
+  s_acebfdccb4f1d0::t_6c7647a9e4e890 117,121-122
+  s_569f1df936cc22::t_60817e72607df4 123
+desktop/lock-in/Resources/Info.plist
+  s_acebfdccb4f1d0::t_029bd55293358f 1-16
+desktop/lock-in/Resources/LockIn.entitlements
+  s_acebfdccb4f1d0::t_15e5c2fc2df63b 1-7
+desktop/lock-in/scripts/build.sh
+  s_acebfdccb4f1d0::t_93d141fa5ebe4a 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "9b8492006f13b2ad18ec01626f9c6a6e59233d56",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
