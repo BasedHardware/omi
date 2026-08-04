@@ -21,8 +21,11 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+from fastapi import HTTPException
 import pytest
 
+from llm_gateway.gateway.errors import GatewayCredentialFailureError, GatewayProviderFailureError
+from llm_gateway.gateway.schemas import FailureClass
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
@@ -613,6 +616,67 @@ def test_track_usage_context_resets_on_exception():
             raise RuntimeError("boom")
 
     assert usage_tracker.get_current_context() is None
+
+
+def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429(monkeypatch, caplog):
+    """The composition boundary must retain the gateway's typed BYOK outcome."""
+    sensitive_provider_body = 'provider-body-with-api-key-and-transcript'
+    conversation = MagicMock()
+    conversation.source = ConversationSource.phone
+    conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.photos = []
+    conversation.external_data = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
+    monkeypatch.setattr(
+        process_conversation,
+        'get_transcript_structure',
+        MagicMock(
+            side_effect=GatewayCredentialFailureError(
+                sensitive_provider_body,
+                failure_class=FailureClass.BYOK_RATE_LIMIT,
+            )
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_conversation._get_structured('uid', 'en', conversation)
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail == {
+        'code': 'byok_rate_limit',
+        'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
+    }
+    assert sensitive_provider_body not in str(exc_info.value.detail)
+    assert sensitive_provider_body not in caplog.text
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        GatewayCredentialFailureError('byok quota', failure_class=FailureClass.BYOK_QUOTA),
+        GatewayProviderFailureError('omi paid quota', failure_class=FailureClass.PROVIDER_429_OMI_PAID),
+    ],
+)
+def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch, error):
+    conversation = MagicMock()
+    conversation.source = ConversationSource.phone
+    conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.photos = []
+    conversation.external_data = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
+    monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=error))
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_conversation._get_structured('uid', 'en', conversation)
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == 'Error processing conversation, please try again later'
 
 
 def test_no_umbrella_conversation_processing_tracking():

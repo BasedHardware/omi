@@ -5,6 +5,7 @@ import json
 
 from fastapi.testclient import TestClient
 import httpx
+import openai
 import pytest
 from starlette.requests import Request
 
@@ -19,6 +20,7 @@ from llm_gateway.main import app
 from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
 from utils.llm.gateway_client import _chat_structured_payload
+from utils.llm.gateway_error_contract import is_byok_rate_limit_gateway_error
 
 LANE_ID = 'omi:auto:chat-structured'
 
@@ -157,8 +159,19 @@ def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, 
         app.dependency_overrides.clear()
 
     assert response.status_code == 429
-    assert response.json()['error']['type'] == 'rate_limit_error'
-    assert response.json()['error']['message'] == f'provider request failed: {failure_class.value}'
+    error = response.json()['error']
+    assert error['type'] == 'rate_limit_error'
+    assert error['message'] == f'provider request failed: {failure_class.value}'
+    assert error['failure_class'] == failure_class.value
+    # BYOK throttling is terminal: the gateway must not use an Omi-paid or LKG fallback.
+    assert len(provider.calls) == 1
+
+    sdk_error = openai.RateLimitError(
+        'safe gateway error',
+        response=httpx.Response(429, request=httpx.Request('POST', 'http://gateway.test/v1/chat/completions')),
+        body={'error': error},
+    )
+    assert is_byok_rate_limit_gateway_error(sdk_error) is (failure_class == FailureClass.BYOK_RATE_LIMIT)
 
 
 def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
