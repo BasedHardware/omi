@@ -29,7 +29,14 @@ from llm_gateway.gateway.providers import (
 )
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, apply_output_budget
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
-from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutStage, RouteArtifact
+from llm_gateway.gateway.schemas import (
+    CredentialMode,
+    FailureClass,
+    ProviderRef,
+    RolloutStage,
+    RouteArtifact,
+    RouteServingClass,
+)
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.log_sanitizer import sanitize
 
@@ -53,7 +60,10 @@ class ExecutorResult:
     selected_model: str
     fallback_used: bool
     fallback_reason: FailureClass | None
+    fallback_from_route_artifact_id: str | None
+    fallback_to_route_artifact_id: str | None
     used_lkg: bool
+    route_serving_class: RouteServingClass
     output_budget: OutputBudgetDecision
     provider_accounting: ProviderResponseMetadata
 
@@ -93,7 +103,7 @@ async def execute_chat_completion(
     attempt_trace: AttemptTrace | None = None,
 ) -> ExecutorResult:
     serving_route = _select_serving_route(resolved_route)
-    serving_is_lkg = serving_route is resolved_route.last_known_good_route
+    serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
     deadline_monotonic = monotonic() + serving_route.timeouts.request_ms / 1000.0
 
@@ -107,6 +117,7 @@ async def execute_chat_completion(
             provider_registry,
             is_lkg=serving_is_lkg,
             fallback_reason=None,
+            fallback_from_route_artifact_id=None,
             attempt_trace=attempt_trace,
             deadline_monotonic=deadline_monotonic,
         )
@@ -128,6 +139,7 @@ async def execute_chat_completion(
                 provider_registry,
                 is_lkg=True,
                 fallback_reason=first_failure,
+                fallback_from_route_artifact_id=serving_route.route_artifact_id,
                 attempt_trace=attempt_trace,
                 deadline_monotonic=deadline_monotonic,
             )
@@ -158,6 +170,18 @@ def selected_serving_route_artifact_id(resolved_route: ResolvedRoute) -> str:
 
 def selected_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
     return _select_serving_route(resolved_route)
+
+
+def selected_route_serving_class(resolved_route: ResolvedRoute) -> RouteServingClass:
+    if selected_route_is_lkg(resolved_route):
+        return RouteServingClass.LKG
+    if resolved_route.active_route.rollout.stage == RolloutStage.CANARY:
+        return RouteServingClass.CANARY
+    return RouteServingClass.ACTIVE
+
+
+def selected_route_is_lkg(resolved_route: ResolvedRoute) -> bool:
+    return not _is_route_eligible_to_serve(resolved_route.active_route, resolved_route.validated_request)
 
 
 def provider_request_for(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
@@ -220,6 +244,7 @@ async def _execute_route(
     *,
     is_lkg: bool,
     fallback_reason: FailureClass | None,
+    fallback_from_route_artifact_id: str | None,
     attempt_trace: AttemptTrace | None,
     deadline_monotonic: float,
 ) -> ExecutorResult:
@@ -261,8 +286,13 @@ async def _execute_route(
                     resolved_route=resolved_route,
                     route=route,
                     provider_ref=provider_ref,
-                    fallback_used=index > 0 or is_lkg,
+                    fallback_used=current_fallback_reason is not None,
                     fallback_reason=current_fallback_reason,
+                    fallback_from_route_artifact_id=(
+                        fallback_from_route_artifact_id
+                        if fallback_from_route_artifact_id is not None
+                        else route.route_artifact_id if current_fallback_reason is not None else None
+                    ),
                     used_lkg=is_lkg,
                 )
 
@@ -494,6 +524,7 @@ def _executor_result(
     provider_ref: ProviderRef,
     fallback_used: bool,
     fallback_reason: FailureClass | None,
+    fallback_from_route_artifact_id: str | None,
     used_lkg: bool,
 ) -> ExecutorResult:
     response = dict(provider_response.response)
@@ -506,7 +537,12 @@ def _executor_result(
         selected_model=provider_ref.model,
         fallback_used=fallback_used,
         fallback_reason=fallback_reason,
+        fallback_from_route_artifact_id=fallback_from_route_artifact_id,
+        fallback_to_route_artifact_id=route.route_artifact_id if fallback_used else None,
         used_lkg=used_lkg,
+        route_serving_class=(
+            RouteServingClass.ACTUAL_FALLBACK if fallback_used else selected_route_serving_class(resolved_route)
+        ),
         output_budget=output_budget_for(resolved_route, route),
         provider_accounting=provider_response.accounting,
     )

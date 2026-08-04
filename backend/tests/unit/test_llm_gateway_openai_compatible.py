@@ -634,6 +634,10 @@ def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypa
     assert recorded[0]['phase'] == 'terminal_marker'
     assert recorded[0]['credential_source'] == 'service_forwarded_byok'
     assert recorded[0]['streaming'] is True
+    assert recorded[0]['used_lkg'] is True
+    assert recorded[0]['fallback_used'] is False
+    assert recorded[0]['fallback_reason'] is None
+    assert recorded[0]['route_serving_class'].value == 'lkg'
     assert recorded[0]['ttfb_seconds'] is not None
     assert recorded[0]['budget_source'] == 'none'
     assert recorded[0]['output_budget'] == 'none'

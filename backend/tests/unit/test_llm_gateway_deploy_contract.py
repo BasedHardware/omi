@@ -136,6 +136,10 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert '${OMI_LLM_GATEWAY_SERVICE_TOKEN}' in probe_command
         assert 'X-Omi-Service-Caller: backend' in probe_command
 
+    deployment = (BACKEND_ROOT / 'charts/llm-gateway/templates/deployment.yaml').read_text(encoding='utf-8')
+    assert 'name: OMI_LLM_GATEWAY_BUILD_IDENTITY' in deployment
+    assert 'value: {{ required "image.tag is required" .Values.image.tag | quote }}' in deployment
+
 
 def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():
     manifest = _load_yaml('deploy/runtime_env.yaml')

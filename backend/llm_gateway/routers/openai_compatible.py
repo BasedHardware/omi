@@ -43,6 +43,8 @@ from llm_gateway.gateway.executor import (
     provider_request_for,
     selected_serving_route,
     selected_serving_route_artifact_id,
+    selected_route_is_lkg,
+    selected_route_serving_class,
 )
 from llm_gateway.gateway.metrics import (
     observe_error,
@@ -56,7 +58,7 @@ from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_s
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
-from llm_gateway.gateway.schemas import FailureClass, RouteArtifact
+from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
 from llm_gateway.gateway.sse import SSEEventDecoder
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
@@ -139,8 +141,9 @@ async def create_chat_completion(
                     provider='none',
                     model='none',
                     credential_source=credential_source,
-                    used_lkg=route is resolved_route.last_known_good_route,
-                    fallback_used=route is resolved_route.last_known_good_route,
+                    route_serving_class=selected_route_serving_class(resolved_route),
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    fallback_used=False,
                     fallback_reason=None,
                     outcome='cancelled',
                     error_class='client_cancelled',
@@ -166,6 +169,8 @@ async def create_chat_completion(
                     credential_source=credential_source,
                     request_id=request_id,
                     streaming=is_streaming,
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    route_serving_class=selected_route_serving_class(resolved_route),
                 ),
                 request_id=request_id,
                 api_surface='openai_chat_completions',
@@ -194,8 +199,9 @@ async def create_chat_completion(
                     provider='none',
                     model='none',
                     credential_source=credential_source,
-                    used_lkg=route is resolved_route.last_known_good_route,
-                    fallback_used=route is resolved_route.last_known_good_route,
+                    route_serving_class=selected_route_serving_class(resolved_route),
+                    used_lkg=selected_route_is_lkg(resolved_route),
+                    fallback_used=False,
                     fallback_reason=None,
                     outcome='error',
                     error_class='unexpected_internal',
@@ -458,7 +464,7 @@ async def _prepared_streaming_iterator(
 ) -> _PreparedStream:
     last_error: GatewayError | None = None
     first_failure: str | None = None
-    for index, provider_ref in enumerate([route.primary, *route.fallbacks]):
+    for provider_ref in [route.primary, *route.fallbacks]:
         provider = provider_registry.provider_for(provider_ref.provider)
         if provider is None:
             raise GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
@@ -484,7 +490,7 @@ async def _prepared_streaming_iterator(
                 stream=stream,
                 provider=provider_ref.provider,
                 model=provider_ref.model,
-                fallback_used=index > 0 or route is resolved_route.last_known_good_route,
+                fallback_used=first_failure is not None,
                 fallback_reason=first_failure,
                 cache_requested=cache_requested_for_openai_request(provider_request),
             )
@@ -509,7 +515,7 @@ async def _prepared_streaming_iterator(
             stream=stream,
             provider=provider_ref.provider,
             model=provider_ref.model,
-            fallback_used=index > 0 or route is resolved_route.last_known_good_route,
+            fallback_used=first_failure is not None,
             fallback_reason=first_failure,
             cache_requested=cache_requested_for_openai_request(provider_request),
         )
@@ -571,9 +577,16 @@ async def _stream_with_terminal_metrics(
                 provider=prepared.provider,
                 model=prepared.model,
                 credential_source=credentials.source.value,
-                used_lkg=route is resolved_route.last_known_good_route,
+                route_serving_class=(
+                    RouteServingClass.ACTUAL_FALLBACK
+                    if prepared.fallback_used
+                    else selected_route_serving_class(resolved_route)
+                ),
+                used_lkg=selected_route_is_lkg(resolved_route),
                 fallback_used=prepared.fallback_used,
                 fallback_reason=prepared.fallback_reason,
+                fallback_from_route_artifact_id=route.route_artifact_id if prepared.fallback_used else None,
+                fallback_to_route_artifact_id=route.route_artifact_id if prepared.fallback_used else None,
                 outcome=outcome,
                 error_class=error_class,
                 request_id=request_id,
