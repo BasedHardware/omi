@@ -78,3 +78,19 @@ def test_token_allowed_on_firebase_backend(monkeypatch):
             )
         )
         assert result["uid"] == "user-1"
+
+
+def test_auth_backend_name_coerces_unknown_value_to_firebase(monkeypatch):
+    """A typo in AUTH_BACKEND must coerce to the firebase default (logged), never raise — a mis-set
+    gate must not take authentication down, and the gate must agree with get_auth_provider."""
+    from utils.auth import factory as auth_factory
+
+    monkeypatch.setenv("AUTH_BACKEND", "bogus-typo")
+    assert auth_factory.auth_backend_name() == "firebase"
+
+
+def test_auth_backend_name_blank_defaults_to_firebase(monkeypatch):
+    from utils.auth import factory as auth_factory
+
+    monkeypatch.setenv("AUTH_BACKEND", "   ")
+    assert auth_factory.auth_backend_name() == "firebase"
