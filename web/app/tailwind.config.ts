@@ -26,6 +26,10 @@ const config: Config = {
         'bg-raised': '#1F1F25',
         'bg-color': '#181818',
 
+        // Desktop `mainContentContainer` fill — the inset content pane sits a
+        // shade darker than the window behind it so the inset reads as depth.
+        'bg-pane': '#0D0D0F',
+
         // Desktop OmiColors.border — visible against bg-secondary, unlike
         // borrowing bg-tertiary as a border colour.
         stroke: '#3A3940',
@@ -70,6 +74,7 @@ const config: Config = {
         sm: '6px',
         // Desktop OmiChrome radius registers, so web surfaces read at the same
         // softness as the macOS app.
+        window: '26px',
         card: '24px',
         section: '20px',
         control: '16px',

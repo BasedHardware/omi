@@ -5,7 +5,6 @@ import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
-import { ChatBubble } from '@/components/chat/ChatBubble';
 import { BottomNavigation } from './BottomNavigation';
 import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
 import { HeaderRecordingIndicator } from '@/components/recording';
@@ -124,9 +123,20 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                 </div>
               )}
 
-              {/* Content */}
-              <div className="flex-1 overflow-hidden">
-                {children}
+              {/* Content pane. Desktop insets the pane from the window edge by
+                  OmiSpacing.md (12) and rounds it to OmiChrome.windowRadius
+                  (26), so the shell reads as a card floating over the window
+                  rather than a full-bleed page. */}
+              <div className="flex-1 min-h-0 p-3">
+                <div
+                  className={cn(
+                    'h-full w-full overflow-hidden',
+                    'rounded-window border border-stroke/[0.22] bg-bg-pane',
+                    'shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
+                  )}
+                >
+                  {children}
+                </div>
               </div>
             </main>
 
@@ -136,9 +146,6 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
             {/* Notification center - push/slide from right */}
             <NotificationCenter />
           </div>
-
-          {/* Chat bubble - floating button */}
-          <ChatBubble />
 
           {/* Bottom navigation - mobile only */}
           <BottomNavigation onOpenSidebar={() => setSidebarOpen(true)} />

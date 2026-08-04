@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from '@tschk/moonshine-next/navigation';
 import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
-import { GanttChartSquare, MessageCircle, Mic, CheckSquare, Menu } from 'lucide-react';
+import { GanttChartSquare, House, Mic, CheckSquare, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
 
@@ -13,8 +13,8 @@ interface BottomNavigationProps {
 
 // Core navigation items (excluding More)
 const navItems = [
+  { label: 'Home', href: '/home', icon: House },
   { label: 'Conversations', href: '/conversations', icon: GanttChartSquare },
-  { label: 'Chat', href: '/chat', icon: MessageCircle },
   { label: 'Record', href: '/record', icon: Mic },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
 ];
@@ -66,8 +66,8 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
                 'w-14 h-14 rounded-xl',
                 'transition-colors duration-150',
                 isActive
-                  ? 'bg-purple-primary/10 text-purple-primary'
-                  : 'text-text-tertiary hover:text-text-secondary'
+                  ? 'bg-text-primary text-bg-primary'
+                  : 'text-text-tertiary hover:text-text-secondary',
               )}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
