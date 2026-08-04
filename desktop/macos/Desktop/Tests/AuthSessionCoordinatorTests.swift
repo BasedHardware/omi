@@ -77,7 +77,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(authSource.contains("commitSignedOutSession("))
 
     // Nuclear signOut still wipes onboarding — invalidate must not.
-    let signOutRange = authSource.range(of: "func signOut() async throws")
+    let signOutRange = authSource.range(of: "func signOut(")
     XCTAssertNotNil(signOutRange)
     let signOutTail = authSource[signOutRange!.lowerBound...]
     let signOutEnd = signOutTail.range(of: "// MARK: - Helper Methods")?.lowerBound ?? signOutTail.endIndex
@@ -135,7 +135,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     let authSource = try sourceFile("AuthService.swift")
     let ownerSource = try sourceFile("Chat/RuntimeOwnerIdentity.swift")
 
-    let signOutRange = authSource.range(of: "func signOut() async throws")
+    let signOutRange = authSource.range(of: "func signOut(")
     XCTAssertNotNil(signOutRange)
     let signOutSnippet = String(authSource[signOutRange!.lowerBound...]).prefix(4200)
 

@@ -357,7 +357,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     let source = try bridgeSource()
     let body = try actionBody(named: "sign_out", in: source)
     XCTAssertTrue(body.contains("DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(body.contains("AuthService.shared.signOut()"))
+    XCTAssertTrue(body.contains("boolParam(params[\"accepted_account_deletion\"], default: false)"))
+    XCTAssertTrue(body.contains("AuthService.shared.signOut(acceptedAccountDeletion: acceptedAccountDeletion)"))
   }
 
   func testEditTestMemorySupportsMarkerParam() throws {

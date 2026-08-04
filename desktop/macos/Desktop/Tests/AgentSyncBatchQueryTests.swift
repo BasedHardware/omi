@@ -335,11 +335,12 @@ final class AgentSyncBatchQueryTests: XCTestCase {
 
     await service.start(vmIP: "owner-a-vm", authToken: "owner-a-auth")
     await gate.waitUntilFirstFetchStarts()
-    await service.stop(flushPendingChanges: false)
+    let stopOwnerA = Task { await service.stop(flushPendingChanges: false) }
+    await gate.releaseFirstFetch()
+    await stopOwnerA.value
     await service.start(vmIP: "owner-b-vm", authToken: "owner-b-auth")
 
     await gate.waitForRequest()
-    await gate.releaseFirstFetch()
     await Task.yield()
     await service.stop(flushPendingChanges: false)
 

@@ -1499,16 +1499,19 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "sign_out",
-      summary: "Sign out via AuthService (local Auth emulator harness only)"
-    ) { _ in
+      summary: "Sign out via AuthService (local Auth emulator harness only)",
+      params: ["accepted_account_deletion"]
+    ) { params in
       guard DesktopLocalProfile.isEnabled else {
         return ["error": "sign_out is only available with OMI_DESKTOP_LOCAL_PROFILE=1 (local Auth emulator)"]
       }
+      let acceptedAccountDeletion = boolParam(params["accepted_account_deletion"], default: false)
       guard AuthState.shared.isSignedIn else {
         return ["signed_out": "true", "was_signed_in": "false"]
       }
-      try await AuthService.shared.signOut()
+      try await AuthService.shared.signOut(acceptedAccountDeletion: acceptedAccountDeletion)
       return [
+        "accepted_account_deletion": acceptedAccountDeletion ? "true" : "false",
         "signed_out": "true",
         "was_signed_in": "true",
         "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",

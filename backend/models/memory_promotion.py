@@ -30,6 +30,18 @@ PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES = 8 * 1024
 PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH = 8
 
 
+def canonical_graph_entity_id(label: str) -> str:
+    """Return the stable graph endpoint id for a readable entity label."""
+    normalized = " ".join((label or "").split()).casefold()
+    if not normalized:
+        raise ValueError("canonical graph entity label must not be blank")
+    if normalized == "user":
+        return "user"
+    if normalized.startswith("ent_"):
+        return normalized
+    return "ent_" + deterministic_contract_id("canonical-graph-entity", {"label": normalized})[:20]
+
+
 def _normalized_arguments(arguments: Dict[str, Any]) -> Dict[str, Any]:
     normalized: Dict[str, Any] = {}
     for key, value in sorted(arguments.items()):
@@ -326,19 +338,10 @@ class MemoryGraphAssertion(BaseModel):
                 label = str(
                     object_value.get("label") or object_value.get("value") or object_value.get("entity_id") or slot
                 )
-                target_id = str(
-                    object_value.get("entity_id")
-                    or "ent_" + deterministic_contract_id("canonical-graph-entity", {"label": label.lower()})[:20]
-                )
+                target_id = str(object_value.get("entity_id") or canonical_graph_entity_id(label))
             else:
                 label = str(raw_value)
-                target_id = (
-                    "ent_"
-                    + deterministic_contract_id(
-                        "canonical-graph-entity",
-                        {"label": label.strip().lower()},
-                    )[:20]
-                )
+                target_id = canonical_graph_entity_id(label)
             nodes.setdefault(
                 target_id,
                 {

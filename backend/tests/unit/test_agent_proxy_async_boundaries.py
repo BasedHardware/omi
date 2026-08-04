@@ -206,6 +206,7 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
 
     monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
     monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
     monkeypatch.setattr(
         agent_proxy,
         "_get_user_context",
@@ -230,6 +231,54 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     assert _ProxyHTTPClient.post_calls == 2
     assert phone_ws.closed == [(1000, "Session ended")]
     assert any(args[1:3] == ("full answer tail", "ai") for args in saved_messages)
+
+
+@pytest.mark.asyncio
+async def test_first_connect_without_vm_returns_typed_retryable_not_ready(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "fresh-firebase-uid"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(agent_proxy, "_get_user_context", lambda _uid: (None, "standard"))
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert websocket.accepted is True
+    assert [json.loads(event) for event in websocket.sent] == [
+        {
+            "type": "error",
+            "code": "agent_vm_not_ready",
+            "state": "not_provisioned",
+            "retryable": True,
+            "message": "Your agent is still being prepared. Please try again shortly.",
+        }
+    ]
+    assert websocket.closed == [(4002, "Agent VM not ready")]
+
+
+@pytest.mark.asyncio
+async def test_deletion_marker_blocks_proxy_before_vm_lookup(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    vm_lookup = MagicMock()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "deleted-uid"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: "pending")
+    monkeypatch.setattr(agent_proxy, "_get_user_context", vm_lookup)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert websocket.accepted is True
+    assert json.loads(websocket.sent[0])["code"] == "account_deletion_in_progress"
+    assert websocket.closed == [(4005, "Account deletion in progress")]
+    vm_lookup.assert_not_called()
 
 
 def test_firestore_client_is_initialized_lazily_and_cached(agent_proxy, monkeypatch):
@@ -390,9 +439,9 @@ def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
     assert bool(agent_proxy.UNRESOLVED_VM_IP)
 
     with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
+        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
     with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", None, "ready")
+        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", None, "ready")
 
 
 @pytest.mark.asyncio

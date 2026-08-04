@@ -147,6 +147,36 @@ def _run_mark_billing_failed(data):
     return result, txn._sets
 
 
+def _run_mark_completed(data):
+    txn = _make_txn()
+    txn_obj = users_db._mark_user_deletion_wipe_completed_txn
+    raw_fn = getattr(txn_obj, 'to_wrap', txn_obj)
+    snapshot = _make_snapshot(data)
+
+    class FakeDocRef:
+        def get(self, transaction=None):
+            return snapshot
+
+    result = raw_fn(txn, FakeDocRef())
+    return result, txn._sets
+
+
+def test_mark_completed_refuses_outstanding_late_vm_cleanup():
+    result, sets = _run_mark_completed(
+        {'wipe_status': 'running', 'late_agent_vm_cleanup': {'vmName': 'omi-agent-uid', 'zone': 'us-central1-a'}}
+    )
+
+    assert result is False
+    assert sets[0][1]['wipe_status'] == 'failed'
+
+
+def test_mark_completed_commits_without_late_vm_cleanup():
+    result, sets = _run_mark_completed({'wipe_status': 'running'})
+
+    assert result is True
+    assert sets[0][1]['wipe_status'] == 'completed'
+
+
 def test_mark_billing_failed_allows_pre_wipe_states():
     result, sets = _run_mark_billing_failed({'uid': 'uid1', 'wipe_status': 'deleting_auth'})
 
