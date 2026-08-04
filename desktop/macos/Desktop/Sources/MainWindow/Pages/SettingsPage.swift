@@ -18,7 +18,7 @@ struct SettingsPage: View {
           // Section header
           HStack {
             Text(selectedSection.displayTitle)
-              .scaledFont(size: OmiType.title, weight: .bold, tracking: -0.8)
+              .geist(size: OmiType.title, weight: .semibold, tracking: OmiType.title * -0.02)
               .foregroundColor(OmiColors.textPrimary)
               .id(selectedSection)
               .transition(.opacity)

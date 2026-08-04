@@ -209,7 +209,7 @@ struct ConversationsPage: View {
       HStack {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Conversations")
-            .scaledFont(size: OmiType.title, weight: .bold, tracking: -0.6)
+            .geist(size: OmiType.title, weight: .semibold, tracking: OmiType.title * -0.02)
             .foregroundColor(OmiColors.textPrimary)
           Text("Recordings, notes, and transcripts from your day")
             .scaledFont(size: OmiType.caption)
@@ -648,13 +648,19 @@ struct ConversationsPage: View {
         }
         .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
         .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .omiControlSurface(
-          fill: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.16) : OmiColors.backgroundSecondary,
-          radius: OmiChrome.smallControlRadius,
-          stroke: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.36) : OmiColors.border.opacity(0.14)
+        .padding(.vertical, OmiSpacing.xs + 1)
+        .background(
+          Capsule(style: .continuous)
+            .fill(
+              appState.showStarredOnly
+                ? OmiColors.amber.opacity(0.12) : OmiColors.backgroundQuaternary.opacity(0.35))
+        )
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(
+              appState.showStarredOnly
+                ? OmiColors.amber.opacity(0.28) : OmiColors.border.opacity(0.18),
+              lineWidth: 1)
         )
       }
       .buttonStyle(.plain)
@@ -697,13 +703,19 @@ struct ConversationsPage: View {
           appState.selectedDateFilter != nil ? OmiColors.backgroundPrimary : OmiColors.textSecondary
         )
         .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .omiControlSurface(
-          fill: appState.selectedDateFilter != nil
-            ? OmiColors.textPrimary : OmiColors.backgroundSecondary,
-          radius: OmiChrome.smallControlRadius,
-          stroke: appState.selectedDateFilter != nil
-            ? OmiColors.border.opacity(0.28) : OmiColors.border.opacity(0.14)
+        .padding(.vertical, OmiSpacing.xs + 1)
+        .background(
+          Capsule(style: .continuous)
+            .fill(
+              appState.selectedDateFilter != nil
+                ? OmiColors.textPrimary : OmiColors.backgroundQuaternary.opacity(0.35))
+        )
+        .overlay(
+          Capsule(style: .continuous)
+            .stroke(
+              appState.selectedDateFilter != nil
+                ? Color.clear : OmiColors.border.opacity(0.18),
+              lineWidth: 1)
         )
       }
       .buttonStyle(.plain)

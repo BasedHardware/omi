@@ -168,12 +168,12 @@ struct ConversationListView: View {
 
   private var conversationListContent: some View {
     let items = flatListItems
-    return LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
+    return LazyVStack(alignment: .leading, spacing: OmiSpacing.xxs) {
       ForEach(items) { item in
         switch item {
         case .header(let key, let isFirst):
-          Text(key)
-            .scaledFont(size: OmiType.body, weight: .semibold)
+          Text(key.uppercased())
+            .geistMono(size: OmiType.caption, weight: .medium, tracking: OmiType.caption * 0.08)
             .foregroundColor(OmiColors.textTertiary)
             .padding(.top, isFirst ? 0 : OmiSpacing.lg)
             .padding(.bottom, OmiSpacing.xs)

@@ -804,16 +804,8 @@ extension SettingsContentView {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: icon)
         .scaledFont(size: 13, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
-        .frame(width: 30, height: 30)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
-            .fill(OmiColors.backgroundQuaternary)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-            )
-        )
+        .foregroundColor(OmiColors.textSecondary)
+        .frame(width: 20, height: 20)
 
       Text(title)
         .scaledFont(size: OmiType.subheading, weight: .semibold, tracking: -0.2)

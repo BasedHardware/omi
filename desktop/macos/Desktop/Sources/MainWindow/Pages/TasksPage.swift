@@ -15,10 +15,10 @@ enum TaskCategory: String, CaseIterable {
 
   var icon: String {
     switch self {
-    case .today: return "sun.max.fill"
-    case .tomorrow: return "sunrise.fill"
+    case .today: return "sun.max"
+    case .tomorrow: return "sunrise"
     case .later: return "calendar"
-    case .noDeadline: return "tray.fill"
+    case .noDeadline: return "tray"
     }
   }
 
@@ -3760,7 +3760,7 @@ struct TasksPage: View {
   private var headerView: some View {
     HStack(spacing: OmiSpacing.sm) {
       Text("Tasks")
-        .scaledFont(size: OmiType.title, weight: .bold, tracking: -0.6)
+        .geist(size: OmiType.title, weight: .semibold, tracking: OmiType.title * -0.02)
         .foregroundColor(OmiColors.textPrimary)
 
       Spacer()
@@ -4498,15 +4498,15 @@ struct TaskCategorySection: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      // Category header
+      // Category header — quiet label, outline icon, no chrome weight
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: category.icon)
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(category.color)
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundColor(OmiColors.textTertiary)
 
-        Text(category.rawValue)
-          .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+        Text(category.rawValue.uppercased())
+          .geistMono(size: OmiType.caption, weight: .medium, tracking: OmiType.caption * 0.08)
+          .foregroundColor(OmiColors.textTertiary)
 
         Spacer()
 

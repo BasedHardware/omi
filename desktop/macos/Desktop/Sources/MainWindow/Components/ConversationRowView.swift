@@ -257,13 +257,10 @@ struct ConversationRowView: View {
           .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textTertiary)
       }
 
-      // Emoji
+      // Emoji — plain glyph, no tile (tiles read as Slack/Notion card chrome)
       Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
         .scaledFont(size: OmiType.subheading)
-        .frame(width: 36, height: 36)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous).fill(
-            OmiColors.backgroundRaised))
+        .frame(width: 28, height: 28)
 
       // Title + metadata below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
@@ -313,28 +310,23 @@ struct ConversationRowView: View {
       .buttonStyle(.plain)
     }
     .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm + 2)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
         .fill(
           isSelected
             ? OmiColors.backgroundTertiary
             : (isHovering
-              ? OmiColors.backgroundRaised
+              ? OmiColors.backgroundRaised.opacity(0.85)
               : (isNewlyCreated
-                ? OmiColors.userBubble.opacity(0.22) : OmiColors.backgroundSecondary))
+                ? OmiColors.userBubble.opacity(0.16) : Color.clear))
         )
     )
     .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
         .stroke(
-          isSelected ? Color.white.opacity(0.22) : OmiColors.border.opacity(0.28),
+          isSelected ? Color.white.opacity(0.14) : Color.clear,
           lineWidth: 1)
-    )
-    .shadow(
-      color: Color(hex: 0x05060A).opacity(isHovering || isSelected ? 0.28 : 0.12),
-      radius: isHovering || isSelected ? 12 : 6,
-      y: isHovering || isSelected ? 6 : 2
     )
     .contentShape(Rectangle())
     .omiAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.18), value: isHovering)
@@ -352,12 +344,10 @@ struct ConversationRowView: View {
           .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textTertiary)
       }
 
-      // Emoji
+      // Emoji — plain glyph, no tile
       Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
         .scaledFont(size: OmiType.heading)
-        .frame(width: 40, height: 40)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous).fill(OmiColors.backgroundRaised))
+        .frame(width: 32, height: 32)
 
       // Title + time/duration below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
@@ -406,28 +396,24 @@ struct ConversationRowView: View {
       }
       .buttonStyle(.plain)
     }
-    .padding(OmiSpacing.lg)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
         .fill(
           isSelected
             ? OmiColors.backgroundTertiary
             : (isHovering
-              ? OmiColors.backgroundRaised
+              ? OmiColors.backgroundRaised.opacity(0.85)
               : (isNewlyCreated
-                ? OmiColors.userBubble.opacity(0.22) : OmiColors.backgroundSecondary))
+                ? OmiColors.userBubble.opacity(0.16) : Color.clear))
         )
     )
     .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
         .stroke(
-          isSelected ? Color.white.opacity(0.22) : OmiColors.border.opacity(0.28),
+          isSelected ? Color.white.opacity(0.14) : Color.clear,
           lineWidth: 1)
-    )
-    .shadow(
-      color: Color(hex: 0x05060A).opacity(isHovering || isSelected ? 0.28 : 0.12),
-      radius: isHovering || isSelected ? 14 : 8,
-      y: isHovering || isSelected ? 7 : 3
     )
     .contentShape(Rectangle())
     .omiAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.18), value: isHovering)
