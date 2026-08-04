@@ -538,6 +538,15 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_current_by_app',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+)
+
+
 QUERY_SPECS = (
     CHANNEL_BINDINGS_BY_UID_CHANNEL_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -559,6 +568,7 @@ QUERY_SPECS = (
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CURRENT_CHAT_SESSION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
