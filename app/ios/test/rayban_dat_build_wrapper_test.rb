@@ -304,7 +304,7 @@ class RayBanDatBuildWrapperTest < Minitest::Test
         log: log,
         env: {
           'COMMAND_LOG' => log,
-          'FIXTURE_APP' => app,
+          'FIXTURE_APP' => File.realpath(app),
           'FLUTTER_BIN' => File.join(fake_bin, 'flutter'),
           'POD_BIN' => File.join(fake_bin, 'pod'),
           'EXPECTED_DEFAULT_LOCK' => File.join(root, 'expected-default.lock'),
@@ -383,7 +383,7 @@ class RayBanDatBuildWrapperTest < Minitest::Test
         printf '\n'
       } >> "$COMMAND_LOG"
 
-      [[ "$PWD" == "$FIXTURE_APP/ios" ]]
+      [[ "$(pwd -P)" == "$FIXTURE_APP/ios" ]]
       mkdir -p Pods
 
       if [[ "${OMI_RAYBAN_DAT-}" == "1" ]]; then

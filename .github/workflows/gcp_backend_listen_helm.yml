@@ -191,15 +191,15 @@ jobs:
           ACCOUNT_DELETION_HANDLER_URL: ${{ env.ACCOUNT_DELETION_HANDLER_URL }}
           SYNC_TASKS_HANDLER_URL: ${{ env.SYNC_TASKS_HANDLER_URL }}
           SYNC_TASKS_INVOKER_SA: ${{ env.SYNC_TASKS_INVOKER_SA }}
-          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          STT_SERVICE_MODELS: modulate-velma-2,parakeet
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
           TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
           TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
           X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
           X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
-        run: backend/scripts/deploy-backend-config.sh
+        run: |
+          python3 -m pip install -q pyyaml
+          backend/scripts/deploy-backend-config.sh
 
       - name: Ensure dev parity-pack bucket (development only)
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && (github.event.inputs.environment || 'development') == 'development' }}
