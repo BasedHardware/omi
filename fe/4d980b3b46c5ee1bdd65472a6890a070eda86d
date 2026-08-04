@@ -1,0 +1,91 @@
+desktop/context-for-claude/Tests/ContextMCPKitTests/StatusHonestyTests.swift
+  s_6753c03801cb1c::t_d5d407ca6ea4bf 1-182
+desktop/context-for-claude/Tests/ContextAppTests/CaptureHealthTests.swift
+  s_6753c03801cb1c::t_41846443fe0942 1-293
+desktop/context-for-claude/Sources/ContextMCPKit/StatusTool.swift
+  s_6753c03801cb1c::t_0a3558dd69b080 22
+  s_6753c03801cb1c::t_3e462e75467a9e 49-56
+  s_6753c03801cb1c::t_94af3172d57fee 91-155
+desktop/context-for-claude/Sources/ContextCore/Models.swift
+  s_6753c03801cb1c::t_465a3a9dd781fc 349-352,355-357,368,371,380,383
+desktop/context-for-claude/Sources/ContextApp/MenuBar/ContextMark.swift
+  s_6753c03801cb1c::t_a18a927fa6f105 25-34,36
+  s_6753c03801cb1c::t_da0b57b178092f 45,59-69
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_6753c03801cb1c::t_41716d18ea0dbc 56-60,84-94,98-143
+  s_6753c03801cb1c::t_5493926d9d9217 811-823,825,827-828,832-833,836-843
+  s_6753c03801cb1c::t_5383a87ff24c75 523-526
+  s_6753c03801cb1c::t_5c0213a7877b3e 443
+  s_6753c03801cb1c::t_95dec9491d08ad 726,728-731
+  s_6753c03801cb1c::t_d5b6acb1e30072 846-859,862-865,868-884,889,891,897-913
+  s_6753c03801cb1c::t_e4b76745136535 170-174,176-178
+  s_6753c03801cb1c::t_1f002fc980c4df 532-535
+  s_6753c03801cb1c::t_bf81e10e0c9289 488,492
+  s_6753c03801cb1c::t_897bfa90c41e3b 340
+  s_6753c03801cb1c::t_aa71c6e71fe10b 585-587
+  s_6753c03801cb1c::t_3c20d8a5e9b181 562,564
+  s_6753c03801cb1c::t_9d019b3e52d5b0 605-610,615-616,630,637-659
+  s_6753c03801cb1c::t_6db08d8981a560 700-705
+  s_6753c03801cb1c::t_1f86c665c571a8 960-966,977,983-1031,1189-1190
+  s_6753c03801cb1c::t_a757e162ae3f40 493-498,500-504
+  s_6753c03801cb1c::t_f6ee0801ab507e 206-220,222-225,227-234
+  s_6753c03801cb1c::t_ff5a6d645daf57 661,1179-1186
+  s_6753c03801cb1c::t_a605db04c93771 684-692,694-699,706-707,712-719,721-724,732-739,745,749-755,763-764
+  s_6753c03801cb1c::t_c82038dae0f46c 460,462-465
+  s_6753c03801cb1c::t_45a386e174d440 499
+  s_6753c03801cb1c::t_989b5f16edf4e3 144-145,565,588,660,664,725,765-766,779,844-845,914-915,1032-1037,1076,1187-1188
+desktop/context-for-claude/Sources/ContextApp/Permissions.swift
+  s_6753c03801cb1c::t_234fb51618a77f 718-721
+  s_6753c03801cb1c::t_386f556d14602a 264-345
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_6753c03801cb1c::t_dc30e960d97b7c 171-176,178-180,183-186,189-206,216,220-268
+  s_6753c03801cb1c::t_e879e884c012b2 269
+desktop/context-for-claude/Sources/ContextMCPKit/Tools.swift
+  s_6753c03801cb1c::t_e7ad5a7ddd3a8e 1928-1930
+  s_6753c03801cb1c::t_837e94fb07d176 1884-1914
+desktop/context-for-claude/Tests/ContextAppTests/CapturePacingTests.swift
+  s_6753c03801cb1c::t_d07d1c37206906 141,146
+  s_6753c03801cb1c::t_c614eee3888d43 143-144,147-150,153,156,160-202
+desktop/context-for-claude/Sources/ContextApp/Capture/ScreenWatcher.swift
+  s_6753c03801cb1c::t_93572dbaee22c5 180-200,205-226,231-237,241,243
+  s_6753c03801cb1c::t_f4b9bcf7922ac5 336,340-344,346-351
+  s_6753c03801cb1c::t_b48a2da072f97a 457
+  s_6753c03801cb1c::t_5b2709aa7343c6 321
+  s_6753c03801cb1c::t_5aca1ef6547620 662-690
+  s_6753c03801cb1c::t_d29d71fe9da78f 258,260,265-266,277,284-287,292,297-299,301
+  s_6753c03801cb1c::t_183ef027f3f768 87-90
+  s_6753c03801cb1c::t_57456c24f5d941 201-204
+  s_6753c03801cb1c::t_f460fecacfbf9e 114
+  s_6753c03801cb1c::t_d6009432a52aea 125,135
+  s_6753c03801cb1c::t_5362cde2a087b2 449,451-456,458-476
+  s_6753c03801cb1c::t_44fecbef5534d4 52-58
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_6753c03801cb1c::t_614027645f8528 95,101
+  s_6753c03801cb1c::t_0e9c53d5c13a42 144-170,172
+  s_6753c03801cb1c::t_0e877da938be27 401-407,409-410
+desktop/context-for-claude/Sources/ContextCore/Queries.swift
+  s_6753c03801cb1c::t_8fc87739562050 407-409,411,414-417,425,429-431
+  s_6753c03801cb1c::t_6710a7f6f53663 366-383
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusItemController.swift
+  s_6753c03801cb1c::t_7525a61af608a4 66-69,71-73,78-95
+  s_6753c03801cb1c::t_9b5ef5bf9f1ab1 1
+  s_6753c03801cb1c::t_c36e22b6d11637 96
+desktop/context-for-claude/Sources/ContextCore/CaptureHealth.swift
+  s_6753c03801cb1c::t_b266ff45c73140 1-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "fe4d980b3b46c5ee1bdd65472a6890a070eda86d",
+  "prompts": {},
+  "sessions": {
+    "s_6753c03801cb1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72b90662-7c98-40c1-97b6-59916a7ca4ee",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
