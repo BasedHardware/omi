@@ -317,8 +317,15 @@ def prepare_graph_enrichment(
         ):
             return _blocked("graph_assertion_invalid", "graph_ready item lacks an exact current graph assertion")
         return GraphEnrichmentResult(status=GraphEnrichmentStatus.already_enriched, plan=current_plan)
-    if not item.subject_entity_id or checked_plan.subject_entity_id != item.subject_entity_id:
-        return _blocked("subject_overwrite", "graph enrichment cannot overwrite or invent the existing subject")
+    # Historical Long-term rows may predate graph classification entirely.  An
+    # enrichment may fill an absent classification, but it must never replace a
+    # field that the canonical item already established.
+    if item.subject_entity_id and checked_plan.subject_entity_id != item.subject_entity_id:
+        return _blocked("subject_overwrite", "graph enrichment cannot overwrite the existing subject")
+    if item.predicate and checked_plan.predicate != item.predicate:
+        return _blocked("predicate_overwrite", "graph enrichment cannot overwrite the existing predicate")
+    if item.arguments and checked_plan.arguments != item.arguments:
+        return _blocked("arguments_overwrite", "graph enrichment cannot overwrite existing graph arguments")
     receipt = GraphEnrichmentReceipt(
         uid=item.uid,
         memory_id=item.memory_id,

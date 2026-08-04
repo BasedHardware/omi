@@ -456,6 +456,72 @@ def test_graph_enrichment_commits_one_fenced_assertion_without_changing_long_ter
     assert result.graph_assertions[0].memory_id == existing.memory_id
 
 
+def test_graph_enrichment_can_fill_an_entirely_missing_historical_classification():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item(subject_entity_id=None, predicate=None, arguments={})
+    plan = PromotionGraphPlan(
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+    )
+
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=plan,
+        account_generation=1,
+        source_generation=2,
+        expected_item_revision=existing.item_revision,
+        expected_content_hash=existing.content_hash,
+        expected_evidence_ids=["ev1"],
+        observed_head_commit_id="head0",
+    )
+
+    assert planned.status == GraphEnrichmentStatus.ready
+    assert planned.operation is not None
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=planned.operation,
+        patch_payload={**planned.patch_payload, "evidence": existing.evidence},
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].content == existing.content
+    assert result.memory_items[0].evidence == existing.evidence
+    assert result.memory_items[0].subject_entity_id == "user"
+    assert result.memory_items[0].predicate == "prefers_update_style"
+    assert result.memory_items[0].arguments == {"style": "concise"}
+    assert result.memory_items[0].graph_ready is True
+
+
+def test_graph_enrichment_fills_only_missing_fields_and_preserves_existing_subject():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item(predicate=None, arguments={})
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=PromotionGraphPlan(
+            subject_entity_id="user",
+            predicate="prefers_update_style",
+            arguments={"style": "concise"},
+        ),
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+
+    assert planned.status == GraphEnrichmentStatus.ready
+    assert planned.operation is not None
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=planned.operation,
+        patch_payload={**planned.patch_payload, "evidence": existing.evidence},
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].subject_entity_id == existing.subject_entity_id
+    assert result.memory_items[0].predicate == "prefers_update_style"
+    assert result.memory_items[0].arguments == {"style": "concise"}
+
+
 def test_graph_enrichment_rejects_a_plan_that_changes_existing_long_term_semantics():
     control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
     existing = _long_term_graph_item()
