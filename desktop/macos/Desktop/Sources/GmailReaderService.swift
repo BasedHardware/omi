@@ -211,11 +211,8 @@ userInitiated: userInitiated,
         query: "newer_than:1d",
         feedPath: "atom/inbox",
         allowBootstrap: false,
-<<<<<<< HEAD
-        userInitiated: userInitiated
-=======
+userInitiated: userInitiated,
         selectedCookiePath: selectedCookiePath
->>>>>>> e794d11904 (fix(desktop): fail closed on ambiguous Gmail accounts)
       )
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {

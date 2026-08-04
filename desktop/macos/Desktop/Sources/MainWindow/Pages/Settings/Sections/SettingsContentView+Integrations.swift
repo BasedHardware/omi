@@ -202,18 +202,14 @@ extension SettingsContentView {
     gmailMemoriesSaved = 0
 
     do {
-<<<<<<< HEAD
-      let emails = try await GmailReaderService.shared.readRecentEmails(
+let emails = try await GmailReaderService.shared.readRecentEmails(
         maxResults: 50,
         userInitiated: true
       )
-=======
-      let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
       guard readGeneration == gmailReadGeneration else {
         isReadingGmail = false
         return
       }
->>>>>>> e794d11904 (fix(desktop): fail closed on ambiguous Gmail accounts)
       gmailEmails = emails
       gmailLastFetched = Date()
       viewModel.markIntegrationSynced()
