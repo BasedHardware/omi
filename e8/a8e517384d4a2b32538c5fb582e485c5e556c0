@@ -1,0 +1,157 @@
+desktop/lock-in/Sources/LockInApp/Resources/README.md
+  s_acebfdccb4f1d0::t_dc0f215c5337b8 1-12
+desktop/lock-in/Package.swift
+  s_acebfdccb4f1d0::t_acd58d51d33ddd 1-51
+desktop/lock-in/Sources/LockInCore/Store.swift
+  s_acebfdccb4f1d0::t_ce773db8f6a36e 1-587
+desktop/lock-in/Sources/LockInScoring/ModelScorer.swift
+  s_acebfdccb4f1d0::t_2a213863c0d705 31-40
+  s_acebfdccb4f1d0::t_2e917375314f5e 1-30,41-267,269,272
+  s_acebfdccb4f1d0::t_575a7091ef6d80 268,270-271
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingResume.swift
+  s_acebfdccb4f1d0::t_3529bdad66484d 1-61
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingWindow.swift
+  s_acebfdccb4f1d0::t_a15257149ea9cc 1-70
+desktop/lock-in/site/download.html
+  s_acebfdccb4f1d0::t_ce8aa160ee0a53 102
+  s_acebfdccb4f1d0::t_213634c9767a86 51
+  s_acebfdccb4f1d0::t_29ea3ea5764166 223,228,233-234
+  s_acebfdccb4f1d0::t_0b74f7b99bfe44 92
+  s_acebfdccb4f1d0::t_b89a88a9b108fd 1-50,52-91,93-101,103-222,224-227,229-232,235-287
+desktop/lock-in/Sources/LockInApp/Views/TodayView.swift
+  s_acebfdccb4f1d0::t_9ab826f1e9098e 1-164,166,168-176,178,180,183-191,193-194,196,198-199,201-210,218-347
+  s_acebfdccb4f1d0::t_69f1b3242db727 177,179,181-182,192,195,197,200
+  s_acebfdccb4f1d0::t_a68f3f65c78cfa 165,167
+  s_acebfdccb4f1d0::t_467afb409bffb0 211-217
+desktop/lock-in/Sources/LockInCore/Score.swift
+  s_acebfdccb4f1d0::t_67564c693c9451 1-160
+desktop/lock-in/Sources/LockInCapture/Sessionizer.swift
+  s_acebfdccb4f1d0::t_c317953b956bda 1-86
+desktop/lock-in/Sources/LockInApp/Views/ShareCard.swift
+  s_acebfdccb4f1d0::t_95e33223039ba6 174-184
+  s_acebfdccb4f1d0::t_e4cd9b43549eac 45-48,61
+  s_acebfdccb4f1d0::t_c2d37b8766b04d 1-44,49-60,62-83,93-95,101-173,185-223,225-229
+  s_acebfdccb4f1d0::t_46043cb82a4777 84-92,96-100
+  s_acebfdccb4f1d0::t_cecfe09e829182 224
+desktop/lock-in/Tests/LockInScoringTests/RulesScorerTests.swift
+  s_acebfdccb4f1d0::t_b8bb33e839afa0 1-134,160-240
+  s_acebfdccb4f1d0::t_78469b02ade0be 135-159
+desktop/lock-in/Sources/LockInCapture/ActivityWatcher.swift
+  s_acebfdccb4f1d0::t_6cd0ee02bbf823 1-144,151,157-159,164,190,197,204,219,227-228,231,241-242,261,264-265
+  s_acebfdccb4f1d0::t_0628f17e53a06d 145-150,152-156,160-163,165-189,191-196,198-203,205-218,220-226,229-230,232-240,243-260,262-263
+desktop/lock-in/Sources/LockInScoring/RulesScorer.swift
+  s_acebfdccb4f1d0::t_82f317d2379920 207-217
+  s_acebfdccb4f1d0::t_7ff5fdddd61523 257-260,262
+  s_acebfdccb4f1d0::t_84fabaea819f70 1-3,8-65,73-206,218-256,261,263-579
+  s_acebfdccb4f1d0::t_87c87ccc1f6aa9 4-7
+  s_acebfdccb4f1d0::t_7ce57cde9a0093 66-72
+desktop/lock-in/Sources/LockInCore/Paths.swift
+  s_acebfdccb4f1d0::t_3a81619b26cf07 1-53
+desktop/lock-in/Sources/LockInApp/Onboarding/AccessibilityPermission.swift
+  s_acebfdccb4f1d0::t_0af9d5c079603e 1-45
+desktop/lock-in/Sources/LockInApp/MenuBar/StatusItemController.swift
+  s_acebfdccb4f1d0::t_b74f896098c722 1-105,109-133
+  s_acebfdccb4f1d0::t_8dc35cb43dee68 106-108
+desktop/lock-in/Sources/LockInCapture/Permission.swift
+  s_acebfdccb4f1d0::t_1080f6685f4e3a 1-88,96-97,103-104
+  s_acebfdccb4f1d0::t_6abee0d2ce1e97 89-95,98-102
+desktop/lock-in/Sources/LockInApp/LockInApp.swift
+  s_acebfdccb4f1d0::t_78d82011204145 1-103
+desktop/lock-in/Sources/LockInApp/MenuBar/StatusPopoverView.swift
+  s_acebfdccb4f1d0::t_b25a1c7f0686e9 1-140,151-203
+  s_acebfdccb4f1d0::t_c3c28bb3f6c6d4 141-150
+desktop/lock-in/Tests/LockInCoreTests/ScoreTests.swift
+  s_acebfdccb4f1d0::t_8a1c837bb1ed2d 1-253
+desktop/lock-in/site/index.html
+  s_acebfdccb4f1d0::t_0cdcf6f5fa8d2f 118
+  s_acebfdccb4f1d0::t_ad442ee947bb1d 217
+  s_acebfdccb4f1d0::t_44dbdce6284737 56
+  s_acebfdccb4f1d0::t_69d9f86259d2d1 51
+  s_acebfdccb4f1d0::t_f3a3f0a26922a8 149-150
+  s_acebfdccb4f1d0::t_cd2936280b7396 1-46,48-50,52-55,57-60,62,68,70-72,74-89,91-111,113-114,116-117,120-124,130,132,134-138,140,142-148,151-216,218-401
+  s_acebfdccb4f1d0::t_aed35338c0cd51 63-67
+  s_acebfdccb4f1d0::t_109b0bedd72ca6 69
+  s_acebfdccb4f1d0::t_b2af5789e7adc5 112,115,119
+  s_acebfdccb4f1d0::t_777f9f1c18d574 61
+  s_acebfdccb4f1d0::t_9baca03e1762ce 90
+  s_acebfdccb4f1d0::t_a24b6856ce6d29 139,141
+  s_acebfdccb4f1d0::t_0ce1905f112206 126-129,131
+  s_acebfdccb4f1d0::t_cda03079dbd5ff 133
+  s_acebfdccb4f1d0::t_8d76b78fa2ac89 125
+  s_acebfdccb4f1d0::t_22d95e58de331c 47
+  s_acebfdccb4f1d0::t_e7deeca63be139 73
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingView.swift
+  s_acebfdccb4f1d0::t_105af80b3be61f 1-152,157-503
+  s_acebfdccb4f1d0::t_807a550feab6cc 153-156
+desktop/lock-in/Sources/LockInApp/Views/MainWindow.swift
+  s_acebfdccb4f1d0::t_424ea2f43881ef 1-103,105-117,163-198
+  s_acebfdccb4f1d0::t_5313415a1ecead 104
+  s_acebfdccb4f1d0::t_f069bb867f6c25 118-162
+docs/superpowers/specs/2026-08-04-lock-in-design.md
+  s_acebfdccb4f1d0::t_4648c35d1cb369 73
+desktop/lock-in/Sources/LockInCore/Retention.swift
+  s_acebfdccb4f1d0::t_6afcc651804d85 1-39
+desktop/lock-in/Sources/LockInApp/Design/Ink.swift
+  s_acebfdccb4f1d0::t_26d5d3d165988c 1-406
+desktop/lock-in/Tests/LockInCoreTests/StoreTests.swift
+  s_acebfdccb4f1d0::t_e730bc5d369e33 55-60,71-72,97-98,128-129,138,166-167,174-175,177,180-181,192-193,195-197,201-206,215,217,219-220,227-229,231-235,242-244,246-253,263-268,274-275,280-282,284-285,290-292,296-297,302-306,308-309,315-317,320-323,333-334,343-344,350,354-356,358-364,368,370-372,374-376,387-388,392-393,401-402,421-422,424-429,432-433,437-438
+  s_acebfdccb4f1d0::t_d1bc43863ff40f 1-54,61-70,73-96,99-127,130-137,139-165,168-173,176,178-179,182-191,194,198-200,207-214,216,218,221-226,230,236-241,245,254-262,269-273,276-279,283,286-289,293-295,298-301,307,310-314,318-319,324-332,335-342,345-349,351-353,357,365-367,369,373,377-386,389-391,394-400,403-420,423,430-431,434-436,439-440
+desktop/lock-in/Sources/LockInApp/Model/TodayProvider.swift
+  s_acebfdccb4f1d0::t_33ea69081b1322 282-283
+  s_acebfdccb4f1d0::t_c48044944a7219 314-316,321,324-325,328-331
+  s_acebfdccb4f1d0::t_e1cde1babfff55 214
+  s_acebfdccb4f1d0::t_4ebc2197478fdf 4-13
+  s_acebfdccb4f1d0::t_c8002fcdafca88 245,247-255
+  s_acebfdccb4f1d0::t_a559b52eaddb3d 1-3,14-213,215-244,246,256-281,284-313,317-320,322-323,326-327,332-334
+desktop/lock-in/Tests/LockInScoringTests/ScorerTests.swift
+  s_acebfdccb4f1d0::t_1319946dbbcc10 1-266
+desktop/lock-in/Sources/LockInScoring/Scorer.swift
+  s_acebfdccb4f1d0::t_0b04146f07265b 1-193
+desktop/lock-in/Sources/LockInApp/Views/TableView.swift
+  s_acebfdccb4f1d0::t_413d2814dd9015 1-164,166-201
+  s_acebfdccb4f1d0::t_3ac03db22e4696 165
+desktop/lock-in/Sources/LockInApp/Model/AppModel.swift
+  s_acebfdccb4f1d0::t_0f44cc86dc2892 1-56
+desktop/lock-in/Sources/LockInCapture/URLProbe.swift
+  s_acebfdccb4f1d0::t_fb2a929ded4b20 1-52,56-60,62,85-99,110-112,114-122,124-133,137-140,158,163,168,174,182-183,206,213,215-216
+  s_acebfdccb4f1d0::t_adbcc48f50889b 100-109,113,123,134-136,186
+  s_acebfdccb4f1d0::t_58e57f8652c41c 53-55,61,63-84
+  s_acebfdccb4f1d0::t_5ee02ceb1b9cb8 141-157,159-162,164-167,169-173,175-181,184-185,187-205,207-212,214
+desktop/lock-in/Tests/LockInCaptureTests/SessionizerTests.swift
+  s_acebfdccb4f1d0::t_c372915b6fc70a 1-273,275-285
+  s_acebfdccb4f1d0::t_b0be5ae1b75260 274
+desktop/lock-in/Tests/LockInCaptureTests/URLProbeTests.swift
+  s_acebfdccb4f1d0::t_90bca3ebe976d1 17,30-32,35-38,55
+  s_acebfdccb4f1d0::t_7b8527afdce051 169-171
+  s_acebfdccb4f1d0::t_0c4f660216e092 175-177
+  s_acebfdccb4f1d0::t_a284f90b755822 231-267,269,273,275,279,287,293,295,299,301,303-304,312,319,321-323,328,331,340,344,348,355-356,365,368
+  s_acebfdccb4f1d0::t_53ad8051245eb5 21
+  s_acebfdccb4f1d0::t_c769493acc5806 1-16,18-20,22-29,33-34,39-54,56-168,172-174,178-230,268,284,292,298,317,326,330,338,347,361,364,369
+  s_acebfdccb4f1d0::t_c05d0311a1ad86 270-272,274,276-278,280-283,285-286,288-291,294,296-297,300,302,305-311,313-316,318,320,324-325,327,329,332-337,339,341-343,345-346,349-354,357-360,362-363,366-367
+desktop/lock-in/Sources/LockInCore/Models.swift
+  s_acebfdccb4f1d0::t_288a2e27f34dd1 18-28
+  s_acebfdccb4f1d0::t_524c59a0be9577 1-17,29-41,50-290
+  s_acebfdccb4f1d0::t_85e4ef76884ea3 42-49
+desktop/lock-in/Tests/LockInCoreTests/ShareBoundaryTests.swift
+  s_acebfdccb4f1d0::t_b79499ddba7e2e 1-226
+desktop/lock-in/Sources/LockInCapture/IdleMonitor.swift
+  s_acebfdccb4f1d0::t_bec3ea349ad8d5 1-64
+desktop/lock-in/Package.resolved
+  s_acebfdccb4f1d0::t_bdb3700b17fe13 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "e8a8e517384d4a2b32538c5fb582e485c5e556c0",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
