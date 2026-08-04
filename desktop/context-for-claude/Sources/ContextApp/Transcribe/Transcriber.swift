@@ -116,8 +116,8 @@ actor Transcriber {
     /// it up front, with a progress bar, is the difference between a slow step and a silent failure.
     ///
     /// It loads as well as downloads, deliberately. Compiling the `.mlmodelc` files the first time
-    /// is itself slow, and paying that here warms the compile cache; the loaded models are dropped
-    /// because the second load from a warm cache is cheap.
+    /// is itself slow, and paying that here warms the compile cache. The loaded models go through
+    /// ``ModelPool`` so the first capture reuses them instead of loading a second CoreML copy.
     ///
     /// Throws under Airgap Mode with nothing on disk — see ``SpeechModelAccess``.
     static func prepareModels(progress: (@Sendable (Double) -> Void)? = nil) async throws {
@@ -128,7 +128,7 @@ actor Transcriber {
         }
 
         let started = Date()
-        _ = try await obtainModels(version: version, progress: progress)
+        _ = try await ModelPool.shared.models(version: version, progress: progress)
         progress?(1)
         ContextLog.info(
             "Parakeet \(version) downloaded in \(String(format: "%.0f", Date().timeIntervalSince(started)))s", "stt")
@@ -767,7 +767,10 @@ private actor ModelPool {
     private var loaded: [AsrModelVersion: AsrModels] = [:]
     private var inFlight: [AsrModelVersion: Task<AsrModels, Error>] = [:]
 
-    func models(version: AsrModelVersion) async throws -> AsrModels {
+    func models(
+        version: AsrModelVersion,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> AsrModels {
         if let models = loaded[version] { return models }
         if let task = inFlight[version] { return try await task.value }
 
@@ -779,7 +782,7 @@ private actor ModelPool {
         // remembered. That is what lets transcription come up on its own the moment Airgap Mode goes
         // off, and it costs nothing to re-ask: a refused decision is one `FileManager` existence
         // check and never touches the network.
-        let task = Task { try await Transcriber.obtainModels(version: version) }
+        let task = Task { try await Transcriber.obtainModels(version: version, progress: progress) }
         inFlight[version] = task
         defer { inFlight[version] = nil }
         let models = try await task.value
