@@ -235,7 +235,8 @@ extension SettingsContentView {
           settingsCardHeader(icon: "waveform.badge.minus", title: "Local VAD Gate")
           settingRow(
             title: "Silence Detection",
-            subtitle: "Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs."
+            subtitle:
+              "Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs."
           ) {
             Toggle("", isOn: $vadGateEnabled)
               .toggleStyle(OmiToggleStyle())
