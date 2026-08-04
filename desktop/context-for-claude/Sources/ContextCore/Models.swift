@@ -393,6 +393,30 @@ public struct StatusInfo: Codable, Sendable, Equatable {
             self.coverage = "no data captured yet"
         }
     }
+
+    /// First sentence of MCP `status` for the local half. Kept here so hermetic tests can assert
+    /// `capturing + transcription gap` without writing the real heartbeat file.
+    ///
+    /// Prefer this for the fully-capturing case; `StatusTool.headline` still owns the degraded
+    /// wording that names which streams are down.
+    public var localCaptureHeadline: String {
+        if capturing {
+            if let reason = Self.nonEmptyReason(pausedReason) {
+                return "Context for Claude is capturing right now — \(reason)."
+            }
+            return "Context for Claude is capturing right now."
+        }
+        if let reason = Self.nonEmptyReason(pausedReason) {
+            return "Context for Claude is not capturing right now — \(reason)."
+        }
+        return "Context for Claude is not capturing right now."
+    }
+
+    private static func nonEmptyReason(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 // MARK: - Time

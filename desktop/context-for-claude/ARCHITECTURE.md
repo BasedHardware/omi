@@ -55,25 +55,33 @@ OCR, storage, MCP, and the macOS UI remain outside this slice.
 ## Data flow
 
 ```
-MicCapture ────────→ Transcriber(mic)    ──┐
-  CoreAudio IOProc     FluidAudio Parakeet │
-                                           ├──→ Engine ──→ ContextStore ──→ context.db
-SystemAudioCapture ─→ Transcriber(system) ─┤    session      GRDB, WAL,
-  CoreAudio tap        FluidAudio Parakeet │    boundaries   FTS5
-                                           │
-ScreenWatcher ──────→ Vision OCR ──────────┘
-  ScreenCaptureKit
+MicCapture ──┐
+             ├→ AudioMixer ─→ ListenSocket (/v4/listen) ──┐
+SystemAudio ─┘     cloud ASR (all hosts)                   │
+                                                           ├──→ Engine ──→ ContextStore ──→ context.db
+MicCapture ──┐                                             │    session      GRDB, WAL,
+             ├→ Transcriber (Parakeet)* ───────────────────┤    boundaries   FTS5
+SystemAudio ─┘     Apple Silicon only                      │
+                                                           │
+ScreenWatcher ──────→ Vision OCR ──────────────────────────┘
+  ScreenCaptureKit          (3 s Silicon / 9 s Intel)
 ```
+
+`*` Local Parakeet is never constructed on Intel. Capture feeds the cloud mixer regardless; a local
+model load failure on Silicon must not tear down the audio devices or the cloud pump
+(`CaptureHostPolicy` / `AudioCaptureDecision`).
 
 Audio flows as 16 kHz mono Int16 little-endian `Data` from capture to transcription — one format,
 agreed once, so a source and a transcriber can be swapped independently.
 
-Speaker attribution needs no diarization model: the mic is the user, the system tap is everyone
-else. Two transcribers, never mixed.
+Cloud mixes both channels so the backend can diarize. Local Parakeet (Silicon) runs in parallel
+and approximates attribution as "mic is the user, system is everyone else" with two separate
+instances — not full multi-speaker labels.
 
 `Engine` owns the only writer. Each source runs in its own task and fails independently — a dead mic
 must not stop screen capture — and the reason surfaces in the menu bar *and* in the MCP `status`
-tool, so Claude can report a gap instead of fabricating over it.
+tool, so Claude can report a gap instead of fabricating over it. On Intel, when cloud ASR is not
+live, a dedicated transcription gap reason is published the same way.
 
 ## Storage
 

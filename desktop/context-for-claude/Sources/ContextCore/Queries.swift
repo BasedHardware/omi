@@ -6,6 +6,13 @@ import GRDB
 /// read-only WAL connection opened while the app is still capturing.
 public enum Queries {
 
+    /// Where `status` gets the live-capture signal from. Tests inject `.fixed` so they never write
+    /// the real Application Support heartbeat.
+    public enum HeartbeatSource: Sendable, Equatable {
+        case live
+        case fixed(CaptureState?)
+    }
+
     // MARK: - Tuning
 
     /// The window title is the signal and the OCR is the detail — enough to recognise a page,
@@ -382,7 +389,13 @@ public enum Queries {
     }
 
     /// Capture health plus coverage, so a reader can tell "never happened" from "not captured".
-    public static func status(_ store: ContextStore) throws -> StatusInfo {
+    ///
+    /// Pass `heartbeat: .fixed(...)` in tests so capturing + gap copy can be asserted without
+    /// writing the real Application Support heartbeat. Production callers use the default `.live`.
+    public static func status(
+        _ store: ContextStore,
+        heartbeat: HeartbeatSource = .live
+    ) throws -> StatusInfo {
         let totals: Totals = try store.read { db in
             let row = try Row.fetchOne(
                 db,
@@ -401,15 +414,24 @@ public enum Queries {
 
         // The heartbeat file is the only live signal the MCP server has; a stale one means the app
         // is gone, whatever it last claimed.
-        let state = CaptureState.read()
+        let state: CaptureState?
+        switch heartbeat {
+        case .live:
+            state = CaptureState.read()
+        case .fixed(let injected):
+            state = injected
+        }
         let live = state.map { !$0.isStale } ?? false
         let capturing = live && (state?.capturing ?? false)
         // A process that is gone is `off` whatever its last beat claimed; a live one keeps its own
         // three-valued answer, which is the only way `degraded` survives the trip to Claude.
         let health: CaptureHealth = live ? (state?.health ?? .off) : .off
         let pausedReason: String?
-        if health == .capturing {
-            pausedReason = nil
+        if capturing {
+            // Sensors can be live while a gap remains (Intel cloud ASR down, mic denied, etc.).
+            // Pass the heartbeat reason through so MCP `status` matches the menu bar — including
+            // when health is `.capturing` and the gap is transcription-only.
+            pausedReason = state?.pausedReason
         } else if live {
             // Deliberately *not* cleared for `degraded`. This branch used to be keyed on
             // `capturing`, and a degraded recorder is exactly the state whose reason a reader most

@@ -53,6 +53,25 @@ final class StatusHonestyTests: XCTestCase {
         XCTAssertEqual(headline, "Context for Claude is capturing right now.")
     }
 
+    func testCapturingPlusTranscriptionGapStaysVisible() {
+        let gap =
+            "Transcription needs a network connection to Omi — audio is still captured but nothing is being transcribed"
+        let headline = Tools.headline(
+            for: status(
+                health: .capturing,
+                capturing: true,
+                pausedReason: gap,
+                streams: [
+                    StreamReport(name: StreamName.microphone, state: .live),
+                    StreamReport(name: StreamName.systemAudio, state: .live),
+                    StreamReport(name: StreamName.screen, state: .live),
+                ]))
+
+        XCTAssertEqual(
+            headline,
+            "Context for Claude is capturing right now — \(gap).")
+    }
+
     func testAStoppedRecorderKeepsItsReason() {
         let headline = Tools.headline(
             for: status(health: .off, pausedReason: "Context for Claude is not running"))

@@ -665,25 +665,33 @@ final class ListenSocket: ObservableObject {
     // MARK: - Outbound audio
 
     private func deliver(_ pcm: Data) {
+        // Policy lives in ContextCore so Intel's "no Parakeet under the mixer" contract is
+        // hermetically testable. `.idle` + `wantsConnection` must buffer: that is the window
+        // between `start()` setting the flag and `connect()` flipping to `.connecting`.
+        // `.airgapped` always drops — never buffer audio the user has forbidden uploading.
+        let phase: CloudOutboundPCMPhase
         switch state {
-        case .live:
+        case .idle: phase = .idle
+        case .connecting: phase = .connecting
+        case .live: phase = .live
+        case .failed: phase = .failed
+        case .paywalled: phase = .paywalled
+        case .airgapped: phase = .airgapped
+        }
+        switch CaptureHostPolicy.outboundPCMAction(
+            phase: phase,
+            wantsConnection: wantsConnection,
+            hasLiveTask: task != nil
+        ) {
+        case .transmit:
             guard let task else {
                 enqueue(pcm)
                 return
             }
             transmit(pcm, on: task)
-        case .connecting:
+        case .buffer:
             enqueue(pcm)
-        case .failed:
-            // `.failed` covers both "dropped, reconnecting" and "refused, and it will be refused
-            // again". Only the first is worth holding audio for; `wantsConnection` is what tells
-            // them apart.
-            guard wantsConnection else { return }
-            enqueue(pcm)
-        case .idle, .paywalled, .airgapped:
-            // Nothing is coming. Dropping here is the point: a socket that will not open must not
-            // grow a buffer for the rest of the day — and under `.airgapped` a buffer would be a
-            // pile of the user's audio kept for an upload they have forbidden.
+        case .drop:
             return
         }
     }

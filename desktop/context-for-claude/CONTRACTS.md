@@ -366,13 +366,38 @@ actor Transcriber {
     func finish() async
 }
 ```
-FluidAudio Parakeet TDT, on-device. `AsrModels.downloadAndLoad(version:)` — `.v2` for English,
-`.v3` otherwise. 10 s windows drained by a 1 s pump. **A fresh `TdtDecoderState()` per window** —
-persisting it across windows makes the transducer loop and Title-Case everything. Use
-`TranscriptFilter.isSilent(rms:)` to skip dead windows before the model and `TranscriptFilter.clean`
-on the output. Model download is ~600 MB on first run: expose
-`static var isModelReady: Bool` and `static func prepareModels() async throws` so onboarding can
-warm it with progress rather than the first conversation silently dropping.
+FluidAudio Parakeet TDT, on-device — **Apple Silicon only**. `Engine` consults
+`CaptureHostPolicy.usesLocalSTT` / `HostArchitecture.usesLocalSTT` and never constructs a
+`Transcriber` on Intel (cloud `/v4/listen` is the sole ASR there). When local STT is enabled:
+`AsrModels.downloadAndLoad(version:)` — `.v2` for English, `.v3` otherwise. Fixed-size windows
+drained by a 1 s pump. **A fresh `TdtDecoderState()` per window** — persisting it across windows
+makes the transducer loop and Title-Case everything. Use `TranscriptFilter.isSilent(rms:)` to skip
+dead windows before the model and `TranscriptFilter.clean` on the output. Model download is ~600 MB
+on first run: expose `static var isModelReady: Bool` and `static func prepareModels() async throws`
+so onboarding can warm it with progress on Silicon; **Intel onboarding must skip `prepareModels`**.
+
+### `Sources/ContextCore/CaptureHostPolicy.swift` — owner: **engine / platform agent**
+
+```swift
+public struct CaptureHostPolicy: Equatable, Sendable {
+    public init(isAppleSilicon: Bool)
+    public var usesLocalSTT: Bool
+    public var screenCaptureInterval: TimeInterval  // 3.0 Silicon / 9.0 Intel
+    public static let localSTTFailureStopsCapture: Bool  // always false
+    public static func resolvedCloudTranscriptionState(
+        socket: CloudSocketSnapshot, isSignedIn: Bool) -> CloudTranscriptionState
+    public static func outboundPCMAction(
+        phase: CloudOutboundPCMPhase, wantsConnection: Bool, hasLiveTask: Bool)
+        -> CloudOutboundPCMAction  // idle+wantsConnection buffers; airgapped always drops
+    public static func cloudTranscriptionGapReason(
+        usesLocalSTT: Bool, isSignedIn: Bool, cloud: CloudTranscriptionState) -> String?
+}
+public struct AudioCaptureDecision: Equatable, Sendable {
+    public let startLocalSTT: Bool
+    public let teardownCaptureOnLocalSTTFailure: Bool  // always false
+    public static func make(usesLocalSTT: Bool) -> AudioCaptureDecision
+}
+```
 
 ### `Sources/ContextApp/Engine.swift` — owner: **engine agent**
 
@@ -391,11 +416,14 @@ warm it with progress rather than the first conversation silently dropping.
     func refreshCapabilities()
 }
 ```
-Owns `MicCapture`, `SystemAudioCapture`, two `Transcriber`s, `ScreenWatcher`, and the `ContextStore`
-writer. Applies `SessionPolicy` to decide session boundaries, sets `appHint` from the frontmost app
-when opening one, and writes `CaptureState` to the heartbeat file every 30 s and on every state
-change. **Each source fails independently** — a dead mic must not stop screen capture; record the
-reason in `pausedReason` and keep the rest alive. Prunes frames older than 30 days on launch.
+Owns `MicCapture`, `SystemAudioCapture`, optional Silicon `Transcriber`s, `ListenSocket` cloud ASR,
+`ScreenWatcher`, and the `ContextStore` writer. Starts audio capture **without** awaiting Parakeet;
+local STT failure must not tear down devices or the cloud pump. Screen interval from
+`HostArchitecture.screenCaptureInterval` (3 s / 9 s). Applies `SessionPolicy` to decide session
+boundaries, sets `appHint` from the frontmost app when opening one, and writes `CaptureState` to
+the heartbeat file every 30 s and on every state change. **Each source fails independently** — a
+dead mic must not stop screen capture; record the reason in `pausedReason` and keep the rest alive.
+Prunes frames older than 30 days on launch.
 
 ### `Sources/ContextApp/Permissions.swift` — owner: **permissions agent**
 

@@ -501,22 +501,48 @@ final class QueriesTests: XCTestCase {
     }
 
     func testStatusIsNotCapturingWithoutALiveHeartbeat() throws {
-        // `status` reads the process-wide heartbeat path and the contract gives it no injection
-        // point, so the expectation is derived from that same file. The test never writes it — a
-        // unit test must not be able to tell the running app it is paused.
-        let state = CaptureState.read()
+        // Inject an absent heartbeat so this never depends on whether Context for Claude is
+        // running on the developer machine.
+        let status = try Queries.status(fixture.store, heartbeat: .fixed(nil))
 
-        let status = try Queries.status(fixture.store)
+        XCTAssertFalse(status.capturing, "an absent heartbeat means the app is not running")
+        XCTAssertEqual(status.pausedReason, "Context for Claude is not running")
+    }
 
-        if let state, !state.isStale {
-            XCTAssertEqual(status.capturing, state.capturing)
-        } else {
-            XCTAssertFalse(status.capturing, "an absent or stale heartbeat means the app is not running")
-            XCTAssertNotNil(status.pausedReason)
-            if state == nil {
-                XCTAssertEqual(status.pausedReason, "Context for Claude is not running")
-            }
-        }
+    func testStatusPassesThroughCapturingPlusTranscriptionGap() throws {
+        // Intel cloud-ASR gap while sensors stay live: MCP `status` must keep both facts.
+        let gap =
+            "Transcription needs a network connection to Omi — audio is still captured but nothing is being transcribed"
+        let heartbeat = CaptureState(
+            capturing: true,
+            pausedReason: gap,
+            updatedAt: ContextTime.now)
+
+        let status = try Queries.status(fixture.store, heartbeat: .fixed(heartbeat))
+
+        XCTAssertTrue(status.capturing)
+        XCTAssertEqual(status.pausedReason, gap)
+        XCTAssertEqual(
+            status.localCaptureHeadline,
+            "Context for Claude is capturing right now — \(gap).")
+        XCTAssertTrue(status.localCaptureHeadline.contains("capturing right now"))
+        XCTAssertTrue(status.localCaptureHeadline.contains(gap))
+    }
+
+    func testStatusHeadlineWhenCapturingWithoutGap() {
+        let status = StatusInfo(
+            capturing: true,
+            pausedReason: nil,
+            capabilities: [],
+            segmentCount: 0,
+            frameCount: 0,
+            sessionCount: 0,
+            oldestAt: nil,
+            newestAt: nil,
+            databasePath: "/tmp/context.db")
+        XCTAssertEqual(
+            status.localCaptureHeadline,
+            "Context for Claude is capturing right now.")
     }
 
     func testHeartbeatGoesStaleOnSchedule() throws {

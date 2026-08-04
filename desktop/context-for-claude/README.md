@@ -3,8 +3,9 @@
 A menu-bar-only macOS app that keeps Claude caught up on what you see and say.
 
 It captures the two ambient streams Omi already captures — audio (your mic, plus the other side of
-your calls) and screen (active window and its text) — transcribes the audio **on device**, uploads
-finished conversations to your Omi account, and serves all of it to Claude over MCP.
+your calls) and screen (active window and its text) — transcribes the audio via **Omi cloud ASR**
+(`/v4/listen`), runs **on-device Parakeet in parallel on Apple Silicon only**, uploads finished
+conversations to your Omi account, and serves all of it to Claude over MCP.
 
 The point: you stop explaining context to Claude. It asks Context for Claude instead.
 
@@ -13,7 +14,9 @@ The point: you stop explaining context to Claude. It asks Context for Claude ins
 
 ## What you need
 
-- macOS 14.4 or later (Apple silicon)
+- macOS 14.4 or later
+- Apple Silicon **or** Intel (Intel uses cloud transcription only — a signed-in Omi account and
+  network are required for transcripts; offline/airgap is unsupported on Intel)
 - Xcode 26 / Swift 6.2
 - An Omi account
 - A code-signing certificate. Any self-signed one works; `scripts/build.sh` tells you how to make
@@ -29,8 +32,12 @@ cd desktop/context-for-claude
 That builds both products, assembles `Context for Claude.app`, signs it, installs it to `/Applications`, and
 prints the absolute path of the MCP binary. Flags: `--no-install`, `--clean`, `--run`.
 
+`scripts/build.sh` builds for the **host architecture** (no arm64-only triple). For Intel QA, build
+on an Intel Mac (or ship a universal/lipo’d release artifact).
+
 Then follow onboarding. It is one click: sign in to Omi, grant microphone, call audio and screen,
-and it registers itself with Claude Code and Claude Desktop and starts at login.
+and it registers itself with Claude Code and Claude Desktop and starts at login. On Apple Silicon,
+onboarding may also warm the on-device Parakeet model (~600 MB); Intel skips that step.
 
 **Restart Claude Code and Claude Desktop afterwards** — both read their MCP config at startup, so a
 session that was already open will not see Context for Claude until it is relaunched.
@@ -71,13 +78,15 @@ Seven tools. The descriptions are written for Claude, so it reaches for them unp
 | `recall` | "What do I know about X?" — searches live local capture **and** your Omi history |
 | `recent` | "What's going on right now?" — the last N minutes, local, no backend lag |
 | `conversations` | Recent conversations with time, duration, app and preview |
-| `transcript` | One conversation in full, speaker-attributed |
+| `transcript` | One conversation in full (Omi: named speakers; local capture: me/them by mic vs system) |
 | `screen` | What was on screen: window titles and their text |
 | `activity` | The shape of a day — contiguous blocks per app |
 | `status` | Capture health and coverage windows, for both halves |
 
 `status` is the one that makes the rest trustworthy: it reports exactly what window of time was
-recorded, so Claude can tell "that never happened" apart from "that was never captured".
+recorded, so Claude can tell "that never happened" apart from "that was never captured". On Intel,
+when cloud ASR is unavailable, `status` and the menu bar say so explicitly rather than inventing
+coverage.
 
 Local hits are literal full-text matches. Omi's are a **semantic** search with no relevance floor —
 it returns nearest neighbours even when nothing matches — so those are counted separately, labelled
@@ -86,11 +95,15 @@ as related rather than matching, and carry a caveat telling Claude to treat them
 ## How it is put together
 
 ```
-Context for Claude.app                     context-for-claude-mcp
-  mic ─┐                          (stdio, spawned by Claude)
-  sys ─┼→ Parakeet (on device) ─┐        │
- screen ┴→ Vision OCR ──────────┼→ context.db (SQLite, WAL, FTS5) ←┘ read-only
-                                └→ Omi account (from-segments + screen-activity)
+Context for Claude.app                        context-for-claude-mcp
+  mic ─┐                             (stdio, spawned by Claude)
+  sys ─┼→ AudioMixer ─→ /v4/listen ─┐
+       │                 (cloud ASR) │
+       └→ Parakeet* ────────────────┼→ context.db (SQLite, WAL, FTS5) ←┘ read-only
+  screen → Vision OCR ──────────────┘         │
+                                              └→ Omi account (from-segments + screen-activity)
+
+  * Apple Silicon only — runs in parallel with cloud ASR (local resilience). Never loaded on Intel.
 ```
 
 Two processes, one database, no IPC. The MCP server is spawned per Claude session, holds no
@@ -100,15 +113,16 @@ state across.
 Capture is ported from `desktop/macos` rather than reinvented, keeping the details that are
 invisible until they bite: a CoreAudio IOProc on the default input device (not `AVAudioEngine`,
 whose implicit aggregate device degrades Bluetooth A2DP), CoreAudio process taps with drift
-compensation for system audio, and a fresh `TdtDecoderState` per window so the transducer does not
-loop.
+compensation for system audio, and (on Silicon) a fresh `TdtDecoderState` per window so the
+transducer does not loop.
 
-Speaker attribution needs no diarization model: the mic is you, the system tap is everyone else.
+Cloud transcription mixes mic + system on one socket so the backend can diarize and match the
+user's speech profile. Local Parakeet (Silicon) runs in parallel and approximates attribution as
+"mic is you, system is everyone else" — not full multi-speaker diarization.
 
-Conversations upload through `POST /v1/conversations/from-segments`, not the `/v4/listen`
-websocket — the audio is already transcribed here, the finalize path websocket sessions end through
-is capped at 10 conversations/hour against 30 for from-segments, and `source: "phone"` gets memories
-extracted immediately where `source: "desktop"` defers them and opts into a trial paywall.
+Conversations upload through `POST /v1/conversations/from-segments` (retryable queue; cloud
+`/v4/listen` already handles live ASR). `source: "phone"` gets memories extracted immediately
+where `source: "desktop"` defers them and opts into a trial paywall.
 
 Detail: `ARCHITECTURE.md`. The interface contracts every file was built against: `CONTRACTS.md`.
 Exact visual values: `docs/design-system.md`.

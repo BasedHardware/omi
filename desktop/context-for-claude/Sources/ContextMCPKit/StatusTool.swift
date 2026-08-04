@@ -102,7 +102,8 @@ extension Tools {
     static func headline(for status: StatusInfo) -> String {
         switch status.health {
         case .capturing:
-            return "Context for Claude is capturing right now."
+            // Intel cloud-ASR gap while sensors stay live must stay visible.
+            return status.localCaptureHeadline
         case .degraded:
             let live = status.streams.filter { $0.state.isLive }.map { streamPhrase($0.name) }
             let down = status.streams.filter { $0.state == .blocked || $0.state == .stalled }

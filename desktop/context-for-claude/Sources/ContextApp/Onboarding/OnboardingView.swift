@@ -506,7 +506,14 @@ struct OnboardingView: View {
     private var setupTitle: String {
         // "First…" only survives for a run that never signed in; once the account is known, the
         // permissions are no longer the first thing being asked for.
-        guard invitations.isBusy else { return auth.isSignedIn ? "Now the permissions." : "First…" }
+        guard invitations.isBusy else {
+            if auth.isSignedIn {
+                return HostArchitecture.usesLocalSTT
+                    ? "Now the permissions."
+                    : "Now the permissions — transcripts use your Omi account."
+            }
+            return "First…"
+        }
         return "Say yes."
     }
 
@@ -971,6 +978,8 @@ struct OnboardingView: View {
     /// The first model pull is ~600 MB. Warming it behind this step costs the user nothing;
     /// leaving it to the first conversation costs them the conversation.
     private func warmModels() {
+        // Intel has no ANE / Parakeet path — cloud `/v4/listen` is the only ASR.
+        guard HostArchitecture.usesLocalSTT else { return }
         guard !Transcriber.isModelReady else { return }
         warmingModels = true
         modelProgress = 0

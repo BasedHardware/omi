@@ -151,6 +151,7 @@ fi
 # Build
 # ---------------------------------------------------------------------------------------------
 log "building ContextApp (release)"
+# Host architecture (no arm64-only triple): Intel Macs get an x86_64 binary; Silicon gets arm64.
 swift build -c release --package-path "$PKG_DIR" --product ContextApp
 
 log "building context-for-claude-mcp (release)"
