@@ -9,29 +9,23 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xl) {
       // Storage Stats
       settingsCard(settingId: "rewind.storage") {
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          HStack {
-            Image(systemName: "internaldrive.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Storage")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-
-              if let stats = rewindStats {
-                Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
-              } else {
-                Text("Loading...")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
-              }
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "internaldrive.fill", title: "Storage")
+          
+          if let stats = rewindStats {
+            settingRow(
+              title: "Usage",
+              subtitle: "\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))"
+            ) {
+              EmptyView()
             }
-
-            Spacer()
+          } else {
+            settingRow(
+              title: "Usage",
+              subtitle: "Loading..."
+            ) {
+              EmptyView()
+            }
           }
         }
       }
@@ -43,19 +37,7 @@ extension SettingsContentView {
       settingsCard(settingId: "rewind.excludedapps") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "eye.slash.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Excluded Apps")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text("Screen capture is paused when these apps are active")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
-            }
+            settingsCardHeader(icon: "eye.slash.fill", title: "Excluded Apps")
 
             Spacer()
 
@@ -64,6 +46,10 @@ extension SettingsContentView {
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
+          
+          Text("Screen capture is paused when these apps are active")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
 
           Divider()
             .background(OmiColors.backgroundQuaternary)
@@ -115,26 +101,12 @@ extension SettingsContentView {
 
       // Battery Settings
       settingsCard(settingId: "rewind.battery") {
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          HStack {
-            Image(systemName: "battery.75percent")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Battery Optimization")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text(
-                "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
-              )
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
-            }
-
-            Spacer()
-
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "battery.75percent", title: "Battery Optimization")
+          settingRow(
+            title: "Behavior",
+            subtitle: "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
+          ) {
             Text("Automatic")
               .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
@@ -144,24 +116,12 @@ extension SettingsContentView {
 
       // Retention Settings
       settingsCard(settingId: "rewind.retention") {
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          HStack {
-            Image(systemName: "clock.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Data Retention")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text("How long to keep screen recordings")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-
-            Spacer()
-
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "clock.fill", title: "Data Retention")
+          settingRow(
+            title: "Retention Period",
+            subtitle: "How long to keep screen recordings"
+          ) {
             SettingsMenuPicker(selection: $rewindSettings.retentionDays) {
               Text("3 days").tag(3)
               Text("7 days").tag(7)

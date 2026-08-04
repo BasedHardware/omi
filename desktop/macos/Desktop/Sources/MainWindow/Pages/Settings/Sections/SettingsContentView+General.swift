@@ -9,95 +9,66 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xl) {
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "rectangle.dashed.badge.record")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Screen Capture")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-
-            Text(
-              permissionError
-                ?? screenCaptureHealth.statusText
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(
-              permissionError != nil || screenCaptureHealth == .temporarilyUnavailable
-                || screenCaptureHealth == .recovering
-                ? OmiColors.warning : OmiColors.textTertiary
-            )
-          }
-
-          Spacer()
-
-          if isToggling {
-            ProgressView()
-              .scaleEffect(0.8)
-              .frame(width: 36, height: 20)
-          } else {
-            Toggle(
-              "",
-              isOn: Binding(
-                get: { isMonitoring },
-                set: { newValue in
-                  isMonitoring = newValue
-                  toggleMonitoring(enabled: newValue)
-                }
+        VStack(spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "rectangle.dashed.badge.record", title: "Screen Capture")
+          settingRow(
+            title: "Status",
+            subtitle: permissionError ?? screenCaptureHealth.statusText
+          ) {
+            if isToggling {
+              ProgressView()
+                .scaleEffect(0.8)
+                .frame(width: 36, height: 20)
+            } else {
+              Toggle(
+                "",
+                isOn: Binding(
+                  get: { isMonitoring },
+                  set: { newValue in
+                    isMonitoring = newValue
+                    toggleMonitoring(enabled: newValue)
+                  }
+                )
               )
-            )
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-            .frame(width: 36, height: 20)
+              .toggleStyle(OmiToggleStyle())
+              .labelsHidden()
+              .frame(width: 36, height: 20)
+            }
           }
         }
       }
 
       // Audio Recording toggle
       settingsCard(settingId: "general.audiorecording") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "mic.fill")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Audio Recording")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-
-            Text(
-              transcriptionError
-                ?? (isTranscribing
-                  ? (appState.isAwaitingMeeting
-                    ? "Waiting for a meeting…" : "Recording and transcribing audio")
-                  : "Audio recording is paused")
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
-          }
-
-          Spacer()
-
-          if isTogglingTranscription {
-            ProgressView()
-              .scaleEffect(0.8)
-              .frame(width: 36, height: 20)
-          } else {
-            Toggle(
-              "",
-              isOn: Binding(
-                get: { isTranscribing },
-                set: { newValue in
-                  isTranscribing = newValue
-                  toggleTranscription(enabled: newValue)
-                }
+        VStack(spacing: OmiSpacing.md) {
+          settingsCardHeader(icon: "mic.fill", title: "Audio Recording")
+          settingRow(
+            title: "Status",
+            subtitle: transcriptionError
+              ?? (isTranscribing
+                ? (appState.isAwaitingMeeting
+                  ? "Waiting for a meeting…" : "Recording and transcribing audio")
+                : "Audio recording is paused")
+          ) {
+            if isTogglingTranscription {
+              ProgressView()
+                .scaleEffect(0.8)
+                .frame(width: 36, height: 20)
+            } else {
+              Toggle(
+                "",
+                isOn: Binding(
+                  get: { isTranscribing },
+                  set: { newValue in
+                    isTranscribing = newValue
+                    toggleTranscription(enabled: newValue)
+                  }
+                )
               )
-            )
-            .toggleStyle(OmiToggleStyle())
-            .labelsHidden()
-            .frame(width: 36, height: 20)
+              .toggleStyle(OmiToggleStyle())
+              .labelsHidden()
+              .frame(width: 36, height: 20)
+            }
           }
         }
       }
@@ -105,25 +76,11 @@ extension SettingsContentView {
       // Notifications toggle
       settingsCard(settingId: "general.notifications") {
         VStack(spacing: OmiSpacing.md) {
-          HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "bell.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.info)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Notifications")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text(notificationStatusText)
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(
-                  appState.isNotificationBannerDisabled ? OmiColors.warning : OmiColors.textTertiary
-                )
-            }
-
-            Spacer()
-
+          settingsCardHeader(icon: "bell.fill", title: "Notifications")
+          settingRow(
+            title: "Status",
+            subtitle: notificationStatusText
+          ) {
             // Toggle mirrors the effective notification state. macOS ownership
             // caveat: the app can request/repair permission but cannot revoke
             // it, so flipping OFF (or fixing disabled banners) deep-links to
@@ -156,6 +113,7 @@ extension SettingsContentView {
             )
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
+            .frame(width: 36, height: 20)
           }
 
           // Warning when banners are disabled
@@ -186,23 +144,11 @@ extension SettingsContentView {
       if #available(macOS 14.4, *) {
         settingsCard(settingId: "general.systemaudio") {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HStack(spacing: OmiSpacing.lg) {
-              Image(systemName: "speaker.wave.2.fill")
-                .scaledFont(size: OmiType.subheading)
-                .foregroundColor(OmiColors.info)
-
-              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("System Audio")
-                  .scaledFont(size: OmiType.subheading, weight: .semibold)
-                  .foregroundColor(OmiColors.textPrimary)
-
-                Text("Choose when Omi records audio from other apps (calls, videos, music).")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
-              }
-
-              Spacer()
-
+            settingsCardHeader(icon: "speaker.wave.2.fill", title: "System Audio")
+            settingRow(
+              title: "Capture Mode",
+              subtitle: "Choose when Omi records audio from other apps (calls, videos, music)."
+            ) {
               SettingsMenuPicker(
                 selection: Binding(
                   get: { systemAudioCaptureMode },
@@ -234,29 +180,18 @@ extension SettingsContentView {
       // Font Size
       settingsCard(settingId: "general.fontsize") {
         VStack(spacing: OmiSpacing.md) {
-          HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "textformat.size")
-              .scaledFont(size: 16, weight: .medium)
-              .foregroundColor(OmiColors.info)
-              .frame(width: 12)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Font Size")
-                .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text("Scale: \(Int(fontScaleSettings.scale * 100))%")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-
-            Spacer()
-
+          settingsCardHeader(icon: "textformat.size", title: "Font Size")
+          settingRow(
+            title: "Scale",
+            subtitle: "Current scale: \(Int(fontScaleSettings.scale * 100))%"
+          ) {
             if fontScaleSettings.scale != 1.0 {
               Button("Reset") {
                 fontScaleSettings.resetToDefault()
               }
               .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            } else {
+              EmptyView()
             }
           }
 

@@ -15,17 +15,7 @@ extension SettingsContentView {
       // Language Mode
       settingsCard(settingId: "transcription.languagemode") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          HStack {
-            Image(systemName: "globe")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            Text("Language Mode")
-              .scaledFont(size: OmiType.subheading, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-
-            Spacer()
-          }
+          settingsCardHeader(icon: "globe", title: "Language Mode")
 
           // Auto-Detect option
           Button(action: {
@@ -166,19 +156,7 @@ extension SettingsContentView {
       settingsCard(settingId: "transcription.vocabulary") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
-            Image(systemName: "text.book.closed")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Custom Vocabulary")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text("Improve recognition of names, brands, and technical terms")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
-            }
+            settingsCardHeader(icon: "text.book.closed", title: "Custom Vocabulary")
 
             Spacer()
 
@@ -188,6 +166,10 @@ extension SettingsContentView {
                 .foregroundColor(OmiColors.textTertiary)
             }
           }
+          
+          Text("Improve recognition of names, brands, and technical terms")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
 
           // Current vocabulary display with removable tags
           if !vocabularyList.isEmpty {
@@ -250,28 +232,14 @@ extension SettingsContentView {
       // Local VAD Gate
       settingsCard(settingId: "transcription.vadgate") {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          HStack {
-            Image(systemName: "waveform.badge.minus")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Local VAD Gate")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text(
-                "Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs."
-              )
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
-              .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
+          settingsCardHeader(icon: "waveform.badge.minus", title: "Local VAD Gate")
+          settingRow(
+            title: "Silence Detection",
+            subtitle: "Uses on-device voice activity detection to skip silence, reducing Deepgram API usage. May save ~40% on transcription costs."
+          ) {
             Toggle("", isOn: $vadGateEnabled)
               .toggleStyle(OmiToggleStyle())
+              .labelsHidden()
               .onChange(of: vadGateEnabled) { _, newValue in
                 AssistantSettings.shared.vadGateEnabled = newValue
                 restartTranscriptionIfNeeded()

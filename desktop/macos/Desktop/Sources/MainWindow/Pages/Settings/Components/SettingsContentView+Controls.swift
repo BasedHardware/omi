@@ -753,13 +753,14 @@ extension SettingsContentView {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(OmiSpacing.xl)
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
           .fill(OmiColors.backgroundTertiary.opacity(0.5))
           .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .stroke(OmiColors.backgroundQuaternary.opacity(0.4), lineWidth: 1)
           )
       )
+      .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
     return Group {
       if let settingId = settingId {
         card.modifier(
@@ -802,11 +803,21 @@ extension SettingsContentView {
   func settingsCardHeader(icon: String, title: String) -> some View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: icon)
-        .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textSecondary)
+        .scaledFont(size: 14, weight: .semibold)
+        .foregroundColor(.white)
+        .frame(width: 28, height: 28)
+        .background(
+          LinearGradient(
+            colors: [OmiColors.accent.opacity(0.85), OmiColors.accent],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+          )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .shadow(color: OmiColors.accent.opacity(0.25), radius: 3, y: 1)
 
       Text(title)
-        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
     }
   }
