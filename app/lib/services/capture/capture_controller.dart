@@ -1725,7 +1725,11 @@ class CaptureController extends ChangeNotifier
     _transcriptServiceReady = true;
     _transcriptStalled = false;
     _transcriptStallRestartInFlight = false;
-    _lastTranscriptProgressAt = DateTime.now();
+    // Do NOT seed _lastTranscriptProgressAt here — a fresh socket connection is
+    // not transcript progress. Seeding it let shouldMarkFramesSyncedAfterSocketSend
+    // mark WAL frames "synced" for ~10s after every reconnect purely because the
+    // socket opened, before any transcription had actually happened; leave it
+    // null (cleared by onClosed/onError) until real progress arrives.
     _secondsSinceLastTranscriptProgress = 0;
     _startTranscriptStallWatchdog();
     // Restart mic on reconnect if interrupted (skip during active call).
@@ -2306,6 +2310,9 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
     _isPaused = true;
+    // Clear immediately — otherwise a stale "reconnecting" state can outlive
+    // the pause by up to one watchdog tick and outrank the Paused/Muted text.
+    _clearTranscriptStallState(keepWatchdog: true);
     // Persist so the mute survives an app kill/restart, not just a reconnect.
     SharedPreferencesUtil().deviceMuted = true;
     updateRecordingState(RecordingState.pause);

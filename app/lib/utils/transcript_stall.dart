@@ -3,7 +3,15 @@
 // without spinning up CaptureController / sockets.
 
 /// Default: surface a stall warning after this much silence in transcript progress.
-const Duration kTranscriptStallWarningAfter = Duration(seconds: 15);
+///
+/// This is silence in *transcript output*, not audio input — a person pausing
+/// mid-conversation, listening rather than speaking, or a quiet room are all
+/// completely normal and can easily exceed 15s without any transcript segment
+/// arriving. 15s made the watchdog restart healthy sockets during ordinary
+/// pauses (cubic review on #6977). Raised well past typical conversational
+/// pause lengths while staying far short of "the session went dead for
+/// minutes" territory this watchdog exists to catch.
+const Duration kTranscriptStallWarningAfter = Duration(seconds: 45);
 
 /// WAL frames may be marked synced after a local socket send only while transcript
 /// progress has advanced within this grace window.

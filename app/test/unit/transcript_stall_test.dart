@@ -13,13 +13,13 @@ void main() {
           hasTerminalTranscriptionFailure: false,
           hasTranscriptSegments: true,
           hasSeenTranscriptProgress: true,
-          secondsSinceLastTranscriptProgress: 15,
+          secondsSinceLastTranscriptProgress: 45,
         ),
         isTrue,
       );
     });
 
-    test('does not report stall before the warning threshold', () {
+    test('does not report stall before the warning threshold, including normal conversational pauses', () {
       expect(
         shouldReportTranscriptStall(
           transcriptServiceReady: true,
@@ -28,7 +28,21 @@ void main() {
           hasTerminalTranscriptionFailure: false,
           hasTranscriptSegments: true,
           hasSeenTranscriptProgress: true,
-          secondsSinceLastTranscriptProgress: 10,
+          secondsSinceLastTranscriptProgress: 20,
+        ),
+        isFalse,
+      );
+      // A silent listener or a quiet room easily exceeds the old 15s threshold —
+      // this must not be reported as a stall (cubic review on #6977).
+      expect(
+        shouldReportTranscriptStall(
+          transcriptServiceReady: true,
+          isDeviceRecording: true,
+          isPaused: false,
+          hasTerminalTranscriptionFailure: false,
+          hasTranscriptSegments: true,
+          hasSeenTranscriptProgress: true,
+          secondsSinceLastTranscriptProgress: 30,
         ),
         isFalse,
       );
