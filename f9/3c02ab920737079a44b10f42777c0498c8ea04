@@ -1,0 +1,82 @@
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/ShortcutConflicts.swift
+  s_6753c03801cb1c::t_f990c17848c638 65-66,77-91
+  s_6753c03801cb1c::t_b0f0d7b91743a7 371-374
+desktop/context-for-claude/Tests/ContextAppTests/ShortcutsTests.swift
+  s_6753c03801cb1c::t_c5dce1b8dbf60e 542-544,548-549,566-581
+  s_18cae1c5af4258::t_bf4416d344b9c6 390,392,403,407,410,412-413,524
+  s_18cae1c5af4258::t_b8fe09e477b2e1 628-629
+  s_6753c03801cb1c::t_534f6536fd9c48 126-187,191,193-303
+  s_6753c03801cb1c::t_172afaf63c47a0 608-611,615,617-618
+  s_6753c03801cb1c::t_d9598db3f38d18 363
+  s_6753c03801cb1c::t_cfbbc0f3a2089f 309,311-312,316-349
+  s_18cae1c5af4258::t_7b07790e33799c 738,741,743
+  s_6753c03801cb1c::t_283b58542125a1 188-190,192
+  s_6753c03801cb1c::t_172f5de68b63f9 3,350-351,582-583,626-627,736-737
+desktop/context-for-claude/Sources/ContextApp/Settings/ShortcutBinding.swift
+  s_6753c03801cb1c::t_ff2543ae7c60f3 151-155,158-159
+  s_6753c03801cb1c::t_14fda1efe54c86 42,45-47,52-60,69-78,80-90
+  s_6753c03801cb1c::t_82ce12c82e764e 8-11,13-25,30,32,35
+  s_6753c03801cb1c::t_72ee061de436e2 209,234,261
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/GlobalShortcuts.swift
+  s_6753c03801cb1c::t_56c1ba52952002 452-462
+  s_6753c03801cb1c::t_6cebb04c2094d7 71-76,78-86,91-97
+  s_6753c03801cb1c::t_7cbc99fee03e23 408,758-764
+  s_6753c03801cb1c::t_d2170d585ee3ba 784-795,797-798,804-812
+  s_6753c03801cb1c::t_5153be1d5942e1 258-405,750
+  s_6753c03801cb1c::t_88be4074c7ebab 497-499
+  s_6753c03801cb1c::t_4d923cdca27c0e 573-576
+  s_6753c03801cb1c::t_2e5eae83b2dcd5 105-128,130-131
+  s_6753c03801cb1c::t_61ed2172676810 416-419
+  s_6753c03801cb1c::t_1c243a251da426 98,406-407,409,420,463,466,500-501,509,522,538,549,577,605,632,700,736,765,813-815
+desktop/context-for-claude/Tests/ContextAppTests/ShortcutBindingsTests.swift
+  s_6753c03801cb1c::t_fa716cbd46acd5 221-237
+  s_1833483671ebc5::t_b2f2287439c769 301-302,304-306,319
+  s_bae7028f52850b::t_af09fdaff9bf5f 456
+  s_1833483671ebc5::t_00e40b8d6f673c 26,30,36,48,107,151,157,159,161,178,270,279-283,317
+  s_1833483671ebc5::t_ccb84bd6e35f99 333
+  s_6753c03801cb1c::t_f2ae10ce26f39f 238-239,457,466
+desktop/context-for-claude/Sources/ContextApp/Shortcuts/LiveShortcutBindings.swift
+  s_6753c03801cb1c::t_85a57bfe033416 30,42,147,163-164,195,207,216
+desktop/context-for-claude/Tests/ContextAppTests/SettingsTests.swift
+  s_6753c03801cb1c::t_16c214753119b8 868,872,888,918-919
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f93c02ab920737079a44b10f42777c0498c8ea04",
+  "prompts": {},
+  "sessions": {
+    "s_1833483671ebc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc9c1bb3-5f71-4ca3-9d63-309ce50e869a",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_18cae1c5af4258": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4668b19-3e0f-4e3c-83ea-9b4b9f2fb786",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_6753c03801cb1c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "72b90662-7c98-40c1-97b6-59916a7ca4ee",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_bae7028f52850b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a2ddb8a3140f095d0",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
