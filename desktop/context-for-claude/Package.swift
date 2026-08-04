@@ -16,6 +16,14 @@ let package = Package(
             url: "https://github.com/FluidInference/FluidAudio.git",
             revision: "19600a485baa4998812e4654b70d2bab8f2c9949"
         ),
+        // The auto-updater. Same version constraint as `desktop/macos/Desktop/Package.swift`, so both
+        // apps resolve the same audited Sparkle and a fix that lands for one is a fix for the other.
+        // The *feed* and the *key* are emphatically not shared — see `Sources/ContextApp/Update/`.
+        //
+        // Sparkle ships to SwiftPM as a binary XCFramework, so this is the first dependency that puts
+        // a real `Sparkle.framework` in `Contents/Frameworks/`. `scripts/build.sh` copies and re-signs
+        // it; a build that skips either step produces a bundle that dyld refuses to launch at all.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
     ],
     targets: [
         // The portable decision rules, shared verbatim with the Windows CMake build in `windows/`.
@@ -53,6 +61,7 @@ let package = Package(
             dependencies: [
                 "ContextCore",
                 .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "Sparkle", package: "Sparkle"),
             ],
             // The generated sounds. `Resources/Fonts` reaches the app the other way — loose files
             // copied by `scripts/build.sh` — because they are registered from a directory URL. The

@@ -39,6 +39,11 @@ enum NetworkEgress {
         case speechModelDownload = "speech-model-download"
         /// `https://<an excluded host>/favicon.ico`, drawn beside each website exclusion.
         case faviconFetch = "favicon-fetch"
+        /// Sparkle asking the appcast whether a newer build exists, and downloading it if so. Not an
+        /// Omi endpoint and not the user's data — but "off this Mac" is the test, not "to Omi", and
+        /// a scheduled request every six hours discloses that this app is installed here and which
+        /// build is running. See `Update/ContextUpdater.swift` for the two places it is enforced.
+        case updateCheck = "update-check"
 
         /// The subsystem a suppression is reported under, so the fallback record lands in the same
         /// area as that client's other degradations rather than in an "airgap" bucket of its own.
@@ -48,7 +53,11 @@ enum NetworkEgress {
             case .omiAPI, .screenActivitySync, .conversationUpload: return .upload
             case .listenSocket, .speechModelDownload: return .capture
             case .mcpKeyProvisioning: return .mcp
-            case .faviconFetch: return .settings
+            // Both land in `settings` because that is where the user meets them: the favicon beside
+            // an exclusion row, and the Updates row's "Check Now". There is no `updates` area, and
+            // adding one for a single client would put a suppression nobody is looking for into a
+            // bucket nobody reads.
+            case .faviconFetch, .updateCheck: return .settings
             }
         }
     }
@@ -104,6 +113,13 @@ enum NetworkEgress {
         case .faviconFetch:
             return "Airgap Mode is on, so site icons aren't fetched. "
                 + "Asking a site for its icon would tell it you excluded it."
+        case .updateCheck:
+            // Says the version stays put, because the alternative reading — "updates are broken" —
+            // is the one that sends someone off to reinstall by hand. This is also the only
+            // suppression in this list a user meets by pressing a button, so it has to explain why
+            // the button appeared to do nothing.
+            return "Airgap Mode is on, so Context for Claude isn't checking for updates. "
+                + "It stays on this version until you turn it off in Settings › General."
         }
     }
 

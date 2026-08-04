@@ -19,6 +19,14 @@ structural decision follows from it:
 - **Capture is ported, not reinvented.** The mic, system-audio and screen paths are lifted from the
   Omi desktop app because they encode years of real-world corrections (Bluetooth A2DP, tap drift
   compensation, transducer decoder state) that are invisible until they bite.
+- **Updates are Sparkle, but nothing else about them is shared with Omi.** Same library, own feed
+  (`appcast.xml`, served from this repository), own EdDSA key, own bundle — so an update prompt
+  carries this app's name, icon and notes and never Omi's. Omi's feed is a backend route reading
+  GitHub Releases through Firestore; borrowing it would mean this app could not ship a fix without a
+  production backend deploy for a service it otherwise has nothing to do with. The hard part is not
+  the mechanism, it is that macOS keys this app's three TCC grants to its code signature, so an
+  update signed by a different identity silently revokes every permission its users granted —
+  `Update/UpdatePolicy.swift` and `docs/releasing.md` are both mostly about that one fact.
 
 ## Targets
 
@@ -27,7 +35,7 @@ structural decision follows from it:
 | `ContextCore` | library | GRDB | Storage, queries, and every pure policy. No AppKit, no AVFoundation — it has to link into the MCP binary. |
 | `ContextMCPKit` | library | ContextCore | JSON-RPC framing, the seven tools, MCP handshake. |
 | `ContextMCP` | executable | ContextMCPKit | `main.swift`. Opens the store read-only, pumps stdio. |
-| `ContextApp` | executable | ContextCore, FluidAudio | Capture, transcription, menu bar, onboarding, Claude registration. |
+| `ContextApp` | executable | ContextCore, FluidAudio, Sparkle | Capture, transcription, menu bar, onboarding, Claude registration, auto-update. |
 | `context_for_claude_windows_core_smoke` | Windows executable | `ContextForClaude::core`, swift-winrt | Calls the portable C ABI for a session decision and ranking score. |
 
 The library/executable split exists so the protocol layer is testable without a bundle and so the
@@ -115,6 +123,7 @@ Sources/ContextApp/      ContextApp  Engine  Permissions
                                      SearchResultsModel  SearchResultsView  SearchRanking
                                      ClaudeRouter (tutorial + settings only, not the bar)
                          Support/    Log  Sound  Telemetry  WindowGlass (the NSWindow half of InkGlass)
+                         Update/     UpdatePolicy  ContextUpdater  UpdateRelaunch  UpdatesSettingsRow
 ```
 
 `CONTRACTS.md` holds the interface each file must satisfy; `docs/design-system.md` holds the

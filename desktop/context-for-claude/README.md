@@ -41,6 +41,27 @@ session that was already open will not see Context for Claude until it is relaun
 build as a different app and revokes Screen Recording and microphone consent every time — for every
 Omi app on the machine. A stable identity is the only reason the grants stick.
 
+The same fact is why shipping an update is not routine: an update replaces the signed bundle, so a
+release signed with a different certificate than the one before it revokes every user's permissions
+at once, silently. See [`docs/releasing.md`](docs/releasing.md).
+
+## Updates
+
+Installed copies update themselves with [Sparkle](https://sparkle-project.org) — the same mechanism
+`desktop/macos` uses, with none of its identity. Its own feed ([`appcast.xml`](appcast.xml), served
+straight from this repository), its own EdDSA key, its own bundle. An update prompt shows this app's
+name, icon and release notes, and never Omi's.
+
+The build you make locally does **not** update itself, and that is enforced rather than assumed:
+`UpdatePolicy` refuses to update any bundle whose signature carries no Team ID, which is every
+locally signed build. Otherwise a developer's copy would quietly replace itself with the shipping one
+and lose its capture permissions doing it.
+
+Airgap Mode covers the update check like every other remote client (`NetworkEgress.Client`).
+
+Cutting a release — including generating the update key, which has not been done yet — is
+[`docs/releasing.md`](docs/releasing.md).
+
 ## What Claude gets
 
 Seven tools. The descriptions are written for Claude, so it reaches for them unprompted.

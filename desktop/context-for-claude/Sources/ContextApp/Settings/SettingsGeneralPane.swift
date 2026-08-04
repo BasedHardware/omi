@@ -5,13 +5,12 @@ import SwiftUI
 /// General: the two shortcut recorders, the conflict row when there is one, launch at login, Airgap
 /// Mode, and the version.
 ///
-/// **There is no `Update Now` and no `Automatic Updates`, deliberately.** This package ships no
-/// updater. Porting `desktop/macos/`'s Sparkle integration is not cheap: it needs the dependency in
-/// `Package.swift`, `SUFeedURL` and `SUPublicEDKey` in `Resources/Info.plist`, an EdDSA signing key,
-/// and a hosted appcast plus a release job that signs and publishes each zip — none of which exists
-/// for this package, whose only distribution path today is `scripts/build.sh` copying into
-/// `/Applications`. So the row states the real version and stops there. A disabled `Update Now` would
-/// still advertise a feature that does not exist, which `I7` and `J7` both rule out.
+/// **The Updates row is live, and on most builds it says so by refusing to be.** `ContextUpdater`
+/// answers `UpdatePolicy` before Sparkle is ever constructed, and the policy turns the updater off
+/// for any bundle signed without a Team ID — which is every local `scripts/build.sh` install. So the
+/// row a developer sees states the version and explains why it will not check, while the row a
+/// Developer ID build shows offers a real check against this app's own appcast. Neither advertises a
+/// feature that is not there, which is what `I7` and `J7` actually ask for.
 struct SettingsGeneralPane: View {
     @ObservedObject var store: SettingsStore
     let shortcuts: ShortcutBindingProvider
@@ -116,8 +115,8 @@ struct SettingsGeneralPane: View {
                 // there is nothing left here that waits for a relaunch.
                 //
                 // **It no longer opens with "Stops all network access", because that was false.**
-                // What the switch is enforced against is this app's own remote clients — the seven
-                // cases of `NetworkEgress.Client` — plus the single remote client living inside the
+                // What the switch is enforced against is this app's own remote clients — every case
+                // of `NetworkEgress.Client`, the update check included — plus the one living in the
                 // MCP server, `OmiBackend`, which `ContextMCPKit/Airgap.swift` suppresses in that
                 // separate process. What it is *not* enforced against, deliberately, is that same
                 // server's local tools: `recall`, `screen`, `activity` and the rest read this Mac's
@@ -171,18 +170,8 @@ struct SettingsGeneralPane: View {
                 }
             }
 
-            SettingsSection(
-                title: "About",
-                footnote: "This build has no auto-updater, so there is nothing here to check for one. "
-                    + "Reinstall from source to move to a newer version."
-            ) {
-                SettingsRow(
-                    icon: "info.circle",
-                    title: "Updates",
-                    subtitle: AppVersion.display
-                ) {
-                    EmptyView()
-                }
+            SettingsSection(title: "About") {
+                UpdatesSettingsRow(updater: ContextUpdater.shared)
             }
         }
         .onAppear { isLaunchAtLoginOn = LoginItem.isEnabled }
@@ -288,7 +277,7 @@ struct ShortcutRecorderField: View {
         .onDisappear(perform: disarm)
     }
 
-    /// A cleared slot shows the default chord greyed, which is what "Clear it to use ⌘⌘" describes:
+    /// A cleared slot shows the default chord greyed, which is what "Clear it to use ⌘ + ⌘" describes:
     /// the shortcut still works, it is just not a recorded override.
     private var isCleared: Bool { chord == nil }
 

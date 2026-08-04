@@ -175,6 +175,51 @@ cp -f "$BIN_DIR/ContextApp" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp -f "$BIN_DIR/context-for-claude-mcp" "$APP_BUNDLE/Contents/MacOS/context-for-claude-mcp"
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/context-for-claude-mcp"
 
+# ---------------------------------------------------------------------------------------------
+# Sparkle
+#
+# The app's only embedded framework, and the one that turns a mistake in this script into an app
+# that does not launch at all. Two things have to be true or dyld refuses the process outright:
+# the framework is inside Contents/Frameworks, and the executable carries an rpath that resolves
+# `@rpath/Sparkle.framework/Versions/B/Sparkle` to it. There is no partial success here — the app
+# either starts or dies before `main`, with a crash log nobody reads as "the build script skipped
+# a step". So this section dies loudly rather than warning, unlike the fonts and the icon above,
+# whose absence only degrades what the app looks like.
+#
+# `context-for-claude-mcp` deliberately does not get the rpath: only ContextApp links Sparkle, and
+# an MCP server that could not start because of a missing updater framework would be a very odd
+# failure to debug.
+# ---------------------------------------------------------------------------------------------
+SPARKLE_SRC=""
+for candidate in \
+    "$BIN_DIR/Sparkle.framework" \
+    "$PKG_DIR/.build/$(uname -m)-apple-macosx/release/Sparkle.framework"
+do
+    if [[ -d "$candidate" ]]; then SPARKLE_SRC="$candidate"; break; fi
+done
+[[ -n "$SPARKLE_SRC" ]] \
+    || die "Sparkle.framework is not in the build output (looked in $BIN_DIR).
+SwiftPM copies it there when the Sparkle binary target resolves. Run:
+  swift package --package-path \"$PKG_DIR\" resolve
+and build again. Shipping without it produces a bundle that dyld refuses to launch."
+
+log "embedding $(basename "$SPARKLE_SRC") ($(du -sh "$SPARKLE_SRC" 2>/dev/null | cut -f1))"
+mkdir -p "$APP_BUNDLE/Contents/Frameworks"
+rm -rf "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+# `ditto`, not `cp -R`: a framework is a symlink farm (Versions/Current, and the top-level aliases
+# into it) plus extended attributes, and ditto is the one tool that reproduces all of it exactly.
+ditto "$SPARKLE_SRC" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+
+# Idempotent: `install_name_tool` errors if the rpath is already there, and a binary that was just
+# copied over never is — but the check costs nothing and makes a re-run of this script safe.
+#
+# It also has to stay *above* the signing section: rewriting a Mach-O invalidates its signature, so
+# an rpath added after signing produces a bundle macOS kills on launch. Nothing is signed yet here,
+# which is the point.
+if ! otool -l "$APP_BUNDLE/Contents/MacOS/$APP_NAME" | grep -q "@executable_path/../Frameworks"; then
+    install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+fi
+
 cp -f "$INFO_PLIST_TEMPLATE" "$APP_BUNDLE/Contents/Info.plist"
 
 # Firebase Web API key for project `based-hardware`. This is a public client key by design — it
@@ -247,20 +292,86 @@ log "copied $BUNDLE_COUNT SPM resource bundle(s)"
 # Never ad-hoc ('-'): the runbook records that ad-hoc signing resets Screen Recording consent for
 # every Omi app on this machine. Nested code is signed before the enclosing bundle, otherwise the
 # outer seal is computed over an unsigned nested binary and codesign rejects it.
+#
+# Sparkle makes "nested code" mean more than it used to. The framework contains four separately
+# sealed pieces of its own — two XPC services, the Updater.app that draws the update sheet, and the
+# Autoupdate helper that outlives this process to swap the bundle — and they arrive signed by the
+# Sparkle project, not by us. `codesign` does not descend into them, so re-signing only the
+# framework leaves four foreign signatures inside a bundle that claims to be ours. Locally that
+# produces a `--deep --strict` verification failure; at release time it produces a notarization
+# rejection, which is a far more expensive place to learn it. Hence sign_code(), applied
+# innermost-first.
+#
+# Deliberately no `--entitlements` on any Sparkle code. The app's entitlements ask for microphone
+# and screen capture, and the development pair also disables library validation; none of that
+# belongs on a downloader or on an installer helper, and granting it would widen the attack surface
+# of the one component whose whole job is to execute code it fetched from the internet.
 # ---------------------------------------------------------------------------------------------
 [[ "$SIGN_IDENTITY" != "-" ]] || die "ad-hoc signing is forbidden — it resets Screen Recording consent for every Omi app"
 assert_not_production "signing target" "$APP_BUNDLE"
+
+# Signs one piece of nested code with no entitlements. A secure timestamp is added only for a real
+# Developer ID: notarization requires one, and it costs a round trip to Apple that a local dev build
+# should not have to make (and cannot, offline).
+sign_code() {
+    local target="$1"
+    assert_not_production "signing target" "$target"
+    if [[ "$SIGN_IDENTITY" == *"Developer ID"* ]]; then
+        codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$target"
+    else
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$target"
+    fi
+}
+
+SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+SPARKLE_VERSION_DIR="$SPARKLE_FW/Versions/Current"
+[[ -d "$SPARKLE_VERSION_DIR" ]] || SPARKLE_VERSION_DIR="$SPARKLE_FW/Versions/B"
+[[ -d "$SPARKLE_VERSION_DIR" ]] \
+    || die "Sparkle.framework has no versioned directory at $SPARKLE_FW/Versions — the copy above is broken"
+
+log "signing Sparkle's nested code"
+for nested in \
+    "$SPARKLE_VERSION_DIR/XPCServices/Downloader.xpc" \
+    "$SPARKLE_VERSION_DIR/XPCServices/Installer.xpc" \
+    "$SPARKLE_VERSION_DIR/Updater.app" \
+    "$SPARKLE_VERSION_DIR/Autoupdate"
+do
+    # Sparkle's layout has changed across major versions and will again. Skip what is not there
+    # rather than pinning this script to one release's file list — but the framework itself, below,
+    # is not optional.
+    [[ -e "$nested" ]] || continue
+    sign_code "$nested"
+done
+sign_code "$SPARKLE_FW"
 
 log "signing nested context-for-claude-mcp"
 codesign --force --options runtime --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/MacOS/context-for-claude-mcp"
 
 log "signing $APP_NAME.app with '$SIGN_IDENTITY'"
-codesign --force --options runtime --entitlements "$ENTITLEMENTS" \
-    --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+if [[ "$SIGN_IDENTITY" == *"Developer ID"* ]]; then
+    codesign --force --options runtime --timestamp --entitlements "$ENTITLEMENTS" \
+        --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+else
+    codesign --force --options runtime --entitlements "$ENTITLEMENTS" \
+        --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+fi
 
-codesign --verify --strict "$APP_BUNDLE" \
-    || die "signature verification failed for $APP_BUNDLE"
+# `--deep`, which the old line did not have. Without it verification stops at the app's own seal and
+# says nothing about the framework inside — which is the only part of this bundle that has ever been
+# signed by somebody else.
+codesign --verify --deep --strict "$APP_BUNDLE" \
+    || die "signature verification failed for $APP_BUNDLE (run: codesign --verify --deep --strict --verbose=4 '$APP_BUNDLE')"
+
+# The two facts an update has to preserve, printed every build so they are familiar before they
+# matter. macOS keys Screen Recording, Microphone and System Audio consent on the signature — the
+# authority and the Team ID below — so a release signed with a different identity than the release
+# before it silently revokes every grant its users have given. `docs/releasing.md` makes checking
+# these a release step; printing them here is what makes the release step readable.
+log "signing identity of the bundle just built:"
+codesign -dv --verbose=2 "$APP_BUNDLE" 2>&1 \
+    | grep -E '^(Authority|TeamIdentifier|Identifier)=' \
+    | sed 's/^/    /' || true
 
 if [[ "$DO_INSTALL" -eq 0 ]]; then
     log "built (not installed): $APP_BUNDLE"

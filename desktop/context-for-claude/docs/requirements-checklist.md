@@ -129,7 +129,7 @@ title, a grey subtitle, and a right-hand control.
 | I4 | Launch on Login toggle | MISSING (LoginItem exists) |
 | I5 | Airgap Mode toggle — suppresses telemetry, update checks, remote favicon requests; takes effect after relaunch | MISSING (engine flag exists) |
 | I6 | Updates row showing the real version | MISSING |
-| I7 | Automatic Updates toggle | DECIDE — no updater exists. Show the real version and OMIT both update controls unless Sparkle ports cheaply. A button that cannot update is worse than none, and disabling it still implies the feature. |
+| I7 | Automatic Updates toggle | DECIDED, and the decision changed because the premise did — Sparkle now ships (`Sources/ContextApp/Update/`, `appcast.xml`, `docs/releasing.md`). The Updates row has a real `Check Now`; automatic *checks* are on and automatic *installs* are deliberately off, so there is still no toggle. That is not the old omission repeated: replacing this bundle is the one act that can silently cost the user Screen Recording, and someone who watched themselves approve an update can connect a dead capture to a cause where a silent overnight swap cannot be connected to anything. J7 holds in the other direction too — on any build `UpdatePolicy` refuses (every locally signed copy), the button is absent rather than disabled, and the row says which kind of build it is |
 
 ### I-Agents
 | # | Requirement | Status |
@@ -212,7 +212,10 @@ These are decisions, not omissions. An audit should confirm each is still the ri
    renders the hits. `ClaudeRouter` survives for the one act that is genuinely about Claude — the
    first-run hand-off (I9) — and for the Settings row that steers it.
 4. **No second email capture** (E7); the Omi account already identifies the user.
-5. **Update controls omitted unless a real updater exists** (I7).
+5. **Update controls exist exactly as far as the updater does** (I7). They were omitted while there
+   was no updater; there is one now, so `Check Now` is real — and it disappears again on any build
+   `UpdatePolicy` refuses, which is every locally signed one. The rule was never "no update
+   controls", it was "no control that cannot do what it says".
 6. **Safari *and Arc* private windows are not excludable** from the window title alone (I39); the
    seam exists for AX to fill. Arc's titles carry no browser chrome at all — measured, not assumed.
 7. **Three reference controls are deleted rather than implemented** (I8 Route to Agent, I15 Accent

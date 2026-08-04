@@ -93,6 +93,22 @@ else
     log "$INSTALL_PATH is not installed"
 fi
 
+# The updater's leftovers, removed whether or not --purge-data was asked for, because none of this is
+# the user's: it is a staged download and two launchd jobs whose only purpose was to replace a bundle
+# that no longer exists. Sparkle submits those jobs to install an update *after* quitting the app, so
+# an uninstall performed mid-update would otherwise leave a helper behind whose job is to put the app
+# back. Both labels are Sparkle's own convention, derived from the bundle identifier.
+for label in "$BUNDLE_ID-sparkle-updater" "$BUNDLE_ID-sparkle-progress"; do
+    assert_not_production "launchd job" "$label"
+    launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
+done
+SPARKLE_CACHE="$HOME/Library/Caches/$BUNDLE_ID"
+assert_not_production "cache directory" "$SPARKLE_CACHE"
+if [[ -d "$SPARKLE_CACHE" ]]; then
+    log "removing cached downloads at $SPARKLE_CACHE"
+    rm -rf "$SPARKLE_CACHE"
+fi
+
 if [[ "$PURGE_DATA" -eq 1 ]]; then
     if [[ -d "$DATA_DIR" ]]; then
         assert_not_production "removal target" "$DATA_DIR"

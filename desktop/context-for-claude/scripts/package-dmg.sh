@@ -135,6 +135,20 @@ else
 fi
 [[ -d "$APP_BUNDLE" ]] || die "no app bundle at $APP_BUNDLE"
 
+# ---------------------------------------------------------------- the updater, before anything else
+#
+# The app now embeds Sparkle, which is the first and only framework inside this bundle and therefore
+# the first thing in it that can be wrong in a way the DMG cannot show you. A bundle whose framework
+# is missing does not launch; a bundle whose framework carries somebody else's signature launches
+# locally and is rejected by notarization, or worse, passes notarization and fails Gatekeeper on the
+# user's machine. Both are cheap to detect here and expensive to detect after publishing, so the
+# image is not built at all until both are ruled out. `--app` makes this more than paranoia: that
+# flag packages a bundle this script did not build and cannot make assumptions about.
+[[ -d "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework" ]] \
+    || die "no Sparkle.framework in $APP_BUNDLE — that bundle cannot launch and must not be shipped. Rebuild with scripts/build.sh."
+codesign --verify --deep --strict "$APP_BUNDLE" \
+    || die "the app's signature does not verify with --deep (a nested Sparkle component is unsigned or signed by somebody else). Run: codesign --verify --deep --strict --verbose=4 '$APP_BUNDLE'"
+
 # ---------------------------------------------------------------- notarize
 
 NOTARY_PROFILE="${CFC_NOTARY_PROFILE:-}"
@@ -427,10 +441,38 @@ if [[ -n "$RELEASE_IDENTITY" ]]; then
   fi
 fi
 
+# ---------------------------------------------------------------- the Sparkle enclosure
+#
+# The DMG is what a person downloads; the zip is what the *app* downloads. They are different
+# artifacts on purpose. A DMG has to be mounted and dragged, which Sparkle cannot do unattended, so
+# the appcast's `<enclosure>` points at a zip of the same bundle — the same one that was signed,
+# notarized and stapled above, so the copy the updater installs is byte-identical to the copy a
+# human would install by hand.
+#
+# `ditto -c -k --keepParent` and nothing else: it is the only zipper on macOS that preserves symlinks
+# and extended attributes, and Sparkle.framework is a symlink farm. A `zip -r` archive of this bundle
+# unpacks into an app that does not launch.
+ZIP="${DMG%.dmg}.zip"
+assert_not_production "sparkle enclosure" "$ZIP"
+rm -f "$ZIP"
+/usr/bin/ditto -c -k --keepParent "$APP_BUNDLE" "$ZIP"
+log "sparkle enclosure: $ZIP ($(du -h "$ZIP" | cut -f1))"
+
 # ---------------------------------------------------------------- the verdict
 
 echo
 log "built: $DMG ($(du -h "$DMG" | cut -f1))"
+echo
+# The remaining two release steps are a signature and an XML edit, and neither can be done from
+# here: `sign_update` needs the private EdDSA key, which lives only in the releasing maintainer's
+# login keychain and is deliberately absent from this repository. Printing the exact commands is the
+# closest this script can get to running them.
+log "next, to publish this as an update (full procedure: docs/releasing.md):"
+echo "  1. sign the enclosure with the private update key:"
+echo "       \$SPARKLE_BIN/sign_update \"$ZIP\""
+echo "  2. add an <item> to desktop/context-for-claude/appcast.xml with that edSignature,"
+echo "     the length it printed, and the release's download URL"
+echo "  3. upload $(basename "$ZIP") and $(basename "$DMG") to the GitHub release, then merge the appcast change"
 echo
 VERDICT="$(spctl --assess --type execute --verbose=2 "$APP_BUNDLE" 2>&1 || true)"
 if grep -q "accepted" <<<"$VERDICT"; then
