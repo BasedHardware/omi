@@ -1122,8 +1122,17 @@ fi
 substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
 fi # end non-local .env.app merge
 
+copy_app_icon() {
+    local icon_source="$SCRIPT_DIR/omi_icon.icns"
+    if [ ! -s "$icon_source" ]; then
+        echo "ERROR: missing app icon at $icon_source" >&2
+        return 1
+    fi
+    cp -f "$icon_source" "$APP_BUNDLE/Contents/Resources/OmiIcon.icns"
+}
+
 substep "Copying app icon"
-cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
+copy_app_icon
 
 substep "Creating PkgInfo"
 echo -n "APPL????" > "$APP_BUNDLE/Contents/PkgInfo"

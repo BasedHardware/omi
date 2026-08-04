@@ -357,7 +357,7 @@ class RayBanDatBuildWrapperTest < Minitest::Test
         printf '\n'
       } >> "$COMMAND_LOG"
 
-      [[ "$(pwd -P)" == "$FIXTURE_APP" ]]
+      [[ "$(pwd -P)" == "$(cd "$FIXTURE_APP" && pwd -P)" ]]
 
       if [[ "${1-}" == "pub" && "${2-}" == "get" ]]; then
         printf '%s' '{"plugins":{"ios":[{"name":"mcumgr_flutter"}],"android":[{"name":"mcumgr_flutter"}]}}' > "$FIXTURE_APP/.flutter-plugins-dependencies"

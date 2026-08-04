@@ -115,7 +115,10 @@ extension SettingsContentView {
     gmailMemoriesSaved = 0
 
     do {
-      let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
+      let emails = try await GmailReaderService.shared.readRecentEmails(
+        maxResults: 50,
+        userInitiated: true
+      )
       gmailEmails = emails
       gmailLastFetched = Date()
       viewModel.markIntegrationSynced()
@@ -221,7 +224,11 @@ extension SettingsContentView {
     calendarMemoriesCreated = 0
     calendarTasksCreated = 0
     do {
-      let events = try await CalendarReaderService.shared.readEvents(daysBack: 30, daysForward: 14)
+      let events = try await CalendarReaderService.shared.readEvents(
+        daysBack: 30,
+        daysForward: 14,
+        userInitiated: true
+      )
       calendarEvents = events
       calendarLastSynced = Date()
       viewModel.markIntegrationSynced()
