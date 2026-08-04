@@ -156,6 +156,21 @@ flutter {
     source '../..'
 }
 
+// unifiedpush_android 3.x pulls a JVM crypto stack for its native WebPush encryption that collides
+// with the app's existing Android crypto ("Duplicate class ..."):
+//  - com.google.protobuf:protobuf-java (full) vs the app's protobuf-javalite (Firebase/gRPC). Drop
+//    the full one; DataStore uses its own shaded datastore-preferences-external-protobuf.
+//  - com.google.crypto.tink:tink (full, 1.18) vs tink-android (1.9, via secure-storage). Align both
+//    onto the Android variant at the version unifiedpush needs: force tink-android:1.18.0 and drop
+//    the full tink (tink-android carries the same com.google.crypto.tink.* classes).
+configurations.all {
+    exclude group: 'com.google.protobuf', module: 'protobuf-java'
+    exclude group: 'com.google.crypto.tink', module: 'tink'
+    resolutionStrategy {
+        force 'com.google.crypto.tink:tink-android:1.18.0'
+    }
+}
+
 dependencies {
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20231013'

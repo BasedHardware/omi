@@ -25,12 +25,24 @@ Future<void> saveFcmTokenServer({required String token, required String timeZone
 /// Register a UnifiedPush endpoint URL with the backend (ADR-0011 on-prem push).
 /// Parallel to [saveFcmTokenServer]; the device platform/hash headers added by makeApiCall let the
 /// backend key the endpoint per-device.
-Future<void> saveUnifiedPushEndpointServer({required String endpoint, required String timeZone}) async {
+Future<void> saveUnifiedPushEndpointServer({
+  required String endpoint,
+  required String timeZone,
+  String? p256dh,
+  String? auth,
+}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/unifiedpush-endpoint',
     headers: {'Content-Type': 'application/json'},
     method: 'POST',
-    body: jsonEncode({'endpoint': endpoint, 'time_zone': timeZone}),
+    // p256dh/auth are the WebPush key set (base64url) the connector generated; sent so the backend
+    // can encrypt this endpoint's notifications (RFC 8291). Omitted when the distributor has no keys.
+    body: jsonEncode({
+      'endpoint': endpoint,
+      'time_zone': timeZone,
+      if (p256dh != null) 'p256dh': p256dh,
+      if (auth != null) 'auth': auth,
+    }),
   );
 
   Logger.debug('saveUnifiedPushEndpoint: ${response?.body}');

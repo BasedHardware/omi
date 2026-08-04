@@ -20,8 +20,11 @@
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+# cmake + ninja + a C toolchain: the webpush_encryption dep pulls webcrypto, whose Dart build hook
+# compiles BoringSSL as a native asset per Android ABI (needs cmake + ninja + the NDK, already below).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git curl unzip zip xz-utils ca-certificates openjdk-21-jdk libglu1-mesa \
+      cmake ninja-build build-essential \
  && rm -rf /var/lib/apt/lists/*
 
 # --- Android SDK (cmdline-tools + platform 36 + build-tools 36 + NDK) ---

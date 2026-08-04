@@ -6,8 +6,10 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:unifiedpush/unifiedpush.dart';
+import 'package:webpush_encryption/webpush_encryption.dart';
 
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -29,11 +31,22 @@ class _UnifiedPushNotificationService implements NotificationInterface {
   _UnifiedPushNotificationService._();
 
   static const String _instanceName = 'default';
+  static const String _keySetStorageKey = 'unifiedpush_webpush_keyset';
 
   // Resolved in initialize() after NotificationChannelStrings.loadAppLocale().
   late final NotificationChannel channel;
 
   final AwesomeNotifications _awesomeNotifications = AwesomeNotifications();
+
+  // Our own WebPush key set (RFC 8291). ntfy is a text-only transport, so we cannot rely on the
+  // UnifiedPush connector's native auto-decryption (it needs raw aes128gcm and hides the private
+  // key). Instead we own the key pair: register our public key so the backend encrypts for it, and
+  // decrypt inbound messages ourselves after hex-decoding. The private key is kept in the platform
+  // keystore (same posture as the OIDC refresh token).
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+  WebPushKeySet? _keySet;
 
   @override
   Future<void> initialize() async {
@@ -91,7 +104,35 @@ class _UnifiedPushNotificationService implements NotificationInterface {
     if (current == null || current.isEmpty) {
       await UnifiedPush.saveDistributor(distributors.first);
     }
-    await UnifiedPush.registerApp(_instanceName);
+    // Ensure the key pair exists before registering so onNewEndpoint can publish our public key.
+    await _ensureKeySet();
+    await UnifiedPush.register(instance: _instanceName);
+  }
+
+  /// Load the persisted WebPush key set, or generate and persist a new one on first use.
+  Future<WebPushKeySet> _ensureKeySet() async {
+    if (_keySet != null) return _keySet!;
+    final stored = await _secureStorage.read(key: _keySetStorageKey);
+    if (stored != null && stored.isNotEmpty) {
+      try {
+        _keySet = await WebPushKeySet.deserialize(stored);
+        return _keySet!;
+      } catch (e) {
+        Logger.debug('UnifiedPush: stored key set invalid, regenerating: $e');
+      }
+    }
+    final keys = await WebPushKeySet.newKeyPair();
+    await _secureStorage.write(key: _keySetStorageKey, value: keys.serialize);
+    _keySet = keys;
+    return keys;
+  }
+
+  static Uint8List _hexDecode(String hex) {
+    final out = Uint8List(hex.length ~/ 2);
+    for (var i = 0; i < out.length; i++) {
+      out[i] = int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16);
+    }
+    return out;
   }
 
   @override
@@ -107,14 +148,22 @@ class _UnifiedPushNotificationService implements NotificationInterface {
     Logger.debug('FCM token save skipped - UnifiedPush backend active');
   }
 
-  Future<void> _onNewEndpoint(String endpoint, String instance) async {
-    Logger.debug('UnifiedPush onNewEndpoint: $endpoint');
+  Future<void> _onNewEndpoint(PushEndpoint endpoint, String instance) async {
+    Logger.debug('UnifiedPush onNewEndpoint: ${endpoint.url}');
+    final keys = await _ensureKeySet();
     final timeZone = await getTimeZone();
-    await saveUnifiedPushEndpointServer(endpoint: endpoint, timeZone: timeZone);
+    // Register OUR public key (not endpoint.pubKeySet — the connector's key, whose private half it
+    // keeps and can't apply over ntfy's text transport). The backend encrypts for our key; we decrypt.
+    await saveUnifiedPushEndpointServer(
+      endpoint: endpoint.url,
+      timeZone: timeZone,
+      p256dh: keys.publicKey.p256dh,
+      auth: keys.publicKey.auth,
+    );
   }
 
-  void _onRegistrationFailed(String instance) {
-    Logger.debug('UnifiedPush registration failed for instance: $instance');
+  void _onRegistrationFailed(FailedReason reason, String instance) {
+    Logger.debug('UnifiedPush registration failed ($reason) for instance: $instance');
   }
 
   void _onUnregistered(String instance) {
@@ -123,10 +172,27 @@ class _UnifiedPushNotificationService implements NotificationInterface {
 
   // --- Inbound messages ---------------------------------------------------------------------------
 
-  void _onMessage(Uint8List message, String instance) {
+  void _onMessage(PushMessage message, String instance) {
+    // message.content is the raw body ntfy delivered — our hex-armored ciphertext (the connector's
+    // own auto-decrypt cannot apply here, so it hands the bytes through with decrypted == false).
+    // Decryption is async; run it off the sync callback.
+    unawaited(_decryptAndDispatch(message.content));
+  }
+
+  Future<void> _decryptAndDispatch(Uint8List content) async {
+    Uint8List plaintext;
+    try {
+      final keys = await _ensureKeySet();
+      // Backend sends encrypt -> hex -> utf8; reverse it: utf8 -> hex-decode -> RFC 8291 decrypt.
+      final ciphertext = _hexDecode(utf8.decode(content));
+      plaintext = await WebPush().decrypt(keys, ciphertext);
+    } catch (e) {
+      Logger.debug('UnifiedPush: could not decrypt message: $e');
+      return;
+    }
     Map<String, dynamic> decoded;
     try {
-      decoded = jsonDecode(utf8.decode(message)) as Map<String, dynamic>;
+      decoded = jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>;
     } catch (e) {
       Logger.debug('UnifiedPush: could not decode message: $e');
       return;

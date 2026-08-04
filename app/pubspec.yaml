@@ -82,7 +82,11 @@ dependencies:
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   # Self-hosted push (ADR-0011): UnifiedPush for a Firebase-free on-prem deployment (Android).
-  unifiedpush: ^5.0.1
+  unifiedpush: ^6.2.0
+  # We own the WebPush key pair + decryption (ntfy is a text transport, so the connector's native
+  # auto-decrypt can't apply — see notification_service_unifiedpush.dart). Same reference impl the
+  # connector uses internally; declared direct because we import it.
+  webpush_encryption: ^1.0.1
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
