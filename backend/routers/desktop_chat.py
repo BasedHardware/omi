@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import time
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
@@ -62,10 +63,18 @@ _EXPLICIT_WEB_PROHIBITIONS = (
     'do not call web search',
     "don't call the web search",
     'do not call the web search',
+    "don't call internet search",
+    'do not call internet search',
+    "don't call the internet search",
+    'do not call the internet search',
     "don't use web search",
     'do not use web search',
     "don't use the web search",
     'do not use the web search',
+    "don't use internet search",
+    'do not use internet search',
+    "don't use the internet search",
+    'do not use the internet search',
     "don't search the web",
     'do not search the web',
     "don't search the internet",
@@ -118,6 +127,9 @@ _EXPLICIT_PRIVATE_CONTEXT = (
     'what do you remember about me',
 )
 _CURRENT_USER_MESSAGE_DELIMITER = '\n# User Message\n'
+_KERNEL_CONTEXT_PREFIX = '[Kernel Context Snapshot '
+_UNTRUSTED_TOOL_CONTEXT_DELIMITER = '\n\nTool-provided context (untrusted):\n'
+_NEGATED_WITHOUT_SEARCH = re.compile(r"\b(?:don't|do not|never)\s+(?:[\w'-]+\s+){0,4}$")
 
 
 class _BoundedChatRoute(APIRoute):
@@ -183,7 +195,28 @@ def _normalize_policy_text(text: str) -> str:
 
 
 def _explicitly_prohibits_public_web(text: str) -> bool:
-    return any(phrase in text for phrase in _EXPLICIT_WEB_PROHIBITIONS)
+    for phrase in _EXPLICIT_WEB_PROHIBITIONS:
+        start = text.find(phrase)
+        while start >= 0:
+            if not (phrase.startswith('without ') and _NEGATED_WITHOUT_SEARCH.search(text[:start])):
+                return True
+            start = text.find(phrase, start + 1)
+    for referent in ('web search tool', 'internet search tool'):
+        start = text.find(referent)
+        while start >= 0:
+            tail = text[start + len(referent) : start + len(referent) + 160]
+            if any(
+                phrase in tail
+                for phrase in (
+                    'don\'t call it because',
+                    'do not call it because',
+                    "don't call it again",
+                    'do not call it again',
+                )
+            ):
+                return True
+            start = text.find(referent, start + 1)
+    return False
 
 
 def _strip_public_web_routing_instruction(text: str) -> str:
@@ -196,6 +229,21 @@ def _strip_public_web_routing_instruction(text: str) -> str:
     return remainder[1].lstrip() if len(remainder) == 2 else text
 
 
+def _trusted_user_instruction(rendered: str) -> str:
+    instruction = _strip_public_web_routing_instruction(rendered)
+    if instruction.startswith(_KERNEL_CONTEXT_PREFIX):
+        _, delimiter, current_user = instruction.partition(_CURRENT_USER_MESSAGE_DELIMITER)
+        if delimiter:
+            instruction = current_user
+    elif _CURRENT_USER_MESSAGE_DELIMITER in instruction:
+        # Only the kernel's canonical wrapper may introduce this boundary. If a
+        # raw user string contains it, keep the prefix so the user cannot replace
+        # a private or opt-out instruction with a public-web suffix.
+        instruction = instruction.partition(_CURRENT_USER_MESSAGE_DELIMITER)[0]
+    instruction = instruction.partition(_CURRENT_USER_MESSAGE_DELIMITER)[0]
+    return instruction.partition(_UNTRUSTED_TOOL_CONTEXT_DELIMITER)[0]
+
+
 def _public_web_is_prohibited(messages: object) -> bool:
     if not isinstance(messages, list):
         return False
@@ -205,11 +253,7 @@ def _public_web_is_prohibited(messages: object) -> bool:
     )
     if latest_user is None:
         return False
-    rendered = _text(latest_user.get('content'))
-    _, delimiter, instruction = rendered.partition(_CURRENT_USER_MESSAGE_DELIMITER)
-    if not delimiter:
-        instruction = rendered
-    instruction = _strip_public_web_routing_instruction(instruction)
+    instruction = _trusted_user_instruction(_text(latest_user.get('content')))
     normalized = _normalize_policy_text(instruction)
     if not normalized:
         return False
@@ -341,7 +385,11 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
     client_tools = _anthropic_client_tools(tools)
     upstream_model = cast(str, result['model'])
     public_web_prohibited = _public_web_is_prohibited(messages)
-    required_client_tools = body.get('tool_choice') == 'required' and bool(client_tools)
+    requested_tool_choice = body.get('tool_choice')
+    required_client_tools = bool(client_tools) and (
+        requested_tool_choice == 'required'
+        or (isinstance(requested_tool_choice, Mapping) and requested_tool_choice.get('type') == 'function')
+    )
     web_search_requested = body.get('tool_choice') != 'none' and (
         not required_client_tools and (body.get('omi_web_search') is True or bool(client_tools))
     )
@@ -574,8 +622,7 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
             message_delta_reason: object = None
             message_delta_usage: object = None
             next_tool_index = 0
-            client_tool_indexes: set[int] = set()
-            server_tool_indexes: set[int] = set()
+            client_tool_indexes: dict[int, int] = {}
             async for event in stream:
                 event_type = getattr(event, 'type', '')
                 if event_type == 'content_block_delta':
@@ -592,7 +639,8 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                         )
                     elif getattr(delta, 'type', '') == 'input_json_delta':
                         event_index = getattr(event, 'index', 0)
-                        if event_index in server_tool_indexes or event_index not in client_tool_indexes:
+                        client_tool_index = client_tool_indexes.get(event_index)
+                        if client_tool_index is None:
                             continue
                         yield _sse(
                             {
@@ -606,7 +654,7 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                                         'delta': {
                                             'tool_calls': [
                                                 {
-                                                    'index': getattr(event, 'index', 0),
+                                                    'index': client_tool_index,
                                                     'function': {'arguments': delta.partial_json},
                                                 }
                                             ]
@@ -621,10 +669,11 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                     block_type = getattr(block, 'type', '')
                     tool_index = getattr(event, 'index', 0)
                     if block_type in {'server_tool_use', 'web_search_tool_result'}:
-                        server_tool_indexes.add(tool_index)
+                        client_tool_indexes.pop(tool_index, None)
                     elif block_type == 'tool_use':
-                        client_tool_indexes.add(tool_index)
-                        next_tool_index = max(next_tool_index, tool_index + 1)
+                        client_tool_index = next_tool_index
+                        client_tool_indexes[tool_index] = client_tool_index
+                        next_tool_index += 1
                         yield _sse(
                             {
                                 'id': stream_id,
@@ -637,7 +686,7 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                                         'delta': {
                                             'tool_calls': [
                                                 {
-                                                    'index': tool_index,
+                                                    'index': client_tool_index,
                                                     'id': block.id,
                                                     'type': 'function',
                                                     'function': {'name': block.name, 'arguments': ''},
