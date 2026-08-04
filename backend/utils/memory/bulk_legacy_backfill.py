@@ -15,7 +15,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, Iterable, Optional, Protocol, Sequence
+from typing import Any, Callable, Dict, Iterable, Optional, Protocol, Sequence, cast
 
 from database.memory_collections import MemoryCollections
 from utils.executors import db_executor
@@ -601,14 +601,15 @@ def _apply_user(
             uid=inventory.uid,
             state=MigrationState.failed,
             inventory=inventory,
-            actions=actions + ["bucket_processing_unavailable"],
+            actions=tuple(actions + ["bucket_processing_unavailable"]),
             staged_count=staged_count,
             error_codes=("bucket_processing_unavailable",),
         )
+    bucket_processor = cast(BucketProcessFn, bucket_process_fn)
     for bucket in config.process_buckets:
         if remaining_rows == 0:
             break
-        bucket_report = bucket_process_fn(inventory.uid, bucket, remaining_rows, stop_fn)
+        bucket_report = bucket_processor(inventory.uid, bucket, remaining_rows, stop_fn)
         actions.append(f"processed_bucket:{bucket}")
         consumed = max(bucket_report.legacy_rows_touched, bucket_report.intended_count)
         remaining_rows = max(0, remaining_rows - consumed)

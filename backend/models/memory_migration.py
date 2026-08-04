@@ -195,7 +195,7 @@ class MigrationVerificationCertificate(BaseModel):
 class CanonicalMigrationJob(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[MIGRATION_SCHEMA_VERSION] = MIGRATION_SCHEMA_VERSION
+    schema_version: Literal["canonical_memory_migration.v2"] = MIGRATION_SCHEMA_VERSION
     uid: str
     job_id: str
     migration_type: str = "legacy_to_canonical"

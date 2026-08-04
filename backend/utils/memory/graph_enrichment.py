@@ -290,11 +290,14 @@ def prepare_graph_enrichment(
     except GraphEnrichmentError as exc:
         return _blocked(exc.code, exc.message)
     if expected_evidence_ids is not None:
-        if not isinstance(expected_evidence_ids, list) or any(
-            not isinstance(value, str) or not value.strip() for value in expected_evidence_ids
+        raw_expected_evidence_ids: object = expected_evidence_ids
+        if not isinstance(raw_expected_evidence_ids, list) or any(
+            not isinstance(value, str) or not value.strip() for value in raw_expected_evidence_ids
         ):
             return _blocked(MigrationBlockCode.stale_fence.value, "evidence fence is malformed")
-        normalized_expected_evidence_ids = sorted({value.strip() for value in expected_evidence_ids})
+        normalized_expected_evidence_ids = sorted(
+            {value.strip() for value in raw_expected_evidence_ids if isinstance(value, str)}
+        )
         if evidence_ids != normalized_expected_evidence_ids:
             return _blocked(MigrationBlockCode.stale_fence.value, "evidence fence does not match current item")
     if item.account_generation != account_generation:
