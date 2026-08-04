@@ -11,12 +11,20 @@ idempotent even when the state document is unavailable.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Callable, Dict, Optional, cast
 
 from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]
 
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryItem, RESTRICTED_SENSITIVITY_LABELS
+from models.product_memory import (
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryTier,
+    ProcessingState,
+    RESTRICTED_SENSITIVITY_LABELS,
+)
+from models.memory_evidence import SourceState
 from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
@@ -66,7 +74,11 @@ def _validated_projection_fences(
         state.get("uid") != uid
         or state.get("schema_version") != V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION
         or state.get("source") != V3_COMPATIBILITY_PROJECTION_SOURCE
-        or state.get("ready") is not True
+        # Serving readiness is a read gate.  Rebuilds must be able to keep it
+        # false while normal canonical outbox writers continue to converge.
+        # Older enrolled state has no separate admission field, where its
+        # historical ``ready`` value remains the conservative fallback.
+        or state.get("writer_admission_ready", state.get("ready")) is not True
         or state.get("projection_version") != V3_COMPATIBILITY_PROJECTION_VERSION
     ):
         raise CompatibilityProjectionSyncError("malformed_compatibility_projection_state")
@@ -92,12 +104,10 @@ def _validated_projection_fences(
         raise CompatibilityProjectionSyncError("malformed_compatibility_projection_state")
     if _required_nonblank_str(state, "source_evidence_fence") != projection_evidence_fence:
         raise CompatibilityProjectionSyncError("malformed_compatibility_projection_state")
-    if (
-        state.get("write_convergence_complete") is not True
-        or state.get("delete_convergence_complete") is not True
-        or state.get("tombstone_convergence_complete") is not True
-    ):
-        raise CompatibilityProjectionSyncError("incomplete_compatibility_projection_state")
+    # These are reader/cutover attestations, not writer admission.  A full
+    # rebuild deliberately clears them while it scans; rejecting normal outbox
+    # writes in that interval would recreate the exact lost-update window the
+    # rebuild protocol is meant to close.
     _required_nonblank_str(state, "source_version")
 
     return {
@@ -151,8 +161,46 @@ def _item_path(uid: str, memory_id: str) -> str:
     return f"{MemoryCollections(uid=uid).v3_compatibility_projection_items}/{memory_id}"
 
 
-def _has_restricted_sensitivity(item: MemoryItem) -> bool:
-    return bool(set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS))
+def v3_compatibility_projection_skip_reason(payload: Mapping[str, Any]) -> Optional[str]:
+    """Return the single default-read projection exclusion decision.
+
+    The normal writer calls this with a typed canonical ``MemoryItem`` dump.
+    Rebuilds call it with the raw persisted payload so legacy compatibility
+    aliases are rejected too. Keeping both paths here prevents a rebuild from
+    deleting a row that the outbox writer would immediately reintroduce.
+    """
+    if payload.get("status") != MemoryItemStatus.active:
+        return "not_active"
+    if payload.get("processing_state") != ProcessingState.processed:
+        return "not_processed"
+    if payload.get("source_state") != SourceState.active:
+        return "source_not_active"
+    if payload.get("tier") not in {MemoryTier.short_term, MemoryTier.long_term}:
+        return "not_default_tier"
+    if payload.get("deleted") is True or payload.get("tombstoned") is True:
+        return "deleted_or_tombstoned"
+    if payload.get("archive") is True:
+        return "archived"
+    labels = payload.get("sensitivity_labels")
+    if not isinstance(labels, list):
+        return "restricted_sensitivity"
+    normalized_labels = {label.strip().lower() for label in labels if isinstance(label, str) and label.strip()}
+    if normalized_labels.intersection(RESTRICTED_SENSITIVITY_LABELS) or payload.get("restricted_sensitivity") is True:
+        return "restricted_sensitivity"
+    if payload.get("user_review") is False:
+        return "user_rejected"
+    promotion = payload.get("promotion")
+    if isinstance(promotion, dict) and promotion.get("user_review") is False:
+        return "user_rejected"
+    content = payload.get("content")
+    if not isinstance(content, str) or not content.strip():
+        return "missing_content"
+    return None
+
+
+def is_v3_compatibility_projection_eligible(item: MemoryItem) -> bool:
+    """The sole serving-projection eligibility policy for canonical writers."""
+    return v3_compatibility_projection_skip_reason(item.model_dump(mode="python")) is None
 
 
 def _run_transaction(db_client: Any, callback: Callable[..., bool], *args: Any) -> bool:
@@ -205,7 +253,7 @@ def upsert_v3_compatibility_projection_item(
     db_client: Any,
 ) -> bool:
     """Idempotently project one authoritative, privacy-eligible memory item."""
-    if _has_restricted_sensitivity(item):
+    if not is_v3_compatibility_projection_eligible(item):
         return delete_v3_compatibility_projection_item(
             item.uid,
             item.memory_id,
@@ -264,5 +312,7 @@ def delete_v3_compatibility_projection_item(
 __all__ = [
     "CompatibilityProjectionSyncError",
     "delete_v3_compatibility_projection_item",
+    "is_v3_compatibility_projection_eligible",
     "upsert_v3_compatibility_projection_item",
+    "v3_compatibility_projection_skip_reason",
 ]

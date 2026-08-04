@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Build/apply a redacted first-user `/v3` compatibility projection.
+"""Build/apply a complete, redacted `/v3` compatibility projection repair.
 
 Default mode is dry-run. Firestore writes require both ``--apply`` and an exact
 ``--confirm-uid`` match. The script writes only the compatibility projection
-state/items paths for the requested user.
+state/items paths for the requested user. It deliberately never publishes read
+cutover readiness: only the canonical migration controller may do that after it
+has verified graph assertions, projection freshness, and the durable outbox.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 try:
     from google.cloud import firestore
@@ -27,6 +30,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from database.google_credentials import prepare_google_credentials
 from database.memory_collections import MemoryCollections
+from utils.memory.v3.compatibility_projection_sync import v3_compatibility_projection_skip_reason
 from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V3_COMPATIBILITY_PROJECTION_SOURCE,
@@ -35,8 +39,13 @@ from utils.memory.v3.projection_reader_contract import (
 
 FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 DEFAULT_PROJECT = "based-hardware"
-DEFAULT_LIMIT = 25
-MAX_LIMIT = 500
+DEFAULT_LIMIT = 5_000
+# ``--limit`` is the bounded page size, not a cap on the user's total source
+# rows.  A user can legitimately have more than one page of canonical items.
+# Keep each Firestore request below the batch/read safety threshold while
+# allowing the source cursor to exhaust the collection.
+MAX_LIMIT = 10_000
+FIRESTORE_WRITE_BATCH_SIZE = 400
 RESTRICTED_SENSITIVITY_LABELS = {
     "credential",
     "secret",
@@ -55,10 +64,16 @@ class ProjectionBuild:
     uid: str
     project: str
     head_path: str
+    source_head: dict[str, Any]
+    source_memory_item_count: int
     source_item_paths: list[str]
     writes: dict[str, dict[str, Any]]
+    stale_projection_paths: list[str]
     rollback_manifest: dict[str, Any]
     redacted_items: list[dict[str, Any]]
+    skipped_by_reason: dict[str, int]
+    full_rebuild: bool
+    rebuild_id: str
 
 
 def _snapshot_data(snapshot) -> dict[str, Any] | None:
@@ -114,12 +129,40 @@ def _stream_memory_items(
         return [(memory_id, path, data)] if data is not None else []
 
     rows: list[tuple[str, str, dict[str, Any]]] = []
-    for snapshot in db_client.collection(paths.memory_items).limit(limit).stream():
-        data = _snapshot_data(snapshot)
-        if data is None:
-            continue
-        doc_id = getattr(snapshot, "id", "") or str(data.get("memory_id") or "")
-        rows.append((doc_id, f"{paths.memory_items}/{doc_id}", data))
+    collection = db_client.collection(paths.memory_items)
+    # Firestore's collection stream is unbounded.  Use deterministic document
+    # ID ordering and a cursor so large accounts are read in bounded pages,
+    # while the returned list still gives the build phase one stable inventory.
+    # Lightweight fakes used by unit tests may not implement cursors; their
+    # single unbounded stream is already an exhausted source and is safe here.
+    supports_cursor = hasattr(collection, "order_by") and hasattr(collection, "start_after")
+    cursor = None
+    seen_ids: set[str] = set()
+    while True:
+        query = collection
+        if supports_cursor:
+            query = query.order_by("__name__")
+            if cursor is not None:
+                query = query.start_after(cursor)
+            snapshots = list(query.limit(limit).stream())
+        else:
+            snapshots = list(query.stream())
+        if not snapshots:
+            break
+        for snapshot in snapshots:
+            data = _snapshot_data(snapshot)
+            if data is None:
+                continue
+            doc_id = getattr(snapshot, "id", "") or str(data.get("memory_id") or "")
+            if not doc_id:
+                raise RuntimeError("source memory item is missing a document id")
+            if doc_id in seen_ids:
+                raise RuntimeError("source memory item cursor did not advance")
+            seen_ids.add(doc_id)
+            rows.append((doc_id, f"{paths.memory_items}/{doc_id}", data))
+        if not supports_cursor or len(snapshots) < limit:
+            break
+        cursor = snapshots[-1]
     return rows
 
 
@@ -144,30 +187,24 @@ def _user_review_value(data: dict[str, Any]):
     return data.get("user_review")
 
 
-def _require_safe_active_item(uid: str, memory_id: str, path: str, data: dict[str, Any]) -> None:
+def _validate_source_identity(uid: str, memory_id: str, path: str, data: dict[str, Any]) -> None:
     if not path.startswith(f"users/{uid}/memory_items/"):
         raise RuntimeError(f"refusing cross-user source path: {path}")
     if data.get("uid") != uid:
         raise RuntimeError(f"refusing cross-user memory item at {path}")
     if data.get("memory_id") not in (None, memory_id):
         raise RuntimeError(f"memory_id mismatch at {path}")
-    if data.get("status") != "active":
-        raise RuntimeError(f"refusing non-active memory item at {path}")
-    if data.get("source_state") != "active":
-        raise RuntimeError(f"refusing non-active source_state at {path}")
-    if data.get("tier") == "archive" or data.get("archive") is True:
-        raise RuntimeError(f"refusing archive memory item at {path}")
-    if data.get("deleted") is True or data.get("tombstoned") is True:
-        raise RuntimeError(f"refusing deleted/tombstoned memory item at {path}")
-    restricted = _labels(data).intersection(RESTRICTED_SENSITIVITY_LABELS)
-    if restricted or data.get("restricted_sensitivity") is True:
-        raise RuntimeError(f"refusing restricted sensitivity memory item at {path}: {sorted(restricted)}")
-    if data.get("user_review") is False:
-        raise RuntimeError(f"refusing user-rejected memory item at {path}")
-    promotion = data.get("promotion")
-    if isinstance(promotion, dict) and promotion.get("user_review") is False:
-        raise RuntimeError(f"refusing user-rejected memory item at {path}")
-    _content(data)
+
+
+def _projection_skip_reason(data: dict[str, Any]) -> str | None:
+    """Return why a source row must not be copied into the default-read projection.
+
+    Keep this aligned with the normal outbox projection writer.  Rows outside this
+    policy are expected in the authoritative store and must not make a complete
+    rebuild look incomplete.
+    """
+
+    return v3_compatibility_projection_skip_reason(data)
 
 
 def _timestamp(data: dict[str, Any], *fields: str) -> datetime:
@@ -178,7 +215,7 @@ def _timestamp(data: dict[str, Any], *fields: str) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _projection_fences(uid: str, head: dict[str, Any]) -> dict[str, Any]:
+def _projection_fences(uid: str, head: dict[str, Any], *, ready: bool, rebuild_id: str) -> dict[str, Any]:
     generation = _as_int(head, "account_generation")
     head_commit_id = _as_nonempty_str(head, "head_commit_id")
     commit_sequence = _as_int(head, "commit_sequence")
@@ -186,7 +223,13 @@ def _projection_fences(uid: str, head: dict[str, Any]) -> dict[str, Any]:
         "uid": uid,
         "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
         "source": V3_COMPATIBILITY_PROJECTION_SOURCE,
-        "ready": True,
+        "ready": ready,
+        "rebuild_id": rebuild_id,
+        "rebuild_complete": True,
+        # This admits canonical outbox writers while ``ready`` remains the
+        # independent reader/cutover gate.  A rebuild therefore cannot lose
+        # writes that arrive after its initial scan.
+        "writer_admission_ready": True,
         "account_generation": generation,
         "projection_generation": generation,
         "freshness_fence_generation": generation,
@@ -278,57 +321,238 @@ def projection_target_item_path(uid: str, memory_id: str) -> str:
     return f"{MemoryCollections(uid=uid).v3_compatibility_projection_items}/{memory_id}"
 
 
+def _projection_item_paths(db_client, *, uid: str) -> list[str]:
+    collection_path = MemoryCollections(uid=uid).v3_compatibility_projection_items
+    return [
+        f"{collection_path}/{getattr(snapshot, 'id', '')}"
+        for snapshot in db_client.collection(collection_path).stream()
+        if getattr(snapshot, "id", "")
+    ]
+
+
 def build_projection(db_client, *, uid: str, project: str, memory_id: str | None, limit: int) -> ProjectionBuild:
     if limit < 1 or limit > MAX_LIMIT:
         raise ValueError(f"--limit must be between 1 and {MAX_LIMIT}")
     head_path, head = _read_head(db_client, uid=uid)
-    fences = _projection_fences(uid, head)
+    full_rebuild = memory_id is None
+    # A manual projection rebuild is a repair operation, not canonical migration
+    # verification.  Keep reads fail-closed until the controller writes a
+    # verified read-cutover checkpoint at this same inventory/head fence.
+    rebuild_id = f"rebuild_{uuid4().hex}"
+    fences = _projection_fences(uid, head, ready=False, rebuild_id=rebuild_id)
     source_rows = _stream_memory_items(db_client, uid=uid, memory_id=memory_id, limit=limit)
-    if not source_rows:
-        raise RuntimeError("no active source memory_items found for projection")
+    if not source_rows and not full_rebuild:
+        raise RuntimeError("memory item was not found for partial projection inspection")
 
     paths = MemoryCollections(uid=uid)
     state_path = paths.v3_compatibility_projection_state
-    writes: dict[str, dict[str, Any]] = {
-        state_path: {
-            **fences,
-            "empty_projection": False,
-        }
-    }
+    writes: dict[str, dict[str, Any]] = {}
+    if full_rebuild:
+        writes[state_path] = {**fences, "empty_projection": False}
     source_paths: list[str] = []
     redacted_items: list[dict[str, Any]] = []
+    skipped_by_reason: dict[str, int] = {}
     for doc_id, source_path, data in source_rows:
         resolved_memory_id = str(data.get("memory_id") or doc_id)
-        _require_safe_active_item(uid, resolved_memory_id, source_path, data)
+        _validate_source_identity(uid, resolved_memory_id, source_path, data)
+        skip_reason = _projection_skip_reason(data)
+        if skip_reason is not None:
+            skipped_by_reason[skip_reason] = skipped_by_reason.get(skip_reason, 0) + 1
+            continue
         target_path = projection_target_item_path(uid, resolved_memory_id)
         projection = _projection_item(uid, resolved_memory_id, data, fences)
         writes[target_path] = projection
         source_paths.append(source_path)
         redacted_items.append(_redacted_item_summary(resolved_memory_id, source_path, data, projection))
 
+    if full_rebuild:
+        writes[state_path]["empty_projection"] = not redacted_items
+
+    projected_paths = set(writes) - {state_path}
+    stale_projection_paths = (
+        sorted(set(_projection_item_paths(db_client, uid=uid)) - projected_paths) if full_rebuild else []
+    )
+
+    touched_paths = sorted(set(writes).union(stale_projection_paths))
     return ProjectionBuild(
         uid=uid,
         project=project,
         head_path=head_path,
+        source_head=head,
+        source_memory_item_count=len(source_rows),
         source_item_paths=source_paths,
         writes=writes,
+        stale_projection_paths=stale_projection_paths,
         rollback_manifest={
             "project": project,
             "uid": uid,
             "dry_run_default": True,
-            "touched_doc_paths": sorted(writes.keys()),
+            "touched_path_count": len(touched_paths),
+            "touched_doc_paths": touched_paths,
             "operator_action": "delete or restore these exact projection docs from backup if rollback is required",
         },
         redacted_items=redacted_items,
+        skipped_by_reason=skipped_by_reason,
+        full_rebuild=full_rebuild,
+        rebuild_id=rebuild_id,
     )
 
 
 def apply_projection(db_client, build: ProjectionBuild) -> list[str]:
-    for path in sorted(build.writes):
+    if not build.full_rebuild:
+        raise RuntimeError("refusing to apply a partial projection; run a complete rebuild")
+
+    state_path = MemoryCollections(uid=build.uid).v3_compatibility_projection_state
+    final_state = build.writes[state_path]
+    # Publishing this first fences all later finalization to one build id.  It
+    # leaves writers admitted, but no reader may observe a partial inventory.
+    staged_state = {
+        **final_state,
+        "ready": False,
+        "rebuild_complete": False,
+        "write_convergence_complete": False,
+        "delete_convergence_complete": False,
+        "tombstone_convergence_complete": False,
+    }
+    db_client.document(state_path).set(staged_state)
+
+    item_paths = [path for path in sorted(build.writes) if path != state_path]
+    for path in item_paths:
         if not path.startswith(f"users/{build.uid}/v3_compatibility_projection"):
             raise RuntimeError(f"refusing write outside v3 projection paths: {path}")
-        db_client.document(path).set(build.writes[path])
-    return sorted(build.writes)
+    for path in build.stale_projection_paths:
+        if not path.startswith(f"users/{build.uid}/v3_compatibility_projection_items/"):
+            raise RuntimeError(f"refusing delete outside projection items: {path}")
+    _apply_item_mutations(
+        db_client,
+        uid=build.uid,
+        rebuild_id=build.rebuild_id,
+        writes=[(path, build.writes[path]) for path in item_paths],
+        deletes=build.stale_projection_paths,
+    )
+
+    _finalize_projection_rebuild(db_client, build=build, state_path=state_path, final_state=final_state)
+    return [state_path, *item_paths, *build.stale_projection_paths]
+
+
+def _finalize_projection_rebuild(
+    db_client, *, build: ProjectionBuild, state_path: str, final_state: dict[str, Any]
+) -> None:
+    """CAS finalization: a stale or superseded rebuild can never publish itself."""
+    state_ref = db_client.document(state_path)
+
+    def finalize(transaction=None) -> None:
+        if transaction is None:
+            _, observed_head = _read_head(db_client, uid=build.uid)
+            state = _snapshot_data(state_ref.get())
+        else:
+            observed_head = _snapshot_data(db_client.document(build.head_path).get(transaction=transaction))
+            state = _snapshot_data(state_ref.get(transaction=transaction))
+        if observed_head != build.source_head:
+            raise RuntimeError("source head changed during projection rebuild; projection remains not ready")
+        if (
+            not isinstance(state, dict)
+            or state.get("rebuild_id") != build.rebuild_id
+            or state.get("ready") is not False
+        ):
+            raise RuntimeError("projection rebuild was superseded or already cut over")
+        if transaction is None:
+            state_ref.set(final_state)
+        else:
+            transaction.set(state_ref, final_state)
+
+    transaction = db_client.transaction() if hasattr(db_client, "transaction") else None
+    if transaction is None:
+        finalize()
+        return
+    if firestore is not None and transaction.__class__.__module__.startswith("google.cloud.firestore"):
+        firestore.transactional(finalize)(transaction)
+        return
+    if hasattr(transaction, "_begin"):
+        transaction._begin()
+    try:
+        finalize(transaction)
+        if hasattr(transaction, "_commit"):
+            transaction._commit()
+    except Exception:
+        if hasattr(transaction, "_rollback"):
+            transaction._rollback()
+        raise
+    finally:
+        if hasattr(transaction, "_clean_up"):
+            transaction._clean_up()
+
+
+def _apply_item_mutations(
+    db_client,
+    *,
+    uid: str,
+    rebuild_id: str,
+    writes: list[tuple[str, dict[str, Any]]],
+    deletes: list[str],
+) -> None:
+    """Write bounded batches only while this rebuild owns the staged state.
+
+    The ownership read and item writes share one Firestore transaction.  A
+    concurrent rebuild that replaces ``rebuild_id`` therefore conflicts and
+    retries before this worker can overwrite the newer rebuild's rows.
+    """
+
+    mutations: list[tuple[str, str, dict[str, Any] | None]] = [("set", path, payload) for path, payload in writes] + [
+        ("delete", path, None) for path in deletes
+    ]
+    if not mutations:
+        return
+    for start in range(0, len(mutations), FIRESTORE_WRITE_BATCH_SIZE):
+        batch_mutations = mutations[start : start + FIRESTORE_WRITE_BATCH_SIZE]
+        state_path = MemoryCollections(uid=uid).v3_compatibility_projection_state
+
+        def mutate(transaction=None) -> None:
+            state_ref = db_client.document(state_path)
+            state = (
+                _snapshot_data(state_ref.get(transaction=transaction))
+                if transaction is not None
+                else _snapshot_data(state_ref.get())
+            )
+            if (
+                not isinstance(state, dict)
+                or state.get("uid") != uid
+                or state.get("rebuild_id") != rebuild_id
+                or state.get("ready") is not False
+                or state.get("rebuild_complete") is not False
+            ):
+                raise RuntimeError("projection rebuild was superseded or already cut over")
+            for kind, path, payload in batch_mutations:
+                reference = db_client.document(path)
+                if transaction is None:
+                    if kind == "set":
+                        reference.set(payload)
+                    else:
+                        reference.delete()
+                elif kind == "set":
+                    transaction.set(reference, payload)
+                else:
+                    transaction.delete(reference)
+
+        transaction = db_client.transaction() if hasattr(db_client, "transaction") else None
+        if transaction is None:
+            mutate()
+        elif firestore is not None and transaction.__class__.__module__.startswith("google.cloud.firestore"):
+            firestore.transactional(mutate)(transaction)
+        else:
+            if hasattr(transaction, "_begin"):
+                transaction._begin()
+            try:
+                mutate(transaction)
+                if hasattr(transaction, "_commit"):
+                    transaction._commit()
+            except Exception:
+                if hasattr(transaction, "_rollback"):
+                    transaction._rollback()
+                raise
+            finally:
+                if hasattr(transaction, "_clean_up"):
+                    transaction._clean_up()
 
 
 def build_report(build: ProjectionBuild, *, applied_paths: list[str] | None = None) -> dict[str, Any]:
@@ -339,12 +563,14 @@ def build_report(build: ProjectionBuild, *, applied_paths: list[str] | None = No
         "dry_run": applied_paths is None,
         "source": {
             "head_path": build.head_path,
-            "memory_item_paths": build.source_item_paths,
+            "memory_item_count": build.source_memory_item_count,
         },
         "projection": {
             "state_path": MemoryCollections(uid=build.uid).v3_compatibility_projection_state,
             "item_count": len(build.redacted_items),
-            "items": build.redacted_items,
+            "stale_item_count": len(build.stale_projection_paths),
+            "skipped_by_reason": dict(sorted(build.skipped_by_reason.items())),
+            "full_rebuild": build.full_rebuild,
         },
         "applied_paths": applied_paths or [],
         "rollback_manifest": build.rollback_manifest,
@@ -360,7 +586,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--uid", default=FIRST_USER_UID)
     parser.add_argument("--project", default=DEFAULT_PROJECT)
     parser.add_argument("--memory-id", default="")
-    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)
+    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT, help="Maximum source rows to inspect")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-uid", default="")
     return parser.parse_args()
@@ -370,6 +596,8 @@ def main() -> int:
     args = parse_args()
     if args.apply and args.confirm_uid != args.uid:
         raise SystemExit("--apply requires --confirm-uid to exactly match --uid")
+    if args.apply and args.memory_id:
+        raise SystemExit("--apply does not allow --memory-id; a ready projection must be rebuilt in full")
     db_client = _load_firestore_client(project=args.project)
     build = build_projection(
         db_client,

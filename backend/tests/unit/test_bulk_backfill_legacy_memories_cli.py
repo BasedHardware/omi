@@ -92,6 +92,7 @@ def test_dry_run_cli_uses_offline_fake_and_emits_redacted_json(script, monkeypat
     assert payload["users"][0]["actions"] == [
         "would_enroll_write_only",
         "would_stage_all_for_admission",
+        "would_require_canonical_migration_verification_and_read_cutover",
     ]
     assert secret_content not in output
     assert db.writes == []

@@ -59,11 +59,12 @@ def _inventory(uid: str, *, candidates: int = 2, tokens: int = 20) -> LegacyBack
     )
 
 
-def test_checkpoint_state_machine_rejects_regressions_and_read_ready_mutation():
+def test_checkpoint_state_machine_rejects_regressions_and_reopens_legacy_read_ready():
     validate_checkpoint_transition(MigrationState.not_started, MigrationState.inventory_done)
     validate_checkpoint_transition(MigrationState.processing, MigrationState.staged)
     validate_checkpoint_transition(MigrationState.staged, MigrationState.processing)
     validate_checkpoint_transition(MigrationState.failed, MigrationState.processing)
+    validate_checkpoint_transition(MigrationState.read_ready, MigrationState.staged)
 
     with pytest.raises(ValueError, match="inventory_done -> not_started"):
         validate_checkpoint_transition(MigrationState.inventory_done, MigrationState.not_started)
@@ -140,7 +141,7 @@ def test_global_pause_env_and_read_failure_both_fail_closed():
     assert read_global_pause(_FailingDb(), env={}) == PauseDecision(True, "pause_check_failed")
 
 
-def test_apply_is_idempotent_across_multiple_uids_and_skips_read_ready_reentry():
+def test_apply_is_idempotent_across_multiple_uids_and_stops_at_staged_for_canonical_cutover():
     store = _CheckpointStore()
     calls: list[str] = []
 
@@ -174,13 +175,15 @@ def test_apply_is_idempotent_across_multiple_uids_and_skips_read_ready_reentry()
         backfill_fn=backfill,
     )
 
-    assert first.read_ready_count == 2
-    assert second.read_ready_count == 2
+    assert first.read_ready_count == 0
+    assert second.read_ready_count == 0
     assert calls == calls_after_first
-    assert all(checkpoint.state == MigrationState.read_ready for checkpoint in store.checkpoints.values())
+    assert all(checkpoint.state == MigrationState.staged for checkpoint in store.checkpoints.values())
+    assert all(checkpoint.staging_complete for checkpoint in store.checkpoints.values())
+    assert all("canonical_migration_verification_required" in result.actions for result in second.users)
 
 
-def test_row_cap_pauses_cleanly_and_resume_reaches_read_ready():
+def test_row_cap_pauses_cleanly_and_resume_reaches_staged():
     store = _CheckpointStore()
     reports = iter(
         [
@@ -214,8 +217,38 @@ def test_row_cap_pauses_cleanly_and_resume_reaches_read_ready():
     assert first.stopped_reason is None
     assert first.paused_user_count == 1
     assert first.users[0].error_codes == ("max_admitted_rows_per_user",)
-    assert second.read_ready_count == 1
-    assert store.checkpoints["uid-a"].state == MigrationState.read_ready
+    assert second.read_ready_count == 0
+    assert second.users[0].state == MigrationState.staged
+    assert store.checkpoints["uid-a"].state == MigrationState.staged
+
+
+def test_preexisting_read_ready_checkpoint_reopens_as_unverified_staged_without_reprocessing():
+    store = _CheckpointStore()
+    inventory = _inventory("uid-a")
+    store.checkpoints["uid-a"] = MigrationCheckpoint(
+        uid="uid-a",
+        state=MigrationState.read_ready,
+        staged_count=2,
+    )
+    calls: list[str] = []
+    result = run_bulk_migration(
+        ["uid-a"],
+        config=BulkMigrationConfig(dry_run=False),
+        inventory_fn=lambda _uid: inventory,
+        checkpoint_store=store,
+        enroll_fn=lambda uid: calls.append(f"enroll:{uid}"),
+        backfill_fn=lambda uid, cap, resume, stop: (_ for _ in ()).throw(AssertionError("must not reprocess")),
+    )
+
+    assert result.read_ready_count == 0
+    assert result.users[0].state == MigrationState.staged
+    assert result.users[0].actions == (
+        "legacy_read_ready_reopened_unverified",
+        "canonical_migration_verification_required",
+    )
+    assert store.checkpoints["uid-a"].state == MigrationState.staged
+    assert store.checkpoints["uid-a"].staging_complete is True
+    assert calls == []
 
 
 def test_pause_is_checked_between_enrollment_and_staging():
@@ -316,7 +349,33 @@ def test_requested_bucket_processing_waits_for_row_budget_then_resumes():
     assert first.paused_user_count == 1
     assert "bucket_processing_deferred_row_cap" in first.users[0].actions
     assert bucket_calls == ["uid-a:manual_required_promotion:2"]
-    assert second.read_ready_count == 1
+    assert second.read_ready_count == 0
+    assert second.users[0].state == MigrationState.staged
+
+
+def test_incomplete_bucket_report_cannot_mark_staging_complete():
+    store = _CheckpointStore()
+
+    def process_bucket(uid: str, bucket: str, cap: int, stop) -> _BackfillReport:
+        return _BackfillReport(completed=True, verified=False, destination_count=1, intended_count=1)
+
+    summary = run_bulk_migration(
+        ["uid-a"],
+        config=BulkMigrationConfig(
+            dry_run=False,
+            max_admitted_rows_per_user=5,
+            process_buckets=("manual_required_promotion",),
+        ),
+        inventory_fn=lambda uid: _inventory(uid, candidates=1),
+        checkpoint_store=store,
+        enroll_fn=lambda uid: None,
+        backfill_fn=lambda uid, cap, resume, stop: _BackfillReport(intended_count=1, destination_count=1),
+        bucket_process_fn=process_bucket,
+    )
+
+    assert summary.failed_user_count == 1
+    assert summary.users[0].error_codes == ("bucket_processing_incomplete",)
+    assert store.checkpoints["uid-a"].staging_complete is False
 
 
 def test_checkpoint_worker_failure_isolated_from_other_uids():
@@ -337,9 +396,9 @@ def test_checkpoint_worker_failure_isolated_from_other_uids():
     )
 
     assert summary.failed_user_count == 1
-    assert summary.read_ready_count == 1
+    assert summary.read_ready_count == 0
     assert summary.users[0].error_codes == ("checkpoint_or_worker_failed",)
-    assert summary.users[1].state == MigrationState.read_ready
+    assert summary.users[1].state == MigrationState.staged
 
 
 def test_apply_user_concurrency_never_exceeds_configured_limit():
@@ -367,5 +426,6 @@ def test_apply_user_concurrency_never_exceeds_configured_limit():
         backfill_fn=backfill,
     )
 
-    assert summary.read_ready_count == 3
+    assert summary.read_ready_count == 0
+    assert all(user.state == MigrationState.staged for user in summary.users)
     assert counters["maximum"] == 2

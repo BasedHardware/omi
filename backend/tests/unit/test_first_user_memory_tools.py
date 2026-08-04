@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -35,12 +36,24 @@ class _Document:
         current = self.db.docs.get(self.path, {}) if merge else {}
         self.db.docs[self.path] = {**current, **payload}
 
+    def delete(self):
+        self.db.docs.pop(self.path, None)
+
 
 class _Query:
     def __init__(self, db, path: str):
         self.db = db
         self.path = path
         self.limit_value = None
+        self.cursor_id = None
+
+    def order_by(self, field):
+        assert field == "__name__"
+        return self
+
+    def start_after(self, snapshot):
+        self.cursor_id = snapshot.id
+        return self
 
     def limit(self, value):
         self.limit_value = value
@@ -49,9 +62,11 @@ class _Query:
     def stream(self):
         rows = []
         prefix = f"{self.path}/"
-        for path, data in self.db.docs.items():
+        for path, data in sorted(self.db.docs.items()):
             if path.startswith(prefix):
                 rows.append(_Snapshot(data, id=path.rsplit("/", 1)[-1]))
+        if self.cursor_id is not None:
+            rows = [row for row in rows if row.id > self.cursor_id]
         rows = rows[: self.limit_value] if self.limit_value is not None else rows
         return rows
 
@@ -172,9 +187,9 @@ def test_projection_dry_run_report_redacts_memory_content():
 
     assert report["dry_run"] is True
     assert "private memory text" not in str(report)
-    assert report["projection"]["items"][0]["content_length"] == len("private memory text")
+    assert report["projection"]["item_count"] == 1
     assert db.writes == []
-    assert report["rollback_manifest"]["touched_doc_paths"] == sorted(build.writes.keys())
+    assert report["rollback_manifest"]["touched_path_count"] == len(build.writes)
 
 
 def test_projection_apply_requires_matching_confirm_uid(monkeypatch):
@@ -204,7 +219,7 @@ def test_projection_apply_requires_matching_confirm_uid(monkeypatch):
 def test_projection_apply_writes_only_projection_paths():
     uid = "uid-a"
     db = _Db(_ready_docs(uid))
-    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
 
     written = projection_tool.apply_projection(db, build)
 
@@ -212,14 +227,64 @@ def test_projection_apply_writes_only_projection_paths():
     assert all(path.startswith(f"users/{uid}/v3_compatibility_projection") for path, _, _ in db.writes)
 
 
-def test_projection_refuses_restricted_sensitivity_by_default():
+def test_projection_source_scan_exhausts_cursor_pages_beyond_ten_thousand_rows():
+    uid = "uid-a"
+    docs = {MemoryCollections(uid=uid).memory_state_head: _head(uid)}
+    item_path = MemoryCollections(uid=uid).memory_items
+    for index in range(10_005):
+        memory_id = f"m{index:05d}"
+        docs[f"{item_path}/{memory_id}"] = _memory_item(uid, memory_id)
+    db = _Db(docs)
+
+    rows = projection_tool._stream_memory_items(db, uid=uid, memory_id=None, limit=1_000)
+
+    assert len(rows) == 10_005
+    assert rows[0][0] == "m00000"
+    assert rows[-1][0] == "m10004"
+
+
+def test_projection_item_batch_rejects_superseded_rebuild_before_writing():
+    uid = "uid-a"
+    db = _Db(_ready_docs(uid))
+    state_path = MemoryCollections(uid=uid).v3_compatibility_projection_state
+    db.docs[state_path].update({"ready": False, "rebuild_complete": False, "rebuild_id": "rebuild-new"})
+
+    with pytest.raises(RuntimeError, match="superseded"):
+        projection_tool._apply_item_mutations(
+            db,
+            uid=uid,
+            rebuild_id="rebuild-old",
+            writes=[(projection_tool.projection_target_item_path(uid, "m2"), {"uid": uid})],
+            deletes=[],
+        )
+
+    assert projection_tool.projection_target_item_path(uid, "m2") not in db.docs
+
+
+def test_projection_skips_restricted_sensitivity_by_default():
     uid = "uid-a"
     docs = _ready_docs(uid)
     docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = _memory_item(uid, labels=["health"])
     db = _Db(docs)
 
-    with pytest.raises(RuntimeError, match="restricted sensitivity"):
-        projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    assert build.redacted_items == []
+    assert build.skipped_by_reason == {"restricted_sensitivity": 1}
+
+
+def test_projection_skips_archived_memory_even_with_default_tier():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    archived = _memory_item(uid)
+    archived["archive"] = True
+    docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = archived
+    db = _Db(docs)
+
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    assert build.redacted_items == []
+    assert build.skipped_by_reason == {"archived": 1}
 
 
 def test_projection_item_preserves_source_created_at_before_updated_at():
@@ -241,24 +306,94 @@ def test_projection_item_preserves_source_created_at_before_updated_at():
     assert projection_item["memorydb"]["updated_at"] == newer_updated_at
 
 
-def test_projection_refuses_top_level_user_rejected_memory():
+def test_projection_skips_top_level_user_rejected_memory():
     uid = "uid-a"
     docs = _ready_docs(uid)
     docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = _memory_item(uid, user_review=False)
     db = _Db(docs)
 
-    with pytest.raises(RuntimeError, match="user-rejected"):
-        projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    assert build.skipped_by_reason == {"user_rejected": 1}
 
 
-def test_projection_refuses_nested_promotion_user_rejected_memory():
+def test_projection_skips_nested_promotion_user_rejected_memory():
     uid = "uid-a"
     docs = _ready_docs(uid)
     docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = _memory_item(uid, promotion={"user_review": False})
     db = _Db(docs)
 
-    with pytest.raises(RuntimeError, match="user-rejected"):
-        projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    assert build.skipped_by_reason == {"user_rejected": 1}
+
+
+def test_partial_projection_cannot_publish_ready_state():
+    uid = "uid-a"
+    db = _Db(_ready_docs(uid))
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+
+    assert build.full_rebuild is False
+    assert MemoryCollections(uid=uid).v3_compatibility_projection_state not in build.writes
+    with pytest.raises(RuntimeError, match="partial projection"):
+        projection_tool.apply_projection(db, build)
+
+
+def test_full_rebuild_removes_stale_projection_rows():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    stale_path = f"{MemoryCollections(uid=uid).v3_compatibility_projection_items}/stale"
+    docs[stale_path] = _projection_item(uid, "stale")
+    db = _Db(docs)
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    projection_tool.apply_projection(db, build)
+
+    assert stale_path not in db.docs
+    assert db.docs[MemoryCollections(uid=uid).v3_compatibility_projection_state]["ready"] is False
+
+
+def test_projection_repair_never_publishes_read_cutover_ready_state():
+    uid = "uid-a"
+    db = _Db(_ready_docs(uid))
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    projection_tool.apply_projection(db, build)
+
+    assert db.docs[MemoryCollections(uid=uid).v3_compatibility_projection_state]["ready"] is False
+
+
+def test_projection_rollback_manifest_lists_exact_touched_paths():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    stale_path = f"{MemoryCollections(uid=uid).v3_compatibility_projection_items}/stale"
+    docs[stale_path] = _projection_item(uid, "stale")
+    db = _Db(docs)
+
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    assert build.rollback_manifest["touched_doc_paths"] == sorted([*build.writes, *build.stale_projection_paths])
+    assert build.rollback_manifest["touched_path_count"] == len(build.rollback_manifest["touched_doc_paths"])
+
+
+def test_source_change_leaves_full_rebuild_not_ready(monkeypatch):
+    uid = "uid-a"
+    db = _Db(_ready_docs(uid))
+    initial_head = _head(uid)
+    changed_head = {**initial_head, "head_commit_id": "head-8", "commit_sequence": 8}
+    heads = iter(
+        [
+            (MemoryCollections(uid=uid).memory_state_head, initial_head),
+            (MemoryCollections(uid=uid).memory_state_head, changed_head),
+        ]
+    )
+    monkeypatch.setattr(projection_tool, "_read_head", lambda _db, *, uid: next(heads))
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id=None, limit=10)
+
+    with pytest.raises(RuntimeError, match="source head changed"):
+        projection_tool.apply_projection(db, build)
+
+    assert db.docs[MemoryCollections(uid=uid).v3_compatibility_projection_state]["ready"] is False
 
 
 def test_projection_memorydb_uses_nested_promotion_user_review_when_present():
@@ -367,3 +502,38 @@ def test_first_user_api_proof_fails_non_list_authenticated_response():
         check["name"] == "authenticated_get_v3_memories_body_list" and check["status"] == "fail"
         for check in api_report["checks"]
     )
+
+
+def test_first_user_api_proof_follows_next_cursor_pages():
+    uid = "uid-a"
+    calls: list[str] = []
+
+    def fake_get(url, headers, timeout_seconds):
+        if not headers.get("Authorization"):
+            return proof_tool.HttpResult(401, {"detail": "not authenticated"}, {})
+        cursor = parse_qs(urlparse(url).query).get("cursor", [None])[0]
+        calls.append(cursor or "first")
+        if cursor is None:
+            return proof_tool.HttpResult(
+                200,
+                [{"id": "m1", "uid": uid, "content": "one", "layer": "short_term"}],
+                {"X-Omi-Memory-Next-Cursor": "page-2"},
+            )
+        return proof_tool.HttpResult(
+            200,
+            [{"id": "m2", "uid": uid, "content": "two", "layer": "long_term"}],
+            {},
+        )
+
+    report = proof_tool.verify_api_behavior(
+        backend_url="https://dev.example",
+        uid=uid,
+        id_token="redacted-token",
+        limit=1,
+        timeout_seconds=1.0,
+        http_get=fake_get,
+    )
+
+    assert report["status"] == "pass"
+    assert report["authenticated_page_count"] == 2
+    assert calls == ["first", "page-2"]

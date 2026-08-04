@@ -15,6 +15,7 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from utils.memory.graph_enrichment import GraphEnrichmentStatus, prepare_graph_enrichment
 
 
 def _evidence():
@@ -398,6 +399,26 @@ def _short_term_existing(**overrides):
     return MemoryItem(**data)
 
 
+def _long_term_graph_item(**overrides):
+    data = dict(
+        tier=MemoryTier.long_term,
+        expires_at=None,
+        ledger_commit_id="head0",
+        ledger_sequence=1,
+        source_commit_id="head0",
+        source_commit_sequence=1,
+        subject_entity_id="user",
+        predicate=None,
+        arguments={},
+        graph_ready=False,
+        graph_assertion_id=None,
+        graph_plan_hash=None,
+        kg_extracted=False,
+    )
+    data.update(overrides)
+    return _short_term_existing(**data)
+
+
 def test_short_term_to_long_term_requires_synthesis_and_commits_structured_graph_assertion():
     control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
     existing = _short_term_existing()
@@ -511,6 +532,161 @@ def test_short_term_to_long_term_rejects_non_synthesis_operation_even_with_valid
             promotion_audit=promotion_audit,
         ),
     )
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert result.memory_items == []
+    assert result.graph_assertions == []
+
+
+def test_graph_enrichment_rejects_a_short_term_target_before_assertion_generation():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _short_term_existing()
+    operation = _operation(
+        operation_type=MemoryOperationType.graph_enrichment,
+        target_memory_id=existing.memory_id,
+        logical_payload={
+            "decision": DurablePatchDecision.update.value,
+            "memory_text": None,
+            "target_memory_id": existing.memory_id,
+            "result_status": LifecycleState.active.value,
+            "subject_entity_id": "user",
+            "predicate": "prefers_update_style",
+            "arguments": {"style": "concise"},
+        },
+    )
+    patch = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id=existing.memory_id,
+        memory_text=None,
+        existing_item=existing.model_dump(mode="python"),
+    )
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch)
+
+    assert result.status != ApplyStatus.committed
+    assert result.graph_assertions == []
+
+
+def test_graph_enrichment_rejects_add_decision_before_materializing_a_new_item():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    graph_plan = PromotionGraphPlan(
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+    )
+    operation = _operation(
+        operation_type=MemoryOperationType.graph_enrichment,
+        logical_payload=_logical_payload(
+            subject_entity_id="user",
+            predicate=graph_plan.predicate,
+            arguments=graph_plan.arguments,
+        ),
+    )
+    patch = _patch(
+        decision=DurablePatchDecision.add,
+        promotion={"graph_plan": graph_plan.model_dump(mode="json")},
+        predicate=graph_plan.predicate,
+        arguments=graph_plan.arguments,
+    )
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch)
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert result.memory_items == []
+    assert result.graph_assertions == []
+
+
+def test_graph_enrichment_rejects_inactive_existing_evidence_at_apply_boundary():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item(
+        user_asserted=True,
+        evidence=[
+            _evidence().model_copy(
+                update={
+                    "source_state": SourceState.tombstoned,
+                    "source_state_reason": SourceStateReason.deleted_by_user,
+                    "artifact_preservation": ArtifactPreservationState.deleted_by_user,
+                }
+            )
+        ],
+    )
+    plan = PromotionGraphPlan(
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+    )
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=plan,
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+
+    assert planned.status == GraphEnrichmentStatus.blocked
+    assert planned.block_code == "evidence_not_active"
+
+
+def test_graph_enrichment_malformed_evidence_fence_is_blocked():
+    existing = _long_term_graph_item()
+    plan = PromotionGraphPlan(
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+    )
+
+    result = prepare_graph_enrichment(
+        item=existing,
+        plan=plan,
+        account_generation=1,
+        source_generation=2,
+        expected_evidence_ids=[1],  # type: ignore[list-item]
+    )
+
+    assert result.status == GraphEnrichmentStatus.blocked
+    assert result.block_code == "stale_fence"
+
+
+@pytest.mark.parametrize("malformed_evidence_ids", [1, [[]]])
+def test_graph_enrichment_malformed_receipt_evidence_returns_invalid_patch(malformed_evidence_ids):
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item()
+    plan = PromotionGraphPlan(
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+    )
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=plan,
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+    assert planned.operation is not None
+    assert planned.patch_payload
+    patch = dict(planned.patch_payload)
+    promotion_audit = dict(patch["promotion_audit"])
+    receipt = dict(promotion_audit["graph_enrichment_receipt"])
+    receipt["evidence_ids"] = malformed_evidence_ids
+    promotion_audit["graph_enrichment_receipt"] = receipt
+    patch["promotion_audit"] = promotion_audit
+    patch["mutation_metadata"] = build_patch_mutation_identity(patch)
+    operation = MemoryOperation.new(
+        uid=planned.operation.uid,
+        operation_type=planned.operation.operation_type,
+        source_packet_id=planned.operation.source_packet_id,
+        target_memory_id=planned.operation.target_memory_id,
+        evidence_ids=planned.operation.evidence_ids,
+        logical_payload=planned.operation.logical_payload.model_copy(
+            update={"mutation_metadata": patch["mutation_metadata"]}
+        ),
+        account_generation=planned.operation.account_generation,
+        source_generation=planned.operation.source_generation,
+        observed_head_commit_id=planned.operation.observed_head_commit_id,
+    )
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch)
 
     assert result.status == ApplyStatus.invalid_patch
     assert result.memory_items == []
