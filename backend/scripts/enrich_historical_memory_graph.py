@@ -55,6 +55,11 @@ def _arguments() -> argparse.Namespace:
         action="store_true",
         help="Use only pre-existing complete canonical graph fields; never call an LLM",
     )
+    parser.add_argument(
+        "--replan-existing",
+        action="store_true",
+        help="Replace only prior fenced graph-enrichment plans with the current planner version",
+    )
     parser.add_argument("--apply", action="store_true", help="Commit plans through the canonical apply ledger")
     parser.add_argument("--confirm-uid", help="Required exact UID acknowledgement with --apply")
     return parser.parse_args()
@@ -77,7 +82,9 @@ def _firestore_client(*, project: str) -> Any:
     return firestore.Client(project=project, credentials=credentials)
 
 
-def _candidates(uid: str, *, control: MemoryControlState, limit: int, db_client: Any) -> list[MemoryItem]:
+def _candidates(
+    uid: str, *, control: MemoryControlState, limit: int, db_client: Any, replan_existing: bool = False
+) -> list[MemoryItem]:
     collection = db_client.collection(MemoryCollections(uid=uid).memory_items)
     # Historical canonical items predate graph_ready and omit the field rather
     # than storing false. Firestore equality filters exclude absent fields, so
@@ -98,7 +105,10 @@ def _candidates(uid: str, *, control: MemoryControlState, limit: int, db_client:
         .order_by("__name__", direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
-    return [item for snapshot in query.stream() if not (item := MemoryItem(**(snapshot.to_dict() or {}))).graph_ready]
+    items = [MemoryItem(**(snapshot.to_dict() or {})) for snapshot in query.stream()]
+    if replan_existing:
+        return [item for item in items if item.graph_ready and (item.promotion or {}).get("graph_enrichment")]
+    return [item for item in items if not item.graph_ready]
 
 
 def _structured_plan(item: MemoryItem, control: MemoryControlState):
@@ -130,6 +140,7 @@ def run_enrichment(
     structured_only: bool,
     apply_limit: int = 1,
     scan_limit: int | None = None,
+    replan_existing: bool = False,
     db_client: Any | None = None,
     llm: Any | None = None,
     progress_reporter: Callable[[dict[str, int]], None] | None = None,
@@ -152,7 +163,9 @@ def run_enrichment(
     applied = 0
     if not apply:
         control = _control(uid, db_client=db_client)
-        for item in _candidates(uid, control=control, limit=candidate_limit, db_client=db_client):
+        for item in _candidates(
+            uid, control=control, limit=candidate_limit, db_client=db_client, replan_existing=replan_existing
+        ):
             planned = (
                 _structured_plan(item, control)
                 if structured_only
@@ -173,7 +186,9 @@ def run_enrichment(
         while applied < apply_limit:
             control = _control(uid, db_client=db_client)
             planned = None
-            for item in _candidates(uid, control=control, limit=candidate_limit, db_client=db_client):
+            for item in _candidates(
+                uid, control=control, limit=candidate_limit, db_client=db_client, replan_existing=replan_existing
+            ):
                 candidate = (
                     _structured_plan(item, control)
                     if structured_only
@@ -214,6 +229,7 @@ def run_enrichment(
         "scan_limit": candidate_limit,
         "apply_limit": apply_limit,
         "structured_only": structured_only,
+        "replan_existing": replan_existing,
         "outcomes": dict(sorted(report.items())),
     }
 
@@ -230,6 +246,7 @@ def main() -> int:
             structured_only=args.structured_only,
             apply_limit=args.apply_limit,
             scan_limit=args.scan_limit,
+            replan_existing=args.replan_existing,
             progress_reporter=(
                 (lambda progress: print(json.dumps({"progress": progress}), flush=True)) if args.apply else None
             ),

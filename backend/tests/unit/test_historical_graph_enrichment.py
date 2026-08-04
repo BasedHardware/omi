@@ -72,6 +72,7 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
                 "eligible": True,
                 "subject_entity_id": "user",
                 "predicate": "prefers_update_style",
+                "object_label": "concise updates",
                 "arguments": {"style": "concise"},
             }
         ),
@@ -81,6 +82,8 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
     assert planned.operation is not None
     assert planned.patch_payload["expected_content_hash"] == _item().content_hash
     assert planned.patch_payload["evidence_ids"] == ["ev1"]
+    assert planned.patch_payload["subject_entity_id"] == "user"
+    assert planned.patch_payload["arguments"]["object"]["label"] == "concise updates"
 
 
 def test_historical_graph_planner_blocks_when_no_source_grounded_fact_exists():
