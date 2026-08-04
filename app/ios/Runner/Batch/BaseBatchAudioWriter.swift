@@ -196,6 +196,29 @@ class BaseBatchAudioWriter {
     /// Hook for recording-owned metadata that must be copied beside a new file.
     func onOpenedLocked(_ partURL: URL) {}
 
+    /// Persist a bounded recording-owned location snapshot beside the audio file.
+    /// The sidecar is written atomically so a native crash cannot leave a partial
+    /// JSON file for the Dart scanner to ingest.
+    func persistRecordingGeolocationSidecar(rawGeolocation: String?, audioURL: URL) {
+        guard let rawGeolocation,
+              let data = rawGeolocation.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else { return }
+
+        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
+        // A same-name part file can be reopened after a native restart. Its
+        // location belongs to that recording, so never replace an existing
+        // snapshot with the next session's config.
+        if FileManager.default.fileExists(atPath: sidecarURL.path) { return }
+        do {
+            try data.write(to: sidecarURL, options: .atomic)
+        } catch {
+            // Location is optional: never interrupt or discard audio capture.
+            NSLog("[\(tag)] failed to persist bounded recording location sidecar: \(type(of: error))")
+        }
+    }
+
     /// Notify Dart that a file finalized, so the recordings list rescans without
     /// waiting for a BLE disconnect.
     private func notifyFinalized(_ fileName: String) {

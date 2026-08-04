@@ -26,12 +26,12 @@ class ConversationLocationCapture {
     this.currentPositionTimeout = const Duration(seconds: 1),
     this.totalTimeout = const Duration(seconds: 3),
     this.maxLastKnownAge = const Duration(minutes: 15),
-  }) : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
-       _checkPermission = checkPermission ?? Geolocator.checkPermission,
-       _getCurrentPosition = getCurrentPosition ?? Geolocator.getCurrentPosition,
-       _getLastKnownPosition = getLastKnownPosition ?? Geolocator.getLastKnownPosition,
-       _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation)),
-       _now = now ?? DateTime.now;
+  })  : _isLocationServiceEnabled = isLocationServiceEnabled ?? Geolocator.isLocationServiceEnabled,
+        _checkPermission = checkPermission ?? Geolocator.checkPermission,
+        _getCurrentPosition = getCurrentPosition ?? Geolocator.getCurrentPosition,
+        _getLastKnownPosition = getLastKnownPosition ?? Geolocator.getLastKnownPosition,
+        _upload = upload ?? ((geolocation) => updateUserGeolocation(geolocation: geolocation)),
+        _now = now ?? DateTime.now;
 
   final LocationServiceEnabled _isLocationServiceEnabled;
   final LocationPermissionReader _checkPermission;
@@ -46,6 +46,7 @@ class ConversationLocationCapture {
   /// Returns the start-time snapshot even when the compatibility upload fails,
   /// so the caller can persist it with the recording/WAL.
   Future<Geolocation?> captureAndUpload() async {
+    final stopwatch = Stopwatch()..start();
     Geolocation? geolocation;
     try {
       geolocation = await _capture().timeout(totalTimeout);
@@ -58,7 +59,12 @@ class ConversationLocationCapture {
     }
     if (geolocation == null) return null;
     try {
-      await _upload(geolocation).timeout(totalTimeout);
+      final remaining = totalTimeout - stopwatch.elapsed;
+      if (remaining <= Duration.zero) {
+        Logger.log('Conversation location capture deadline elapsed before compatibility upload');
+        return geolocation;
+      }
+      await _upload(geolocation).timeout(remaining);
     } catch (e) {
       Logger.log('Conversation location compatibility upload failed; preserving recording snapshot');
     }

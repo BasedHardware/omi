@@ -1588,6 +1588,10 @@ class CaptureController extends ChangeNotifier
 
     // Ensure even very short device recordings have a location in Redis before
     // the backend is able to finalize their conversation.
+    // Drain the old session's in-memory WAL tail before replacing its location
+    // snapshot; otherwise those frames could be flushed under the next session's
+    // location.
+    await _wal.getSyncs().phone.finalizeCurrentSession();
     await _captureSessionLocation();
 
     await _resetStateVariables();

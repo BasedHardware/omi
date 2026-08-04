@@ -54,13 +54,13 @@ void main() {
       final gate = SyncUploadGate(
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
-        uploader: (files, {onUploadProgress, conversationId, geolocation, syncLane = SyncUploadLane.fresh}) async {
+        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
           uploaded = geolocation;
           return UploadFilesResult.queued('job-1');
         },
       );
 
-      await uploadNativeBatchRecording(recording, file: file, lane: SyncUploadLane.fresh, uploadGate: gate);
+      await uploadNativeBatchRecording(recording, file: file, uploadGate: gate);
 
       expect(uploaded?.latitude, 37.7749);
       expect(uploaded?.longitude, -122.4194);

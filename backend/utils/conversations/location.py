@@ -24,7 +24,10 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
         cached = r.get(cache_key)
         if cached:
             data = json.loads(cached)
-            return Geolocation(**data)
+            # The cache is rounded to ~100m and is shared across users. Keep
+            # the recording's exact coordinates instead of returning the first
+            # user's coordinates that populated this cell.
+            return Geolocation(**data).model_copy(update={'latitude': latitude, 'longitude': longitude})
     except Exception as e:
         logging.warning('Failed to read geocode cache for key %s: %s', cache_key, e)
 
@@ -79,6 +82,8 @@ def resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[Geolocat
         return geolocation
     return enriched.model_copy(
         update={
+            'latitude': geolocation.latitude,
+            'longitude': geolocation.longitude,
             'captured_at': geolocation.captured_at,
             'capture_source': geolocation.capture_source,
             'accuracy': geolocation.accuracy,
@@ -100,7 +105,9 @@ async def async_get_google_maps_location(latitude: float, longitude: float) -> O
         cached = r.get(cache_key)
         if cached:
             data = json.loads(cached)
-            return Geolocation(**data)
+            # See the sync helper above: cache entries are rounded, but the
+            # coordinates belong to this recording, not the cache owner.
+            return Geolocation(**data).model_copy(update={'latitude': latitude, 'longitude': longitude})
     except Exception as e:
         logging.warning('Failed to read geocode cache for key %s: %s', cache_key, e)
 
@@ -154,6 +161,8 @@ async def async_resolve_geolocation(geolocation: Optional[Geolocation]) -> Optio
         return geolocation
     return enriched.model_copy(
         update={
+            'latitude': geolocation.latitude,
+            'longitude': geolocation.longitude,
             'captured_at': geolocation.captured_at,
             'capture_source': geolocation.capture_source,
             'accuracy': geolocation.accuracy,

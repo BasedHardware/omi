@@ -16,6 +16,10 @@ internal fun persistNativeBatchGeolocationSidecar(audioFile: File, rawGeolocatio
     try {
         JSONObject(rawGeolocation)
         val sidecar = File(audioFile.path + NATIVE_BATCH_GEOLOCATION_SIDECAR_SUFFIX)
+        // A same-name part file can be reopened after a native restart. Its
+        // location belongs to that recording, so never replace an existing
+        // snapshot with the next session's config.
+        if (sidecar.exists()) return
         val pending = File(sidecar.path + ".part")
         FileOutputStream(pending).use { output ->
             output.write(rawGeolocation.toByteArray(Charsets.UTF_8))

@@ -158,6 +158,8 @@ class TestAsyncCacheHit:
 
         assert isinstance(result, Geolocation)
         assert result.google_place_id == "ChIJIQBpAG2ahYAR_6128GcTUEo"
+        assert result.latitude == 37.78512
+        assert result.longitude == -122.40932
 
 
 class TestAsyncCacheMiss:

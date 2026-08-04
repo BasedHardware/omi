@@ -33,6 +33,25 @@ void main() {
     expect(groups.single.membershipKey, 'first%2Csecond');
   });
 
+  test('clusters points across a rounded-coordinate boundary', () {
+    final groups = buildConversationMapGroups([
+      _conversation('first', latitude: 0, longitude: 0.00049),
+      _conversation('second', latitude: 0, longitude: 0.00051),
+    ]);
+
+    expect(groups, hasLength(1));
+    expect(groups.single.conversations.map((conversation) => conversation.id), ['first', 'second']);
+  });
+
+  test('honors the supplied conversation set, including discarded items', () {
+    final groups = buildConversationMapGroups([
+      _conversation('discarded', latitude: 37.7749, longitude: -122.4194, discarded: true),
+    ]);
+
+    expect(groups, hasLength(1));
+    expect(groups.single.conversations.single.id, 'discarded');
+  });
+
   test('cluster membership key is stable across provider ordering', () {
     final first = buildConversationMapGroups([
       _conversation('second', latitude: 37.77494, longitude: -122.41944),
@@ -95,9 +114,11 @@ class _MemoryTileProvider extends TileProvider {
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) => _tile;
 }
 
-ServerConversation _conversation(String id, {double? latitude, double? longitude}) => ServerConversation(
-  id: id,
-  createdAt: DateTime.utc(2026, 8, 1),
-  structured: Structured('Title', 'Overview'),
-  geolocation: latitude == null || longitude == null ? null : Geolocation(latitude: latitude, longitude: longitude),
-);
+ServerConversation _conversation(String id, {double? latitude, double? longitude, bool discarded = false}) =>
+    ServerConversation(
+      id: id,
+      createdAt: DateTime.utc(2026, 8, 1),
+      structured: Structured('Title', 'Overview'),
+      discarded: discarded,
+      geolocation: latitude == null || longitude == null ? null : Geolocation(latitude: latitude, longitude: longitude),
+    );

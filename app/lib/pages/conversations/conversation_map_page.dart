@@ -6,8 +6,12 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
+
+const _mapClusterDistanceMeters = 100.0;
+const _mapDistance = Distance(roundResult: false);
 
 class ConversationMapGroup {
   const ConversationMapGroup({required this.latitude, required this.longitude, required this.conversations});
@@ -27,13 +31,11 @@ class ConversationMapGroup {
 /// Builds stable ~100m clusters and drops malformed/missing coordinates without
 /// affecting the surrounding conversation surface.
 List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversation> conversations) {
-  final grouped = <String, List<ServerConversation>>{};
-  final coordinates = <String, (double, double)>{};
+  final located = <(ServerConversation, LatLng)>[];
   for (final conversation in conversations) {
     final latitude = conversation.geolocation?.latitude;
     final longitude = conversation.geolocation?.longitude;
-    if (conversation.discarded ||
-        latitude == null ||
+    if (latitude == null ||
         longitude == null ||
         !latitude.isFinite ||
         !longitude.isFinite ||
@@ -43,16 +45,37 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
         longitude > 180) {
       continue;
     }
-    final key = '${latitude.toStringAsFixed(3)},${longitude.toStringAsFixed(3)}';
-    coordinates.putIfAbsent(key, () => (latitude, longitude));
-    (grouped[key] ??= []).add(conversation);
+    located.add((conversation, LatLng(latitude, longitude)));
   }
+
+  // Sort before grouping so marker membership and row order do not depend on
+  // the order in which paginated/provider data happened to arrive. Group by
+  // actual distance rather than rounded coordinate strings: rounding creates
+  // artificial boundaries where points only metres apart become separate pins.
+  located.sort((a, b) => a.$1.id.compareTo(b.$1.id));
+  final grouped = <({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})>[];
+  for (final (conversation, point) in located) {
+    final group =
+        grouped.cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>().firstWhere(
+              (candidate) => candidate!.points.any(
+                (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
+              ),
+              orElse: () => null,
+            );
+    if (group == null) {
+      grouped.add((anchor: point, points: [point], conversations: [conversation]));
+    } else {
+      group.points.add(point);
+      group.conversations.add(conversation);
+    }
+  }
+
   return [
-    for (final entry in grouped.entries)
+    for (final group in grouped)
       ConversationMapGroup(
-        latitude: coordinates[entry.key]!.$1,
-        longitude: coordinates[entry.key]!.$2,
-        conversations: entry.value,
+        latitude: group.anchor.latitude,
+        longitude: group.anchor.longitude,
+        conversations: group.conversations,
       ),
   ];
 }
@@ -65,7 +88,7 @@ class ConversationMapPage extends StatelessWidget {
 
   Future<void> _openConversation(BuildContext context, ServerConversation conversation) async {
     final timestamp = conversation.startedAt ?? conversation.createdAt;
-    final day = DateTime(timestamp.year, timestamp.month, timestamp.day);
+    final day = conversationLocalDayKey(timestamp);
     context.read<ConversationDetailProvider>().updateConversation(conversation.id, day);
     await Navigator.of(
       context,
@@ -170,8 +193,8 @@ class ConversationMapPage extends StatelessWidget {
                           button: true,
                           label: group.conversations.length == 1
                               ? (group.conversations.single.structured.title.isEmpty
-                                    ? context.l10n.untitledConversation
-                                    : group.conversations.single.structured.title)
+                                  ? context.l10n.untitledConversation
+                                  : group.conversations.single.structured.title)
                               : '${group.conversations.length} ${context.l10n.conversations}',
                           child: GestureDetector(
                             key: ValueKey('conversation_map_marker_${group.membershipKey}'),

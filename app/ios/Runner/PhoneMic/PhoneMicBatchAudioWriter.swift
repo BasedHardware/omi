@@ -36,14 +36,10 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
               (try? JSONSerialization.jsonObject(with: data)) is [String: Any]
         else { return }
 
-        let audioURL = partURL.deletingPathExtension()
-        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
-        do {
-            try data.write(to: sidecarURL, options: .atomic)
-        } catch {
-            // Location is optional: never interrupt or discard audio capture.
-            NSLog("[PhoneBatchWriter] failed to persist bounded recording location sidecar: \(type(of: error))")
-        }
+        persistRecordingGeolocationSidecar(
+            rawGeolocation: raw,
+            audioURL: partURL.deletingPathExtension()
+        )
     }
 
     /// `dir` is resolved once at bring-up (a missing/empty `flutter.batchAudioDir`

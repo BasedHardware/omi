@@ -92,6 +92,35 @@ void main() {
 
     expect((await capture.captureAndUpload())?.latitude, 1);
   });
+
+  test('shares one deadline between capture and compatibility upload', () async {
+    final uploadStarted = Completer<void>();
+    var uploadCompleted = false;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.always,
+      getCurrentPosition: () async {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return _position(latitude: 1, longitude: 2);
+      },
+      getLastKnownPosition: () async => null,
+      upload: (_) async {
+        uploadStarted.complete();
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        uploadCompleted = true;
+        return true;
+      },
+      totalTimeout: const Duration(milliseconds: 40),
+    );
+
+    final stopwatch = Stopwatch()..start();
+    final result = await capture.captureAndUpload();
+
+    expect(result?.latitude, 1);
+    expect(uploadStarted.isCompleted, isTrue);
+    expect(uploadCompleted, isFalse);
+    expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 100)));
+  });
 }
 
 Position _position({required double latitude, required double longitude}) {
