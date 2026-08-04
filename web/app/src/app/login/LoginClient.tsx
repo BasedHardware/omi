@@ -127,11 +127,19 @@ export function LoginClient() {
         }}
         className="absolute inset-0 z-0"
       >
+        {/*
+          The artwork is square (3840x3840) and the device's optical centre sits
+          ~5% above the image's geometric centre. `object-cover` crops around
+          50% 50%, which put the device high in the frame and clipped its top on
+          short viewports. Biasing the crop upward lands the device on the
+          viewport's centre line. Horizontal stays 50%: the device is already
+          centred there.
+        */}
         <Image
           src="/login-bg.png"
           alt="Omi Product"
           fill
-          className="object-cover"
+          className="object-cover [object-position:50%_44.7%]"
           priority
         />
         {/* Darker overlay for better contrast */}
