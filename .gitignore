@@ -277,3 +277,9 @@ htmlcov/
 
 # pnpm store
 .pnpm-store/
+
+# `bunx shadcn` shells out to pnpm and drops these at the repo root. This repo
+# is Bun-only, so they are byproducts, never inputs — ignored so a shadcn run
+# cannot quietly commit a second lockfile.
+pnpm-lock.yaml
+pnpm-workspace.yaml
