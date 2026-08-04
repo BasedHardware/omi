@@ -16,7 +16,10 @@ is the boundary on that path. It is a port of the MIT-licensed
   verdict parsing, and the retrying/cancellable `SecurityScreener`. Pure; the classifier
   is injected.
 - `utils/security/tool_results.py` — the classifier bound to `get_llm('security_screen')`
-  (`gpt-5-nano`), and `screen_tool_result`, the function the agentic chat loop calls.
+  (`gpt-5-nano`), and `screen_tool_result`, the function the agentic chat loop calls. In
+  gateway mode, `security_screen` is generated as the registered
+  `omi:auto:security-screen` lane with the `route.security_screen.model_config.001` artifact;
+  `test_security_screen_feature_resolves_to_registered_gateway_lane` guards that registration.
 
 ## Two load-bearing properties
 
