@@ -1,11 +1,11 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2180,
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1875
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1899
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Gmail account selection: pick which browser profile Omi reads email from during onboarding; cancel path and post-probe recheck keep the gmail insight task from stalling."
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Gmail account probe failures fail closed, cancellation resumes onboarding without leaving the shared selection continuation suspended, and reads remain bound to the selected profile."
   },
   "threshold": 1500
 }
