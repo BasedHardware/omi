@@ -61,7 +61,6 @@ bool isLiveCaptureWal(Wal wal, int nowSeconds) =>
 bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int nowSeconds) =>
     batch.isNotEmpty && isLiveCaptureWal(batch.first, nowSeconds) && pendingForConversation.length <= batch.length;
 
-@visibleForTesting
 String? _walLocationBatchKey(Wal wal) {
   final geolocation = wal.geolocation;
   if (geolocation == null) return null;
