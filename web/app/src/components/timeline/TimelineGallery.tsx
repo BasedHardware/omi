@@ -1,0 +1,137 @@
+'use client';
+
+import { useCallback, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { TimelineDayGroup } from '@/lib/timeline';
+import type { Conversation } from '@/types/conversation';
+import type { DailySummary } from '@/types/recap';
+import {
+  TimelineConversationTile,
+  TimelineTileSkeleton,
+} from './TimelineConversationTile';
+import { TimelineRecapTile } from './TimelineRecapTile';
+
+interface TimelineGalleryProps {
+  groups: TimelineDayGroup[];
+  selectedId: string | null;
+  onConversationClick: (conversation: Conversation) => void;
+  onRecapClick: (recap: DailySummary) => void;
+  onStarToggle?: (id: string, starred: boolean) => void;
+  isSelectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onSelect?: (id: string) => void;
+  mergingIds?: Set<string>;
+  onEnterSelectionMode?: (id: string) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  loading?: boolean;
+}
+
+// Distance from the bottom of the scroller at which the next page is fetched.
+const LOAD_MORE_THRESHOLD_PX = 400;
+
+export function TimelineGallery({
+  groups,
+  selectedId,
+  onConversationClick,
+  onRecapClick,
+  onStarToggle,
+  isSelectionMode = false,
+  selectedIds,
+  onSelect,
+  mergingIds,
+  onEnterSelectionMode,
+  hasMore = false,
+  onLoadMore,
+  loading = false,
+}: TimelineGalleryProps) {
+  // Guards against firing loadMore repeatedly for one scroll gesture while the
+  // in-flight page has not yet grown the list.
+  const loadRequestedRef = useRef(false);
+
+  const handleScroll = useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+      const nearBottom = scrollHeight - scrollTop - clientHeight < LOAD_MORE_THRESHOLD_PX;
+
+      if (!nearBottom) {
+        loadRequestedRef.current = false;
+        return;
+      }
+      if (loading || !hasMore || loadRequestedRef.current) return;
+
+      loadRequestedRef.current = true;
+      onLoadMore?.();
+    },
+    [hasMore, loading, onLoadMore],
+  );
+
+  return (
+    <div className="h-full overflow-y-auto px-5 pb-8" onScroll={handleScroll}>
+      {groups.map((group) => (
+        <section key={group.key} className="mb-8">
+          <div className="sticky top-0 z-10 -mx-5 px-5 py-2.5 bg-bg-primary/90 backdrop-blur-sm border-b border-stroke mb-4">
+            <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-text-tertiary">
+              {group.label}
+            </h2>
+          </div>
+
+          <div
+            className={cn(
+              'grid gap-3 items-stretch auto-rows-auto',
+              'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4',
+            )}
+          >
+            {group.items.map((item) =>
+              item.kind === 'recap' ? (
+                <TimelineRecapTile
+                  key={`recap-${item.id}`}
+                  recap={item.recap}
+                  isSelected={selectedId === item.id}
+                  onClick={() => onRecapClick(item.recap)}
+                />
+              ) : (
+                <TimelineConversationTile
+                  key={`conversation-${item.id}`}
+                  conversation={item.conversation}
+                  isSelected={selectedId === item.id}
+                  onClick={() => onConversationClick(item.conversation)}
+                  onStarToggle={onStarToggle}
+                  isSelectionMode={isSelectionMode}
+                  isChecked={selectedIds?.has(item.id) ?? false}
+                  onSelect={onSelect}
+                  isMerging={mergingIds?.has(item.id) ?? false}
+                  onEnterSelectionMode={onEnterSelectionMode}
+                />
+              ),
+            )}
+          </div>
+        </section>
+      ))}
+
+      {loading && groups.length > 0 && (
+        <div className="flex justify-center py-6">
+          <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TimelineGallerySkeleton() {
+  return (
+    <div className="px-5 pb-8">
+      {[0, 1].map((section) => (
+        <div key={section} className="mb-8">
+          <div className="h-3 w-24 rounded bg-bg-tertiary animate-pulse mb-4" />
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {[0, 1, 2, 3].map((tile) => (
+              <TimelineTileSkeleton key={tile} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
