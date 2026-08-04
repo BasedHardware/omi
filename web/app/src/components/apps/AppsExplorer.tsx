@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
-import { Search, Loader2, X, ChevronDown, Star, Plus, LayoutGrid } from 'lucide-react';
+import { Loader2, ChevronDown, Star, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getAppsGrouped,
@@ -23,7 +23,7 @@ import { AppCard } from './AppCard';
 import { connectorTabFromParam, type ConnectorTab } from '@/lib/connectors';
 import { AppGridSection } from './AppGridSection';
 import { ConnectedServices } from './ConnectedServices';
-import { PageHeader } from '@/components/layout/PageHeader';
+import { PageToolbar } from '@/components/layout/PageToolbar';
 
 // Module-level cache for apps data
 interface AppsCache {
@@ -534,14 +534,19 @@ export function AppsExplorer() {
 
   return (
     <div className="min-h-full">
-      {/* Page Header */}
-      <PageHeader title="Connectors" icon={LayoutGrid} />
-
-      {/* Sticky Toolbar */}
-      <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary">
-        <div className="py-4 px-4">
-          {/* Tabs + Create button */}
-          <div className="flex items-center gap-1 mb-4">
+      <PageToolbar
+        className="sticky top-0 z-10"
+        search={
+          activeTab === 'services'
+            ? undefined
+            : {
+                value: searchQuery,
+                onChange: setSearchQuery,
+                placeholder: 'Search apps...',
+              }
+        }
+        controls={
+          <div className="flex items-center gap-1">
             {/* Tabs */}
             <button
               onClick={() => setActiveTab('explore')}
@@ -587,88 +592,58 @@ export function AppsExplorer() {
             >
               Services
             </button>
-
-            {/* Spacer + Create button */}
-            <div className="flex-1" />
-            <button
-              onClick={() => router.push('/connectors/new')}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-xl',
-                'bg-white text-black font-medium',
-                'hover:bg-white/90 transition-colors',
-              )}
-            >
-              <Plus className="w-5 h-5" />
-              <span className="hidden sm:inline">Create App</span>
-            </button>
           </div>
-
-          {/* Search */}
-          <div className={cn('relative mb-3', activeTab === 'services' && 'hidden')}>
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-quaternary" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search apps..."
-              className={cn(
-                'w-full pl-10 pr-10 py-2.5 rounded-xl',
-                'bg-bg-tertiary border border-bg-quaternary',
-                'text-text-primary placeholder:text-text-quaternary',
-                'focus:outline-none focus:ring-2 focus:ring-white/50',
-                'transition-all',
-              )}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-bg-quaternary"
-              >
-                <X className="w-4 h-4 text-text-tertiary" />
-              </button>
-            )}
-          </div>
-
-          {/* Inline Filters */}
-          <div
+        }
+        actions={
+          <button
+            onClick={() => router.push('/connectors/new')}
             className={cn(
-              'flex flex-wrap items-center gap-2',
-              activeTab === 'services' && 'hidden',
+              'flex items-center gap-2 px-4 py-2 rounded-control',
+              'bg-white text-black font-medium',
+              'hover:bg-white/90 transition-colors',
             )}
           >
-            <FilterDropdown
-              label="Category"
-              value={filters.category}
-              options={categories}
-              onChange={(v) => setFilters((f) => ({ ...f, category: v }))}
-              placeholder="All categories"
-            />
-            <FilterDropdown
-              label="Capability"
-              value={filters.capability}
-              options={capabilities}
-              onChange={(v) => setFilters((f) => ({ ...f, capability: v }))}
-              placeholder="All capabilities"
-            />
-            <RatingFilter
-              value={filters.rating}
-              onChange={(v) => setFilters((f) => ({ ...f, rating: v }))}
-            />
-            <SortDropdown
-              value={filters.sort}
-              onChange={(v) => setFilters((f) => ({ ...f, sort: v }))}
-            />
-            {activeFilterCount > 0 && (
-              <button
-                onClick={clearFilters}
-                className="text-sm text-text-primary hover:underline ml-2"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+            <Plus className="w-5 h-5" />
+            <span className="hidden sm:inline">Create App</span>
+          </button>
+        }
+        below={
+          activeTab !== 'services' && (
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterDropdown
+                label="Category"
+                value={filters.category}
+                options={categories}
+                onChange={(v) => setFilters((f) => ({ ...f, category: v }))}
+                placeholder="All categories"
+              />
+              <FilterDropdown
+                label="Capability"
+                value={filters.capability}
+                options={capabilities}
+                onChange={(v) => setFilters((f) => ({ ...f, capability: v }))}
+                placeholder="All capabilities"
+              />
+              <RatingFilter
+                value={filters.rating}
+                onChange={(v) => setFilters((f) => ({ ...f, rating: v }))}
+              />
+              <SortDropdown
+                value={filters.sort}
+                onChange={(v) => setFilters((f) => ({ ...f, sort: v }))}
+              />
+              {activeFilterCount > 0 && (
+                <button
+                  onClick={clearFilters}
+                  className="text-sm text-text-primary hover:underline ml-2"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          )
+        }
+      />
 
       {/* Content */}
       <div className="w-full px-6 py-6">

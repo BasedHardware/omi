@@ -2,7 +2,20 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Trash2, Clock, X, ChevronDown, Copy, Download, FileJson, FileText, FileCode, CheckSquare, Square } from 'lucide-react';
+import {
+  Check,
+  Trash2,
+  Clock,
+  X,
+  ChevronDown,
+  Copy,
+  Download,
+  FileJson,
+  FileText,
+  FileCode,
+  CheckSquare,
+  Square,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ActionItem } from '@/types/conversation';
 
@@ -61,8 +74,8 @@ export function BulkActionBar({
               'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
               'transition-colors',
               allSelected
-                ? 'bg-purple-primary/10 text-purple-primary'
-                : 'text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary'
+                ? 'bg-white/10 text-white'
+                : 'text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary',
             )}
           >
             {allSelected ? (
@@ -108,7 +121,7 @@ export function BulkActionBar({
                 'bg-bg-tertiary hover:bg-bg-quaternary',
                 'text-text-secondary text-sm',
                 'transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               <Clock className="w-4 h-4" />
@@ -125,10 +138,12 @@ export function BulkActionBar({
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.15 }}
                   className={cn(
-                    inline ? 'absolute top-full mt-2 left-0' : 'absolute bottom-full mb-2 left-0',
+                    inline
+                      ? 'absolute top-full mt-2 left-0'
+                      : 'absolute bottom-full mb-2 left-0',
                     'bg-bg-secondary border border-bg-tertiary rounded-lg',
                     'shadow-lg shadow-black/20',
-                    'py-1 min-w-[120px] z-50'
+                    'py-1 min-w-[120px] z-50',
                   )}
                 >
                   <button
@@ -174,7 +189,7 @@ export function BulkActionBar({
               'bg-success/20 hover:bg-success/30',
               'text-success text-sm',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
             <Check className="w-4 h-4" />
@@ -191,7 +206,7 @@ export function BulkActionBar({
             'bg-error/20 hover:bg-error/30',
             'text-error text-sm',
             'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
           <Trash2 className="w-4 h-4" />
@@ -211,7 +226,7 @@ export function BulkActionBar({
               'bg-bg-tertiary hover:bg-bg-quaternary',
               'text-text-secondary text-sm',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
             title="Copy to clipboard"
           >
@@ -231,7 +246,7 @@ export function BulkActionBar({
                 'bg-bg-tertiary hover:bg-bg-quaternary',
                 'text-text-secondary text-sm',
                 'transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               <Download className="w-4 h-4" />
@@ -248,10 +263,12 @@ export function BulkActionBar({
                   exit={{ opacity: 0, y: 5 }}
                   transition={{ duration: 0.15 }}
                   className={cn(
-                    inline ? 'absolute top-full mt-2 right-0' : 'absolute bottom-full mb-2 right-0',
+                    inline
+                      ? 'absolute top-full mt-2 right-0'
+                      : 'absolute bottom-full mb-2 right-0',
                     'bg-bg-secondary border border-bg-tertiary rounded-lg',
                     'shadow-lg shadow-black/20',
-                    'py-1 min-w-[140px] z-50'
+                    'py-1 min-w-[140px] z-50',
                   )}
                 >
                   <button
@@ -299,9 +316,9 @@ export function BulkActionBar({
             onClick={onDone}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-              'bg-purple-primary/10 hover:bg-purple-primary/20',
-              'text-purple-primary text-sm font-medium',
-              'transition-colors'
+              'bg-white/10 hover:bg-white/20',
+              'text-white text-sm font-medium',
+              'transition-colors',
             )}
           >
             Done
@@ -321,7 +338,7 @@ export function BulkActionBar({
         transition={{ duration: 0.2 }}
         className={cn(
           'flex items-center gap-3 py-2 px-3 rounded-lg',
-          'bg-bg-tertiary/50 border border-bg-quaternary'
+          'bg-bg-tertiary/50 border border-bg-quaternary',
         )}
       >
         {content}
@@ -343,7 +360,7 @@ export function BulkActionBar({
           'rounded-xl shadow-lg shadow-black/30',
           'px-4 py-3',
           'flex items-center gap-4',
-          'z-50'
+          'z-50',
         )}
       >
         {content}

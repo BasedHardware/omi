@@ -34,12 +34,6 @@ const config: Config = {
         // borrowing bg-tertiary as a border colour.
         stroke: '#3A3940',
 
-        // Purple accent system
-        'purple-primary': '#8B5CF6',
-        'purple-secondary': '#A855F7',
-        'purple-accent': '#7C3AED',
-        'purple-light': '#D946EF',
-
         // Text
         'text-primary': '#FFFFFF',
         'text-secondary': '#E5E5E5',

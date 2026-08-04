@@ -61,25 +61,13 @@ export function MemoryList({
     if (!lastItem) return;
 
     // Trigger load more when within 5 items of the end
-    if (
-      lastItem.index >= memories.length - 5 &&
-      hasMore &&
-      !loading &&
-      !loadingMore
-    ) {
+    if (lastItem.index >= memories.length - 5 && hasMore && !loading && !loadingMore) {
       setLoadingMore(true);
       onLoadMore().finally(() => {
         setLoadingMore(false);
       });
     }
-  }, [
-    memories.length,
-    hasMore,
-    loading,
-    loadingMore,
-    onLoadMore,
-    virtualizer,
-  ]);
+  }, [memories.length, hasMore, loading, loadingMore, onLoadMore, virtualizer]);
 
   // Scroll to highlighted memory
   useEffect(() => {
@@ -164,7 +152,7 @@ export function MemoryList({
       {/* Loading indicator */}
       {(loading || loadingMore) && (
         <div className="flex items-center justify-center py-4">
-          <Loader2 className="w-5 h-5 text-purple-primary animate-spin" />
+          <Loader2 className="w-5 h-5 text-white animate-spin" />
           <span className="ml-2 text-sm text-text-tertiary">Loading memories...</span>
         </div>
       )}
@@ -189,7 +177,7 @@ export function MemoryListSkeleton() {
           className={cn(
             'rounded-xl p-4',
             'bg-bg-tertiary border border-bg-quaternary',
-            'animate-pulse'
+            'animate-pulse',
           )}
         >
           <div className="flex items-start gap-3">

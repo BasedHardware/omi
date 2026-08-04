@@ -36,7 +36,7 @@ const categoryConfig: Partial<
   interesting: {
     icon: <Lightbulb className="w-4 h-4" />,
     label: 'Interesting',
-    color: 'text-purple-primary',
+    color: 'text-white',
   },
   manual: {
     icon: <FileText className="w-4 h-4" />,
@@ -155,10 +155,10 @@ export const MemoryCard = memo(function MemoryCard({
         'noise-overlay group relative rounded-xl p-4',
         'bg-white/[0.02] border border-white/[0.06]',
         'transition-all duration-150',
-        'hover:bg-white/[0.05] hover:border-purple-primary/30',
+        'hover:bg-white/[0.05] hover:border-white/30',
         needsReview && 'border-l-4 border-l-warning',
-        isHighlighted && 'ring-2 ring-purple-primary bg-purple-primary/10 animate-pulse',
-        isSelected && 'bg-purple-primary/5 border-purple-primary/50',
+        isHighlighted && 'ring-2 ring-white bg-white/10 animate-pulse',
+        isSelected && 'bg-white/5 border-white/50',
       )}
     >
       {/* Content */}
@@ -175,8 +175,8 @@ export const MemoryCard = memo(function MemoryCard({
               'border-2 transition-all duration-200',
               'flex items-center justify-center',
               isSelected
-                ? 'bg-purple-primary border-purple-primary'
-                : 'border-text-quaternary hover:border-purple-primary',
+                ? 'bg-white border-white'
+                : 'border-text-quaternary hover:border-white',
             )}
             aria-label={isSelected ? 'Deselect memory' : 'Select memory'}
           >
@@ -188,7 +188,7 @@ export const MemoryCard = memo(function MemoryCard({
                   exit={{ scale: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
+                  <Check className="w-3 h-3 text-bg-primary" strokeWidth={3} />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -222,10 +222,10 @@ export const MemoryCard = memo(function MemoryCard({
                 }
               }}
               className={cn(
-                'w-full text-sm bg-bg-secondary border border-purple-primary/50',
+                'w-full text-sm bg-bg-secondary border border-white/50',
                 'rounded px-2 py-1.5 resize-none overflow-hidden',
                 'text-text-primary outline-none leading-relaxed',
-                'focus:ring-1 focus:ring-purple-primary/30',
+                'focus:ring-1 focus:ring-white/30',
               )}
               placeholder="Enter memory content..."
               rows={1}
@@ -247,7 +247,7 @@ export const MemoryCard = memo(function MemoryCard({
               {needsTruncation && (
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className="text-xs text-text-quaternary hover:text-purple-primary mt-1 transition-colors"
+                  className="text-xs text-text-quaternary hover:text-white mt-1 transition-colors"
                 >
                   {isExpanded ? 'Show less' : 'Show more'}
                 </button>
@@ -264,8 +264,7 @@ export const MemoryCard = memo(function MemoryCard({
                   <span
                     className={cn(
                       'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs',
-                      memory.category === 'interesting' &&
-                        'bg-purple-primary/10 text-purple-primary',
+                      memory.category === 'interesting' && 'bg-white/10 text-white',
                       memory.category === 'manual' && 'bg-blue-400/10 text-blue-400',
                     )}
                   >

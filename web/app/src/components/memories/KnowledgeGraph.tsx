@@ -31,7 +31,7 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-full">
-      <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+      <Loader2 className="w-8 h-8 text-white animate-spin" />
     </div>
   ),
 });
@@ -329,8 +329,8 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
           disabled={rebuilding}
           className={cn(
             'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-purple-primary text-white text-sm font-medium',
-            'hover:bg-purple-secondary transition-colors',
+            'bg-white text-black text-sm font-medium',
+            'hover:bg-white/90 transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
@@ -391,7 +391,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
               'w-full pl-9 pr-8 py-2 rounded-lg',
               'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
               'text-sm text-text-primary',
-              'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+              'focus:outline-none focus:ring-2 focus:ring-white/50',
               'placeholder:text-text-quaternary',
             )}
           />
@@ -420,7 +420,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
             'flex items-center gap-2 px-3 py-2 rounded-lg',
             'backdrop-blur-sm border transition-colors',
             showAllLabels
-              ? 'bg-purple-primary/20 border-purple-primary/50 text-purple-primary'
+              ? 'bg-white/20 border-white/50 text-white'
               : 'bg-bg-tertiary/80 border-bg-quaternary text-text-secondary hover:text-text-primary',
           )}
           title={showAllLabels ? 'Hide labels' : 'Show all labels'}
@@ -579,7 +579,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
                   onClick={() => onNodeSelect(selectedNode.id, selectedNode.memoryIds)}
                   className={cn(
                     'flex items-center gap-1 px-2 py-1 rounded-md text-xs',
-                    'text-purple-primary hover:bg-purple-primary/10',
+                    'text-white hover:bg-white/10',
                     'transition-colors',
                   )}
                 >
@@ -595,7 +595,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       {/* Loading overlay */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/80">
-          <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+          <Loader2 className="w-8 h-8 text-white animate-spin" />
         </div>
       )}
 

@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 export interface PageToolbarSearch {
   value: string;
   onChange: (value: string) => void;
-  onSubmit?: () => void;
+  /** Called on Enter and on clear, with the value being submitted. */
+  onSubmit?: (value: string) => void;
   placeholder?: string;
 }
 
@@ -53,7 +54,7 @@ export function PageToolbar({
                 value={search.value}
                 onChange={(e) => search.onChange(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') search.onSubmit?.();
+                  if (e.key === 'Enter') search.onSubmit?.(search.value);
                 }}
                 placeholder={search.placeholder ?? 'Search'}
                 aria-label={search.placeholder ?? 'Search'}
@@ -64,7 +65,7 @@ export function PageToolbar({
                   type="button"
                   onClick={() => {
                     search.onChange('');
-                    search.onSubmit?.();
+                    search.onSubmit?.('');
                   }}
                   aria-label="Clear search"
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-element text-text-tertiary hover:bg-bg-quaternary hover:text-text-primary transition-colors"
