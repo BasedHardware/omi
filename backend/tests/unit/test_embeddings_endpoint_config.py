@@ -60,15 +60,34 @@ def test_local_endpoint_with_byok_openai_does_not_duplicate_api_key(monkeypatch)
     monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-user-byok' if provider == 'openai' else None)
 
     proxy = clients._OpenAIEmbeddingsProxy(
-        model=clients._embeddings_model(),
+        model_factory=clients._embeddings_model,
         default=None,
-        ctor_kwargs=clients._embeddings_ctor_kwargs(),
+        ctor_kwargs_factory=clients._embeddings_ctor_kwargs,
     )
     inst = proxy._resolve()  # must not raise TypeError: multiple values for 'api_key'
     # Pinned to the local endpoint (BYOK fell through to the default client), not a per-key
     # BYOK instance: a second _resolve() returns the very same cached default.
     assert inst is proxy._resolve()
     assert str(inst.openai_api_base).rstrip('/') == 'http://ollama:11434/v1'
+
+
+def test_model_and_ctor_kwargs_resolve_at_call_time_not_at_construction(monkeypatch):
+    """The proxy resolves model + ctor kwargs on first use, not when constructed.
+
+    The module-level ``embeddings`` proxy is built at import; a construction-time snapshot would
+    freeze the model/endpoint read at import and ignore env applied afterwards. Build the proxy, set
+    the env AFTER, and first access must reflect the post-construction env (lazy, memoized).
+    """
+    proxy = clients._OpenAIEmbeddingsProxy(
+        model_factory=clients._embeddings_model,
+        default=None,
+        ctor_kwargs_factory=clients._embeddings_ctor_kwargs,
+    )
+    # Applied AFTER the proxy exists — an __init__-time snapshot would miss both.
+    monkeypatch.setenv(clients.EMBEDDINGS_MODEL_ENV_VAR, 'set-after-build')
+    monkeypatch.setenv(clients.EMBEDDINGS_BASE_URL_ENV_VAR, 'http://tei:8080/v1')
+    assert proxy._model == 'set-after-build'
+    assert proxy._ctor_kwargs['base_url'] == 'http://tei:8080/v1'
 
 
 def test_screen_activity_query_uses_local_endpoint_no_google(monkeypatch):

@@ -266,13 +266,39 @@ def get_direct_anthropic_client(*, byok_api_key: str | None = None) -> anthropic
 class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
-    __slots__ = ('_model', '_default', '_ctor_kwargs')
+    __slots__ = ('_model_factory', '_ctor_kwargs_factory', '_model_cached', '_default', '_ctor_kwargs_cached')
     _METHODS_TO_WRAP = {'embed_documents', 'aembed_documents', 'embed_query', 'aembed_query'}
 
-    def __init__(self, model: str, default: Optional[OpenAIEmbeddings], ctor_kwargs: Dict[str, Any]):
-        object.__setattr__(self, '_model', model)
+    def __init__(
+        self,
+        model_factory: Callable[[], str],
+        default: Optional[OpenAIEmbeddings],
+        ctor_kwargs_factory: Callable[[], Dict[str, Any]],
+    ):
+        # model + ctor_kwargs are resolved lazily (call-time, memoized) rather than snapshotted at
+        # import: an env change between import and first embedding call must be honored, and no env
+        # is read for a process that never embeds.
+        object.__setattr__(self, '_model_factory', model_factory)
+        object.__setattr__(self, '_ctor_kwargs_factory', ctor_kwargs_factory)
+        object.__setattr__(self, '_model_cached', None)
         object.__setattr__(self, '_default', default)
-        object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+        object.__setattr__(self, '_ctor_kwargs_cached', None)
+
+    @property
+    def _model(self) -> str:
+        cached = self._model_cached
+        if cached is None:
+            cached = self._model_factory()
+            object.__setattr__(self, '_model_cached', cached)
+        return cached
+
+    @property
+    def _ctor_kwargs(self) -> Dict[str, Any]:
+        cached = self._ctor_kwargs_cached
+        if cached is None:
+            cached = self._ctor_kwargs_factory()
+            object.__setattr__(self, '_ctor_kwargs_cached', cached)
+        return cached
 
     def _default_client(self) -> OpenAIEmbeddings:
         default = self._default
@@ -697,9 +723,9 @@ llm_mini = _LazyClientProxy(_create_legacy_llm_mini)
 # Embeddings, parser, utilities
 # ---------------------------------------------------------------------------
 embeddings = _OpenAIEmbeddingsProxy(
-    model=_embeddings_model(),
+    model_factory=_embeddings_model,
     default=None,
-    ctor_kwargs=_embeddings_ctor_kwargs(),
+    ctor_kwargs_factory=_embeddings_ctor_kwargs,
 )
 parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
 
