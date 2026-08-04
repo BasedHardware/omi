@@ -122,16 +122,16 @@ export function HeaderRecordingIndicator() {
                 onClick={() => setShowModeSelector(!showModeSelector)}
                 className={cn(
                   'flex items-center gap-2 px-4 py-2 rounded-full',
-                  'bg-purple-primary/10 border border-purple-primary/30',
-                  'hover:bg-purple-primary/20 transition-colors',
+                  'bg-white/[0.08] border border-stroke',
+                  'hover:bg-white/[0.14] transition-colors',
                   'text-sm font-medium',
                 )}
               >
-                <Mic className="w-4 h-4 text-purple-primary" />
-                <span className="text-purple-primary">Record</span>
+                <Mic className="w-4 h-4 text-text-primary" />
+                <span className="text-text-primary">Record</span>
                 <ChevronDown
                   className={cn(
-                    'w-3.5 h-3.5 text-purple-primary/70 transition-transform',
+                    'w-3.5 h-3.5 text-text-tertiary transition-transform',
                     showModeSelector && 'rotate-180',
                   )}
                 />
@@ -164,7 +164,7 @@ export function HeaderRecordingIndicator() {
                       className={cn(
                         'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
                         audioMode === 'mic-only'
-                          ? 'bg-purple-primary/10 border border-purple-primary/30'
+                          ? 'bg-white/[0.08] border border-stroke'
                           : 'bg-bg-tertiary hover:bg-bg-quaternary border border-transparent',
                       )}
                     >
@@ -172,7 +172,7 @@ export function HeaderRecordingIndicator() {
                         className={cn(
                           'w-8 h-8 rounded-lg flex items-center justify-center',
                           audioMode === 'mic-only'
-                            ? 'bg-purple-primary/20'
+                            ? 'bg-white/[0.14]'
                             : 'bg-bg-secondary',
                         )}
                       >
@@ -180,7 +180,7 @@ export function HeaderRecordingIndicator() {
                           className={cn(
                             'w-4 h-4',
                             audioMode === 'mic-only'
-                              ? 'text-purple-primary'
+                              ? 'text-text-primary'
                               : 'text-text-tertiary',
                           )}
                         />
@@ -190,7 +190,7 @@ export function HeaderRecordingIndicator() {
                           className={cn(
                             'text-sm font-medium',
                             audioMode === 'mic-only'
-                              ? 'text-purple-primary'
+                              ? 'text-text-primary'
                               : 'text-text-primary',
                           )}
                         >
@@ -207,7 +207,7 @@ export function HeaderRecordingIndicator() {
                       className={cn(
                         'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
                         audioMode === 'mic-and-system'
-                          ? 'bg-purple-primary/10 border border-purple-primary/30'
+                          ? 'bg-white/[0.08] border border-stroke'
                           : 'bg-bg-tertiary hover:bg-bg-quaternary border border-transparent',
                       )}
                     >
@@ -215,7 +215,7 @@ export function HeaderRecordingIndicator() {
                         className={cn(
                           'w-8 h-8 rounded-lg flex items-center justify-center',
                           audioMode === 'mic-and-system'
-                            ? 'bg-purple-primary/20'
+                            ? 'bg-white/[0.14]'
                             : 'bg-bg-secondary',
                         )}
                       >
@@ -223,7 +223,7 @@ export function HeaderRecordingIndicator() {
                           className={cn(
                             'w-4 h-4',
                             audioMode === 'mic-and-system'
-                              ? 'text-purple-primary'
+                              ? 'text-text-primary'
                               : 'text-text-tertiary',
                           )}
                         />
@@ -233,7 +233,7 @@ export function HeaderRecordingIndicator() {
                           className={cn(
                             'text-sm font-medium',
                             audioMode === 'mic-and-system'
-                              ? 'text-purple-primary'
+                              ? 'text-text-primary'
                               : 'text-text-primary',
                           )}
                         >
@@ -251,7 +251,7 @@ export function HeaderRecordingIndicator() {
                     onClick={handleStartRecording}
                     className={cn(
                       'w-full py-2.5 px-4 rounded-lg font-medium',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
+                      'bg-text-primary text-bg-primary hover:opacity-90',
                       'transition-colors flex items-center justify-center gap-2',
                     )}
                   >
@@ -274,7 +274,7 @@ export function HeaderRecordingIndicator() {
             )}
           >
             <motion.div
-              className="w-4 h-4 border-2 border-purple-primary border-t-transparent rounded-full"
+              className="w-4 h-4 border-2 border-text-primary border-t-transparent rounded-full"
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             />
@@ -361,7 +361,7 @@ export function HeaderRecordingIndicator() {
                       <Mic className="w-3 h-3 text-text-quaternary" />
                       <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                         <motion.div
-                          className="h-full bg-purple-primary rounded-full"
+                          className="h-full bg-text-primary rounded-full"
                           initial={{ width: 0 }}
                           animate={{ width: `${Math.min(100, micLevel * 100)}%` }}
                           transition={{ duration: 0.1 }}
