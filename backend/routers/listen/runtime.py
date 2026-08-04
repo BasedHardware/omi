@@ -623,7 +623,7 @@ class ListenSessionRuntime:
                 )
             self.send_event(MessageServiceStatusEvent(status='ready'))
             result = await self.task_supervisor.supervise(receive_task=receive_task)
-            logger.info('Listen supervisor exited reason=%s task=%s', result.reason, result.task_name)
+            logger.info('Listen supervisor exited reason=%s', result.reason)
             if result.reason in {'crash', 'lifetime_done'}:
                 self.state.live_transcription_failed = True
             if receive_task.done() and not receive_task.cancelled():
@@ -646,6 +646,15 @@ class ListenSessionRuntime:
             await self._teardown()
 
     async def _teardown(self) -> None:
+        try:
+            await self._teardown_components()
+        finally:
+            try:
+                self.parity_capture.persist()
+            except Exception as error:
+                logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
+
+    async def _teardown_components(self) -> None:
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
         self._finish_live_transcription()
@@ -703,10 +712,6 @@ class ListenSessionRuntime:
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
         await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        try:
-            self.parity_capture.persist()
-        except Exception as error:
-            logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()
