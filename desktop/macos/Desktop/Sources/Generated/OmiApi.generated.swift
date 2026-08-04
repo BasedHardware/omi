@@ -2100,7 +2100,7 @@ public enum OmiAPI {
       longitude = try c.decode(Double.self, forKey: .longitude)
     }
 
-    public init(accuracy: Double?, address: String?, altitude: Double?, captureSource: String?, capturedAt: String?, googlePlaceId: String?, latitude: Double, locationType: String?, longitude: Double) {
+    public init(accuracy: Double? = nil, address: String? = nil, altitude: Double? = nil, captureSource: String? = nil, capturedAt: String? = nil, googlePlaceId: String? = nil, latitude: Double, locationType: String? = nil, longitude: Double) {
       self.accuracy = accuracy
       self.address = address
       self.altitude = altitude
