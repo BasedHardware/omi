@@ -614,14 +614,23 @@ saves to the backend (`POST /v1/users/unifiedpush-endpoint`). The backend sits o
 and POSTs to `${UNIFIEDPUSH_INTERNAL_BASE_URL}${path}` = `http://ntfy:80/<topic>?up=1`, reaching the
 same server by service name.
 
-**Flow:** app registers → `onNewEndpoint` → saves endpoint to backend → backend POSTs the
-notification JSON (`{notification?, data, tag, priority, is_background}`) to the endpoint → ntfy
-delivers it to the distributor → the app decodes it and shows the notification (same dispatch it
-runs for an FCM message). Dead endpoints (HTTP 404/410) are dropped from `unifiedpush_endpoints`.
+**Flow:** app registers → `onNewEndpoint` → the app generates a WebPush key set, saves the endpoint
+**plus its `p256dh`/`auth`** to the backend → backend builds the notification JSON
+(`{notification?, data, tag, priority, is_background}`), **encrypts it for that key set (WebPush
+RFC 8291, aes128gcm) and hex-encodes the ciphertext**, then POSTs the hex text to the endpoint → ntfy
+delivers it to the distributor → the app **hex-decodes and decrypts** it and shows the notification
+(same dispatch it runs for an FCM message). Dead endpoints (HTTP 404/410) are dropped from
+`unifiedpush_endpoints`. An endpoint that registered no keys (legacy client) gets a plaintext JSON POST.
 
-**Debt:** the POST body is plaintext — WebPush (aes128gcm) payload encryption is not implemented; use
-a UnifiedPush connector that delivers raw bytes. Message durability across distributor reconnects
-uses ntfy's default in-memory cache (add `NTFY_CACHE_FILE` + a volume to harden).
+**Why hex, not raw binary.** ntfy is a text transport: it turns any non-UTF8 body into an *attachment*
+(rejected unless attachment storage is enabled, and then delivered as a download URL, not bytes). So
+the backend armors the aes128gcm ciphertext as a lowercase-hex UTF-8 string; the app reverses it. The
+UnifiedPush connector's own native decryption can't apply here (it needs raw aes128gcm and hides the
+private key), so the app owns the key set and decrypts via the `webpush_encryption` package — the same
+reference impl the connector uses internally. Backend uses `http-ece`.
+
+**Debt:** message durability across distributor reconnects uses ntfy's default in-memory cache (add
+`NTFY_CACHE_FILE` + a volume to harden).
 
 ### Full app E2E (emulator + ntfy distributor) — proven 2026-08-03
 
