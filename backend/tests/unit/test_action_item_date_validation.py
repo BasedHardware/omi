@@ -120,10 +120,13 @@ _SYS_MODULE_NAMES = [
     "utils.llm.conversation_processing",
     "utils.retrieval",
     "utils.retrieval.tools",
+    "utils.retrieval.tool_result_boundaries",
     "utils.retrieval.tools.action_item_tools",
     "utils.retrieval.agentic",
     "utils.conversations",
     "utils.conversations.render",
+    "utils.memory",
+    "utils.memory.chat_memory_adapter",
     "langchain_core",
     "langchain_core.tools",
     "langchain_core.runnables",
@@ -275,10 +278,6 @@ import contextvars
 
 agentic_stub = _stub_module("utils.retrieval.agentic")
 agentic_stub.agent_config_context = contextvars.ContextVar('agent_config', default=None)
-_stub_package("utils.memory")
-memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
-memory_adapter_stub.CHAT_MEMORY_BOUNDARY_NOTICE = 'memory boundary'
-memory_adapter_stub.CHAT_MEMORY_POLICY_MARKER = 'memory policy'
 
 # ---------------------------------------------------------------------------
 # Load production code
@@ -304,18 +303,40 @@ _stub_package("models")
 sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 _load_module_from_file("models.conversation", BACKEND_DIR / "models" / "conversation.py")
 _load_module_from_file("models.app", BACKEND_DIR / "models" / "app.py")
-_load_module_from_file(
-    "utils.retrieval.tool_result_boundaries",
-    BACKEND_DIR / "utils" / "retrieval" / "tool_result_boundaries.py",
-)
 
-# Load action_item_tools
-action_item_tools = _load_module_from_file(
-    "utils.retrieval.tools.action_item_tools",
-    BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
-)
-create_action_item_tool = action_item_tools.create_action_item_tool
-update_action_item_tool = action_item_tools.update_action_item_tool
+
+@pytest.fixture(scope='module', autouse=True)
+def _load_action_item_runtime():
+    global action_item_tools, create_action_item_tool, update_action_item_tool, _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
+
+    _stub_package("utils.memory")
+    memory_adapter_stub = types.ModuleType("utils.memory.chat_memory_adapter")
+    memory_adapter_stub.CHAT_MEMORY_BOUNDARY_NOTICE = 'memory boundary'
+    memory_adapter_stub.CHAT_MEMORY_POLICY_MARKER = 'memory policy'
+    sys.modules["utils.memory.chat_memory_adapter"] = memory_adapter_stub
+
+    sys.modules.pop("utils.retrieval.tool_result_boundaries", None)
+    sys.modules.pop("utils.retrieval.tools.action_item_tools", None)
+
+    _load_module_from_file(
+        "utils.retrieval.tool_result_boundaries",
+        BACKEND_DIR / "utils" / "retrieval" / "tool_result_boundaries.py",
+    )
+
+    # Load action_item_tools
+    action_item_tools = _load_module_from_file(
+        "utils.retrieval.tools.action_item_tools",
+        BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",
+    )
+    create_action_item_tool = action_item_tools.create_action_item_tool
+    update_action_item_tool = action_item_tools.update_action_item_tool
+
+    yield
+
+    # Restore sys.modules now that the modules under test are imported and bound to
+    # their stubbed dependencies. Tests below patch those module objects directly.
+    restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+    del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def test_missing_action_item_preserves_trusted_recovery_control():
@@ -339,11 +360,6 @@ conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
 )
-
-# Restore sys.modules now that the modules under test are imported and bound to
-# their stubbed dependencies. Tests below patch those module objects directly.
-restore_sys_modules(_SYS_MODULES_SNAPSHOT)
-del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 def _make_config(uid="test-user-123"):

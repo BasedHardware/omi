@@ -146,6 +146,11 @@ def test_auto_requires_an_exact_schema_object(output):
     assert verdict.reason == 'invalid security screen verdict'
 
 
+def test_duplicate_decision_keys_fail_closed_to_strict():
+    verdict = parse_security_screen_verdict('{"decision":"strict","decision":"auto"}')
+    assert verdict is not None and verdict.decision is SecurityPosture.STRICT
+
+
 @pytest.mark.parametrize(
     'output',
     [

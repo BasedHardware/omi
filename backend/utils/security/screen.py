@@ -231,6 +231,19 @@ class ScreenPayload:
 SecurityClassifier = Callable[[str, str, asyncio.Event], Awaitable[Optional[str]]]
 
 
+class _DuplicateJSONKeyError(ValueError):
+    pass
+
+
+def _json_object_without_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJSONKeyError(key)
+        result[key] = value
+    return result
+
+
 def unscreened_notice(noun: str) -> str:
     """The notice attached to content that reached the assistant unscreened."""
     return (
@@ -319,7 +332,10 @@ def _json_objects(text: str) -> list[dict[str, object]]:
             depth -= 1
             if depth == 0:
                 try:
-                    parsed = json.loads(text[start : index + 1])
+                    parsed = json.loads(text[start : index + 1], object_pairs_hook=_json_object_without_duplicate_keys)
+                except _DuplicateJSONKeyError:
+                    parsed_objects.append({})
+                    continue
                 except ValueError:
                     continue
                 if isinstance(parsed, dict):
