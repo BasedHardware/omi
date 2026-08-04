@@ -3565,6 +3565,10 @@ struct TasksPage: View {
       NSApp.keyWindow?.makeFirstResponder(nil)
       return true
     }
+    if taskDetailTask != nil {
+      closeTaskDetailPanel()
+      return true
+    }
     return viewModel.handleEscape()
   }
 
@@ -5152,6 +5156,11 @@ struct TaskRow: View {
           if isChatActive, !isActiveChatTask {
             onOpenChat?(task)
           } else if !isMultiSelectMode {
+            onOpenDetails?(task)
+          }
+        }
+        .onTapGesture(count: 2) {
+          if !isMultiSelectMode {
             onOpenDetails?(task)
           }
         }

@@ -756,6 +756,15 @@ check_desktop_launcher_tests_if_needed() {
   (
     cd desktop/macos
     for test_script in tests/test-*.sh; do
+      # These are live named-bundle checks, not hermetic launcher tests. The
+      # pre-push hook neither launches an automation bridge nor knows a QA app
+      # path, so retain them for their Tier-3 E2E flow/direct harness command.
+      case "$test_script" in
+        tests/test-mounted-navigation-latency.sh|tests/test-named-bundle-resources.sh)
+          echo "== $test_script (skipped: requires a mounted named bundle)"
+          continue
+          ;;
+      esac
       echo "== $test_script"
       bash "$test_script"
     done

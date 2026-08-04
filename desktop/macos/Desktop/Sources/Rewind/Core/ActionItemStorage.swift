@@ -334,23 +334,41 @@ actor ActionItemStorage {
     noDeadlineLimit: Int = 100,
     noDeadlineOffset: Int = 0
   ) async throws -> (dated: [TaskActionItem], noDeadline: [TaskActionItem], hasMoreNoDeadline: Bool) {
-    let dated = try await getFilteredActionItems(
-      limit: Int.max,
-      offset: 0,
-      completedStates: [false],
-      dueDateIsNull: false
-    )
-    let noDeadlineLookahead = try await getFilteredActionItems(
-      limit: noDeadlineLimit + 1,
-      offset: noDeadlineOffset,
-      completedStates: [false],
-      dueDateIsNull: true
-    )
-    return (
-      dated: dated,
-      noDeadline: Array(noDeadlineLookahead.prefix(noDeadlineLimit)),
-      hasMoreNoDeadline: noDeadlineLookahead.count > noDeadlineLimit
-    )
+    let db = try await ensureInitialized()
+
+    return try await db.read { database in
+      func filteredIncomplete(
+        dueDateIsNull: Bool,
+        limit: Int,
+        offset: Int
+      ) throws -> [TaskActionItem] {
+        var query = ActionItemRecord.all()
+          .filter(Column("deleted") == false)
+          .filter(Column("completed") == false)
+        query =
+          dueDateIsNull
+          ? query.filter(Column("dueAt") == nil)
+          : query.filter(Column("dueAt") != nil)
+        let records =
+          try query
+          .order(Column("sortOrder").ascNullsLast, Column("dueAt").ascNullsLast, Column("createdAt").desc)
+          .limit(limit, offset: offset)
+          .fetchAll(database)
+        return records.map { $0.toTaskActionItem() }
+      }
+
+      let dated = try filteredIncomplete(dueDateIsNull: false, limit: Int.max, offset: 0)
+      let noDeadlineLookahead = try filteredIncomplete(
+        dueDateIsNull: true,
+        limit: noDeadlineLimit + 1,
+        offset: noDeadlineOffset
+      )
+      return (
+        dated: dated,
+        noDeadline: Array(noDeadlineLookahead.prefix(noDeadlineLimit)),
+        hasMoreNoDeadline: noDeadlineLookahead.count > noDeadlineLimit
+      )
+    }
   }
 
   /// Search action items by description text (case-insensitive)

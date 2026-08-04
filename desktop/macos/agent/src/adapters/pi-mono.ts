@@ -235,38 +235,61 @@ const EXPLICIT_WEB_PROHIBITIONS = [
   "don't use the internet search", "do not use the internet search",
   "don't search the web", "do not search the web",
   "don't search the internet", "do not search the internet",
+  "no web search", "no web searches",
+  "no internet search", "no internet searches",
+  "skip web search", "skip the web search",
+  "skip searching the web", "skip searching online",
+  "avoid web search", "avoid the web search",
+  "avoid searching the web",
+  "don't browse the web", "do not browse the web",
+  "don't browse online", "do not browse online",
+  "don't search online", "do not search online",
+  "without searching", "without searching the web",
+  "without searching online",
   "without web search",
 ];
 
-function explicitlyProhibitsPublicWeb(normalized: string): boolean {
-  if (EXPLICIT_WEB_PROHIBITIONS.some((phrase) => {
-    let searchStart = 0;
-    while (searchStart < normalized.length) {
-      const start = normalized.indexOf(phrase, searchStart);
-      if (start < 0) {
-        return false;
+const KERNEL_CONTEXT_PREFIX = "[Kernel Context Snapshot ";
+const LEGACY_CONTEXT_PREFIX = "# Omi Context Snapshot";
+const TRUSTED_CONTEXT_PREFIXES = [KERNEL_CONTEXT_PREFIX, LEGACY_CONTEXT_PREFIX];
+const UNTRUSTED_TOOL_CONTEXT_DELIMITER = "\n\nTool-provided context (untrusted):\n";
+const NEGATED_WITHOUT_SEARCH = /\b(?:don't|do not|never)\s+(?:[\w'-]+\s+){0,4}$/;
+const NO_WEB_SEARCH_RESULTS_REPORT = /\b(?:got\s+)?no\s+(?:the\s+)?(?:web|internet)\s+search(?:es)?\s+results?\b/;
+
+function explicitlyRequestsPublicWeb(normalized: string): boolean {
+  return EXPLICIT_WEB_REQUESTS.some((phrase) =>
+    normalized.replace(NO_WEB_SEARCH_RESULTS_REPORT, " ").includes(phrase)
+  );
+}
+
+function explicitlyProhibitsPublicWeb(normalized: string, allowResultReport = false): boolean {
+  for (const phrase of EXPLICIT_WEB_PROHIBITIONS) {
+    let start = normalized.indexOf(phrase);
+    while (start >= 0) {
+      if (allowResultReport && NO_WEB_SEARCH_RESULTS_REPORT.exec(normalized.slice(start))?.index === 0) {
+        start = normalized.indexOf(phrase, start + 1);
+        continue;
       }
-      const suffix = normalized.slice(start + phrase.length).trimStart();
-      if (!/^results?\b/.test(suffix)) {
+      if (!(phrase.startsWith("without ") && NEGATED_WITHOUT_SEARCH.test(normalized.slice(0, start)))) {
         return true;
       }
-      searchStart = start + phrase.length;
+      start = normalized.indexOf(phrase, start + 1);
     }
-    return false;
-  })) {
-    return true;
   }
-  return ["web search tool", "internet search tool"].some((referent) => {
-    const start = normalized.indexOf(referent);
-    if (start < 0) {
-      return false;
+  for (const referent of ["web search tool", "internet search tool"]) {
+    let start = normalized.indexOf(referent);
+    while (start >= 0) {
+      const tail = normalized.slice(start + referent.length, start + referent.length + 160);
+      if ([
+        "don't call it because", "do not call it because",
+        "don't call it again", "do not call it again",
+      ].some((phrase) => tail.includes(phrase))) {
+        return true;
+      }
+      start = normalized.indexOf(referent, start + 1);
     }
-    const tail = normalized.slice(start + referent.length, start + referent.length + 160);
-    return [
-      "don't call it because", "do not call it because",
-      "don't call it again", "do not call it again",
-    ].some((phrase) => tail.includes(phrase));
-  });
+  }
+  return false;
 }
 
 const FRESH_PUBLIC_REQUESTS = [
@@ -315,10 +338,21 @@ const PUBLIC_WEB_ACCESS_DENIAL = /\b(?:I\s+)?(?:do\s+not|don't|cannot|can't|can 
 const CURRENT_USER_MESSAGE_DELIMITER = "\n# User Message\n";
 
 function currentUserInstruction(renderedPrompt: string): string {
-  const delimiterIndex = renderedPrompt.lastIndexOf(CURRENT_USER_MESSAGE_DELIMITER);
-  return delimiterIndex === -1
-    ? renderedPrompt
-    : renderedPrompt.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
+  let instruction = stripPublicWebRoutingInstruction(renderedPrompt);
+  const isTrustedContextSnapshot = TRUSTED_CONTEXT_PREFIXES.some((prefix) => instruction.trimStart().startsWith(prefix));
+  if (isTrustedContextSnapshot) {
+    const delimiterIndex = instruction.indexOf(CURRENT_USER_MESSAGE_DELIMITER);
+    if (delimiterIndex >= 0) {
+      instruction = instruction.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);
+    }
+  } else if (instruction.includes(CURRENT_USER_MESSAGE_DELIMITER)) {
+    // Only the kernel's canonical wrapper may introduce this boundary. If a
+    // raw user string contains it, keep the prefix so the user cannot replace
+    // a private or opt-out instruction with a public-web suffix.
+    instruction = instruction.split(CURRENT_USER_MESSAGE_DELIMITER, 1)[0];
+  }
+  instruction = instruction.split(CURRENT_USER_MESSAGE_DELIMITER, 1)[0];
+  return instruction.split(UNTRUSTED_TOOL_CONTEXT_DELIMITER, 1)[0];
 }
 
 function containsWholeTerm(text: string, terms: string[]): boolean {
@@ -344,6 +378,15 @@ function normalizedLookupText(text: string): string {
     .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
     .toLowerCase()
     .replace(/[\u2018\u2019]/g, "'");
+}
+
+function stripPublicWebRoutingInstruction(text: string): string {
+  const trimmed = text.trimStart();
+  const opening = "<omi_retrieval_policy>";
+  const closing = "</omi_retrieval_policy>";
+  if (!trimmed.startsWith(opening)) return text;
+  const remainder = trimmed.split(closing, 2);
+  return remainder.length === 2 ? remainder[1].trimStart() : text;
 }
 
 function utf8ByteLength(text: string): number {
@@ -376,13 +419,8 @@ export function routePromptForPublicWeb(message: string): string {
   // whether this particular turn requires a public-web lookup.
   const normalized = normalizedLookupText(currentUserInstruction(message));
   if (!normalized) return message;
-  const hasExplicitWebReference = EXPLICIT_WEB_REQUESTS.some(
-    (phrase) => normalized.includes(phrase)
-  );
-  if (
-    hasExplicitWebReference
-    && explicitlyProhibitsPublicWeb(normalized)
-  ) {
+  const hasExplicitWebReference = explicitlyRequestsPublicWeb(normalized);
+  if (explicitlyProhibitsPublicWeb(normalized, hasExplicitWebReference)) {
     return message;
   }
   const hasExplicitPrivateContext = EXPLICIT_PRIVATE_CONTEXT.some(
@@ -547,15 +585,24 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     env.OMI_ADAPTER_ID = "pi-mono";
     env.OMI_EXECUTION_ROLE = this.currentExecutionRole;
-    if (
-      this.currentToolProjection.surfaceKind === "main_chat"
-      && this.currentToolProjection.chatFirstUi
-      && Number.isSafeInteger(this.currentToolProjection.controlGeneration)
-      && (this.currentToolProjection.controlGeneration ?? -1) >= 0
-    ) {
-      env.OMI_SURFACE_KIND = "main_chat";
-      env.OMI_CHAT_FIRST_UI = "true";
-      env.OMI_CHAT_FIRST_CONTROL_GENERATION = String(this.currentToolProjection.controlGeneration);
+    // The typed-chat surface is needed for both the chat-first rollout tools
+    // and legacy typed-chat writes such as create_memory. Keep the surface
+    // marker independent from the optional chat-first capability flags so a
+    // legacy typed-chat session does not accidentally look like a background
+    // or voice run to the stdio projection.
+    if (this.currentToolProjection.surfaceKind === "main_chat" || this.currentToolProjection.surfaceKind === "floating_chat") {
+      env.OMI_SURFACE_KIND = this.currentToolProjection.surfaceKind;
+      if (
+        this.currentToolProjection.chatFirstUi
+        && Number.isSafeInteger(this.currentToolProjection.controlGeneration)
+        && (this.currentToolProjection.controlGeneration ?? -1) >= 0
+      ) {
+        env.OMI_CHAT_FIRST_UI = "true";
+        env.OMI_CHAT_FIRST_CONTROL_GENERATION = String(this.currentToolProjection.controlGeneration);
+      } else {
+        delete env.OMI_CHAT_FIRST_UI;
+        delete env.OMI_CHAT_FIRST_CONTROL_GENERATION;
+      }
     } else {
       delete env.OMI_SURFACE_KIND;
       delete env.OMI_CHAT_FIRST_UI;
@@ -686,14 +733,17 @@ export class PiMonoAdapter implements HarnessAdapter {
       surfaceKind?: string;
       chatFirstUi: boolean;
       controlGeneration: number | null;
-    } = projection.surfaceKind === "main_chat"
-      && projection.chatFirstUi
-      && Number.isSafeInteger(projection.controlGeneration)
-      && (projection.controlGeneration ?? -1) >= 0
+    } = projection.surfaceKind === "main_chat" || projection.surfaceKind === "floating_chat"
       ? {
-          surfaceKind: "main_chat" as const,
-          chatFirstUi: true,
-          controlGeneration: projection.controlGeneration,
+          surfaceKind: projection.surfaceKind,
+          chatFirstUi: projection.chatFirstUi
+            && Number.isSafeInteger(projection.controlGeneration)
+            && (projection.controlGeneration ?? -1) >= 0,
+          controlGeneration: projection.chatFirstUi
+            && Number.isSafeInteger(projection.controlGeneration)
+            && (projection.controlGeneration ?? -1) >= 0
+            ? projection.controlGeneration
+            : null,
         }
       : { chatFirstUi: false, controlGeneration: null };
     if (
@@ -1443,12 +1493,17 @@ function toolProjectionFromMetadata(metadata: Record<string, unknown> | undefine
   controlGeneration: number | null;
 } {
   const generation = Number(metadata?.chatFirstControlGeneration);
-  const enabled = metadata?.surfaceKind === "main_chat"
+  const typedSurface = metadata?.surfaceKind === "main_chat"
+    ? "main_chat"
+    : metadata?.surfaceKind === "floating_chat"
+      ? "floating_chat"
+      : undefined;
+  const enabled = typedSurface !== undefined
     && metadata?.chatFirstUi === true
     && Number.isSafeInteger(generation)
     && generation >= 0;
-  return enabled
-    ? { surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: generation }
+  return typedSurface
+    ? { surfaceKind: typedSurface, chatFirstUi: enabled, controlGeneration: enabled ? generation : null }
     : { chatFirstUi: false, controlGeneration: null };
 }
 

@@ -300,6 +300,35 @@ def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
     ]
 
 
+def test_gke_config_map_contract_rejects_declared_map_name_and_key_drift(tmp_path):
+    validator = load_validator()
+    values_path = tmp_path / 'values.yaml'
+    write_yaml(values_path, {'envFrom': [{'configMapRef': {'name': 'expected-map'}}], 'env': []})
+    env_config = {
+        'gke': {
+            'config_map': {'name': 'expected-map', 'entries': {'REDIS_DB_HOST': {'source': 'environment'}}},
+            'backend-listen': {
+                'values_file': str(values_path),
+                'env': {'REDIS_DB_HOST': {'config_map': {'name': 'wrong-map', 'key': 'MISSING'}}},
+            },
+        }
+    }
+
+    errors = validator._validate_gke(env_config, strict_provisional=True)
+
+    assert (
+        validator.ValidationError(
+            'gke/backend-listen',
+            "env REDIS_DB_HOST ConfigMap name must match declared gke.config_map.name 'expected-map'",
+        )
+        in errors
+    )
+    assert (
+        validator.ValidationError('gke/backend-listen', "env REDIS_DB_HOST ConfigMap key 'MISSING' is undeclared")
+        in errors
+    )
+
+
 def test_repo_cloud_run_workflows_match_manifest():
     validator = load_validator()
 
@@ -341,11 +370,12 @@ def test_workflow_validation_uses_immutable_workflow_root_with_admitted_runtime_
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend.yml'
     admitted_workflow = validator._load_yaml(workflow_path)
     old_admitted_workflow = copy.deepcopy(admitted_workflow)
-    old_admitted_workflow['jobs']['deploy']['steps'] = [
+    deploy_stack = next(
         step
         for step in old_admitted_workflow['jobs']['deploy']['steps']
-        if step.get('name') != 'Checkout workflow-owned deploy-control source'
-    ]
+        if 'deploy-backend-stack' in str(step.get('uses', ''))
+    )
+    deploy_stack['with']['admitted_sha'] = '${{ github.event.workflow_run.head_sha }}'
     assert validator.ValidationError(
         f'cloud_run_workflow/{workflow_path}',
         'backend deploy checkout must remain bound to the readiness-approved commit',
@@ -561,10 +591,10 @@ def test_automatic_firestore_readiness_contract_requires_readiness_admitted_sha_
     validator = load_validator()
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend_auto_dev.yml'
     workflow = validator._load_yaml(workflow_path)
-    deploy_checkout = next(
-        step for step in workflow['jobs']['deploy']['steps'] if step.get('uses') == 'actions/checkout@v7'
+    deploy_stack = next(
+        step for step in workflow['jobs']['deploy']['steps'] if 'deploy-backend-stack' in str(step.get('uses', ''))
     )
-    deploy_checkout['with']['ref'] = '${{ github.event.workflow_run.head_sha }}'
+    deploy_stack['with']['admitted_sha'] = '${{ github.event.workflow_run.head_sha }}'
 
     errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
 
@@ -584,11 +614,10 @@ def test_manual_firestore_readiness_contract_allows_one_staged_workflow_control_
 
     assert validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow) == []
 
-    workflow['jobs']['deploy']['steps'] = [
-        step
-        for step in workflow['jobs']['deploy']['steps']
-        if step.get('name') != 'Checkout workflow-owned deploy-control source'
-    ]
+    deploy_stack = next(
+        step for step in workflow['jobs']['deploy']['steps'] if 'deploy-backend-stack' in str(step.get('uses', ''))
+    )
+    deploy_stack['with'].pop('admitted_sha')
     errors = validator._validate_firestore_readiness_workflow_contract(str(workflow_path), workflow)
 
     assert (

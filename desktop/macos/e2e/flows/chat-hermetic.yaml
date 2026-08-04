@@ -18,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
   - desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
@@ -34,6 +35,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor+MemoryCreation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift

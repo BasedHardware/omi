@@ -27,9 +27,14 @@ struct CaptureListeningControls: View {
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
-      captureButton
-
-      listeningControlSlot
+      ForEach(CaptureListeningControlsLayout.displayOrder, id: \.self) { control in
+        switch control {
+        case .listening:
+          listeningControlSlot
+        case .capture:
+          captureButton
+        }
+      }
     }
     .onAppear(perform: syncCaptureState)
     .onReceive(NotificationCenter.default.publisher(for: .screenCapturePermissionLost)) { _ in
@@ -153,6 +158,15 @@ struct CaptureListeningControls: View {
 }
 
 enum CaptureListeningControlsLayout {
+  enum Control: Hashable {
+    case listening
+    case capture
+  }
+
+  /// Listening's reserved trailing slot must precede Capture, otherwise the
+  /// slot's hover capacity becomes visible whitespace between the two pills.
+  static let displayOrder: [Control] = [.listening, .capture]
+
   /// Resting Listening is about 104pt wide; reserve room for its 31pt hover
   /// affordance without changing the control group's measured width.
   static let listeningSlotWidth: CGFloat = 136

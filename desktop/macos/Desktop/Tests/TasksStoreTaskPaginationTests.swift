@@ -118,11 +118,11 @@ final class TasksStoreTaskPaginationTests: XCTestCase {
     XCTAssertEqual(merged.filter { $0.dueAt == nil }.count, 0)
   }
 
-  func testInitialNoDeadlineSliceIsBoundedByPageSize() {
+  func testStableIncompleteSurfacePreservesEveryNoDeadlineInput() {
     let page = (0..<100).map { task(id: "undated-\($0)", dueAt: nil) }
     let visible = TasksStore.stableIncompleteTaskSurfaceItems(datedTasks: [], noDeadlineTasks: page)
 
     XCTAssertEqual(visible.count, 100)
-    XCTAssertLessThanOrEqual(visible.filter { $0.dueAt == nil }.count, 100)
+    XCTAssertEqual(visible.filter { $0.dueAt == nil }.count, 100)
   }
 }

@@ -805,10 +805,13 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
-    if usesChatFirstShell,
-      let route = ChatFirstRoute.primaryAutomationDestination(named: target)
-    {
-      chatFirstNavigation.selectPrimary(route)
+    if usesChatFirstShell, let route = ChatFirstRoute.automationVisibilityDestination(named: target) {
+      switch route {
+      case .more(let page):
+        chatFirstNavigation.selectMore(page)
+      default:
+        chatFirstNavigation.selectPrimary(route)
+      }
     } else if let item = resolvedAutomationTarget(target) {
       navigateToLegacyDestination(item)
     }

@@ -506,6 +506,7 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
+    includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [ServerMemory] {
@@ -518,6 +519,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if includeArchive {
+      endpoint += "&include_archive=true"
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
@@ -532,6 +536,7 @@ extension APIClient {
     category: String? = nil,
     tags: [String]? = nil,
     includeDismissed: Bool = false,
+    includeArchive: Bool = false,
     deviceScope: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryListPage {
@@ -544,6 +549,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if includeArchive {
+      endpoint += "&include_archive=true"
     }
     if let deviceScope = deviceScope {
       endpoint += "&device_scope=\(deviceScope)"
@@ -599,7 +607,9 @@ extension APIClient {
     source: String? = nil,
     windowTitle: String? = nil,
     headline: String? = nil,
-    expectedOwnerId: String? = nil
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    allowsAuthRetry: Bool = true
   ) async throws -> CreateMemoryResponse {
     struct CreateRequest: Encodable {
       let content: String
@@ -637,7 +647,12 @@ extension APIClient {
       windowTitle: windowTitle,
       headline: headline
     )
-    return try await post("v3/memories", body: body, expectedOwnerId: expectedOwnerId)
+    return try await post(
+      "v3/memories",
+      body: body,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot,
+      allowsAuthRetry: allowsAuthRetry)
   }
 
   /// Max memories per POST /v3/memories/batch call. Must match the

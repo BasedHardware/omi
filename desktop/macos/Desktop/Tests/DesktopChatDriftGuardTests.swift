@@ -95,6 +95,27 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(messagesSource.contains("initialRestoreState = .completed"))
   }
 
+  func testPermissionRefreshPreservesStateWhenSystemEventsIsStopped() throws {
+    let source = try sourceFile("AppState/AppState+Permissions.swift")
+    let start = try XCTUnwrap(source.range(of: "if status == -600"))
+    let snippet = String(source[start.lowerBound...]).prefix(320)
+
+    XCTAssertFalse(snippet.contains("hasAutomationPermission = false"))
+    XCTAssertFalse(snippet.contains("automationPermissionError = 0"))
+  }
+
+  func testGoogleConnectorProbesUseExplicitUserInitiatedReads() throws {
+    let source = try sourceFile("DesktopAutomationBridge.swift")
+    for action in ["calendar_read_probe", "gmail_read_probe"] {
+      guard let start = source.range(of: "name: \"\(action)\"") else {
+        return XCTFail("missing \(action)")
+      }
+      let tail = source[start.lowerBound...]
+      let body = tail.range(of: "\n    register(").map { String(tail[..<$0.lowerBound]) } ?? String(tail)
+      XCTAssertTrue(body.contains("userInitiated: true"), "\(action) must declare explicit user intent")
+    }
+  }
+
   func testScrollHandoffCannotBeRearmedByStaleBottomChecks() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
@@ -116,9 +137,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
     let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    // omi-test-quality: source-inspection -- the cohort shell must share the
-    // modern top-navigation and Dashboard/Home chat surfaces and must not
-    // resurrect either its retired rail or ChatPage's nested header.
+    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern top-navigation and Dashboard/Home chat surfaces and must not resurrect either its retired rail or ChatPage's nested header.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
     XCTAssertTrue(shellSource.contains("case .chat:\n      DashboardPage("))
     XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))
