@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 try:
     from google.cloud import firestore
@@ -67,6 +68,7 @@ class ProjectionBuild:
     redacted_items: list[dict[str, Any]]
     skipped_by_reason: dict[str, int]
     full_rebuild: bool
+    rebuild_id: str
 
 
 def _snapshot_data(snapshot) -> dict[str, Any] | None:
@@ -206,7 +208,7 @@ def _timestamp(data: dict[str, Any], *fields: str) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _projection_fences(uid: str, head: dict[str, Any], *, ready: bool) -> dict[str, Any]:
+def _projection_fences(uid: str, head: dict[str, Any], *, ready: bool, rebuild_id: str) -> dict[str, Any]:
     generation = _as_int(head, "account_generation")
     head_commit_id = _as_nonempty_str(head, "head_commit_id")
     commit_sequence = _as_int(head, "commit_sequence")
@@ -215,6 +217,8 @@ def _projection_fences(uid: str, head: dict[str, Any], *, ready: bool) -> dict[s
         "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
         "source": V3_COMPATIBILITY_PROJECTION_SOURCE,
         "ready": ready,
+        "rebuild_id": rebuild_id,
+        "rebuild_complete": True,
         # This admits canonical outbox writers while ``ready`` remains the
         # independent reader/cutover gate.  A rebuild therefore cannot lose
         # writes that arrive after its initial scan.
@@ -327,7 +331,8 @@ def build_projection(db_client, *, uid: str, project: str, memory_id: str | None
     # A manual projection rebuild is a repair operation, not canonical migration
     # verification.  Keep reads fail-closed until the controller writes a
     # verified read-cutover checkpoint at this same inventory/head fence.
-    fences = _projection_fences(uid, head, ready=False)
+    rebuild_id = f"rebuild_{uuid4().hex}"
+    fences = _projection_fences(uid, head, ready=False, rebuild_id=rebuild_id)
     source_rows = _stream_memory_items(db_client, uid=uid, memory_id=memory_id, limit=limit)
     if not source_rows and not full_rebuild:
         raise RuntimeError("memory item was not found for partial projection inspection")
@@ -382,6 +387,7 @@ def build_projection(db_client, *, uid: str, project: str, memory_id: str | None
         redacted_items=redacted_items,
         skipped_by_reason=skipped_by_reason,
         full_rebuild=full_rebuild,
+        rebuild_id=rebuild_id,
     )
 
 
@@ -391,7 +397,16 @@ def apply_projection(db_client, build: ProjectionBuild) -> list[str]:
 
     state_path = MemoryCollections(uid=build.uid).v3_compatibility_projection_state
     final_state = build.writes[state_path]
-    staged_state = {**final_state, "ready": False}
+    # Publishing this first fences all later finalization to one build id.  It
+    # leaves writers admitted, but no reader may observe a partial inventory.
+    staged_state = {
+        **final_state,
+        "ready": False,
+        "rebuild_complete": False,
+        "write_convergence_complete": False,
+        "delete_convergence_complete": False,
+        "tombstone_convergence_complete": False,
+    }
     db_client.document(state_path).set(staged_state)
 
     item_paths = [path for path in sorted(build.writes) if path != state_path]
@@ -407,14 +422,56 @@ def apply_projection(db_client, build: ProjectionBuild) -> list[str]:
         deletes=build.stale_projection_paths,
     )
 
-    _, final_head = _read_head(db_client, uid=build.uid)
-    if final_head != build.source_head:
-        raise RuntimeError("source head changed during projection rebuild; projection remains not ready")
-    # ``final_state`` remains not-ready by construction.  Do not add a direct
-    # ready=True write here: that would race the head check and bypass the
-    # migration controller's complete postcondition verifier.
-    db_client.document(state_path).set(final_state)
+    _finalize_projection_rebuild(db_client, build=build, state_path=state_path, final_state=final_state)
     return [state_path, *item_paths, *build.stale_projection_paths]
+
+
+def _finalize_projection_rebuild(
+    db_client, *, build: ProjectionBuild, state_path: str, final_state: dict[str, Any]
+) -> None:
+    """CAS finalization: a stale or superseded rebuild can never publish itself."""
+    state_ref = db_client.document(state_path)
+
+    def finalize(transaction=None) -> None:
+        if transaction is None:
+            _, observed_head = _read_head(db_client, uid=build.uid)
+            state = _snapshot_data(state_ref.get())
+        else:
+            observed_head = _snapshot_data(db_client.document(build.head_path).get(transaction=transaction))
+            state = _snapshot_data(state_ref.get(transaction=transaction))
+        if observed_head != build.source_head:
+            raise RuntimeError("source head changed during projection rebuild; projection remains not ready")
+        if (
+            not isinstance(state, dict)
+            or state.get("rebuild_id") != build.rebuild_id
+            or state.get("ready") is not False
+        ):
+            raise RuntimeError("projection rebuild was superseded or already cut over")
+        if transaction is None:
+            state_ref.set(final_state)
+        else:
+            transaction.set(state_ref, final_state)
+
+    transaction = db_client.transaction() if hasattr(db_client, "transaction") else None
+    if transaction is None:
+        finalize()
+        return
+    if firestore is not None and transaction.__class__.__module__.startswith("google.cloud.firestore"):
+        firestore.transactional(finalize)(transaction)
+        return
+    if hasattr(transaction, "_begin"):
+        transaction._begin()
+    try:
+        finalize(transaction)
+        if hasattr(transaction, "_commit"):
+            transaction._commit()
+    except Exception:
+        if hasattr(transaction, "_rollback"):
+            transaction._rollback()
+        raise
+    finally:
+        if hasattr(transaction, "_clean_up"):
+            transaction._clean_up()
 
 
 def _apply_item_mutations(db_client, *, writes: list[tuple[str, dict[str, Any]]], deletes: list[str]) -> None:

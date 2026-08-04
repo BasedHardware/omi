@@ -112,10 +112,28 @@ class MigrationPageReceipt(BaseModel):
 
 
 class MigrationVerificationCertificate(BaseModel):
-    """Fresh convergence proof tied to one canonical barrier head."""
+    """Verifier-issued convergence proof, bound to exactly one migration job.
+
+    This is deliberately more than a report saying that a few collections look
+    healthy.  The persistence layer rejects a certificate unless every identity
+    and version fence below agrees with the claimed job and the live cutover
+    documents.  A production verifier must also authenticate the certificate
+    before it is attached (see ``MigrationCertificateVerifier``).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    uid: str
+    job_id: str
+    account_generation: int
+    source_generation: int
+    transform_version: str
+    policy_version: str
+    source_adapter_version: str
+    projection_rebuild_id: str
+    verifier_id: str
+    verification_run_id: str
+    signature: str
     canonical_head_commit_id: str
     canonical_head_sequence: int
     source_snapshot_token: str
@@ -125,7 +143,20 @@ class MigrationVerificationCertificate(BaseModel):
     mismatch_count: int = 0
     verified_at: AwareDatetime = Field(default_factory=_now)
 
-    @field_validator("canonical_head_commit_id", "source_snapshot_token", "source_digest")
+    @field_validator(
+        "uid",
+        "job_id",
+        "transform_version",
+        "policy_version",
+        "source_adapter_version",
+        "projection_rebuild_id",
+        "verifier_id",
+        "verification_run_id",
+        "signature",
+        "canonical_head_commit_id",
+        "source_snapshot_token",
+        "source_digest",
+    )
     @classmethod
     def nonblank(cls, value: str) -> str:
         if not value.strip():
@@ -134,7 +165,12 @@ class MigrationVerificationCertificate(BaseModel):
 
     @model_validator(mode="after")
     def exact_convergence(self) -> "MigrationVerificationCertificate":
-        if self.canonical_head_sequence < 0 or self.mismatch_count < 0:
+        if (
+            self.canonical_head_sequence < 0
+            or self.account_generation < 0
+            or self.source_generation < 0
+            or self.mismatch_count < 0
+        ):
             raise ValueError("certificate counters must be nonnegative")
         if self.mismatch_count:
             raise ValueError("a cutover certificate cannot contain mismatches")
@@ -188,6 +224,21 @@ class CanonicalMigrationJob(BaseModel):
         if self.cutover_head_commit_id and self.certificate is None:
             raise ValueError("cutover requires a verification certificate")
         return self
+
+    def certificate_matches(self, certificate: MigrationVerificationCertificate) -> bool:
+        """Whether a verifier result is for this immutable migration identity."""
+        return (
+            certificate.uid == self.uid
+            and certificate.job_id == self.job_id
+            and certificate.account_generation == self.account_generation
+            and certificate.source_generation == self.source_generation
+            and certificate.transform_version == self.transform_version
+            and certificate.policy_version == self.policy_version
+            and certificate.source_adapter_version == self.source_adapter_version
+            and certificate.source_snapshot_token == self.source_snapshot_token
+            and certificate.source_digest == self.source_digest
+            and set(certificate.required_surfaces) == set(self.required_surfaces)
+        )
 
     @classmethod
     def new(

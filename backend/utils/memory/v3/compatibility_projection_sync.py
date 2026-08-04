@@ -103,12 +103,10 @@ def _validated_projection_fences(
         raise CompatibilityProjectionSyncError("malformed_compatibility_projection_state")
     if _required_nonblank_str(state, "source_evidence_fence") != projection_evidence_fence:
         raise CompatibilityProjectionSyncError("malformed_compatibility_projection_state")
-    if (
-        state.get("write_convergence_complete") is not True
-        or state.get("delete_convergence_complete") is not True
-        or state.get("tombstone_convergence_complete") is not True
-    ):
-        raise CompatibilityProjectionSyncError("incomplete_compatibility_projection_state")
+    # These are reader/cutover attestations, not writer admission.  A full
+    # rebuild deliberately clears them while it scans; rejecting normal outbox
+    # writes in that interval would recreate the exact lost-update window the
+    # rebuild protocol is meant to close.
     _required_nonblank_str(state, "source_version")
 
     return {

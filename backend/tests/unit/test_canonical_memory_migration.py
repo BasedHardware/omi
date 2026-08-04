@@ -1,6 +1,7 @@
 from datetime import timedelta
 import pytest
 from database.memory_migration_store import (
+    HmacMigrationCertificateVerifier,
     InMemoryMigrationStore,
     MigrationCheckpointConflict,
     MigrationFenceConflict,
@@ -27,11 +28,22 @@ def _job():
         source_generation=3,
         required_surfaces=list(MigrationSurface),
         job_id="job1",
-    )
+    ).model_copy(update={"source_snapshot_token": "snapshot-9", "source_digest": "digest-9"})
 
 
 def _certificate():
     return MigrationVerificationCertificate(
+        uid="u1",
+        job_id="job1",
+        account_generation=2,
+        source_generation=3,
+        transform_version="legacy-v1",
+        policy_version="policy-v1",
+        source_adapter_version="source-v1",
+        projection_rebuild_id="rebuild-9",
+        verifier_id="test-verifier",
+        verification_run_id="run-9",
+        signature="test-signature",
         canonical_head_commit_id="head-9",
         canonical_head_sequence=9,
         source_snapshot_token="snapshot-9",
@@ -110,6 +122,16 @@ def test_cutover_is_fenced_by_an_exact_fresh_certificate():
 def test_certificate_rejects_missing_surface_or_mismatch():
     with pytest.raises(ValueError):
         MigrationVerificationCertificate(
+            uid="u1",
+            job_id="job1",
+            account_generation=2,
+            source_generation=3,
+            transform_version="legacy-v1",
+            policy_version="policy-v1",
+            source_adapter_version="source-v1",
+            projection_rebuild_id="rebuild-9",
+            verifier_id="test-verifier",
+            verification_run_id="run-9",
             canonical_head_commit_id="h",
             canonical_head_sequence=1,
             source_snapshot_token="s",
@@ -134,6 +156,31 @@ def test_terminal_job_cannot_be_reclaimed_and_certificate_surface_order_is_ignor
     assert complete.job.state.value == "complete"
     with pytest.raises(MigrationCheckpointConflict):
         store.claim_job("u1", "job1", "worker-a")
+
+
+def test_certificate_is_bound_to_the_exact_job_snapshot_and_terminal_cutover_is_idempotent():
+    store = InMemoryMigrationStore()
+    store.create_job(_job())
+    claimed = store.claim_job("u1", "job1", "worker-a")
+    assert claimed.claim is not None
+    with pytest.raises(MigrationFenceConflict, match="identity"):
+        store.attach_certificate(
+            "u1", "job1", claimed.claim, _certificate().model_copy(update={"source_digest": "different"})
+        )
+    complete = CanonicalMigrationReconciler(store).certify_and_cutover(claimed, claimed.claim, _certificate()).job
+    # A lost response may retry the exact operation after the lease was cleared;
+    # it must not re-open or mutate the terminal job.
+    assert store.cutover("u1", "job1", claimed.claim, expected_head_commit_id="head-9") == complete
+    assert complete.claim is None
+
+
+def test_hmac_verifier_rejects_tampered_certificate():
+    certificate = _certificate()
+    verifier = HmacMigrationCertificateVerifier(verifier_id="test-verifier", signing_key=b"not-a-production-key")
+    signed = certificate.model_copy(update={"signature": verifier.sign(certificate)})
+    verifier.verify(_job(), signed)
+    with pytest.raises(MigrationFenceConflict, match="signature"):
+        verifier.verify(_job(), signed.model_copy(update={"canonical_head_sequence": 10}))
 
 
 def test_projection_writer_admission_is_independent_from_reader_readiness():
