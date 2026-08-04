@@ -698,6 +698,12 @@ TERMINAL_EXITS = {
     ),
     'provider_refused': ([FakeStream(response=_refusal_final())], None, True),
     'provider_refused_with_category': ([FakeStream(response=_refusal_final(category='cyber'))], None, True),
+    # Whitespace makes ``full_response`` non-empty while the persisted reply is still blank.
+    'provider_refused_after_whitespace': (
+        [FakeStream(response=_refusal_final(), events=[_text_delta('\n\n')])],
+        None,
+        True,
+    ),
     'provider_failed_unrecoverably': ([FakeStream(error=BadRequestError())], None, True),
     'retry_budget_exhausted': ([FakeStream(error=ReadTimeout()) for _ in range(5)], None, True),
     'safety_guard_blocked_a_tool': (
@@ -713,8 +719,15 @@ TERMINAL_EXITS = {
 }
 
 
+#: Every scripted failure case supplies this many streams. Pinned rather than read from the
+#: module default so raising that default turns into a budget-exhaustion assertion failure here,
+#: not an IndexError off the end of the script — the latter would pass for the wrong reason.
+SCRIPTED_FAILURE_ATTEMPTS = 5
+
+
 @pytest.mark.parametrize('exit_name', sorted(TERMINAL_EXITS))
-async def test_every_terminal_exit_leaves_an_answer_and_reports_whether_it_failed(agentic_mod, exit_name):
+async def test_every_terminal_exit_leaves_an_answer_and_reports_whether_it_failed(agentic_mod, exit_name, monkeypatch):
+    monkeypatch.setattr(agentic_mod, 'AGENT_STREAM_PROVIDER_MAX_ATTEMPTS', SCRIPTED_FAILURE_ATTEMPTS)
     streams, guard_spec, expects_failure = TERMINAL_EXITS[exit_name]
     guard = _blocking_guard(*guard_spec) if guard_spec else None
     go, _calls, full_response = _run(agentic_mod, streams, safety_guard=guard)
@@ -729,6 +742,131 @@ async def test_every_terminal_exit_leaves_an_answer_and_reports_whether_it_faile
         assert result, f'{exit_name} is a failure and must report a reason the router can record'
     else:
         assert result is None, f'{exit_name} is a deliberate reply, not a provider failure'
+
+
+# ---------------------------------------------------------------------------
+# The same contract on the managed (OpenAI chat-completions) loop.
+#
+# ``_run_openai_agent_stream`` is the runner gateway feature mode selects, so it carries the
+# production traffic. It was added with the same defect this class describes at two of its exits:
+# an apology pushed through ``put_data`` alone, which the router then overwrote. The contract is
+# provider-independent, so the table is duplicated in shape rather than in assertions.
+# ---------------------------------------------------------------------------
+
+
+class _FakeChatModel:
+    """Scripted stand-in for the bound chat model ``get_llm`` returns."""
+
+    def __init__(self, scripts):
+        self._scripts = list(scripts)
+        self._call = 0
+
+    def bind(self, **_kwargs):
+        return self
+
+    def astream(self, _messages):
+        script = self._scripts[self._call]
+        self._call += 1
+
+        async def chunks():
+            if isinstance(script, Exception):
+                raise script
+            for chunk in script:
+                yield chunk
+
+        return chunks()
+
+
+def _openai_chunk(text='', tool_calls=None):
+    return types.SimpleNamespace(content=text, tool_call_chunks=tool_calls or [])
+
+
+def _openai_tool_chunk(name='lookup'):
+    return [{'index': 0, 'id': 'call_1', 'name': name, 'args': '{}'}]
+
+
+def _run_openai(agentic_mod, scripts, safety_guard=None, get_llm_error=None, tool_result='tool result'):
+    """Drive the managed loop over a scripted sequence of provider streams."""
+    if safety_guard is None:
+        safety_guard = MagicMock()
+        safety_guard.should_warn_user.return_value = None
+        safety_guard.get_stats.return_value = {}
+
+    callback = agentic_mod.AsyncStreamingCallback()
+    full_response = []
+    get_llm = MagicMock(side_effect=get_llm_error) if get_llm_error else MagicMock(return_value=_FakeChatModel(scripts))
+
+    async def go():
+        with patch.object(agentic_mod, 'get_llm', new=get_llm), patch.object(
+            agentic_mod, '_execute_tool', new=AsyncMock(return_value=tool_result)
+        ), patch.object(agentic_mod, 'handle_llm_error_async', new=AsyncMock()), patch.object(
+            agentic_mod, 'record_fallback'
+        ):
+            return await agentic_mod._run_openai_agent_stream(
+                'SYSTEM',
+                [{'role': 'user', 'content': 'question'}],
+                [],
+                {'lookup': MagicMock()},
+                callback,
+                full_response,
+                safety_guard,
+                {},
+            )
+
+    return go, full_response
+
+
+OPENAI_TERMINAL_EXITS = {
+    'model_answered': ([[_openai_chunk('Here is your answer.')]], None, None, False),
+    # A content filter on this contract yields no signal of its own: the completion simply
+    # arrives with no text and no tool calls, which the loop would otherwise treat as done.
+    'model_returned_nothing': ([[_openai_chunk('')]], None, None, True),
+    'client_construction_failed': (None, None, BadRequestError(), True),
+    'provider_failed_unrecoverably': ([BadRequestError()], None, None, True),
+    'retry_budget_exhausted': ([ReadTimeout() for _ in range(5)], None, None, True),
+    'safety_guard_blocked_a_tool': (
+        [[_openai_chunk(tool_calls=_openai_tool_chunk())]],
+        ('validate_tool_call', 'I seem to be stuck trying to answer your question.'),
+        None,
+        False,
+    ),
+    'safety_guard_blocked_on_context_size': (
+        [[_openai_chunk(tool_calls=_openai_tool_chunk())]],
+        ('check_context_size', "That's a lot of information to process at once!"),
+        None,
+        False,
+    ),
+}
+
+
+@pytest.mark.parametrize('exit_name', sorted(OPENAI_TERMINAL_EXITS))
+async def test_every_managed_terminal_exit_leaves_an_answer_and_reports_whether_it_failed(
+    agentic_mod, exit_name, monkeypatch
+):
+    monkeypatch.setattr(agentic_mod, 'AGENT_STREAM_PROVIDER_MAX_ATTEMPTS', SCRIPTED_FAILURE_ATTEMPTS)
+    scripts, guard_spec, get_llm_error, expects_failure = OPENAI_TERMINAL_EXITS[exit_name]
+    guard = _blocking_guard(*guard_spec) if guard_spec else None
+    go, full_response = _run_openai(agentic_mod, scripts, safety_guard=guard, get_llm_error=get_llm_error)
+
+    result = await go()
+
+    assert ''.join(full_response).strip(), f'{exit_name} ended the turn with nothing to render'
+
+    if expects_failure:
+        assert result, f'{exit_name} is a failure and must report a reason the router can record'
+    else:
+        assert result is None, f'{exit_name} is a deliberate reply, not a provider failure'
+
+
+async def test_a_silent_completion_is_reported_rather_than_persisted_as_a_blank_answer(agentic_mod):
+    """The managed contract has no refusal stop reason — a filtered turn is just an empty
+    completion, so the only signal the loop gets is that it produced nothing."""
+    go, full_response = _run_openai(agentic_mod, [[_openai_chunk('')]])
+
+    result = await go()
+
+    assert result == 'empty_answer'
+    assert ''.join(full_response) == agentic_mod.AGENT_EMPTY_ANSWER_MESSAGE
 
 
 async def test_refusal_is_reported_as_a_failure_rather_than_an_empty_answer(agentic_mod):

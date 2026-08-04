@@ -187,6 +187,9 @@ AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try agai
 # Delivered when a provider safety classifier declines the turn. Retrying the same prompt would
 # be declined again, so this says the request cannot be answered rather than inviting a retry.
 AGENT_REFUSAL_MESSAGE = "I can't help with that one. Try asking me something else."
+# Delivered when a loop runs to completion without the model ever emitting text. Unlike a
+# refusal this is not a policy decision, so it does invite a retry.
+AGENT_EMPTY_ANSWER_MESSAGE = "I wasn't able to put a response together for that. Please try again."
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
@@ -578,6 +581,35 @@ async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list
     await callback.put_data(text)
 
 
+def _has_answer(full_response: list) -> bool:
+    """Whether anything the router would render as an answer has been delivered.
+
+    List truthiness is not the same question. A stream can emit the inter-iteration separator or
+    a whitespace-only delta and then fail, which leaves ``full_response`` non-empty while the
+    persisted reply is still blank to the reader.
+    """
+    return bool(''.join(full_response).strip())
+
+
+async def _end_with_answer_guarantee(
+    callback: AsyncStreamingCallback, full_response: list, provider: str
+) -> Optional[str]:
+    """Close the stream, guaranteeing the turn left the user something to read.
+
+    Either loop can run to completion without the model emitting any text: a content filter, an
+    empty completion, or a tool-only iteration with nothing to say. ``full_response`` is what the
+    router persists and renders, so returning here silently hands the user a blank answer and
+    records the turn as a success. Report it as the failure it is instead.
+    """
+    if _has_answer(full_response):
+        await callback.end()
+        return None
+    logger.warning('Chat agent loop finished with no answer provider=%s', provider)
+    await _put_answer_text(callback, full_response, AGENT_EMPTY_ANSWER_MESSAGE)
+    await callback.end()
+    return 'empty_answer'
+
+
 def _refusal_category(response: Any) -> str:
     """Name the policy category behind a refusal, for logs only.
 
@@ -728,7 +760,7 @@ async def _run_anthropic_agent_stream(
         # report the turn as failed instead.
         if response.stop_reason == "refusal":
             logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
-            if not full_response:
+            if not _has_answer(full_response):
                 await _put_answer_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
             await callback.end()
             return 'provider_refusal'
@@ -807,7 +839,7 @@ async def _run_anthropic_agent_stream(
     stats = safety_guard.get_stats()
     logger.info(f"Safety Guard final stats: {stats}")
 
-    await callback.end()
+    return await _end_with_answer_guarantee(callback, full_response, 'anthropic')
 
 
 def _openai_content_text(content: Any) -> str:
@@ -924,7 +956,9 @@ async def _run_openai_agent_stream(
         chat_model = chat_model.bind(tools=tool_schemas, tool_choice='auto', max_completion_tokens=8192)
     except Exception as error:
         await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-        await callback.put_data('\n\nSorry, I encountered an error. Please try again.')
+        # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+        # router would overwrite this apology with its own canned error.
+        await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
         await callback.end()
         return f'provider_{type(error).__name__}'
 
@@ -992,7 +1026,7 @@ async def _run_openai_agent_stream(
                     continue
 
                 await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-                await callback.put_data('\n\nSorry, I encountered an error. Please try again.')
+                await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
 
@@ -1060,7 +1094,7 @@ async def _run_openai_agent_stream(
         messages.extend(tool_results)
 
     logger.info('Safety Guard final stats: %s', safety_guard.get_stats())
-    await callback.end()
+    return await _end_with_answer_guarantee(callback, full_response, 'openai')
 
 
 # ---------------------------------------------------------------------------
