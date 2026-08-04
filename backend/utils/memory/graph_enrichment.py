@@ -215,6 +215,13 @@ def _current_evidence_ids(item: MemoryItem) -> List[str]:
     return sorted(ids)
 
 
+def _normalize_expected_evidence_ids(values: object) -> Optional[List[str]]:
+    """Return a validated evidence fence while retaining a runtime trust boundary."""
+    if not isinstance(values, list) or any(not isinstance(value, str) or not value.strip() for value in values):
+        return None
+    return sorted({value.strip() for value in values if isinstance(value, str)})
+
+
 def _assertion_matches_current_item(
     *, item: MemoryItem, assertion: Any, evidence_ids: List[str], plan: GraphEnrichmentPlan
 ) -> bool:
@@ -290,14 +297,9 @@ def prepare_graph_enrichment(
     except GraphEnrichmentError as exc:
         return _blocked(exc.code, exc.message)
     if expected_evidence_ids is not None:
-        raw_expected_evidence_ids: object = expected_evidence_ids
-        if not isinstance(raw_expected_evidence_ids, list) or any(
-            not isinstance(value, str) or not value.strip() for value in raw_expected_evidence_ids
-        ):
+        normalized_expected_evidence_ids = _normalize_expected_evidence_ids(expected_evidence_ids)
+        if normalized_expected_evidence_ids is None:
             return _blocked(MigrationBlockCode.stale_fence.value, "evidence fence is malformed")
-        normalized_expected_evidence_ids = sorted(
-            {value.strip() for value in raw_expected_evidence_ids if isinstance(value, str)}
-        )
         if evidence_ids != normalized_expected_evidence_ids:
             return _blocked(MigrationBlockCode.stale_fence.value, "evidence fence does not match current item")
     if item.account_generation != account_generation:
