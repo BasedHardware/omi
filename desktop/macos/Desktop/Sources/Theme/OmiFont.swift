@@ -141,17 +141,9 @@ package struct ScaledFontModifier: ViewModifier {
   var tracking: CGFloat?
 
   package func body(content: Content) -> some View {
-    let s = round(size * fontScale)
-    // Prefer Geist (Second Brain design system). Font.geist falls back to system
-    // when the family isn't registered yet (previews / early boot).
-    Group {
-      if design == .monospaced {
-        content.font(.geistMono(s, weight))
-      } else {
-        content.font(.geist(s, weight))
-      }
-    }
-    .tracking(tracking ?? 0)
+    content
+      .font(.system(size: round(size * fontScale), weight: weight, design: design))
+      .tracking(tracking ?? 0)
   }
 }
 

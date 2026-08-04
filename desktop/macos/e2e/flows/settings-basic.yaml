@@ -11,6 +11,10 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiChrome.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiColors.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiFont.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
 preconditions:
   - auth_ready
 
