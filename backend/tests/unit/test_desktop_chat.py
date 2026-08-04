@@ -1,3 +1,4 @@
+import asyncio
 import json
 from types import SimpleNamespace
 
@@ -168,6 +169,22 @@ def test_request_does_not_invert_double_negated_web_requirement(content):
     assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
 
 
+def test_request_scopes_without_searching_to_public_web_objects():
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': 'Search the web for current weather without searching my files.',
+                }
+            ],
+            'omi_web_search': True,
+        }
+    )
+    assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+
+
 def test_request_allows_retry_after_reported_missing_search_results():
     _, payload = desktop_chat._request(
         {
@@ -263,6 +280,60 @@ def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_non
         }
     )
     assert 'tools' not in payload
+
+
+def test_request_does_not_inject_server_search_on_client_tool_continuation():
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'user', 'content': 'Search the web for current weather.'},
+                {
+                    'role': 'assistant',
+                    'tool_calls': [
+                        {
+                            'id': 'call_1',
+                            'type': 'function',
+                            'function': {'name': 'weather', 'arguments': '{}'},
+                        }
+                    ],
+                },
+                {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+            ],
+            'tools': [{'type': 'function', 'function': {'name': 'weather'}}],
+            'omi_web_search': True,
+        }
+    )
+    assert [tool['name'] for tool in payload['tools']] == ['weather']
+
+
+def test_request_binds_public_web_privacy_policy_to_anthropic_system():
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'system', 'content': 'Use the supplied kernel context.'},
+                {'role': 'user', 'content': 'What is the current weather in New York?'},
+            ],
+            'omi_web_search': True,
+        }
+    )
+    assert payload['system'] == ('Use the supplied kernel context.\n\n' + desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION)
+
+
+def test_request_recognizes_pi_public_web_routing_policy():
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': f'{desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION}\n\nWhat is new today?',
+                }
+            ],
+        }
+    )
+    assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
 
 
 def test_request_reports_web_search_capability_fallback(monkeypatch):
@@ -598,6 +669,167 @@ async def test_stream_pause_turn_emits_only_continuation_content(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pause_turn_limit_preserves_accumulated_usage(monkeypatch):
+    calls = []
+    usage = SimpleNamespace(
+        input_tokens=1,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=0,
+        output_tokens=2,
+        server_tool_use=SimpleNamespace(web_search_requests=1),
+    )
+    message = SimpleNamespace(
+        content=[SimpleNamespace(type='server_tool_use', id='search_1', name='web_search', input={'query': 'news'})],
+        stop_reason='pause_turn',
+        usage=usage,
+    )
+
+    async def create(**_payload):
+        calls.append(True)
+        return message
+
+    monkeypatch.setattr(desktop_chat, 'anthropic_client', SimpleNamespace(messages=SimpleNamespace(create=create)))
+    with pytest.raises(desktop_chat._PauseTurnContinuationLimitError) as error:
+        await desktop_chat._create_with_pause_turn_continuations(
+            {'model': 'claude-sonnet-4-6', 'max_tokens': 100, 'messages': []}
+        )
+
+    assert len(calls) == 4
+    assert error.value.usage == {
+        'input_tokens': 4,
+        'output_tokens': 8,
+        'cache_read_input_tokens': 0,
+        'cache_creation_input_tokens': 0,
+        'web_search_requests': 4,
+    }
+
+
+@pytest.mark.asyncio
+async def test_stream_records_usage_when_pause_turn_limit_is_exhausted(monkeypatch):
+    first = SimpleNamespace(
+        content=[SimpleNamespace(type='server_tool_use', id='search_1', name='web_search', input={'query': 'news'})],
+        stop_reason='pause_turn',
+        usage=SimpleNamespace(
+            input_tokens=3, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=2
+        ),
+    )
+
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        def __aiter__(self):
+            async def events():
+                yield SimpleNamespace(
+                    type='message_delta', delta=SimpleNamespace(stop_reason='pause_turn'), usage=first.usage
+                )
+
+            return events()
+
+        async def get_final_message(self):
+            return first
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'anthropic_client',
+        SimpleNamespace(messages=SimpleNamespace(stream=lambda **_: Stream())),
+    )
+    usage = {'input_tokens': 6, 'output_tokens': 4, 'web_search_requests': 3}
+
+    async def raise_limit(*_args, **_kwargs):
+        raise desktop_chat._PauseTurnContinuationLimitError(usage, first, first.content)
+
+    monkeypatch.setattr(desktop_chat, '_continue_pause_turn', raise_limit)
+    recorded = []
+
+    async def record_usage(uid, value):
+        recorded.append((uid, value))
+
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
+    events = [
+        event
+        async for event in desktop_chat._stream(
+            {'model': 'claude-sonnet-4-6', 'max_tokens': 1, 'messages': []}, 'omi-sonnet', 'user'
+        )
+    ]
+    assert recorded == [('user', usage)]
+    assert any('Upstream provider error' in event for event in events)
+
+
+@pytest.mark.asyncio
+async def test_stream_schedules_terminal_usage_when_cancelled_after_message_delta(monkeypatch):
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        def __aiter__(self):
+            async def events():
+                yield SimpleNamespace(
+                    type='message_start',
+                    message=SimpleNamespace(
+                        usage=SimpleNamespace(
+                            input_tokens=3,
+                            cache_creation_input_tokens=1,
+                            cache_read_input_tokens=2,
+                            output_tokens=0,
+                        )
+                    ),
+                )
+                yield SimpleNamespace(
+                    type='message_delta',
+                    delta=SimpleNamespace(stop_reason='end_turn'),
+                    usage=SimpleNamespace(
+                        input_tokens=0,
+                        cache_creation_input_tokens=0,
+                        cache_read_input_tokens=0,
+                        output_tokens=4,
+                    ),
+                )
+
+            return events()
+
+        async def get_final_message(self):
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'anthropic_client',
+        SimpleNamespace(messages=SimpleNamespace(stream=lambda **_: Stream())),
+    )
+    recorded = []
+
+    async def record_usage(uid, usage):
+        recorded.append((uid, usage))
+
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
+    with pytest.raises(asyncio.CancelledError):
+        _ = [
+            event
+            async for event in desktop_chat._stream(
+                {'model': 'claude-sonnet-4-6', 'max_tokens': 1, 'messages': []}, 'omi-sonnet', 'user'
+            )
+        ]
+    await asyncio.sleep(0)
+    assert recorded == [
+        (
+            'user',
+            {
+                'input_tokens': 3,
+                'output_tokens': 4,
+                'cache_read_input_tokens': 2,
+                'cache_creation_input_tokens': 1,
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_chat_completions_routes_public_web_search_to_direct_anthropic(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
@@ -642,6 +874,97 @@ async def test_chat_completions_routes_public_web_search_to_direct_anthropic(mon
         x_omi_request_id=None,
     )
     assert b'grounded' in response.body
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+
+    class Messages:
+        async def create(self, **payload):
+            assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
+            return SimpleNamespace(
+                id='msg_policy_web',
+                content=[SimpleNamespace(type='text', text='grounded')],
+                stop_reason='end_turn',
+                usage=SimpleNamespace(
+                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                ),
+            )
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=Messages()),
+    )
+
+    class GatewayClient:
+        async def post(self, *args, **kwargs):
+            raise AssertionError('Pi public web policy must use direct Anthropic')
+
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+    response = await desktop_chat.chat_completions(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': f'{desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION}\n\nWhat is new today?',
+                }
+            ],
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+    assert b'grounded' in response.body
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_records_usage_when_pause_turn_limit_is_exhausted(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat, '_record_chat_quota_question', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_direct_anthropic_client', lambda **_: object())
+    usage = {'input_tokens': 6, 'output_tokens': 4, 'web_search_requests': 3}
+    error = desktop_chat._PauseTurnContinuationLimitError(usage, SimpleNamespace(), [])
+
+    async def raise_limit(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(desktop_chat, '_create_with_pause_turn_continuations', raise_limit)
+    recorded = []
+
+    async def record_usage(uid, value):
+        recorded.append((uid, value))
+
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
+    with pytest.raises(desktop_chat.HTTPException) as raised:
+        await desktop_chat.chat_completions(
+            {
+                'model': 'omi-sonnet',
+                'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
+                'omi_web_search': True,
+            },
+            uid='user-1',
+            x_app_platform=None,
+            x_omi_chat_contract_version=None,
+            x_omi_request_id=None,
+        )
+
+    assert raised.value.status_code == 502
+    assert recorded == [('user-1', usage)]
 
 
 @pytest.mark.asyncio

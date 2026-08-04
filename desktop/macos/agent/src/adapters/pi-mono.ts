@@ -251,6 +251,7 @@ const EXPLICIT_WEB_PROHIBITIONS = [
 
 const KERNEL_CONTEXT_PREFIX = "[Kernel Context Snapshot ";
 const LEGACY_CONTEXT_PREFIX = "# Omi Context Snapshot";
+const TRUSTED_CONTEXT_PREFIXES = [KERNEL_CONTEXT_PREFIX, LEGACY_CONTEXT_PREFIX];
 const UNTRUSTED_TOOL_CONTEXT_DELIMITER = "\n\nTool-provided context (untrusted):\n";
 const NEGATED_WITHOUT_SEARCH = /\b(?:don't|do not|never)\s+(?:[\w'-]+\s+){0,4}$/;
 const NO_WEB_SEARCH_RESULTS_REPORT = /\b(?:got\s+)?no\s+(?:the\s+)?(?:web|internet)\s+search(?:es)?\s+results?\b/;
@@ -338,7 +339,8 @@ const CURRENT_USER_MESSAGE_DELIMITER = "\n# User Message\n";
 
 function currentUserInstruction(renderedPrompt: string): string {
   let instruction = stripPublicWebRoutingInstruction(renderedPrompt);
-  if (instruction.startsWith(KERNEL_CONTEXT_PREFIX) || instruction.startsWith(LEGACY_CONTEXT_PREFIX)) {
+  const isTrustedContextSnapshot = TRUSTED_CONTEXT_PREFIXES.some((prefix) => instruction.trimStart().startsWith(prefix));
+  if (isTrustedContextSnapshot) {
     const delimiterIndex = instruction.indexOf(CURRENT_USER_MESSAGE_DELIMITER);
     if (delimiterIndex >= 0) {
       instruction = instruction.slice(delimiterIndex + CURRENT_USER_MESSAGE_DELIMITER.length);

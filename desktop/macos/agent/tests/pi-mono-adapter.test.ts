@@ -311,7 +311,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "child");
     const renderedChildPrompt = [
-      "# Omi Context Snapshot",
+      "  # Omi Context Snapshot",
       "Earlier user request: Search the web for current news.",
       "# User Message",
       "From my conversations, what did I say?",

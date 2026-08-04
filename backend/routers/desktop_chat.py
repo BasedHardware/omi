@@ -55,6 +55,13 @@ _WEB_SEARCH_TOOL = {
     'max_uses': 5,
     'allowed_callers': ['direct'],
 }
+_PUBLIC_WEB_ROUTING_INSTRUCTION = (
+    '<omi_retrieval_policy>Web search is required and available for this fresh public request. '
+    'Use a live public-web or search tool before answering. Base time-sensitive claims only on that lookup and '
+    'identify the source. Never say, imply, or hedge that you lack internet, web-search, real-time-data, or tool '
+    'access; if the lookup itself fails, state that the lookup failed instead. Do not use private Omi context unless '
+    'the user explicitly asks for it.</omi_retrieval_policy>'
+)
 
 _EXPLICIT_WEB_REQUESTS = (
     'search the web',
@@ -112,7 +119,6 @@ _EXPLICIT_WEB_PROHIBITIONS = (
     'do not browse online',
     "don't search online",
     'do not search online',
-    'without searching',
     'without searching the web',
     'without searching online',
     'without web search',
@@ -273,6 +279,39 @@ def _explicitly_prohibits_public_web(text: str, *, allow_result_report: bool = F
     return False
 
 
+def _latest_user_message(messages: object) -> Mapping[str, object] | None:
+    if not isinstance(messages, list):
+        return None
+    return next(
+        (message for message in reversed(messages) if isinstance(message, Mapping) and message.get('role') == 'user'),
+        None,
+    )
+
+
+def _last_message_is_user(messages: object) -> bool:
+    return bool(
+        isinstance(messages, list)
+        and messages
+        and isinstance(messages[-1], Mapping)
+        and messages[-1].get('role') == 'user'
+    )
+
+
+def _has_public_web_routing_instruction(messages: object) -> bool:
+    latest_user = _latest_user_message(messages)
+    return bool(latest_user and _text(latest_user.get('content')).lstrip().startswith(_PUBLIC_WEB_ROUTING_INSTRUCTION))
+
+
+def _direct_web_search_requested(body: Mapping[str, object]) -> bool:
+    messages = body.get('messages')
+    return bool(
+        body.get('tool_choice') != 'none'
+        and _last_message_is_user(messages)
+        and not _public_web_is_prohibited(messages)
+        and (body.get('omi_web_search') is True or _has_public_web_routing_instruction(messages))
+    )
+
+
 def _strip_public_web_routing_instruction(text: str) -> str:
     trimmed = text.lstrip()
     opening = '<omi_retrieval_policy>'
@@ -299,12 +338,7 @@ def _trusted_user_instruction(rendered: str) -> str:
 
 
 def _public_web_is_prohibited(messages: object) -> bool:
-    if not isinstance(messages, list):
-        return False
-    latest_user = next(
-        (message for message in reversed(messages) if isinstance(message, Mapping) and message.get('role') == 'user'),
-        None,
-    )
+    latest_user = _latest_user_message(messages)
     if latest_user is None:
         return False
     instruction = _trusted_user_instruction(_text(latest_user.get('content')))
@@ -488,8 +522,17 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
         requested_tool_choice == 'required'
         or (isinstance(requested_tool_choice, Mapping) and requested_tool_choice.get('type') == 'function')
     )
-    web_search_requested = body.get('tool_choice') != 'none' and (
-        not required_client_tools and (body.get('omi_web_search') is True or bool(client_tools))
+    web_search_requested = (
+        body.get('tool_choice') != 'none'
+        and _last_message_is_user(messages)
+        and (
+            not required_client_tools
+            and (
+                body.get('omi_web_search') is True
+                or bool(client_tools)
+                or _has_public_web_routing_instruction(messages)
+            )
+        )
     )
     web_search_supported = not upstream_model.startswith('claude-haiku')
     if web_search_requested and not web_search_supported and not public_web_prohibited:
@@ -506,6 +549,13 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
         and not public_web_prohibited
         and web_search_requested
     )
+    if inject_web_search:
+        existing_system = result.get('system')
+        result['system'] = (
+            f'{existing_system.rstrip()}\n\n{_PUBLIC_WEB_ROUTING_INSTRUCTION}'
+            if isinstance(existing_system, str) and existing_system.strip()
+            else _PUBLIC_WEB_ROUTING_INSTRUCTION
+        )
     if body.get('tool_choice') != 'none' and (isinstance(tools, list) or inject_web_search):
         result['tools'] = ([_WEB_SEARCH_TOOL] if inject_web_search else []) + client_tools
     if choice is not None and result.get('tools'):
@@ -649,6 +699,14 @@ def _merge_usage(total: dict[str, int], usage: object) -> dict[str, int]:
     return total
 
 
+class _PauseTurnContinuationLimitError(RuntimeError):
+    def __init__(self, usage: dict[str, int], message: object, content: list[object]):
+        super().__init__('Anthropic pause_turn continuation limit reached')
+        self.usage = usage
+        self.message = message
+        self.content = content
+
+
 async def _continue_pause_turn(
     payload: dict[str, object],
     message: object,
@@ -675,7 +733,7 @@ async def _continue_pause_turn(
         aggregated_content.extend(_message_content(message))
         if getattr(message, 'stop_reason', None) != 'pause_turn':
             return message, total_usage, aggregated_content
-    raise RuntimeError('Anthropic pause_turn continuation limit reached')
+    raise _PauseTurnContinuationLimitError(total_usage, message, aggregated_content)
 
 
 async def _create_with_pause_turn_continuations(
@@ -732,6 +790,25 @@ async def _record_usage(uid: str, usage: object) -> None:
     )
 
 
+def _consume_task_result(task: asyncio.Task[object]) -> None:
+    if not task.cancelled():
+        task.exception()
+
+
+def _schedule_usage_record(uid: str, usage: object) -> None:
+    task = asyncio.create_task(_record_usage(uid, usage))
+    task.add_done_callback(_consume_task_result)
+
+
+async def _record_usage_resilient(uid: str, usage: object) -> None:
+    task = asyncio.create_task(_record_usage(uid, usage))
+    try:
+        await asyncio.shield(task)
+    except asyncio.CancelledError:
+        task.add_done_callback(_consume_task_result)
+        raise
+
+
 async def _stream(
     payload: dict[str, object],
     public_model: str,
@@ -750,16 +827,20 @@ async def _stream(
             'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}],
         }
     )
+    stream_usage: dict[str, int] = {}
+    message_delta_reason: object = None
+    usage_recorded = False
     try:
         stream_client = client or anthropic_client
         async with stream_client.messages.stream(**payload) as stream:
-            message_delta_reason: object = None
             message_delta_usage: object = None
             next_tool_index = 0
             client_tool_indexes: dict[int, int] = {}
             async for event in stream:
                 event_type = getattr(event, 'type', '')
-                if event_type == 'content_block_delta':
+                if event_type == 'message_start':
+                    _merge_usage(stream_usage, getattr(getattr(event, 'message', None), 'usage', None))
+                elif event_type == 'content_block_delta':
                     delta = cast(Any, getattr(event, 'delta', None))
                     if getattr(delta, 'type', '') == 'text_delta':
                         yield _sse(
@@ -835,6 +916,7 @@ async def _stream(
                 elif event_type == 'message_delta':
                     message_delta_reason = getattr(getattr(event, 'delta', None), 'stop_reason', None)
                     message_delta_usage = getattr(event, 'usage', None)
+                    _merge_usage(stream_usage, message_delta_usage)
             final_message = await stream.get_final_message()
             final_usage = getattr(final_message, 'usage', None) or message_delta_usage
             final_content: list[object] | None = None
@@ -887,6 +969,9 @@ async def _stream(
                         next_tool_index += 1
             else:
                 usage = final_usage
+            if usage is not None:
+                await _record_usage_resilient(uid, usage)
+                usage_recorded = True
             reason = _stop_reason(getattr(final_message, 'stop_reason', None) or message_delta_reason)
             yield _sse(
                 {
@@ -898,7 +983,6 @@ async def _stream(
                 }
             )
             if usage is not None:
-                await _record_usage(uid, usage)
                 yield _sse(
                     {
                         'id': stream_id,
@@ -909,6 +993,14 @@ async def _stream(
                         'usage': _usage(usage),
                     }
                 )
+    except _PauseTurnContinuationLimitError as exc:
+        if not usage_recorded:
+            await _record_usage_resilient(uid, exc.usage)
+        yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}})
+    except asyncio.CancelledError:
+        if stream_usage and not usage_recorded:
+            _schedule_usage_record(uid, stream_usage)
+        raise
     except Exception:
         yield _sse({'error': {'message': 'Upstream provider error', 'type': 'server_error', 'code': 502}})
     yield 'data: [DONE]\n\n'
@@ -1096,10 +1188,7 @@ async def chat_completions(
         return JSONResponse(stub_chat_completions_json(body), headers=stub_headers)
     payload: dict[str, object] = {}
     try:
-        direct_web_search_requested = body.get('omi_web_search') is True and body.get('tool_choice') != 'none'
-        direct_web_search_requested = direct_web_search_requested and not _public_web_is_prohibited(
-            body.get('messages')
-        )
+        direct_web_search_requested = _direct_web_search_requested(body)
         gateway_mode = (
             should_route_features_through_gateway()
             and _uses_managed_chat_agent(body)
@@ -1212,6 +1301,9 @@ async def chat_completions(
         # and validated above, so keep the SDK boundary dynamic like _stream.
         direct_client: Any = get_direct_anthropic_client(byok_api_key=get_byok_key('anthropic'))
         message, usage, content = await _create_with_pause_turn_continuations(payload, client=direct_client)
+    except _PauseTurnContinuationLimitError as exc:
+        await _record_usage(uid, exc.usage)
+        raise HTTPException(status_code=502, detail='Upstream provider error') from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail='Upstream provider error') from exc
     await _record_usage(uid, usage)
