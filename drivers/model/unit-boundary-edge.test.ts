@@ -16,6 +16,12 @@ const claim = (id: string, surface: string): ProvisionalClaim => ({
 const provisionals = [claim("p-alice", "Alice"), claim("p-she", "She"), claim("p-it", "it")];
 const evidence = provisionals.map((item) => ({ evidence_id: item.evidence_refs[0]!, event_revision_id: `event:${item.claim_revision_id}`, source_unit_ref: item.claim_revision_id, range: { start: 0, end: `${item.arguments[0]!.value.value} works on atlas`.length }, excerpt: `${item.arguments[0]!.value.value} works on atlas`, source_identity_ref: null, speaker_rendering: "speaker:owner", source_local_mention_ref: null, state: "active" as const, source_trust: "test", policy_labels: [], source_independence_key: "session" }));
 
+test("unit-boundary request drops ambiguous_surface bookkeeping markers", () => {
+  const provisional = { ...claim("p-alice", "Alice"), ambiguity_markers: ["ambiguous_surface:subject", "one_off", "hedged"] };
+  const request = buildUnitBoundaryRequest(provisional, evidence);
+  expect(request.ambiguity_markers).toEqual(["one_off", "hedged"]);
+});
+
 test("C2 adversarial session transition commits once, persists returned bindings/scope, excludes abstention, and skips resumed sessions", async () => {
   const sqlite = new SqliteLedger(new Database(":memory:"));
   let commitCalls = 0;

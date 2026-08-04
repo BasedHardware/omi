@@ -15,10 +15,12 @@ const fixture = new URL("./corpus.fixture.json", import.meta.url).pathname;
 const dbPath = (prefix = "omi-stage-") => join(mkdtempSync(join(tmpdir(), prefix)), "run.db");
 
 test("subjectPolicyLabels marks owner self-reference, bystander, and generic", () => {
-  const claim = { observed_speaker_slot_id: "speaker", arguments: [{ slot_id: "speaker" }, { slot_id: "person" }], evidence_refs: ["e1"] };
+  const claim = { observed_speaker_slot_id: "speaker", arguments: [{ slot_id: "speaker", surface: "I" }, { slot_id: "person", surface: "Alice" }], evidence_refs: ["e1"] };
   expect(subjectPolicyLabels(claim, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:owner"]);
   expect(subjectPolicyLabels(claim, [{ evidence_id: "e1", source_identity_ref: { local_key: "speaker:s1:0" } }])).toEqual(["subject:bystander"]);
-  expect(subjectPolicyLabels({ ...claim, observed_speaker_slot_id: null }, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:generic"]);
+  expect(subjectPolicyLabels({ ...claim, observed_speaker_slot_id: null, arguments: [{ slot_id: "person", surface: "Alice" }] }, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:generic"]);
+  // Extract often omits the self-ref slot; first-person filler on owner evidence still counts.
+  expect(subjectPolicyLabels({ ...claim, observed_speaker_slot_id: null }, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:owner"]);
 });
 
 test("pipeline runs each selected session once with deterministic fake extraction", async () => {

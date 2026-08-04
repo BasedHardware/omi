@@ -63,11 +63,18 @@ const syntheticClaims = (evidence: readonly ReturnType<typeof ingestConversation
 });
 
 /** Deterministic subject class: owner fills a claim role via self-reference on person:owner evidence. */
+const FIRST_PERSON = /^(i|i'm|i've|i'll|i'd|me|my|mine|myself|we|we're|we've|us|our|ours)$/iu;
+
 export const subjectPolicyLabels = (
-  claim: { observed_speaker_slot_id?: string | null; arguments: readonly { slot_id: string }[]; evidence_refs: readonly string[] },
+  claim: { observed_speaker_slot_id?: string | null; arguments: readonly { slot_id: string; surface?: string | null }[]; evidence_refs: readonly string[] },
   evidence: readonly { evidence_id: string; source_identity_ref?: { local_key: string } | null }[],
 ): readonly string[] => {
-  const speakerSlot = claim.observed_speaker_slot_id;
+  // Extract often omits observed_speaker_slot_id on clear first-person fillers;
+  // recover the self-role when owner evidence carries a pronoun argument.
+  let speakerSlot = claim.observed_speaker_slot_id;
+  if (!speakerSlot || !claim.arguments.some((argument) => argument.slot_id === speakerSlot)) {
+    speakerSlot = claim.arguments.find((argument) => argument.surface && FIRST_PERSON.test(argument.surface.trim()))?.slot_id ?? null;
+  }
   if (!speakerSlot || !claim.arguments.some((argument) => argument.slot_id === speakerSlot)) return ["subject:generic"];
   const byId = new Map(evidence.map((item) => [item.evidence_id, item]));
   for (const ref of claim.evidence_refs) {
