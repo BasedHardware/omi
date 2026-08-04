@@ -19,6 +19,8 @@ enum GoogleOAuthError: LocalizedError {
   case keychainWriteFailed
   case accountUnverified
   case missingScopes([String])
+  case ownerChanged
+  case invalidResponse
 
   var errorDescription: String? {
     switch self {
@@ -52,6 +54,10 @@ enum GoogleOAuthError: LocalizedError {
       return "Google did not return a verified account email."
     case .missingScopes(let scopes):
       return "Google did not grant the required permissions: \(scopes.joined(separator: ", "))."
+    case .ownerChanged:
+      return "The signed-in Omi account changed before Google sign-in finished. Try again."
+    case .invalidResponse:
+      return "Google returned an invalid response. Try again."
     }
   }
 }
@@ -255,13 +261,12 @@ final class LoopbackRedirectServer: @unchecked Sendable {
       return nil
     }
     let parts = firstLine.split(separator: " ")
-    guard parts.count >= 2, parts[0] == "GET", let path = parts[1].split(separator: "?").first
-    else {
+    guard parts.count >= 2, parts[0] == "GET" else {
       return nil
     }
-    let query =
-      parts[1].contains("?")
-      ? String(parts[1].split(separator: "?", maxSplits: 1)[1]) : ""
+    let target = parts[1].split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false)
+    guard let path = target.first else { return nil }
+    let query = target.count == 2 ? String(target[1]) : ""
     var components = URLComponents()
     components.scheme = "http"
     components.host = "127.0.0.1"
@@ -397,8 +402,9 @@ final class GoogleOAuthTokenClient: @unchecked Sendable {
     do {
       let (data, response) = try await session.data(for: request)
       let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-      let json =
-        (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+      guard let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+        throw GoogleOAuthError.invalidResponse
+      }
       if status == 400 || status == 401 {
         if let error = json["error"] as? String, error == "invalid_grant" {
           throw GoogleOAuthError.invalidGrant
@@ -455,6 +461,7 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
   private let tokenClient: GoogleOAuthTokenClient
   private let lock = NSLock()
   private let refreshGate = GoogleOAuthRefreshGate()
+  private let refreshSafetyWindow: TimeInterval = 60
 
   init(
     store: GoogleOAuthStoring,
@@ -467,31 +474,64 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
   func connections() -> [GoogleOAuthConnection] {
     lock.lock()
     defer { lock.unlock() }
-    return store.readAll()
+    do {
+      return try store.readAll(for: UserDefaults.standard.string(forKey: .authUserId))
+    } catch {
+      log("GoogleOAuth: keychain read failed; keeping OAuth path fail-closed")
+      return []
+    }
   }
 
   func primaryConnection() -> GoogleOAuthConnection? {
-    connections().first { !$0.needsReconnect }
+    let active = connections().filter { !$0.needsReconnect }
+    guard !active.isEmpty else { return nil }
+    if let selected = UserDefaults.standard.string(forKey: .googleOauthPrimaryAccount),
+      let connection = active.first(where: { $0.account == selected })
+    {
+      return connection
+    }
+    guard let first = active.first else { return nil }
+    UserDefaults.standard.set(first.account, forKey: .googleOauthPrimaryAccount)
+    return first
   }
 
   func activeConnections() -> [GoogleOAuthConnection] {
-    connections().filter { !$0.needsReconnect }
+    primaryConnection().map { [$0] } ?? []
   }
 
   func connection(account: String?) -> GoogleOAuthConnection? {
     if let account {
       return connections().first { $0.account == account && !$0.needsReconnect }
     }
-    return connections().first { !$0.needsReconnect }
+    return primaryConnection()
+  }
+
+  @discardableResult
+  func selectPrimaryAccount(_ account: String) -> Bool {
+    guard connections().contains(where: { $0.account == account && !$0.needsReconnect }) else {
+      return false
+    }
+    UserDefaults.standard.set(account, forKey: .googleOauthPrimaryAccount)
+    return true
   }
 
   func hasGrants() -> Bool {
-    !connections().isEmpty
+    lock.lock()
+    defer { lock.unlock() }
+    do {
+      return !(try store.readAll(for: UserDefaults.standard.string(forKey: .authUserId))).isEmpty
+    } catch {
+      log("GoogleOAuth: keychain read failed; keeping OAuth path fail-closed")
+      return true
+    }
   }
 
   func connect() async throws -> GoogleOAuthConnection {
     guard let clientId = GoogleOAuth.clientId, !clientId.isEmpty else {
       throw GoogleOAuthError.noClientId
+    }
+    guard let ownerSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      throw GoogleOAuthError.ownerChanged
     }
     let pair = try PkcePair.generate()
     let state = try Self.randomState()
@@ -543,8 +583,15 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     _ = try await GoogleOAuthGmailReader.readRecentEmails(token: token, maxResults: 1)
     _ = try await GoogleOAuthCalendarReader.readEvents(
       token: token, daysBack: 1, daysForward: 1, maxResults: 1)
-    guard upsert(connection) else {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(ownerSnapshot) else {
+      throw GoogleOAuthError.ownerChanged
+    }
+    guard upsert(connection, ownerID: ownerSnapshot.ownerID) else {
       throw GoogleOAuthError.keychainWriteFailed
+    }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(ownerSnapshot) else {
+      _ = remove(account: connection.account, expected: connection, ownerID: ownerSnapshot.ownerID)
+      throw GoogleOAuthError.ownerChanged
     }
     return connection
   }
@@ -553,7 +600,9 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
     guard let stored = connection(account: account) else {
       throw GoogleOAuthError.reconnectRequired
     }
-    if !stored.isExpired { return stored.accessToken }
+    if Date().addingTimeInterval(refreshSafetyWindow) < stored.expiresAt {
+      return stored.accessToken
+    }
     guard let clientId = GoogleOAuth.clientId else {
       throw GoogleOAuthError.reconnectRequired
     }
@@ -564,7 +613,8 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
           try await tokenClient.refresh(stored, clientId: clientId)
         })
       return try lock.withLock {
-        let current = store.readAll().first { Self.sameAccount($0, stored) }
+        let all = try store.readAll(for: UserDefaults.standard.string(forKey: .authUserId))
+        let current = all.first { Self.sameAccount($0, stored) }
         guard let current else {
           throw GoogleOAuthError.reconnectRequired
         }
@@ -574,10 +624,10 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
           }
           return current.accessToken
         }
-        var all = store.readAll()
-        all.removeAll { Self.sameAccount($0, stored) }
-        all.insert(refreshed, at: 0)
-        guard store.write(all) else {
+        var updated = all
+        updated.removeAll { Self.sameAccount($0, stored) }
+        updated.insert(refreshed, at: 0)
+        guard store.write(updated, for: UserDefaults.standard.string(forKey: .authUserId)) else {
           throw GoogleOAuthError.keychainWriteFailed
         }
         return refreshed.accessToken
@@ -589,7 +639,7 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
   }
 
   func disconnect(account: String? = nil) async throws {
-    guard let stored = connection(account: account) else { return }
+    guard let stored = rawConnection(account: account) else { return }
     var failure: Error?
     do {
       try await tokenClient.revoke(stored)
@@ -604,21 +654,29 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
 
   /// Returns false when the keychain write fails, so callers can surface the
   /// failure instead of reporting a connection that was never persisted.
-  func upsert(_ connection: GoogleOAuthConnection) -> Bool {
+  func upsert(_ connection: GoogleOAuthConnection, ownerID: String? = nil) -> Bool {
     guard let account = connection.account, !account.isEmpty else { return false }
     lock.lock()
     defer { lock.unlock() }
-    var all = store.readAll()
+    let scopedOwner = ownerID ?? UserDefaults.standard.string(forKey: .authUserId)
+    guard var all = try? store.readAll(for: scopedOwner) else { return false }
     all.removeAll { $0.account == account }
     all.insert(connection, at: 0)
-    return store.write(all)
+    if ownerID == nil || ownerID == UserDefaults.standard.string(forKey: .authUserId) {
+      if UserDefaults.standard.string(forKey: .googleOauthPrimaryAccount) == nil {
+        UserDefaults.standard.set(account, forKey: .googleOauthPrimaryAccount)
+      }
+    }
+    return store.write(all, for: scopedOwner)
   }
 
   @discardableResult
   func markNeedsReconnect(account: String?, expected: GoogleOAuthConnection? = nil) -> Bool {
     lock.lock()
     defer { lock.unlock() }
-    var all = store.readAll()
+    guard var all = try? store.readAll(for: UserDefaults.standard.string(forKey: .authUserId)) else {
+      return false
+    }
     guard
       let index = all.firstIndex(where: { connection in
         guard Self.sameAccount(connection, account: account) else { return false }
@@ -629,13 +687,16 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
       return false
     }
     all[index].needsReconnect = true
-    return store.write(all)
+    return store.write(all, for: UserDefaults.standard.string(forKey: .authUserId))
   }
 
-  func remove(account: String?, expected: GoogleOAuthConnection? = nil) -> Bool {
+  func remove(
+    account: String?, expected: GoogleOAuthConnection? = nil, ownerID: String? = nil
+  ) -> Bool {
     lock.lock()
     defer { lock.unlock() }
-    var all = store.readAll()
+    let scopedOwner = ownerID ?? UserDefaults.standard.string(forKey: .authUserId)
+    guard var all = try? store.readAll(for: scopedOwner) else { return false }
     guard let index = all.firstIndex(where: { Self.sameAccount($0, account: account) }) else {
       return true
     }
@@ -643,7 +704,18 @@ final class GoogleOAuthConnectionManager: @unchecked Sendable {
       return true
     }
     all.remove(at: index)
-    return store.write(all)
+    if ownerID == nil || ownerID == UserDefaults.standard.string(forKey: .authUserId),
+      UserDefaults.standard.string(forKey: .googleOauthPrimaryAccount) == account
+    {
+      UserDefaults.standard.removeObject(forKey: .googleOauthPrimaryAccount)
+    }
+    return store.write(all, for: scopedOwner)
+  }
+
+  private func rawConnection(account: String?) -> GoogleOAuthConnection? {
+    let all = connections()
+    if let account { return all.first { $0.account == account } }
+    return all.first
   }
 
   private static func sameAccount(_ lhs: GoogleOAuthConnection, _ rhs: GoogleOAuthConnection) -> Bool {

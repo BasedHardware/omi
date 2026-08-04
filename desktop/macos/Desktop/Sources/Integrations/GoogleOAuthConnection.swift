@@ -49,6 +49,8 @@ enum GoogleOAuth {
   ]
   static let clientIdKey = DefaultsKey.googleOauthClientId.rawValue
   static let clientSecretKey = DefaultsKey.googleOauthClientSecret.rawValue
+  static let clientSecretService = DesktopKeychainStore.scopedService("com.omi.desktop.google-oauth-client")
+  static let clientSecretAccount = "client-secret"
 
   static var clientId: String? {
     get { UserDefaults.standard.string(forKey: clientIdKey) }
@@ -57,10 +59,32 @@ enum GoogleOAuth {
 
   static var clientSecret: String? {
     get {
-      let value = UserDefaults.standard.string(forKey: clientSecretKey)
-      return (value?.isEmpty ?? true) ? nil : value
+      if case .found(let value) = DesktopKeychainStore.readString(
+        service: clientSecretService, account: clientSecretAccount)
+      {
+        return value
+      }
+      guard let legacy = UserDefaults.standard.string(forKey: .googleOauthClientSecret), !legacy.isEmpty else {
+        return nil
+      }
+      guard
+        DesktopKeychainStore.setString(
+          legacy, service: clientSecretService, account: clientSecretAccount)
+      else { return nil }
+      UserDefaults.standard.removeObject(forKey: .googleOauthClientSecret)
+      return legacy
     }
-    set { UserDefaults.standard.set(newValue, forKey: clientSecretKey) }
+    set {
+      if let newValue, !newValue.isEmpty {
+        guard
+          DesktopKeychainStore.setString(
+            newValue, service: clientSecretService, account: clientSecretAccount)
+        else { return }
+      } else {
+        DesktopKeychainStore.delete(service: clientSecretService, account: clientSecretAccount)
+      }
+      UserDefaults.standard.removeObject(forKey: .googleOauthClientSecret)
+    }
   }
 }
 
@@ -71,25 +95,34 @@ final class GoogleOAuthStore: GoogleOAuthStoring, @unchecked Sendable {
   // Team+bundle scoped so a dev/ad-hoc build cannot create an item the signed
   // app cannot silently access (and vice versa).
   static let service = DesktopKeychainStore.scopedService("com.omi.desktop.google-oauth")
-  static var account: String {
-    let userID = UserDefaults.standard.string(forKey: .authUserId) ?? "signed-out"
-    return "connections.\(userID)"
+  static func account(for ownerID: String?) -> String {
+    "connections.\(ownerID ?? "signed-out")"
   }
 
-  func readAll() -> [GoogleOAuthConnection] {
-    guard
-      case .found(let raw) = DesktopKeychainStore.readString(
-        service: Self.service, account: Self.account),
-      let data = raw.data(using: .utf8),
-      let decoded = try? JSONDecoder().decode(
-        [GoogleOAuthConnection].self, from: data)
-    else {
+  func readAll(for ownerID: String? = UserDefaults.standard.string(forKey: .authUserId)) throws
+    -> [GoogleOAuthConnection]
+  {
+    switch DesktopKeychainStore.readString(service: Self.service, account: Self.account(for: ownerID)) {
+    case .missing:
       return []
+    case .unavailable(let status):
+      throw GoogleOAuthStoreError.keychainUnavailable(status)
+    case .found(let raw):
+      guard let data = raw.data(using: .utf8) else {
+        throw GoogleOAuthStoreError.invalidData
+      }
+      do {
+        return try JSONDecoder().decode([GoogleOAuthConnection].self, from: data)
+      } catch {
+        throw GoogleOAuthStoreError.invalidData
+      }
     }
-    return decoded
   }
 
-  func write(_ connections: [GoogleOAuthConnection]) -> Bool {
+  func write(
+    _ connections: [GoogleOAuthConnection],
+    for ownerID: String? = UserDefaults.standard.string(forKey: .authUserId)
+  ) -> Bool {
     guard
       let data = try? JSONEncoder().encode(connections),
       let raw = String(data: data, encoding: .utf8)
@@ -99,7 +132,7 @@ final class GoogleOAuthStore: GoogleOAuthStoring, @unchecked Sendable {
     }
     guard
       DesktopKeychainStore.setString(
-        raw, service: Self.service, account: Self.account)
+        raw, service: Self.service, account: Self.account(for: ownerID))
     else {
       log("GoogleOAuthStore: keychain write failed")
       return false
@@ -107,15 +140,20 @@ final class GoogleOAuthStore: GoogleOAuthStoring, @unchecked Sendable {
     return true
   }
 
-  func deleteAll() {
-    DesktopKeychainStore.delete(service: Self.service, account: Self.account)
+  func deleteAll(for ownerID: String? = UserDefaults.standard.string(forKey: .authUserId)) {
+    DesktopKeychainStore.delete(service: Self.service, account: Self.account(for: ownerID))
   }
 }
 
+enum GoogleOAuthStoreError: Error {
+  case keychainUnavailable(OSStatus)
+  case invalidData
+}
+
 protocol GoogleOAuthStoring {
-  func readAll() -> [GoogleOAuthConnection]
+  func readAll(for ownerID: String?) throws -> [GoogleOAuthConnection]
   /// Persist the full connection list. Returns false when the keychain write
   /// fails so callers can surface the failure instead of reporting success
   /// for a grant that was never stored.
-  func write(_ connections: [GoogleOAuthConnection]) -> Bool
+  func write(_ connections: [GoogleOAuthConnection], for ownerID: String?) -> Bool
 }

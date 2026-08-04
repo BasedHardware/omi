@@ -1,0 +1,1 @@
+{"change": "Google OAuth stores credentials in the keychain, pins consent to the initiating Omi account, refreshes before expiry, and lets users choose the account used for reads"}

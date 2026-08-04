@@ -126,6 +126,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var isProbingGmailAccounts = false
   @Published var showingGmailAccountPicker = false
   @Published var gmailAwaitingSelection = false
+  @Published private(set) var gmailAccountSelectionFailed = false
   private var gmailSelectionWaiter: CheckedContinuation<Void, Never>?
   private var gmailSelectionCancelled = false
   private var googleAccountSelectionTask: Task<Void, Never>?
@@ -859,8 +860,13 @@ func loadGmailAccounts() async {
     guard gmailAccounts.isEmpty else { return }
     isProbingGmailAccounts = true
     defer { isProbingGmailAccounts = false }
-    guard let accounts = try? await GmailAccountProbe.availableAccounts() else { return }
-    gmailAccounts = accounts
+    do {
+      gmailAccounts = try await GmailAccountProbe.availableAccounts()
+      gmailAccountSelectionFailed = false
+    } catch {
+      gmailAccountSelectionFailed = true
+      lastActionError = error.localizedDescription
+    }
   }
 
   func selectGmailAccount(_ cookiePath: String?, label: String) {
@@ -872,7 +878,14 @@ func loadGmailAccounts() async {
 
   private func awaitGmailAccountSelectionIfNeeded() async {
     guard !GoogleOAuthConnectionManager.shared.hasGrants() else { return }
-    let accounts = (try? await GmailAccountProbe.availableAccounts()) ?? []
+    let accounts: [GmailAccountOption]
+    do {
+      accounts = try await GmailAccountProbe.availableAccounts()
+    } catch {
+      gmailAccountSelectionFailed = true
+      log("OnboardingPagedIntroCoordinator: Gmail account probe failed: \(error.localizedDescription)")
+      return
+    }
     if let selectedPath = GmailSelectionStore.selectedCookiePath {
       if accounts.contains(where: { $0.id == selectedPath }) { return }
       if accounts.count == 1, let account = accounts.first {
@@ -918,6 +931,13 @@ func loadGmailAccounts() async {
   /// background task: fall back to the automatic (first readable) account.
   func cancelGmailAccountSelection() {
     showingGmailAccountPicker = false
+    GmailSelectionStore.persist(cookiePath: nil, label: "Automatic")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "gmail_account_selection",
+      from: "manual_selection",
+      to: "automatic_profile",
+      reason: "picker_cancelled",
+      outcome: .recovered)
     gmailSelectionCancelled = true
     gmailAwaitingSelection = false
     resumeGmailSelection()
@@ -972,6 +992,10 @@ func loadGmailAccounts() async {
       await accountSelectionTask.value
       await googleInsightGate.waitForCalendar()
       guard !Task.isCancelled else { return }
+      guard !self.gmailAccountSelectionFailed else {
+        await self.markInsightFinished(.gmail)
+        return
+      }
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: 300,

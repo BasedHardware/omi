@@ -70,6 +70,7 @@ enum DefaultsKey: String {
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
   case googleOauthClientId = "googleOauthClientId"
   case googleOauthClientSecret = "googleOauthClientSecret"
+  case googleOauthPrimaryAccount = "googleOauthPrimaryAccount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
 }
