@@ -333,6 +333,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            MEMORY_V3_CURSOR_SECRET:
+              secret: MEMORY_V3_CURSOR_SECRET
+              version: latest
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
               version: latest
@@ -446,6 +449,9 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
               category: rollout
+            MEMORY_V3_CURSOR_SECRET_VERSION:
+              value: dev-v1
+              category: memory_rollout
         backend-sync:
           secrets:
             GOOGLE_CLIENT_SECRET:
