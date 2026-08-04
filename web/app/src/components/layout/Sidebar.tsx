@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   GanttChartSquare,
   House,
-  MessageCircle,
   LayoutGrid,
   ListChecks,
   CalendarDays,
@@ -76,6 +75,9 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
+// Order mirrors the desktop rail (`SidebarNavItem.mainItems`): Home, then
+// Conversations, Memories, Tasks, then the surfaces web adds on top. Chat has
+// no row of its own on either client — it is what Home opens into.
 const navItems: NavItem[] = [
   {
     label: 'Home',
@@ -88,24 +90,9 @@ const navItems: NavItem[] = [
     icon: <GanttChartSquare className="w-5 h-5" />,
   },
   {
-    label: 'Record',
-    href: '/record',
-    icon: <Mic className="w-5 h-5" />,
-  },
-  {
-    label: 'Recaps',
-    href: '/recaps',
-    icon: <CalendarDays className="w-5 h-5" />,
-  },
-  {
-    label: 'Chat',
-    href: '/chat',
-    icon: <MessageCircle className="w-5 h-5" />,
-  },
-  {
-    label: 'My Apps',
-    href: '/my-apps',
-    icon: <LayoutGrid className="w-5 h-5" />,
+    label: 'Memories',
+    href: '/memories',
+    icon: <Brain className="w-5 h-5" />,
   },
   {
     label: 'Tasks',
@@ -113,9 +100,19 @@ const navItems: NavItem[] = [
     icon: <ListChecks className="w-5 h-5" />,
   },
   {
-    label: 'Memories',
-    href: '/memories',
-    icon: <Brain className="w-5 h-5" />,
+    label: 'Recaps',
+    href: '/recaps',
+    icon: <CalendarDays className="w-5 h-5" />,
+  },
+  {
+    label: 'Record',
+    href: '/record',
+    icon: <Mic className="w-5 h-5" />,
+  },
+  {
+    label: 'My Apps',
+    href: '/my-apps',
+    icon: <LayoutGrid className="w-5 h-5" />,
   },
   {
     label: 'Persona',
@@ -249,7 +246,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           willChange: !isDesktop ? 'transform' : undefined,
         }}
         className={cn(
-          'bg-bg-secondary border-r border-white/[0.04]',
+          // The rail sits on the raw window; the inset content pane is the
+          // only card, so it carries no fill or divider of its own on desktop.
+          'bg-bg-secondary lg:bg-transparent',
           'flex flex-col flex-shrink-0',
           // Mobile: fixed overlay with slide transition
           'fixed top-0 left-0 bottom-0 z-50',
@@ -276,7 +275,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 className="object-contain"
               />
               {showText && (
-                <span className="text-[10px] bg-purple-primary/20 text-purple-primary px-1.5 py-0.5 rounded-full font-medium">
+                <span className="text-[10px] bg-white/[0.10] text-text-secondary px-1.5 py-0.5 rounded-full font-medium">
                   Beta
                 </span>
               )}
@@ -384,16 +383,26 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       : undefined
                   }
                   className={cn(
-                    'flex items-center rounded-xl border-l-[3px]',
+                    'relative flex items-center rounded-chip',
                     'transition-colors duration-150',
                     showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
                     isActive
-                      ? 'bg-purple-primary/10 text-purple-primary border-l-[3px] border-purple-primary'
-                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary border-transparent',
+                      ? 'text-bg-primary'
+                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
                     showComingSoon && 'opacity-60',
                   )}
                 >
-                  <span className="flex-shrink-0 relative">
+                  {/* One shared pill for the whole nav: framer-motion matches it
+                      across rows by layoutId, so selecting a page slides the
+                      fill rather than cross-fading two of them. */}
+                  {isActive && (
+                    <motion.span
+                      layoutId="sidebar-active-pill"
+                      transition={{ type: 'spring', stiffness: 520, damping: 42 }}
+                      className="absolute inset-0 rounded-chip bg-text-primary"
+                    />
+                  )}
+                  <span className="flex-shrink-0 relative z-10">
                     {item.icon}
                     {/* Recording badge - pulsing red dot */}
                     {showRecordingBadge && (
@@ -404,10 +413,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     )}
                   </span>
                   {showText && (
-                    <span className="font-medium flex items-center gap-2">
+                    <span className="relative z-10 font-medium flex items-center gap-2">
                       {item.label}
                       {showComingSoon && (
-                        <span className="text-[10px] text-text-quaternary bg-bg-quaternary px-1.5 py-0.5 rounded">
+                        <span
+                          className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded',
+                            isActive
+                              ? 'bg-bg-primary/10 text-bg-primary'
+                              : 'bg-bg-quaternary text-text-quaternary',
+                          )}
+                        >
                           Soon
                         </span>
                       )}
@@ -497,7 +513,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             title={!showText ? 'Feedback' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
+              'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50',
               showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
             )}
           >
@@ -511,7 +527,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             title={!showText ? 'Discord' : undefined}
             className={cn(
               'flex items-center rounded-lg transition-colors',
-              'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary/50',
+              'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary/50',
               showText ? 'gap-3 px-3 py-2' : 'justify-center p-2',
             )}
           >
@@ -604,13 +620,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       'absolute bottom-full left-2 right-2 mb-3',
                       'bg-[#1a1a1f]/95 backdrop-blur-xl',
                       'rounded-2xl overflow-hidden',
-                      'shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_-20px_40px_-10px_rgba(139,92,246,0.15),0_10px_30px_-5px_rgba(0,0,0,0.5)]',
+                      'shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_-20px_40px_-10px_rgba(0,0,0,0.45),0_10px_30px_-5px_rgba(0,0,0,0.5)]',
                     )}
                   >
                     {/* User info header */}
                     <div className="p-4 border-b border-white/[0.04]">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center ring-1 ring-white/[0.08] overflow-hidden">
+                        <div className="w-10 h-10 rounded-xl bg-white/[0.08] flex items-center justify-center ring-1 ring-white/[0.08] overflow-hidden">
                           {user?.photoURL ? (
                             <Image
                               src={user.photoURL}
@@ -654,7 +670,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                             'hover:bg-white/[0.04]',
                           )}
                         >
-                          <item.icon className="w-4 h-4 text-white/40 group-hover:text-purple-400 transition-colors flex-shrink-0" />
+                          <item.icon className="w-4 h-4 text-white/40 group-hover:text-white/80 transition-colors flex-shrink-0" />
                           <span className="text-sm text-white/70 group-hover:text-white/90">
                             {item.label}
                           </span>
@@ -695,7 +711,7 @@ export function MobileMenuButton({ onClick }: { onClick: () => void }) {
       className={cn(
         'lg:hidden p-2 rounded-lg',
         'hover:bg-bg-tertiary transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
       )}
     >
       <Menu className="w-6 h-6 text-text-secondary" />
