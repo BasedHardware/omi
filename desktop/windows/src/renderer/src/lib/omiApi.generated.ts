@@ -866,6 +866,7 @@ export type CandidateStatus = "pending" | "accepted" | "rejected" | "expired";
 export type CandidateSubjectKind = "task" | "workstream";
 
 export interface CanonicalKnowledgeGraphResponse {
+  catalog_nodes?: Array<Record<string, unknown>>;
   edges: Array<Record<string, unknown>>;
   has_more: boolean;
   next_cursor?: string | null;
