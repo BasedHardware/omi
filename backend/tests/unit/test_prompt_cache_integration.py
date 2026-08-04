@@ -22,6 +22,8 @@ from datetime import timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -158,7 +160,12 @@ def _passthrough_tool(target=None, **_kwargs):
 
 
 langchain_tools_mod = _stub_module("langchain_core.tools")
-langchain_tools_mod.tool = _passthrough_tool
+
+
+@pytest.fixture(autouse=True)
+def _patch_langchain_tool(monkeypatch):
+    monkeypatch.setattr(langchain_tools_mod, "tool", _passthrough_tool, raising=False)
+
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
@@ -686,7 +693,7 @@ def test_convert_tools_produces_valid_anthropic_schemas():
     """
     agentic_mod = _get_agentic_module()
 
-    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, include_server_web_search=True)
 
     # +1 for web_search server tool
     assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1, "Should produce one schema per tool + web_search"
@@ -706,6 +713,14 @@ def test_convert_tools_produces_valid_anthropic_schemas():
         assert "defer_loading" not in schema, f"Core tool {schema['name']} should not have defer_loading"
 
 
+def test_convert_tools_does_not_enable_server_web_search_by_default():
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+
+    assert all(schema.get("name") != "web_search" for schema in tool_schemas)
+
+
 def test_convert_tools_defers_app_tools():
     """
     App tools should be marked with defer_loading=True and tool_search_tool
@@ -720,7 +735,9 @@ def test_convert_tools_defers_app_tools():
     mock_app_tool.args_schema = mock_schema
     mock_app_tool.description = "Mock app tool"
 
-    tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
+    tool_schemas, tool_registry = agentic_mod._convert_tools(
+        agentic_mod.CORE_TOOLS, [mock_app_tool], include_server_web_search=True
+    )
 
     # Should have web_search + tool_search_tool + core tools + 1 app tool
     assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 3  # +1 web_search, +1 search tool, +1 app tool
@@ -745,7 +762,7 @@ def test_convert_tools_preserves_core_tool_order():
     """
     agentic_mod = _get_agentic_module()
 
-    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, include_server_web_search=True)
 
     # Skip web_search server tool (first element) when checking core tool order
     schema_names = [s["name"] for s in tool_schemas[1:]]

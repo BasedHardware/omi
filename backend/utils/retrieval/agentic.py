@@ -339,7 +339,7 @@ WEB_SEARCH_TOOL = {
 }
 
 
-def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
+def _convert_tools(core_tools: list, app_tools: list = None, *, include_server_web_search: bool = False) -> tuple:
     """Convert all tools and build name->object registry.
 
     Core tools are always visible to Claude. App tools are marked with
@@ -353,7 +353,8 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     schemas = []
 
     # Add built-in server tools
-    schemas.append(WEB_SEARCH_TOOL)
+    if include_server_web_search:
+        schemas.append(WEB_SEARCH_TOOL)
 
     # Add tool search tool if there are app tools to discover
     if app_tools:

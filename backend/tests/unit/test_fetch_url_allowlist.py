@@ -88,6 +88,10 @@ class TestUrlExtraction:
             'https://example.com/releases/v2.0.?',
         ]
 
+    def test_extract_user_turn_urls_strips_closing_markdown_delimiters_before_sentence_punctuation(self):
+        messages = [_message('Fetch **https://example.com/article**. and [https://example.com/docs].')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/article', 'https://example.com/docs']
+
     def test_extracted_terminal_url_punctuation_matches_literal_allowlist(self):
         url = extract_user_turn_urls([_message('Fetch <https://example.com/releases/v1.0.>')])[0]
         assert is_url_allowlisted(url, [url])
@@ -187,6 +191,10 @@ class TestRuntimeEnforcement:
     def test_is_url_allowlisted_canonicalizes_host_and_default_port(self):
         allowlist = ['HTTPS://Example.COM:443/page']
         assert is_url_allowlisted('https://example.com/page', allowlist)
+
+    def test_is_url_allowlisted_distinguishes_trailing_dot_hostname(self):
+        assert not is_url_allowlisted('https://example.com/page', ['https://example.com./page'])
+        assert is_url_allowlisted('https://example.com./page', ['https://example.com./page'])
 
     def test_is_url_allowlisted_rejects_unlisted_same_host_variants(self):
         allowlist = ['http://example.com/page']

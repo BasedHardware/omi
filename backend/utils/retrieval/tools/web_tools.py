@@ -72,7 +72,7 @@ def _canonical_user_url(
         port = parsed.port
     except ValueError:
         return None
-    hostname = parsed.hostname.rstrip('.').lower()
+    hostname = parsed.hostname.lower()
     default_port = 443 if parsed.scheme.lower() == 'https' else 80
     effective_port = '' if port in (None, default_port) else str(port)
     return parsed.scheme.lower(), hostname, effective_port, parsed.path or '/', parsed.params, parsed.query
@@ -92,7 +92,7 @@ def extract_urls_from_text(
             if _url_has_explicit_delimiters(source, match.start(), match.end()):
                 url = raw_url
             else:
-                delimited_url = _markdown_delimited_url(raw_url, source, match.start())
+                delimited_url = _markdown_delimited_url(url, source, match.start())
                 if delimited_url is not None:
                     url = delimited_url
         if url and url not in seen:
