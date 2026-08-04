@@ -41,7 +41,8 @@ bool canAutoUploadPhoneRecordings({
   required bool useCustomStt,
   required bool autoSyncOfflineRecordings,
   required bool isUploading,
-}) => !useCustomStt && autoSyncOfflineRecordings && !isUploading;
+}) =>
+    !useCustomStt && autoSyncOfflineRecordings && !isUploading;
 
 /// The next offline-fallback recording to auto-upload from [fileNames], or null
 /// when none is eligible. Only auto-marker files qualify (explicit Transcribe
@@ -89,7 +90,8 @@ bool shouldFallbackToPhoneOnDeviceDisconnect({
   required bool supportsBatch,
   required bool batchAlreadyActive,
   required bool isOnDeviceOfflineBatchActive,
-}) => isRecordingDevice && isRecording && supportsBatch && !batchAlreadyActive && !isOnDeviceOfflineBatchActive;
+}) =>
+    isRecordingDevice && isRecording && supportsBatch && !batchAlreadyActive && !isOnDeviceOfflineBatchActive;
 
 /// Maps the capture state machine into the boolean that the fallback predicate
 /// (`shouldFallbackToPhoneOnDeviceDisconnect`) expects for `isRecording`.
@@ -168,8 +170,8 @@ class BatchRecordingInfo {
     final bytesPerSec = codec == BleAudioCodec.pcm16
         ? 32200
         : codec == BleAudioCodec.pcm8
-        ? 16100
-        : 2400;
+            ? 16100
+            : 2400;
     return (sizeBytes / bytesPerSec).round().clamp(1, 24 * 3600);
   }
 }
