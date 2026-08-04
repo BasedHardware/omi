@@ -97,22 +97,34 @@ def _structured_plan(item: MemoryItem, control: MemoryControlState):
     )
 
 
-def main() -> int:
-    args = _arguments()
-    if args.limit < 1 or args.limit > MAX_PAGE_SIZE or args.apply_limit < 1 or args.apply_limit > MAX_PAGE_SIZE:
-        raise SystemExit(f"--limit and --apply-limit must be between 1 and {MAX_PAGE_SIZE}")
-    if args.apply and args.confirm_uid != args.uid:
-        raise SystemExit("--apply requires --confirm-uid to exactly match --uid")
+def run_enrichment(
+    *,
+    uid: str,
+    firestore_project: str,
+    limit: int,
+    apply: bool,
+    confirm_uid: str | None,
+    structured_only: bool,
+    apply_limit: int = 1,
+    db_client: Any | None = None,
+    llm: Any | None = None,
+) -> dict[str, Any]:
+    """Return aggregate outcomes for one bounded historical enrichment page."""
+    if limit < 1 or limit > MAX_PAGE_SIZE or apply_limit < 1 or apply_limit > MAX_PAGE_SIZE:
+        raise ValueError(f"limit and apply_limit must be between 1 and {MAX_PAGE_SIZE}")
+    if apply and confirm_uid != uid:
+        raise ValueError("apply requires confirm_uid to exactly match uid")
 
-    db_client = firestore.Client(project=args.firestore_project)
-    control = _control(args.uid, db_client=db_client)
-    llm = None if args.structured_only else get_llm("memory_l2")
+    db_client = db_client or firestore.Client(project=firestore_project)
+    control = _control(uid, db_client=db_client)
+    if llm is None and not structured_only:
+        llm = get_llm("memory_l2")
     report: Counter[str] = Counter()
     applied = 0
-    for item in _candidates(args.uid, control=control, limit=args.limit, db_client=db_client):
+    for item in _candidates(uid, control=control, limit=limit, db_client=db_client):
         planned = (
             _structured_plan(item, control)
-            if args.structured_only
+            if structured_only
             else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
         )
         if planned is None:
@@ -121,14 +133,14 @@ def main() -> int:
         if planned.status != "ready" or planned.operation is None:
             report[planned.block_code or "blocked"] += 1
             continue
-        if not args.apply:
+        if not apply:
             report["planned"] += 1
             continue
-        if applied >= args.apply_limit:
+        if applied >= apply_limit:
             report["apply_limit_reached"] += 1
             continue
         result = apply_long_term_patch_firestore(
-            uid=args.uid,
+            uid=uid,
             operation_id=planned.operation.operation_id,
             patch_payload=planned.patch_payload,
             proposed_operation=planned.operation,
@@ -139,18 +151,31 @@ def main() -> int:
             applied += 1
         else:
             report[f"apply_{result.status.value}"] += 1
-    print(
-        json.dumps(
-            {
-                "dry_run": not args.apply,
-                "limit": args.limit,
-                "apply_limit": args.apply_limit,
-                "structured_only": args.structured_only,
-                "outcomes": dict(sorted(report.items())),
-            }
+    return {
+        "dry_run": not apply,
+        "limit": limit,
+        "apply_limit": apply_limit,
+        "structured_only": structured_only,
+        "outcomes": dict(sorted(report.items())),
+    }
+
+
+def main() -> int:
+    args = _arguments()
+    try:
+        report = run_enrichment(
+            uid=args.uid,
+            firestore_project=args.firestore_project,
+            limit=args.limit,
+            apply=args.apply,
+            confirm_uid=args.confirm_uid,
+            structured_only=args.structured_only,
+            apply_limit=args.apply_limit,
         )
-    )
-    return 0 if not any(key.startswith("apply_") for key in report) else 1
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(json.dumps(report))
+    return 0 if not any(key.startswith("apply_") for key in report["outcomes"]) else 1
 
 
 if __name__ == "__main__":
