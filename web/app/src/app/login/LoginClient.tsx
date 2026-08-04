@@ -128,18 +128,17 @@ export function LoginClient() {
         className="absolute inset-0 z-0"
       >
         {/*
-          The artwork is square (3840x3840) and the device's optical centre sits
-          ~5% above the image's geometric centre. `object-cover` crops around
-          50% 50%, which put the device high in the frame and clipped its top on
-          short viewports. Biasing the crop upward lands the device on the
-          viewport's centre line. Horizontal stays 50%: the device is already
-          centred there.
+          The device's light sits at image fraction (0.4975, 0.4975) — the
+          artwork's centre. The image is square, so a plain centred `cover` crop
+          lands that light on the viewport's centre point at every size. The
+          mark is pinned to the same point, which is how the ring stays around
+          the light instead of only lining up at one window size.
         */}
         <Image
           src="/login-bg.png"
           alt="Omi Product"
           fill
-          className="object-cover [object-position:50%_44.7%]"
+          className="object-cover object-center"
           priority
         />
         {/* Darker overlay for better contrast */}
@@ -183,35 +182,52 @@ export function LoginClient() {
               {channel && code ? 'Connect your chat' : 'thought to action'}
             </motion.p>
 
-            {/* Logo with glow and hover animation */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.03 }}
-              transition={{ duration: 0.3 }}
-              className="mb-8"
-            >
-              <div className="w-16 h-16 relative group" role="img" aria-label="Omi">
-                {/* Blue glow effect - outer */}
-                <div className="absolute inset-[-10px] rounded-full bg-blue-500/15 blur-xl group-hover:bg-blue-500/25 transition-all duration-500" />
-                {/* Purple glow effect - inner */}
-                <div className="absolute inset-0 rounded-full bg-white/10 blur-lg group-hover:bg-white/15 transition-all duration-500" />
-                {omiMarkDots.map((dot, index) => (
-                  <motion.span
-                    key={`omi-mark-dot-${index}`}
-                    initial={{ opacity: 0, scale: 0.5, x: dot.startX, y: dot.startY }}
-                    animate={{ opacity: 1, scale: 1, x: dot.finalX, y: dot.finalY }}
-                    transition={{
-                      duration: 0.85,
-                      delay: 0.2 + index * 0.06,
-                      ease: 'easeOut',
-                    }}
-                    style={{ marginLeft: -4, marginTop: -4 }}
-                    className="absolute left-1/2 top-1/2 z-10 h-2 w-2 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.85)]"
-                  />
-                ))}
-              </div>
-            </motion.div>
+            {/*
+              The mark is pinned to the viewport centre, not laid out in this
+              column, because that is where the device's light falls under a
+              centred `cover` crop. `fixed` + `-translate-1/2` keeps the ring
+              around the light at any window size; laying it out in flow only
+              ever lined the two up at one specific height. The spacer below
+              holds the column's rhythm so the buttons do not move.
+            */}
+            {/*
+              Positioning lives on this plain wrapper, not on the motion element
+              below. Framer writes `transform` for the scale animation, which
+              overrides Tailwind's `-translate-x-1/2 -translate-y-1/2` and left
+              the ring offset by half its own box.
+            */}
+            <div className="fixed left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileHover={{ scale: 1.03 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div className="w-16 h-16 relative group" role="img" aria-label="Omi">
+                  {/* Blue glow effect - outer */}
+                  <div className="absolute inset-[-10px] rounded-full bg-blue-500/15 blur-xl group-hover:bg-blue-500/25 transition-all duration-500" />
+                  {/* Purple glow effect - inner */}
+                  <div className="absolute inset-0 rounded-full bg-white/10 blur-lg group-hover:bg-white/15 transition-all duration-500" />
+                  {omiMarkDots.map((dot, index) => (
+                    <motion.span
+                      key={`omi-mark-dot-${index}`}
+                      initial={{ opacity: 0, scale: 0.5, x: dot.startX, y: dot.startY }}
+                      animate={{ opacity: 1, scale: 1, x: dot.finalX, y: dot.finalY }}
+                      transition={{
+                        duration: 0.85,
+                        delay: 0.2 + index * 0.06,
+                        ease: 'easeOut',
+                      }}
+                      style={{ marginLeft: -4, marginTop: -4 }}
+                      className="absolute left-1/2 top-1/2 z-10 h-2 w-2 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.85)]"
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Reserves the space the pinned mark used to occupy in flow. */}
+            <div aria-hidden="true" className="h-16 w-16 mb-8" />
 
             {/* Auth buttons */}
             <motion.div
