@@ -717,8 +717,7 @@ jobs:
         self.assertIn("Fail closed for a production first create", deploy)
         self.assertIn("refusing to create a public Cloud Run service outside development", deploy)
         self.assertIn("inputs.environment == 'development' && '--allow-unauthenticated' || ''", deploy)
-        self.assertIn("first_create", promotion)
-        self.assertIn("confirm first-create traffic", promotion)
+        self.assertNotIn("first_create", promotion)
 
     def test_runtime_preflight_never_outputs_fallback_bindings_for_a_live_service(self) -> None:
         contract = fixture_contract()
@@ -809,6 +808,7 @@ jobs:
     def test_runtime_preflight_redacts_bearer_and_quoted_credentials(self) -> None:
         original_run = RUNTIME_PREFLIGHT.subprocess.run
         diagnostics = (
+            ("Bearer ya29.standalone-secret-token", "standalone-secret-token"),
             ("Authorization: Bearer ya29.bearer-secret-token", "bearer-secret-token"),
             ('{"access_token": "ya29.quoted-secret"}', "ya29.quoted-secret"),
             ('{"authorization": "Bearer ya29.quoted-bearer"}', "ya29.quoted-bearer"),

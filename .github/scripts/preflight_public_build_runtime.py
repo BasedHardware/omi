@@ -36,6 +36,7 @@ def _sanitized_gcloud_diagnostic(error: subprocess.CalledProcessError) -> str:
     compact = " ".join(raw.split())
     # gcloud normally omits credentials, but failures can include echoed input
     # from a proxy or wrapper. Do not turn a deployment error into a leak.
+    compact = re.sub(r'(?i)(bearer\s+)[^\s,;"\']+', r"\1[REDACTED]", compact)
     for marker in ("access_token", "authorization", "password", "secret", "token"):
         compact = re.sub(
             rf'(?i)({marker}["\']?\s*[=:]\s*["\']?)' rf'(?:bearer\s+)?' rf'[^\s,;"\']+' rf'(["\']?)',

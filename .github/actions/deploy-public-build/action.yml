@@ -1,5 +1,5 @@
 name: Deploy public build
-description: Build, validate, and promote one browser application through a no-traffic Cloud Run candidate.
+description: Build, validate, and promote one browser application through a Cloud Run candidate; existing services use no-traffic and first creates receive initial traffic.
 inputs:
   target:
     description: Canonical public-build target name declared in config/public-build-contract.json.
@@ -41,7 +41,7 @@ outputs:
     description: Cloud Run region deployed from the checked-in target contract.
     value: ${{ steps.contract.outputs.region }}
   revision:
-    description: Exact no-traffic candidate revision promoted by this action.
+    description: Exact candidate revision promoted by this action; existing services start with no traffic and first creates receive initial traffic.
     value: ${{ steps.candidate.outputs.revision }}
   image:
     description: Immutable image reference promoted by this action.
@@ -196,4 +196,3 @@ runs:
         region: ${{ steps.contract.outputs.region }}
         revision: ${{ steps.candidate.outputs.revision }}
         tag: ${{ steps.candidate.outputs.tag }}
-        first_create: ${{ steps.runtime-preflight.outputs.service_exists != 'true' }}

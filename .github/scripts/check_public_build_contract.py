@@ -580,7 +580,6 @@ def validate_shared_actions(root: Path) -> list[str]:
         "resolve_cloud_run_tagged_url.py",
         "smoke_public_build_browser.py",
         "status.latestCreatedRevisionName",
-        "first_create",
         "gcloud run services update-traffic",
         "--to-revisions=",
     )
