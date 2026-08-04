@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Focused, self-driving harness for spatial overlay anchoring and Claude guidance.
+# Focused, self-driving harness for spatial overlay anchoring and connector guidance.
 #
 # Usage:
 #   cd desktop/macos && ./scripts/spatial-overlay-harness.sh
@@ -28,7 +28,7 @@ Runs:
   1. Swift dogfood/unit tests:
      SpatialOverlayDogfoodHarnessTests, SpatialOverlay*, BrowserAutomationTargetTests
   2. Optional visual dogfood flow through the local automation bridge:
-     e2e/flows/claude-guidance-overlay.yaml
+     e2e/flows/claude-guidance-overlay.yaml (Claude + Screen Recording)
 
 Options:
   --visual       Also run the app-side visual flow against the automation bridge

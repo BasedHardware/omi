@@ -63,6 +63,7 @@ enum DefaultsKey: String {
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -89,6 +90,14 @@ struct ScopedDefaultsKey {
   /// Owner-scoped key for the legacy task-order migration completion marker.
   static func tasksSortOrderMigrated(ownerID: String) -> Self {
     Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
+  }
+
+  static func importConnectorAvailabilityText(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
+  }
+
+  static func importConnectorSourceCount(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
   }
 }
 

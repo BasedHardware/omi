@@ -1686,16 +1686,19 @@ import XCTest
     let tableRendererSource =
       rendererSource
       .components(separatedBy: "private struct OmiMarkdownTableView").last?
-      .components(separatedBy: "private struct CodeBlockCopyButton").first ?? ""
+      .components(separatedBy: "private struct OmiMarkdownCodeBlockView").first ?? ""
     XCTAssertTrue(rendererSource.contains("GridRow(alignment: .top)"))
-    XCTAssertTrue(rendererSource.contains("minHeight: row == 0 ? 40 : 44"))
+    XCTAssertFalse(rendererSource.contains("minHeight: row == 0 ? 40 : 44"))
     XCTAssertTrue(
       rendererSource.contains(
         ".frame(maxHeight: .infinity, alignment: columnAlignment.topAlignment)"
       )
     )
     XCTAssertTrue(rendererSource.contains(".background(rowBackground(row))"))
-    XCTAssertFalse(tableRendererSource.contains("ScrollView"))
+    XCTAssertTrue(tableRendererSource.contains("ScrollView(.horizontal, showsIndicators: true)"))
+    XCTAssertTrue(tableRendererSource.contains(".background(VerticalWheelPassthrough())"))
+    XCTAssertTrue(tableRendererSource.contains(".fixedSize(horizontal: false, vertical: true)"))
+    XCTAssertTrue(tableRendererSource.contains("OmiMarkdownInlineCopyText("))
     XCTAssertFalse(rendererSource.contains("@State private var document"))
     XCTAssertFalse(rendererSource.contains("attrCache"))
     XCTAssertTrue(rendererSource.contains(".textSelection(.disabled)"))
@@ -1798,17 +1801,23 @@ import XCTest
     }
   }
 
-  func testOmiMarkdownProvidesCopyOnlyForCodeBlocks() throws {
+  func testOmiMarkdownProvidesOneClickCopyForInlineAndFencedCode() throws {
     // omi-test-quality: source-inspection -- static contract: the reusable SwiftUI code-block
-    // renderer owns a leaf-state copy affordance; clipboard writes are exercised manually in the app.
+    // renderer owns the copy affordances; clipboard writes are exercised manually in the app.
     let source = try omiMarkdownSource()
 
     XCTAssertTrue(source.contains("private func codeBlockView(_ code: String, language: String?)"))
-    XCTAssertTrue(source.contains("private struct CodeBlockCopyButton: View"))
+    XCTAssertTrue(source.contains("private struct OmiMarkdownCodeBlockView: View"))
+    XCTAssertTrue(source.contains("private struct OmiMarkdownInlineCodeCopyButton: View"))
+    XCTAssertTrue(source.contains("private struct OmiMarkdownCopyToast: View"))
+    XCTAssertTrue(source.contains("Text(\"Copied\")"))
     XCTAssertFalse(source.contains("private struct MarkdownTableCopyButton: View"))
     XCTAssertTrue(source.contains("@State private var copied = false"))
-    XCTAssertTrue(source.contains("NSPasteboard.general.setString(code, forType: .string)"))
-    XCTAssertTrue(source.contains(".help(\"Copy code\")"))
+    XCTAssertTrue(source.contains("OmiMarkdownClipboard.copy(code)"))
+    XCTAssertTrue(source.contains("guard OmiMarkdownClipboard.copy(code) else"))
+    XCTAssertTrue(source.contains(".onTapGesture { copyCode() }"))
+    XCTAssertTrue(source.contains("Click anywhere in the code block to copy"))
+    XCTAssertTrue(source.contains(".accessibilityAction { copyCode() }"))
     XCTAssertFalse(source.contains("Copy table"))
   }
 

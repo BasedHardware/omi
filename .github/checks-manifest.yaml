@@ -470,6 +470,12 @@ checks:
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 02: macOS-only manifest checks must have an executable CI route"
+  - id: desktop-app-icon-bundle
+    command: ["bash", "desktop/macos/tests/test-app-icon-bundle.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/omi_icon.icns", "desktop/macos/tests/test-app-icon-bundle.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "named bundles must keep copying the canonical app icon, and the regression test must remain an executable deterministic check"
   - id: desktop-swift-format-wrapper
     command: ["bash", "desktop/macos/tests/test-swift-format-wrapper.sh"]
     triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
