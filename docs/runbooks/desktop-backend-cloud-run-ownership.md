@@ -1,5 +1,7 @@
 # Desktop backend production ownership
 
+Gemini timeout and provider-attribution incidents use [Desktop Gemini proxy incidents](desktop-gemini-proxy-incidents.md).
+
 ## Authority
 
 `desktop-backend` is a separate Cloud Run release vector from the Python backend

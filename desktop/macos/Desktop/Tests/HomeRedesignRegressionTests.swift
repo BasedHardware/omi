@@ -133,6 +133,99 @@ final class ChatTranscriptWindowTests: XCTestCase {
     XCTAssertEqual(visible.last?.id, "message-500")
   }
 
+  func testCompactPolicyMountsOnlyItsRequestedSuffixAndExpansionKeepsTheBound() {
+    let messages = (0..<120).map { index in
+      ChatMessage(id: "message-\(index)", text: "Message \(index)", sender: .user)
+    }
+    let policy = ChatTranscriptWindow.Policy(initialMessageCount: 12, maximumMessageCount: 40)
+
+    let initial = ChatTranscriptWindow.visibleMessages(
+      in: messages,
+      policy: policy,
+      presentation: .initial
+    )
+    let expanded = ChatTranscriptWindow.visibleMessages(
+      in: messages,
+      policy: policy,
+      presentation: .expanded
+    )
+
+    XCTAssertEqual(initial.map(\.id), (108..<120).map { "message-\($0)" })
+    XCTAssertEqual(expanded.map(\.id), (80..<120).map { "message-\($0)" })
+  }
+
+  func testCompactPolicyOffersAPathToRevealLocallyLoadedRowsWithoutRemoteMore() {
+    let messages = (0..<20).map { index in
+      ChatMessage(id: "message-\(index)", text: "Message \(index)", sender: .user)
+    }
+    let policy = ChatTranscriptWindow.Policy(initialMessageCount: 5, maximumMessageCount: 20)
+
+    XCTAssertEqual(
+      ChatTranscriptWindow.earlierAction(
+        for: messages,
+        policy: policy,
+        presentation: .initial,
+        hasMoreMessages: false
+      ),
+      .revealLocallyLoadedRows
+    )
+    XCTAssertFalse(
+      ChatTranscriptWindow.canRevealLocallyLoadedRows(
+        in: messages,
+        policy: policy,
+        presentation: .expanded
+      )
+    )
+    XCTAssertEqual(
+      ChatTranscriptWindow.earlierAction(
+        for: messages,
+        policy: policy,
+        presentation: .expanded,
+        hasMoreMessages: false
+      ),
+      .none
+    )
+  }
+
+  func testCompactPolicyPreservesRemoteLoadingWhenLocallyLoadedRowsAreAlsoHidden() {
+    let messages = (0..<10).map { index in
+      ChatMessage(id: "message-\(index)", text: "Message \(index)", sender: .user)
+    }
+    let policy = ChatTranscriptWindow.Policy(initialMessageCount: 4, maximumMessageCount: 20)
+
+    XCTAssertEqual(
+      ChatTranscriptWindow.earlierAction(
+        for: messages,
+        policy: policy,
+        presentation: .initial,
+        hasMoreMessages: true
+      ),
+      .revealLocallyLoadedRowsAndLoadMore
+    )
+    XCTAssertEqual(
+      ChatTranscriptWindow.earlierAction(
+        for: messages,
+        policy: policy,
+        presentation: .expanded,
+        hasMoreMessages: true
+      ),
+      .loadMoreRows
+    )
+  }
+
+  func testStandardPolicyRetainsTheExistingNonHomeDefaults() {
+    XCTAssertEqual(
+      ChatTranscriptWindow.visibleMessages(
+        in: [ChatMessage(id: "one", text: "One", sender: .user)],
+        policy: .standard,
+        presentation: .initial
+      ).map(\.id),
+      ["one"]
+    )
+    XCTAssertEqual(ChatTranscriptWindow.Policy.standard.initialMessageCount, 500)
+    XCTAssertEqual(ChatTranscriptWindow.Policy.standard.maximumMessageCount, 500)
+  }
+
   func testStopsLoadingEarlierMessagesAtTheVisibleWindowLimit() {
     let belowLimit = (0..<499).map { ChatMessage(id: "message-\($0)", text: "", sender: .user) }
     let atLimit = (0..<500).map { ChatMessage(id: "message-\($0)", text: "", sender: .user) }

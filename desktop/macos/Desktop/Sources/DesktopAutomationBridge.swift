@@ -2084,7 +2084,8 @@ final class DesktopAutomationActionRegistry {
 
         let status = await AppleNotesReaderService.shared.connectionStatus(
           maxResults: maxResults,
-          selectedFolderPath: selectedFolderPath
+          selectedFolderPath: selectedFolderPath,
+          userInitiated: true
         )
         switch status {
         case .connected(let noteCount, _):
@@ -2479,7 +2480,8 @@ final class DesktopAutomationActionRegistry {
         let events = try await CalendarReaderService.shared.readEvents(
           daysBack: normalized.daysBack,
           daysForward: normalized.daysForward,
-          maxResults: normalized.maxResults
+          maxResults: normalized.maxResults,
+          userInitiated: true
         )
         return [
           "status": "connected",
@@ -2531,7 +2533,8 @@ final class DesktopAutomationActionRegistry {
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: maxResults,
-          query: query
+          query: query,
+          userInitiated: true
         )
         return [
           "status": "connected",

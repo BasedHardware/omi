@@ -55,7 +55,7 @@ def validate_chat_completion_request(
     if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none') and not lane.capabilities.tools:
         raise GatewayCapabilityMismatchError('tool_choice is not supported for this lane', param='tool_choice')
 
-    messages = _validate_messages(request.get('messages'), lane)
+    messages = _validate_messages(request.get('messages'))
     response_format = _validate_response_format(request.get('response_format'), lane)
     forwarded_params = _validate_forwarded_params(request)
 
@@ -67,7 +67,7 @@ def validate_chat_completion_request(
     )
 
 
-def _validate_messages(value: object, lane: LaneConfig) -> list[Mapping[str, Any]]:
+def _validate_messages(value: object) -> list[Mapping[str, Any]]:
     if not isinstance(value, list) or not value:
         raise GatewayInvalidRequestError('messages must be a non-empty list', param='messages')
 
@@ -81,37 +81,35 @@ def _validate_messages(value: object, lane: LaneConfig) -> list[Mapping[str, Any
         role = typed_message.get('role')
         if not isinstance(role, str) or not role:
             raise GatewayInvalidRequestError('message role is required', param=f'{param}.role')
-        if 'content' not in typed_message:
-            raise GatewayInvalidRequestError('message content is required', param=f'{param}.content')
-        _validate_text_content(
-            typed_message.get('content'),
-            param=f'{param}.content',
-            image_input=lane.capabilities.image_input,
-        )
+        content = typed_message.get('content')
+        if 'content' not in typed_message or content is None:
+            if role == 'assistant':
+                typed_message = {**dict(typed_message), 'content': ''}
+            else:
+                raise GatewayInvalidRequestError('message content is required', param=f'{param}.content')
+        _validate_text_content(typed_message.get('content'), param=f'{param}.content')
         validated.append(typed_message)
     return validated
 
 
-def _validate_text_content(content: object, *, param: str, image_input: bool) -> None:
+def _validate_text_content(content: object, *, param: str) -> None:
     if isinstance(content, str):
         return
 
     if (
         isinstance(content, list)
         and content
-        and all(_is_message_content_part(part, image_input=image_input) for part in cast(list[object], content))
+        and all(_is_supported_content_part(part) for part in cast(list[object], content))
     ):
         return
 
-    raise GatewayCapabilityMismatchError('only text message content is supported for this lane', param=param)
+    raise GatewayCapabilityMismatchError(
+        'only text or image_url message content is supported for this lane', param=param
+    )
 
 
-def _is_message_content_part(part: object, *, image_input: bool) -> bool:
-    if _is_text_content_part(part):
-        return True
-    if image_input and _is_image_content_part(part):
-        return True
-    return False
+def _is_supported_content_part(part: object) -> bool:
+    return _is_text_content_part(part) or _is_image_url_content_part(part)
 
 
 def _is_text_content_part(part: object) -> bool:
@@ -125,17 +123,14 @@ def _is_text_content_part(part: object) -> bool:
     return True
 
 
-def _is_image_content_part(part: object) -> bool:
+def _is_image_url_content_part(part: object) -> bool:
     if not isinstance(part, Mapping):
         return False
     typed_part = cast(Mapping[str, object], part)
     if typed_part.get('type') != 'image_url':
         return False
     image_url = typed_part.get('image_url')
-    if not isinstance(image_url, Mapping):
-        return False
-    url = image_url.get('url')
-    return isinstance(url, str) and bool(url.strip())
+    return isinstance(image_url, Mapping) and isinstance(cast(Mapping[str, object], image_url).get('url'), str)
 
 
 def _validate_response_format(value: object, lane: LaneConfig) -> Mapping[str, Any] | None:

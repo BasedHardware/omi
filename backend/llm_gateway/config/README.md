@@ -9,10 +9,8 @@ are applied after the legacy profile is read and affect only `omi:auto:*` gatewa
 Each override names one configured feature, selects its gateway provider/model, and may set
 provider request options such as `reasoning_effort` or Anthropic `effort`.
 
-Generated lanes normally use `openai.chat_completions`. The `chat_agent` Anthropic override is the explicit
-exception: it uses `anthropic.messages` and advertises streaming + tools because `/v1/messages` preserves the native
-Anthropic agentic contract. The OpenAI-compatible resolver rejects that surface, and the Messages router rejects
-OpenAI-compatible lanes; this prevents the same lane from silently claiming two incompatible protocols.
+Generated lanes use `openai.chat_completions`, including `chat_agent`, which is pinned to the OpenAI-compatible Luna
+route. Anthropic Messages remains a separate provider surface for lanes that explicitly select Anthropic.
 
 The generated `openglass` lane also advertises image input. Channel media sends its downloaded image as an OpenAI
 `image_url` content part through that lane; other generated lanes remain text-only.

@@ -304,7 +304,7 @@ def _capabilities_for_feature(feature: str, *, provider: str, surface: str) -> d
         'image_input': feature == 'openglass' and surface == 'openai.chat_completions',
         'streaming': anthropic_messages or provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
         'structured_output': structured_output,
-        'tools': anthropic_messages or feature == 'memory_l2',
+        'tools': anthropic_messages or feature in {'chat_agent', 'memory_l2'},
         'translation': feature == 'translation',
     }
 

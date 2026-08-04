@@ -65,31 +65,33 @@ void main() {
     await SharedPreferencesUtil.init();
     tempDir = Directory.systemTemp.createTempSync('voice_recorder_contention_');
 
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      pathProviderChannel,
-      (MethodCall call) async {
-        if (call.method == 'getApplicationSupportDirectory') return tempDir.path;
-        if (call.method == 'getTemporaryDirectory') return tempDir.path;
-        return null;
-      },
-    );
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      permissionsChannel,
-      (MethodCall call) async {
-        if (call.method == 'checkPermissionStatus') return 1;
-        if (call.method == 'requestPermissions') {
-          return {for (final permission in call.arguments as List<dynamic>) permission: 1};
-        }
-        return null;
-      },
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(pathProviderChannel, (
+      MethodCall call,
+    ) async {
+      if (call.method == 'getApplicationSupportDirectory') return tempDir.path;
+      if (call.method == 'getTemporaryDirectory') return tempDir.path;
+      return null;
+    });
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(permissionsChannel, (
+      MethodCall call,
+    ) async {
+      if (call.method == 'checkPermissionStatus') return 1;
+      if (call.method == 'requestPermissions') {
+        return {for (final permission in call.arguments as List<dynamic>) permission: 1};
+      }
+      return null;
+    });
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(pathProviderChannel, null);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(permissionsChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      pathProviderChannel,
+      null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      permissionsChannel,
+      null,
+    );
     if (tempDir.existsSync()) {
       tempDir.deleteSync(recursive: true);
     }
