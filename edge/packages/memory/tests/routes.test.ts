@@ -39,4 +39,18 @@ describe("memory routes", () => {
       globalThis.fetch = prev;
     }
   });
+
+  it("does not add an item GET route absent from the Python memory surface", async () => {
+    const app = memoryRoutes({
+      features: resolveFeatures({
+        ORIGIN_API_BASE: "https://api.example",
+        FIREBASE_PROJECT_ID: "based-hardware",
+        ADMIN_KEY: "admin-key-123456789",
+      }),
+    });
+    const response = await app.request("https://edge.example/m1", {
+      headers: { Authorization: "Bearer admin-key-123456789u1" },
+    });
+    expect(response.status).toBe(404);
+  });
 });

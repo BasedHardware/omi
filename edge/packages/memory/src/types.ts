@@ -87,7 +87,6 @@ export type ListMemoriesInput = {
 
 export type MemoryStore = {
   list(input: ListMemoriesInput): Promise<MemoryRecord[]>;
-  get(uid: string, id: string): Promise<MemoryRecord | null>;
 };
 
 /** Origin (Python API) adapter — no local DB yet. */
@@ -107,15 +106,6 @@ export function originMemoryStore(originBase: string, authHeader: string): Memor
       if (!res.ok) throw new Error(`origin_memories_${res.status}`);
       const body = (await res.json()) as unknown;
       return normalizeMemoryList(body, input.uid);
-    },
-    async get(uid, id) {
-      const res = await fetch(`${base}/v3/memories/${id}`, {
-        headers: { Authorization: authHeader, "x-omi-edge": "memory-origin" },
-      });
-      if (res.status === 404) return null;
-      if (!res.ok) throw new Error(`origin_memory_${res.status}`);
-      const body = (await res.json()) as Record<string, unknown>;
-      return normalizeMemory(body, uid);
     },
   };
 }

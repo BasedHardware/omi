@@ -53,18 +53,6 @@ export function memoryRoutes(deps: AppDeps) {
     }
   });
 
-  app.get("/:id", async (c) => {
-    const uid = c.get("uid");
-    const store = originMemoryStore(deps.features.originApiBase, c.get("authHeader"));
-    try {
-      const item = await store.get(uid, c.req.param("id"));
-      if (!item) return c.json({ error: "not_found" }, 404);
-      return c.json(item);
-    } catch (e) {
-      return c.json({ error: "get_failed", detail: sanitize(String(e)) }, 502);
-    }
-  });
-
   return app;
 }
 

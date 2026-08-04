@@ -99,36 +99,4 @@ describe("originMemoryStore normalize", () => {
     }
   });
 
-  it("gets a single MemoryDB response", async () => {
-    const prev = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({
-          id: "m1",
-          uid: "u1",
-          content: "likes coffee",
-          created_at: "2026-08-04T12:00:00Z",
-          updated_at: "2026-08-04T12:00:00Z",
-          layer: "archive",
-        }),
-        { status: 200 },
-      )) as unknown as typeof fetch;
-    try {
-      const store = originMemoryStore("https://api.example", "Bearer t");
-      await expect(store.get("u1", "m1")).resolves.toMatchObject({ id: "m1", layer: "archive" });
-    } finally {
-      globalThis.fetch = prev;
-    }
-  });
-
-  it("returns null for a missing memory", async () => {
-    const prev = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
-    try {
-      const store = originMemoryStore("https://api.example", "Bearer t");
-      await expect(store.get("u1", "missing")).resolves.toBeNull();
-    } finally {
-      globalThis.fetch = prev;
-    }
-  });
 });
