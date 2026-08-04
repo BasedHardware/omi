@@ -68,7 +68,7 @@ function RecordPageContent() {
         <header className="flex-shrink-0 flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <Link
-              href="/conversations"
+              href="/timeline"
               className="p-2 rounded-element text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
