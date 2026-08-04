@@ -105,7 +105,7 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
     with _loaded_dependencies() as (dependencies, firebase_auth, _mcp_db, _dev_db):
         calls: list[tuple[Any, Any, tuple[Any, ...], dict[str, Any]]] = []
 
-        def verify_id_token(token: str) -> dict[str, str]:
+        def verify_id_token(token: str, *, check_revoked: bool = False) -> dict[str, str]:
             assert token == 'firebase-token'
             return {'uid': 'user-1'}
 
@@ -295,7 +295,7 @@ def test_firebase_verification_keeps_the_event_loop_responsive() -> None:
             release = threading.Event()
             loop = asyncio.get_running_loop()
 
-            def blocking_verify(_token: str) -> dict[str, str]:
+            def blocking_verify(_token: str, *, check_revoked: bool = False) -> dict[str, str]:
                 loop.call_soon_threadsafe(entered.set)
                 assert release.wait(timeout=2)
                 return {'uid': 'user-1'}
