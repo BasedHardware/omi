@@ -801,11 +801,16 @@ def apply_long_term_patch_transaction(
                 and promotion_metadata is None
                 and patch.result_status == LifecycleState.active
                 and not patch.supersedes
-                and graph_plan.subject_entity_id == existing_item.subject_entity_id
                 and patch.subject_entity_id == graph_plan.subject_entity_id
-                and patch.predicate == graph_plan.predicate == existing_item.predicate
+                and (
+                    not existing_item.subject_entity_id
+                    or graph_plan.subject_entity_id == existing_item.subject_entity_id
+                )
+                and patch.predicate == graph_plan.predicate
+                and (not existing_item.predicate or graph_plan.predicate == existing_item.predicate)
                 and bool(_GRAPH_PREDICATE_RE.fullmatch(graph_plan.predicate))
-                and patch.arguments == graph_plan.arguments == existing_item.arguments
+                and patch.arguments == graph_plan.arguments
+                and (not existing_item.arguments or graph_plan.arguments == existing_item.arguments)
                 and sorted(record.evidence_id for record in evidence)
                 == sorted(record.evidence_id for record in existing_item.evidence)
             ):
