@@ -70,6 +70,26 @@ _EXPLICIT_WEB_PROHIBITIONS = (
     'do not search the web',
     "don't search the internet",
     'do not search the internet',
+    'no web search',
+    'no web searches',
+    'no internet search',
+    'no internet searches',
+    'skip web search',
+    'skip the web search',
+    'skip searching the web',
+    'skip searching online',
+    'avoid web search',
+    'avoid the web search',
+    'avoid searching the web',
+    "don't browse the web",
+    'do not browse the web',
+    "don't browse online",
+    'do not browse online',
+    "don't search online",
+    'do not search online',
+    'without searching',
+    'without searching the web',
+    'without searching online',
     'without web search',
 )
 _EXPLICIT_PRIVATE_CONTEXT = (
@@ -163,17 +183,7 @@ def _normalize_policy_text(text: str) -> str:
 
 
 def _explicitly_prohibits_public_web(text: str) -> bool:
-    for phrase in _EXPLICIT_WEB_PROHIBITIONS:
-        start = text.find(phrase)
-        while start >= 0:
-            suffix = text[start + len(phrase) :].lstrip()
-            if not any(
-                suffix.startswith(noun) and (len(suffix) == len(noun) or not suffix[len(noun)].isalnum())
-                for noun in ('result', 'results')
-            ):
-                return True
-            start = text.find(phrase, start + 1)
-    return False
+    return any(phrase in text for phrase in _EXPLICIT_WEB_PROHIBITIONS)
 
 
 def _strip_public_web_routing_instruction(text: str) -> str:
@@ -196,16 +206,17 @@ def _public_web_is_prohibited(messages: object) -> bool:
     if latest_user is None:
         return False
     rendered = _text(latest_user.get('content'))
-    instruction = rendered.rsplit(_CURRENT_USER_MESSAGE_DELIMITER, 1)[-1]
+    _, delimiter, instruction = rendered.partition(_CURRENT_USER_MESSAGE_DELIMITER)
+    if not delimiter:
+        instruction = rendered
     instruction = _strip_public_web_routing_instruction(instruction)
     normalized = _normalize_policy_text(instruction)
     if not normalized:
         return False
+    explicitly_prohibits_web = _explicitly_prohibits_public_web(normalized)
     explicitly_mentions_web = any(phrase in normalized for phrase in _EXPLICIT_WEB_REQUESTS)
     private_context = any(phrase in normalized for phrase in _EXPLICIT_PRIVATE_CONTEXT)
-    return (explicitly_mentions_web and _explicitly_prohibits_public_web(normalized)) or (
-        private_context and not explicitly_mentions_web
-    )
+    return explicitly_prohibits_web or (private_context and not explicitly_mentions_web)
 
 
 def _user_content(content: object) -> object:
@@ -330,8 +341,9 @@ def _request(body: object) -> tuple[str, dict[str, object]]:
     client_tools = _anthropic_client_tools(tools)
     upstream_model = cast(str, result['model'])
     public_web_prohibited = _public_web_is_prohibited(messages)
+    required_client_tools = body.get('tool_choice') == 'required' and bool(client_tools)
     web_search_requested = body.get('tool_choice') != 'none' and (
-        body.get('omi_web_search') is True or bool(client_tools)
+        not required_client_tools and (body.get('omi_web_search') is True or bool(client_tools))
     )
     web_search_supported = not upstream_model.startswith('claude-haiku')
     if web_search_requested and not web_search_supported and not public_web_prohibited:
@@ -529,6 +541,8 @@ async def _create_with_pause_turn_continuations(
 
 
 async def _record_usage(uid: str, usage: object) -> None:
+    if get_byok_key('anthropic'):
+        return
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
     await run_blocking(
         db_executor,
@@ -560,6 +574,8 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
             message_delta_reason: object = None
             message_delta_usage: object = None
             next_tool_index = 0
+            client_tool_indexes: set[int] = set()
+            server_tool_indexes: set[int] = set()
             async for event in stream:
                 event_type = getattr(event, 'type', '')
                 if event_type == 'content_block_delta':
@@ -575,6 +591,9 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                             }
                         )
                     elif getattr(delta, 'type', '') == 'input_json_delta':
+                        event_index = getattr(event, 'index', 0)
+                        if event_index in server_tool_indexes or event_index not in client_tool_indexes:
+                            continue
                         yield _sse(
                             {
                                 'id': stream_id,
@@ -597,37 +616,39 @@ async def _stream(payload: dict[str, object], public_model: str, uid: str) -> As
                                 ],
                             }
                         )
-                elif (
-                    event_type == 'content_block_start'
-                    and getattr(getattr(event, 'content_block', None), 'type', '') == 'tool_use'
-                ):
+                elif event_type == 'content_block_start':
                     block = event.content_block
+                    block_type = getattr(block, 'type', '')
                     tool_index = getattr(event, 'index', 0)
-                    next_tool_index = max(next_tool_index, tool_index + 1)
-                    yield _sse(
-                        {
-                            'id': stream_id,
-                            'object': 'chat.completion.chunk',
-                            'created': created,
-                            'model': public_model,
-                            'choices': [
-                                {
-                                    'index': 0,
-                                    'delta': {
-                                        'tool_calls': [
-                                            {
-                                                'index': tool_index,
-                                                'id': block.id,
-                                                'type': 'function',
-                                                'function': {'name': block.name, 'arguments': ''},
-                                            }
-                                        ]
-                                    },
-                                    'finish_reason': None,
-                                }
-                            ],
-                        }
-                    )
+                    if block_type in {'server_tool_use', 'web_search_tool_result'}:
+                        server_tool_indexes.add(tool_index)
+                    elif block_type == 'tool_use':
+                        client_tool_indexes.add(tool_index)
+                        next_tool_index = max(next_tool_index, tool_index + 1)
+                        yield _sse(
+                            {
+                                'id': stream_id,
+                                'object': 'chat.completion.chunk',
+                                'created': created,
+                                'model': public_model,
+                                'choices': [
+                                    {
+                                        'index': 0,
+                                        'delta': {
+                                            'tool_calls': [
+                                                {
+                                                    'index': tool_index,
+                                                    'id': block.id,
+                                                    'type': 'function',
+                                                    'function': {'name': block.name, 'arguments': ''},
+                                                }
+                                            ]
+                                        },
+                                        'finish_reason': None,
+                                    }
+                                ],
+                            }
+                        )
                 elif event_type == 'message_delta':
                     message_delta_reason = getattr(getattr(event, 'delta', None), 'stop_reason', None)
                     message_delta_usage = getattr(event, 'usage', None)

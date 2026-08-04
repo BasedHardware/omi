@@ -61,7 +61,46 @@ def test_request_keeps_private_turns_off_public_web_search():
     _, payload = desktop_chat._request(
         {
             'model': 'omi-sonnet',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': (
+                        'Current turn:\n# User Message\n'
+                        'From my conversations, what did I say?\n# User Message\nWhat is the weather?'
+                    ),
+                }
+            ],
+            'omi_web_search': True,
+        }
+    )
+    assert 'tools' not in payload
+
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': "Don't use web search; answer from memory."}],
+            'omi_web_search': True,
+        }
+    )
+    assert 'tools' not in payload
+
+
+@pytest.mark.parametrize(
+    'content',
+    [
+        'No web search; answer from memory.',
+        'Skip the web search and answer directly.',
+        'Avoid searching the web for this.',
+        "Don't browse the web; answer from memory.",
+        'Do not search online.',
+        "Don't use web search results; answer from memory.",
+    ],
+)
+def test_request_recognizes_common_public_web_opt_outs(content):
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': content}],
             'omi_web_search': True,
         }
     )
@@ -74,6 +113,17 @@ def test_request_adds_web_search_alongside_client_tools_but_not_for_haiku_or_non
         {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'Plan my day'}], 'tools': client_tools}
     )
     assert [tool['name'] for tool in payload['tools']] == ['web_search', 'weather']
+
+    _, payload = desktop_chat._request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'Use the weather tool'}],
+            'tools': client_tools,
+            'tool_choice': 'required',
+        }
+    )
+    assert [tool['name'] for tool in payload['tools']] == ['weather']
+    assert payload['tool_choice'] == {'type': 'any'}
 
     _, payload = desktop_chat._request(
         {
@@ -159,6 +209,7 @@ async def test_record_usage_charges_web_search_requests(monkeypatch):
         calls.append((function, args))
 
     monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     await desktop_chat._record_usage(
         'user',
         {
@@ -168,6 +219,19 @@ async def test_record_usage_charges_web_search_requests(monkeypatch):
         },
     )
     assert calls[0][1][-1] == 0.03
+
+
+@pytest.mark.asyncio
+async def test_record_usage_skips_byok_requests(monkeypatch):
+    calls = []
+
+    async def run_blocking(_, function, *args):
+        calls.append((function, args))
+
+    monkeypatch.setattr(desktop_chat, 'run_blocking', run_blocking)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: 'anthropic-key')
+    await desktop_chat._record_usage('user', {'input_tokens': 3, 'web_search_requests': 1})
+    assert calls == []
 
 
 @pytest.mark.asyncio
@@ -219,6 +283,81 @@ async def test_stream_emits_openai_terminal_event(monkeypatch):
     ]
     assert json.loads(events[1][6:])['choices'][0]['delta'] == {'content': 'hello'}
     assert events[-1] == 'data: [DONE]\n\n'
+
+
+@pytest.mark.asyncio
+async def test_stream_does_not_forward_server_tool_input_deltas(monkeypatch):
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        def __aiter__(self):
+            async def events():
+                yield SimpleNamespace(
+                    type='content_block_start',
+                    index=0,
+                    content_block=SimpleNamespace(type='server_tool_use', id='search_1', name='web_search'),
+                )
+                yield SimpleNamespace(
+                    type='content_block_delta',
+                    index=0,
+                    delta=SimpleNamespace(type='input_json_delta', partial_json='{"query":"news"}'),
+                )
+                yield SimpleNamespace(
+                    type='content_block_start',
+                    index=1,
+                    content_block=SimpleNamespace(type='tool_use', id='call_1', name='weather'),
+                )
+                yield SimpleNamespace(
+                    type='content_block_delta',
+                    index=1,
+                    delta=SimpleNamespace(type='input_json_delta', partial_json='{"city":"NYC"}'),
+                )
+                yield SimpleNamespace(
+                    type='message_delta',
+                    delta=SimpleNamespace(stop_reason='tool_use'),
+                    usage=SimpleNamespace(
+                        input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                    ),
+                )
+
+            return events()
+
+        async def get_final_message(self):
+            return SimpleNamespace(
+                content=[],
+                stop_reason='tool_use',
+                usage=SimpleNamespace(
+                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
+                ),
+            )
+
+    monkeypatch.setattr(
+        desktop_chat, 'anthropic_client', SimpleNamespace(messages=SimpleNamespace(stream=lambda **_: Stream()))
+    )
+
+    async def record_usage(*_):
+        return None
+
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
+    events = [
+        event
+        async for event in desktop_chat._stream(
+            {'model': 'claude-sonnet-4-6', 'max_tokens': 1, 'messages': []}, 'omi-sonnet', 'user'
+        )
+    ]
+    payloads = [json.loads(event[6:]) for event in events if event.startswith('data: {')]
+    tool_calls = [
+        call
+        for payload in payloads
+        if payload.get('choices')
+        for call in payload['choices'][0].get('delta', {}).get('tool_calls', [])
+    ]
+    assert [call['index'] for call in tool_calls] == [1, 1]
+    assert all(call.get('id') != 'search_1' for call in tool_calls)
 
 
 @pytest.mark.asyncio
