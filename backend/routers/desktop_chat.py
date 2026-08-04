@@ -5,7 +5,7 @@ import base64
 import json
 import re
 import time
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -815,6 +815,7 @@ async def _stream(
     uid: str,
     *,
     client: Any | None = None,
+    on_upstream_accepted: Callable[[], Awaitable[None]] | None = None,
 ) -> AsyncIterator[str]:
     stream_id = f'chatcmpl-{uuid4()}'
     created = int(time.time())
@@ -833,6 +834,10 @@ async def _stream(
     try:
         stream_client = client or anthropic_client
         async with stream_client.messages.stream(**payload) as stream:
+            # Quota is charged once the provider accepts the turn, mirroring the
+            # gateway lane: a request the provider rejects costs the user nothing.
+            if on_upstream_accepted is not None:
+                await on_upstream_accepted()
             message_delta_usage: object = None
             next_tool_index = 0
             client_tool_indexes: dict[int, int] = {}
@@ -1228,13 +1233,13 @@ async def chat_completions(
                     'X-Request-Id': request_id,
                 },
             )
-        await _record_chat_quota_question(uid, request_id, x_app_platform)
         return StreamingResponse(
             _stream(
                 payload,
                 public_model,
                 uid,
                 client=get_direct_anthropic_client(byok_api_key=get_byok_key('anthropic')),
+                on_upstream_accepted=lambda: _record_chat_quota_question(uid, request_id, x_app_platform),
             ),
             media_type='text/event-stream',
             headers={
@@ -1243,8 +1248,6 @@ async def chat_completions(
                 'X-Request-Id': request_id,
             },
         )
-    if not gateway_mode:
-        await _record_chat_quota_question(uid, request_id, x_app_platform)
     if gateway_mode:
         usage_token = set_usage_context(uid, 'chat_agent')
         started_at = time.monotonic()
@@ -1306,6 +1309,7 @@ async def chat_completions(
         raise HTTPException(status_code=502, detail='Upstream provider error') from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail='Upstream provider error') from exc
+    await _record_chat_quota_question(uid, request_id, x_app_platform)
     await _record_usage(uid, usage)
     return JSONResponse(
         _message_response(message, public_model, content_override=content, usage_override=usage),
