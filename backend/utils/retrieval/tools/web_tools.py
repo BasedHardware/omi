@@ -43,6 +43,15 @@ def _url_has_explicit_delimiters(text: str, start: int, end: int) -> bool:
     return (text[start - 1], text[end]) in {('<', '>'), ('`', '`'), ('(', ')')}
 
 
+def _parenthesized_url(raw_url: str, text: str, start: int) -> Optional[str]:
+    if start == 0 or text[start - 1] != '(' or not raw_url.endswith(')'):
+        return None
+    url_without_closing_delimiter = raw_url[:-1]
+    if url_without_closing_delimiter.count('(') != url_without_closing_delimiter.count(')'):
+        return None
+    return url_without_closing_delimiter
+
+
 def _canonical_user_url(
     url: str, *, strip_trailing_punctuation: bool = True
 ) -> Optional[Tuple[str, str, str, str, str, str]]:
@@ -71,11 +80,14 @@ def extract_urls_from_text(
     source = text or ''
     for match in USER_URL_PATTERN.finditer(source):
         raw_url = match.group(0).strip()
-        url = (
-            raw_url
-            if preserve_terminal_punctuation and _url_has_explicit_delimiters(source, match.start(), match.end())
-            else normalize_user_url(raw_url)
-        )
+        url = normalize_user_url(raw_url)
+        if preserve_terminal_punctuation:
+            if _url_has_explicit_delimiters(source, match.start(), match.end()):
+                url = raw_url
+            else:
+                parenthesized_url = _parenthesized_url(raw_url, source, match.start())
+                if parenthesized_url is not None:
+                    url = parenthesized_url
         if url and url not in seen:
             seen.add(url)
             urls.append(url)

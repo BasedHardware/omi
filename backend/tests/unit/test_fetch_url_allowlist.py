@@ -65,6 +65,18 @@ class TestUrlExtraction:
         messages = [_message('Fetch <https://example.com/releases/v1.0.>')]
         assert extract_user_turn_urls(messages) == ['https://example.com/releases/v1.0.']
 
+    def test_extract_user_turn_urls_preserves_terminal_url_punctuation_in_parentheses(self):
+        messages = [_message('Fetch (https://example.com/releases/v1.0.)')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/releases/v1.0.']
+
+    def test_extract_user_turn_urls_strips_unwrapped_sentence_punctuation(self):
+        messages = [_message('Fetch https://example.com/article.!?')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/article']
+
+    def test_extract_user_turn_urls_preserves_all_terminal_url_punctuation_in_backticks(self):
+        messages = [_message('Fetch `https://example.com/releases/v1.0.!?`')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/releases/v1.0.!?']
+
     def test_extracted_terminal_url_punctuation_matches_literal_allowlist(self):
         url = extract_user_turn_urls([_message('Fetch <https://example.com/releases/v1.0.>')])[0]
         assert is_url_allowlisted(url, [url])
