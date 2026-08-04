@@ -2,6 +2,7 @@
 ///
 /// Pure predicates/delays so the "connecting → timeout → disconnected → retry"
 /// contract can be unit-tested without CoreBluetooth or NativeBleTransport.
+library;
 
 /// Matches [NativeBleTransport.connect] device-ready wait.
 const Duration kBleDeviceReadyTimeout = Duration(seconds: 60);
