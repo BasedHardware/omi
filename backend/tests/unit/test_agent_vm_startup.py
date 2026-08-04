@@ -13,8 +13,7 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     for name, body in {
-        "curl": "printf '%s\\n' omi-token\n",
-        "gcloud": "printf 'gcloud %s\\n' \"$*\" >> \"$COMMAND_LOG\"\ncase \"$1 $2\" in\n  'secrets versions') printf '%s\\n' secret-value ;;\nesac\n",
+        "curl": "case \"$*\" in\n  *'/instance/attributes/auth-token'*) printf '%s\\n' omi-token ;;\n  *'/instance/service-accounts/default/token'*) printf '%s\\n' '{\"access_token\":\"metadata-token\"}' ;;\n  *'/project/project-id'*) printf '%s\\n' based-hardware-dev ;;\n  *'secretmanager.googleapis.com'*) printf '%s\\n' '{\"payload\":{\"data\":\"c2VjcmV0LXZhbHVl\"}}' ;;\n  *) exit 1 ;;\nesac\n",
         "docker": "printf 'docker %s\\n' \"$*\" >> \"$COMMAND_LOG\"\n",
     }.items():
         path = bin_dir / name
@@ -24,6 +23,7 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     environment = {
         **os.environ,
         "AGENT_VM_IMAGE": "gcr.io/project/agent-vm:abcdef0",
+        "AGENT_VM_GEMINI_SECRET_NAME": "GEMINI_API_KEY",
         "AGENT_VM_DATA_DIR": bash_path(tmp_path / "data", cwd=ROOT),
         "COMMAND_LOG": bash_path(log, cwd=ROOT),
         "OMI_TEST_FAKE_BIN": bash_path(bin_dir, cwd=ROOT),
@@ -41,9 +41,8 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     )
 
     commands = log.read_text(encoding="utf-8")
-    assert "gcloud secrets versions access latest --secret=DESKTOP_ANTHROPIC_API_KEY" in commands
-    assert "gcloud secrets versions access latest --secret=GEMINI_API_KEY" in commands
-    assert "gcloud auth configure-docker gcr.io --quiet" in commands
+    assert "gcloud" not in commands
+    assert "docker login --username oauth2accesstoken --password-stdin https://gcr.io" in commands
     assert "docker pull gcr.io/project/agent-vm:abcdef0" in commands
     assert "--env ANTHROPIC_API_KEY=secret-value" in commands
     assert "--env AUTH_TOKEN=omi-token" in commands
@@ -53,3 +52,15 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
         "--env PLAYWRIGHT_MCP_ARGS=[\"--user-data-dir\", \"/app/chrome-profile\", \"--headless\", \"--no-sandbox\"]"
         in commands
     )
+
+
+def test_startup_publishers_substitute_only_the_image() -> None:
+    workflows = {
+        "desktop_backend_auto_dev.yml": "GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com",
+        "desktop_backend_prod.yml": "GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com",
+    }
+    for workflow, service_account in workflows.items():
+        content = (ROOT.parent / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
+        assert "envsubst '$AGENT_VM_IMAGE $AGENT_VM_GEMINI_SECRET_NAME' < backend/agent_vm/startup.sh" in content
+        assert "envsubst < backend/agent_vm/startup.sh" not in content
+        assert service_account in content
