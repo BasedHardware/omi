@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffService.swift
+  s_d6e5378f930d41::t_a13de0e31ebb43 125-131,136-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "90c4581cd280816773607c1542b603db55b2cf50",
+  "prompts": {},
+  "sessions": {
+    "s_d6e5378f930d41": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2b7e25bc-8c3d-45db-806f-c7243c778fb2",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
