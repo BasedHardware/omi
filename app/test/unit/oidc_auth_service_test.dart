@@ -60,17 +60,19 @@ class _OidcEnvFields implements EnvFields {
 /// and returns canned responses. Subclasses the concrete client (its methods
 /// are plain instance methods, so overriding is a clean seam).
 class _FakeAppAuth extends FlutterAppAuth {
-  _FakeAppAuth({this.tokenResponse});
+  _FakeAppAuth({this.tokenResponse, this.tokenError});
 
   int tokenCalls = 0;
   int endSessionCalls = 0;
   TokenRequest? lastTokenRequest;
   TokenResponse? tokenResponse;
+  Object? tokenError;
 
   @override
   Future<TokenResponse> token(TokenRequest request) async {
     tokenCalls++;
     lastTokenRequest = request;
+    if (tokenError != null) throw tokenError!;
     return tokenResponse!;
   }
 
@@ -247,6 +249,33 @@ void main() {
 
       expect(outcome.ok, isTrue);
       expect(appAuth.tokenCalls, 1, reason: 'forced refresh bypasses the fast-path');
+    });
+  });
+
+  group('refresh failure classification (transient vs definitive)', () {
+    final DateTime now = DateTime.utc(2026, 1, 1, 12, 0, 0);
+
+    Future<OidcLoginOutcome> refreshWithError(Object error) async {
+      final prefs = SharedPreferencesUtil();
+      prefs.uid = 'user-fail';
+      prefs.authToken = 'access-expired';
+      prefs.tokenExpirationTime = now.subtract(const Duration(minutes: 1)).millisecondsSinceEpoch;
+      final appAuth = _FakeAppAuth(tokenError: error);
+      final storage = _FakeSecureStorage()..store[_refreshTokenPrefKey] = 'rt-1';
+      final service = OidcAuthService.forTest(appAuth: appAuth, secureStorage: storage, clock: () => now);
+      return service.refresh(forceRefresh: true);
+    }
+
+    test('a network-class failure is transient (retry, never a terminal logout)', () async {
+      final outcome = await refreshWithError(Exception('Connection refused'));
+      expect(outcome.ok, isFalse);
+      expect(outcome.transient, isTrue);
+    });
+
+    test('an invalid_grant is definitive (drop the refresh token)', () async {
+      final outcome = await refreshWithError(Exception('invalid_grant: refresh token revoked'));
+      expect(outcome.ok, isFalse);
+      expect(outcome.transient, isFalse);
     });
   });
 

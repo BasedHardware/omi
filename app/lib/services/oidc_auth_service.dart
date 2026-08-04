@@ -216,7 +216,7 @@ class OidcAuthService {
         );
       } catch (e, s) {
         debugPrint('OIDC refresh failed: $e\n$s');
-        return OidcLoginOutcome.failure('OIDC refresh failed: $e');
+        return OidcLoginOutcome.failure('OIDC refresh failed: $e', transient: _isTransientRefreshError(e));
       }
     });
   }
@@ -306,11 +306,34 @@ class OidcLoginOutcome {
   final String? uid;
   final String? error;
 
+  /// True when the failure is likely temporary (network/timeout) rather than a definitive
+  /// invalid/expired refresh token. Callers use it to retry instead of forcing a re-login.
+  final bool transient;
+
   const OidcLoginOutcome.success(this.uid)
       : ok = true,
-        error = null;
+        error = null,
+        transient = false;
 
-  const OidcLoginOutcome.failure(this.error)
+  const OidcLoginOutcome.failure(this.error, {this.transient = false})
       : ok = false,
         uid = null;
+}
+
+/// Classify a caught refresh error: network/timeout is transient (retry, keep session); a clear
+/// OAuth grant rejection is definitive (drop the refresh token). Unknown errors default to transient
+/// so an ambiguous blip never logs the user out.
+bool _isTransientRefreshError(Object e) {
+  final text = e.toString().toLowerCase();
+  const definitive = [
+    'invalid_grant',
+    'invalid_token',
+    'unauthorized_client',
+    'invalid_client',
+    'invalid_request',
+    'token_expired',
+    'invalid refresh',
+  ];
+  if (definitive.any(text.contains)) return false;
+  return true;
 }

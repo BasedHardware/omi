@@ -72,7 +72,13 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
       // OIDC (ADR-0038): refresh through the OIDC provider, not Firebase.
       final outcome = await OidcAuthService.instance.refresh();
       if (!outcome.ok && expiry.isBefore(DateTime.now())) {
-        // Expired with no usable refresh token: drop it, forcing re-login.
+        if (outcome.transient) {
+          // Refresh failed for a transient reason (e.g. network) and the cached token is already
+          // expired. Keep the session and signal a retryable failure instead of a terminal logout;
+          // the next attempt can succeed.
+          throw AuthTokenUnavailableException(const AuthTokenTransientFailure(failureClass: 'oidc_refresh_transient'));
+        }
+        // Definitive failure (invalid/expired refresh token): drop it, forcing re-login.
         SharedPreferencesUtil().authToken = '';
       }
       hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
