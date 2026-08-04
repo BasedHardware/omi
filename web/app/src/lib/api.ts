@@ -667,42 +667,6 @@ export async function getGoalAdvice(id: string): Promise<string> {
 }
 
 // ============================================================================
-// Persona API
-// ============================================================================
-
-/**
- * The signed-in user's persona, creating one if they have none.
- *
- * `/v1/user/persona` is get-or-create; plain `GET /v1/personas` 404s for a user
- * who has never had one, which would render as an error rather than an empty
- * state.
- */
-export async function getOrCreatePersona(): Promise<App> {
-  return fetchWithAuth<App>('/v1/user/persona', { method: 'POST' });
-}
-
-export interface UpdatePersonaParams {
-  name?: string;
-  username?: string;
-  description?: string;
-}
-
-/**
- * Update the signed-in user's persona.
- *
- * `PATCH /v1/personas/{id}` is multipart: the JSON body travels in a
- * `persona_data` form field alongside an optional image. Only the fields sent
- * are touched — the route no longer re-claims the handle or regenerates the
- * description for fields the caller omitted.
- */
-export async function updatePersona(
-  id: string,
-  updates: UpdatePersonaParams,
-): Promise<void> {
-  const form = new FormData();
-  form.append('persona_data', JSON.stringify(updates));
-  await fetchWithAuth(`/v1/personas/${id}`, { method: 'PATCH', body: form });
-}
 
 /** Daily, weekly, and overall task-completion scores. */
 export async function getScores(date?: string): Promise<Scores> {
