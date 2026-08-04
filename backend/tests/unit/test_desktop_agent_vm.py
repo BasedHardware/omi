@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 
@@ -47,6 +48,7 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda _project: "image")
     monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
+    monkeypatch.setattr(desktop_agent_vm, "_service_account", lambda: "service-account")
     monkeypatch.setattr(desktop_agent_vm, "_claim_vm_if_allowed", lambda _uid, _candidate: (vm, False))
     tasks = BackgroundTasks()
 
@@ -73,6 +75,7 @@ async def test_sparse_new_uid_is_persisted_as_provisioning_and_scheduled(monkeyp
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda _project: "image")
     monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
+    monkeypatch.setattr(desktop_agent_vm, "_service_account", lambda: "service-account")
     monkeypatch.setattr(
         desktop_agent_vm,
         "_claim_vm_if_allowed",
@@ -113,7 +116,9 @@ async def test_late_created_vm_cleanup_is_persisted_when_provider_delete_fails(m
         lambda *args: persisted.append(args),
     )
 
-    await desktop_agent_vm._provision_background("uid", "project", "image", "bucket", "omi-agent-uid", "omi-token")
+    await desktop_agent_vm._provision_background(
+        "uid", "project", "image", "bucket", "omi-agent-uid", "omi-token", "service-account"
+    )
 
     assert persisted == [("uid", "omi-agent-uid", "us-central1-a")]
 
@@ -142,7 +147,9 @@ async def test_create_error_after_deletion_admission_still_records_possible_late
         lambda *args: persisted.append(args),
     )
 
-    await desktop_agent_vm._provision_background("uid", "project", "image", "bucket", "omi-agent-uid", "omi-token")
+    await desktop_agent_vm._provision_background(
+        "uid", "project", "image", "bucket", "omi-agent-uid", "omi-token", "service-account"
+    )
 
     assert persisted == [("uid", "omi-agent-uid", "us-central1-a")]
 
@@ -163,7 +170,9 @@ async def test_pre_dispatch_create_error_never_deletes_a_superseding_vm(monkeypa
     monkeypatch.setattr(desktop_agent_vm, "_create_vm", create_vm)
     monkeypatch.setattr(desktop_agent_vm, "_delete_vm", lambda *args: deleted.append(args))
 
-    await desktop_agent_vm._provision_background("uid", "project", "image", "bucket", "old-generation", "old-token")
+    await desktop_agent_vm._provision_background(
+        "uid", "project", "image", "bucket", "old-generation", "old-token", "service-account"
+    )
 
     assert deleted == []
 
@@ -294,6 +303,44 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 
     assert error.value.status_code == 402
     assert error.value.detail == "trial_expired"
+
+
+@pytest.mark.asyncio
+async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_scope(monkeypatch):
+    requests = []
+
+    async def fake_gce_request(method, url, token, body=None):
+        requests.append((method, url, body))
+        return httpx.Response(200, json={"name": "operation"}, request=httpx.Request(method, url))
+
+    async def fake_operation(*args):
+        return None
+
+    async def fake_instance(*args):
+        return "RUNNING", {"networkInterfaces": [{"accessConfigs": [{"natIP": "203.0.113.10"}]}]}
+
+    monkeypatch.setattr(desktop_agent_vm, "_get_access_token", lambda: "gce-token")
+    monkeypatch.setattr(desktop_agent_vm, "_gce_request", fake_gce_request)
+    monkeypatch.setattr(desktop_agent_vm, "_operation", fake_operation)
+    monkeypatch.setattr(desktop_agent_vm, "_instance", fake_instance)
+
+    ip = await desktop_agent_vm._create_vm(
+        "project",
+        "source-image",
+        "bucket",
+        "omi-agent-user",
+        "omi-token",
+        "agent-bootstrap@example.iam.gserviceaccount.com",
+    )
+
+    assert ip == "203.0.113.10"
+    assert requests[0][0] == "POST"
+    assert requests[0][2]["serviceAccounts"] == [
+        {
+            "email": "agent-bootstrap@example.iam.gserviceaccount.com",
+            "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
+        }
+    ]
 
 
 async def _stopped_instance():

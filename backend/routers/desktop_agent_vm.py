@@ -88,6 +88,13 @@ def _gcs_bucket() -> str:
     return bucket
 
 
+def _service_account() -> str:
+    service_account = os.getenv("GCE_SERVICE_ACCOUNT")
+    if not service_account:
+        raise RuntimeError("GCE_SERVICE_ACCOUNT is not configured")
+    return service_account
+
+
 def _get_vm(uid: str) -> dict[str, Any] | None:
     snapshot = get_firestore_client().collection("users").document(uid).get()
     if not snapshot.exists:
@@ -281,7 +288,9 @@ def _ip(instance: dict[str, Any]) -> str | None:
     return candidate if _is_usable_vm_ip(candidate) else None
 
 
-async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str, auth_token: str) -> str:
+async def _create_vm(
+    project: str, source_image: str, bucket: str, vm_name: str, auth_token: str, service_account: str
+) -> str:
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{_ZONE}/instances"
     startup = f"#!/bin/bash\ncurl -sf https://storage.googleapis.com/{bucket}/startup.sh -o /tmp/omi-startup.sh && bash /tmp/omi-startup.sh\n"
     body = {
@@ -296,6 +305,14 @@ async def _create_vm(project: str, source_image: str, bucket: str, vm_name: str,
                     "diskSizeGb": "50",
                     "diskType": f"zones/{_ZONE}/diskTypes/pd-balanced",
                 },
+            }
+        ],
+        "serviceAccounts": [
+            {
+                # This identity is dedicated to VM bootstrap and is limited to
+                # the Agent VM image repository and environment secrets.
+                "email": service_account,
+                "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
             }
         ],
         "networkInterfaces": [
@@ -378,13 +395,13 @@ async def _cleanup_possible_late_vm(uid: str, project: str, vm_name: str, zone: 
 
 
 async def _provision_background(
-    uid: str, project: str, source_image: str, bucket: str, vm_name: str, auth_token: str
+    uid: str, project: str, source_image: str, bucket: str, vm_name: str, auth_token: str, service_account: str
 ) -> None:
     if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
         logger.info("Skipping Agent VM create after deletion/owner transition for uid=%s", uid)
         return
     try:
-        ip = await _create_vm(project, source_image, bucket, vm_name, auth_token)
+        ip = await _create_vm(project, source_image, bucket, vm_name, auth_token, service_account)
     except AgentVmCreateOutcomeUnknown as exc:
         logger.error("Agent VM provisioning failed for uid=%s: %s", uid, exc)
         if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
@@ -454,6 +471,7 @@ async def provision_agent_vm(
         project = _project()
         source_image = _source_image(project)
         bucket = _gcs_bucket()
+        service_account = _service_account()
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     generation = uuid.uuid4().hex
@@ -479,7 +497,9 @@ async def provision_agent_vm(
             authToken=str(vm.get("authToken") or ""),
             agentStatus=str(vm.get("status") or "provisioning"),
         )
-    background_tasks.add_task(_provision_background, uid, project, source_image, bucket, vm_name, auth_token)
+    background_tasks.add_task(
+        _provision_background, uid, project, source_image, bucket, vm_name, auth_token, service_account
+    )
     return ProvisionAgentResponse(
         status="provisioning", vmName=vm_name, authToken=auth_token, agentStatus="provisioning"
     )

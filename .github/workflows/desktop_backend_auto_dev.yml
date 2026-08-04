@@ -184,6 +184,7 @@ jobs:
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
+          AGENT_VM_GEMINI_SECRET_NAME: GEMINI_API_KEY
         run: |
           set -euo pipefail
           if [[ -z "$AGENT_GCS_BUCKET" ]]; then
@@ -195,7 +196,8 @@ jobs:
           python3 backend/scripts/runtime_image_contracts.py smoke \
             --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
           docker push "$agent_image"
-          AGENT_VM_IMAGE="$agent_image" envsubst < backend/agent_vm/startup.sh \
+          AGENT_VM_IMAGE="$agent_image" AGENT_VM_GEMINI_SECRET_NAME="$AGENT_VM_GEMINI_SECRET_NAME" \
+            envsubst '$AGENT_VM_IMAGE $AGENT_VM_GEMINI_SECRET_NAME' < backend/agent_vm/startup.sh \
             | gcloud storage cp - "gs://$AGENT_GCS_BUCKET/startup.sh"
 
       - name: Deploy desktop-backend to Cloud Run
@@ -219,6 +221,7 @@ jobs:
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
             AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
+            GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
