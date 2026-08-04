@@ -298,6 +298,14 @@ export function Conversations(): React.JSX.Element {
     [folderFilter, dateRange]
   )
 
+  // Leaving the panel must invalidate in-flight loadAll commits so a fetch that
+  // started while visible cannot publish/setState after the route is hidden.
+  useEffect(() => {
+    if (!panelIsActive) {
+      loadGenRef.current += 1
+    }
+  }, [panelIsActive])
+
   // Load folders: cached first (instant paint), then reconcile from the backend.
   useEffect(() => {
     if (!panelIsActive) return
@@ -351,7 +359,8 @@ export function Conversations(): React.JSX.Element {
   // cloud rows — no extra cloud fetch — so the list updates in real time.
   useEffect(() => {
     if (!panelIsActive) return
-    return subscribeConversations(() => {
+    let cancelled = false
+    const unsubscribe = subscribeConversations(() => {
       // The account this refresh belongs to (teardown fires this same channel via
       // invalidateConversationsCache, so guard it too — otherwise a switch would
       // merge A's still-in-state cloud rows and persist them under B).
@@ -359,7 +368,7 @@ export function Conversations(): React.JSX.Element {
       window.omi
         .listLocalConversations()
         .then((freshLocals) => {
-          if (getCacheUid() !== originUid) return
+          if (cancelled || getCacheUid() !== originUid) return
           setLocals(freshLocals)
           setRows((prev) => {
             const cloud = prev.filter((r) => r.source === 'cloud' && !r.pending)
@@ -377,6 +386,10 @@ export function Conversations(): React.JSX.Element {
         })
         .catch((e) => console.error('Live local refresh failed:', e))
     })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [folderFilter, dateRange, panelIsActive])
 
   // Legacy local-only recordings eligible for backfill; recomputed only when the
