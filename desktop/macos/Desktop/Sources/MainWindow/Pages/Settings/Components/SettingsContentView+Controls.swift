@@ -751,16 +751,15 @@ extension SettingsContentView {
   ) -> some View {
     let card = content()
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(OmiSpacing.xl)
-      .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(OmiColors.backgroundTertiary.opacity(0.5))
-          .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.4), lineWidth: 1)
-          )
+      .padding(OmiSpacing.lg)
+      .omiPanel(
+        fill: OmiColors.backgroundTertiary.opacity(0.5),
+        radius: OmiChrome.smallControlRadius,
+        stroke: OmiColors.backgroundQuaternary.opacity(0.4),
+        shadowOpacity: 0.04,
+        shadowRadius: 8,
+        shadowY: 2
       )
-      .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
     return Group {
       if let settingId = settingId {
         card.modifier(
