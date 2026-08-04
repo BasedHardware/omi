@@ -8,6 +8,7 @@ import { useAuth } from '@/components/auth/AuthProvider';
 import { useChat } from '@/hooks/useChat';
 import { useGoals } from '@/hooks/useGoals';
 import { useHomeTasks } from '@/hooks/useHomeTasks';
+import { useScrollEdges } from '@/hooks/useScrollEdges';
 import { ChatComposer, type ChatComposerHandle } from '@/components/chat/ChatComposer';
 import { ChatTranscript } from '@/components/chat/ChatTranscript';
 import { RecordingStage } from '@/components/chat/RecordingStage';
@@ -127,6 +128,7 @@ export function HomePage() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [openGoalId, setOpenGoalId] = useState<string | null>(null);
   const askRef = useRef<ChatComposerHandle>(null);
+  const { ref: scrollRef, edges } = useScrollEdges<HTMLDivElement>();
 
   // Track the goal by id, not by value, so the sheet keeps showing live data
   // after an optimistic write replaces the object.
@@ -163,16 +165,31 @@ export function HomePage() {
         </div>
       )}
 
-      {/* The fade belongs to the scroll region, not the page: it sits over the
-          top of the scroller so messages dissolve into the surface instead of
-          being clipped at a hard edge. It is tall and starts fully opaque only
-          at the very top, so a line of text is never half-hidden behind it. */}
+      {/* The fades belong to the scroll region, not the page: they sit over the
+          scroller so messages dissolve into the surface instead of being
+          clipped at a hard edge. Each one only appears when there is something
+          hidden behind it — a fade over the first or last message is dimming
+          content for no reason. */}
       <div className="relative min-h-0 flex-1">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-bg-pane via-bg-pane/80 to-transparent"
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-0 z-10 h-24',
+            'bg-gradient-to-b from-bg-pane via-bg-pane/80 to-transparent',
+            'transition-opacity duration-200',
+            edges.atTop ? 'opacity-0' : 'opacity-100',
+          )}
         />
-        <div className="h-full overflow-y-auto">
+        <div
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24',
+            'bg-gradient-to-t from-bg-pane via-bg-pane/80 to-transparent',
+            'transition-opacity duration-200',
+            edges.atBottom ? 'opacity-0' : 'opacity-100',
+          )}
+        />
+        <div ref={scrollRef} className="h-full overflow-y-auto">
           {inChat ? (
             <div className="mx-auto max-w-3xl px-6 py-6">
               <ChatTranscript
@@ -310,6 +327,7 @@ export function HomePage() {
             }
             recording={{
               isActive: isCapturing,
+              level: micLevel,
               onStart: () => void startRecording(),
               onStop: () => void stopRecording(),
               disabled: !RECORDING_ENABLED,

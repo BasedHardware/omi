@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from '@tschk/moonshine-next/navigation';
+import { usePathname, useSearchParams } from '@tschk/moonshine-next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
@@ -89,6 +90,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children, title, hideHeader = false }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <ChatProvider>
@@ -144,7 +146,21 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                     'shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
                   )}
                 >
-                  {children}
+                  {/* Keyed on the pathname so each destination fades and lifts
+                      in. `mode="wait"` is deliberately not used: holding the
+                      new page back until the old one has left doubles the
+                      perceived latency of every navigation. */}
+                  <AnimatePresence initial={false}>
+                    <motion.div
+                      key={pathname}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      className="h-full"
+                    >
+                      {children}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </div>
             </main>

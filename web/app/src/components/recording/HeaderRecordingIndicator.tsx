@@ -14,6 +14,7 @@ import {
   Monitor,
 } from 'lucide-react';
 import Link from '@tschk/moonshine-next/link';
+import { usePathname } from '@tschk/moonshine-next/navigation';
 import { useRecordingContext } from './RecordingContext';
 import type { AudioMode } from './RecordingContext';
 import { LiveTranscriptCompact } from './LiveTranscript';
@@ -53,6 +54,7 @@ export function HeaderRecordingIndicator() {
 
   const { isOpen: isNotificationOpen } = useNotificationContext();
   const { isOpen: isChatOpen } = useChat();
+  const pathname = usePathname();
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [showModeSelector, setShowModeSelector] = useState(false);
@@ -91,10 +93,10 @@ export function HeaderRecordingIndicator() {
     setAudioMode(mode);
   };
 
-  // Starting a recording belongs to the composer on Home, so the idle affordance
-  // is not repeated here. The active states stay global: once something is
+  // Starting a recording belongs to Home, so the idle affordance appears there
+  // and nowhere else. The active states stay global: once something is
   // recording you must be able to stop it from wherever you have navigated to.
-  if (isIdle) return null;
+  if (isIdle && pathname !== '/home') return null;
 
   return (
     <motion.div

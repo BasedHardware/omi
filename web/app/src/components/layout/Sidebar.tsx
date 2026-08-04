@@ -24,6 +24,7 @@ import {
   LifeBuoy,
   Sparkles,
   Bell,
+  Download,
   Mic,
   MessageSquare,
   Smartphone,
@@ -434,61 +435,71 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Platform-aware app download banner */}
-        {!mobileAppDismissed &&
-          (() => {
-            const isMac =
-              typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
-            const bannerHref = isMac
-              ? 'https://macos.omi.me/'
-              : 'https://onelink.to/rbsrxc';
-            const bannerTitle = isMac
-              ? 'Omi is 10X better on macOS'
-              : 'Take Omi with you';
-            const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
-            return (
-              <div className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}>
-                <a
-                  href={bannerHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
-                    showText ? 'p-3 pr-9' : 'justify-center p-3',
-                  )}
+        <AnimatePresence>
+          {!mobileAppDismissed &&
+            (() => {
+              const isMac =
+                typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent);
+              const bannerHref = isMac
+                ? 'https://macos.omi.me/'
+                : 'https://onelink.to/rbsrxc';
+              const bannerTitle = isMac
+                ? 'Omi is 10X better on macOS'
+                : 'Take Omi with you';
+              const bannerSubtitle = isMac ? 'Try Omi on macOS' : 'Try Omi on your phone';
+              return (
+                <motion.div
+                  // Dismissing is the one moment this banner is the thing you are
+                  // looking at, so it leaves with a pop rather than blinking out.
+                  initial={false}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.86, opacity: 0 }}
+                  transition={{ type: 'spring', stiffness: 520, damping: 26 }}
+                  className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}
                 >
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
-                    {isMac ? (
-                      <AppleLogo className="w-4 h-4 text-text-tertiary" />
-                    ) : (
-                      <Smartphone className="w-4 h-4 text-text-tertiary" />
+                  <a
+                    href={bannerHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      'relative flex items-center gap-3 rounded-xl bg-bg-tertiary/50 transition-colors hover:bg-bg-tertiary',
+                      showText ? 'p-3 pr-9' : 'justify-center p-3',
                     )}
-                  </div>
-                  {showText && (
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-text-primary">
-                        {bannerTitle}
-                      </p>
-                      <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                  >
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
+                      {isMac ? (
+                        <AppleLogo className="w-4 h-4 text-text-tertiary" />
+                      ) : (
+                        <Smartphone className="w-4 h-4 text-text-tertiary" />
+                      )}
                     </div>
-                  )}
-                  {showText && (
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setMobileAppDismissed(true);
-                        localStorage.setItem('mobile-app-banner-dismissed', 'true');
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
-                      aria-label="Dismiss"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </a>
-              </div>
-            );
-          })()}
+                    {showText && (
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-text-primary">
+                          {bannerTitle}
+                        </p>
+                        <p className="text-xs text-text-quaternary">{bannerSubtitle}</p>
+                      </div>
+                    )}
+                    {showText && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setMobileAppDismissed(true);
+                          localStorage.setItem('mobile-app-banner-dismissed', 'true');
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
+                        aria-label="Dismiss"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </a>
+                </motion.div>
+              );
+            })()}
+        </AnimatePresence>
 
         {/* Footer: one surface that is the profile at rest and the whole menu
             when open. The menu grows upward out of the profile row rather than
@@ -513,13 +524,27 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               safe — it is checked by a test rather than left to drift. */}
           <div
             className={cn(
-              'overflow-hidden transition-all duration-200 ease-out',
-              menuOpen ? 'opacity-100' : 'opacity-0',
+              'overflow-hidden',
+              'transition-[max-height,opacity] duration-300',
+              // Overshooting ease: the panel arrives slightly past its mark and
+              // settles, which reads as the surface lifting rather than as a
+              // box being resized.
+              '[transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
+              menuOpen ? 'opacity-100' : 'opacity-0 duration-200',
             )}
             style={{ maxHeight: menuOpen ? PROFILE_MENU_MAX_HEIGHT : 0 }}
             aria-hidden={!menuOpen}
           >
-            <div inert={!menuOpen}>
+            <div
+              inert={!menuOpen}
+              className={cn(
+                'transition-transform duration-300',
+                '[transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
+                // Held down a little while closed so the rows slide up out of
+                // the profile row rather than appearing already in place.
+                menuOpen ? 'translate-y-0' : 'translate-y-3',
+              )}
+            >
               <div className="p-2 space-y-0.5">
                 <MenuRow
                   href="/connectors"

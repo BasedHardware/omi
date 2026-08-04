@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useState, useEffect, useImperativeHandle } from 'react';
-import { ArrowUp, Paperclip, Mic, Square } from 'lucide-react';
+import { ArrowUp, Paperclip, AudioLines } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
+import { OmiOrb } from '@/components/ui/OmiOrb';
 import { uploadChatFiles } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -37,9 +38,16 @@ interface ChatComposerProps {
    * Capture controls live in the pill so that starting a recording and asking
    * about it are the same gesture in the same place. Omitted where there is no
    * capture to start.
+   *
+   * It wears a waveform rather than a microphone, and sits next to send rather
+   * than beside the attachment. Dictation is also a microphone, and two mics a
+   * thumb apart meaning different things read as one control drawn twice: this
+   * one opens a live conversation, the other one types for you.
    */
   recording?: {
     isActive: boolean;
+    /** Input level, 0..1, so the button itself meters what it is hearing. */
+    level: number;
     onStart: () => void;
     onStop: () => void;
     disabled?: boolean;
@@ -236,32 +244,38 @@ export function ChatComposer({
           className="hidden"
         />
 
-        {recording && (
-          <button
-            onClick={recording.isActive ? recording.onStop : recording.onStart}
-            disabled={recording.disabled}
-            className={cn(
-              iconButton,
-              recording.isActive && 'bg-red-500/15 text-red-400 hover:bg-red-500/25',
-            )}
-            title={recording.isActive ? 'Stop recording' : 'Record'}
-            aria-label={recording.isActive ? 'Stop recording' : 'Record'}
-          >
-            {recording.isActive ? (
-              <Square className="h-4 w-4 fill-current" />
-            ) : (
-              <Mic className="h-[18px] w-[18px]" />
-            )}
-          </button>
-        )}
-
-        {/* Inline voice recorder - always visible */}
+        {/* Dictation: types for you. */}
         <InlineVoiceRecorder
           onTranscript={handleVoiceTranscript}
           disabled={isStreaming}
         />
 
         <div className="flex-1" />
+
+        {/* Live conversation: sits beside send because it is the other way to
+            put something into the thread. Once it is running the mark takes
+            over the button and meters the room. */}
+        {recording && (
+          <button
+            onClick={recording.isActive ? recording.onStop : recording.onStart}
+            disabled={recording.disabled}
+            className={cn(
+              iconButton,
+              recording.isActive &&
+                'bg-white/[0.10] text-text-primary hover:bg-white/[0.16]',
+            )}
+            title={recording.isActive ? 'Stop conversation' : 'Start a live conversation'}
+            aria-label={
+              recording.isActive ? 'Stop conversation' : 'Start a live conversation'
+            }
+          >
+            {recording.isActive ? (
+              <OmiOrb state="listening" level={recording.level} size={20} />
+            ) : (
+              <AudioLines className="h-[18px] w-[18px]" />
+            )}
+          </button>
+        )}
 
         {/* Send button */}
         <button
