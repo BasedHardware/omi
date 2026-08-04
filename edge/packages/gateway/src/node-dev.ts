@@ -7,7 +7,8 @@ import { resolveFeatures, memoryKv } from "@omi/platform";
 
 const env = {
   EDGE_PROVIDER: process.env.EDGE_PROVIDER || "bun",
-  EDGE_MODULES: process.env.EDGE_MODULES || "health,whoami,memory,conversation,tasks,search",
+  EDGE_MODULES:
+    process.env.EDGE_MODULES || "health,whoami,memory,conversation,tasks,search,identity",
   EDGE_PROXY_ORIGIN: process.env.EDGE_PROXY_ORIGIN || "true",
   ORIGIN_API_BASE: process.env.ORIGIN_API_BASE || "http://127.0.0.1:8080",
   FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "based-hardware",

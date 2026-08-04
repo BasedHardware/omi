@@ -35,10 +35,19 @@
       "version": "0.0.1",
       "dependencies": {
         "@omi/conversation": "workspace:*",
+        "@omi/identity": "workspace:*",
         "@omi/memory": "workspace:*",
         "@omi/platform": "workspace:*",
         "@omi/tasks": "workspace:*",
         "@omi/tenant": "workspace:*",
+        "hono": "^4.7.7",
+      },
+    },
+    "packages/identity": {
+      "name": "@omi/identity",
+      "version": "0.0.1",
+      "dependencies": {
+        "@omi/platform": "workspace:*",
         "hono": "^4.7.7",
       },
     },
@@ -200,6 +209,8 @@
     "@omi/conversation": ["@omi/conversation@workspace:packages/conversation"],
 
     "@omi/gateway": ["@omi/gateway@workspace:packages/gateway"],
+
+    "@omi/identity": ["@omi/identity@workspace:packages/identity"],
 
     "@omi/memory": ["@omi/memory@workspace:packages/memory"],
 

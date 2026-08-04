@@ -18,7 +18,7 @@ describe("feature gates", () => {
     expect(m.has("health")).toBe(true);
     expect(m.has("memory")).toBe(true);
     expect(m.has("search")).toBe(true);
-    expect(m.size).toBe(6);
+    expect(m.size).toBe(7);
   });
 
   it("resolveFeatures proxy default on", () => {
