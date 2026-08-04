@@ -232,35 +232,37 @@ def test_load_contracts_dockerfile_filter_skips_non_matching_entries(contracts_m
     an absent ``plugins/Dockerfile`` does not fail a backend smoke."""
     staged_registry = tmp_path / 'runtime_images.json'
     staged_registry.write_text(
-        json.dumps({
-            'schema_version': 1,
-            'images': [
-                {
-                    'name': 'backend',
-                    'dockerfile': 'backend/Dockerfile',
-                    'deployment_workflows': ['.github/workflows/gcp_backend.yml'],
-                    'build_context': '.',
-                    'source_root': 'backend',
-                    'workdir': '/app',
-                    'entrypoints': ['main'],
-                    'image_import_smoke': False,
-                    'dependency_probe_smoke': True,
-                    'pull_request_smoke': True,
-                },
-                {
-                    'name': 'plugins',
-                    'dockerfile': 'plugins/Dockerfile',
-                    'deployment_workflows': ['.github/workflows/gcp_plugins.yml'],
-                    'build_context': '.',
-                    'source_root': 'plugins',
-                    'workdir': '/app',
-                    'entrypoints': ['main'],
-                    'image_import_smoke': True,
-                    'dependency_probe_smoke': True,
-                    'pull_request_smoke': True,
-                },
-            ],
-        }),
+        json.dumps(
+            {
+                'schema_version': 1,
+                'images': [
+                    {
+                        'name': 'backend',
+                        'dockerfile': 'backend/Dockerfile',
+                        'deployment_workflows': ['.github/workflows/gcp_backend.yml'],
+                        'build_context': '.',
+                        'source_root': 'backend',
+                        'workdir': '/app',
+                        'entrypoints': ['main'],
+                        'image_import_smoke': False,
+                        'dependency_probe_smoke': True,
+                        'pull_request_smoke': True,
+                    },
+                    {
+                        'name': 'plugins',
+                        'dockerfile': 'plugins/Dockerfile',
+                        'deployment_workflows': ['.github/workflows/gcp_plugins.yml'],
+                        'build_context': '.',
+                        'source_root': 'plugins',
+                        'workdir': '/app',
+                        'entrypoints': ['main'],
+                        'image_import_smoke': True,
+                        'dependency_probe_smoke': True,
+                        'pull_request_smoke': True,
+                    },
+                ],
+            }
+        ),
         encoding='utf-8',
     )
 
@@ -269,9 +271,7 @@ def test_load_contracts_dockerfile_filter_skips_non_matching_entries(contracts_m
     (staged_root / 'backend').mkdir(parents=True)
     (staged_root / 'backend' / 'Dockerfile').write_text('FROM python:3.11\n', encoding='utf-8')
     (staged_root / '.github' / 'workflows').mkdir(parents=True)
-    (staged_root / '.github' / 'workflows' / 'gcp_backend.yml').write_text(
-        'name: backend\n', encoding='utf-8'
-    )
+    (staged_root / '.github' / 'workflows' / 'gcp_backend.yml').write_text('name: backend\n', encoding='utf-8')
     # plugins/Dockerfile is intentionally absent — it is not part of the staged
     # backend deploy surface.
 
