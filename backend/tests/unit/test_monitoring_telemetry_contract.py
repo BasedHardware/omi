@@ -78,9 +78,9 @@ def test_token_scraped_jobs_use_metrics_scrape_token():
         configured = jobs[job['name']]
         auth = configured.get('authorization') or {}
         credentials = str(auth.get('credentials_file', ''))
-        assert 'metrics-scrape-token' in credentials, (
-            f"{job['name']} must scrape with metrics-scrape-token bearer credentials"
-        )
+        assert (
+            'metrics-scrape-token' in credentials
+        ), f"{job['name']} must scrape with metrics-scrape-token bearer credentials"
 
 
 def test_kube_state_metrics_enabled_in_prod():
@@ -116,18 +116,16 @@ def test_enforced_coverage_alert_includes_declared_jobs():
         if job.get('coverage_status') != 'enforced':
             continue
         assert job.get('coverage_alert') == 'omi-journey-scrape-missing'
-        assert job['name'] in blob, (
-            f"enforced job {job['name']!r} must appear in omi-journey-scrape-missing expr"
-        )
+        assert job['name'] in blob, f"enforced job {job['name']!r} must appear in omi-journey-scrape-missing expr"
 
 
 def test_declared_gaps_are_explicit_not_silently_enforced():
     inventory = _load_inventory()
     for job in inventory['scrape_jobs']:
         if job.get('coverage_status') == 'declared':
-            assert job.get('coverage_alert') is None, (
-                f"{job['name']} is declared-only; do not claim a coverage_alert until one exists"
-            )
+            assert (
+                job.get('coverage_alert') is None
+            ), f"{job['name']} is declared-only; do not claim a coverage_alert until one exists"
 
 
 def test_alert_rules_use_declared_receiver_and_instatus_components():
