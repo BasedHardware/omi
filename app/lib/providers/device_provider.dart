@@ -23,6 +23,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
@@ -488,8 +489,28 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
-    await captureProvider?.onRecordingDeviceDisconnected();
-    captureProvider?.updateRecordingDevice(null);
+    // Capture before the awaited fallback so a reconnect that installs a new
+    // recording device is not cleared by this stale disconnect continuation.
+    final disconnectedRecordingDeviceId = captureProvider?.recordingDevice?.id;
+    try {
+      await captureProvider?.onRecordingDeviceDisconnected();
+    } catch (e, st) {
+      // Fallback startup/teardown must not abort the rest of disconnect cleanup.
+      Logger.error('onRecordingDeviceDisconnected failed during device disconnect: $e\n$st');
+    }
+
+    final currentRecordingDeviceId = captureProvider?.recordingDevice?.id;
+    if (shouldClearRecordingDeviceAfterDisconnectFallback(
+      disconnectedDeviceId: disconnectedRecordingDeviceId,
+      currentRecordingDeviceId: currentRecordingDeviceId,
+    )) {
+      captureProvider?.updateRecordingDevice(null);
+    } else {
+      Logger.debug(
+        'Skipping updateRecordingDevice(null) after disconnect — reconnect already set '
+        '${currentRecordingDeviceId ?? "unknown"} (was $disconnectedRecordingDeviceId)',
+      );
+    }
 
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes

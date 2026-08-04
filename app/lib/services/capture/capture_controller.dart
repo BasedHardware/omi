@@ -131,6 +131,10 @@ class CaptureController extends ChangeNotifier
   // finalization is complete.
   Completer<void>? _phoneMicBatchStopCompleter;
 
+  /// Bumped to cancel an in-flight BLE-disconnect → phone-batch fallback when
+  /// reconnect / user-stop wins the race across the fallback's awaits.
+  int _disconnectPhoneFallbackEpoch = 0;
+
   bool get isPhoneMicBatchRecording => _phoneMicBatchActive;
 
   bool _isLoadingInProgressConversation = false;
@@ -1532,6 +1536,9 @@ class CaptureController extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+    // Cancel any in-flight disconnect→phone-batch fallback before we claim the
+    // mic for the wearable again.
+    _disconnectPhoneFallbackEpoch++;
     if (deviceOnboardingProvider == null && SharedPreferencesUtil().batchModeSuspendedForOnboarding) {
       await restoreBatchModeAfterOnboarding();
     }
@@ -1593,13 +1600,35 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
+    final disconnectedDeviceId = _recordingDevice?.id;
+    final startedEpoch = ++_disconnectPhoneFallbackEpoch;
+
+    bool stillCurrent() => shouldContinueDisconnectPhoneFallback(
+          startedEpoch: startedEpoch,
+          currentEpoch: _disconnectPhoneFallbackEpoch,
+          disconnectedDeviceId: disconnectedDeviceId,
+          currentRecordingDeviceId: _recordingDevice?.id,
+          userStopped: recordingState == RecordingState.stop,
+        );
+
     Logger.debug('[CaptureProvider] BLE disconnected during recording; starting phone batch fallback');
     await _cleanupCurrentState(disableNativeBackground: true);
+    if (!stillCurrent()) {
+      Logger.debug('[CaptureProvider] aborting phone batch fallback after cleanup (stale disconnect)');
+      return;
+    }
+
     await _socket?.stop(reason: 'BLE disconnected; starting phone batch fallback');
+    if (!stillCurrent()) {
+      Logger.debug('[CaptureProvider] aborting phone batch fallback after socket stop (stale disconnect)');
+      return;
+    }
+
     await _startPhoneMicBatch(auto: true);
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
+    _disconnectPhoneFallbackEpoch++;
     await _cleanupCurrentState(disableNativeBackground: true);
     if (cleanDevice) {
       _updateRecordingDevice(null);

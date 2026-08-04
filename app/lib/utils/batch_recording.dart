@@ -104,6 +104,32 @@ bool isRecordingDuringDeviceDisconnect(RecordingState recordingState) =>
     recordingState == RecordingState.record ||
     recordingState == RecordingState.interrupted;
 
+/// Whether an in-flight BLE-disconnect phone-fallback should keep going after
+/// an await. A bumped epoch cancels the attempt (reconnect/stop). A different
+/// recording-device id means reconnect already installed a new device.
+bool shouldContinueDisconnectPhoneFallback({
+  required int startedEpoch,
+  required int currentEpoch,
+  required String? disconnectedDeviceId,
+  required String? currentRecordingDeviceId,
+  required bool userStopped,
+}) {
+  if (startedEpoch != currentEpoch) return false;
+  if (userStopped) return false;
+  if (currentRecordingDeviceId != null && currentRecordingDeviceId != disconnectedDeviceId) {
+    return false;
+  }
+  return true;
+}
+
+/// After `onRecordingDeviceDisconnected` returns, only clear the capture
+/// recording device when reconnect has not already installed a different one.
+bool shouldClearRecordingDeviceAfterDisconnectFallback({
+  required String? disconnectedDeviceId,
+  required String? currentRecordingDeviceId,
+}) =>
+    currentRecordingDeviceId == null || currentRecordingDeviceId == disconnectedDeviceId;
+
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///
 ///   audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin

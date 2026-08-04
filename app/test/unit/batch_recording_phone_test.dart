@@ -189,4 +189,86 @@ void main() {
       );
     });
   });
+
+  group('disconnect fallback revalidation', () {
+    test('continues only while epoch and device id still match', () {
+      expect(
+        shouldContinueDisconnectPhoneFallback(
+          startedEpoch: 3,
+          currentEpoch: 3,
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: 'dev-a',
+          userStopped: false,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldContinueDisconnectPhoneFallback(
+          startedEpoch: 3,
+          currentEpoch: 3,
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: null,
+          userStopped: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('aborts when epoch bumps, user stops, or reconnect installs another device', () {
+      expect(
+        shouldContinueDisconnectPhoneFallback(
+          startedEpoch: 3,
+          currentEpoch: 4,
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: 'dev-a',
+          userStopped: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldContinueDisconnectPhoneFallback(
+          startedEpoch: 3,
+          currentEpoch: 3,
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: 'dev-a',
+          userStopped: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldContinueDisconnectPhoneFallback(
+          startedEpoch: 3,
+          currentEpoch: 3,
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: 'dev-b',
+          userStopped: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('clears recording device only when reconnect has not replaced it', () {
+      expect(
+        shouldClearRecordingDeviceAfterDisconnectFallback(
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: 'dev-a',
+        ),
+        isTrue,
+      );
+      expect(
+        shouldClearRecordingDeviceAfterDisconnectFallback(
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: null,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldClearRecordingDeviceAfterDisconnectFallback(
+          disconnectedDeviceId: 'dev-a',
+          currentRecordingDeviceId: 'dev-b',
+        ),
+        isFalse,
+      );
+    });
+  });
 }
