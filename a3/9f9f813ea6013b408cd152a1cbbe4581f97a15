@@ -1,0 +1,73 @@
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffView.swift
+  s_d6e5378f930d41::t_b6488393656990 2-3
+  s_d6e5378f930d41::t_8b0519ad4b52d9 1,4-258
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffSettings.swift
+  s_d6e5378f930d41::t_152df7c93ca896 1-28
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffModels.swift
+  s_d6e5378f930d41::t_83a643ae73500b 1-79
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffPolicy.swift
+  s_d6e5378f930d41::t_693a8bf93b8c25 1-56
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_d6e5378f930d41::t_224c940d770ba9 431-432
+  s_d6e5378f930d41::t_35edbafee3757d 455-456
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_d6e5378f930d41::t_ec01d06d9158e6 376-379
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffRecipients.swift
+  s_d6e5378f930d41::t_2442f0a01c11ea 1-150
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffStore.swift
+  s_d6e5378f930d41::t_d9277b53c819f4 1-99
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_d6e5378f930d41::t_5b21fd26486694 53-55
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffService.swift
+  s_d6e5378f930d41::t_0cd339c6d57f50 44-50
+  s_d6e5378f930d41::t_91e0a4121cf175 140-144
+  s_d6e5378f930d41::t_3d43ab904c8576 293-306
+  s_d6e5378f930d41::t_b7bbb6ade1aadf 239
+  s_d6e5378f930d41::t_e53a6eefed0ea4 182-184
+  s_d6e5378f930d41::t_5f8d1c55d83d46 252-257,260-262
+  s_d6e5378f930d41::t_a8eb25e4434830 311
+  s_d6e5378f930d41::t_e3c73fed6f8e84 339-344,351
+  s_d6e5378f930d41::t_5969d4c2021b9b 345
+  s_d6e5378f930d41::t_0f98ae4c9a2810 86-87
+  s_d6e5378f930d41::t_0e567eeabff0ef 1-43,51-85,88-130,139,146-163,171-181,185-238,240-251,258-259,263-292,307-310,312-338,346-350,352-362,367-368,370-434
+  s_d6e5378f930d41::t_f19627818dcc97 131-138,145
+  s_d6e5378f930d41::t_440abf4c3e3885 164-170
+  s_d6e5378f930d41::t_fe779f64af6679 363-366,369
+desktop/macos/changelog/unreleased/20260804-meeting-handoff.json
+  s_d6e5378f930d41::t_ab84196e8ab5da 1-3
+desktop/macos/Desktop/Tests/MeetingHandoffTests.swift
+  s_d6e5378f930d41::t_434c28b668393a 1-201,304-393
+  s_d6e5378f930d41::t_cee0815bc08d03 202-303
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstRoute.swift
+  s_d6e5378f930d41::t_b4e48d27970053 100
+  s_d6e5378f930d41::t_1bd08dcf0e452c 393
+  s_d6e5378f930d41::t_b6213057fc1d9a 114
+  s_d6e5378f930d41::t_ed084567783c96 128
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  s_d6e5378f930d41::t_6c393a97e8a590 333
+  s_d6e5378f930d41::t_24e96fc52bb97b 283-284
+desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
+  s_d6e5378f930d41::t_e9cd1470ce152d 29
+  s_d6e5378f930d41::t_c61984c90df421 46
+  s_d6e5378f930d41::t_aeeafac85547cb 14
+desktop/macos/Desktop/Sources/MeetingHandoff/MeetingHandoffComposer.swift
+  s_d6e5378f930d41::t_ca717e35102c01 1-113
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_d6e5378f930d41::t_e7dbfa1c333478 1832-1833
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a39f9f813ea6013b408cd152a1cbbe4581f97a15",
+  "prompts": {},
+  "sessions": {
+    "s_d6e5378f930d41": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2b7e25bc-8c3d-45db-806f-c7243c778fb2",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
