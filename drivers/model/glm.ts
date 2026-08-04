@@ -21,6 +21,15 @@ const entailmentStrategy = "span-entailment";
 const renderStrategy = "retrieval-node-summary";
 type GlmStrategy = typeof entityStrategy | typeof mentionStrategy | typeof scopeStrategy | typeof boundaryStrategy | typeof groundedStrategy | typeof identityStrategy | typeof identityVerifyStrategy | typeof namingCheckStrategy | typeof selfReferenceStrategy | typeof predicateStrategy | typeof composeStrategy | typeof entailmentStrategy | typeof renderStrategy;
 
+/** Transient transport + malformed model JSON: ask again instead of repairing the answer. */
+const retryableGlmError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/API key missing|version mismatch|does not support strategy|fixture provider ran out/.test(message)) return false;
+  return /\b(429|500|502|503|504)\b/.test(message)
+    || /timeout|ECONNRESET|fetch failed|socket/i.test(message)
+    || /was not JSON|missing required field|unexpected field|must be|risk_markers|invalid STM|GLM .+ response/.test(message);
+};
+
 /**
  * Every id a model must return is a label into a list it can read on the same
  * page, never a sha256 or a revision id out of our bookkeeping. A model asked
@@ -221,13 +230,10 @@ const promptForBoundary = (input: BoundaryInput): string => JSON.stringify({
 const parseBoundaryResponse = (content: string): UnitBoundaryJudgment => {
   const root = parseJsonObject(content, "STM/LTM unit-boundary");
   assertKeys(root, ["decision"], ["risk_markers"], "STM/LTM unit-boundary");
-  // Coerce junk markers rather than aborting the dream item: empty strings and
-  // non-arrays showed up in live GLM runs and previously stranded owner claims.
-  const risk_markers = Array.isArray(root.risk_markers)
-    ? root.risk_markers.filter((marker): marker is string => typeof marker === "string" && !!marker.trim())
-    : undefined;
-  if (root.decision === "accept_ltm") return { decision: "accept_ltm", ...(risk_markers?.length ? { risk_markers } : {}) };
-  if (root.decision === "abstain") return { decision: "abstain", reason: risk_markers?.join("; ") || "GLM boundary sufficiency abstention", ...(risk_markers?.length ? { risk_markers } : {}) };
+  if (root.risk_markers !== undefined && (!Array.isArray(root.risk_markers) || root.risk_markers.some((marker) => typeof marker !== "string" || !marker.trim()))) throw new Error("GLM STM/LTM unit-boundary risk_markers must be an array of non-empty strings");
+  const risk_markers = Array.isArray(root.risk_markers) ? root.risk_markers as readonly string[] : undefined;
+  if (root.decision === "accept_ltm") return { decision: "accept_ltm", ...(risk_markers ? { risk_markers } : {}) };
+  if (root.decision === "abstain") return { decision: "abstain", reason: risk_markers?.join("; ") || "GLM boundary sufficiency abstention", ...(risk_markers ? { risk_markers } : {}) };
   throw new Error('GLM STM/LTM unit-boundary decision must be "accept_ltm" or "abstain"');
 };
 
@@ -636,17 +642,27 @@ export class GlmModel implements ModelPort {
     // not implement used to be silently answered by whatever is implemented.
     if (version !== undefined && edge.versions !== null && !edge.versions.has(version)) throw new Error(`GLM ${strategy} version mismatch: caller requested "${version}" but this driver implements "${[...edge.versions].join('", "')}"`);
     if (!this.apiKey) throw new Error("GLM API key missing: set GLM_API_KEY, ZAI_API_KEY, or OMI_BENCH_OPENAI_API_KEY");
-    const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content: edge.prompt(input) }] }),
-      // A hung request must become an ERROR the caller's fail-closed/retry
-      // paths can see, never a dream cycle stalled forever on one socket.
-      signal: AbortSignal.timeout(300_000),
-    });
-    if (!response.ok) throw new Error(`GLM chat completion failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
-    const payload = await response.json();
-    return edge.parse(readContent(payload), input);
+    const attempts = 3;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
+          body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content: edge.prompt(input) }] }),
+          // A hung request must become an ERROR the caller's fail-closed/retry
+          // paths can see, never a dream cycle stalled forever on one socket.
+          signal: AbortSignal.timeout(300_000),
+        });
+        if (!response.ok) throw new Error(`GLM chat completion failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
+        const payload = await response.json();
+        return edge.parse(readContent(payload), input);
+      } catch (error) {
+        if (attempt >= attempts || !retryableGlmError(error)) throw error;
+        const backoffMs = 500 * 2 ** (attempt - 1);
+        console.error(`retry ${attempt}/${attempts - 1} for ${strategy} in ${backoffMs}ms: ${error instanceof Error ? error.message : error}`);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
   }
 
   // Compose and render are deliberately refused here: their responses have

@@ -65,11 +65,19 @@ test("GLM placement parsers reject malformed model output instead of repairing i
   const mentionRequest = buildMentionDetectionRequest([provisional], evidence);
   const scopeRequest = buildScopeRoleRequest(provisional, [entity], evidence);
   const boundaryRequest = buildUnitBoundaryRequest(provisional, evidence);
+  const bad = (body: string) => fixtureProvider(body, body, body);
 
-  await expect(modelFor(fixtureProvider('{"mentions":[{"claim":"k1","slot_id":"subject","span":{"start":0,"end":5},"excerpt":"k1x1","antecedent_handle":null}]}')).invoke({ strategy: "mention-local-handle", version: "v1", input: mentionRequest })).rejects.toThrow("missing required field: surface");
-  await expect(modelFor(fixtureProvider('{"bindings":{"subject":"c9"},"scope_ref":"project:atlas","confidently_placed":true}')).invoke({ strategy: "scope-role-binding", version: "v1", input: scopeRequest })).rejects.toThrow("binds non-candidate entity");
-  await expect(modelFor(fixtureProvider('{not json}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).rejects.toThrow("was not JSON");
-  await expect(modelFor(fixtureProvider('{"decision":"abstain","risk_markers":[""]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "GLM boundary sufficiency abstention" });
+  await expect(modelFor(bad('{"mentions":[{"claim":"k1","slot_id":"subject","span":{"start":0,"end":5},"excerpt":"k1x1","antecedent_handle":null}]}')).invoke({ strategy: "mention-local-handle", version: "v1", input: mentionRequest })).rejects.toThrow("missing required field: surface");
+  await expect(modelFor(bad('{"bindings":{"subject":"c9"},"scope_ref":"project:atlas","confidently_placed":true}')).invoke({ strategy: "scope-role-binding", version: "v1", input: scopeRequest })).rejects.toThrow("binds non-candidate entity");
+  await expect(modelFor(bad('{not json}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).rejects.toThrow("was not JSON");
+  await expect(modelFor(bad('{"decision":"abstain","risk_markers":[""]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).rejects.toThrow("risk_markers must be an array of non-empty strings");
+});
+
+test("GLM retries a malformed boundary judgment and accepts a later valid response", async () => {
+  const boundaryRequest = buildUnitBoundaryRequest(claim(), evidenceFor(claim()));
+  const provider = fixtureProvider('{"decision":"abstain","risk_markers":[""]}', '{"decision":"abstain","risk_markers":["missing_time"]}');
+  await expect(modelFor(provider).invoke({ strategy: "stm-ltm-unit-boundary", version: "v2", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
+  expect(provider.calls).toHaveLength(2);
 });
 
 test("GLM placement abstentions parse without becoming placement approvals, and unknown strategies still reject", async () => {
@@ -191,7 +199,7 @@ test("a composed assertion citing a label it was never shown keeps the assertion
   // core reads that as a grounding failure, which is the honest outcome.
   expect(composed.assertions).toEqual([{ text: "Nora runs the Atlas rollout.", citations: ["evidence:9f2a"] }, { text: "She also chairs the board.", citations: [] }]);
   expect(composed.citations).toEqual(["evidence:9f2a"]);
-  await expect(modelFor(fixtureProvider('{"answer":"","assertions":[],"note":"nothing here"}')).compose({ strategy: "citation-grounded-compose", version: "v1", input: composeInput })).rejects.toThrow("unexpected field: note");
+  await expect(modelFor(fixtureProvider('{"answer":"","assertions":[],"note":"nothing here"}', '{"answer":"","assertions":[],"note":"nothing here"}', '{"answer":"","assertions":[],"note":"nothing here"}')).compose({ strategy: "citation-grounded-compose", version: "v1", input: composeInput })).rejects.toThrow("unexpected field: note");
   await expect(modelFor(fixtureProvider('{"answer":"x"}')).compose({ strategy: "not-a-real-compose", version: "v1", input: composeInput })).rejects.toThrow("compose does not support strategy");
 });
 
@@ -203,7 +211,7 @@ test("span entailment defaults to not entailed instead of repairing a verdict it
   expect(prompt).not.toContain("evidence:9f2a");
   expect(prompt).toContain("Nora runs the Atlas rollout");
   await expect(modelFor(fixtureProvider('{"entailed":"yes"}')).invoke({ strategy: "span-entailment", version: "v1", input })).resolves.toEqual({ entailed: false });
-  await expect(modelFor(fixtureProvider('{"entailed":true,"confidence":0.9}')).invoke({ strategy: "span-entailment", version: "v1", input })).rejects.toThrow("unexpected field: confidence");
+  await expect(modelFor(fixtureProvider('{"entailed":true,"confidence":0.9}', '{"entailed":true,"confidence":0.9}', '{"entailed":true,"confidence":0.9}')).invoke({ strategy: "span-entailment", version: "v1", input })).rejects.toThrow("unexpected field: confidence");
 });
 
 test("the node-summary edge summarizes readable facts and refuses a citation it was never shown", async () => {
@@ -234,6 +242,8 @@ test("identity-naming-check parses the contract key, the exact 'answer' alias, a
     '{"answer":"true"}',
     '{"answer":false}',
     '{"is_generic":true}',
+    '{"is_generic":true}',
+    '{"is_generic":true}',
   );
   const model = modelFor(provider);
   await expect(model.invoke({ strategy: "identity-naming-check", version: "dream-naming-check-v1", input: { label: "him", surfaces: ["him"] } })).resolves.toEqual({ names_specific_referent: false });
@@ -241,7 +251,7 @@ test("identity-naming-check parses the contract key, the exact 'answer' alias, a
   await expect(model.invoke({ strategy: "identity-naming-check", version: "dream-naming-check-v1", input: { label: "700", surfaces: ["700"] } })).resolves.toEqual({ names_specific_referent: false });
   // {"is_generic": true} semantically means REJECT; treating any renamed
   // single key as the verdict would invert it into an admission. It must fail
-  // loudly, and the caller's fail-closed catch turns that into a rejection.
+  // loudly (after retries), and the caller's fail-closed catch turns that into a rejection.
   await expect(model.invoke({ strategy: "identity-naming-check", version: "dream-naming-check-v1", input: { label: "x", surfaces: ["x"] } })).rejects.toThrow("identity-naming-check");
   const prompts = (provider.calls as { messages: { content: string }[] }[]).map((call) => call.messages[0]!.content);
   expect(prompts[0]).toContain("UNTRUSTED CONTENT");
