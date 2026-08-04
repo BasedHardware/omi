@@ -222,29 +222,34 @@ final class CloudConnectorGuidanceOverlay {
   }
 
   /// Screen Recording helper whose app icon can be dropped into System Settings.
-  func presentDragToGrantCard(appIcon: NSImage, appName: String, appURL: URL, near anchor: CGRect) {
+  func presentDragToGrantCard(
+    appIcon: NSImage,
+    appName: String,
+    appURL: URL,
+    near anchor: CGRect,
+    visibleFrameOverride: CGRect? = nil,
+    followsSettingsWindow: Bool = true
+  ) {
     dismissTask?.cancel()
     settingsWatchTask?.cancel()
     closeCurrentOverlay()
 
     let cardSize = Self.dragCardSize(appName: appName)
     dragCardSize = cardSize
-    let screen = Self.screen(forAnchor: anchor)
+    let visibleFrame = visibleFrameOverride ?? Self.screen(forAnchor: anchor).visibleFrame
     let targetFrame = Self.permissionListTargetFrame(in: anchor)
     let frame = Self.dragCardFrame(
-      target: targetFrame, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+      target: targetFrame, cardSize: cardSize, visibleFrame: visibleFrame)
     let dragTargetState = ScreenRecordingDragTargetState(
       frame: targetFrame,
       direction: Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame))
     self.dragTargetState = dragTargetState
 
-    lastAutomationState = [
-      "visible": "true",
-      "kind": "dragToGrant",
-      "appName": appName,
-      "panelFrame": Self.string(frame),
-      "dropTargetFrame": Self.string(targetFrame),
-    ]
+    lastAutomationState = Self.dragToGrantAutomationState(
+      appName: appName,
+      settingsFrame: anchor,
+      visibleFrame: visibleFrame
+    )
 
     presentPermissionDropTarget(appName: appName, frame: targetFrame)
 
@@ -293,6 +298,8 @@ final class CloudConnectorGuidanceOverlay {
       }
     }
 
+    guard followsSettingsWindow else { return }
+
     // Follow the System Settings window: re-anchor over it once it appears, and
     // dismiss the card as soon as the user closes it — the drag target is gone.
     settingsWatchTask = Task { [weak self] in
@@ -321,19 +328,23 @@ final class CloudConnectorGuidanceOverlay {
     dragTargetState?.frame = targetFrame
     let frame = Self.dragCardFrame(
       target: targetFrame, cardSize: size, visibleFrame: screen.visibleFrame)
-    dragTargetState?.direction = Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame)
+    let direction = Self.dragCardDirection(cardFrame: frame, targetFrame: targetFrame)
+    dragTargetState?.direction = direction
     window.setFrame(frame, display: true)
     dragTargetWindow?.setFrame(targetFrame, display: true)
     lastAutomationState?["panelFrame"] = Self.string(frame)
     lastAutomationState?["dropTargetFrame"] = Self.string(targetFrame)
+    lastAutomationState?["dropTargetVertical"] = targetFrame.midY >= anchor.midY ? "upper" : "lower"
+    lastAutomationState?["dragDirection"] = direction.rawValue
   }
 
   /// The list is the actual drag destination, not the entire System Settings
   /// window. System Settings does not expose this list before Accessibility has
   /// been granted, so model its stable content region from the public window
-  /// geometry. Keep it proportional so a resized or moved Settings window gets
-  /// guidance in the same place.
-  static func permissionListTargetFrame(in settingsFrame: CGRect) -> CGRect {
+  /// geometry. The permission list is in the upper content pane, immediately
+  /// below the toolbar/header; using `minY` here puts the highlight in the lower
+  /// pane and detaches the helper card from the list the user needs to target.
+  nonisolated static func permissionListTargetFrame(in settingsFrame: CGRect) -> CGRect {
     let sidebarWidth = min(max(settingsFrame.width * 0.28, 180), 270)
     let horizontalInset = min(max(settingsFrame.width * 0.05, 24), 44)
     let x = min(
@@ -341,7 +352,8 @@ final class CloudConnectorGuidanceOverlay {
       settingsFrame.minX + sidebarWidth + horizontalInset)
     let width = max(120, settingsFrame.maxX - horizontalInset - x)
     let height = min(max(settingsFrame.height * 0.28, 96), 180)
-    let y = settingsFrame.minY + max(56, settingsFrame.height * 0.22)
+    let contentHeaderInset = max(56, settingsFrame.height * 0.22)
+    let y = settingsFrame.maxY - contentHeaderInset - height
     return CGRect(x: x, y: y, width: width, height: height)
   }
 
@@ -400,6 +412,31 @@ final class CloudConnectorGuidanceOverlay {
   static func dragCardSize(appName: String) -> CGSize {
     let hasLongDisplayName = appName.count > 16
     return CGSize(width: hasLongDisplayName ? 260 : 220, height: hasLongDisplayName ? 200 : 190)
+  }
+
+  static func dragToGrantAutomationState(
+    appName: String,
+    settingsFrame: CGRect,
+    visibleFrame: CGRect
+  ) -> [String: String] {
+    let cardSize = dragCardSize(appName: appName)
+    let targetFrame = permissionListTargetFrame(in: settingsFrame)
+    let cardFrame = dragCardFrame(
+      target: targetFrame,
+      cardSize: cardSize,
+      visibleFrame: visibleFrame
+    )
+    let direction = dragCardDirection(cardFrame: cardFrame, targetFrame: targetFrame)
+    return [
+      "visible": "true",
+      "kind": "dragToGrant",
+      "appName": appName,
+      "panelFrame": string(cardFrame),
+      "dropTargetFrame": string(targetFrame),
+      "dropTargetPane": "content",
+      "dropTargetVertical": targetFrame.midY >= settingsFrame.midY ? "upper" : "lower",
+      "dragDirection": direction.rawValue,
+    ]
   }
 
   static func dragCardInitialAlpha(reduceMotion: Bool) -> CGFloat {
@@ -618,9 +655,26 @@ final class CloudConnectorGuidanceOverlay {
       presentClaudeAddHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
     case .claudeConnectExplicit, .claudeConnectHeuristic:
       presentClaudeConnectHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
+    case .screenRecordingDrag:
+      let appURL = Bundle.main.bundleURL
+      presentDragToGrantCard(
+        appIcon: NSWorkspace.shared.icon(forFile: appURL.path),
+        appName: fixture.appName,
+        appURL: appURL,
+        near: fixture.windowFrame,
+        visibleFrameOverride: fixture.visibleFrame,
+        followsSettingsWindow: false
+      )
     }
 
-    var state = automationState()
+    return Self.automationFixtureState(fixture, state: automationState())
+  }
+
+  static func automationFixtureState(
+    _ fixture: SpatialOverlayDogfoodFixture,
+    state: [String: String]
+  ) -> [String: String] {
+    var state = state
     state["fixture"] = fixture.rawValue
     state["action"] = fixture.actionLabel.lowercased()
     return state
@@ -774,7 +828,7 @@ private final class TransparentHostingView<Content: View>: NSHostingView<Content
   override var isOpaque: Bool { false }
 }
 
-enum PermissionDragDirection: Equatable {
+enum PermissionDragDirection: String, Equatable {
   case up
   case down
   case left

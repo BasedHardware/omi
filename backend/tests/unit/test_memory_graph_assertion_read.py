@@ -76,11 +76,14 @@ class _FakeDb:
     def __init__(self, docs=None):
         self.docs = dict(docs or {})
         self.limit_calls: list[tuple[str, int]] = []
+        self.get_all_batch_sizes: list[int] = []
 
     def collection(self, name: str):
         return _CollectionRef(self, name)
 
     def get_all(self, refs):
+        refs = list(refs)
+        self.get_all_batch_sizes.append(len(refs))
         return [ref.get() for ref in refs]
 
 
@@ -113,6 +116,7 @@ def _active_item(assertion: MemoryGraphAssertion, **overrides: Any) -> dict[str,
     item = {
         "uid": UID,
         "memory_id": assertion.memory_id,
+        "account_generation": 4,
         "status": "active",
         "tier": "long_term",
         "processing_state": "processed",
@@ -393,3 +397,93 @@ def test_existing_graph_traversal_sees_atomic_assertion_without_an_llm_call(monk
             (assertion.memory_id,),
         )
     ]
+
+
+def test_load_fenced_assertions_preserves_caller_order_and_skips_missing():
+    first = _assertion("mem-first", commit_sequence=2)
+    second = _assertion("mem-second", commit_sequence=3)
+    third = _assertion("mem-third", commit_sequence=4)
+    docs = {
+        **_docs_for(first, _active_item(first)),
+        **_docs_for(third, _active_item(third)),
+    }
+    db = _FakeDb(docs)
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        ["mem-second", "mem-first", "mem-missing", "mem-third"],
+        account_generation=4,
+        db_client=db,
+    )
+
+    assert [assertion.memory_id for assertion in loaded] == ["mem-first", "mem-third"]
+
+
+def test_load_fenced_assertions_batches_assertion_and_item_reads():
+    assertions = [_assertion(f"mem-{index:03d}", commit_sequence=index + 1) for index in range(205)]
+    docs: dict[str, dict[str, Any]] = {}
+    for assertion in assertions:
+        docs.update(_docs_for(assertion, _active_item(assertion)))
+    db = _FakeDb(docs)
+    memory_ids = [assertion.memory_id for assertion in assertions]
+
+    loaded = kg_db.load_fenced_assertions_for_memory_items(
+        UID,
+        memory_ids,
+        account_generation=4,
+        db_client=db,
+    )
+
+    assert len(loaded) == 205
+    assert max(db.get_all_batch_sizes) <= kg_db.MEMORY_GRAPH_ASSERTION_BATCH_SIZE
+    assert db.get_all_batch_sizes == [100, 100, 5, 100, 100, 5]
+
+
+def test_load_fenced_assertions_excludes_wrong_account_generation():
+    assertion = _assertion("mem-stale-generation")
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, account_generation=3)))
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+            db_client=db,
+        )
+        == []
+    )
+
+
+def test_load_fenced_assertions_excludes_restricted_sensitivity_labels():
+    assertion = _assertion("mem-restricted")
+    db = _FakeDb(_docs_for(assertion, _active_item(assertion, sensitivity_labels=["HeAlTh"])))
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+            db_client=db,
+        )
+        == []
+    )
+
+
+def test_load_fenced_assertions_ignores_miskeyed_memory_item_documents():
+    assertion = _assertion("mem-authoritative")
+    docs = _docs_for(assertion, _active_item(assertion))
+    item_path = f"users/{UID}/memory_items/{assertion.memory_id}"
+    miskeyed_item = dict(docs[item_path])
+    miskeyed_item["memory_id"] = "mem-payload-alias"
+    docs[item_path] = miskeyed_item
+    db = _FakeDb(docs)
+
+    assert (
+        kg_db.load_fenced_assertions_for_memory_items(
+            UID,
+            [assertion.memory_id],
+            account_generation=4,
+            db_client=db,
+        )
+        == []
+    )

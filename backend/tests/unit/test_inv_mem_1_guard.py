@@ -52,6 +52,8 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         "memory_source_replacements",
         "memory_outbox",
         "memory_control_state",
+        # Migration checkpoint under memory_control (not a product-memory tier store).
+        "legacy_canonical_backfill_checkpoint",
         "memory_apply_control_state",
         "memory_lineage",
         "memory_evidence",

@@ -52,8 +52,12 @@ podLabels:
   # Keep those scrape targets in the same development-only evidence plane as
   # the Pusher targets.
 
-podSecurityContext: {}
-  # fsGroup: 2000
+podSecurityContext:
+  # The image runs as omi:omi (10001:10001). Kubernetes mounts emptyDir as
+  # root-owned, so the parity-pack cassette root needs this supplemental group
+  # before the non-root listener can create its cassettes/ directory.
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
 
 securityContext: {}
   # capabilities:

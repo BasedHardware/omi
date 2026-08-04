@@ -32,16 +32,28 @@ struct DesktopTopBar: View {
   }
 
   var body: some View {
-    TopNavigationBarLayout(
-      expandedNavigation: { navPills },
-      compactNavigation: { compactNavigationMenu },
-      persistentControls: { CaptureListeningControls(appState: appState, onRewind: onRewind) },
-      settings: { settingsButton }
-    )
-    .frame(maxWidth: .infinity)
+    GeometryReader { proxy in
+      let laneWidth = TopNavigationLayoutMetrics.contentLaneWidth(for: proxy.size.width)
+
+      HStack(spacing: 0) {
+        Spacer(minLength: 0)
+        TopNavigationBarLayout(
+          expandedNavigation: { navPills },
+          compactNavigation: { compactNavigationMenu },
+          persistentControls: { CaptureListeningControls(appState: appState, onRewind: onRewind) },
+          settings: { settingsButton }
+        )
+        .frame(width: laneWidth)
+        Spacer(minLength: 0)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
     .frame(height: 44)
-    .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
+    // The Memory submenu is an inline overlay. Elevation belongs to the shared
+    // top-bar component so every shell and exported preview paints it above the
+    // destination sibling rather than relying on each call site to remember.
+    .zIndex(1)
     .onDisappear {
       memoryDropdownTask?.cancel()
     }
@@ -266,6 +278,20 @@ struct DesktopTopBar: View {
   }
 }
 
+enum TopNavigationLayoutMetrics {
+  /// The top bar follows the same readable lane as the Home chat composer,
+  /// retaining the composer's horizontal inset at narrow sizes.
+  static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
+    max(
+      0,
+      min(
+        ChatComposerLayout.contentLaneMaxWidth,
+        availableWidth - (ChatComposerLayout.pageMargin * 2)
+      )
+    )
+  }
+}
+
 /// Keeps the persistent capture and settings controls visible while replacing
 /// only primary navigation with its compact menu when a whole top-bar row no
 /// longer fits. Keeping the alternatives at this level means SwiftUI measures
@@ -310,8 +336,9 @@ struct TopNavigationBarLayout<
   }
 }
 
-/// Measures a top-bar row at its no-overflow width, then pins its persistent
-/// controls to the trailing edge once `ViewThatFits` has selected it.
+/// Fills the proposed lane when the row fits, then pins its persistent controls
+/// to the trailing edge. When it does not fit, reporting intrinsic width lets
+/// `ViewThatFits` select the compact alternative.
 private struct TopNavigationBarRowLayout: Layout {
   private static let navigationToControlsSpacing = OmiSpacing.md * 3
   private static let controlsToSettingsSpacing = OmiSpacing.md
@@ -322,9 +349,17 @@ private struct TopNavigationBarRowLayout: Layout {
     cache: inout ()
   ) -> CGSize {
     let sizes = sizes(for: subviews)
+    let intrinsicWidth =
+      sizes.navigation.width + Self.navigationToControlsSpacing + sizes.controls.width
+      + Self.controlsToSettingsSpacing + sizes.settings.width
+    let width: CGFloat
+    if let proposedWidth = proposal.width, proposedWidth.isFinite {
+      width = max(proposedWidth, intrinsicWidth)
+    } else {
+      width = intrinsicWidth
+    }
     return CGSize(
-      width: sizes.navigation.width + Self.navigationToControlsSpacing + sizes.controls.width
-        + Self.controlsToSettingsSpacing + sizes.settings.width,
+      width: width,
       height: max(sizes.navigation.height, sizes.controls.height, sizes.settings.height)
     )
   }

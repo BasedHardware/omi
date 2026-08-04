@@ -58,6 +58,19 @@ def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
     assert (
         "memory_items",
         "COLLECTION",
+        (
+            ("account_generation", "ASCENDING"),
+            ("tier", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("processing_state", "ASCENDING"),
+            ("graph_ready", "ASCENDING"),
+            ("updated_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
+        ),
+    ) in signatures
+    assert (
+        "memory_items",
+        "COLLECTION",
         (("source_ids", "CONTAINS"), ("__name__", "ASCENDING")),
     ) not in signatures
     assert (

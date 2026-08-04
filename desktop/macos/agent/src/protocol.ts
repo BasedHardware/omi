@@ -29,6 +29,8 @@ export interface CanonicalCorrelation {
 export interface QueryMessage extends ProtocolEnvelope {
   type: "query";
   sessionId: string;
+  /** Requested projection surface; the runtime accepts it only when bound to the canonical session. */
+  surfaceKind: string;
   producingTurnId?: string;
   prompt: string;
   mode?: "ask" | "act";
