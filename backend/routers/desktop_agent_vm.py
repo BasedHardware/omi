@@ -3,6 +3,7 @@ import hashlib
 import ipaddress
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -24,6 +25,9 @@ from utils.subscription import is_trial_paywalled
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _ZONE = "us-central1-a"
+_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+_READY_TIMEOUT_SECONDS = 300
+_READY_POLL_SECONDS = 5
 
 
 class AccountDeletionAccessBlocked(RuntimeError):
@@ -270,6 +274,26 @@ async def _instance(project: str, zone: str, vm_name: str) -> tuple[str, dict[st
     return str(instance.get("status", "UNKNOWN")), instance
 
 
+async def _wait_for_vm_ready(ip: str, auth_token: str) -> None:
+    deadline = time.monotonic() + _READY_TIMEOUT_SECONDS
+    url = f"http://{ip}:8080/health"
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    async with httpx.AsyncClient(timeout=10) as client:
+        while time.monotonic() < deadline:
+            try:
+                unauthenticated = await client.get(url)
+                if unauthenticated.status_code != 401:
+                    await asyncio.sleep(_READY_POLL_SECONDS)
+                    continue
+                response = await client.get(url, headers=headers)
+                if response.status_code == 200 and response.json().get("status") == "ok":
+                    return
+            except (httpx.HTTPError, ValueError):
+                pass
+            await asyncio.sleep(_READY_POLL_SECONDS)
+    raise RuntimeError("Agent VM did not become healthy before the readiness timeout")
+
+
 def _is_usable_vm_ip(value: Any) -> bool:
     if not isinstance(value, str) or not value or value == "unknown":
         return False
@@ -312,7 +336,7 @@ async def _create_vm(
                 # This identity is dedicated to VM bootstrap and is limited to
                 # the Agent VM image repository and environment secrets.
                 "email": service_account,
-                "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
+                "scopes": [_CLOUD_PLATFORM_SCOPE],
             }
         ],
         "networkInterfaces": [
@@ -345,7 +369,31 @@ async def _create_vm(
     ip = _ip(instance)
     if ip is None:
         raise AgentVmCreateOutcomeUnknown("GCE created VM has no usable IP address")
+    await _wait_for_vm_ready(ip, auth_token)
     return ip
+
+
+async def _set_service_account(project: str, vm_name: str, zone: str, service_account: str) -> None:
+    token = await run_blocking(db_executor, _get_access_token)
+    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/setServiceAccount"
+    body = {"email": service_account, "scopes": [_CLOUD_PLATFORM_SCOPE]}
+    response = await _gce_request("POST", url, token, body)
+    response.raise_for_status()
+    operation = response.json().get("name")
+    if not operation:
+        raise RuntimeError("GCE set-service-account response omitted operation name")
+    await _operation(project, zone, operation)
+
+
+async def _stop_vm(project: str, vm_name: str, zone: str) -> None:
+    token = await run_blocking(db_executor, _get_access_token)
+    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/stop"
+    response = await _gce_request("POST", url, token)
+    response.raise_for_status()
+    operation = response.json().get("name")
+    if not operation:
+        raise RuntimeError("GCE stop response omitted operation name")
+    await _operation(project, zone, operation)
 
 
 async def _start_vm(project: str, vm_name: str, zone: str) -> str:
@@ -424,29 +472,33 @@ async def _provision_background(
         await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
 
 
-async def _restart_background(uid: str, project: str, vm: dict[str, Any]) -> None:
+async def _restart_background(uid: str, project: str, vm: dict[str, Any], service_account: str) -> None:
     vm_name = str(vm["vmName"])
     zone = str(vm.get("zone") or _ZONE)
     auth_token = str(vm.get("authToken") or "")
     try:
+        await _set_service_account(project, vm_name, zone, service_account)
         ip = await _start_vm(project, vm_name, zone)
+        await _wait_for_vm_ready(ip, auth_token)
         await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip, zone)
     except Exception as exc:
         logger.error("Agent VM restart failed for uid=%s: %s", uid, exc)
         await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error", None, zone)
 
 
-async def _recover_background(uid: str, vm: dict[str, Any], ip: str) -> None:
-    await run_blocking(
-        db_executor,
-        _set_vm_if_current,
-        uid,
-        str(vm["vmName"]),
-        str(vm.get("authToken") or ""),
-        "ready",
-        ip,
-        str(vm.get("zone") or _ZONE),
-    )
+async def _rebootstrap_background(uid: str, project: str, vm: dict[str, Any], service_account: str) -> None:
+    vm_name = str(vm["vmName"])
+    zone = str(vm.get("zone") or _ZONE)
+    auth_token = str(vm.get("authToken") or "")
+    try:
+        await _stop_vm(project, vm_name, zone)
+        await _set_service_account(project, vm_name, zone, service_account)
+        ip = await _start_vm(project, vm_name, zone)
+        await _wait_for_vm_ready(ip, auth_token)
+        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip, zone)
+    except Exception as exc:
+        logger.error("Agent VM rebootstrap failed for uid=%s: %s", uid, exc)
+        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error", None, zone)
 
 
 def _response(vm: dict[str, Any]) -> AgentVmResponse:
@@ -546,7 +598,22 @@ async def get_agent_status(
         )
         if not updated:
             return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        background_tasks.add_task(_restart_background, uid, project, vm)
+        try:
+            service_account = _service_account()
+        except RuntimeError as exc:
+            logger.error("Agent VM restart blocked for uid=%s: %s", uid, exc)
+            await run_blocking(
+                db_executor,
+                _set_vm_if_current,
+                uid,
+                str(vm["vmName"]),
+                str(vm.get("authToken") or ""),
+                "error",
+                None,
+                str(vm.get("zone") or _ZONE),
+            )
+            return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
+        background_tasks.add_task(_restart_background, uid, project, vm, service_account)
         return _response(pending)
     if (
         gce_status == "RUNNING"
@@ -572,6 +639,21 @@ async def get_agent_status(
                 auth_token,
             )
             return None if deleted else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        background_tasks.add_task(_recover_background, uid, vm, instance_ip)
+        try:
+            service_account = _service_account()
+        except RuntimeError as exc:
+            logger.error("Agent VM recovery blocked for uid=%s: %s", uid, exc)
+            await run_blocking(
+                db_executor,
+                _set_vm_if_current,
+                uid,
+                str(vm["vmName"]),
+                str(vm.get("authToken") or ""),
+                "error",
+                None,
+                str(vm.get("zone") or _ZONE),
+            )
+            return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
+        background_tasks.add_task(_rebootstrap_background, uid, project, vm, service_account)
         return _response(pending)
     return _response(vm)

@@ -54,13 +54,37 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     )
 
 
-def test_startup_publishers_substitute_only_the_image() -> None:
+def test_startup_publishers_render_image_and_secret_name_without_shell_defaults() -> None:
     workflows = {
         "desktop_backend_auto_dev.yml": "GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com",
         "desktop_backend_prod.yml": "GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com",
     }
-    for workflow, service_account in workflows.items():
-        content = (ROOT.parent / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
+    publisher_paths = sorted(
+        path
+        for path in (ROOT.parent / ".github" / "workflows").glob("desktop_backend_*.yml")
+        if "backend/agent_vm/startup.sh" in path.read_text(encoding="utf-8")
+    )
+    assert {path.name for path in publisher_paths} == set(workflows)
+    for path in publisher_paths:
+        workflow = path.name
+        service_account = workflows[workflow]
+        content = path.read_text(encoding="utf-8")
         assert "envsubst '$AGENT_VM_IMAGE $AGENT_VM_GEMINI_SECRET_NAME' < backend/agent_vm/startup.sh" in content
         assert "envsubst < backend/agent_vm/startup.sh" not in content
         assert service_account in content
+
+    rendered = subprocess.run(
+        ["envsubst", "$AGENT_VM_IMAGE $AGENT_VM_GEMINI_SECRET_NAME"],
+        input=STARTUP.read_bytes(),
+        env={
+            **os.environ,
+            "AGENT_VM_IMAGE": "gcr.io/project/agent-vm:abcdef0",
+            "AGENT_VM_GEMINI_SECRET_NAME": "DESKTOP_GEMINI_API_KEY",
+        },
+        capture_output=True,
+        check=True,
+    ).stdout.decode("utf-8")
+    assert 'image="gcr.io/project/agent-vm:abcdef0"' in rendered
+    assert 'gemini_secret_name="DESKTOP_GEMINI_API_KEY"' in rendered
+    assert "${AGENT_VM_GEMINI_SECRET_NAME}" not in rendered
+    assert '${AGENT_VM_DATA_DIR:-/var/lib/omi-agent}' in rendered
