@@ -148,7 +148,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                 >
                   {/* Keyed on the pathname so each destination fades and lifts
                       in.
-                      
+
                       Deliberately not wrapped in `AnimatePresence
                       initial={false}`: every route registers its own copy of
                       this layout, so navigating remounts the whole shell. That
