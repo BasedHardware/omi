@@ -13,6 +13,7 @@
     "@omi/memory": "workspace:*",
     "@omi/conversation": "workspace:*",
     "@omi/tasks": "workspace:*",
+    "@omi/identity": "workspace:*",
     "hono": "^4.7.7"
   },
   "scripts": {

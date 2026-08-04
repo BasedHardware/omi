@@ -11,6 +11,7 @@ import { defaultTenantRecord, ensureTenant, kvTenantStore } from "@omi/tenant";
 import { memoryRoutes } from "@omi/memory";
 import { conversationRoutes } from "@omi/conversation";
 import { tasksRoutes } from "@omi/tasks";
+import { identityRoutes } from "@omi/identity";
 import { mountOriginParity } from "./parity-proxy.js";
 
 /**
@@ -75,6 +76,11 @@ export function createApp(deps: AppDeps) {
   if (moduleEnabled(f, "tasks")) {
     mountOriginParity(app, deps, { prefix: "/v1/action-items", edgeName: "tasks-parity" });
     app.route("/edge/tasks", tasksRoutes(deps));
+  }
+
+  if (moduleEnabled(f, "identity")) {
+    mountOriginParity(app, deps, { prefix: "/v1/users", edgeName: "identity-parity" });
+    app.route("/edge/users", identityRoutes(deps));
   }
 
   if (moduleEnabled(f, "search")) {

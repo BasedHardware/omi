@@ -13,7 +13,8 @@ export type EdgeModuleId =
   | "memory"
   | "conversation"
   | "tasks"
-  | "search";
+  | "search"
+  | "identity";
 
 const ALL_MODULES: EdgeModuleId[] = [
   "health",
@@ -22,6 +23,7 @@ const ALL_MODULES: EdgeModuleId[] = [
   "conversation",
   "tasks",
   "search",
+  "identity",
 ];
 
 export type FeatureEnv = Record<string, string | undefined>;
