@@ -53,6 +53,10 @@ import { useNotificationContext } from '@/components/notifications/NotificationC
 import { cn } from '@/lib/utils';
 import { SETTINGS_SECTIONS, type SettingsSectionId } from '@/lib/settingsSections';
 import { PROFILE_MENU_MAX_HEIGHT } from '@/lib/profileMenu';
+import { ConfettiBurst } from '@/components/ui/ConfettiBurst';
+
+/** How long the banner takes to swell and pop, and the burst to clear it. */
+const BANNER_BURST_MS = 420;
 
 // Hook to detect if we're on desktop
 function useIsDesktop() {
@@ -184,6 +188,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
   const [isTemporaryExpand, setIsTemporaryExpand] = useState(false);
   const [mobileAppDismissed, setMobileAppDismissed] = useState(false);
+  // Dismissal runs in two beats: the burst fires over the still-present banner,
+  // then the banner pops out. Collapsing them into one state would unmount the
+  // banner — and the burst anchored to it — on the same frame.
+  const [bannerBursting, setBannerBursting] = useState(false);
   const isDesktop = useIsDesktop();
   const sidebarRef = useRef<HTMLElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -450,13 +458,23 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               return (
                 <motion.div
                   // Dismissing is the one moment this banner is the thing you are
-                  // looking at, so it leaves with a pop rather than blinking out.
+                  // looking at, so it swells, bursts and pops out of existence
+                  // rather than blinking out.
                   initial={false}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.86, opacity: 0 }}
-                  transition={{ type: 'spring', stiffness: 520, damping: 26 }}
-                  className={cn('px-3 pt-2 pb-2', !showText && 'px-2')}
+                  animate={
+                    bannerBursting
+                      ? { scale: [1, 1.06, 0], opacity: [1, 1, 0] }
+                      : { scale: 1, opacity: 1 }
+                  }
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={
+                    bannerBursting
+                      ? { duration: BANNER_BURST_MS / 1000, times: [0, 0.35, 1] }
+                      : { type: 'spring', stiffness: 520, damping: 26 }
+                  }
+                  className={cn('relative px-3 pt-2 pb-2', !showText && 'px-2')}
                 >
+                  {bannerBursting && <ConfettiBurst />}
                   <a
                     href={bannerHref}
                     target="_blank"
@@ -486,8 +504,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          setMobileAppDismissed(true);
+                          setBannerBursting(true);
                           localStorage.setItem('mobile-app-banner-dismissed', 'true');
+                          window.setTimeout(
+                            () => setMobileAppDismissed(true),
+                            BANNER_BURST_MS,
+                          );
                         }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-text-quaternary transition-colors hover:bg-white/[0.08] hover:text-text-tertiary"
                         aria-label="Dismiss"
