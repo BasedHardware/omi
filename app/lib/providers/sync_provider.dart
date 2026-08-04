@@ -19,6 +19,18 @@ enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
 
+List<SyncedConversationPointer> sortSyncedConversationPointers(
+  Iterable<SyncedConversationPointer> pointers,
+) {
+  final sorted = List<SyncedConversationPointer>.from(pointers);
+  sorted.sort((a, b) {
+    final aDate = a.conversation.startedAt ?? a.conversation.createdAt;
+    final bDate = b.conversation.startedAt ?? b.conversation.createdAt;
+    return bDate.compareTo(aDate);
+  });
+  return sorted;
+}
+
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
   final AudioPlayerUtils _audioPlayerUtils = AudioPlayerUtils.instance;
@@ -290,9 +302,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   double get walsSyncedProgress => _syncState.progress;
   double? get syncSpeedKBps => _syncState.speedKBps;
   List<SyncedConversationPointer> get syncedConversationsPointers {
-    final sorted = List<SyncedConversationPointer>.from(_syncState.syncedConversations);
-    sorted.sort((a, b) => (b.conversation.createdAt).compareTo(a.conversation.createdAt));
-    return sorted;
+    return sortSyncedConversationPointers(_syncState.syncedConversations);
   }
 
   String? get syncError => _syncState.errorMessage;
