@@ -1,6 +1,13 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  ReactNode,
+} from 'react';
 
 interface ChatContext {
   // Panel state
@@ -65,14 +72,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       openChatWithApp,
       clearAppContext,
     }),
-    [isOpen, openChat, closeChat, toggleChat, currentContext, setContext, selectedAppId, openChatWithApp, clearAppContext]
+    [
+      isOpen,
+      openChat,
+      closeChat,
+      toggleChat,
+      currentContext,
+      setContext,
+      selectedAppId,
+      openChatWithApp,
+      clearAppContext,
+    ],
   );
 
-  return (
-    <ChatContext.Provider value={value}>
-      {children}
-    </ChatContext.Provider>
-  );
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }
 
 export function useChat() {

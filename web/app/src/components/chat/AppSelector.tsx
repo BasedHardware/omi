@@ -81,8 +81,8 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
             )}
           </div>
         ) : (
-          <div className="w-6 h-6 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-3.5 h-3.5 text-purple-primary" />
+          <div className="w-6 h-6 rounded-full bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-text-primary" />
           </div>
         )}
 
@@ -131,15 +131,15 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                     !selectedAppId && 'bg-bg-tertiary/50',
                   )}
                 >
-                  <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                    <Sparkles className="w-4 h-4 text-purple-primary" />
+                  <div className="w-8 h-8 rounded-full bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+                    <Sparkles className="w-4 h-4 text-text-primary" />
                   </div>
                   <div className="flex-1 text-left">
                     <p className="text-sm font-medium text-text-primary">Omi</p>
                     <p className="text-xs text-text-tertiary">Default assistant</p>
                   </div>
                   {!selectedAppId && (
-                    <Check className="w-4 h-4 text-purple-primary flex-shrink-0" />
+                    <Check className="w-4 h-4 text-text-primary flex-shrink-0" />
                   )}
                 </button>
 
@@ -186,7 +186,7 @@ export function AppSelector({ selectedAppId, onSelectApp, disabled }: AppSelecto
                       )}
                     </div>
                     {selectedAppId === app.id && (
-                      <Check className="w-4 h-4 text-purple-primary flex-shrink-0" />
+                      <Check className="w-4 h-4 text-text-primary flex-shrink-0" />
                     )}
                   </button>
                 ))}

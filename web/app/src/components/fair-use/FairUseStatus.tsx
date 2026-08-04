@@ -43,7 +43,7 @@ function UsageBar({
   pct: number;
 }) {
   const barColor =
-    pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-purple-500';
+    pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-text-primary';
 
   return (
     <div className="space-y-1.5">
@@ -125,7 +125,7 @@ export function FairUseStatus() {
           <p className="text-text-tertiary mb-4">Unable to load fair use status.</p>
           <button
             onClick={loadStatus}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.08] text-text-secondary hover:bg-white/[0.14] transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
             Retry
@@ -231,7 +231,7 @@ export function FairUseStatus() {
           const usedMin = Math.round(used_ms / 60000);
           const limitMin = Math.round(daily_limit_ms / 60000);
           const pct = Math.min((used_ms / daily_limit_ms) * 100, 100);
-          const barColor = exhausted ? 'bg-red-500' : 'bg-purple-500';
+          const barColor = exhausted ? 'bg-red-500' : 'bg-text-primary';
 
           let resetLabel = '';
           if (resets_at) {

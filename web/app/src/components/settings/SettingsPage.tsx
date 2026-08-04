@@ -133,7 +133,7 @@ function Toggle({
       className={cn(
         'relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0',
         enabled
-          ? 'bg-purple-500 shadow-[0_0_12px_rgba(139,92,246,0.4)]'
+          ? 'bg-text-primary shadow-[0_0_12px_rgba(255,255,255,0.25)]'
           : 'bg-white/[0.08]',
         disabled && 'opacity-50 cursor-not-allowed',
       )}
@@ -261,12 +261,14 @@ function Dropdown({
               className={cn(
                 'w-full px-4 py-2.5 text-left transition-colors flex items-center justify-between text-sm',
                 option.value === value
-                  ? 'bg-purple-500/15 text-white'
+                  ? 'bg-white/[0.08] text-white'
                   : 'text-white/70 hover:bg-white/[0.04] hover:text-white/90',
               )}
             >
               <span>{option.label}</span>
-              {option.value === value && <Check className="w-4 h-4 text-purple-400" />}
+              {option.value === value && (
+                <Check className="w-4 h-4 text-text-secondary" />
+              )}
             </button>
           ))}
         </div>
@@ -331,13 +333,13 @@ function ConfirmDialog({
           <div
             className={cn(
               'p-2 rounded-full',
-              isDestructive ? 'bg-red-500/10' : 'bg-purple-500/10',
+              isDestructive ? 'bg-red-500/10' : 'bg-white/[0.08]',
             )}
           >
             <AlertTriangle
               className={cn(
                 'w-6 h-6',
-                isDestructive ? 'text-red-400' : 'text-purple-400',
+                isDestructive ? 'text-red-400' : 'text-text-secondary',
               )}
             />
           </div>
@@ -366,7 +368,7 @@ function ConfirmDialog({
               'px-4 py-2 rounded-xl font-medium flex items-center gap-2',
               isDestructive
                 ? 'bg-red-500 text-white hover:bg-red-600'
-                : 'bg-purple-500 text-white hover:bg-purple-600',
+                : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
               'transition-colors disabled:opacity-50',
             )}
           >
@@ -436,7 +438,7 @@ function ProfileSection({
         </h3>
         <Card>
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-full overflow-hidden bg-bg-tertiary ring-2 ring-purple-500/30 flex-shrink-0">
+            <div className="w-20 h-20 rounded-full overflow-hidden bg-bg-tertiary ring-2 ring-white/25 flex-shrink-0">
               {user?.photoURL ? (
                 <Image
                   src={user.photoURL}
@@ -527,7 +529,7 @@ function ProfileSection({
                   'flex-1 px-4 py-2.5 rounded-xl',
                   'bg-bg-tertiary border border-white/[0.06]',
                   'text-text-primary placeholder:text-text-quaternary',
-                  'focus:outline-none focus:border-purple-500',
+                  'focus:outline-none focus:border-white/25',
                 )}
               />
               <button
@@ -535,8 +537,8 @@ function ProfileSection({
                 disabled={!newWord.trim()}
                 className={cn(
                   'px-4 py-2.5 rounded-xl font-medium',
-                  'bg-purple-500 text-white',
-                  'hover:bg-purple-600 transition-colors',
+                  'bg-text-primary text-bg-primary',
+                  'hover:bg-text-primary/90 transition-colors',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
@@ -632,10 +634,10 @@ function PrivacySection({
         </SettingRow>
       </Card>
 
-      <Card className="border-purple-500/20">
+      <Card className="border-white/25">
         <div className="flex items-start gap-4">
-          <div className="p-2 rounded-lg bg-purple-500/10">
-            <Shield className="w-5 h-5 text-purple-400" />
+          <div className="p-2 rounded-lg bg-white/[0.08]">
+            <Shield className="w-5 h-5 text-text-secondary" />
           </div>
           <div>
             <h3 className="text-text-primary font-medium">Your Privacy Matters</h3>
@@ -647,7 +649,7 @@ function PrivacySection({
               href="https://omi.me/privacy"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-purple-400 hover:underline mt-2"
+              className="inline-flex items-center gap-1 text-sm text-text-secondary hover:underline mt-2"
             >
               Learn more about our privacy policy
               <ExternalLink className="w-3.5 h-3.5" />
@@ -1065,7 +1067,7 @@ function UsageSectionContent({
           className={cn(
             'px-4 py-2 rounded-lg text-sm font-medium transition-all',
             activeTab === 'plan'
-              ? 'bg-purple-500 text-white shadow-md'
+              ? 'bg-text-primary text-bg-primary shadow-md'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
           )}
         >
@@ -1076,7 +1078,7 @@ function UsageSectionContent({
           className={cn(
             'px-4 py-2 rounded-lg text-sm font-medium transition-all',
             activeTab === 'usage'
-              ? 'bg-purple-500 text-white shadow-md'
+              ? 'bg-text-primary text-bg-primary shadow-md'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
           )}
         >
@@ -1096,8 +1098,8 @@ function UsageSectionContent({
                 {/* Header */}
                 <div className="flex items-start justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-purple-400" />
+                    <div className="w-12 h-12 rounded-2xl bg-white/[0.08] flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-text-secondary" />
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold text-text-primary">
@@ -1108,7 +1110,7 @@ function UsageSectionContent({
                   </div>
                   <button
                     onClick={() => setShowUpgradeOptions(true)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/20"
+                    className="px-5 py-2.5 bg-text-primary hover:bg-text-primary/90 text-bg-primary text-sm font-semibold rounded-xl transition-all shadow-lg shadow-black/40"
                   >
                     Upgrade to Unlimited
                   </button>
@@ -1199,7 +1201,7 @@ function UsageSectionContent({
 
               {/* Upgrade Options (shown when clicked) */}
               {showUpgradeOptions && (
-                <Card className="border-purple-500/20">
+                <Card className="border-white/25">
                   <div className="flex items-center justify-between mb-5">
                     <div>
                       <h4 className="text-lg font-semibold text-text-primary">
@@ -1233,12 +1235,12 @@ function UsageSectionContent({
                             className={cn(
                               'relative p-5 rounded-2xl border-2 text-left transition-all',
                               isSelected
-                                ? 'border-purple-500 bg-purple-500/5 shadow-lg shadow-purple-500/10'
-                                : 'border-bg-tertiary hover:border-purple-500/30 bg-bg-tertiary/30',
+                                ? 'border-white/25 bg-white/[0.08] shadow-lg shadow-black/40'
+                                : 'border-bg-tertiary hover:border-white/25 bg-bg-tertiary/30',
                             )}
                           >
                             {isAnnual && (
-                              <span className="absolute -top-2.5 right-3 px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wide">
+                              <span className="absolute -top-2.5 right-3 px-3 py-1 bg-text-primary text-bg-primary text-[10px] font-bold rounded-full uppercase tracking-wide">
                                 Best Value
                               </span>
                             )}
@@ -1249,7 +1251,7 @@ function UsageSectionContent({
                               {option.price_string}
                             </p>
                             {option.description && (
-                              <p className="text-xs text-purple-400 mt-2 font-medium">
+                              <p className="text-xs text-text-secondary mt-2 font-medium">
                                 {option.description}
                               </p>
                             )}
@@ -1259,7 +1261,7 @@ function UsageSectionContent({
                     </div>
                   ) : (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                      <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
                     </div>
                   )}
 
@@ -1276,9 +1278,9 @@ function UsageSectionContent({
                     disabled={isLoading || !selectedPriceId}
                     className={cn(
                       'w-full py-3.5 rounded-xl font-semibold transition-all',
-                      'bg-gradient-to-r from-purple-500 to-purple-600 text-white',
-                      'hover:from-purple-600 hover:to-purple-700',
-                      'shadow-lg shadow-purple-500/20',
+                      'bg-text-primary text-bg-primary',
+                      'hover:bg-text-primary/90',
+                      'shadow-lg shadow-black/40',
                       'disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none',
                     )}
                   >
@@ -1330,10 +1332,10 @@ function UsageSectionContent({
                     <p className="text-xs text-text-quaternary">Insights</p>
                   </div>
                   <div className="text-center">
-                    <div className="w-10 h-10 mx-auto rounded-xl bg-purple-500/10 flex items-center justify-center mb-2">
-                      <Brain className="w-5 h-5 text-purple-400" />
+                    <div className="w-10 h-10 mx-auto rounded-xl bg-white/[0.08] flex items-center justify-center mb-2">
+                      <Brain className="w-5 h-5 text-text-secondary" />
                     </div>
-                    <p className="text-xl font-bold text-purple-400">
+                    <p className="text-xl font-bold text-text-secondary">
                       {monthlyUsage?.memories_created || 0}
                     </p>
                     <p className="text-xs text-text-quaternary">Memories</p>
@@ -1346,8 +1348,8 @@ function UsageSectionContent({
             <>
               {/* Header */}
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 rounded-full bg-white/[0.14] flex items-center justify-center">
+                  <Crown className="w-5 h-5 text-text-secondary" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-text-primary">
@@ -1380,12 +1382,12 @@ function UsageSectionContent({
                         className={cn(
                           'relative p-4 rounded-xl border-2 text-left transition-all',
                           isSelected
-                            ? 'border-purple-500 bg-purple-500/5'
+                            ? 'border-white/25 bg-white/[0.08]'
                             : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
                         )}
                       >
                         {isAnnual && (
-                          <span className="absolute -top-2 right-2 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-medium rounded-full">
+                          <span className="absolute -top-2 right-2 px-2 py-0.5 bg-text-primary text-bg-primary text-[10px] font-medium rounded-full">
                             POPULAR
                           </span>
                         )}
@@ -1397,7 +1399,7 @@ function UsageSectionContent({
                           {option.price_string}
                         </p>
                         {option.description && (
-                          <p className="text-xs text-purple-400 mt-1">
+                          <p className="text-xs text-text-secondary mt-1">
                             {option.description}
                           </p>
                         )}
@@ -1414,7 +1416,7 @@ function UsageSectionContent({
                 </div>
               ) : (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
                 </div>
               )}
 
@@ -1424,7 +1426,7 @@ function UsageSectionContent({
                 <ul className="space-y-2">
                   {defaultFeatures.map((feature, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                      <Check className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
                       <span className="text-sm text-text-tertiary">{feature}</span>
                     </li>
                   ))}
@@ -1449,8 +1451,8 @@ function UsageSectionContent({
                 }
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
-                  'bg-purple-500 text-white',
-                  'hover:bg-purple-600',
+                  'bg-text-primary text-bg-primary',
+                  'hover:bg-text-primary/90',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
@@ -1504,7 +1506,7 @@ function UsageSectionContent({
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all',
                   selectedPeriod === period
-                    ? 'bg-purple-500 text-white shadow-md'
+                    ? 'bg-text-primary text-bg-primary shadow-md'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
                 )}
               >
@@ -1544,10 +1546,10 @@ function UsageSectionContent({
                 <p className="text-xs text-text-quaternary">Insights</p>
               </div>
               <div className="text-center">
-                <div className="w-10 h-10 mx-auto rounded-xl bg-purple-500/10 flex items-center justify-center mb-2">
-                  <Brain className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 mx-auto rounded-xl bg-white/[0.08] flex items-center justify-center mb-2">
+                  <Brain className="w-5 h-5 text-text-secondary" />
                 </div>
-                <p className="text-xl font-bold text-purple-400">
+                <p className="text-xl font-bold text-text-secondary">
                   {usage?.memories_created || 0}
                 </p>
                 <p className="text-xs text-text-quaternary">Memories</p>
@@ -1701,7 +1703,7 @@ function CreateApiKeyDialog({
                   'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
                   copied
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-purple-500 text-white hover:bg-purple-600',
+                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
                 )}
               >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -1737,7 +1739,7 @@ function CreateApiKeyDialog({
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
                   placeholder="e.g., My App Integration"
-                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                 />
               </div>
 
@@ -1752,7 +1754,7 @@ function CreateApiKeyDialog({
                       className={cn(
                         'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
                         isReadOnly
-                          ? 'bg-purple-500 text-white'
+                          ? 'bg-text-primary text-bg-primary'
                           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
                       )}
                     >
@@ -1763,7 +1765,7 @@ function CreateApiKeyDialog({
                       className={cn(
                         'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
                         isFullAccess
-                          ? 'bg-purple-500 text-white'
+                          ? 'bg-text-primary text-bg-primary'
                           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
                       )}
                     >
@@ -1803,7 +1805,7 @@ function CreateApiKeyDialog({
                             className={cn(
                               'px-3 py-1.5 text-xs font-semibold transition-colors',
                               scopes[writeKey]
-                                ? 'bg-purple-500 text-white'
+                                ? 'bg-text-primary text-bg-primary'
                                 : 'text-text-quaternary hover:text-text-secondary',
                             )}
                           >
@@ -1825,7 +1827,7 @@ function CreateApiKeyDialog({
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
                   keyName.trim() && !isCreating
-                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
                     : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
                 )}
               >
@@ -1918,7 +1920,7 @@ function CreateMcpKeyDialog({
                   'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
                   copied
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-purple-500 text-white hover:bg-purple-600',
+                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
                 )}
               >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -1953,7 +1955,7 @@ function CreateMcpKeyDialog({
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
                   placeholder="e.g., Claude Desktop"
-                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                 />
               </div>
               <button
@@ -1962,7 +1964,7 @@ function CreateMcpKeyDialog({
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
                   keyName.trim() && !isCreating
-                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
                     : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
                 )}
               >
@@ -2144,7 +2146,7 @@ function DeveloperSection({
           </h3>
           <button
             onClick={() => setShowApiKeyDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.08] text-text-secondary text-xs font-medium hover:bg-white/[0.14] transition-colors"
           >
             <Plus className="w-3 h-3" />
             Create Key
@@ -2167,7 +2169,7 @@ function DeveloperSection({
                         {apiKey.key_prefix}...
                       </code>
                       {apiKey.scopes && apiKey.scopes.length > 0 && (
-                        <span className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+                        <span className="text-xs text-text-secondary bg-white/[0.08] px-2 py-0.5 rounded">
                           {apiKey.scopes.length} scopes
                         </span>
                       )}
@@ -2206,14 +2208,14 @@ function DeveloperSection({
               href="https://docs.omi.me/doc/developer/MCP"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+              className="text-xs text-text-secondary hover:text-text-secondary transition-colors"
             >
               Docs ↗
             </a>
           </div>
           <button
             onClick={() => setShowMcpKeyDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.08] text-text-secondary text-xs font-medium hover:bg-white/[0.14] transition-colors"
           >
             <Plus className="w-3 h-3" />
             Create Key
@@ -2313,7 +2315,7 @@ function DeveloperSection({
               </p>
               <button
                 onClick={copyUrl}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors"
               >
                 <code className="text-sm text-text-primary font-mono truncate mr-2">
                   {mcpServerUrl}
@@ -2384,7 +2386,7 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 1. Name{' '}
-                <span className="text-purple-400/60 font-normal">
+                <span className="text-text-secondary font-normal">
                   → Claude &quot;Name&quot;
                 </span>
               </p>
@@ -2394,7 +2396,7 @@ function DeveloperSection({
                   setCopiedClaudeName(true);
                   setTimeout(() => setCopiedClaudeName(false), 2000);
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
               >
                 <code className="text-sm text-text-primary font-mono">
                   {claudeConnectorName}
@@ -2411,7 +2413,7 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 2. Remote MCP server URL{' '}
-                <span className="text-purple-400/60 font-normal">
+                <span className="text-text-secondary font-normal">
                   → Claude &quot;Remote MCP server URL&quot;
                 </span>
               </p>
@@ -2421,7 +2423,7 @@ function DeveloperSection({
                   setCopiedClaudeUrl(true);
                   setTimeout(() => setCopiedClaudeUrl(false), 2000);
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
               >
                 <code className="text-sm text-text-primary font-mono truncate mr-2">
                   {claudeConnectorUrl}
@@ -2438,7 +2440,7 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 3. OAuth Client ID{' '}
-                <span className="text-purple-400/60 font-normal">
+                <span className="text-text-secondary font-normal">
                   → Claude Advanced &quot;OAuth Client ID&quot;
                 </span>
               </p>
@@ -2448,7 +2450,7 @@ function DeveloperSection({
                   setCopiedClaudeClientId(true);
                   setTimeout(() => setCopiedClaudeClientId(false), 2000);
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
               >
                 <code className="text-sm text-text-primary font-mono">
                   {claudeConnectorClientId}
@@ -2465,7 +2467,7 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 4. OAuth Client Secret{' '}
-                <span className="text-purple-400/60 font-normal">
+                <span className="text-text-secondary font-normal">
                   → Claude Advanced &quot;OAuth Client Secret&quot;
                 </span>
               </p>
@@ -2476,7 +2478,7 @@ function DeveloperSection({
                     setCopiedClaudeSecret(true);
                     setTimeout(() => setCopiedClaudeSecret(false), 2000);
                   }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
                 >
                   <code className="text-sm text-text-primary font-mono truncate mr-2">
                     {claudeConnectorSecret.slice(0, 8)}…{claudeConnectorSecret.slice(-4)}
@@ -2534,7 +2536,7 @@ function DeveloperSection({
             href="https://docs.omi.me/doc/developer/apps/Introduction"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+            className="text-xs text-text-secondary hover:text-text-secondary transition-colors"
           >
             Docs ↗
           </a>
@@ -2596,7 +2598,7 @@ function DeveloperSection({
                             )
                           }
                           placeholder="https://your-server.com/webhook"
-                          className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                          className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                         />
                         {webhook.hasDelay && (
                           <input
@@ -2612,7 +2614,7 @@ function DeveloperSection({
                               )
                             }
                             placeholder="Interval (seconds)"
-                            className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                            className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                           />
                         )}
                       </div>
@@ -2638,7 +2640,7 @@ function DeveloperSection({
               'w-full flex items-center gap-4 py-3 transition-colors',
               isExporting
                 ? 'text-text-tertiary cursor-not-allowed'
-                : 'text-text-primary hover:text-purple-400',
+                : 'text-text-primary hover:text-text-secondary',
             )}
           >
             <div className="p-2 rounded-lg bg-bg-tertiary">
@@ -2686,7 +2688,7 @@ function DeveloperSection({
           <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">
             Experimental
           </h3>
-          <FlaskConical className="w-4 h-4 text-purple-400" />
+          <FlaskConical className="w-4 h-4 text-text-secondary" />
         </div>
         <Card>
           <div className="space-y-1">
@@ -2781,7 +2783,7 @@ function DeveloperSection({
           href="https://docs.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-between py-3 text-text-primary hover:text-purple-400 transition-colors"
+          className="flex items-center justify-between py-3 text-text-primary hover:text-text-secondary transition-colors"
         >
           <div className="flex items-center gap-3">
             <BookOpen className="w-5 h-5 text-text-tertiary" />
@@ -2886,7 +2888,7 @@ function AccountSection({
         <Card>
           <Link
             href="/fair-use"
-            className="flex items-center justify-between py-2 text-text-primary hover:text-purple-400 transition-colors"
+            className="flex items-center justify-between py-2 text-text-primary hover:text-text-secondary transition-colors"
           >
             <div className="flex items-center gap-3">
               <Scale className="w-5 h-5 text-text-tertiary" />
@@ -2910,7 +2912,7 @@ function AccountSection({
         <Card>
           <button
             onClick={onSignOut}
-            className="w-full flex items-center gap-3 py-3 text-text-primary hover:text-purple-400 transition-colors"
+            className="w-full flex items-center gap-3 py-3 text-text-primary hover:text-text-secondary transition-colors"
           >
             <LogOut className="w-5 h-5" />
             <span className="font-medium">Sign Out</span>
@@ -2943,7 +2945,7 @@ function AccountSection({
             href="https://feedback.omi.me"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between py-3 border-b border-white/[0.06] text-text-primary hover:text-purple-400 transition-colors"
+            className="flex items-center justify-between py-3 border-b border-white/[0.06] text-text-primary hover:text-text-secondary transition-colors"
           >
             <span>Feedback & Bug Reports</span>
             <ExternalLink className="w-4 h-4" />
@@ -2952,7 +2954,7 @@ function AccountSection({
             href="https://help.omi.me"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between py-3 text-text-primary hover:text-purple-400 transition-colors"
+            className="flex items-center justify-between py-3 text-text-primary hover:text-text-secondary transition-colors"
           >
             <span>Help Center</span>
             <ExternalLink className="w-4 h-4" />
@@ -3321,7 +3323,7 @@ export function SettingsPage() {
     if (sectionLoading === activeSection) {
       return (
         <div className="h-64 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-text-primary animate-spin" />
         </div>
       );
     }
@@ -3421,8 +3423,8 @@ export function SettingsPage() {
           <div className="absolute inset-0 bg-black/60" />
           <div className="relative bg-bg-secondary rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-white/[0.06]">
             <div className="flex flex-col items-center text-center gap-4">
-              <div className="p-3 rounded-full bg-purple-500/10">
-                <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+              <div className="p-3 rounded-full bg-white/[0.08]">
+                <Loader2 className="w-8 h-8 text-text-secondary animate-spin" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">

@@ -58,7 +58,7 @@ function getNotificationIconColor(type: NotificationType): string {
     case 'action_item_delete':
       return 'text-blue-400';
     case 'daily_summary':
-      return 'text-purple-400';
+      return 'text-text-secondary';
     case 'plugin':
       return 'text-green-400';
     case 'merge_completed':
@@ -100,7 +100,7 @@ export function NotificationItem({
         'flex items-start gap-3 px-4 py-3 cursor-pointer',
         'hover:bg-bg-tertiary/50 transition-colors',
         'group relative',
-        !notification.read && 'bg-purple-primary/5',
+        !notification.read && 'bg-white/[0.08]',
       )}
     >
       {/* Icon or App Image */}
@@ -151,7 +151,7 @@ export function NotificationItem({
       {/* Unread indicator */}
       {!notification.read && (
         <div
-          className="w-2 h-2 rounded-full bg-purple-primary flex-shrink-0 mt-2"
+          className="w-2 h-2 rounded-full bg-text-primary flex-shrink-0 mt-2"
           title="Unread"
         />
       )}
