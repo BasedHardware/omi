@@ -14,7 +14,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from retire_superseded_sync_prs import SyncPullRequest, select_superseded  # noqa: E402
+from retire_superseded_sync_prs import (  # noqa: E402
+    SyncPullRequest,
+    list_open_prs_args,
+    parse_listed_prs,
+    select_superseded,
+)
 
 
 class SelectSupersededTests(unittest.TestCase):
@@ -55,6 +60,44 @@ class SelectSupersededTests(unittest.TestCase):
         ]
         selected = select_superseded(prs, current_number=10960, prefix="release/windows-v")
         self.assertEqual([pr.number for pr in selected], [10419])
+
+
+class ListOpenPrsQueryTests(unittest.TestCase):
+    def test_list_args_do_not_use_head_search_qualifier(self) -> None:
+        # Regression for the review blocker: `gh pr list --search head:release/windows-v`
+        # returns zero same-repo results, so listing must be open + local prefix filter.
+        args = list_open_prs_args(base="main")
+        self.assertNotIn("--search", args)
+        self.assertFalse(any(a.startswith("head:") for a in args))
+        self.assertEqual(
+            args,
+            [
+                "pr",
+                "list",
+                "--base",
+                "main",
+                "--state",
+                "open",
+                "--json",
+                "number,headRefName,isCrossRepository",
+                "--limit",
+                "100",
+            ],
+        )
+
+    def test_parse_listed_prs_keeps_cross_repo_flag(self) -> None:
+        payload = (
+            '[{"number":1,"headRefName":"release/windows-v1.0.1","isCrossRepository":false},'
+            '{"number":2,"headRefName":"release/windows-v9.9.9","isCrossRepository":true}]'
+        )
+        prs = parse_listed_prs(payload)
+        self.assertEqual(
+            prs,
+            [
+                SyncPullRequest(number=1, head_ref="release/windows-v1.0.1", is_cross_repository=False),
+                SyncPullRequest(number=2, head_ref="release/windows-v9.9.9", is_cross_repository=True),
+            ],
+        )
 
 
 if __name__ == "__main__":

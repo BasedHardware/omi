@@ -9,6 +9,11 @@ touching tags, releases, or branches.
 
 The selection predicate is pure and unit-tested; the gh calls are best-effort
 and never raise (the release is already published by the time this runs).
+
+Listing intentionally does **not** use `gh pr list --search 'head:…'`. That
+qualifier does not match same-repo `release/windows-v*` heads as a prefix (live
+queries return zero results), so candidates are listed openly for `main` and
+filtered locally with `head_ref.startswith(prefix)`.
 """
 
 from __future__ import annotations
@@ -51,6 +56,39 @@ def select_superseded(prs: Sequence[SyncPullRequest], current_number: int, prefi
     ]
 
 
+def list_open_prs_args(*, base: str) -> list[str]:
+    """Build `gh pr list` args for candidate sync PRs.
+
+    Do not add `--search head:…` here — GitHub's `head:` search qualifier does
+    not treat the value as a branch-name prefix for same-repo PRs, so that path
+    silently returns an empty set and the retirement step becomes a no-op.
+    """
+    return [
+        "pr",
+        "list",
+        "--base",
+        base,
+        "--state",
+        "open",
+        "--json",
+        "number,headRefName,isCrossRepository",
+        "--limit",
+        "100",
+    ]
+
+
+def parse_listed_prs(stdout: str) -> list[SyncPullRequest]:
+    raw = json.loads(stdout)
+    return [
+        SyncPullRequest(
+            number=item["number"],
+            head_ref=item["headRefName"],
+            is_cross_repository=bool(item.get("isCrossRepository", False)),
+        )
+        for item in raw
+    ]
+
+
 def _run_gh(args: Sequence[str], *, gh: str = "gh") -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [gh, *args],
@@ -68,44 +106,28 @@ def retire(
     search_head: str,
     gh: str = "gh",
 ) -> list[SyncPullRequest]:
-    """List matching open PRs and close every one except the current PR.
+    """List open PRs against ``base`` and close superseded sync PRs.
 
     Returns the list of PRs that were closed. All gh failures are swallowed so a
     cleanup problem can never block the release workflow.
     """
-    listed = _run_gh(
-        [
-            "pr", "list",
-            "--base", base,
-            "--state", "open",
-            "--search", f"head:{search_head}",
-            "--json", "number,headRefName,isCrossRepository",
-            "--limit", "100",
-        ],
-        gh=gh,
-    )
+    listed = _run_gh(list_open_prs_args(base=base), gh=gh)
     if listed.returncode:
         return []
 
     try:
-        raw = json.loads(listed.stdout)
-    except json.JSONDecodeError:
+        prs = parse_listed_prs(listed.stdout)
+    except (json.JSONDecodeError, KeyError, TypeError):
         return []
 
-    prs = [
-        SyncPullRequest(
-            number=item["number"],
-            head_ref=item["headRefName"],
-            is_cross_repository=bool(item.get("isCrossRepository", False)),
-        )
-        for item in raw
-    ]
     to_close = select_superseded(prs, current_number, search_head)
 
     for pr in to_close:
         closed = _run_gh(
             [
-                "pr", "close", str(pr.number),
+                "pr",
+                "close",
+                str(pr.number),
                 "--comment",
                 f"Superseded by #{current_number} (release v{version}); the release tag is authoritative.",
             ],
@@ -119,7 +141,7 @@ def retire(
 
 
 def _self_test(gh: str) -> int:
-    """Hermetic check of the selection predicate and CLI wiring (no gh needed)."""
+    """Hermetic check of the selection predicate and listing args (no gh needed)."""
     prs = [
         SyncPullRequest(number=10419, head_ref="release/windows-v1.0.3"),
         SyncPullRequest(number=10513, head_ref="release/windows-v1.0.11"),
@@ -138,6 +160,14 @@ def _self_test(gh: str) -> int:
         print("self-test failed: current or unrelated PR was not retained", file=sys.stderr)
         return 1
 
+    list_args = list_open_prs_args(base="main")
+    if "--search" in list_args or any(a.startswith("head:") for a in list_args):
+        print(f"self-test failed: listing still uses head-search: {list_args}", file=sys.stderr)
+        return 1
+    if "--base" not in list_args or "main" not in list_args:
+        print(f"self-test failed: listing missing base filter: {list_args}", file=sys.stderr)
+        return 1
+
     if shutil.which(gh) is None:
         print(f"self-test passed; gh not found on PATH ({gh!r}), skipping live listing", file=sys.stderr)
     return 0
@@ -148,7 +178,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--current-pr", type=int)
     parser.add_argument("--version")
     parser.add_argument("--base", default="main")
-    parser.add_argument("--search-head", default="release/windows-v")
+    parser.add_argument(
+        "--search-head",
+        default="release/windows-v",
+        help="local headRefName prefix used after listing open PRs (not a gh --search qualifier)",
+    )
     parser.add_argument("--gh", default="gh", help="gh executable (test seam)")
     parser.add_argument("--self-test", action="store_true", help="run the hermetic predicate self-test and exit")
     args = parser.parse_args(argv)
