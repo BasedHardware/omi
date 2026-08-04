@@ -84,6 +84,16 @@ extension SettingsContentView {
                   .foregroundColor(OmiColors.warning)
               }
               Spacer()
+              if !account.needsReconnect,
+                account.account != GoogleOAuthConnectionManager.shared.primaryConnection()?.account
+              {
+                Button("Use for reads") {
+                  _ = GoogleOAuthConnectionManager.shared.selectPrimaryAccount(account.account ?? "")
+                  loadGoogleOAuthAccounts()
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(OmiColors.textSecondary)
+              }
               Button(action: {
                 Task {
                   if account.needsReconnect {
@@ -276,20 +286,37 @@ extension SettingsContentView {
   func selectGmailAccount(_ cookiePath: String?, label: String) {
     GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
     showingGmailAccountPicker = false
+    gmailReadGeneration += 1
   }
 
   var googleOAuthSummary: String {
     if googleOAuthAccounts.isEmpty {
       return "Connect Gmail and Calendar over OAuth — no browser cookies."
     }
-    let count = googleOAuthAccounts.count
-    return count == 1
-      ? "1 account connected — Gmail and Calendar read through OAuth."
-      : "\(count) accounts connected — Gmail and Calendar read through OAuth."
+    let activeCount = googleOAuthAccounts.filter { !$0.needsReconnect }.count
+    let storedCount = googleOAuthAccounts.count
+    if !googleOAuthIsVerified {
+      return "\(storedCount) account\(storedCount == 1 ? "" : "s") stored — verifying Gmail and Calendar."
+    }
+    return activeCount == 1
+      ? "1 account verified — Gmail and Calendar read through OAuth."
+      : "\(activeCount) accounts verified — Gmail and Calendar read through OAuth."
   }
 
   func loadGoogleOAuthAccounts() {
     googleOAuthAccounts = GoogleOAuthConnectionManager.shared.connections()
+    googleOAuthIsVerified = false
+    guard !googleOAuthAccounts.isEmpty else { return }
+    googleOAuthIsVerifying = true
+    Task {
+      let gmail = await GmailReaderService.shared.verifyConnection()
+      let calendar = await CalendarReaderService.shared.verifyConnection()
+      await MainActor.run {
+        googleOAuthIsVerifying = false
+        googleOAuthIsVerified = if case .connected = gmail, case .connected = calendar { true } else { false }
+        googleOAuthAccounts = GoogleOAuthConnectionManager.shared.connections()
+      }
+    }
   }
 
   func connectGoogleOAuth() async {
@@ -332,7 +359,7 @@ extension SettingsContentView {
       + "Desktop app clients require it at the token endpoint."
     let idField = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
     idField.placeholderString = "Client ID"
-    let secretField = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
+    let secretField = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
     secretField.placeholderString = "Client secret (optional)"
     let stack = NSStackView(views: [idField, secretField])
     stack.orientation = .vertical
@@ -349,15 +376,20 @@ extension SettingsContentView {
   }
 
   func readGmail() async {
+    let readGeneration = gmailReadGeneration
     isReadingGmail = true
     gmailReadError = nil
     gmailMemoriesSaved = 0
 
     do {
-      let emails = try await GmailReaderService.shared.readRecentEmails(
+let emails = try await GmailReaderService.shared.readRecentEmails(
         maxResults: 50,
         userInitiated: true
       )
+      guard readGeneration == gmailReadGeneration else {
+        isReadingGmail = false
+        return
+      }
       gmailEmails = emails
       gmailLastFetched = Date()
       viewModel.markIntegrationSynced()
@@ -365,6 +397,11 @@ extension SettingsContentView {
       if !emails.isEmpty {
         isSavingGmailMemories = true
         let result = await GmailReaderService.shared.saveAsMemories(emails: emails)
+        guard readGeneration == gmailReadGeneration else {
+          isSavingGmailMemories = false
+          isReadingGmail = false
+          return
+        }
         gmailMemoriesSaved = result.saved
         isSavingGmailMemories = false
       }

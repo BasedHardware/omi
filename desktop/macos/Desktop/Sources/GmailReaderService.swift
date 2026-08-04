@@ -163,6 +163,7 @@ if userInitiated {
         manager: oauth, maxResults: maxResults, query: query)
     }
     }
+    let selectedCookiePath = GmailSelectionStore.selectedCookiePath
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
       let queryEmails = try fetchGmailViaAtomFeedSingle(
@@ -170,13 +171,10 @@ if userInitiated {
         query: query,
         feedPath: nil,
         allowBootstrap: false,
-        userInitiated: userInitiated
+selectedCookiePath: selectedCookiePath
       )
       let labelEmails = try fetchGmailViaLabelFeeds(
-        maxResults: maxResults,
-        query: query,
-        userInitiated: userInitiated
-      )
+        maxResults: maxResults, query: query, selectedCookiePath: selectedCookiePath)
       var merged: [String: GmailEmail] = [:]
       for email in queryEmails + labelEmails {
         let existing = merged[email.id]
@@ -190,10 +188,7 @@ if userInitiated {
         .map(\.self)
     } else {
       emails = try fetchGmailViaAtomFeedSingle(
-        maxResults: maxResults,
-        query: query,
-        userInitiated: userInitiated
-      )
+maxResults: maxResults, query: query, selectedCookiePath: selectedCookiePath)
     }
     return emails.sorted { $0.date > $1.date }
   }
@@ -262,11 +257,13 @@ if successfulReads {
       if manager.hasGrants() {
         _ = try await readRecentEmailsViaOAuth(manager: manager, maxResults: 1, query: "newer_than:1d")
       } else {
+        let selectedCookiePath = GmailSelectionStore.selectedCookiePath
         _ = try fetchGmailViaAtomFeedSingle(
           maxResults: 1,
           query: "newer_than:1d",
           feedPath: "atom/inbox",
-          allowBootstrap: false
+          allowBootstrap: false,
+          selectedCookiePath: selectedCookiePath
         )
       }
       return .connected(verifiedAt: Date())
@@ -493,7 +490,7 @@ if successfulReads {
     query: String = "newer_than:1d",
     feedPath: String? = nil,
     allowBootstrap: Bool? = nil,
-    userInitiated: Bool = false
+    selectedCookiePath: String? = nil
   ) throws
     -> [GmailEmail]
   {
@@ -501,10 +498,8 @@ if successfulReads {
       allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
 let browserConfigs = GmailSelectionStore.filter(
-      BrowserGoogleSession.configsForPython(
-        logPrefix: "GmailReaderService",
-        userInitiated: userInitiated
-      ))
+      BrowserGoogleSession.configsForPython(logPrefix: "GmailReaderService"),
+      selectedCookiePath: selectedCookiePath)
 
     guard !browserConfigs.isEmpty else {
       throw GmailReaderError.noBrowserFound
@@ -852,9 +847,7 @@ let browserConfigs = GmailSelectionStore.filter(
   }
 
   private func fetchGmailViaLabelFeeds(
-    maxResults: Int,
-    query: String,
-    userInitiated: Bool = false
+    maxResults: Int, query: String, selectedCookiePath: String? = nil
   ) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
@@ -881,7 +874,7 @@ let browserConfigs = GmailSelectionStore.filter(
         query: query,
         feedPath: feedPath,
         allowBootstrap: false,
-        userInitiated: userInitiated
+        selectedCookiePath: selectedCookiePath
       )
       for email in feedEmails {
         let existing = merged[email.id]

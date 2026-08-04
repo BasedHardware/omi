@@ -4,6 +4,7 @@ enum GoogleOAuthReaderError: LocalizedError {
   case reconnectRequired
   case http(Int)
   case network(String)
+  case invalidResponse
 
   var errorDescription: String? {
     switch self {
@@ -13,6 +14,8 @@ enum GoogleOAuthReaderError: LocalizedError {
       return "Google returned HTTP \(status)."
     case .network(let detail):
       return "Network error: \(detail)"
+    case .invalidResponse:
+      return "Google returned an invalid response. Try again."
     }
   }
 }
@@ -49,7 +52,10 @@ enum GoogleOAuthGmailReader {
         throw GoogleOAuthReaderError.network("Could not construct the Gmail request.")
       }
       let body = try await get(url, token: token, session: session)
-      ids.append(contentsOf: (body["messages"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String })
+      guard let messages = body["messages"] as? [[String: Any]] else {
+        throw GoogleOAuthReaderError.invalidResponse
+      }
+      ids.append(contentsOf: messages.compactMap { $0["id"] as? String })
       pageToken = body["nextPageToken"] as? String
     } while ids.count < maxResults && pageToken != nil
 
@@ -137,7 +143,10 @@ enum GoogleOAuthGmailReader {
       guard status >= 200 && status < 300 else {
         throw GoogleOAuthReaderError.http(status)
       }
-      return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+      guard let body = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+        throw GoogleOAuthReaderError.invalidResponse
+      }
+      return body
     } catch let error as GoogleOAuthReaderError {
       throw error
     } catch {
@@ -187,7 +196,10 @@ enum GoogleOAuthCalendarReader {
         throw GoogleOAuthReaderError.network("Could not construct the Calendar request.")
       }
       let body = try await GoogleOAuthGmailReader.get(url, token: token, session: session)
-      events.append(contentsOf: (body["items"] as? [[String: Any]] ?? []).compactMap(parseEvent))
+      guard let items = body["items"] as? [[String: Any]] else {
+        throw GoogleOAuthReaderError.invalidResponse
+      }
+      events.append(contentsOf: items.compactMap(parseEvent))
       pageToken = body["nextPageToken"] as? String
     } while events.count < maxResults && pageToken != nil
     return Array(events.prefix(maxResults)).sorted { $0.startTime > $1.startTime }

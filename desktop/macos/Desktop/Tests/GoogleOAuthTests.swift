@@ -59,12 +59,12 @@ final class VolatileGoogleOAuthStore: GoogleOAuthStoring {
     }
   }
 
-  func readAll() -> [GoogleOAuthConnection] {
+  func readAll(for ownerID: String? = nil) -> [GoogleOAuthConnection] {
     lock.lock()
     defer { lock.unlock() }
     return storedValues
   }
-  func write(_ connections: [GoogleOAuthConnection]) -> Bool {
+  func write(_ connections: [GoogleOAuthConnection], for ownerID: String? = nil) -> Bool {
     lock.lock()
     defer { lock.unlock() }
     storedValues = connections
@@ -111,6 +111,7 @@ final class GoogleOAuthTests: XCTestCase {
     super.setUp()
     GoogleOAuth.clientId = nil
     GoogleOAuth.clientSecret = nil
+    UserDefaults.standard.removeObject(forKey: .googleOauthPrimaryAccount)
     MockURLProtocol.handler = nil
   }
 
@@ -175,6 +176,9 @@ final class GoogleOAuthTests: XCTestCase {
     let url = LoopbackRedirectServer.redirectURL(fromRequestHead: head)
     XCTAssertEqual(url?.path, "/oauth/callback")
     XCTAssertEqual(url?.query, "code=c&state=state-1")
+    let emptyQuery = LoopbackRedirectServer.redirectURL(
+      fromRequestHead: "GET /oauth/callback? HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+    XCTAssertEqual(emptyQuery?.path, "/oauth/callback")
     XCTAssertNil(LoopbackRedirectServer.redirectURL(fromRequestHead: "POST / HTTP/1.1\r\n\r\n"))
   }
 
@@ -212,9 +216,9 @@ final class GoogleOAuthTests: XCTestCase {
       defaults.set(original, forKey: DefaultsKey.authUserId.rawValue)
     }
     defaults.set("omi-user-a", forKey: DefaultsKey.authUserId.rawValue)
-    let first = GoogleOAuthStore.account
+    let first = GoogleOAuthStore.account(for: defaults.string(forKey: .authUserId))
     defaults.set("omi-user-b", forKey: DefaultsKey.authUserId.rawValue)
-    let second = GoogleOAuthStore.account
+    let second = GoogleOAuthStore.account(for: defaults.string(forKey: .authUserId))
     XCTAssertNotEqual(first, second)
     XCTAssertTrue(first.hasSuffix("omi-user-a"))
     XCTAssertTrue(second.hasSuffix("omi-user-b"))
@@ -238,8 +242,8 @@ final class GoogleOAuthTests: XCTestCase {
 
   func testManagerUpsertReportsWriteFailure() {
     struct FailingStore: GoogleOAuthStoring {
-      func readAll() -> [GoogleOAuthConnection] { [] }
-      func write(_ connections: [GoogleOAuthConnection]) -> Bool { false }
+      func readAll(for ownerID: String?) throws -> [GoogleOAuthConnection] { [] }
+      func write(_ connections: [GoogleOAuthConnection], for ownerID: String?) -> Bool { false }
     }
     let manager = GoogleOAuthConnectionManager(
       store: FailingStore(), tokenClient: GoogleOAuthTokenClient(session: mockSession()))
@@ -338,6 +342,22 @@ final class GoogleOAuthTests: XCTestCase {
     XCTAssertEqual(token, "work-token")
   }
 
+  func testAccessTokenRefreshesInsideSafetyWindow() async throws {
+    let store = VolatileGoogleOAuthStore()
+    store.values = [
+      connection(
+        accessToken: "near-expiry", expiresAt: Date().addingTimeInterval(30), account: "a@b.co")
+    ]
+    GoogleOAuth.clientId = "client-abc"
+    MockURLProtocol.handler = { _ in
+      jsonResponse(["access_token": "fresh", "expires_in": 3600])
+    }
+    let manager = GoogleOAuthConnectionManager(
+      store: store, tokenClient: GoogleOAuthTokenClient(session: mockSession()))
+    let token = try await manager.accessToken(account: "a@b.co")
+    XCTAssertEqual(token, "fresh")
+  }
+
   func testAccessTokenRejectsStaleGrant() async {
     let store = VolatileGoogleOAuthStore()
     store.values = [connection(account: "old@corp.com", needsReconnect: true)]
@@ -394,6 +414,40 @@ final class GoogleOAuthTests: XCTestCase {
     store.values = [replacement]
     XCTAssertTrue(manager.remove(account: replacement.account, expected: old))
     XCTAssertEqual(store.readAll().first?.accessToken, "new")
+  }
+
+  func testDisconnectRemovesNeedsReconnectGrant() async {
+    let store = VolatileGoogleOAuthStore()
+    store.values = [connection(account: "stale@corp.com", needsReconnect: true)]
+    MockURLProtocol.handler = { _ in jsonResponse([:]) }
+    let manager = GoogleOAuthConnectionManager(
+      store: store, tokenClient: GoogleOAuthTokenClient(session: mockSession()))
+    try? await manager.disconnect(account: "stale@corp.com")
+    XCTAssertTrue(store.values.isEmpty)
+  }
+
+  func testKeychainReadFailureDoesNotFallBackToCookies() {
+    struct UnavailableStore: GoogleOAuthStoring {
+      func readAll(for ownerID: String?) throws -> [GoogleOAuthConnection] {
+        throw GoogleOAuthStoreError.keychainUnavailable(-25308)
+      }
+      func write(_ connections: [GoogleOAuthConnection], for ownerID: String?) -> Bool { false }
+    }
+    let manager = GoogleOAuthConnectionManager(
+      store: UnavailableStore(), tokenClient: GoogleOAuthTokenClient(session: mockSession()))
+    XCTAssertTrue(manager.connections().isEmpty)
+    XCTAssertTrue(manager.hasGrants())
+  }
+
+  func testPrimaryAccountSelectionIsExplicit() {
+    let store = VolatileGoogleOAuthStore()
+    let manager = GoogleOAuthConnectionManager(
+      store: store, tokenClient: GoogleOAuthTokenClient(session: mockSession()))
+    XCTAssertTrue(manager.upsert(connection(account: "first@corp.com")))
+    XCTAssertTrue(manager.upsert(connection(account: "second@corp.com")))
+    XCTAssertEqual(manager.primaryConnection()?.account, "first@corp.com")
+    XCTAssertTrue(manager.selectPrimaryAccount("second@corp.com"))
+    XCTAssertEqual(manager.primaryConnection()?.account, "second@corp.com")
   }
 
   func testGmailParseMessage() {
@@ -530,6 +584,18 @@ final class GoogleOAuthTests: XCTestCase {
     } catch let error as GoogleOAuthReaderError {
       XCTAssertEqual(
         error.errorDescription, GoogleOAuthReaderError.reconnectRequired.errorDescription)
+    } catch {
+      XCTFail("unexpected error \(error)")
+    }
+  }
+
+  func testGmailListRejectsMalformedSuccessfulResponse() async {
+    MockURLProtocol.handler = { _ in jsonResponse(["unexpected": []]) }
+    do {
+      _ = try await GoogleOAuthGmailReader.readRecentEmails(token: "token", session: mockSession())
+      XCTFail("expected malformed response")
+    } catch let error as GoogleOAuthReaderError {
+      XCTAssertEqual(error.errorDescription, GoogleOAuthReaderError.invalidResponse.errorDescription)
     } catch {
       XCTFail("unexpected error \(error)")
     }

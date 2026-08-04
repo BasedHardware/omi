@@ -34,6 +34,10 @@ enum GmailSelectionStore {
   }
 
   static func filter(_ configs: [[String: String]]) -> [[String: String]] {
+    filter(configs, selectedCookiePath: selectedCookiePath)
+  }
+
+  static func filter(_ configs: [[String: String]], selectedCookiePath: String?) -> [[String: String]] {
     guard let selected = selectedCookiePath, !selected.isEmpty else { return configs }
     let narrowed = configs.filter { $0["db_path"] == selected }
     return narrowed
@@ -50,7 +54,7 @@ enum GmailAccountProbe {
       let data = try JSONSerialization.data(withJSONObject: configs)
       configJSON = String(data: data, encoding: .utf8) ?? "[]"
     } catch {
-      return []
+      throw error
     }
 
     let pythonScript = """
@@ -81,7 +85,9 @@ enum GmailAccountProbe {
                       break
               except Exception:
                   continue
-          return {'name': browser['name'], 'db_path': browser['db_path'], 'email': email}
+          if email:
+              return {'name': browser['name'], 'db_path': browser['db_path'], 'email': email}
+          return None
 
       accounts = []
       with ThreadPoolExecutor(max_workers=min(4, max(1, len(browsers)))) as executor:
@@ -102,16 +108,30 @@ enum GmailAccountProbe {
         String(data: result.stdout, encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       guard !outputPath.isEmpty, FileManager.default.fileExists(atPath: outputPath) else {
-        return []
+        throw GmailAccountProbeError.noOutput
       }
       defer { try? FileManager.default.removeItem(atPath: outputPath) }
       let data = try Data(contentsOf: URL(fileURLWithPath: outputPath))
       guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-        return []
+        throw GmailAccountProbeError.invalidOutput
       }
       return Self.parseAccounts(json)
     } catch {
-      return []
+      throw error
+    }
+  }
+
+  enum GmailAccountProbeError: LocalizedError {
+    case noOutput
+    case invalidOutput
+
+    var errorDescription: String? {
+      switch self {
+      case .noOutput:
+        return "Gmail account probe produced no output."
+      case .invalidOutput:
+        return "Gmail account probe returned unreadable output."
+      }
     }
   }
 
@@ -123,10 +143,11 @@ enum GmailAccountProbe {
     }
     return raw.compactMap { dict in
       guard let path = dict["db_path"] as? String, !path.isEmpty else { return nil }
+      guard let email = dict["email"] as? String, !email.isEmpty else { return nil }
       return GmailAccountOption(
         id: path,
         browserName: dict["name"] as? String ?? "Browser",
-        email: dict["email"] as? String
+        email: email
       )
     }
   }

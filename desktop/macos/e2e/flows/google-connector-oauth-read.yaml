@@ -7,6 +7,9 @@ covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/GmailReaderService.swift
   - desktop/macos/Desktop/Sources/CalendarReaderService.swift
+  - desktop/macos/Desktop/Sources/Integrations/GoogleOAuthConnection.swift
+  - desktop/macos/Desktop/Sources/Integrations/GoogleOAuthFlow.swift
+  - desktop/macos/Desktop/Sources/Integrations/GoogleOAuthReader.swift
   - desktop/macos/Desktop/Sources/GoogleOAuthConnection.swift
   - desktop/macos/Desktop/Sources/GoogleOAuthFlow.swift
   - desktop/macos/Desktop/Sources/GoogleOAuthReader.swift
