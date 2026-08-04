@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
-from models.memory_apply import MemoryControlState, memory_content_hash
+from models.memory_apply import ApplyStatus, MemoryControlState, memory_content_hash
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentStatus
 from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment
+from scripts import enrich_historical_memory_graph as historical_runner
 from scripts.enrich_historical_memory_graph import _is_replan_candidate
 from scripts.enrich_historical_memory_graph import run_enrichment
 
@@ -24,6 +26,11 @@ class _Planner:
 
     def invoke(self, _messages: object) -> _Response:
         return _Response(self.payload)
+
+
+class _FailingPlanner:
+    def invoke(self, _messages: object) -> _Response:
+        raise RuntimeError("transient gateway failure")
 
 
 def _item(**overrides: object) -> MemoryItem:
@@ -147,3 +154,53 @@ def test_historical_runner_allows_a_bounded_scan_for_unenriched_candidates():
             db_client=object(),
             llm=object(),
         )
+
+
+def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    failing = _item(memory_id="mem_failing")
+    ready = _item(memory_id="mem_ready")
+    planner = _Planner(
+        {
+            "eligible": True,
+            "subject_entity_id": "user",
+            "predicate": "prefers_update_style",
+            "object_label": "concise updates",
+        }
+    )
+
+    monkeypatch.setattr(historical_runner, "_control", lambda *_args, **_kwargs: control)
+    monkeypatch.setattr(
+        historical_runner,
+        "_candidates",
+        lambda *_args, **_kwargs: [failing, ready],
+    )
+
+    def plan(item: MemoryItem, **_kwargs: object):
+        if item.memory_id == failing.memory_id:
+            return plan_historical_graph_enrichment(item=item, control=control, llm=_FailingPlanner())
+        return plan_historical_graph_enrichment(item=item, control=control, llm=planner)
+
+    monkeypatch.setattr(historical_runner, "plan_historical_graph_enrichment", plan)
+    monkeypatch.setattr(
+        historical_runner,
+        "apply_long_term_patch_firestore",
+        lambda **_kwargs: SimpleNamespace(status=ApplyStatus.committed),
+    )
+
+    report = run_enrichment(
+        uid="u1",
+        firestore_project="test",
+        limit=1,
+        scan_limit=2,
+        apply=True,
+        confirm_uid="u1",
+        structured_only=False,
+        apply_limit=1,
+        db_client=object(),
+        llm=object(),
+    )
+
+    assert report["outcomes"] == {"committed": 1, "planner_error": 1}
