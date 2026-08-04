@@ -1,0 +1,14 @@
+name = "omi-bff"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Override per env: wrangler secret / dashboard
+ORIGIN_API_BASE = "https://api.omi.me"
+FIREBASE_PROJECT_ID = "based-hardware"
+TENANT_SHARD_COUNT = "64"
+
+# [[kv_namespaces]]
+# binding = "TENANT_KV"
+# id = "replace-me"

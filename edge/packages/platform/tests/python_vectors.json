@@ -1,0 +1,31 @@
+{
+  "secret_utf8": "0123456789abcdef0123456789abcdef",
+  "uid": "user_test_uid_001",
+  "plaintext": "hello omi secret memory",
+  "ciphertext_b64": "hHzFVBhwAAfieTgoceY6fKtLrQpWAWu88EilBWXFU/iH3a1Y81bsj6Tjk80FUfnaVflu",
+  "derived_key_b64": "No4VJQ1JB7zxgZn0Id5Bt/EemIy+kpG8DZN2e8L1m3Y=",
+  "sanitize": [
+    {
+      "in": "Bearer abcd1234efgh5678",
+      "out": "Bearer abcd***5678"
+    },
+    {
+      "in": "john.doe@example.com",
+      "out": "j***e@example.com"
+    },
+    {
+      "in": "access_token",
+      "out": "access_token"
+    }
+  ],
+  "sanitize_pii": [
+    {
+      "in": "Alice",
+      "out": "A***e"
+    },
+    {
+      "in": "john.doe@example.com",
+      "out": "j***e@example.com"
+    }
+  ]
+}
