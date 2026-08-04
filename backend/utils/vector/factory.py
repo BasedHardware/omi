@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import Optional
+from typing import Mapping, Optional
 
 from utils.vector.ports import VectorStore
 
@@ -14,12 +14,19 @@ _lock = threading.Lock()
 _instance: Optional[VectorStore] = None
 
 
-def get_vector_store() -> VectorStore:
+def get_vector_store(env: Optional[Mapping[str, str]] = None) -> VectorStore:
+    """Return the configured vector store (singleton, resolved on first use).
+
+    ``env`` selects the backend from that mapping instead of ``os.environ``. Pass it when a caller
+    has already validated backend-specific dependencies against a specific environment (the
+    vector-repair worker entrypoint does) so selection and validation read one source, never one
+    validated and the other constructed from a different mapping."""
     global _instance
     if _instance is None:
         with _lock:
             if _instance is None:
-                backend = (os.getenv("VECTOR_STORE_BACKEND") or "pinecone").strip().lower()
+                source = os.environ if env is None else env
+                backend = (source.get("VECTOR_STORE_BACKEND") or "pinecone").strip().lower()
                 if backend == "pinecone":
                     from utils.vector.adapters.pinecone import PineconeVectorStore
 

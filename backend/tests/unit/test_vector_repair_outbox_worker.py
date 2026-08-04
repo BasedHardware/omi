@@ -1019,7 +1019,7 @@ class TestEntrypoint:
                 return None
 
         fake_modules = {
-            "utils.vector": SimpleNamespace(get_vector_store=lambda: _FakeStore()),
+            "utils.vector": SimpleNamespace(get_vector_store=lambda env=None: _FakeStore()),
             "database._client": SimpleNamespace(db=SimpleNamespace()),
             "utils.llm.clients": SimpleNamespace(embeddings=SimpleNamespace(embed_query=lambda text: [0.0])),
         }
@@ -1233,8 +1233,8 @@ class TestEntrypoint:
 
         class VectorModule:
             @staticmethod
-            def get_vector_store():
-                calls.append(("get_vector_store",))
+            def get_vector_store(env=None):
+                calls.append(("get_vector_store", env))
                 return Store()
 
         class ClientModule:
@@ -1258,12 +1258,13 @@ class TestEntrypoint:
                 return LlmClientsModule
             raise AssertionError(name)
 
+        env = {
+            "PINECONE_API_KEY": "pc-key",
+            "PINECONE_INDEX_NAME": "memory-index",
+            "OPENAI_API_KEY": "openai-key",
+        }
         deps = entrypoint.build_vector_repair_outbox_production_dependencies(
-            {
-                "PINECONE_API_KEY": "pc-key",
-                "PINECONE_INDEX_NAME": "memory-index",
-                "OPENAI_API_KEY": "openai-key",
-            },
+            env,
             module_loader=module_loader,
         )
 
@@ -1271,7 +1272,10 @@ class TestEntrypoint:
         deps.vector_deleter({"vector_id": "vec1", "uid": "u1", "memory_id": "mem1"})
         deps.vector_repairer({"required_projection_commit_id": "projection-1"}, item)
 
-        assert ("get_vector_store",) in calls
+        # Backend selection must read the SAME env the entrypoint validated deps against, so the
+        # validated backend and the constructed store never diverge (validate one source / build
+        # from another).
+        assert ("get_vector_store", env) in calls
         assert ("import", "utils.vector") in calls
         assert ("get", "users/u1/memory_items/mem1") in calls
         assert (

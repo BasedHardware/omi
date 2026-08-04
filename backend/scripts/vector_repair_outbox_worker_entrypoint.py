@@ -190,7 +190,7 @@ def build_vector_repair_outbox_production_dependencies(
     # Route the repair adapter's delete/upsert seams through the neutral vector-store port
     # (ADR-0033) instead of a raw Pinecone client, so the worker honors VECTOR_STORE_BACKEND. The
     # adapter calls delete_vectors(filter=, namespace=) and upsert_vectors(vectors=, namespace=).
-    vector_store = vector_module.get_vector_store()
+    vector_store = vector_module.get_vector_store(env=env)
     db_client = firestore_client_module.db
     embeddings = llm_clients_module.embeddings
 
