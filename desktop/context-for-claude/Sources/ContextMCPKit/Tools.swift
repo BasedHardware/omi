@@ -1668,19 +1668,7 @@ extension Tools {
             return out.joined(separator: "\n")
         }
 
-        let headline: String
-        if status.capturing {
-            if let reason = status.pausedReason.flatMap(nonEmpty) {
-                // Partial failure while sensors run (e.g. Intel cloud ASR gap) must stay visible.
-                headline = "Context for Claude is capturing right now — \(reason)."
-            } else {
-                headline = "Context for Claude is capturing right now."
-            }
-        } else if let reason = status.pausedReason.flatMap(nonEmpty) {
-            headline = "Context for Claude is not capturing right now — \(reason)."
-        } else {
-            headline = "Context for Claude is not capturing right now."
-        }
+        let headline = status.localCaptureHeadline
 
         if status.segmentCount == 0 && status.frameCount == 0 {
             out.append("""

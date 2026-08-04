@@ -4,7 +4,7 @@ A menu-bar-only macOS app that keeps Claude caught up on what you see and say.
 
 It captures the two ambient streams Omi already captures — audio (your mic, plus the other side of
 your calls) and screen (active window and its text) — transcribes the audio via **Omi cloud ASR**
-(`/v4/listen`), keeps an **on-device Parakeet fallback on Apple Silicon only**, uploads finished
+(`/v4/listen`), runs **on-device Parakeet in parallel on Apple Silicon only**, uploads finished
 conversations to your Omi account, and serves all of it to Claude over MCP.
 
 The point: you stop explaining context to Claude. It asks Context for Claude instead.
@@ -57,7 +57,7 @@ Seven tools. The descriptions are written for Claude, so it reaches for them unp
 | `recall` | "What do I know about X?" — searches live local capture **and** your Omi history |
 | `recent` | "What's going on right now?" — the last N minutes, local, no backend lag |
 | `conversations` | Recent conversations with time, duration, app and preview |
-| `transcript` | One conversation in full, speaker-attributed |
+| `transcript` | One conversation in full (Omi: named speakers; local capture: me/them by mic vs system) |
 | `screen` | What was on screen: window titles and their text |
 | `activity` | The shape of a day — contiguous blocks per app |
 | `status` | Capture health and coverage windows, for both halves |
@@ -82,7 +82,7 @@ Context for Claude.app                        context-for-claude-mcp
   screen → Vision OCR ──────────────┘         │
                                               └→ Omi account (from-segments + screen-activity)
 
-  * Apple Silicon only — local resilience when cloud is down. Never loaded on Intel.
+  * Apple Silicon only — runs in parallel with cloud ASR (local resilience). Never loaded on Intel.
 ```
 
 Two processes, one database, no IPC. The MCP server is spawned per Claude session, holds no
@@ -96,8 +96,8 @@ compensation for system audio, and (on Silicon) a fresh `TdtDecoderState` per wi
 transducer does not loop.
 
 Cloud transcription mixes mic + system on one socket so the backend can diarize and match the
-user's speech profile. Local Parakeet (Silicon) approximates attribution as "mic is you, system is
-everyone else".
+user's speech profile. Local Parakeet (Silicon) runs in parallel and approximates attribution as
+"mic is you, system is everyone else" — not full multi-speaker diarization.
 
 Finished sessions still upload through `POST /v1/conversations/from-segments` (retryable queue,
 higher create rate than websocket finalize, `source: "phone"` for immediate memory extraction).

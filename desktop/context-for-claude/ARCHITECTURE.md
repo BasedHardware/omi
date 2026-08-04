@@ -66,8 +66,9 @@ model load failure on Silicon must not tear down the audio devices or the cloud 
 Audio flows as 16 kHz mono Int16 little-endian `Data` from capture to transcription — one format,
 agreed once, so a source and a transcriber can be swapped independently.
 
-Cloud mixes both channels so the backend can diarize. Local fallback (Silicon) approximates
-attribution as "mic is the user, system is everyone else" with two separate Parakeet instances.
+Cloud mixes both channels so the backend can diarize. Local Parakeet (Silicon) runs in parallel
+and approximates attribution as "mic is the user, system is everyone else" with two separate
+instances — not full multi-speaker labels.
 
 `Engine` owns the only writer. Each source runs in its own task and fails independently — a dead mic
 must not stop screen capture — and the reason surfaces in the menu bar *and* in the MCP `status`

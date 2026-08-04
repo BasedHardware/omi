@@ -379,6 +379,13 @@ public struct CaptureHostPolicy: Equatable, Sendable {
     public var usesLocalSTT: Bool
     public var screenCaptureInterval: TimeInterval  // 3.0 Silicon / 9.0 Intel
     public static let localSTTFailureStopsCapture: Bool  // always false
+    public static func resolvedCloudTranscriptionState(
+        socket: CloudSocketSnapshot, isSignedIn: Bool) -> CloudTranscriptionState
+    public static func outboundPCMAction(
+        phase: CloudOutboundPCMPhase, wantsConnection: Bool, hasLiveTask: Bool)
+        -> CloudOutboundPCMAction  // idle+wantsConnection buffers (Intel must not drop)
+    public static func reasonsAfterResumeWipe<Key: Hashable>(
+        _ reasons: [Key: String], storageKey: Key) -> [Key: String]
     public static func cloudTranscriptionGapReason(
         usesLocalSTT: Bool, isSignedIn: Bool, cloud: CloudTranscriptionState) -> String?
 }

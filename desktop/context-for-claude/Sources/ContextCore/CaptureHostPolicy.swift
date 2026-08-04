@@ -57,7 +57,86 @@ public enum CloudTranscriptionState: String, Sendable, Equatable {
     case paywalled
 }
 
+/// Raw listen-socket snapshot before Engine softens it for gap UI (signed-in idle → connecting,
+/// reconnecting failure → connecting).
+public enum CloudSocketSnapshot: Equatable, Sendable {
+    case idle
+    case connecting
+    case live
+    case failed(String)
+    case paywalled
+}
+
+/// What to do with a PCM chunk that cannot leave the client immediately.
+public enum CloudOutboundPCMAction: String, Sendable, Equatable {
+    case transmit
+    case buffer
+    case drop
+}
+
+/// Socket phase for outbound PCM policy — same cases as `ListenSocket.State` without networking types.
+public enum CloudOutboundPCMPhase: String, Sendable, Equatable {
+    case idle
+    case connecting
+    case live
+    case failed
+    case paywalled
+}
+
 extension CaptureHostPolicy {
+    /// Maps a listen-socket snapshot onto the coarse cloud state Engine uses for gap copy.
+    ///
+    /// Signed-in `.idle` is the brief window after `wantsConnection` flips true and before the
+    /// socket reports `.connecting` — treat it as connecting so Intel does not flash an offline
+    /// gap. A `.failed` detail that says "reconnecting" is the same recoverable window.
+    public static func resolvedCloudTranscriptionState(
+        socket: CloudSocketSnapshot,
+        isSignedIn: Bool
+    ) -> CloudTranscriptionState {
+        switch socket {
+        case .idle:
+            return isSignedIn ? .connecting : .idle
+        case .connecting:
+            return .connecting
+        case .live:
+            return .live
+        case .failed(let detail):
+            return detail.localizedCaseInsensitiveContains("reconnecting") ? .connecting : .failed
+        case .paywalled:
+            return .paywalled
+        }
+    }
+
+    /// Whether outbound PCM should be held until the socket can take it.
+    ///
+    /// Critical for Intel: there is no local Parakeet under the mixer, so dropping audio while
+    /// `wantsConnection` is true but the phase is still `.idle` (start has run, connect has not
+    /// flipped state yet) permanently loses those words.
+    public static func outboundPCMAction(
+        phase: CloudOutboundPCMPhase,
+        wantsConnection: Bool,
+        hasLiveTask: Bool
+    ) -> CloudOutboundPCMAction {
+        switch phase {
+        case .live:
+            return hasLiveTask ? .transmit : .buffer
+        case .connecting:
+            return .buffer
+        case .idle, .failed:
+            return wantsConnection ? .buffer : .drop
+        case .paywalled:
+            return .drop
+        }
+    }
+
+    /// Resume wipe keeps only storage; transcription gaps must be re-applied afterwards.
+    public static func reasonsAfterResumeWipe<Key: Hashable>(
+        _ reasons: [Key: String],
+        storageKey: Key
+    ) -> [Key: String] {
+        reasons.filter { $0.key == storageKey }
+    }
+
     /// Honest gap copy when this host has no local STT and cloud is not producing transcripts.
     ///
     /// Returns nil while cloud is live or still connecting, and always nil when local STT is

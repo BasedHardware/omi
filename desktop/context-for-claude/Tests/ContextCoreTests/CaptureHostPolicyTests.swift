@@ -51,16 +51,6 @@ final class CaptureHostPolicyTests: XCTestCase {
                 usesLocalSTT: false, isSignedIn: true, cloud: .connecting))
     }
 
-    func testResumeMustReapplyTranscriptionGapAfterReasonWipe() {
-        // Engine.resume wipes non-storage reasons then restarts cloud transcription. The gap
-        // policy must still produce a signed-out Intel reason so that wipe cannot leave a
-        // healthy-looking state with no ASR.
-        let afterWipe = CaptureHostPolicy.cloudTranscriptionGapReason(
-            usesLocalSTT: false, isSignedIn: false, cloud: .idle)
-        XCTAssertNotNil(afterWipe)
-        XCTAssertTrue(afterWipe?.contains("Omi account") == true)
-    }
-
     func testCloudGapReasonSignedOutOnIntel() {
         let reason = CaptureHostPolicy.cloudTranscriptionGapReason(
             usesLocalSTT: false, isSignedIn: false, cloud: .idle)
@@ -83,6 +73,136 @@ final class CaptureHostPolicyTests: XCTestCase {
         XCTAssertEqual(
             reason,
             "Transcription off — Omi trial expired; upgrade to keep transcripts on this Mac")
+    }
+
+    // MARK: - Socket → cloud state mapping
+
+    func testResolvedCloudStateSignedInIdleIsConnecting() {
+        XCTAssertEqual(
+            CaptureHostPolicy.resolvedCloudTranscriptionState(socket: .idle, isSignedIn: true),
+            .connecting)
+    }
+
+    func testResolvedCloudStateSignedOutIdleStaysIdle() {
+        XCTAssertEqual(
+            CaptureHostPolicy.resolvedCloudTranscriptionState(socket: .idle, isSignedIn: false),
+            .idle)
+    }
+
+    func testResolvedCloudStateReconnectingFailureIsConnecting() {
+        XCTAssertEqual(
+            CaptureHostPolicy.resolvedCloudTranscriptionState(
+                socket: .failed("Socket closed — reconnecting"),
+                isSignedIn: true),
+            .connecting)
+    }
+
+    func testResolvedCloudStatePermanentFailureStaysFailed() {
+        XCTAssertEqual(
+            CaptureHostPolicy.resolvedCloudTranscriptionState(
+                socket: .failed("Unauthorized"),
+                isSignedIn: true),
+            .failed)
+    }
+
+    func testResolvedCloudStatePassthroughCases() {
+        XCTAssertEqual(
+            CaptureHostPolicy.resolvedCloudTranscriptionState(socket: .connecting, isSignedIn: false),
+            .connecting)
+        XCTAssertEqual(
+            CaptureHostPolicy.resolvedCloudTranscriptionState(socket: .live, isSignedIn: false),
+            .live)
+        XCTAssertEqual(
+            CaptureHostPolicy.resolvedCloudTranscriptionState(socket: .paywalled, isSignedIn: true),
+            .paywalled)
+    }
+
+    // MARK: - Outbound PCM while connecting
+
+    func testIdleWithWantsConnectionBuffersPCM() {
+        // The Intel bug: mixer can emit before connect() flips idle → connecting.
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .idle, wantsConnection: true, hasLiveTask: false),
+            .buffer)
+    }
+
+    func testIdleWithoutWantsConnectionDropsPCM() {
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .idle, wantsConnection: false, hasLiveTask: false),
+            .drop)
+    }
+
+    func testPaywalledAlwaysDropsPCM() {
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .paywalled, wantsConnection: true, hasLiveTask: false),
+            .drop)
+    }
+
+    func testConnectingBuffersAndLiveTransmitsWhenTaskExists() {
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .connecting, wantsConnection: true, hasLiveTask: false),
+            .buffer)
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .live, wantsConnection: true, hasLiveTask: true),
+            .transmit)
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .live, wantsConnection: true, hasLiveTask: false),
+            .buffer)
+    }
+
+    func testFailedBuffersOnlyWhileWantingConnection() {
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .failed, wantsConnection: true, hasLiveTask: false),
+            .buffer)
+        XCTAssertEqual(
+            CaptureHostPolicy.outboundPCMAction(
+                phase: .failed, wantsConnection: false, hasLiveTask: false),
+            .drop)
+    }
+
+    // MARK: - Resume wipe ordering
+
+    func testResumeWipeThenGapRefreshPreservesIntelTranscriptionGap() {
+        // Correct Engine.resume order: wipe non-storage reasons, then refresh gap from cloud.
+        var reasons = [
+            "transcription": "stale from previous session",
+            "microphone": "denied",
+            "storage": "disk full",
+        ]
+        reasons = CaptureHostPolicy.reasonsAfterResumeWipe(reasons, storageKey: "storage")
+        XCTAssertEqual(reasons, ["storage": "disk full"])
+
+        let gap = CaptureHostPolicy.cloudTranscriptionGapReason(
+            usesLocalSTT: false, isSignedIn: false, cloud: .idle)
+        XCTAssertNotNil(gap)
+        if let gap {
+            reasons["transcription"] = gap
+        }
+        XCTAssertEqual(reasons["transcription"], gap)
+        XCTAssertEqual(reasons["storage"], "disk full")
+    }
+
+    func testResumeGapRefreshThenWipeLosesIntelTranscriptionGap() {
+        // Documents the historical bug: refreshTranscriptionGap before wipe erased the Intel gap.
+        guard let gap = CaptureHostPolicy.cloudTranscriptionGapReason(
+            usesLocalSTT: false, isSignedIn: false, cloud: .idle)
+        else {
+            return XCTFail("signed-out Intel idle must produce a gap reason")
+        }
+        var reasons = ["transcription": gap, "storage": "disk full"]
+        // Wrong order: wipe after refresh
+        reasons = CaptureHostPolicy.reasonsAfterResumeWipe(reasons, storageKey: "storage")
+        XCTAssertNil(
+            reasons["transcription"],
+            "wipe-after-refresh drops the gap — Engine must wipe first")
+        XCTAssertEqual(reasons["storage"], "disk full")
     }
 }
 

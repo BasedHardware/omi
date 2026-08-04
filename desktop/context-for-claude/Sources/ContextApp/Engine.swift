@@ -315,22 +315,18 @@ final class Engine: ObservableObject {
     /// Surfaces cloud-only gaps on Intel (and clears them when the socket is live). Silicon keeps
     /// local fallback, so a cloud outage is not reported as "nothing is being transcribed".
     private func refreshTranscriptionGap() {
-        let cloud: CloudTranscriptionState
+        let snapshot: CloudSocketSnapshot
         switch ListenSocket.shared.state {
-        case .idle:
-            // Signed-in idle is almost always the brief window before `start()` flips to
-            // `.connecting`. Treat it as connecting so Intel does not flash an offline gap at
-            // launch/resume. Signed-out idle is the real "need an account" gap.
-            cloud = OmiAuth.shared.isSignedIn ? .connecting : .idle
-        case .connecting: cloud = .connecting
-        case .live: cloud = .live
-        case .failed(let detail):
-            // ListenSocket uses `.failed("… — reconnecting")` while audio is still buffered and a
-            // retry is scheduled. Treat that like connecting so Intel does not show a permanent
-            // offline message during a recoverable drop.
-            cloud = detail.localizedCaseInsensitiveContains("reconnecting") ? .connecting : .failed
-        case .paywalled: cloud = .paywalled
+        case .idle: snapshot = .idle
+        case .connecting: snapshot = .connecting
+        case .live: snapshot = .live
+        case .failed(let detail): snapshot = .failed(detail)
+        case .paywalled: snapshot = .paywalled
         }
+        let cloud = CaptureHostPolicy.resolvedCloudTranscriptionState(
+            socket: snapshot,
+            isSignedIn: OmiAuth.shared.isSignedIn
+        )
         if let gap = CaptureHostPolicy.cloudTranscriptionGapReason(
             usesLocalSTT: HostArchitecture.usesLocalSTT,
             isSignedIn: OmiAuth.shared.isSignedIn,
@@ -404,7 +400,7 @@ final class Engine: ObservableObject {
         // a signed-out resume looked fully healthy with no ASR running.
         if isPaused {
             isPaused = false
-            reasons = reasons.filter { $0.key == .storage }
+            reasons = CaptureHostPolicy.reasonsAfterResumeWipe(reasons, storageKey: .storage)
             capabilities = Permissions.report()
             startPermittedSources()
             ContextLog.info("Capture resumed", "engine")
