@@ -10,11 +10,12 @@ export const PROFILE_MENU_MAX_HEIGHT = 520;
 
 /**
  * The tallest the profile menu can be: one row each for Connectors, the
- * settings sections, the three support links and Sign Out, plus the two
- * groups' padding and the divider between them.
+ * settings sections, the four support links (Download, Help, Feedback,
+ * Discord) and Sign Out, plus the two groups' padding and the divider between
+ * them.
  */
 export function profileMenuHeightBound(sectionCount: number): number {
-  const rows = 1 + sectionCount + 3 + 1;
+  const rows = 1 + sectionCount + 4 + 1;
   return rows * MENU_ROW_HEIGHT + 2 * MENU_GROUP_PADDING + MENU_DIVIDER;
 }
 

@@ -14,11 +14,11 @@ export function ChatBubble() {
         'fixed bottom-20 lg:bottom-6 right-6 z-50',
         'w-14 h-14 rounded-full',
         'flex items-center justify-center',
-        'shadow-lg shadow-purple-primary/25',
+        'shadow-lg shadow-black/40',
         'transition-colors duration-200',
         isOpen
           ? 'bg-bg-tertiary hover:bg-bg-quaternary'
-          : 'bg-purple-primary hover:bg-purple-secondary'
+          : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
       )}
       aria-label={isOpen ? 'Close chat' : 'Open chat'}
     >

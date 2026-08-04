@@ -33,8 +33,8 @@ export function MarketplaceHeader() {
                   href="/timeline"
                   className={cn(
                     'px-4 py-1.5 rounded-full text-sm font-medium',
-                    'bg-purple-primary text-white',
-                    'hover:bg-purple-secondary transition-colors'
+                    'bg-text-primary text-bg-primary',
+                    'hover:bg-text-primary/90 transition-colors',
                   )}
                 >
                   Dashboard
@@ -46,7 +46,7 @@ export function MarketplaceHeader() {
                 className={cn(
                   'px-4 py-1.5 rounded-full text-sm font-medium',
                   'bg-white text-gray-900',
-                  'hover:bg-gray-100 transition-colors'
+                  'hover:bg-gray-100 transition-colors',
                 )}
               >
                 Sign In

@@ -76,8 +76,8 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
               'flex flex-col shadow-2xl',
             )}
           >
-            {/* Subtle purple glow at top */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-purple-primary/50 to-transparent" />
+            {/* Subtle glow at top */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
             {/* Close button */}
             <div className="absolute top-4 right-4 z-10">
@@ -195,7 +195,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                     href="https://www.omi.me/pages/terms"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-purple-primary hover:text-purple-secondary transition-colors"
+                    className="text-text-primary hover:text-text-secondary transition-colors"
                   >
                     Terms of Service
                   </a>{' '}
@@ -204,7 +204,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
                     href="https://www.omi.me/pages/privacy"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-purple-primary hover:text-purple-secondary transition-colors"
+                    className="text-text-primary hover:text-text-secondary transition-colors"
                   >
                     Privacy Policy
                   </a>
@@ -213,7 +213,7 @@ export function LoginPanel({ isOpen, onClose }: LoginPanelProps) {
             </div>
 
             {/* Bottom gradient accent */}
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-purple-primary/5 to-transparent pointer-events-none" />
+            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white/[0.05] to-transparent pointer-events-none" />
           </motion.div>
         </>
       )}

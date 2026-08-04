@@ -47,7 +47,7 @@ export function DeveloperBanner() {
 
           {/* Animated sparkle effect */}
           <div className="absolute right-4 top-4 animate-pulse">
-            <Sparkles className="h-5 w-5 text-purple-200/70" />
+            <Sparkles className="h-5 w-5 text-text-secondary" />
           </div>
 
           <div className="relative z-10 flex h-auto flex-col p-6 sm:h-[12rem] sm:flex-row sm:items-center sm:justify-between sm:p-8 md:p-10">
@@ -56,7 +56,7 @@ export function DeveloperBanner() {
               <h3 className="text-xl font-bold text-white sm:text-2xl md:text-2xl">
                 Start Building Your Own Apps
               </h3>
-              <p className="mt-2 text-sm text-purple-100 sm:text-base">
+              <p className="mt-2 text-sm text-text-secondary sm:text-base">
                 Create powerful AI-powered apps for Omi and start earning. Join our
                 developer community today!
               </p>
@@ -64,13 +64,13 @@ export function DeveloperBanner() {
 
             {/* Middle - Code typing animation */}
             <div className="mt-4 hidden sm:mt-0 sm:block sm:max-w-md sm:flex-1">
-              <div className="h-[9.5rem] overflow-hidden rounded-md bg-black/30 p-3 font-mono text-xs text-purple-200/90 backdrop-blur-sm">
+              <div className="h-[9.5rem] overflow-hidden rounded-md bg-black/30 p-3 font-mono text-xs text-text-secondary backdrop-blur-sm">
                 <div className="h-full">
                   {codeLines.slice(0, codeStep + 1).map((line, i) => (
                     <div key={i} className="whitespace-pre">
                       {line}
                       {i === codeStep && (
-                        <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-purple-300"></span>
+                        <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-text-primary"></span>
                       )}
                     </div>
                   ))}
@@ -88,7 +88,7 @@ export function DeveloperBanner() {
 
             {/* Right - Button */}
             <div className="mt-4 flex items-center sm:ml-4 sm:mt-0">
-              <div className="flex items-center gap-1.5 rounded-full bg-black/80 px-4 py-2 text-sm font-medium text-purple-200 shadow-sm transition-all duration-300 group-hover:bg-black group-hover:shadow-md group-hover:shadow-purple-900/30">
+              <div className="flex items-center gap-1.5 rounded-full bg-black/80 px-4 py-2 text-sm font-medium text-text-secondary shadow-sm transition-all duration-300 group-hover:bg-black group-hover:shadow-md group-hover:shadow-black/40">
                 <Zap className="h-3.5 w-3.5" />
                 <span>Start Building</span>
                 <ArrowRight className="h-3.5 w-3.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />

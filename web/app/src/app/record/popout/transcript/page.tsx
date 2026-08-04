@@ -58,7 +58,7 @@ function Waveform({
           key={i}
           className={cn(
             'w-1 rounded-full',
-            isActive && !isPaused ? 'bg-purple-400' : 'bg-gray-500',
+            isActive && !isPaused ? 'bg-text-primary' : 'bg-gray-500',
           )}
           animate={{
             height: isActive && !isPaused ? `${Math.max(6, height * 24)}px` : '6px',
@@ -75,7 +75,7 @@ function Waveform({
 
 // Colors for different speakers
 const speakerColors = [
-  { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+  { bg: 'bg-white/[0.08]', text: 'text-text-secondary', border: 'border-white/25' },
   { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
   { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
   { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
@@ -217,7 +217,7 @@ export default function TranscriptPopoutPage() {
             {isIdle && (
               <button
                 onClick={handleStart}
-                className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white transition-colors"
+                className="p-2 rounded-lg bg-text-primary hover:bg-text-primary/90 text-bg-primary transition-colors"
                 title="Start Recording"
               >
                 <Play className="w-4 h-4" />
@@ -227,7 +227,7 @@ export default function TranscriptPopoutPage() {
             {/* Initializing spinner */}
             {isInitializing && (
               <motion.div
-                className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full"
+                className="w-5 h-5 border-2 border-white/25 border-t-transparent rounded-full"
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
               />
@@ -241,7 +241,7 @@ export default function TranscriptPopoutPage() {
                   className={cn(
                     'p-2 rounded-lg transition-colors',
                     isPaused
-                      ? 'bg-purple-500 hover:bg-purple-600 text-white'
+                      ? 'bg-text-primary hover:bg-text-primary/90 text-bg-primary'
                       : 'bg-bg-tertiary hover:bg-bg-secondary text-text-primary',
                   )}
                   title={isPaused ? 'Resume' : 'Pause'}
@@ -298,7 +298,7 @@ export default function TranscriptPopoutPage() {
             {isIdle && (
               <button
                 onClick={handleStart}
-                className="mt-4 px-4 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
+                className="mt-4 px-4 py-2 rounded-lg bg-text-primary hover:bg-text-primary/90 text-bg-primary text-sm font-medium transition-colors"
               >
                 Start Recording
               </button>

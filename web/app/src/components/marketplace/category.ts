@@ -158,10 +158,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Support for emotional and mental health',
     icon: Heart,
     theme: {
-      primary: 'text-purple-500',
-      secondary: 'text-purple-400',
-      accent: 'bg-purple-500/15',
-      background: 'bg-purple-500/5',
+      primary: 'text-text-primary',
+      secondary: 'text-text-secondary',
+      accent: 'bg-white/[0.08]',
+      background: 'bg-white/[0.08]',
     },
   },
   integration: {
@@ -182,10 +182,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Other useful applications',
     icon: Sparkles,
     theme: {
-      primary: 'text-purple-500',
-      secondary: 'text-purple-400',
-      accent: 'bg-purple-500/15',
-      background: 'bg-purple-500/5',
+      primary: 'text-text-primary',
+      secondary: 'text-text-secondary',
+      accent: 'bg-white/[0.08]',
+      background: 'bg-white/[0.08]',
     },
   },
 };

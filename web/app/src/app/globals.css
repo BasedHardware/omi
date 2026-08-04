@@ -24,34 +24,42 @@
   }
 
   .font-system-ui {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family:
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      'Helvetica Neue',
+      Arial,
+      sans-serif;
   }
 }
 
 :root {
   /* Backgrounds */
-  --bg-primary: #0F0F0F;
-  --bg-secondary: #1A1A1A;
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #1a1a1a;
   --bg-tertiary: #252525;
-  --bg-quaternary: #2A2A2A;
+  --bg-quaternary: #2a2a2a;
 
   /* Purple accent system */
-  --purple-primary: #8B5CF6;
-  --purple-secondary: #A855F7;
-  --purple-accent: #7C3AED;
-  --purple-light: #D946EF;
+  --purple-primary: #8b5cf6;
+  --purple-secondary: #a855f7;
+  --purple-accent: #7c3aed;
+  --purple-light: #d946ef;
 
   /* Text */
-  --text-primary: #FFFFFF;
-  --text-secondary: #E5E5E5;
-  --text-tertiary: #B0B0B0;
+  --text-primary: #ffffff;
+  --text-secondary: #e5e5e5;
+  --text-tertiary: #b0b0b0;
   --text-quaternary: #888888;
 
   /* Status */
-  --success: #10B981;
-  --warning: #F59E0B;
-  --error: #EF4444;
-  --info: #3B82F6;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
 }
 
 * {
@@ -73,7 +81,7 @@ body {
 
 /* Focus styles for accessibility */
 .focus-ring {
-  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary;
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary;
 }
 
 /* Scrollbar styling */

@@ -565,6 +565,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
               <div className="border-t border-stroke/60 p-2 space-y-0.5">
                 <MenuRow
+                  href="https://omi.me/download"
+                  icon={Download}
+                  label="Download"
+                  external
+                  onNavigate={closeUserMenu}
+                />
+                <MenuRow
                   href="/help"
                   icon={LifeBuoy}
                   label="Help"
