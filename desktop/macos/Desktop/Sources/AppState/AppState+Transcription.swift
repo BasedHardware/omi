@@ -853,17 +853,17 @@ extension AppState {
   /// The Python backend handles conversation lifecycle automatically when the WebSocket closes.
   /// When `/v4/listen` has announced the backend conversation id, finalize that exact conversation
   /// instead of relying on the user's current in-progress pointer.
-  func stopTranscription() {
-    // On-device path: there is no backend WebSocket/conversation, so skip the cloud
-    // force-process/reconciliation entirely. Stop capture, then AWAIT both Parakeet instances'
-    // final tail flushes (delivered to the still-current session) BEFORE clearing state, so the
-    // last words persist to the right conversation instead of racing the async drain.
+  @discardableResult
+  func stopTranscription() -> Task<Void, Never>? {
+    recordingGeneration &+= 1
+    // On-device path: await both Parakeet tail flushes before clearing state so the
+    // last words persist to the current conversation.
     if sttSession.useLocalSTT {
       let mic = localMicService
       let sys = localSystemService
       localMicService = nil
       localSystemService = nil
-      Task { @MainActor in
+      return Task { @MainActor in
         self.stopAudioCapture()
         await mic?.finish()
         await sys?.finish()
@@ -871,7 +871,6 @@ extension AppState {
         self.clearTranscriptionState(finalizationReason: .userStop, allowCloudForceProcess: false)
         self.silentMicFallbackInProgress = false
       }
-      return
     }
 
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil).
@@ -920,6 +919,7 @@ extension AppState {
 
       await loadConversations()
     }
+    return nil
   }
 
   /// On-device Parakeet failed to load — fall back to cloud STT instead of silently recording a

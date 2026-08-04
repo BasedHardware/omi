@@ -294,7 +294,8 @@ def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
 
 def get_all_time_usage_stats(uid: str) -> Dict[str, Any]:
     """Aggregates all hourly usage stats for a user from Firestore."""
-    return _aggregate_stats_from_docs(_store().query(f'users/{uid}/hourly_usage'))
+    stats, _ = _read_all_time_usage(uid)
+    return stats
 
 
 def get_hourly_history_for_today(uid: str, date: datetime) -> List[Dict[str, Any]]:
@@ -410,6 +411,46 @@ def get_yearly_history(uid: str) -> List[Dict[str, Any]]:
     return history
 
 
+def _read_all_time_usage(uid: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Read hourly usage once while building both the total and yearly history."""
+    docs = _store().query(f'users/{uid}/hourly_usage')
+    stats: Dict[str, Any] = {
+        'transcription_seconds': 0,
+        'words_transcribed': 0,
+        'insights_gained': 0,
+        'memories_created': 0,
+        'speech_seconds': 0,
+    }
+    yearly_totals: Dict[int, Dict[str, int]] = {}
+    document_count = 0
+    for doc in docs:
+        document_count += 1
+        data = _typed_doc(doc)
+        for key in stats:
+            stats[key] += data.get(key, 0)
+        year = cast(int, data.get('year', 0))
+        year_stats = yearly_totals.setdefault(
+            year,
+            {
+                'transcription_seconds': 0,
+                'words_transcribed': 0,
+                'insights_gained': 0,
+                'memories_created': 0,
+            },
+        )
+        for key in year_stats:
+            year_stats[key] += data.get(key, 0)
+
+    record_firestore_read(
+        FirestoreReadFamily.ALL_TIME_USAGE,
+        FirestoreReadMode.UNBOUNDED,
+        document_count,
+    )
+    history = [{'date': f"{year}-01-01", **year_stats} for year, year_stats in yearly_totals.items()]
+    history.sort(key=lambda x: cast(str, x['date']))
+    return stats, history
+
+
 def get_current_user_usage(
     uid: str, period: str, tz_name: Optional[str] = None, now: Optional[datetime] = None
 ) -> Dict[str, Any]:
@@ -447,7 +488,8 @@ def get_current_user_usage(
         response['yearly'] = UsageStats(**get_yearly_usage_stats(uid, now)).model_dump()
         response['history'] = get_monthly_history_for_year(uid, now)
     elif period == 'all_time':
-        response['all_time'] = UsageStats(**get_all_time_usage_stats(uid)).model_dump()
-        response['history'] = get_yearly_history(uid)
+        all_time, history = _read_all_time_usage(uid)
+        response['all_time'] = UsageStats(**all_time).model_dump()
+        response['history'] = history
 
     return response

@@ -14,6 +14,7 @@ path, then assert on returned values — no Firestore call mechanics.
 
 import os
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -208,3 +209,40 @@ def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(store, monkey
     # 600 (7am local, filed under the previous UTC date) + 300 (6pm local, filed under today's
     # UTC date). Serving the UTC day alone finds only the 300.
     assert result['today']['transcription_seconds'] == 900, result['today']
+
+
+def test_all_time_usage_builds_totals_and_history_from_one_stream(store, monkeypatch):
+    # Upstream #11062: get_current_user_usage('all_time') reads hourly_usage ONCE, building both the
+    # all-time total and the yearly history in a single pass. Exercised on the neutral store seam;
+    # the single-read (dedup) invariant is proved by record_firestore_read being called once with the
+    # document count (2), not by asserting the raw adapter's .stream() call.
+    store.set('users/uid/hourly_usage/2025-01-01-00', {'year': 2025, 'transcription_seconds': 10, 'speech_seconds': 8})
+    store.set(
+        'users/uid/hourly_usage/2026-01-01-00',
+        {'year': 2026, 'transcription_seconds': 20, 'words_transcribed': 4, 'speech_seconds': 16},
+    )
+    record_read = MagicMock()
+    monkeypatch.setattr(user_usage, 'record_firestore_read', record_read)
+
+    result = user_usage.get_current_user_usage('uid', 'all_time')
+
+    assert result['all_time']['transcription_seconds'] == 30
+    assert result['all_time']['words_transcribed'] == 4
+    assert result['all_time']['speech_seconds'] == 24
+    assert result['history'] == [
+        {
+            'date': '2025-01-01',
+            'transcription_seconds': 10,
+            'words_transcribed': 0,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+        {
+            'date': '2026-01-01',
+            'transcription_seconds': 20,
+            'words_transcribed': 4,
+            'insights_gained': 0,
+            'memories_created': 0,
+        },
+    ]
+    record_read.assert_called_once_with(FirestoreReadFamily.ALL_TIME_USAGE, FirestoreReadMode.UNBOUNDED, 2)

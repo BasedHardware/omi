@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -50,6 +50,7 @@ class CanonicalKnowledgeGraphPage:
     edges: List[Dict[str, Any]]
     has_more: bool
     next_cursor: Optional[str]
+    catalog_nodes: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -343,8 +344,8 @@ def _read_canonical_graph_page_once(
             secret=secret,
         )
 
-    accepted_items: List[Dict[str, Any]] = []
     accepted_assertions: List[MemoryGraphAssertion] = []
+    catalog_nodes: List[Dict[str, Any]] = []
     visible_memory_ids: set[str] = set()
     pending_snapshots: List[Any] = []
     pending_window_has_more = False
@@ -384,19 +385,24 @@ def _read_canonical_graph_page_once(
                 last_consumed_snapshot = snapshot
 
             if eligible_batch:
-                accepted_items.extend(eligible_batch)
                 memory_ids = [cast(str, item['memory_id']) for item in eligible_batch]
                 loaded_assertions = kg_db.load_fenced_assertions_for_memory_items(
                     uid,
                     memory_ids,
                     account_generation=revision.account_generation,
                 )
+                assertion_memory_ids = {assertion.memory_id for assertion in loaded_assertions}
                 for assertion in loaded_assertions:
                     accepted_assertions.append(assertion)
                     visible_memory_ids.add(assertion.memory_id)
                 for item in eligible_batch:
-                    if _canonical_memory_catalog_node(item) is not None:
-                        visible_memory_ids.add(cast(str, item['memory_id']))
+                    memory_id = cast(str, item['memory_id'])
+                    if memory_id in assertion_memory_ids:
+                        continue
+                    catalog_node = _canonical_memory_catalog_node(item)
+                    if catalog_node is not None:
+                        catalog_nodes.append(catalog_node)
+                        visible_memory_ids.add(memory_id)
 
             if len(visible_memory_ids) >= limit:
                 break
@@ -460,12 +466,12 @@ def _read_canonical_graph_page_once(
         {'nodes': [], 'edges': []},
         accepted_assertions,
     )
-    catalog_nodes = [node for item in accepted_items if (node := _canonical_memory_catalog_node(item)) is not None]
     return CanonicalKnowledgeGraphPage(
-        nodes=[*merged['nodes'], *catalog_nodes],
+        nodes=merged['nodes'],
         edges=merged['edges'],
         has_more=has_more,
         next_cursor=next_cursor,
+        catalog_nodes=catalog_nodes,
     )
 
 

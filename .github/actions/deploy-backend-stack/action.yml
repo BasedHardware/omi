@@ -121,6 +121,10 @@ runs:
         # backend.config and sibling scripts, while runtime data stays in the
         # separately checked-out admitted source below.
         cp -a .workflow-source/backend "$control_source/backend"
+        # runtime_image_contracts resolves declared deployment workflows from
+        # its repository root, so preserve that immutable workflow surface
+        # alongside the control scripts it validates.
+        cp -a .workflow-source/.github "$control_source/.github"
         rm -rf .workflow-source
 
     - name: Checkout admitted runtime source
@@ -141,6 +145,7 @@ runs:
         mkdir -p "$control_root"
         cp -a "$RUNNER_TEMP/backend-deploy-workflow-source/.github" "$workflow_root/.github"
         cp -a "$RUNNER_TEMP/backend-deploy-control-source/backend" "$control_root/backend"
+        cp -a "$RUNNER_TEMP/backend-deploy-control-source/.github" "$control_root/.github"
         rm -rf "$RUNNER_TEMP/backend-deploy-workflow-source"
         rm -rf "$RUNNER_TEMP/backend-deploy-control-source"
         printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"

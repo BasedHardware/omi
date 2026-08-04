@@ -1064,6 +1064,126 @@ async def test_gateway_rejection_does_not_record_quota_question(monkeypatch):
     assert quota_calls == []
 
 
+def _wire_direct_lane(monkeypatch, quota_calls):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_features_through_gateway', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _provider: None)
+
+    async def record_quota(*args, **kwargs):
+        quota_calls.append((args, kwargs))
+
+    monkeypatch.setattr(desktop_chat, '_record_chat_quota_question', record_quota)
+
+    async def record_usage(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(desktop_chat, '_record_usage', record_usage)
+    monkeypatch.setattr(desktop_chat, '_record_usage_resilient', record_usage)
+
+
+async def _drain(response):
+    return ''.join([chunk async for chunk in response.body_iterator])
+
+
+@pytest.mark.asyncio
+async def test_direct_stream_rejection_does_not_record_quota_question(monkeypatch):
+    quota_calls = []
+    _wire_direct_lane(monkeypatch, quota_calls)
+
+    class Stream:
+        async def __aenter__(self):
+            raise RuntimeError('upstream rejected the request')
+
+        async def __aexit__(self, *_):
+            return None
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
+    )
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform='windows',
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='request-1',
+    )
+    body = await _drain(response)
+
+    assert 'Upstream provider error' in body
+    assert quota_calls == []
+
+
+@pytest.mark.asyncio
+async def test_direct_stream_records_one_quota_question_when_upstream_accepts(monkeypatch):
+    quota_calls = []
+    _wire_direct_lane(monkeypatch, quota_calls)
+
+    class Stream:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def get_final_message(self):
+            return SimpleNamespace(
+                content=[SimpleNamespace(type='text', text='hi')], stop_reason='end_turn', usage=None
+            )
+
+        def __aiter__(self):
+            async def events():
+                yield SimpleNamespace(type='content_block_delta', delta=SimpleNamespace(type='text_delta', text='hi'))
+
+            return events()
+
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        lambda **_: SimpleNamespace(messages=SimpleNamespace(stream=lambda **_kwargs: Stream())),
+    )
+
+    response = await desktop_chat.chat_completions(
+        {'model': 'omi-sonnet', 'stream': True, 'messages': [{'role': 'user', 'content': 'hello'}]},
+        uid='user-1',
+        x_app_platform='windows',
+        x_omi_chat_contract_version=None,
+        x_omi_request_id='request-1',
+    )
+    body = await _drain(response)
+
+    assert 'hi' in body
+    assert [call[0] for call in quota_calls] == [('user-1', 'request-1', 'windows')]
+
+
+@pytest.mark.asyncio
+async def test_direct_json_upstream_error_does_not_record_quota_question(monkeypatch):
+    quota_calls = []
+    _wire_direct_lane(monkeypatch, quota_calls)
+    monkeypatch.setattr(desktop_chat, 'get_direct_anthropic_client', lambda **_: object())
+
+    async def raise_upstream(*_args, **_kwargs):
+        raise RuntimeError('upstream rejected the request')
+
+    monkeypatch.setattr(desktop_chat, '_create_with_pause_turn_continuations', raise_upstream)
+
+    with pytest.raises(desktop_chat.HTTPException) as error:
+        await desktop_chat.chat_completions(
+            {'model': 'omi-sonnet', 'messages': [{'role': 'user', 'content': 'hello'}]},
+            uid='user-1',
+            x_app_platform='windows',
+            x_omi_chat_contract_version=None,
+            x_omi_request_id='request-1',
+        )
+
+    assert error.value.status_code == 502
+    assert quota_calls == []
+
+
 @pytest.mark.asyncio
 async def test_chat_completions_rejects_unknown_explicit_model_before_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)

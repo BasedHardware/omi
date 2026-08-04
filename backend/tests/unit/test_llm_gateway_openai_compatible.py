@@ -634,6 +634,10 @@ def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypa
     assert recorded[0]['phase'] == 'terminal_marker'
     assert recorded[0]['credential_source'] == 'service_forwarded_byok'
     assert recorded[0]['streaming'] is True
+    assert recorded[0]['used_lkg'] is True
+    assert recorded[0]['fallback_used'] is False
+    assert recorded[0]['fallback_reason'] is None
+    assert recorded[0]['route_serving_class'].value == 'lkg'
     assert recorded[0]['ttfb_seconds'] is not None
     assert recorded[0]['budget_source'] == 'none'
     assert recorded[0]['output_budget'] == 'none'
@@ -740,6 +744,91 @@ async def test_streaming_consumer_abandonment_records_cancelled_exactly_once(mon
     assert len(recorded) == 1
     assert recorded[0]['outcome'] == 'cancelled'
     assert recorded[0]['error_class'] == 'consumer_abandoned_stream'
+
+
+@pytest.mark.asyncio
+async def test_streaming_fallback_that_fails_midstream_is_not_actual_fallback(monkeypatch):
+    """When a fallback stream is opened (prepared.fallback_used=True) but that
+    stream later fails before [DONE], the terminal metric must not classify the
+    request as ACTUAL_FALLBACK — the PR contract requires a *subsequent
+    successful* provider/route."""
+    recorded: list[dict] = []
+    monkeypatch.setattr(openai_compatible, 'observe_route_result', lambda *_args, **kwargs: recorded.append(kwargs))
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+
+    async def failing_stream():
+        raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+        yield b''
+
+    prepared = openai_compatible._PreparedStream(
+        first_chunk=b'data: {"choices":[]}\n\n',
+        stream=failing_stream(),
+        provider='openai',
+        model='gpt-4o-mini',
+        fallback_used=True,
+        fallback_reason='timeout_before_output',
+    )
+    stream = openai_compatible._stream_with_terminal_metrics(
+        prepared,
+        resolved_route=resolved,
+        credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+        route=route,
+        started_at=openai_compatible.time_request(),
+        request_id='a1b2c3d4-fallback-fail-test-000000000001',
+    )
+
+    assert await anext(stream) == b'data: {"choices":[]}\n\n'
+    with pytest.raises(ProviderFailure):
+        await anext(stream)
+
+    assert len(recorded) == 1
+    assert recorded[0]['outcome'] == 'error'
+    assert recorded[0]['error_class'] == 'provider_5xx_omi_paid_midstream'
+    assert recorded[0]['fallback_used'] is False
+    assert recorded[0]['fallback_reason'] is None
+    assert recorded[0]['route_serving_class'] != openai_compatible.RouteServingClass.ACTUAL_FALLBACK
+
+
+@pytest.mark.asyncio
+async def test_streaming_successful_fallback_is_classified_as_actual_fallback(monkeypatch):
+    """When a fallback stream opens and completes successfully ([DONE]), the
+    terminal metric SHOULD classify it as ACTUAL_FALLBACK."""
+    recorded: list[dict] = []
+    monkeypatch.setattr(openai_compatible, 'observe_route_result', lambda *_args, **kwargs: recorded.append(kwargs))
+    config = _streaming_enabled_gateway_config()
+    resolved = resolve_chat_completion_route(config, valid_request(stream=True))
+    route = openai_compatible.selected_serving_route(resolved)
+
+    async def done_stream():
+        yield b'data: [DONE]\n\n'
+
+    prepared = openai_compatible._PreparedStream(
+        first_chunk=b'data: {"choices":[]}\n\n',
+        stream=done_stream(),
+        provider='openai',
+        model='gpt-4o-mini',
+        fallback_used=True,
+        fallback_reason='timeout_before_output',
+    )
+    stream = openai_compatible._stream_with_terminal_metrics(
+        prepared,
+        resolved_route=resolved,
+        credentials=build_omi_managed_credential_context(ServiceCaller(name='backend')),
+        route=route,
+        started_at=openai_compatible.time_request(),
+        request_id='b2c3d4e5-fallback-ok-test-0000000000002',
+    )
+
+    collected = [chunk async for chunk in stream]
+    assert b'data: [DONE]\n\n' in collected
+
+    assert len(recorded) == 1
+    assert recorded[0]['outcome'] == 'success'
+    assert recorded[0]['fallback_used'] is True
+    assert recorded[0]['fallback_reason'] == 'timeout_before_output'
+    assert recorded[0]['route_serving_class'] == openai_compatible.RouteServingClass.ACTUAL_FALLBACK
 
 
 def _streaming_enabled_gateway_config():

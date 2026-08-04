@@ -176,6 +176,7 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
     assert 'Live STT attempt failure rate (failure / accepted)' in panel_titles
     assert 'Journey acceptance-to-terminal latency (p95)' in panel_titles
     assert 'Capture finalization durable projection and nonterminal work' in panel_titles
+    assert 'LLM gateway LKG serving share (rollout exposure)' in panel_titles
     live_stt_panel = next(
         panel for panel in dashboard['panels'] if panel['title'].startswith('Live STT attempt failure')
     )
@@ -197,3 +198,6 @@ def test_idle_metrics_and_monitoring_contract_distinguish_traffic_from_a_missing
     assert 'max(listen_finalization_durable_jobs{state="accepted"})' in dead_emission_rule['data'][0]['model']['expr']
     assert 'max by (state)' in dead_emission_rule['data'][1]['model']['expr']
     assert dead_emission_rule['data'][2]['model']['expression'] == '$A >= 5 && $B == 0'
+    lkg_panel = next(panel for panel in dashboard['panels'] if panel['id'] == 11)
+    assert 'route_serving_class="lkg"' in lkg_panel['targets'][0]['expr']
+    assert 'fallback_used' not in lkg_panel['targets'][0]['expr']

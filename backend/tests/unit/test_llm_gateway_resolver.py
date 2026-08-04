@@ -98,6 +98,20 @@ def test_lkg_is_selected_only_for_active_route_policy_allowed_failure():
     assert selected.route_artifact_id == LKG_ROUTE
 
 
+def test_same_artifact_pointer_is_not_a_distinct_lkg_failover():
+    base = load_gateway_config(prod_mode=True)
+    lanes = dict(base.lanes)
+    lanes[LANE_ID] = lanes[LANE_ID].model_copy(update={'last_known_good': ACTIVE_ROUTE})
+    config = GatewayConfig(
+        lanes=lanes,
+        route_artifacts=base.route_artifacts,
+        feature_bundles=base.feature_bundles,
+    )
+    resolved = resolve_chat_completion_route(config, valid_request())
+
+    assert select_lkg_route_for_failure(resolved, FailureClass.TIMEOUT_BEFORE_OUTPUT) is None
+
+
 @pytest.mark.parametrize(
     'failure_class',
     [

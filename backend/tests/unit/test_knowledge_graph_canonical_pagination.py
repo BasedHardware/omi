@@ -225,27 +225,32 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert page.next_cursor is None
 
 
-def test_canonical_graph_includes_unlinked_canonical_memory_as_an_atlas_node(monkeypatch):
-    # Atlas product change (#11081): a durable canonical memory with no graph assertion (graph_ready
-    # False, unlinked) is still surfaced as an isolated catalog node. Exercised on the neutral store
-    # seam — the item is seeded without an assertion (row second element None).
+def test_canonical_graph_separates_unlinked_canonical_memory_from_assertion_graph(monkeypatch):
+    # Boundary product change (#11089): a durable canonical memory WITH a graph assertion is a graph
+    # node/edge; one WITHOUT an assertion is surfaced separately as a catalog node. Exercised on the
+    # neutral store seam (no db_client, ADR-0028): linked seeded with its assertion, unlinked without
+    # (row second element None) — the boundary is the presence of a graph assertion, not graph_ready.
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
-    item, _assertion = _assertion_and_item("unlinked", 1, graph_ready=False)
-    item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
-    _fake_db_for([(item, None)])
+    linked_item, linked_assertion = _assertion_and_item("linked", 1, updated_at=NOW.replace(minute=1))
+    unlinked_updated_at = NOW.replace(minute=2)
+    unlinked_item, _unlinked_assertion = _assertion_and_item("unlinked", 2, updated_at=unlinked_updated_at)
+    unlinked_item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
+    _fake_db_for([(linked_item, linked_assertion), (unlinked_item, None)])
 
     page = kg.get_canonical_knowledge_graph(UID, limit=10)
 
-    assert page.edges == []
-    assert page.nodes == [
+    assert page.nodes
+    assert _page_memory_ids(page) == {"linked"}
+    assert all(not node["id"].startswith("memory:") for node in page.nodes)
+    assert page.catalog_nodes == [
         {
             "id": "memory:unlinked",
             "label": "A durable canonical memory that has no inferred relationship yet.",
             "node_type": "concept",
             "aliases": [],
             "memory_ids": ["unlinked"],
-            "created_at": NOW,
-            "updated_at": NOW,
+            "created_at": unlinked_updated_at,
+            "updated_at": unlinked_updated_at,
         }
     ]
 
@@ -337,6 +342,7 @@ def test_canonical_route_is_additive_and_legacy_route_response_is_unchanged(monk
     canonical_payload = {
         "nodes": [{"id": "canonical-node"}],
         "edges": [],
+        "catalog_nodes": [{"id": "memory:catalog-only"}],
         "has_more": True,
         "next_cursor": "v3.opaque.signed",
     }
