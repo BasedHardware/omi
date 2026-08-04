@@ -7,7 +7,10 @@
     ".": "./src/index.ts",
     "./encryption": "./src/encryption.ts",
     "./sanitize": "./src/sanitize.ts",
-    "./auth": "./src/auth.ts"
+    "./auth": "./src/auth.ts",
+    "./features": "./src/features.ts",
+    "./origin": "./src/origin.ts",
+    "./context": "./src/context.ts"
   },
   "scripts": {
     "test": "vitest run",

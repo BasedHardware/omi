@@ -1,13 +1,19 @@
-name = "omi-bff"
+name = "omi-edge-api"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-# Override per env: wrangler secret / dashboard
+EDGE_PROVIDER = "cloudflare"
+# Comma list: health,whoami,memory,conversation,tasks,search
+EDGE_MODULES = "health,whoami"
+EDGE_PROXY_ORIGIN = "true"
 ORIGIN_API_BASE = "https://api.omi.me"
 FIREBASE_PROJECT_ID = "based-hardware"
 TENANT_SHARD_COUNT = "64"
+
+# Enable modules gradually, e.g.:
+# EDGE_MODULES = "health,whoami,memory,search"
 
 # [[kv_namespaces]]
 # binding = "TENANT_KV"
