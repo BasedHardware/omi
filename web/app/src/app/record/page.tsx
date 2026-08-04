@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import Link from '@tschk/moonshine-next/link';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
@@ -12,6 +12,7 @@ import { RecordingControls } from '@/components/recording/RecordingControls';
 import { LiveTranscript } from '@/components/recording/LiveTranscript';
 import { cn } from '@/lib/utils';
 import { RECORDING_ENABLED } from '@/lib/featureFlags';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 /**
  * Inner content component that uses recording context.
@@ -78,9 +79,7 @@ function RecordPageContent() {
           {/* Audio mode indicator */}
           {isActive && (
             <div className="flex items-center gap-2 text-sm text-text-tertiary">
-              <span>
-                {audioMode === 'mic-only' ? 'Mic Only' : 'Mic + System'}
-              </span>
+              <span>{audioMode === 'mic-only' ? 'Mic Only' : 'Mic + System'}</span>
             </div>
           )}
         </header>
@@ -88,22 +87,30 @@ function RecordPageContent() {
         {/* Main content - Vertical stack layout */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Top section - Recording controls (compact) */}
-          <div className={cn(
-            "flex-shrink-0 border-b border-bg-tertiary",
-            isIdle ? "py-8" : "py-4"
-          )}>
+          <div
+            className={cn(
+              'flex-shrink-0 border-b border-bg-tertiary',
+              isIdle ? 'py-8' : 'py-4',
+            )}
+          >
             {isIdle ? (
               // Start recording UI - compact centered
               <div className="flex flex-col items-center gap-4 px-6">
                 <div className="flex items-center gap-4">
-                  <div className={cn(
-                    "w-16 h-16 rounded-full flex items-center justify-center",
-                    RECORDING_ENABLED ? "bg-purple-primary/10" : "bg-bg-tertiary"
-                  )}>
-                    <Mic className={cn(
-                      "w-8 h-8",
-                      RECORDING_ENABLED ? "text-purple-primary" : "text-text-quaternary"
-                    )} />
+                  <div
+                    className={cn(
+                      'w-16 h-16 rounded-full flex items-center justify-center',
+                      RECORDING_ENABLED ? 'bg-purple-primary/10' : 'bg-bg-tertiary',
+                    )}
+                  >
+                    <Mic
+                      className={cn(
+                        'w-8 h-8',
+                        RECORDING_ENABLED
+                          ? 'text-purple-primary'
+                          : 'text-text-quaternary',
+                      )}
+                    />
                   </div>
                   <div className="text-left">
                     <h2 className="text-xl font-semibold text-text-primary flex items-center gap-2">
@@ -129,7 +136,7 @@ function RecordPageContent() {
                       'px-6 py-3 rounded-xl font-medium',
                       'bg-purple-primary hover:bg-purple-secondary text-white',
                       'transition-all transform hover:scale-105',
-                      'flex items-center gap-2'
+                      'flex items-center gap-2',
                     )}
                   >
                     <Mic className="w-5 h-5" />
@@ -145,7 +152,7 @@ function RecordPageContent() {
                       className={cn(
                         'inline-flex items-center gap-2 px-4 py-2 rounded-lg',
                         'text-sm text-purple-primary hover:bg-purple-primary/10',
-                        'transition-colors'
+                        'transition-colors',
                       )}
                     >
                       <ArrowLeft className="w-4 h-4" />
@@ -245,6 +252,8 @@ function RecordPageContent() {
     </>
   );
 }
+
+registerMoonshineRoute('/record', RecordPage, 'root');
 
 /**
  * Wrapper that provides MainLayout first, then renders content inside it.

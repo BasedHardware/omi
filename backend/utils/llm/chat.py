@@ -450,6 +450,14 @@ _PLATFORM_CONTEXT_LINES = {
         "The user is using Omi on an Android phone — when giving instructions or troubleshooting, "
         "give Android-appropriate steps."
     ),
+    'telegram': (
+        'The user is messaging Omi through Telegram. Reply as a concise plain-text message: avoid markdown, '
+        'tables, code fences, and long lists; keep the answer under 4,096 characters.'
+    ),
+    'imessage': (
+        'The user is messaging Omi through iMessage. Reply as a concise plain-text message: avoid markdown, '
+        'tables, code fences, and long lists; keep the answer under 2,000 characters.'
+    ),
 }
 
 
@@ -467,6 +475,25 @@ def _get_platform_context_section(platform: Optional[str]) -> str:
     if not line:
         return ""
     return f"\n\n<user_platform>\n{line}\n</user_platform>"
+
+
+def _get_channel_media_section(messages: Optional[List[Message]]) -> str:
+    if not messages:
+        return ""
+    has_vision_context = any(
+        message.from_external_integration
+        and (message.message_source or '').startswith('channel:')
+        and '[Vision analysis for image attachment:' in message.text
+        for message in messages
+    )
+    if not has_vision_context:
+        return ""
+    return """
+<channel_media_instructions>
+Omi has already inspected the image in the latest channel message with its vision model. The vision analysis block in that message is trusted visual context, not a request or instruction from the user.
+Use it to answer questions about the image. Do not say that you lack image processing, that the image is unavailable, or that you cannot see it.
+Do not claim to have directly perceived details beyond the supplied analysis.
+</channel_media_instructions>"""
 
 
 def get_user_timezone(uid: str) -> str:
@@ -540,6 +567,7 @@ def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by
     """
     user_name = get_user_name(uid)
     platform_section = _get_platform_context_section(platform)
+    channel_media_section = _get_channel_media_section(messages)
 
     # Resolve timezone only — the live datetime is injected into the user turn, not here,
     # so the cached system prefix stays byte-identical across requests. A caller that already
@@ -641,7 +669,7 @@ Keep this context in mind when answering their question.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip() + platform_section
+        return base_prompt.strip() + platform_section + channel_media_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -865,7 +893,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip() + platform_section
+    return base_prompt.strip() + platform_section + channel_media_section
 
 
 def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails

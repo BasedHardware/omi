@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
-import Image from 'next/image';
+import { usePathname } from '@tschk/moonshine-next/navigation';
+import Image from '@tschk/moonshine-next/image';
 import { X } from 'lucide-react';
 
 type Platform = 'ios' | 'android' | 'other';

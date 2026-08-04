@@ -219,6 +219,18 @@ INDEX_ONLY_REQUIREMENTS = (
 )
 
 
+CHANNEL_BINDINGS_BY_UID_CHANNEL_QUERY = FirestoreQuerySpec(
+    identifier='channel_bindings_by_uid_channel',
+    collection_group='channel_bindings',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('uid', '==', 'uid'),
+        FirestoreQueryFilter('channel', '==', 'channel'),
+    ),
+    index_fields=(_asc('uid'), _asc('channel'), _asc('__name__')),
+)
+
+
 ACTIVE_ATTENTION_OVERRIDE_QUERY = FirestoreQuerySpec(
     identifier='task_attention_overrides_active_by_generation',
     collection_group='task_attention_overrides',
@@ -507,6 +519,7 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    CHANNEL_BINDINGS_BY_UID_CHANNEL_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,

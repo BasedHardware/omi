@@ -7,6 +7,7 @@ from llm_gateway.gateway.errors import GatewayCapabilityMismatchError, GatewayIn
 from llm_gateway.gateway.validator import validate_chat_completion_request
 
 LANE_ID = 'omi:auto:chat-structured'
+VISION_LANE_ID = 'omi:auto:openglass'
 
 
 def test_accepts_non_streaming_text_messages_with_json_schema_output():
@@ -216,6 +217,39 @@ def test_rejects_unsupported_message_content_parts():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(
         messages=[{'role': 'user', 'content': [{'type': 'input_audio', 'input_audio': {'data': 'abc'}}]}]
+    )
+
+    with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):
+        validate_chat_completion_request(request, lane)
+
+
+def test_accepts_mixed_text_and_image_content_for_vision_lane():
+    lane = load_gateway_config(prod_mode=True).lanes[VISION_LANE_ID]
+    request = valid_request(
+        model=VISION_LANE_ID,
+        response_format=None,
+        messages=[
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'Describe this image.'},
+                    {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,encoded'}},
+                ],
+            }
+        ],
+    )
+
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.messages == tuple(request['messages'])
+
+
+def test_rejects_malformed_image_content_for_vision_lane():
+    lane = load_gateway_config(prod_mode=True).lanes[VISION_LANE_ID]
+    request = valid_request(
+        model=VISION_LANE_ID,
+        response_format=None,
+        messages=[{'role': 'user', 'content': [{'type': 'image_url', 'image_url': {}}]}],
     )
 
     with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):

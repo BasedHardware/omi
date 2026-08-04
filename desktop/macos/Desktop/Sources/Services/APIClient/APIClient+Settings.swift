@@ -180,6 +180,14 @@ extension APIClient {
     try await delete("v1/users/delete-account")
   }
 
+  func getChannelStatus() async throws -> ChannelStatusResponse {
+    return try await get("v1/channels")
+  }
+
+  func createChannelLink(channel: String) async throws -> ChannelLinkResponse {
+    return try await post("v1/channels/\(channel)/link", body: EmptyBody())
+  }
+
   // MARK: - Assistant Settings API
 
   /// Fetches assistant settings from the backend
@@ -288,6 +296,40 @@ struct RecordingPermissionResponse: Codable {
 
   enum CodingKeys: String, CodingKey {
     case enabled = "store_recording_permission"
+  }
+}
+
+struct ChannelBindingResponse: Codable, Identifiable {
+  let channel: String
+  let linkedAt: Date
+
+  var id: String { channel }
+
+  enum CodingKeys: String, CodingKey {
+    case channel
+    case linkedAt = "linked_at"
+  }
+}
+
+struct ChannelStatusResponse: Codable {
+  let bindings: [ChannelBindingResponse]
+  let phoneRegistered: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case bindings
+    case phoneRegistered = "phone_registered"
+  }
+}
+
+struct ChannelLinkResponse: Codable {
+  let channel: String
+  let code: String
+  let expiresAt: Date
+  let instructions: String
+
+  enum CodingKeys: String, CodingKey {
+    case channel, code, instructions
+    case expiresAt = "expires_at"
   }
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useCallback, useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Loader2, Network, X, ExternalLink, RotateCcw, Tag, ZoomIn, ZoomOut, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';

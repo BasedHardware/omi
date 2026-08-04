@@ -22,6 +22,10 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: TWILIO_TWIML_APP_SID
+          TWILIO_NUMBER:
+            config_map:
+              name: dev-omi-backend-config
+              key: TWILIO_NUMBER
           USE_VERTEX_AI:
             value: 'true'
           STT_PRERECORDED_MODEL:
@@ -307,6 +311,8 @@ environments:
             source: environment
           TWILIO_TWIML_APP_SID:
             source: environment
+          TWILIO_NUMBER:
+            source: environment
           X_OAUTH_CLIENT_ID:
             source: environment
           X_OAUTH_REDIRECT_URI:
@@ -332,6 +338,27 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            TELEGRAM_BOT_TOKEN:
+              secret: TELEGRAM_BOT_TOKEN
+              version: latest
+            TELEGRAM_WEBHOOK_SECRET:
+              secret: TELEGRAM_WEBHOOK_SECRET
+              version: latest
+            SENDBLUE_API_KEY_ID:
+              secret: SENDBLUE_API_KEY_ID
+              version: latest
+            SENDBLUE_API_KEY_SECRET:
+              secret: SENDBLUE_API_KEY_SECRET
+              version: latest
+            SENDBLUE_NUMBER:
+              secret: SENDBLUE_NUMBER
+              version: latest
+            SENDBLUE_WEBHOOK_SIGNING_SECRET:
+              secret: SENDBLUE_WEBHOOK_SIGNING_SECRET
+              version: latest
+            SENDBLUE_WEBHOOK_PATH_TOKEN:
+              secret: SENDBLUE_WEBHOOK_PATH_TOKEN
               version: latest
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -372,6 +399,9 @@ environments:
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
+            TWILIO_NUMBER:
+              env_var: TWILIO_NUMBER
+              category: telephony
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -410,6 +440,12 @@ environments:
               value: 'true'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            BASE_API_URL:
+              value: https://api.omiapi.com
+              category: oauth_metadata
+            CHANNEL_SIGN_IN_URL:
+              value: https://web-channels-dev---omi-web-app-dt5lrfkkoa-uc.a.run.app/login
+              category: oauth_metadata
             OMI_PARITY_PACK_CAPTURE:
               value: '1'
               category: replay_capture
@@ -951,6 +987,10 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: TWILIO_TWIML_APP_SID
+          TWILIO_NUMBER:
+            config_map:
+              name: prod-omi-backend-config
+              key: TWILIO_NUMBER
           USE_VERTEX_AI:
             value: 'true'
           STT_PRERECORDED_MODEL:
@@ -1163,6 +1203,8 @@ environments:
             source: environment
           TWILIO_TWIML_APP_SID:
             source: environment
+          TWILIO_NUMBER:
+            source: environment
           X_OAUTH_CLIENT_ID:
             source: environment
           X_OAUTH_REDIRECT_URI:
@@ -1202,6 +1244,27 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            TELEGRAM_BOT_TOKEN:
+              secret: TELEGRAM_BOT_TOKEN
+              version: latest
+            TELEGRAM_WEBHOOK_SECRET:
+              secret: TELEGRAM_WEBHOOK_SECRET
+              version: latest
+            SENDBLUE_API_KEY_ID:
+              secret: SENDBLUE_API_KEY_ID
+              version: latest
+            SENDBLUE_API_KEY_SECRET:
+              secret: SENDBLUE_API_KEY_SECRET
+              version: latest
+            SENDBLUE_NUMBER:
+              secret: SENDBLUE_NUMBER
+              version: latest
+            SENDBLUE_WEBHOOK_SIGNING_SECRET:
+              secret: SENDBLUE_WEBHOOK_SIGNING_SECRET
+              version: latest
+            SENDBLUE_WEBHOOK_PATH_TOKEN:
+              secret: SENDBLUE_WEBHOOK_PATH_TOKEN
               version: latest
             DESKTOP_PREVIEW_PUBLISH_KEY:
               secret: DESKTOP_PREVIEW_PUBLISH_KEY
@@ -1245,6 +1308,9 @@ environments:
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
+            TWILIO_NUMBER:
+              env_var: TWILIO_NUMBER
+              category: telephony
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -1284,6 +1350,12 @@ environments:
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
+            BASE_API_URL:
+              value: https://api.omi.me
+              category: oauth_metadata
+            CHANNEL_SIGN_IN_URL:
+              value: https://app.omi.me/login
+              category: oauth_metadata
             LISTEN_FINALIZATION_TASKS_QUEUE:
               value: conversation-finalization
               category: reliability

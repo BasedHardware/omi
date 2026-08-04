@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { ExternalLink } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
 
 // Create simple purple marker icon
 function createMarkerIcon() {

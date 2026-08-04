@@ -1,3 +1,7 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from '@tschk/moonshine-next/navigation';
 import {
   findAppById,
   getAppsV2,
@@ -8,14 +12,9 @@ import { CompactPluginCard } from '@/components/marketplace/plugin-card/CompactP
 import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
 import { BreadcrumbJsonLd, SoftwareAppJsonLd } from '@/components/seo/JsonLd';
 import { Calendar, User, FolderOpen, Puzzle, ArrowRight, DollarSign } from 'lucide-react';
-import { Metadata } from 'next';
-import Image from 'next/image';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-
-type Props = {
-  params: Promise<{ id: string }>;
-};
+import Image from '@tschk/moonshine-next/image';
+import Link from '@tschk/moonshine-next/link';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 // ISR configuration
 export const revalidate = 300; // Revalidate every 5 minutes
@@ -49,67 +48,43 @@ export async function generateStaticParams() {
   return popularGroup?.data.map((app) => ({ id: app.id })) || [];
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { id } = await params;
-  const plugin = await findAppById(id);
+export default function PluginDetailPage() {
+  const { id = '' } = useParams();
+  const [plugin, setPlugin] = useState<Awaited<ReturnType<typeof findAppById>>>(null);
+  const [relatedApps, setRelatedApps] = useState<ReturnType<typeof transformToPlugin>[]>(
+    [],
+  );
+  const [loaded, setLoaded] = useState(false);
 
-  if (!plugin) {
-    return {
-      title: 'App Not Found',
-      description: 'The requested app could not be found.',
+  useEffect(() => {
+    let active = true;
+    // Get v2 apps to find related ones
+    Promise.all([findAppById(id), getAppsV2(true)]).then(([app, response]) => {
+      if (!active) return;
+      setPlugin(app);
+      if (app) {
+        // Flatten all apps from groups
+        const rawPlugins: V2AppData[] = response.groups.flatMap((group) => group.data);
+        // Get related apps based on category
+        setRelatedApps(
+          rawPlugins
+            .map(transformToPlugin)
+            .filter(
+              (candidate) =>
+                candidate.category === app.category && candidate.id !== app.id,
+            )
+            .slice(0, 6),
+        );
+      }
+      setLoaded(true);
+    });
+    return () => {
+      active = false;
     };
-  }
+  }, [id]);
 
-  const categoryName = formatCategoryName(plugin.category);
-  const title = `${plugin.name} - ${categoryName} App`;
-  const description = `${plugin.description} Available on Omi, the AI-powered wearable platform.`;
-  const ogImage = plugin.image || '/og-apps.png';
-
-  return {
-    title,
-    description,
-    alternates: {
-      canonical: `/apps/${id}`,
-    },
-    openGraph: {
-      title,
-      description: plugin.description,
-      url: `/apps/${id}`,
-      images: [{ url: ogImage, width: 1200, height: 630, alt: plugin.name }],
-      type: 'website',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title,
-      description: plugin.description,
-      images: [ogImage],
-    },
-  };
-}
-
-export default async function PluginDetailPage({ params }: Props) {
-  const { id } = await params;
-  const plugin = await findAppById(id);
-
-  if (!plugin) {
-    notFound();
-  }
-
-  // Get v2 apps to find related ones
-  const { groups } = await getAppsV2(true); // include_reviews=true to get ratings for related apps
-
-  // Flatten all apps from groups
-  const rawPlugins: V2AppData[] = [];
-  for (const group of groups) {
-    rawPlugins.push(...group.data);
-  }
-
-  const allPlugins = rawPlugins.map(transformToPlugin);
-
-  // Get related apps based on category
-  const relatedApps = allPlugins
-    .filter((p) => p.category === plugin.category && p.id !== plugin.id)
-    .slice(0, 6);
+  if (!loaded) return <div className="min-h-screen bg-[#0B0F17]" />;
+  if (!plugin) return <div className="min-h-screen bg-[#0B0F17]" />;
 
   const categoryName = formatCategoryName(plugin.category);
   const capabilities = plugin.capabilities || [];
@@ -345,3 +320,5 @@ export default async function PluginDetailPage({ params }: Props) {
     </div>
   );
 }
+
+registerMoonshineRoute('/apps/:id', PluginDetailPage, 'public');

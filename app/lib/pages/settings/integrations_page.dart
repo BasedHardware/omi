@@ -1,10 +1,12 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/backend/http/api/channels.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
@@ -105,6 +107,10 @@ class IntegrationsPage extends StatefulWidget {
 }
 
 class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBindingObserver {
+  ChannelStatus? _channelStatus;
+  ChannelLinkResponse? _channelLink;
+  String? _channelLoading;
+
   @override
   void initState() {
     super.initState();
@@ -113,6 +119,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     // Schedule loading for after the first frame to avoid setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadFromBackend();
+      _loadChannels();
     });
   }
 
@@ -136,21 +143,181 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     await context.read<IntegrationProvider>().loadFromBackend();
   }
 
+  Future<void> _loadChannels() async {
+    try {
+      final status = await getChannelStatus();
+      if (mounted) setState(() => _channelStatus = status);
+    } catch (_) {}
+  }
+
+  Future<void> _generateChannelCode(String channel) async {
+    setState(() => _channelLoading = channel);
+    try {
+      final link = await createChannelLink(channel);
+      if (!mounted) return;
+      setState(() => _channelLink = link);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.error)));
+      }
+    } finally {
+      if (mounted) setState(() => _channelLoading = null);
+    }
+  }
+
+  Future<void> _copyChannelCode() async {
+    final code = _channelLink?.code;
+    if (code == null) return;
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.l10n.copied)));
+  }
+
+  Widget _buildMessagingChannels() {
+    const channels = ['telegram', 'imessage', 'sms'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.integrations,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Use the same Omi core chat from Telegram, iMessage, or SMS.',
+          style: TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        ...channels.map((channel) {
+          final isLinked = _channelStatus?.bindings.any(
+                (binding) => binding.channel == channel,
+              ) ??
+              false;
+          final displayName = channel == 'imessage' ? 'iMessage' : channel[0].toUpperCase() + channel.substring(1);
+          final isLoading = _channelLoading == channel;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1E),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          isLinked ? context.l10n.connected : context.l10n.disconnected,
+                          style: const TextStyle(
+                            color: Color(0xFF8E8E93),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _channelLoading == null ? () => _generateChannelCode(channel) : null,
+                    child: Text(isLoading ? '…' : context.l10n.connect),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        if (_channelLink != null) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C1E),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _channelLink!.instructions,
+                  style: const TextStyle(
+                    color: Color(0xFF8E8E93),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        _channelLink!.code,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _copyChannelCode,
+                      icon: const Icon(
+                        Icons.copy,
+                        color: Color(0xFF8E8E93),
+                        size: 18,
+                      ),
+                      tooltip: context.l10n.copy,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
   Future<void> _connectApp(IntegrationApp app) async {
     if (!app.isAvailable) {
       return;
     }
-    PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: app.displayName);
+    PlatformManager.instance.analytics.integrationConnectAttempted(
+      integrationName: app.displayName,
+    );
 
     if (app == IntegrationApp.googleCalendar) {
       final service = GoogleCalendarService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      final handled = await _handleAuthFlow(
+        app,
+        service.isAuthenticated,
+        service.authenticate,
+      );
       if (handled) return;
     }
 
     if (app == IntegrationApp.gmail) {
       final service = GmailService();
-      final handled = await _handleAuthFlow(app, service.isAuthenticated, service.authenticate);
+      final handled = await _handleAuthFlow(
+        app,
+        service.isAuthenticated,
+        service.authenticate,
+      );
       if (handled) return;
     }
 
@@ -173,11 +340,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       }
       return;
     }
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AppleHealthDetailPage()));
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AppleHealthDetailPage()));
     if (mounted) await _loadFromBackend();
   }
 
-  Future<bool> _handleAuthFlow(IntegrationApp app, bool isAuthenticated, Future<bool> Function() authenticate) async {
+  Future<bool> _handleAuthFlow(
+    IntegrationApp app,
+    bool isAuthenticated,
+    Future<bool> Function() authenticate,
+  ) async {
     if (isAuthenticated) return false;
 
     final shouldAuth = await _showAuthDialog(app);
@@ -188,16 +361,25 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
       final success = await authenticate();
       if (success) {
-        PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
+        PlatformManager.instance.analytics.integrationConnectSucceeded(
+          integrationName: app.displayName,
+        );
         if (mounted) {
           scaffoldMessenger.showSnackBar(
-            SnackBar(content: Text(context.l10n.completeAuthInBrowser), duration: const Duration(seconds: 5)),
+            SnackBar(
+              content: Text(context.l10n.completeAuthInBrowser),
+              duration: const Duration(seconds: 5),
+            ),
           );
         }
         await _loadFromBackend();
-        Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+        Logger.debug(
+          '✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress',
+        );
       } else {
-        PlatformManager.instance.analytics.integrationConnectFailed(integrationName: app.displayName);
+        PlatformManager.instance.analytics.integrationConnectFailed(
+          integrationName: app.displayName,
+        );
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(
@@ -218,7 +400,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Text(
             context.l10n.disconnectAppTitle(app.disconnectDisplayName),
             style: const TextStyle(color: Colors.white),
@@ -230,11 +414,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
+              child: Text(
+                context.l10n.cancel,
+                style: const TextStyle(color: Color(0xFF8E8E93)),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(context.l10n.disconnect, style: const TextStyle(color: Colors.red)),
+              child: Text(
+                context.l10n.disconnect,
+                style: const TextStyle(color: Colors.red),
+              ),
             ),
           ],
         );
@@ -254,13 +444,21 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         final integrationProvider = context.read<IntegrationProvider>();
         final scaffoldMessenger = ScaffoldMessenger.of(context);
 
-        final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
+        final success = await integrationProvider.deleteConnection(
+          IntegrationApp.appleHealth.key,
+        );
         if (success) {
-          PlatformManager.instance.analytics.integrationDisconnected(integrationName: 'Apple Health');
+          PlatformManager.instance.analytics.integrationDisconnected(
+            integrationName: 'Apple Health',
+          );
           if (mounted) {
             scaffoldMessenger.showSnackBar(
               SnackBar(
-                content: Text(context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName)),
+                content: Text(
+                  context.l10n.disconnectedFrom(
+                    IntegrationApp.appleHealth.displayName,
+                  ),
+                ),
                 duration: const Duration(seconds: 2),
               ),
             );
@@ -280,14 +478,19 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     }
   }
 
-  Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
+  Future<void> _handleDisconnect(
+    IntegrationApp app,
+    Future<bool> Function() disconnect,
+  ) async {
     // Capture instances before async operation to avoid use_build_context_synchronously
     final integrationProvider = context.read<IntegrationProvider>();
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     final success = await disconnect();
     if (success) {
-      PlatformManager.instance.analytics.integrationDisconnected(integrationName: app.displayName);
+      PlatformManager.instance.analytics.integrationDisconnected(
+        integrationName: app.displayName,
+      );
       // Re-read every row: Gmail and Google Calendar share one grant, so dropping
       // either one also disconnects the other.
       if (mounted) {
@@ -295,7 +498,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       }
       if (mounted) {
         scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text(context.l10n.disconnectedFrom(app.displayName)), duration: const Duration(seconds: 2)),
+          SnackBar(
+            content: Text(context.l10n.disconnectedFrom(app.displayName)),
+            duration: const Duration(seconds: 2),
+          ),
         );
       }
     } else {
@@ -317,8 +523,13 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(context.l10n.connectTo(app.displayName), style: const TextStyle(color: Colors.white)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            context.l10n.connectTo(app.displayName),
+            style: const TextStyle(color: Colors.white),
+          ),
           content: Text(
             context.l10n.authAccessMessage(app.displayName),
             style: const TextStyle(color: Color(0xFF8E8E93)),
@@ -326,11 +537,17 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
+              child: Text(
+                context.l10n.cancel,
+                style: const TextStyle(color: Color(0xFF8E8E93)),
+              ),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(context.l10n.continueAction, style: const TextStyle(color: Colors.white)),
+              child: Text(
+                context.l10n.continueAction,
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
           ],
         );
@@ -350,7 +567,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       child: Container(
         width: 80,
         height: 32,
-        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+          borderRadius: BorderRadius.circular(16),
+        ),
       ),
     );
   }
@@ -402,7 +622,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                                   : Colors.grey.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
+                            child: Icon(
+                              app.icon,
+                              color: isAvailable ? app.iconColor : Colors.grey,
+                              size: 24,
+                            ),
                           );
                         },
                       ),
@@ -412,7 +636,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                         color: isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
+                      child: Icon(
+                        app.icon,
+                        color: isAvailable ? app.iconColor : Colors.grey,
+                        size: 24,
+                      ),
                     ),
             ),
             const SizedBox(width: 16),
@@ -433,7 +661,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             else if (!isConnected)
               // Connect button
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: !isAvailable ? Colors.grey.withValues(alpha: 0.3) : Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -450,14 +681,21 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             else
               // Disconnect button
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.red.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   context.l10n.disconnect,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
           ],
@@ -483,14 +721,22 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 color: Colors.purple.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.add_circle_outline, color: Colors.purple, size: 24),
+              child: const Icon(
+                Icons.add_circle_outline,
+                color: Colors.purple,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 16),
             // App Name
             Expanded(
               child: Text(
                 context.l10n.createYourOwnApp,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
             // Arrow icon
@@ -500,7 +746,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 color: Colors.purple.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(Icons.arrow_forward_ios, color: Colors.purple, size: 12),
+              child: const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.purple,
+                size: 12,
+              ),
             ),
           ],
         ),
@@ -525,7 +775,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
         ),
         title: Text(
           context.l10n.integrations,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         centerTitle: true,
       ),
@@ -539,7 +793,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               Expanded(
                 child: ListView(
                   children: [
-                    ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
+                    _buildMessagingChannels(),
+                    ...IntegrationApp.values.map(
+                      (app) => _buildAppTile(app, isLoading),
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Divider(color: Colors.grey.shade800, thickness: 1),
@@ -553,12 +810,19 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 padding: const EdgeInsets.only(top: 20),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 16),
+                    const Icon(
+                      Icons.info_outline,
+                      color: Color(0xFF8E8E93),
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         context.l10n.integrationsFooter,
-                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                        style: const TextStyle(
+                          color: Color(0xFF8E8E93),
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],

@@ -210,6 +210,18 @@ def test_https_is_never_accepted_even_for_loopback() -> None:
         _validate_redirect_uri("https://127.0.0.1:5000/callback")
 
 
+def test_configured_web_sign_in_redirect_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHANNEL_SIGN_IN_URL", "https://web.example/login")
+    _validate_redirect_uri("https://web.example/login")
+    _validate_redirect_uri("https://web.example/login/")
+
+
+def test_unconfigured_web_sign_in_redirect_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHANNEL_SIGN_IN_URL", "https://web.example/login")
+    with pytest.raises(HTTPException):
+        _validate_redirect_uri("https://web.example/other")
+
+
 def test_http_remote_host_rejection_message_mentions_loopback() -> None:
     with pytest.raises(HTTPException) as info:
         _validate_redirect_uri("http://attacker.example.com/cb")

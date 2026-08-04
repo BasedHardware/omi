@@ -62,6 +62,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/calendar',
     '/v1/candidates',
     '/v1/chat',
+    '/v1/channels',
     '/v1/conversations',
     '/v1/dev',
     '/v1/fair-use',

@@ -29,6 +29,10 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: TWILIO_TWIML_APP_SID
+        TWILIO_NUMBER:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: TWILIO_NUMBER
         USE_VERTEX_AI:
           value: 'true'
         STT_PRERECORDED_MODEL:
@@ -224,6 +228,27 @@ environment_shared:
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
+          TELEGRAM_BOT_TOKEN:
+            secret: TELEGRAM_BOT_TOKEN
+            version: latest
+          TELEGRAM_WEBHOOK_SECRET:
+            secret: TELEGRAM_WEBHOOK_SECRET
+            version: latest
+          SENDBLUE_API_KEY_ID:
+            secret: SENDBLUE_API_KEY_ID
+            version: latest
+          SENDBLUE_API_KEY_SECRET:
+            secret: SENDBLUE_API_KEY_SECRET
+            version: latest
+          SENDBLUE_NUMBER:
+            secret: SENDBLUE_NUMBER
+            version: latest
+          SENDBLUE_WEBHOOK_SIGNING_SECRET:
+            secret: SENDBLUE_WEBHOOK_SIGNING_SECRET
+            version: latest
+          SENDBLUE_WEBHOOK_PATH_TOKEN:
+            secret: SENDBLUE_WEBHOOK_PATH_TOKEN
+            version: latest
         env:
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
@@ -256,6 +281,9 @@ environment_shared:
           GOOGLE_CLIENT_ID:
             env_var: GOOGLE_CLIENT_ID
             category: oauth_metadata
+          TWILIO_NUMBER:
+            env_var: TWILIO_NUMBER
+            category: telephony
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity

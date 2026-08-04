@@ -11,8 +11,8 @@ import {
   MessageSquare,
   Info,
 } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
+import Image from '@tschk/moonshine-next/image';
+import Link from '@tschk/moonshine-next/link';
 import type { Plugin } from '../types';
 import { formatInstalls } from '../utils/format';
 

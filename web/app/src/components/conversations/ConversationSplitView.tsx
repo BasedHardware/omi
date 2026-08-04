@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Search as SearchIcon, CheckSquare, X } from 'lucide-react';
 import { cn } from '@/lib/utils';

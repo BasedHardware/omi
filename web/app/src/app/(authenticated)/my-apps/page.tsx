@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { AppsExplorer } from '@/components/apps/AppsExplorer';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function AppsPage() {
   useEffect(() => {
@@ -15,3 +16,5 @@ export default function AppsPage() {
     </div>
   );
 }
+
+registerMoonshineRoute('/my-apps', AppsPage, 'authenticated');

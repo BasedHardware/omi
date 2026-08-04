@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Pause, Play, Square, ChevronDown, ExternalLink, PanelTop, FileText, Monitor } from 'lucide-react';
-import Link from 'next/link';
+import Link from '@tschk/moonshine-next/link';
 import { useRecordingContext } from './RecordingContext';
 import type { AudioMode } from './RecordingContext';
 import { LiveTranscriptCompact } from './LiveTranscript';
