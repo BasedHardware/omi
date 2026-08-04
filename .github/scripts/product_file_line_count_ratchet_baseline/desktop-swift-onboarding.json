@@ -1,11 +1,11 @@
 {
   "files": {
 "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2180,
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1917
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1941
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Gmail account selection: pick which browser profile Omi reads email from during onboarding; cancel path resumes the gmail insight task automatically, and OAuth reads skip the cookie picker while Gmail and Calendar share its selection gate."
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Gmail account selection and Google OAuth ownership checks fail closed on probe, keychain, owner, and provider-response errors; refreshes before expiry and preserves explicit primary-account selection."
   },
   "threshold": 1500
 }
