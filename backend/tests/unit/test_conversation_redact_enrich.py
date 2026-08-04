@@ -147,12 +147,13 @@ class TestRedactForList:
 
 class TestRedactForIntegration:
     def test_unlocked_passthrough(self):
-        conv = _make_conv_dict(is_locked=False)
+        conv = _make_conv_dict(is_locked=False, geolocation={'latitude': 1.0, 'longitude': 2.0})
         result = redact_conversation_for_integration(conv)
         assert result['structured']['title'] == "Test Title"
+        assert 'geolocation' not in result
 
     def test_locked_strips_everything(self):
-        conv = _make_conv_dict(is_locked=True)
+        conv = _make_conv_dict(is_locked=True, geolocation={'latitude': 1.0, 'longitude': 2.0})
         result = redact_conversation_for_integration(conv)
         assert result['structured']['title'] == ''
         assert result['structured']['overview'] == ''
@@ -162,6 +163,7 @@ class TestRedactForIntegration:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
+        assert 'geolocation' not in result
 
     def test_locked_non_dict_structured_coerced(self):
         """Integration redaction also handles non-dict structured (e.g. Pydantic)."""

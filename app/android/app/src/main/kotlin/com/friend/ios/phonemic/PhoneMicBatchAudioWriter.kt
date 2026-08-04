@@ -92,9 +92,9 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
             }
 
             if (!isOpenLocked) {
-                val startSec = now / 1000
                 // codec opus_fs320 (20ms frames), 16kHz mono — mirrors the BLE/pendant
                 // batch naming so the Dart scanner (`audio_omibatch*`) and backend both match.
+                val startSec = nextPhoneMicBatchStartSec(File(dirPath), marker, now / 1000)
                 val name = "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin$PART_SUFFIX"
                 if (!openLocked(dirPath, name, startSec, now)) {
                     noteStorageFullTransitionLocked() // open refused — likely the free-space guard
@@ -153,4 +153,15 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         private const val MAX_FILE_SECONDS = 900L // 15 min per file
         private const val GAP_MS = 30_000L // start a new file after this silence gap
     }
+}
+
+internal fun nextPhoneMicBatchStartSec(dir: File, marker: String, initialStartSec: Long): Long {
+    var startSec = initialStartSec
+    while (File(dir, "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin").exists() ||
+        File(dir, "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin${BaseBatchAudioWriter.PART_SUFFIX}")
+            .exists()
+    ) {
+        startSec++
+    }
+    return startSec
 }

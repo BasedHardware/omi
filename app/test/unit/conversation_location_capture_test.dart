@@ -81,6 +81,24 @@ void main() {
     expect(await capture.captureAndUpload(), isNull);
   });
 
+  test('rejects a future-dated last-known position', () async {
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.whileInUse,
+      getCurrentPosition: () => Completer<Position>().future,
+      getLastKnownPosition: () async => _position(
+        latitude: 51.5072,
+        longitude: -0.1276,
+        timestamp: DateTime.utc(2026, 7, 21, 0, 1),
+      ),
+      upload: (_) async => true,
+      currentPositionTimeout: const Duration(milliseconds: 1),
+      now: () => DateTime.utc(2026, 7, 21),
+    );
+
+    expect(await capture.captureAndUpload(), isNull);
+  });
+
   test('preserves the snapshot when the compatibility upload fails', () async {
     final capture = ConversationLocationCapture(
       isLocationServiceEnabled: () async => true,
@@ -121,13 +139,50 @@ void main() {
     expect(uploadCompleted, isFalse);
     expect(stopwatch.elapsed, lessThan(const Duration(milliseconds: 100)));
   });
+
+  test('serializes compatibility uploads after an earlier timed-out upload', () async {
+    final firstUploadStarted = Completer<void>();
+    final releaseFirstUpload = Completer<void>();
+    final uploadedLatitudes = <double?>[];
+    var positionIndex = 0;
+    final capture = ConversationLocationCapture(
+      isLocationServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.always,
+      getCurrentPosition: () async {
+        positionIndex++;
+        return _position(latitude: positionIndex.toDouble(), longitude: 2);
+      },
+      getLastKnownPosition: () async => null,
+      upload: (geolocation) async {
+        uploadedLatitudes.add(geolocation.latitude);
+        if (uploadedLatitudes.length == 1) {
+          firstUploadStarted.complete();
+          await releaseFirstUpload.future;
+        }
+        return true;
+      },
+      totalTimeout: const Duration(milliseconds: 10),
+    );
+
+    final first = capture.captureAndUpload();
+    await firstUploadStarted.future;
+    expect((await first)?.latitude, 1);
+
+    final second = capture.captureAndUpload();
+    expect((await second)?.latitude, 2);
+    expect(uploadedLatitudes, [1]);
+
+    releaseFirstUpload.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(uploadedLatitudes, [1, 2]);
+  });
 }
 
-Position _position({required double latitude, required double longitude}) {
+Position _position({required double latitude, required double longitude, DateTime? timestamp}) {
   return Position(
     latitude: latitude,
     longitude: longitude,
-    timestamp: DateTime.utc(2026, 7, 21),
+    timestamp: timestamp ?? DateTime.utc(2026, 7, 21),
     accuracy: 8,
     altitude: 220,
     altitudeAccuracy: 2,

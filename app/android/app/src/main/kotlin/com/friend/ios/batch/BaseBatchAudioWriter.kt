@@ -103,7 +103,8 @@ abstract class BaseBatchAudioWriter(
             currentBytes = file.length()
             currentFrames = 0
             lastFsyncMs = nowMs
-            onOpenedLocked(file)
+            runCatching { onOpenedLocked(file) }
+                .onFailure { error -> Log.w(tag, "metadata hook failed: ${error.javaClass.simpleName}") }
             Log.i(tag, "opened batch file $fileName")
             true
         } catch (e: Exception) {
@@ -197,6 +198,7 @@ abstract class BaseBatchAudioWriter(
                     Log.w(tag, "close fsync failed — leaving ${partFile.name} unfinalized")
                 } else {
                     partFile.delete() // nothing written — drop the empty placeholder
+                    deleteRecordingGeolocationSidecars(partFile)
                 }
             }
             raf = null
@@ -237,11 +239,19 @@ abstract class BaseBatchAudioWriter(
                     if (p.renameTo(finalFile)) Log.i(tag, "recovered stale batch file -> ${finalFile.name}")
                 } else {
                     p.delete()
+                    deleteRecordingGeolocationSidecars(p)
                 }
             }
         } catch (e: Exception) {
             Log.w(tag, "recoverStalePartFiles failed: ${e.message}")
         }
+    }
+
+    private fun deleteRecordingGeolocationSidecars(partFile: File) {
+        val audioPath = partFile.path.removeSuffix(PART_SUFFIX)
+        if (File(audioPath).exists()) return
+        File(audioPath + NATIVE_BATCH_GEOLOCATION_SIDECAR_SUFFIX).delete()
+        File(audioPath + NATIVE_BATCH_GEOLOCATION_SIDECAR_SUFFIX + PART_SUFFIX).delete()
     }
 
     // ── Config + prefs ──

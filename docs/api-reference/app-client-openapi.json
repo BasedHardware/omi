@@ -11441,6 +11441,7 @@
           "accuracy": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {

@@ -33,34 +33,34 @@ void main() {
       durationSeconds: 120,
       starred: true,
       folderId: 'folder-1',
-      startedAt: DateTime.utc(2026, 8, 1, 12),
+      startedAt: DateTime(2026, 8, 1, 12),
     );
     final short = _conversation(
       'short',
       durationSeconds: 10,
       starred: true,
       folderId: 'folder-1',
-      startedAt: DateTime.utc(2026, 8, 1, 13),
+      startedAt: DateTime(2026, 8, 1, 13),
     );
     final unstarred = _conversation(
       'unstarred',
       durationSeconds: 120,
       folderId: 'folder-1',
-      startedAt: DateTime.utc(2026, 8, 1, 14),
+      startedAt: DateTime(2026, 8, 1, 14),
     );
     final wrongFolder = _conversation(
       'wrong-folder',
       durationSeconds: 120,
       starred: true,
       folderId: 'folder-2',
-      startedAt: DateTime.utc(2026, 8, 1, 15),
+      startedAt: DateTime(2026, 8, 1, 15),
     );
     final wrongDate = _conversation(
       'wrong-date',
       durationSeconds: 120,
       starred: true,
       folderId: 'folder-1',
-      startedAt: DateTime.utc(2026, 8, 2, 12),
+      startedAt: DateTime(2026, 8, 2, 12),
     );
     final provider = _provider()
       ..showShortConversations = false

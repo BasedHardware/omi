@@ -3,7 +3,6 @@ package com.friend.ios.batch
 import com.friend.ios.ble.OmiBleManager
 
 import android.content.Context
-import org.json.JSONObject
 import java.io.File
 import kotlin.math.abs
 
@@ -39,16 +38,6 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
     }
 
     private var lastPageTimestampMs: Long = 0
-
-    override fun onOpenedLocked(partFile: File) {
-        val rawGeolocation = runCatching {
-            JSONObject(stringPref("nativeBleStreamConfig"))
-                .optJSONObject("geolocation")
-                ?.toString()
-        }.getOrNull() ?: return
-        val audioFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
-        persistNativeBatchGeolocationSidecar(audioFile, rawGeolocation, TAG)
-    }
 
     /**
      * Append the opus frames extracted from one flash page. [pageTimestampMs] is the

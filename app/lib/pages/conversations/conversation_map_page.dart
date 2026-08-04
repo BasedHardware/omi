@@ -57,7 +57,7 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
   for (final (conversation, point) in located) {
     final group =
         grouped.cast<({LatLng anchor, List<LatLng> points, List<ServerConversation> conversations})?>().firstWhere(
-              (candidate) => candidate!.points.any(
+              (candidate) => candidate!.points.every(
                 (member) => _mapDistance.as(LengthUnit.Meter, member, point) <= _mapClusterDistanceMeters,
               ),
               orElse: () => null,
@@ -80,11 +80,35 @@ List<ConversationMapGroup> buildConversationMapGroups(Iterable<ServerConversatio
   ];
 }
 
-class ConversationMapPage extends StatelessWidget {
+class ConversationMapPage extends StatefulWidget {
   const ConversationMapPage({super.key, required this.conversations, this.tileProvider});
 
   final List<ServerConversation> conversations;
   final TileProvider? tileProvider;
+
+  @override
+  State<ConversationMapPage> createState() => _ConversationMapPageState();
+}
+
+class _ConversationMapPageState extends State<ConversationMapPage> {
+  static const double _tileLoadZoomDelta = 0.000001;
+  final MapController _mapController = MapController();
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _loadTilesAfterLayout() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final camera = _mapController.camera;
+      // flutter_map 7 can apply the initial camera fit after creating its first
+      // tile set without scheduling the newly visible tiles to load.
+      _mapController.move(camera.center, camera.zoom + _tileLoadZoomDelta);
+    });
+  }
 
   Future<void> _openConversation(BuildContext context, ServerConversation conversation) async {
     final timestamp = conversation.startedAt ?? conversation.createdAt;
@@ -141,7 +165,7 @@ class ConversationMapPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groups = buildConversationMapGroups(conversations);
+    final groups = buildConversationMapGroups(widget.conversations);
     return Scaffold(
       backgroundColor: AppStyles.backgroundPrimary,
       appBar: AppBar(
@@ -154,13 +178,14 @@ class ConversationMapPage extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Text(
-                  context.l10n.noConversationsYet,
+                  widget.conversations.isEmpty ? context.l10n.noConversationsYet : context.l10n.unknownLocation,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70, fontSize: 16),
                 ),
               ),
             )
           : FlutterMap(
+              mapController: _mapController,
               options: MapOptions(
                 initialCenter: LatLng(groups.first.latitude, groups.first.longitude),
                 initialZoom: groups.length == 1 ? 14 : 11,
@@ -173,6 +198,7 @@ class ConversationMapPage extends StatelessWidget {
                         padding: const EdgeInsets.all(48),
                       ),
                 backgroundColor: AppStyles.backgroundPrimary,
+                onMapReady: _loadTilesAfterLayout,
               ),
               children: [
                 TileLayer(
@@ -180,7 +206,7 @@ class ConversationMapPage extends StatelessWidget {
                   subdomains: const ['a', 'b', 'c', 'd'],
                   userAgentPackageName: 'me.omi.app',
                   retinaMode: RetinaMode.isHighDensity(context),
-                  tileProvider: tileProvider,
+                  tileProvider: widget.tileProvider,
                 ),
                 MarkerLayer(
                   markers: [

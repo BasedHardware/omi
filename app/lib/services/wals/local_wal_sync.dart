@@ -140,7 +140,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         _sessionGeolocation != null &&
         _sessionGeolocationSetAt != null &&
         wal.timerStart >= _sessionGeolocationSetAt! - 60) {
-      wal.geolocation = _sessionGeolocation;
+      wal.geolocation = _copyGeolocation(_sessionGeolocation);
     }
     final existingIndex = _wals.indexWhere((w) => w.id == wal.id);
     if (existingIndex >= 0) {
@@ -228,9 +228,12 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   void setSessionGeolocation(Geolocation? geolocation) {
-    _sessionGeolocation = geolocation;
+    _sessionGeolocation = _copyGeolocation(geolocation);
     _sessionGeolocationSetAt = geolocation == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000;
   }
+
+  Geolocation? _copyGeolocation(Geolocation? geolocation) =>
+      geolocation == null ? null : Geolocation.fromJson(geolocation.toJson());
 
   Future _chunk() async {
     if (_frames.isEmpty) {
@@ -295,7 +298,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
-          geolocation: _sessionGeolocation,
+          geolocation: _copyGeolocation(_sessionGeolocation),
         );
         _wals.add(wal);
       } else {
@@ -482,7 +485,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             seconds: chunkFrameCount ~/ _framesPerSecond,
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
-            geolocation: _sessionGeolocation,
+            geolocation: _copyGeolocation(_sessionGeolocation),
           ),
         );
     }

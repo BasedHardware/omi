@@ -40,4 +40,31 @@ class NativeBatchGeolocationSidecarTest {
         )
         assertFalse(File(oversizedAudio.path + NATIVE_BATCH_GEOLOCATION_SIDECAR_SUFFIX).exists())
     }
+
+    @Test
+    fun `keeps the first snapshot and removes stale pending metadata`() {
+        val audio = File(temporaryFolder.root, "audio.bin")
+        val sidecar = File(audio.path + NATIVE_BATCH_GEOLOCATION_SIDECAR_SUFFIX)
+        val pending = File(sidecar.path + ".part")
+        val first = """{"latitude":1,"longitude":2}"""
+        val replacement = """{"latitude":3,"longitude":4}"""
+
+        sidecar.writeText(first)
+        pending.writeText("stale")
+        persistNativeBatchGeolocationSidecar(audio, replacement, "test")
+
+        assertEquals(first, sidecar.readText())
+        assertFalse(pending.exists())
+    }
+
+    @Test
+    fun `cleans a pending file when the new snapshot is invalid`() {
+        val audio = File(temporaryFolder.root, "invalid.bin")
+        val pending = File(audio.path + NATIVE_BATCH_GEOLOCATION_SIDECAR_SUFFIX + ".part")
+        pending.writeText("stale")
+
+        persistNativeBatchGeolocationSidecar(audio, "", "test")
+
+        assertFalse(pending.exists())
+    }
 }

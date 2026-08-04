@@ -8,8 +8,12 @@ error), matching the fix already applied inline in routers/integration.py. Pinne
 no live services.
 """
 
+import json
+import math
 import os
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -19,7 +23,7 @@ os.environ.setdefault(
 import asyncio  # noqa: E402
 
 from models.geolocation import Geolocation  # noqa: E402
-from models.geolocation import geolocation_from_private_header  # noqa: E402
+from models.geolocation import GeolocationInput, geolocation_from_private_header  # noqa: E402
 
 import utils.conversations.location as loc  # noqa: E402
 
@@ -85,3 +89,31 @@ def test_async_resolve_geolocation_keeps_raw_on_miss():
 
 def test_private_header_parser_treats_non_string_sentinels_as_absent():
     assert geolocation_from_private_header(object()) is None
+
+
+@pytest.mark.parametrize('field', ['accuracy', 'altitude'])
+@pytest.mark.parametrize('value', [math.nan, math.inf, -math.inf])
+def test_geolocation_rejects_nonfinite_metadata(field, value):
+    payload = {'latitude': 1.0, 'longitude': 2.0, field: value}
+
+    with pytest.raises(ValueError):
+        GeolocationInput.model_validate(payload)
+    with pytest.raises(ValueError):
+        Geolocation.model_validate(payload)
+    assert geolocation_from_private_header(json.dumps(payload, allow_nan=True)) is None
+
+
+def test_private_header_parser_ignores_deep_malformed_json():
+    # Keep the header below its size cap while forcing the JSON decoder over
+    # its recursion limit. Client-controlled malformed metadata must fail soft.
+    value = '[' * 2000 + ']' * 2000
+    assert len(value) <= 4096
+    assert geolocation_from_private_header(value) is None
+
+
+def test_geolocation_input_rejects_negative_accuracy_but_allows_negative_altitude():
+    with pytest.raises(ValueError):
+        GeolocationInput.model_validate({'latitude': 1.0, 'longitude': 2.0, 'accuracy': -1.0})
+
+    valid = GeolocationInput.model_validate({'latitude': 1.0, 'longitude': 2.0, 'altitude': -10.0})
+    assert valid.altitude == -10.0

@@ -135,13 +135,7 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
     }
 
     override func onOpenedLocked(_ partURL: URL) {
-        guard let raw = UserDefaults.standard.string(forKey: "flutter.nativeBleStreamConfig"),
-              let data = raw.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let geolocation = json["geolocation"],
-              JSONSerialization.isValidJSONObject(geolocation),
-              let geolocationData = try? JSONSerialization.data(withJSONObject: geolocation),
-              let geolocationJSON = String(data: geolocationData, encoding: .utf8) else { return }
+        guard let geolocationJSON = recordingGeolocationJSON(fromDefaultsKey: "flutter.nativeBleStreamConfig") else { return }
         persistRecordingGeolocationSidecar(
             rawGeolocation: geolocationJSON,
             audioURL: partURL.deletingPathExtension()

@@ -58,20 +58,6 @@ final class LimitlessBatchAudioWriter: BaseBatchAudioWriter {
         lastPageTimestampMs = 0
     }
 
-    override func onOpenedLocked(_ partURL: URL) {
-        guard let raw = UserDefaults.standard.string(forKey: "flutter.nativeBleStreamConfig"),
-              let data = raw.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let geolocation = json["geolocation"],
-              JSONSerialization.isValidJSONObject(geolocation),
-              let geolocationData = try? JSONSerialization.data(withJSONObject: geolocation),
-              let geolocationJSON = String(data: geolocationData, encoding: .utf8) else { return }
-        persistRecordingGeolocationSidecar(
-            rawGeolocation: geolocationJSON,
-            audioURL: partURL.deletingPathExtension()
-        )
-    }
-
     // MARK: - Writing (on `queue`)
 
     private func appendLocked(_ frames: [Data], pageTimestampMs: Int64) -> Bool {

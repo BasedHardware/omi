@@ -43,6 +43,18 @@ void main() {
     expect(groups.single.conversations.map((conversation) => conversation.id), ['first', 'second']);
   });
 
+  test('does not merge a transitive chain beyond the cluster radius', () {
+    final groups = buildConversationMapGroups([
+      _conversation('a', latitude: 0, longitude: 0),
+      _conversation('b', latitude: 0, longitude: 0.0005),
+      _conversation('c', latitude: 0, longitude: 0.001),
+    ]);
+
+    expect(groups, hasLength(2));
+    expect(groups[0].conversations.map((conversation) => conversation.id), ['a', 'b']);
+    expect(groups[1].conversations.map((conversation) => conversation.id), ['c']);
+  });
+
   test('honors the supplied conversation set, including discarded items', () {
     final groups = buildConversationMapGroups([
       _conversation('discarded', latitude: 37.7749, longitude: -122.4194, discarded: true),
@@ -78,7 +90,21 @@ void main() {
     expect(find.text('No conversations yet'), findsOneWidget);
   });
 
+  testWidgets('distinguishes conversations with no usable location', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ConversationMapPage(conversations: [_conversation('unknown')]),
+      ),
+    );
+
+    expect(find.text('Unknown location'), findsOneWidget);
+    expect(find.text('No conversations yet'), findsNothing);
+  });
+
   testWidgets('markers and clustered rows expose stable descriptive keys', (tester) async {
+    _MemoryTileProvider.requests = 0;
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -96,6 +122,7 @@ void main() {
 
     final marker = find.byKey(const ValueKey('conversation_map_marker_first%2Csecond'));
     expect(marker, findsOneWidget);
+    expect(_MemoryTileProvider.requests, greaterThan(0));
 
     await tester.tap(marker);
     await tester.pumpAndSettle();
@@ -106,12 +133,16 @@ void main() {
 }
 
 class _MemoryTileProvider extends TileProvider {
+  static int requests = 0;
   static final _tile = MemoryImage(
     base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='),
   );
 
   @override
-  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) => _tile;
+  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
+    requests++;
+    return _tile;
+  }
 }
 
 ServerConversation _conversation(String id, {double? latitude, double? longitude, bool discarded = false}) =>

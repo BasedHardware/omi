@@ -222,6 +222,8 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     hours. The lane label is still carried on the payload for metering and
     reporting; it no longer selects the queue.
     """
+    if frozenset(payload) != SYNC_JOB_TASK_PAYLOAD_KEYS:
+        raise ValueError('sync job payload does not match the durable worker schema')
     _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
 
 

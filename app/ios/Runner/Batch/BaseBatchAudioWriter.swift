@@ -179,6 +179,7 @@ class BaseBatchAudioWriter {
                     NSLog("[\(tag)] close fsync failed — leaving \(part.lastPathComponent) unfinalized")
                 } else {
                     try? FileManager.default.removeItem(at: part) // nothing written — drop the placeholder
+                    removeRecordingGeolocationSidecars(forPartURL: part)
                 }
             }
             fileHandle = nil
@@ -195,6 +196,21 @@ class BaseBatchAudioWriter {
 
     /// Hook for recording-owned metadata that must be copied beside a new file.
     func onOpenedLocked(_ partURL: URL) {}
+
+    /// Extract the validated geolocation object from a native Flutter preference.
+    /// Every native sink uses this shared bound and JSON-shape check before
+    /// creating a private sidecar.
+    func recordingGeolocationJSON(fromDefaultsKey key: String) -> String? {
+        guard let raw = UserDefaults.standard.string(forKey: key),
+              let data = raw.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let geolocation = json["geolocation"],
+              JSONSerialization.isValidJSONObject(geolocation),
+              let geolocationData = try? JSONSerialization.data(withJSONObject: geolocation) else { return nil }
+        return String(data: geolocationData, encoding: .utf8)
+    }
 
     /// Persist a bounded recording-owned location snapshot beside the audio file.
     /// The sidecar is written atomically so a native crash cannot leave a partial
@@ -245,8 +261,17 @@ class BaseBatchAudioWriter {
                 NSLog("[\(tag)] recovered stale batch file -> \(finalURL.lastPathComponent)")
             } else {
                 try? FileManager.default.removeItem(at: url)
+                removeRecordingGeolocationSidecars(forPartURL: url)
             }
         }
+    }
+
+    private func removeRecordingGeolocationSidecars(forPartURL partURL: URL) {
+        let audioURL = partURL.deletingPathExtension()
+        guard !FileManager.default.fileExists(atPath: audioURL.path) else { return }
+        let sidecarURL = URL(fileURLWithPath: audioURL.path + ".geolocation.json")
+        try? FileManager.default.removeItem(at: sidecarURL)
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: sidecarURL.path + ".part"))
     }
 
     // MARK: - Helpers

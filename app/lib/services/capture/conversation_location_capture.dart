@@ -43,6 +43,11 @@ class ConversationLocationCapture {
   final Duration totalTimeout;
   final Duration maxLastKnownAge;
 
+  // Future.timeout does not cancel the underlying HTTP request. Keep
+  // compatibility writes ordered so a timed-out older request cannot finish
+  // after a newer session's write and put the user's cache back in the past.
+  Future<void> _uploadTail = Future<void>.value();
+
   /// Returns the start-time snapshot even when the compatibility upload fails,
   /// so the caller can persist it with the recording/WAL.
   Future<Geolocation?> captureAndUpload() async {
@@ -64,11 +69,21 @@ class ConversationLocationCapture {
         Logger.log('Conversation location capture deadline elapsed before compatibility upload');
         return geolocation;
       }
-      await _upload(geolocation).timeout(remaining);
+      await _enqueueUpload(geolocation).timeout(remaining);
     } catch (e) {
       Logger.log('Conversation location compatibility upload failed; preserving recording snapshot');
     }
     return geolocation;
+  }
+
+  Future<void> _enqueueUpload(Geolocation geolocation) {
+    final upload = _uploadTail.then<void>((_) async {
+      await _upload(geolocation);
+    });
+    // Keep the queue usable after a failed upload while preserving the error
+    // for the caller that is awaiting this particular upload.
+    _uploadTail = upload.catchError((_) {});
+    return upload;
   }
 
   Future<Geolocation?> _capture() async {
@@ -94,10 +109,12 @@ class ConversationLocationCapture {
       captureSource = 'last_known_position';
     }
     if (position == null) return null;
-    if (captureSource == 'last_known_position' &&
-        _now().toUtc().difference(position.timestamp.toUtc()) > maxLastKnownAge) {
-      Logger.log('Last known location is stale, skipping conversation location');
-      return null;
+    if (captureSource == 'last_known_position') {
+      final age = _now().toUtc().difference(position.timestamp.toUtc());
+      if (age < Duration.zero || age > maxLastKnownAge) {
+        Logger.log('Last known location is stale or future-dated, skipping conversation location');
+        return null;
+      }
     }
 
     return Geolocation(

@@ -74,6 +74,7 @@ class CaptureController extends ChangeNotifier
 
   final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
   Geolocation? _sessionGeolocation;
+  int _sessionGeolocationGeneration = 0;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -1339,14 +1340,28 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _captureSessionLocation() async {
-    _sessionGeolocation = await _conversationLocationCapture.captureAndUpload();
-    _wal.getSyncs().phone.setSessionGeolocation(_sessionGeolocation);
+    final generation = ++_sessionGeolocationGeneration;
+    // Do not let a prior session's snapshot cover the interval while the new
+    // capture is waiting on the location service.
+    _sessionGeolocation = null;
+    _wal.getSyncs().phone.setSessionGeolocation(null);
+    final geolocation = await _conversationLocationCapture.captureAndUpload();
+    if (generation != _sessionGeolocationGeneration) return;
+    _sessionGeolocation = geolocation;
+    _wal.getSyncs().phone.setSessionGeolocation(geolocation);
+  }
+
+  void _clearSessionLocation() {
+    _sessionGeolocationGeneration++;
+    _sessionGeolocation = null;
+    _wal.getSyncs().phone.setSessionGeolocation(null);
   }
 
   streamRecording() async {
-    // Capture once at session start. The snapshot is carried privately in the
-    // live handshake and inherited by any WAL written for delayed/offline sync.
-    await _captureSessionLocation();
+    // Drain any tail from the preceding phone session before replacing its
+    // location. A stale session snapshot must never be applied to a later WAL.
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+    _clearSessionLocation();
 
     // Mode is fixed for the whole session at start. On iOS and Android the phone
     // mic can capture Transcribe Later (batch) audio: explicitly when the user
@@ -1366,9 +1381,15 @@ class CaptureController extends ChangeNotifier
     final micPermission = await Permission.microphone.request();
     if (!micPermission.isGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic');
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       return;
     }
+
+    // Capture only after microphone permission is granted. This keeps a
+    // denied microphone request from uploading a location for a recording that
+    // never started.
+    await _captureSessionLocation();
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
@@ -1416,6 +1437,7 @@ class CaptureController extends ChangeNotifier
       Logger.error('[CaptureProvider] phone mic start failed: $e\n$st');
       _activeSource = null;
       _phoneMicWalActive = false;
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       await _socket?.stop(reason: 'phone mic start failed');
     }
@@ -1431,6 +1453,7 @@ class CaptureController extends ChangeNotifier
       _endOfflineSession();
       await _cleanupCurrentState();
       _phoneMicBatchActive = false;
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       return;
     }
@@ -1450,6 +1473,8 @@ class CaptureController extends ChangeNotifier
     await _cleanupCurrentState(disableNativeBackground: true);
     _micInterrupted = false;
     ServiceManager.instance().phoneMic.stop();
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+    _clearSessionLocation();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
   }
@@ -1463,11 +1488,17 @@ class CaptureController extends ChangeNotifier
     final micPermission = await Permission.microphone.request();
     if (!micPermission.isGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       return;
     }
 
     await _cleanupCurrentState();
+
+    // The compatibility upload is intentionally best-effort, but the snapshot
+    // still belongs to this recording session and must be captured after the
+    // permission gate above.
+    await _captureSessionLocation();
 
     // batchAudioDir may never have been written if batch was chosen via the
     // offline auto-switch (setBatchMode was never called with batch on).
@@ -1515,6 +1546,7 @@ class CaptureController extends ChangeNotifier
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
       _phoneMicBatchActive = false;
+      _clearSessionLocation();
       _endOfflineSession();
       updateRecordingState(RecordingState.stop);
     }
@@ -1622,6 +1654,8 @@ class CaptureController extends ChangeNotifier
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
     await _cleanupCurrentState(disableNativeBackground: true);
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+    _clearSessionLocation();
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
@@ -1971,6 +2005,7 @@ class CaptureController extends ChangeNotifier
     // Force-drain tail buffer before clearing state
     final phoneSync = _wal.getSyncs().phone;
     await phoneSync.finalizeCurrentSession();
+    _clearSessionLocation();
 
     _resetStateVariables();
     externalActions.addProcessingConversation(
@@ -2003,6 +2038,7 @@ class CaptureController extends ChangeNotifier
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
   /// Called from synchronous onMessageEventReceived — fire-and-forget async.
   Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
+    final locationGeneration = _sessionGeolocationGeneration;
     try {
       final phoneSync = _wal.getSyncs().phone;
       await phoneSync.finalizeCurrentSession();
@@ -2011,6 +2047,10 @@ class CaptureController extends ChangeNotifier
       }
     } catch (e) {
       Logger.debug('_finalizeAndStampSession error: $e');
+    } finally {
+      if (locationGeneration == _sessionGeolocationGeneration) {
+        _clearSessionLocation();
+      }
     }
   }
 

@@ -1,8 +1,8 @@
 import 'package:omi/backend/schema/geolocation.dart';
 
-/// Private Dart-to-Android handoff contract for background BLE streaming.
-/// The snapshot is recording-owned and copied once; native code validates and
-/// forwards it only on the authenticated `/v4/listen` request.
+/// Private Dart-to-native handoff contract for live/background BLE streaming.
+/// Android and iOS native writers also consume this recording-owned snapshot;
+/// native code validates it before forwarding or persisting it.
 Map<String, dynamic> buildNativeBleStreamConfig({
   required String deviceId,
   required String codec,

@@ -438,6 +438,47 @@ void main() {
       expect(sync.testFrameSynced[3], false); // Not this one
       expect(sync.testFrameSynced[259], true); // This one (last match)
     });
+
+    test('each finalized WAL owns an independent location snapshot', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final location = Geolocation(
+        latitude: 40.7128,
+        longitude: -74.006,
+        time: DateTime.utc(2026, 8, 1, 12),
+        captureSource: 'current_position',
+      );
+      sync.setSessionGeolocation(location);
+      location.latitude = 41.0;
+
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])));
+      await sync.finalizeCurrentSession();
+
+      sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])));
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testWals, hasLength(2));
+      expect(sync.testWals[0].geolocation?.latitude, 40.7128);
+      expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+
+      sync.testWals[0].geolocation!.latitude = 42.0;
+      expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+    });
+
+    test('cleared session location is not inherited by external WALs', () async {
+      sync.setSessionGeolocation(
+        Geolocation(latitude: 40.7128, longitude: -74.006, time: DateTime.utc(2026, 8, 1, 12)),
+      );
+      sync.setSessionGeolocation(null);
+
+      final wal = Wal(
+        timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+      );
+      await sync.addExternalWal(wal);
+
+      expect(wal.geolocation, isNull);
+    });
   });
 
   group('_chunk payload extraction', () {

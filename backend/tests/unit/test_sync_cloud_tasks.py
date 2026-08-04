@@ -621,6 +621,23 @@ def _load_cloud_tasks():
     )
 
 
+def _valid_sync_task_payload(**overrides):
+    payload = {key: None for key in _load_cloud_tasks().SYNC_JOB_TASK_PAYLOAD_KEYS}
+    payload.update(
+        {
+            'schema_version': 1,
+            'job_id': 'job-1',
+            'uid': 'uid-1',
+            'raw_blob_paths': ['gs://bucket/job-1.opus'],
+            'source': 'omi',
+            'should_lock': False,
+            'lane': 'fresh',
+        }
+    )
+    payload.update(overrides)
+    return payload
+
+
 def _request_with(headers: dict):
     request = MagicMock()
     request.headers = headers
@@ -692,7 +709,7 @@ class TestVerifyCloudTasksOidc:
             for var in ('SYNC_TASKS_PROJECT', 'SYNC_TASKS_LOCATION', 'SYNC_TASKS_QUEUE'):
                 os.environ.pop(var, None)
             with pytest.raises(RuntimeError):
-                cloud_tasks.enqueue_sync_job({'job_id': 'j'})
+                cloud_tasks.enqueue_sync_job(_valid_sync_task_payload(job_id='j'))
 
     def test_backfill_lane_still_uses_the_main_queue(self):
         # An offline recording can never carry server capture proof, so every
@@ -708,15 +725,24 @@ class TestVerifyCloudTasksOidc:
             'SYNC_BACKFILL_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
             'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         }
+        payload = _valid_sync_task_payload(lane='backfill')
         with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
-            cloud_tasks.enqueue_sync_job({'job_id': 'job-1', 'lane': 'backfill'})
+            cloud_tasks.enqueue_sync_job(payload)
 
         enqueue.assert_called_once_with(
             'sync-jobs',
             'https://backend-sync.example.com/v2/sync-jobs/run',
             'job-1',
-            {'job_id': 'job-1', 'lane': 'backfill'},
+            payload,
         )
+
+    def test_enqueue_rejects_payload_schema_drift_before_cloud_tasks(self):
+        cloud_tasks = _load_cloud_tasks()
+        payload = _valid_sync_task_payload(unexpected_field='must-not-be-admitted')
+        with patch.object(cloud_tasks, '_enqueue_named_task') as enqueue:
+            with pytest.raises(ValueError, match='durable worker schema'):
+                cloud_tasks.enqueue_sync_job(payload)
+        enqueue.assert_not_called()
 
     def test_enqueue_account_deletion_task_is_named_by_job_id(self):
         cloud_tasks = _load_cloud_tasks()
@@ -929,7 +955,6 @@ def _load_sync_router_for_fast_path():
         'models.conversation_enums',
         'models.sync_contract',
         'models.geolocation',
-        'models.sync_contract',
         'models.sync_audio',
         'models.transcript_segment',
         'utils',
