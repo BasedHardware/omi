@@ -6,7 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 EDGE_PROVIDER = "cloudflare"
 # Comma list: health,whoami,memory,conversation,tasks,search
-EDGE_MODULES = "health,whoami"
+# Enable peel gradually. memory|conversation|tasks mount Python path parity proxies.
+EDGE_MODULES = "health,whoami,memory,conversation,tasks,search"
 EDGE_PROXY_ORIGIN = "true"
 ORIGIN_API_BASE = "https://api.omi.me"
 FIREBASE_PROJECT_ID = "based-hardware"

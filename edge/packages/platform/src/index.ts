@@ -4,3 +4,4 @@ export * from "./auth.js";
 export * from "./features.js";
 export * from "./origin.js";
 export * from "./context.js";
+export * from "./middleware.js";

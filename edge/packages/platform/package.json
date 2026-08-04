@@ -10,8 +10,13 @@
     "./auth": "./src/auth.ts",
     "./features": "./src/features.ts",
     "./origin": "./src/origin.ts",
-    "./context": "./src/context.ts"
+    "./context": "./src/context.ts",
+    "./middleware": "./src/middleware.ts"
   },
+  "dependencies": {
+    "hono": "^4.7.7"
+  },
+
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json"
