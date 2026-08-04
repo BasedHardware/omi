@@ -14,11 +14,11 @@ import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
+from database.account_deletion_policy import account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
-from utils.account_deletion_access import account_deletion_blocks_access
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 

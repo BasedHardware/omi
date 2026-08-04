@@ -6,6 +6,11 @@ from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
+from database.account_deletion_policy import normalize_account_deletion_status
+from database.account_deletion_transitions import (
+    mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
+    record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
+)
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
@@ -313,18 +318,17 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     )
 
 
-def get_user_deletion_wipe_status(uid: str) -> str | None:
+def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
     """Return the authoritative deletion lifecycle state for an authenticated UID.
 
     This intentionally bypasses caches: an accepted deletion must become an
     access barrier on the very next request, and a cached pre-delete miss would
     reopen the exact half-deleted-account window this marker closes.
     """
-    snapshot = db.collection('account_deletions').document(uid).get()
+    client = firestore_client or get_firestore_client()
+    snapshot = client.collection('account_deletions').document(uid).get()
     if not snapshot.exists:
         return None
-    from utils.account_deletion_access import normalize_account_deletion_status
-
     status = (snapshot.to_dict() or {}).get('wipe_status')
     return normalize_account_deletion_status(marker_exists=True, raw_status=status)
 
@@ -426,12 +430,10 @@ def mark_user_deletion_wipe_started(uid: str, wipe_job_id: str) -> bool:
     return _mark_user_deletion_wipe_started_txn(transaction, doc_ref, wipe_job_id)
 
 
-def mark_user_deletion_wipe_completed(uid: str):
-    """Mark the background data wipe as finished."""
-    db.collection('account_deletions').document(uid).set(
-        {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
-        merge=True,
-    )
+def mark_user_deletion_wipe_completed(uid: str) -> bool:
+    """Complete the wipe only if no provider cleanup remains outstanding."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _mark_user_deletion_wipe_completed_txn(db.transaction(), doc_ref)
 
 
 def mark_user_deletion_wipe_failed(uid: str):
@@ -440,6 +442,35 @@ def mark_user_deletion_wipe_failed(uid: str):
         {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
         merge=True,
     )
+
+
+def record_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str) -> bool:
+    """Persist a late VM only when an admitted deletion owns its cleanup."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    return _record_late_agent_vm_cleanup_txn(db.transaction(), doc_ref, vm_name, zone)
+
+
+def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
+    """Return a late-created VM that must be retried independently of user data."""
+    snapshot = db.collection('account_deletions').document(uid).get()
+    data = snapshot.to_dict() or {}
+    pending = data.get('late_agent_vm_cleanup') if snapshot.exists else None
+    if not isinstance(pending, dict):
+        return None
+    vm_name = pending.get('vmName')
+    zone = pending.get('zone')
+    if not isinstance(vm_name, str) or not vm_name or not isinstance(zone, str) or not zone:
+        return None
+    return {'vmName': vm_name, 'zone': zone}
+
+
+def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:
+    """Clear a late-VM retry record only after its matching GCE instance is gone."""
+    doc_ref = db.collection('account_deletions').document(uid)
+    snapshot = doc_ref.get()
+    pending = (snapshot.to_dict() or {}).get('late_agent_vm_cleanup') if snapshot.exists else None
+    if isinstance(pending, dict) and pending.get('vmName') == vm_name:
+        doc_ref.update({'late_agent_vm_cleanup': firestore.DELETE_FIELD})
 
 
 @transactional

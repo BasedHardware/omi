@@ -2,17 +2,28 @@ import Foundation
 @preconcurrency import GRDB
 import OmiSupport
 
-private final class GzipProcessController: @unchecked Sendable {
+final class GzipProcessController: @unchecked Sendable {
   private let lock = NSLock()
   private var process: Process?
   private var cancelled = false
 
-  func install(_ process: Process) -> Bool {
+  func run(_ process: Process) throws {
     lock.lock()
-    defer { lock.unlock() }
-    guard !cancelled else { return false }
+    guard !cancelled else {
+      lock.unlock()
+      throw CancellationError()
+    }
     self.process = process
-    return true
+    do {
+      // Launch while holding the same lock used by cancel(). Cancellation
+      // therefore either wins before launch or observes the running process.
+      try process.run()
+      lock.unlock()
+    } catch {
+      self.process = nil
+      lock.unlock()
+      throw error
+    }
   }
 
   func cancel() {
@@ -176,15 +187,16 @@ actor AgentVMService {
   ) async {
     guard isCurrent(ownerID: ownerID, generation: generation) else { return }
     if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
-      guard
-        await uploadDatabase(
-          vmIP: ip,
-          authToken: status.authToken,
-          ownerID: ownerID,
-          generation: generation)
-      else {
-        log("AgentVMService: VM database is not ready; incremental sync remains stopped")
-        return
+      let uploaded = await uploadDatabase(
+        vmIP: ip,
+        authToken: status.authToken,
+        ownerID: ownerID,
+        generation: generation)
+      if !uploaded {
+        // AgentSync owns the in-session recovery path for a missing VM database.
+        // Keep it running after a transient initial upload failure so it can retry
+        // rather than leaving this launch permanently unsynchronised.
+        log("AgentVMService: Initial database upload failed; starting incremental sync recovery")
       }
     }
     guard isCurrent(ownerID: ownerID, generation: generation) else { return }
@@ -291,13 +303,16 @@ actor AgentVMService {
   }
 
   private static func createConsistentSnapshot(sourcePool: DatabasePool, destination: URL) async throws {
-    try await Task.detached(priority: .utility) {
-      try? FileManager.default.removeItem(at: destination)
-      let destinationQueue = try DatabaseQueue(path: destination.path)
-      try sourcePool.backup(to: destinationQueue, pagesPerStep: 128) { _ in
-        try Task.checkCancellation()
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      group.addTask(priority: .utility) {
+        try? FileManager.default.removeItem(at: destination)
+        let destinationQueue = try DatabaseQueue(path: destination.path)
+        try sourcePool.backup(to: destinationQueue, pagesPerStep: 128) { _ in
+          try Task.checkCancellation()
+        }
       }
-    }.value
+      try await group.waitForAll()
+    }
   }
 
   private static func gzip(source: URL, destination: URL) async throws -> Int32 {
@@ -316,8 +331,7 @@ actor AgentVMService {
             }
             defer { try? output.close() }
             process.standardOutput = output
-            guard controller.install(process) else { throw CancellationError() }
-            try process.run()
+            try controller.run(process)
             process.waitUntilExit()
             if process.terminationReason == .uncaughtSignal {
               throw CancellationError()

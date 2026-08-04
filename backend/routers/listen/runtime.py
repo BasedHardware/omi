@@ -60,6 +60,7 @@ from utils.transcribe_decisions import (
     validate_audio_format,
 )
 from utils.transcribe_store import check_credits_invalidation, conversations_db, redis_db, user_db
+from database.account_deletion_policy import account_deletion_blocks_access
 from utils.webhooks import get_audio_bytes_webhook_seconds
 from utils.audio import AudioRingBuffer
 from utils.other.storage import get_user_has_speech_profile
@@ -78,6 +79,11 @@ logger = logging.getLogger(__name__)
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 FREEMIUM_THRESHOLD_SECONDS = 180
+
+
+def _account_deletion_blocks_owner_persistence(uid: str) -> bool:
+    status = user_db.get_user_deletion_wipe_status(uid)
+    return account_deletion_blocks_access(status)
 
 
 def _normalize_client_conversation_id(value: Optional[str]) -> Optional[str]:
@@ -648,24 +654,38 @@ class ListenSessionRuntime:
     async def _teardown(self) -> None:
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
+        owner_persistence_blocked = self.request.owner_persistence_blocked.is_set()
+        if not owner_persistence_blocked:
+            try:
+                owner_persistence_blocked = await self.persistence.call(
+                    _account_deletion_blocks_owner_persistence, self.request.uid
+                )
+            except Exception as error:
+                logger.error('Listen teardown deletion fence unavailable type=%s', type(error).__name__)
+                owner_persistence_blocked = True
+        if owner_persistence_blocked:
+            self.request.owner_persistence_blocked.set()
+            await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self._finish_live_transcription()
-        try:
-            await self.transcripts.flush_translations()
-        except Exception as error:
-            logger.error('Translation flush failed type=%s', type(error).__name__)
+        if not owner_persistence_blocked:
+            try:
+                await self.transcripts.flush_translations()
+            except Exception as error:
+                logger.error('Translation flush failed type=%s', type(error).__name__)
         self.state.active = False
         try:
             self.receiver.finish()
         except Exception as error:
             logger.error('STT finish failed type=%s', type(error).__name__)
-        await self._flush_usage(final=True)
+        if not owner_persistence_blocked:
+            await self._flush_usage(final=True)
         if self.request.websocket.client_state == WebSocketState.CONNECTED and not self.state.stt_terminal_failure:
             try:
                 await self.request.websocket.close(code=self.state.close_code)
             except Exception:
                 pass
         conversation_id = self.state.current_conversation_id
-        if conversation_id:
+        if conversation_id and not owner_persistence_blocked:
             try:
                 if self.is_multi_channel:
                     await self.persistence.call(redis_db.remove_in_progress_conversation_id, self.request.uid)
@@ -693,7 +713,8 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Conversation disconnect finalization failed type=%s', type(error).__name__)
         try:
-            await self.receiver.flush_multi_channel_tail()
+            if not owner_persistence_blocked:
+                await self.receiver.flush_multi_channel_tail()
         finally:
             if self.pusher_close:
                 try:
@@ -702,11 +723,12 @@ class ListenSessionRuntime:
                     logger.error('Pusher close failed type=%s', type(error).__name__)
         if self.onboarding_handler:
             self.onboarding_handler.cleanup()
-        await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        try:
-            self.parity_capture.persist()
-        except Exception as error:
-            logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
+        if not owner_persistence_blocked:
+            await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
+            try:
+                self.parity_capture.persist()
+            except Exception as error:
+                logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()

@@ -112,3 +112,25 @@ class TestAgentWsStartupSurvivesAGoneClient:
             s for s in websocket.send_attempts if "agent_vm_not_ready" in s
         ], "the typed error event must still be attempted"
         assert websocket.close_attempts == [4003], "the connection must still be closed with its not-healthy code"
+
+
+@pytest.mark.asyncio
+async def test_startup_deletion_race_uses_typed_close(agent_proxy, monkeypatch):
+    async def blocked(*_args, **_kwargs):
+        raise agent_proxy.AccountDeletionAccessBlocked("running")
+
+    admitted = []
+
+    async def close_for_deletion(websocket, uid):
+        admitted.append((websocket, uid))
+        return False
+
+    monkeypatch.setattr(agent_proxy, "_ensure_vm_running", blocked)
+    monkeypatch.setattr(agent_proxy, "_admit_account_access_or_close", close_for_deletion)
+    websocket = _GoneClientWebSocket()
+
+    vm, deletion_blocked = await agent_proxy._ensure_vm_running_or_close(websocket, "uid-gone", {})
+
+    assert vm is None
+    assert deletion_blocked is True
+    assert admitted == [(websocket, "uid-gone")]

@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException, WebSocketException
 
 from utils.other import endpoints
+from database import users
 
 
 @pytest.fixture(autouse=True)
@@ -69,3 +70,13 @@ def test_websocket_auth_uses_typed_account_deletion_close(monkeypatch):
 
     assert error.value.code == endpoints.WS_AUTH_CODE_ACCOUNT_DELETION
     assert error.value.reason == "Account deletion in progress"
+
+
+def test_deletion_status_reads_the_injected_firestore_client():
+    snapshot = MagicMock(exists=True)
+    snapshot.to_dict.return_value = {"wipe_status": "running"}
+    client = MagicMock()
+    client.collection.return_value.document.return_value.get.return_value = snapshot
+
+    assert users.get_user_deletion_wipe_status("old-uid", firestore_client=client) == "running"
+    client.collection.assert_called_once_with("account_deletions")

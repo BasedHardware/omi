@@ -17,12 +17,19 @@ from utils.mcp_memories import (
     build_mcp_default_memory_read_context,
     build_mcp_default_memory_write_context,
 )
-from utils.other.endpoints import check_api_key_rate_limit, enforce_account_deletion_http_access
+from utils.other import endpoints as auth_endpoints
 from utils.scopes import Scopes, has_scope
 
 logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer()
+
+check_api_key_rate_limit = auth_endpoints.check_api_key_rate_limit
+
+
+def enforce_account_deletion_http_access(uid: str) -> None:
+    """Keep transport enforcement behind a call-time module boundary."""
+    auth_endpoints.enforce_account_deletion_http_access(uid)
 
 
 async def _enforce_account_deletion_access(uid: str) -> None:

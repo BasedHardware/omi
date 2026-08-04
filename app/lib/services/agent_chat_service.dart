@@ -24,11 +24,7 @@ void agentLog(String msg) {
   final line = '${DateTime.now().toIso8601String()} $msg';
   print('[AgentChat] $msg');
   try {
-    agentLogFile?.writeAsStringSync(
-      '$line\n',
-      mode: FileMode.append,
-      flush: true,
-    );
+    agentLogFile?.writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
   } catch (_) {}
 }
 
@@ -46,11 +42,7 @@ class AgentChatEvent {
   static String textFrom(Map<String, dynamic> message) =>
       message['text'] as String? ?? message['content'] as String? ?? message['message'] as String? ?? '';
 
-  static AgentChatEvent fromMessage(
-    AgentChatEventType type,
-    Map<String, dynamic> message,
-  ) =>
-      AgentChatEvent(
+  static AgentChatEvent fromMessage(AgentChatEventType type, Map<String, dynamic> message) => AgentChatEvent(
         type,
         textFrom(message),
         code: message['code'] as String?,
@@ -75,6 +67,9 @@ class AgentChatService {
     await initAgentLog();
     final connectSw = Stopwatch()..start();
     agentLog('connect() called');
+    // Startup events describe a specific socket. Never let an error from an
+    // earlier connection abort a query after a successful reconnect.
+    _pendingStartupEvents.clear();
 
     // Clean up any existing connection
     await _streamSubscription?.cancel();
@@ -127,21 +122,15 @@ class AgentChatService {
             // Log thinking_done timing (VM tells us how long Claude spent thinking)
             if (type == 'thinking_done') {
               final thinkingMs = msg['thinkingMs'] as int? ?? 0;
-              agentLog(
-                '[TIMING] *** THINKING DONE *** +${elapsed}ms (VM thinking: ${thinkingMs}ms)',
-              );
+              agentLog('[TIMING] *** THINKING DONE *** +${elapsed}ms (VM thinking: ${thinkingMs}ms)');
               return;
             }
 
             if (_eventController == null || _eventController!.isClosed) {
               if (type == 'status') {
-                _pendingStartupEvents.add(
-                  AgentChatEvent.fromMessage(AgentChatEventType.status, msg),
-                );
+                _pendingStartupEvents.add(AgentChatEvent.fromMessage(AgentChatEventType.status, msg));
               } else if (type == 'error') {
-                _pendingStartupEvents.add(
-                  AgentChatEvent.fromMessage(AgentChatEventType.error, msg),
-                );
+                _pendingStartupEvents.add(AgentChatEvent.fromMessage(AgentChatEventType.error, msg));
                 _connected = false;
               }
               return;
@@ -156,62 +145,41 @@ class AgentChatService {
                   _firstTextReceived = true;
                   agentLog('[TIMING] *** FIRST TEXT DELTA *** +${elapsed}ms');
                 }
-                _eventController?.add(
-                  AgentChatEvent(AgentChatEventType.textDelta, text),
-                );
+                _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
                 break;
               case 'tool_activity':
                 final toolName = msg['name'] as String? ?? '';
                 final status = msg['status'] as String? ?? 'started';
-                agentLog(
-                  '[TIMING] tool=$toolName status=$status +${elapsed}ms',
-                );
+                agentLog('[TIMING] tool=$toolName status=$status +${elapsed}ms');
                 final displayText = status == 'started' ? _toolDisplayName(toolName) : '';
-                _eventController?.add(
-                  AgentChatEvent(AgentChatEventType.toolActivity, displayText),
-                );
+                _eventController?.add(AgentChatEvent(AgentChatEventType.toolActivity, displayText));
                 break;
               case 'status':
                 final message = msg['message'] as String? ?? text;
-                _eventController?.add(
-                  AgentChatEvent(AgentChatEventType.status, message),
-                );
+                _eventController?.add(AgentChatEvent(AgentChatEventType.status, message));
                 break;
               case 'result':
-                agentLog(
-                  '[TIMING] *** RESULT *** +${elapsed}ms (total query time)',
-                );
+                agentLog('[TIMING] *** RESULT *** +${elapsed}ms (total query time)');
                 _queryStopwatch?.stop();
                 _responseTimer?.cancel();
-                _eventController?.add(
-                  AgentChatEvent(AgentChatEventType.result, text),
-                );
+                _eventController?.add(AgentChatEvent(AgentChatEventType.result, text));
                 _eventController?.close();
                 break;
               case 'error':
                 agentLog('[TIMING] *** ERROR *** +${elapsed}ms');
                 _queryStopwatch?.stop();
                 _responseTimer?.cancel();
-                _eventController?.add(
-                  AgentChatEvent.fromMessage(AgentChatEventType.error, msg),
-                );
+                _eventController?.add(AgentChatEvent.fromMessage(AgentChatEventType.error, msg));
                 _eventController?.close();
                 break;
               default:
                 if (text.isNotEmpty) {
-                  _eventController?.add(
-                    AgentChatEvent(AgentChatEventType.textDelta, text),
-                  );
+                  _eventController?.add(AgentChatEvent(AgentChatEventType.textDelta, text));
                 }
             }
           } catch (e) {
             Logger.error('AgentChatService: parse error: $e');
-            _eventController?.add(
-              AgentChatEvent(
-                AgentChatEventType.error,
-                'Failed to parse agent response',
-              ),
-            );
+            _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Failed to parse agent response'));
             _eventController?.close();
           }
         },
@@ -219,12 +187,7 @@ class AgentChatService {
           final elapsed = _queryStopwatch?.elapsedMilliseconds ?? 0;
           agentLog('[TIMING] Stream error +${elapsed}ms: $error');
           _queryStopwatch?.stop();
-          _eventController?.add(
-            AgentChatEvent(
-              AgentChatEventType.error,
-              'Connection error: $error',
-            ),
-          );
+          _eventController?.add(AgentChatEvent(AgentChatEventType.error, 'Connection error: $error'));
           _eventController?.close();
           _connected = false;
         },
@@ -241,15 +204,11 @@ class AgentChatService {
 
       // Trigger pre-warm on the VM so a Claude session is ready before the user types
       _channel!.sink.add(jsonEncode({'type': 'prewarm'}));
-      agentLog(
-        '[TIMING] prewarm sent +${connectSw.elapsedMilliseconds}ms (total connect)',
-      );
+      agentLog('[TIMING] prewarm sent +${connectSw.elapsedMilliseconds}ms (total connect)');
 
       return true;
     } catch (e) {
-      agentLog(
-        'Connection failed after ${connectSw.elapsedMilliseconds}ms: $e',
-      );
+      agentLog('Connection failed after ${connectSw.elapsedMilliseconds}ms: $e');
       _connected = false;
       return false;
     }
@@ -291,6 +250,7 @@ class AgentChatService {
 
   Future<void> disconnect() async {
     _connected = false;
+    _pendingStartupEvents.clear();
     _responseTimer?.cancel();
     _eventController?.close();
     _eventController = null;
@@ -312,9 +272,7 @@ class AgentChatService {
       _queryStopwatch?.stop();
       _connected = false;
       if (_eventController != null && !_eventController!.isClosed) {
-        _eventController!.add(
-          AgentChatEvent(AgentChatEventType.error, 'Connection timed out'),
-        );
+        _eventController!.add(AgentChatEvent(AgentChatEventType.error, 'Connection timed out'));
         _eventController!.close();
       }
     });

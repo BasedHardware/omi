@@ -54,6 +54,15 @@ ACCOUNT_DELETION_WIPE_COMPLETED = 'Account Deletion Wipe Completed'
 ACCOUNT_DELETION_WIPE_FAILED = 'Account Deletion Wipe Failed'
 
 
+def _gce_project_id() -> str | None:
+    return (
+        os.getenv('GCE_PROJECT_ID')
+        or os.getenv('GOOGLE_CLOUD_PROJECT')
+        or os.getenv('FIREBASE_PROJECT_ID')
+        or os.getenv('GCP_PROJECT_ID')
+    )
+
+
 def delete_agent_vm_for_account(uid: str) -> None:
     """Delete the owner VM before the Firestore pointer becomes unreachable.
 
@@ -61,10 +70,10 @@ def delete_agent_vm_for_account(uid: str) -> None:
     creation, so a create already in flight either loses before insert or
     deletes its late-created instance here/on its post-create fence.
     """
-    vm = users_db.get_agent_vm(uid)
+    vm = users_db.get_agent_vm(uid) or users_db.get_late_agent_vm_cleanup(uid)
     if not isinstance(vm, dict) or not vm.get('vmName'):
         return
-    project = os.getenv('GCE_PROJECT_ID') or os.getenv('FIREBASE_PROJECT_ID') or os.getenv('GCP_PROJECT_ID')
+    project = _gce_project_id()
     if not project:
         raise RuntimeError('GCE project is not configured for account-deletion VM cleanup')
     vm_name = str(vm['vmName'])
@@ -76,6 +85,7 @@ def delete_agent_vm_for_account(uid: str) -> None:
     with httpx.Client(timeout=180) as client:
         response = client.delete(instance_url, headers=headers)
         if response.status_code == 404:
+            users_db.clear_late_agent_vm_cleanup(uid, vm_name)
             return
         response.raise_for_status()
         operation = response.json().get('name')
@@ -91,6 +101,7 @@ def delete_agent_vm_for_account(uid: str) -> None:
             if result.get('status') == 'DONE':
                 if result.get('error'):
                     raise RuntimeError(f'GCE Agent VM deletion failed: {result["error"]}')
+                users_db.clear_late_agent_vm_cleanup(uid, vm_name)
                 return
             time.sleep(5)
     raise RuntimeError('GCE Agent VM deletion timed out')
@@ -334,9 +345,12 @@ def background_wipe_user_data(uid: str, retry_count: int = 0, terminal: bool = F
         return False
     else:
         try:
-            users_db.mark_user_deletion_wipe_completed(uid)
+            if users_db.mark_user_deletion_wipe_completed(uid) is False:
+                logger.warning('delete_account completion deferred for outstanding provider cleanup')
+                return False
         except Exception as e:
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
+            return False
         required_failures, best_effort_failures = _purge_failures(purge_result)
         purge_result_dict = purge_result
         _emit_deletion_telemetry(
@@ -427,12 +441,6 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
 
 
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
-    if reason or reason_details:
-        try:
-            users_db.set_user_deletion_feedback(uid, reason, reason_details)
-        except Exception as e:
-            logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
-
     # Persist the authoritative, actionable intent before dispatch. This state
     # is enough for reconciliation to recover a failed queue handoff, while the
     # Cloud Tasks handler claim fences all destructive work. If either write or
@@ -446,6 +454,11 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     wipe_job_id = wipe_intent.get('wipe_job_id') if isinstance(wipe_intent, dict) else None
     if not isinstance(wipe_job_id, str) or not wipe_job_id:
         raise RuntimeError('deletion-wipe intent did not persist a wipe_job_id')
+    if reason or reason_details:
+        try:
+            users_db.set_user_deletion_feedback(uid, reason, reason_details)
+        except Exception as e:
+            logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
     dispatch_claimed = wipe_intent.get('dispatch_claimed') is True if isinstance(wipe_intent, dict) else False
     if not dispatch_claimed:
         logger.info('delete_account joined existing durable deletion intent')
