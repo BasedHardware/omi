@@ -1,3 +1,18 @@
+## GKE manages the Kubernetes control plane; these customer-cluster scrape
+## targets do not exist and their default "down" alerts would page forever.
+kubeProxy:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+
+defaultRules:
+  disabled:
+    KubeProxyDown: true
+    KubeSchedulerDown: true
+    KubeControllerManagerDown: true
+
 grafana:
   enabled: true
   serviceAccount:

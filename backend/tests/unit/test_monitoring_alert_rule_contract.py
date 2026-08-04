@@ -3,9 +3,12 @@
 import json
 from pathlib import Path
 
+import yaml
+
 REPO = Path(__file__).resolve().parents[3]
 MONITORING = REPO / "backend/charts/monitoring"
 ALERT_SOURCES = MONITORING / "alerts"
+PROD_STACK_VALUES = MONITORING / "kube-prometheus-stack/prod_omi_monitoring_values.yaml"
 ERROR_COUNT_RULES = {
     "cew4j7ruiik1sd",  # Backend 4XX
     "cew4jcnpa68sga",  # Backend 5XX
@@ -96,6 +99,19 @@ def test_split_alert_exports_preserve_error_count_no_data_contract():
     assert ERROR_COUNT_RULES <= split.keys()
     for uid in ERROR_COUNT_RULES:
         assert combined[uid]["noDataState"] == split[uid]["noDataState"] == "OK"
+
+
+def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
+    """Managed GKE must not page on control-plane targets it cannot expose."""
+    values = yaml.safe_load(PROD_STACK_VALUES.read_text(encoding="utf-8"))
+
+    for component in ("kubeProxy", "kubeScheduler", "kubeControllerManager"):
+        assert values[component]["enabled"] is False
+
+    disabled = values["defaultRules"]["disabled"]
+    assert disabled["KubeProxyDown"] is True
+    assert disabled["KubeSchedulerDown"] is True
+    assert disabled["KubeControllerManagerDown"] is True
 
 
 def test_combined_alert_export_matches_every_split_source_rule():
