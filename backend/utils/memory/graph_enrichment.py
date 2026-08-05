@@ -207,18 +207,13 @@ def _blocked(code: str, reason: str) -> GraphEnrichmentResult:
 def _coerce_plan(plan: GraphEnrichmentPlan | PromotionGraphPlan | Dict[str, Any]) -> GraphEnrichmentPlan:
     if isinstance(plan, GraphEnrichmentPlan):
         return plan
-    if isinstance(plan, PromotionGraphPlan):
-        raw_plan = plan.model_dump(mode="python")
-    elif isinstance(plan, dict):
-        raw_plan = dict(plan)
-    else:
-        raw_plan = plan
+    raw_plan = plan.model_dump(mode="python") if isinstance(plan, PromotionGraphPlan) else dict(plan)
     try:
         # Firestore stores PromotionGraphPlan directly, including its own
         # discriminator.  GraphEnrichmentPlan has a different wrapper
         # discriminator, so remove only the known source-plan version while
         # retaining plan_hash for validation rather than silently rehashing it.
-        if isinstance(raw_plan, dict) and raw_plan.get("schema_version") in {
+        if raw_plan.get("schema_version") in {
             PROMOTION_GRAPH_PLAN_VERSION,
             PROMOTION_GRAPH_PLAN_V2_VERSION,
         }:

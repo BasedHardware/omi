@@ -121,16 +121,15 @@ def invoke_historical_graph_planner(item: MemoryItem, llm: Any) -> PromotionGrap
     if not subject_label or not object_label or not subject_node_type or not object_node_type:
         return None
     normalized_subject = _normalize_evidence_text(subject_label)
+    content = item.content or ""
     if normalized_subject == "user" or normalized_subject in _FIRST_PERSON_SUBJECT_LABELS:
         subject_label = "user"
-        subject_is_supported = _contains_evidence_phrase(item.content, "user") or _contains_first_person_reference(
-            item.content
-        )
+        subject_is_supported = _contains_evidence_phrase(content, "user") or _contains_first_person_reference(content)
     else:
-        subject_is_supported = _contains_evidence_phrase(item.content, subject_label)
+        subject_is_supported = _contains_evidence_phrase(content, subject_label)
     if not subject_is_supported:
         return None
-    if not _contains_evidence_phrase(item.content, object_label):
+    if not _contains_evidence_phrase(content, object_label):
         return None
     return PromotionGraphPlan(
         schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
