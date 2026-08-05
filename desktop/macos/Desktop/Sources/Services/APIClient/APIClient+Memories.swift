@@ -777,10 +777,10 @@ extension APIClient {
   }
 
   /// Deletes all default-scope memories.
-  /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
+  /// The backend keeps Archive outside this operation.
   func deleteAllMemories(scope: MemoryLayerScope) async throws {
     if scope == .defaultAccess {
-      try await deleteAllMemories()
+      try await delete("v3/memories?scope=default")
       return
     }
     throw APIError.unsupportedTierScopedBulkMutation("deletion")

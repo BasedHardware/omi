@@ -1022,13 +1022,20 @@ def delete_memory(
 
 @router.delete('/v3/memories', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memories(
+    scope: Literal['all', 'default'] = Query(
+        'all',
+        description="Delete all memories or only default-access Short-term and Long-term memories.",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
 ):
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        MemoryService(db_client=db_client).delete_all(uid)
+        if scope == 'default':
+            MemoryService(db_client=db_client).delete_default(uid)
+        else:
+            MemoryService(db_client=db_client).delete_all(uid)
         _mirror_delete_all_into_legacy(uid, db_client=db_client)
         return {'status': 'ok'}
 
