@@ -1,0 +1,48 @@
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveCaptureSystemProbe.swift
+  s_569f1df936cc22::t_693bfbd78564d5 1-93
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_569f1df936cc22::t_953420b035b9cd 1434-1443
+  s_569f1df936cc22::t_afc29dc986989e 905-910
+  s_569f1df936cc22::t_555694303a0fd4 1416-1422
+  s_569f1df936cc22::t_f9bdc5c9d93406 703-714,717-718,725-726
+  s_569f1df936cc22::t_1ab636b96a9f4a 687-692
+desktop/macos/Desktop/Tests/ProactiveCaptureSystemProbeTests.swift
+  s_569f1df936cc22::t_8651cdb93a1211 1-78
+desktop/macos/Desktop/Tests/CursorScreenTrackerTests.swift
+  s_569f1df936cc22::t_b58549e5efae62 1-64
+desktop/macos/e2e/flows/floating-bar-functional.yaml
+  s_569f1df936cc22::t_cb55a5bd4f7481 13
+desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
+  s_569f1df936cc22::t_0736c0fdc96534 1-48
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingSound.swift
+  s_569f1df936cc22::t_a3a05c0e799e4d 304,306-307
+  s_569f1df936cc22::t_c6e76ba1402707 389-391
+  s_569f1df936cc22::t_3b8eb746dbc8c6 444-459
+  s_569f1df936cc22::t_63d757efa585e7 305,308
+desktop/macos/e2e/flows/screen-recording-permission.yaml
+  s_569f1df936cc22::t_f4dadaf2405ac9 18
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_569f1df936cc22::t_ce2d304336448c 790
+  s_569f1df936cc22::t_8c612a2b993a1a 769
+  s_569f1df936cc22::t_e10a92ef8e2145 205
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_569f1df936cc22::t_084091a94dcfd7 5
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-proactiveassistants.json
+  s_569f1df936cc22::t_74673020d6426b 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "61709303c4462fac225c2e7c2eeb887c32ea7074",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
