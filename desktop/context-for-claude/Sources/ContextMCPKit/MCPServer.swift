@@ -41,9 +41,25 @@ public final class MCPServer {
     not the same thing as a durable memory.
 
     Routing, when the question is about the recent past: `recent` for the current session (the last \
-    minutes to an hour, and the only tool that sees them in full), `screen` for what was on their \
-    display, `activity` for where the time went, `recall` to search across everything by name or \
-    topic. Reaching for the wrong one of these is recoverable; reaching for none of them is not.
+    minutes to an hour, and the only tool that sees them in full), `screen` for the *text* that was \
+    on their display, `look` for the display itself as an image, `activity` for where the time \
+    went, `recall` to search across everything by name or topic. Reaching for the wrong one of \
+    these is recoverable; reaching for none of them is not.
+
+    **`look` returns real pixels, so use it as your own eyes.** Anything the user describes visually \
+    — "this looks wrong", "the spacing is off", "does that render properly" — is a thing to look at \
+    rather than to ask about. So is your own work: after changing a UI, build it, run it, and look \
+    at it before you report on it. Claiming a layout is fixed without looking is a guess dressed as \
+    a result, and this is the tool that turns it into a check. Each result states its own age; \
+    respect that line rather than assuming the frame is live.
+
+    **This applies to subagents too, and they are where it is most often skipped.** A subagent \
+    given a task inherits none of the conversation it came from, so it is the reader most likely to \
+    be missing the context these tools hold and least likely to think to ask for it. If you are \
+    dispatching one, either look the context up first and pass it in the prompt, or tell the \
+    subagent explicitly that these tools exist and to use them. If you *are* a subagent and the \
+    task refers to something you were not told — a person, a file, a decision, a screen — call \
+    these tools before reporting that you lack context.
 
     Two rules for reading the results honestly. Hits marked as captured live on this Mac are exact \
     full-text matches. Hits from Omi's history are a semantic search with no relevance floor — it \
@@ -245,13 +261,13 @@ public final class MCPServer {
         // rather than on the connection.
         defer { if isOurTool { recordServedCall(name) } }
         do {
-            let text = try Tools.call(name: name, arguments: request.params?["arguments"], store: store, openError: openError)
-            return RPC.result(id: request.id, Self.content(text, isError: false))
+            let output = try Tools.call(name: name, arguments: request.params?["arguments"], store: store, openError: openError)
+            return RPC.result(id: request.id, Self.content(output, isError: false))
         } catch {
             // MCP models a tool failure as a *result* so the model can read the reason and recover;
             // a JSON-RPC error would be swallowed by the client instead.
             Self.note("tool \(name) failed: \(error)")
-            return RPC.result(id: request.id, Self.content(Self.describe(error), isError: true))
+            return RPC.result(id: request.id, Self.content(ToolOutput(text: Self.describe(error)), isError: true))
         }
     }
 
@@ -274,9 +290,25 @@ public final class MCPServer {
         }
     }
 
-    private static func content(_ text: String, isError: Bool) -> JSONValue {
-        [
-            "content": [["type": "text", "text": .string(text)]],
+    /// The `content` array for a tool result: the prose, then any pictures.
+    ///
+    /// **Text first, always.** An `image` block carries no timestamp and no caption — MCP has no
+    /// field for either — so everything that keeps a screenshot from being misread (when it was
+    /// taken, whether the screen has changed since, that a redacted frame's picture was withheld)
+    /// lives in the text block and only works if the model meets it first.
+    private static func content(_ output: ToolOutput, isError: Bool) -> JSONValue {
+        var blocks: [JSONValue] = [["type": "text", "text": .string(output.text)]]
+        for image in output.images {
+            blocks.append([
+                "type": "image",
+                // Base64 with no `data:` prefix and no padding games: MCP's image block is the raw
+                // encoding plus a separate mime type, and a data URI here is silently rejected.
+                "data": .string(image.base64),
+                "mimeType": .string(image.mimeType),
+            ])
+        }
+        return [
+            "content": .array(blocks),
             "isError": .bool(isError),
         ]
     }

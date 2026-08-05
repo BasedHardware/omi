@@ -7,7 +7,7 @@ import XCTest
 // testing, and testing them through a live Omi account would be neither hermetic nor possible.
 @testable import ContextMCPKit
 
-/// The eleven tools: their declarations, their date arguments, and what they say when there is
+/// The twelve tools: their declarations, their date arguments, and what they say when there is
 /// nothing to say.
 ///
 /// The declarations are as much of the product as the queries behind them — a tool Claude cannot
@@ -16,7 +16,7 @@ final class ToolsTests: XCTestCase {
     /// Exactly the set in CONTRACTS.md. Renaming one silently unregisters it from every existing
     /// Claude session, so this list is deliberately spelled out rather than derived.
     private let expectedNames: Set<String> = [
-        "recall", "recent", "conversations", "transcript", "screen", "activity", "status",
+        "recall", "recent", "conversations", "transcript", "screen", "look", "activity", "status",
         "get_memories", "create_memory", "edit_memory", "delete_memory",
     ]
 
@@ -27,6 +27,7 @@ final class ToolsTests: XCTestCase {
         "conversations": ["since", "until", "limit"],
         "transcript": ["session_id"],
         "screen": ["since", "until", "app", "limit"],
+        "look": ["at", "app", "count"],
         "activity": ["since", "until"],
         "status": [],
         "get_memories": ["limit", "offset", "sort", "categories"],
@@ -35,10 +36,18 @@ final class ToolsTests: XCTestCase {
         "delete_memory": ["memory_id"],
     ]
 
+    /// The prose half of a tool call. Eleven of the twelve tools produce nothing else, and every
+    /// assertion in this file that predates `look` is about the prose.
+    private func toolText(
+        name: String, arguments: JSONValue?, store: ContextStore?, openError: Error? = nil
+    ) throws -> String {
+        try Tools.call(name: name, arguments: arguments, store: store, openError: openError).text
+    }
+
     // MARK: - Declarations
 
-    func testToolsAreExactlyTheElevenInTheContract() {
-        XCTAssertEqual(Tools.all.count, 11)
+    func testToolsAreExactlyTheOnesInTheContract() {
+        XCTAssertEqual(Tools.all.count, 12)
         XCTAssertEqual(Set(Tools.all.map(\.name)), expectedNames)
     }
 
@@ -86,19 +95,19 @@ final class ToolsTests: XCTestCase {
     }
 
     func testMemoryWritesFailClearlyWhenNoOmiKeyIsConfigured() throws {
-        let create = try Tools.call(
+        let create = try toolText(
             name: "create_memory",
             arguments: ["content": .string("Nik is the founder")],
             store: nil)
         XCTAssertTrue(create.contains("no Omi MCP API key is configured"), create)
 
-        let edit = try Tools.call(
+        let edit = try toolText(
             name: "edit_memory",
             arguments: ["memory_id": .string("memory-1"), "content": .string("corrected")],
             store: nil)
         XCTAssertTrue(edit.contains("no Omi MCP API key is configured"), edit)
 
-        let delete = try Tools.call(
+        let delete = try toolText(
             name: "delete_memory",
             arguments: ["memory_id": .string("memory-1")],
             store: nil)
@@ -152,7 +161,7 @@ final class ToolsTests: XCTestCase {
         // The MCP server is spawned per Claude session and may well run before the app has ever
         // captured anything. That is a sentence, never an exception.
         for (name, arguments) in validArguments() {
-            let text = try Tools.call(name: name, arguments: arguments, store: nil)
+            let text = try toolText(name: name, arguments: arguments, store: nil)
 
             XCTAssertFalse(text.isEmpty, "\(name) said nothing")
             XCTAssertTrue(
@@ -186,7 +195,7 @@ final class ToolsTests: XCTestCase {
         }
 
         for (name, arguments) in validArguments() {
-            let text = try Tools.call(name: name, arguments: arguments, store: nil).lowercased()
+            let text = try toolText(name: name, arguments: arguments, store: nil).lowercased()
             XCTAssertFalse(
                 text.contains("has never captured anything"),
                 "\(name) asserted an empty history while capture was live, said: \(text)")
@@ -214,7 +223,7 @@ final class ToolsTests: XCTestCase {
         // tells them apart. The corpus is dated 2025 so the year can only come from the data.
         let store = try seededStore()
 
-        let text = try Tools.call(
+        let text = try toolText(
             name: "recall", arguments: ["query": "chinchilla"], store: store)
 
         XCTAssertFalse(text.contains("pricing"), "recall returned a row that does not match")
@@ -224,7 +233,7 @@ final class ToolsTests: XCTestCase {
     func testStatusRendersTheCoverageWindow() throws {
         let store = try seededStore()
 
-        let text = try Tools.call(name: "status", arguments: nil, store: store)
+        let text = try toolText(name: "status", arguments: nil, store: store)
 
         XCTAssertTrue(text.contains("2025"), "status lost the coverage window, said: \(text)")
     }
@@ -232,7 +241,7 @@ final class ToolsTests: XCTestCase {
     func testToolsRenderCapturedContext() throws {
         let store = try seededStore()
 
-        let text = try Tools.call(name: "recall", arguments: ["query": "pricing"], store: store)
+        let text = try toolText(name: "recall", arguments: ["query": "pricing"], store: store)
 
         XCTAssertTrue(text.contains("pricing change"), "recall did not render the line it found: \(text)")
     }
@@ -255,7 +264,7 @@ final class ToolsTests: XCTestCase {
         ]
 
         for (name, arguments) in calls {
-            let text = try Tools.call(name: name, arguments: arguments, store: store)
+            let text = try toolText(name: name, arguments: arguments, store: store)
 
             XCTAssertTrue(
                 text.contains("present on this Mac but could not be read"),
@@ -281,17 +290,17 @@ final class ToolsTests: XCTestCase {
         let store = try unreadableStore()
 
         XCTAssertThrowsError(
-            try Tools.call(name: "recent", arguments: ["minutes": 30], store: store),
+            try toolText(name: "recent", arguments: ["minutes": 30], store: store),
             "recent answered from a database it could not read")
         XCTAssertThrowsError(
-            try Tools.call(name: "activity", arguments: ["since": "yesterday"], store: store),
+            try toolText(name: "activity", arguments: ["since": "yesterday"], store: store),
             "activity answered from a database it could not read")
     }
 
     func testStatusSaysTheDatabaseOpenedAndFailedRatherThanThatNothingWasCaptured() throws {
         let store = try unreadableStore()
 
-        let text = try Tools.call(name: "status", arguments: nil, store: store)
+        let text = try toolText(name: "status", arguments: nil, store: store)
 
         XCTAssertTrue(
             text.contains("could not be read"),
@@ -452,7 +461,7 @@ final class ToolsTests: XCTestCase {
     func testScreenRendersNewestFirstAndSaysSo() throws {
         let store = try screenStore()
 
-        let text = try Tools.call(name: "screen", arguments: [:], store: store)
+        let text = try toolText(name: "screen", arguments: [:], store: store)
 
         XCTAssertTrue(text.contains("newest first"), "screen stopped claiming an order: \(text)")
         let positions = ["CHARLIE-NEWEST", "BRAVO-MIDDLE", "ALPHA-OLDEST"].map { marker -> Int in
@@ -470,7 +479,7 @@ final class ToolsTests: XCTestCase {
     func testScreenOnlyShowsWhatIsInsideTheRangeItPrints() throws {
         let store = try screenStore()
 
-        let text = try Tools.call(
+        let text = try toolText(
             name: "screen",
             arguments: [
                 "since": .number(screenBase - 60),
@@ -493,7 +502,7 @@ final class ToolsTests: XCTestCase {
     func testConversationsListsOnlyWhatIsInsideTheRangeItPrints() throws {
         let store = try conversationStore()
 
-        let text = try Tools.call(
+        let text = try toolText(
             name: "conversations",
             arguments: ["since": .number(base + 1_000), "until": .number(base + 5_000)],
             store: store)
@@ -574,7 +583,7 @@ final class ToolsTests: XCTestCase {
     func testStatusSaysTheOmiScreenHalfRunsHoursBehindThisMac() throws {
         let store = try seededStore()
 
-        let text = try Tools.call(name: "status", arguments: nil, store: store)
+        let text = try toolText(name: "status", arguments: nil, store: store)
 
         XCTAssertTrue(text.contains("Freshness"), "status said nothing about freshness: \(text)")
         XCTAssertTrue(
@@ -597,7 +606,7 @@ final class ToolsTests: XCTestCase {
     func testTranscriptMarksTheUncertainLineAndOnlyTheUncertainLine() throws {
         let fixture = try confidenceStore()
 
-        let text = try Tools.call(
+        let text = try toolText(
             name: "transcript",
             arguments: ["session_id": .number(Double(fixture.sessionId))],
             store: fixture.store)
@@ -688,13 +697,13 @@ final class ToolsTests: XCTestCase {
     func testScreenCarriesTheSyncWatermarkWithoutASecondStatusCall() throws {
         let store = try screenStore()
 
-        let populated = try Tools.call(name: "screen", arguments: [:], store: store)
+        let populated = try toolText(name: "screen", arguments: [:], store: store)
         XCTAssertTrue(
             populated.contains("Screen synced through:"),
             "screen did not say how far the account's screen history has synced: \(populated)")
 
         // The empty answer is where it decides the meaning, so it must be there too.
-        let empty = try Tools.call(
+        let empty = try toolText(
             name: "screen",
             arguments: [
                 "since": .number(screenBase - 10 * 86_400),
@@ -710,7 +719,7 @@ final class ToolsTests: XCTestCase {
     func testRecallCarriesTheSyncWatermarkToo() throws {
         let store = try seededStore()
 
-        let text = try Tools.call(name: "recall", arguments: ["query": "pricing"], store: store)
+        let text = try toolText(name: "recall", arguments: ["query": "pricing"], store: store)
 
         XCTAssertTrue(text.contains("Screen synced through:"), text)
     }
@@ -760,13 +769,13 @@ final class ToolsTests: XCTestCase {
         let store = try seededStore()
 
         // Required argument missing: answering "no results" would tell Claude the user never said it.
-        XCTAssertThrowsError(try Tools.call(name: "recall", arguments: nil, store: store))
-        XCTAssertThrowsError(try Tools.call(name: "transcript", arguments: [:], store: store))
+        XCTAssertThrowsError(try toolText(name: "recall", arguments: nil, store: store))
+        XCTAssertThrowsError(try toolText(name: "transcript", arguments: [:], store: store))
         // Unparseable dates are an explicit error, not a silently ignored filter.
         XCTAssertThrowsError(
-            try Tools.call(
+            try toolText(
                 name: "recall", arguments: ["query": "pricing", "since": "soonish"], store: store))
-        XCTAssertThrowsError(try Tools.call(name: "no_such_tool", arguments: nil, store: store))
+        XCTAssertThrowsError(try toolText(name: "no_such_tool", arguments: nil, store: store))
     }
 
     /// A filter that is present but not a date in any reading used to return nil, which the caller
@@ -783,14 +792,14 @@ final class ToolsTests: XCTestCase {
 
         for (label, value) in wrongTypes {
             XCTAssertThrowsError(
-                try Tools.call(
+                try toolText(
                     name: "recall", arguments: ["query": "pricing", "since": value], store: store),
                 "a `since` of \(label) was dropped rather than rejected")
         }
 
         // The one shape that may still pass through: an empty string is "no filter asked for", and
         // the header then prints no range, so nothing is claimed that was not applied.
-        let unbounded = try Tools.call(
+        let unbounded = try toolText(
             name: "recall", arguments: ["query": "pricing", "since": ""], store: store)
         XCTAssertFalse(
             unbounded.split(separator: "\n").first?.lowercased().contains("since") ?? false,
@@ -1068,7 +1077,7 @@ final class ToolsTests: XCTestCase {
                     ocrText: "boston departures and fares"))
         }
 
-        let text = try Tools.call(
+        let text = try toolText(
             name: "recall", arguments: ["query": "boston", "limit": 10], store: store)
 
         XCTAssertTrue(
@@ -1117,10 +1126,13 @@ final class ToolsTests: XCTestCase {
             "conversations": ["since", "until", "limit"],
             "transcript": ["session_id"],
             "screen": ["since", "until", "app", "limit"],
+            "look": ["at", "app", "count"],
             "activity": ["since", "until"],
             "status": [],
         ]
-        let everyParameter: Set<String> = ["query", "since", "until", "limit", "minutes", "app", "session_id"]
+        let everyParameter: Set<String> = [
+            "query", "since", "until", "limit", "minutes", "app", "session_id", "at", "count",
+        ]
 
         for tool in Tools.all.map(\.name) {
             let clamped = Tools.clampToolResult(oversized, tool: tool)

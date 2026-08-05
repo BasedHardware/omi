@@ -1387,9 +1387,15 @@ enum FrameImage {
     /// `sips` takes roughly 0.15 — which is why the tiles land at 0.40/0.20/0.15/0.10 rather than at
     /// the round JPEG-shaped numbers a reader would expect. Anyone re-tuning them must re-measure.
     ///
-    /// Fidelity is the cheap side of this trade because nothing decodes these files: no MCP tool
-    /// returns pixels and the uploader sends only text. OCR reads a separate, larger image
-    /// (``ocrMaxPixelSize``) before this one is written and is untouched by the selection.
+    /// **Fidelity used to be the cheap side of this trade and no longer is.** The note here once
+    /// read "nothing decodes these files: no MCP tool returns pixels and the uploader sends only
+    /// text" — true when it was written, and false since the `look` tool started handing these
+    /// frames to Claude as images. The tile is now also the ceiling on what a model can read off a
+    /// screenshot, and small UI text is the first thing to go, so re-tuning these numbers downward
+    /// is a legibility decision as much as a storage one.
+    ///
+    /// OCR reads a separate, larger image (``ocrMaxPixelSize``) before this one is written and is
+    /// untouched by the selection.
     static func data(from image: CGImage, quality: CaptureQuality) -> Data? {
         let data = NSMutableData()
         guard

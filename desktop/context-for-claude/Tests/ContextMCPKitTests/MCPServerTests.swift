@@ -1,6 +1,8 @@
 import ContextCore
 import ContextMCPKit
+import CoreGraphics
 import Foundation
+import ImageIO
 import XCTest
 
 /// The wire protocol Claude Code and Claude Desktop speak to this binary.
@@ -125,18 +127,18 @@ final class MCPServerTests: XCTestCase {
 
     // MARK: - Tools
 
-    func testToolsListAdvertisesExactlyTheElevenTools() throws {
+    func testToolsListAdvertisesExactlyTheContractedTools() throws {
         let server = MCPServer(store: nil)
 
         let response = try XCTUnwrap(server.handle(line: request(id: 2, method: "tools/list")))
         let tools = try XCTUnwrap(try parse(response)["result"]?["tools"]?.arrayValue)
 
-        XCTAssertEqual(tools.count, 11)
+        XCTAssertEqual(tools.count, 12)
         XCTAssertEqual(
             Set(tools.compactMap { $0["name"]?.stringValue }),
             [
-                "recall", "recent", "conversations", "transcript", "screen", "activity", "status",
-                "get_memories", "create_memory", "edit_memory", "delete_memory",
+                "recall", "recent", "conversations", "transcript", "screen", "look", "activity",
+                "status", "get_memories", "create_memory", "edit_memory", "delete_memory",
             ])
         for tool in tools {
             XCTAssertNotNil(tool["description"]?.stringValue)
@@ -222,6 +224,84 @@ final class MCPServerTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    // MARK: - Pictures on the wire
+
+    /// `look` is the one tool that returns pixels, and the content array is where that either works
+    /// or silently degrades into a text-only answer the model reads as "there was no screenshot".
+    ///
+    /// The order is asserted along with the blocks. MCP's `image` block carries no timestamp and no
+    /// caption, so everything that stops a screenshot being misread — when it was taken, whether
+    /// the screen has changed since — is in the text block, and only works if the model meets it
+    /// first.
+    func testALookResultCarriesTheProseFirstAndThenTheImage() throws {
+        let store = try makeStore()
+        let framePath = try heicFixture()
+        _ = try store.insertFrame(
+            Frame(
+                capturedAt: ContextTime.now - 2, appName: "Xcode", windowTitle: "MCPServer.swift",
+                imagePath: framePath))
+
+        let response = try XCTUnwrap(server(store).handle(line: toolCall(id: 21, name: "look")))
+        let blocks = try XCTUnwrap(try parse(response)["result"]?["content"]?.arrayValue)
+
+        XCTAssertEqual(blocks.count, 2, "expected prose plus one picture: \(response)")
+        XCTAssertEqual(blocks.first?["type"]?.stringValue, "text")
+        XCTAssertEqual(blocks.last?["type"]?.stringValue, "image")
+        XCTAssertEqual(blocks.last?["mimeType"]?.stringValue, "image/jpeg")
+
+        let encoded = try XCTUnwrap(blocks.last?["data"]?.stringValue)
+        XCTAssertFalse(encoded.hasPrefix("data:"), "a data URI here is silently rejected by the client")
+        XCTAssertNotNil(Data(base64Encoded: encoded), "the image block is not base64")
+    }
+
+    /// Every other tool must keep returning exactly one text block. An empty `image` block, or a
+    /// second block carrying nothing, is the kind of change that passes every tool test and breaks
+    /// rendering in the client.
+    func testATextToolStillReturnsOneTextBlockAndNothingElse() throws {
+        let response = try XCTUnwrap(server(try makeStore()).handle(line: toolCall(id: 22, name: "status")))
+        let blocks = try XCTUnwrap(try parse(response)["result"]?["content"]?.arrayValue)
+
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks.first?["type"]?.stringValue, "text")
+    }
+
+    private func server(_ store: ContextStore) -> MCPServer {
+        MCPServer(
+            store: store,
+            // Kept out of the real support directory: the stamp exists to drive an animation in the
+            // installed app, and a test run must not light it up.
+            queryStampURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("stamp-\(UUID().uuidString).json"))
+    }
+
+    private func toolCall(id: Int, name: String) -> String {
+        #"{"jsonrpc":"2.0","id":\#(id),"method":"tools/call","params":{"name":"\#(name)","arguments":{}}}"#
+    }
+
+    /// A frame image in the format capture actually writes.
+    private func heicFixture() throws -> String {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wire-frame-\(UUID().uuidString).heic")
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+
+        let context = try XCTUnwrap(
+            CGContext(
+                data: nil, width: 48, height: 48, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        context.setFillColor(CGColor(red: 0.1, green: 0.6, blue: 0.3, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 48, height: 48))
+        let image = try XCTUnwrap(context.makeImage())
+
+        let data = NSMutableData()
+        let destination = try XCTUnwrap(
+            CGImageDestinationCreateWithData(data as CFMutableData, "public.heic" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        try (data as Data).write(to: url)
+        return url.path
+    }
 
     private func request(id: Int, method: String) -> String {
         #"{"jsonrpc":"2.0","id":\#(id),"method":"\#(method)"}"#

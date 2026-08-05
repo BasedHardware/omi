@@ -15,6 +15,37 @@ public struct ToolDefinition: Sendable {
     }
 }
 
+/// A picture in a tool result, already encoded for the wire.
+///
+/// Base64 rather than `Data` because that is the only thing MCP's `image` content block carries,
+/// and a path is deliberately not an option: the string in here is the image itself, so nothing
+/// downstream is holding a reference only this Mac can resolve.
+public struct ToolImage: Sendable, Equatable {
+    public let base64: String
+    public let mimeType: String
+
+    public init(base64: String, mimeType: String) {
+        self.base64 = base64
+        self.mimeType = mimeType
+    }
+}
+
+/// What one tool call produced: prose, and — for `look` alone — the pixels behind it.
+///
+/// The prose is never optional and never empty, including on the calls that carry an image. A
+/// picture with no sentence saying *when* it was taken and *whether the screen has changed since*
+/// is the one way this tool can mislead: a model reading a two-hour-old screenshot as the current
+/// state of an app will confidently describe a UI that no longer exists.
+public struct ToolOutput: Sendable, Equatable {
+    public var text: String
+    public var images: [ToolImage]
+
+    public init(text: String, images: [ToolImage] = []) {
+        self.text = text
+        self.images = images
+    }
+}
+
 /// Failures a tool call can report back to Claude. Every case names the offending value: a filter
 /// that was silently dropped is worse than a call that failed loudly, because Claude would then
 /// reason over the wrong slice of the user's life without knowing it.
@@ -74,6 +105,7 @@ public enum Tools {
         ),
         ToolDefinition(name: "transcript", description: transcriptDescription, inputSchema: transcriptSchema),
         ToolDefinition(name: "screen", description: screenDescription, inputSchema: screenSchema),
+        ToolDefinition(name: "look", description: lookDescription, inputSchema: lookSchema),
         ToolDefinition(name: "activity", description: activityDescription, inputSchema: activitySchema),
         ToolDefinition(name: "status", description: statusDescription, inputSchema: statusSchema),
         ToolDefinition(name: "get_memories", description: getMemoriesDescription, inputSchema: getMemoriesSchema),
@@ -82,18 +114,19 @@ public enum Tools {
         ToolDefinition(name: "delete_memory", description: deleteMemoryDescription, inputSchema: deleteMemorySchema),
     ]
 
-    /// Executes a tool and returns the text payload for the MCP content block.
+    /// Executes a tool and returns the payload for the MCP content blocks.
     ///
     /// `store` is nil when nothing has been captured on this Mac yet — which is the *normal* state
     /// five minutes after install, and no longer means the tools have nothing to say: the Omi
     /// account's own history answers most of them on its own.
-    public static func call(name: String, arguments: JSONValue?, store: ContextStore?, openError: Error? = nil) throws -> String {
+    public static func call(name: String, arguments: JSONValue?, store: ContextStore?, openError: Error? = nil) throws -> ToolOutput {
         guard all.contains(where: { $0.name == name }) else { throw ToolError.unknownTool(name) }
 
         if store == nil, let openError = openError, name != "status" {
             throw openError
         }
 
+        var images: [ToolImage] = []
         let text: String
         switch name {
         case "recall": text = try runRecall(arguments, store)
@@ -101,6 +134,7 @@ public enum Tools {
         case "conversations": text = try runConversations(arguments, store)
         case "transcript": text = try runTranscript(arguments, store)
         case "screen": text = try runScreen(arguments, store)
+        case "look": (text, images) = try runLook(arguments, store)
         case "activity": text = try runActivity(arguments, store)
         case "status": text = runStatus(store, openError)
         case "get_memories": text = try runGetMemories(arguments)
@@ -111,8 +145,10 @@ public enum Tools {
         }
         // The last thing before the transport, and deliberately here rather than in `renderMerged`:
         // Several tools render outside it and so carry no row budget of their own, and `activity`
-        // has no row limit at any layer — a ceiling only some paths respect is not a ceiling.
-        return clampToolResult(text, tool: name)
+        // has no row limit at any layer — a ceiling only some paths respect is not a ceiling. The
+        // images are not clamped here and must not be: `FrameImages` bounds each one at the encode,
+        // where dropping bytes means a smaller picture rather than half a JPEG.
+        return ToolOutput(text: clampToolResult(text, tool: name), images: images)
     }
 
     /// Carried by every clamped result, so a truncated answer cannot be read as a complete one —
@@ -151,6 +187,8 @@ public enum Tools {
             return "Ask again with a narrower `since` / `until`, or a smaller `limit`."
         case "screen":
             return "Ask again with a narrower `since` / `until`, a single `app`, or a smaller `limit`."
+        case "look":
+            return "Ask again for fewer frames, or for a single `app`."
         case "activity":
             return "Ask again with a narrower `since` / `until`."
         case "transcript":
@@ -324,6 +362,32 @@ extension Tools {
     so you never need a separate `status` call to tell an unsynced window from an idle one.
     """
 
+    static let lookDescription = """
+    Look at the user's actual screen — the real pixels, as an image you can see, from a few seconds \
+    ago. `screen` gives you the text that was on the display; this gives you the display.
+
+    **Use this whenever seeing beats being told.** They say "this looks wrong", "the spacing is \
+    off", "why does it render like that", "is this centred", "does that look right to you" — look, \
+    do not ask them to describe it or to take a screenshot. It is also how you check your own work: \
+    after you change a UI, build it, run it, and look at it. A layout you reasoned about is a \
+    guess; a layout you looked at is a fact, and this is the difference between "it should render \
+    correctly now" and knowing that it does.
+
+    Equally good for anything visual they have not narrated: a diff, a dashboard, a stack trace, a \
+    design, a spreadsheet, a device on a video call, a page mid-checkout.
+
+    `at` defaults to now and takes the same times the other tools do, so "what was on my screen at \
+    2pm" works. `app` narrows to one application's frames ("Xcode", "Safari", or a bundle id) — \
+    reach for it when the window you care about is not the one they are in front of right now.
+
+    Two things to hold on to. **The picture is the newest capture at or before that moment, not a \
+    fresh screenshot**, and every result states its age: an idle screen writes no new frame, so a \
+    frame minutes old means the screen has not changed, while a frame minutes old *after you just \
+    launched something* means capture is not keeping up — look again rather than describing stale \
+    pixels. And a frame whose text held a credential comes back with the text and no picture, on \
+    purpose; that is redaction working, not a failure.
+    """
+
     static let activityDescription = """
     Get the shape of the user's day or week on this Mac: contiguous blocks of time per app and \
     window, with totals. Local capture only — it measures attention at this machine.
@@ -451,6 +515,20 @@ extension Tools {
             "Mail". Leave it out to see everything.
             """)),
             ("limit", Schema.integer("Maximum number of screen observations, newest-first.", default: 60)),
+        ])
+    }
+
+    static var lookSchema: JSONValue {
+        Schema.object(properties: [
+            ("at", Schema.string("The moment to look at; defaults to now. \(dateHelp)")),
+            ("app", Schema.string("""
+            Optional application to look at, as macOS shows it ("Xcode", "Safari", "Figma") or as a \
+            bundle id. Leave it out for whatever was on screen.
+            """)),
+            ("count", Schema.integer("""
+            How many frames to return, newest first. Defaults to 1. Ask for 2 or 3 to see a change \
+            happen — what it looked like before and after — rather than one moment.
+            """, default: 1)),
         ])
     }
 
@@ -951,6 +1029,191 @@ extension Tools {
         }
         if let lag = omiScreenLagCaveat(until: until) { out += "\n\n" + lag }
         return out + footerBlock(failures, notes, localSearched: local.searched)
+    }
+
+    /// `look` — the newest captured frames at or before a moment, as pictures.
+    ///
+    /// Local only, and unlike every other local-only tool it cannot fall back to the account: the
+    /// Omi backend stores screen *text*, never pixels, so there is no remote half to merge. When
+    /// this Mac has nothing, the honest answer is that there is nothing to look at.
+    ///
+    /// The prose is built even when a picture is returned, and it is built first, because the two
+    /// failure modes here are both failures of framing rather than of retrieval: a stale frame read
+    /// as the live screen, and a redacted frame's pixels handed over anyway.
+    private static func runLook(_ args: JSONValue?, _ store: ContextStore?) throws -> (String, [ToolImage]) {
+        let at = try dateArg(args, "at") ?? ContextTime.now
+        let app = stringArg(args, "app")
+        // Three at most. Each image costs roughly as much of the reply as several thousand words of
+        // prose, and a fourth screenshot has never been the thing that answered the question.
+        let count = clamp(intArg(args, "count") ?? 1, 1, 3)
+
+        guard let store else { return (noLocalCaptureMessage, []) }
+
+        let frames = try RewindQueries.newestFrames(store, at: at, app: app, limit: count)
+        guard let newest = frames.first else {
+            return (nothingToLookAt(at: at, app: app, store: store), [])
+        }
+
+        var out: [String] = [headline(forFrameAt: newest.capturedAt, requestedAt: at)]
+        var images: [ToolImage] = []
+
+        for frame in frames {
+            out.append("")
+            out.append(describe(frame))
+            // Evidence the model can act on, in both directions: a picture it can read, or the
+            // reason there is none. Silence would leave "the screenshot did not arrive" and "this
+            // screen had a credential on it" looking identical.
+            if let reason = withheldReason(frame) {
+                out.append(reason)
+            } else if let image = FrameImages.modelImage(atPath: frame.imagePath) {
+                images.append(image)
+            } else {
+                out.append("""
+                _The picture for this moment is no longer on disk — the frame's own retention window \
+                has passed, or the file could not be read. The text below is what survives of it._
+                """)
+            }
+            if let text = frameText(frame) { out.append(text) }
+        }
+
+        if images.count > 1 {
+            out.append("")
+            out.append("_The images are in the same order as the moments above: newest first._")
+        }
+        return (out.joined(separator: "\n"), images)
+    }
+
+    /// The first line of a `look`, and the one that stops a stale frame being read as the live
+    /// screen. Age is always stated, in the user's own clock time and as an interval.
+    private static func headline(forFrameAt capturedAt: Double, requestedAt: Double) -> String {
+        let age = max(0, requestedAt - capturedAt)
+        let clock = clockFormatter.string(from: Date(timeIntervalSince1970: capturedAt))
+        // Two thresholds, and the gap between them is the honest one. Under a minute is "now" at a
+        // 3-second capture cadence. Past `idleFrameGrace` an unchanged screen has genuinely stopped
+        // producing frames, so the reader is told what old actually means here rather than left to
+        // assume the capture failed.
+        if age < 60 {
+            return "**The user's screen at \(clock)** — \(describeAge(age)), effectively live."
+        }
+        if age < idleFrameGrace {
+            return """
+            **The user's screen at \(clock)** — \(describeAge(age)). Capture writes a frame only \
+            when the screen changes, so this is very likely still what is in front of them.
+            """
+        }
+        return """
+        **The user's screen at \(clock)** — \(describeAge(age)), which is the newest frame there \
+        is. Either nothing on screen has changed since then, or screen capture stopped: `status` \
+        is what tells those apart. Do not describe this as the current state of anything you have \
+        just changed — look again first.
+        """
+    }
+
+    /// Past this, "the screen has not changed" stops being the obvious reading of an old frame.
+    ///
+    /// Ten minutes is well beyond any capture hiccup at a 3-second cadence, and well inside how
+    /// long a person legitimately sits on one unchanged window while reading.
+    static let idleFrameGrace: Double = 600
+
+    private static func describeAge(_ seconds: Double) -> String {
+        let whole = Int(seconds.rounded())
+        if whole < 2 { return "captured just now" }
+        if whole < 90 { return "captured \(whole) seconds ago" }
+        let minutes = Int((seconds / 60).rounded())
+        if minutes < 90 { return "captured \(number(minutes)) minutes ago" }
+        let hours = Int((seconds / 3600).rounded())
+        if hours < 36 { return "captured \(number(hours)) hours ago" }
+        return "captured \(number(Int((seconds / 86400).rounded()))) days ago"
+    }
+
+    private static func describe(_ frame: RewindFrame) -> String {
+        let clock = clockFormatter.string(from: Date(timeIntervalSince1970: frame.capturedAt))
+        let title = frame.windowTitle.flatMap(nonEmpty).map { " — \"\(collapse($0))\"" } ?? ""
+        return "**\(clock) · \(frame.appName)\(title)**"
+    }
+
+    /// Why this frame's picture is not attached, or nil when it is.
+    ///
+    /// **The one rule that makes serving pixels safe.** Capture scrubs credential-shaped values out
+    /// of a frame's text before storing it (`Redaction.scrub`), but the screenshot beside that text
+    /// still shows the token in full — the scrub has never touched pixels, because until `look`
+    /// nothing decoded them. So the marker left behind by the scrub is read back as evidence: a
+    /// frame whose text was redacted is a frame whose picture would leak exactly what the redaction
+    /// removed, and it is withheld. The text still goes back, so the moment is not lost.
+    private static func withheldReason(_ frame: RewindFrame) -> String? {
+        let sawCredential = [frame.ocrText, frame.axText]
+            .compactMap { $0 }
+            .contains { $0.contains(Redaction.marker) }
+        guard sawCredential else { return nil }
+        return """
+        _No picture for this moment: a credential was visible on this screen and was redacted out of \
+        the text below. The screenshot would show it in full, so it is withheld. This is redaction \
+        working — say so rather than reporting a failed capture._
+        """
+    }
+
+    /// The frame's own text, kept under the picture rather than instead of it.
+    ///
+    /// Both columns, in the order they are trustworthy: the accessibility text is exact where it
+    /// exists, OCR sees everything drawn and guesses. Bounded hard, because the picture is the
+    /// answer here and the text is the caption — an unbounded OCR dump would spend the reply that
+    /// the image needs.
+    private static func frameText(_ frame: RewindFrame) -> String? {
+        let joined = [frame.axText, frame.ocrText]
+            .compactMap { $0.flatMap(nonEmpty) }
+            .joined(separator: "\n")
+        guard let text = nonEmpty(joined) else { return nil }
+        let bounded = text.count > lookTextBudget
+            ? String(text.prefix(lookTextBudget)) + "…"
+            : text
+        return "```\n\(bounded)\n```"
+    }
+
+    /// Characters of frame text carried under one picture.
+    static let lookTextBudget = 1_500
+
+    /// What `look` says when there is no frame to look at — which is a different fact depending on
+    /// why, and saying the wrong one tells the user their screen was never recorded when the truth
+    /// is that they asked about a Tuesday before they installed the app.
+    private static func nothingToLookAt(at: Double, app: String?, store: ContextStore) -> String {
+        let moment = ContextTime.describe(at)
+        let scope = app.map { " from \($0)" } ?? ""
+        var out = "No screen capture\(scope) exists at or before \(moment)."
+
+        // Named with the time of the frame that *does* exist, rather than asserting the screen was
+        // being captured "then". Some frame at or before the moment asked for is only evidence that
+        // capture reached that far back — on a Mac whose screen grant died three days ago it is the
+        // three-day-old frame answering, and a sentence implying live capture would be wrong.
+        if let app, let anyFrame = try? RewindQueries.newestFrames(store, at: at, app: nil, limit: 1).first {
+            out += """
+             The newest frame from any app at or before then is \
+            \(ContextTime.describe(anyFrame.capturedAt)) — \(anyFrame.appName) — so it is the `app` \
+            filter that matched nothing here, not the recording. \(app) either was not on screen or \
+            is named differently on this Mac. Look again without the filter.
+            """
+            return out
+        }
+
+        // The heartbeat is the only thing that can tell "the screen is not being recorded right
+        // now" from "this moment predates the recording", and it is a fact about the app rather
+        // than about the user — so it is worth a sentence before any conclusion is drawn. It is an
+        // *addition* to the closing caveat below, never a substitute: whichever branch produced the
+        // empty answer, "not recorded" is the reading that must survive it.
+        if let state = CaptureState.read(), !state.isStale,
+           let screen = state.stream(StreamName.screen), !screen.state.isLive {
+            out += """
+             Screen capture is currently **\(screen.state.rawValue)**\
+            \(screen.detail.flatMap(nonEmpty).map { " — \($0)" } ?? ""), so this is very likely a \
+            gap in the recording rather than an idle screen.
+            """
+        }
+
+        out += """
+         Frames older than the retention window are deleted while their text survives, and nothing \
+        before the app was installed was ever captured — so this is "not recorded", never "nothing \
+        was on screen". `screen` and `activity` may still hold the text and the shape of that time.
+        """
+        return out
     }
 
     private static func runActivity(_ args: JSONValue?, _ store: ContextStore?) throws -> String {

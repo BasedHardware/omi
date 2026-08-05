@@ -1,13 +1,18 @@
 import Foundation
 import GRDB
 
-/// The reads the Rewind timeline window performs, and the only place `frames.imagePath` is
-/// selected.
+/// The reads that need the picture, and the only place `frames.imagePath` is selected.
 ///
 /// `Queries` deliberately never returns an image path: every one of its results is destined for a
 /// language model over MCP, and a filesystem path is neither answerable nor safe to hand over. The
-/// timeline is the one consumer that needs the pixels, so it gets its own entry point rather than a
-/// flag threaded through the MCP shapes.
+/// consumers that need the pixels get their own entry points here rather than a flag threaded
+/// through the MCP shapes.
+///
+/// There are two of them, and the distinction the rule turns on is *path versus pixels*, not
+/// *local versus model*. The Rewind timeline draws the file directly. The `look` tool decodes it
+/// and sends the image itself, which is why it may read from here — what it must never do, and
+/// what a path on a `Hit` would let it do by accident, is hand Claude a string only this Mac can
+/// resolve.
 ///
 /// **Whole days are read at once, and nothing is sampled.** A day of capture is ~1,500 rows and a
 /// `RewindFrame` is a handful of pointers, so the entire day fits in memory with room to spare; the
@@ -140,6 +145,52 @@ public enum RewindQueries {
         }
     }
 
+    /// The newest showable frames at or before `instant`, newest first, optionally one app only.
+    ///
+    /// The read behind the `look` tool: "show me the screen" is a lookup backwards from a moment,
+    /// never a scan forwards, because the newest frame at or before *now* is the closest thing to
+    /// what is on the display this second. A frame *after* `instant` is deliberately unreachable —
+    /// answering "what did it look like at 2pm" with a 2:40pm picture is not a slightly stale
+    /// answer, it is a different question.
+    ///
+    /// `app` matches the display name or the bundle id, case-insensitively and by prefix, so
+    /// `"Xcode"`, `"xcode"` and `"com.apple.dt.Xcode"` all find the same frames. Callers pass what
+    /// a person would type.
+    ///
+    /// Lives in this file for the reason stated at the top of it: this is still the only module
+    /// that selects `frames.imagePath`. What the `look` tool does with the path is convert the file
+    /// into pixels — the path itself never reaches a tool result.
+    public static func newestFrames(
+        _ store: ContextStore,
+        at instant: Double,
+        app: String? = nil,
+        limit: Int = 1
+    ) throws -> [RewindFrame] {
+        guard limit > 0 else { return [] }
+
+        var conditions = ["imagePath IS NOT NULL", "capturedAt <= ?"]
+        var scope: [(any DatabaseValueConvertible)?] = [instant]
+        if let app, !app.trimmingCharacters(in: .whitespaces).isEmpty {
+            conditions.append("(appName LIKE ? OR bundleId LIKE ?)")
+            let prefix = app.trimmingCharacters(in: .whitespaces) + "%"
+            scope += [prefix, prefix]
+        }
+
+        return try store.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT id, capturedAt, appName, bundleId, windowTitle, ocrText, axText, imagePath
+                    FROM frames
+                    WHERE \(conditions.joined(separator: " AND "))
+                    ORDER BY capturedAt DESC, id DESC
+                    LIMIT ?
+                    """,
+                arguments: StatementArguments(scope + [limit])
+            ).compactMap(RewindFrame.init)
+        }
+    }
+
     /// The span the timeline may travel over, or nil when nothing showable was ever captured.
     ///
     /// Bounded to frames that have an image, for the same reason `frames` is: a date picker that
@@ -207,6 +258,14 @@ public struct RewindFrame: Sendable, Equatable, Identifiable {
     public let bundleId: String?
     public let windowTitle: String?
     public let ocrText: String?
+    /// The focused window's accessibility text, as `Frame.axText` holds it.
+    ///
+    /// Carried here because the two text columns fail in opposite directions and the `look` tool
+    /// reads both: OCR sees everything drawn and guesses at it, accessibility is exact and covers
+    /// only what the app chose to expose. It is also half of the redaction evidence — a credential
+    /// `Redaction.scrub` caught may have been caught in either column, and the picture must be
+    /// withheld if it was caught in *either*.
+    public let axText: String?
     /// Absolute path to the stored HEIC. Non-optional by construction: a row without one is not a
     /// `RewindFrame`, so no display path has to defend against a missing picture.
     public let imagePath: String
@@ -218,6 +277,7 @@ public struct RewindFrame: Sendable, Equatable, Identifiable {
         bundleId: String? = nil,
         windowTitle: String? = nil,
         ocrText: String? = nil,
+        axText: String? = nil,
         imagePath: String
     ) {
         self.id = id
@@ -227,6 +287,7 @@ public struct RewindFrame: Sendable, Equatable, Identifiable {
         self.bundleId = RewindFrame.nonEmpty(bundleId)
         self.windowTitle = RewindFrame.nonEmpty(windowTitle)
         self.ocrText = ocrText
+        self.axText = axText
         self.imagePath = imagePath
     }
 
@@ -245,6 +306,10 @@ public struct RewindFrame: Sendable, Equatable, Identifiable {
             bundleId: row["bundleId"],
             windowTitle: row["windowTitle"],
             ocrText: row["ocrText"],
+            // Absent from the timeline's own SELECT, and `Row` returns nil rather than throwing for
+            // a column that was not fetched — so a query that does not need the accessibility text
+            // does not pay to read it, and one that does gets it by naming it.
+            axText: row["axText"],
             imagePath: path)
     }
 
