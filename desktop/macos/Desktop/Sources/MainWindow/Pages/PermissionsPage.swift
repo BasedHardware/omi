@@ -179,8 +179,7 @@ struct MicrophonePermissionSection: View {
       // Expanded content - different for denied vs not determined
       if isExpanded && !appState.hasMicrophonePermission {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           if isPermissionDenied {
             // DENIED STATE - Show reset options
@@ -490,8 +489,7 @@ struct ScreenRecordingPermissionSection: View {
       // Expanded content
       if isExpanded && (!appState.hasScreenRecordingPermission || appState.isScreenRecordingStale) {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           if appState.isScreenRecordingStale {
             // STALE STATE - developer signing changed, user must toggle off/on
@@ -757,8 +755,7 @@ struct SystemAudioPermissionSection: View {
 
       if isExpanded {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           expandedContent
         }
@@ -960,8 +957,7 @@ struct NotificationPermissionSection: View {
       // Expanded content
       if isExpanded && !appState.hasNotificationPermission {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           if isPermissionDenied {
             // DENIED STATE - Show settings instructions

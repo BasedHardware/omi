@@ -203,7 +203,7 @@ extension SettingsContentView {
           }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
-            Divider()
+            GlassSeparator()
 
             HStack {
               Image(systemName: "checkmark.circle.fill")
@@ -384,7 +384,7 @@ extension SettingsContentView {
 
           // Project CLAUDE.md (only show if workspace is set)
           if !aiChatWorkingDirectory.isEmpty {
-            Divider().opacity(0.3)
+            GlassSeparator()
 
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               HStack {
@@ -572,8 +572,7 @@ extension SettingsContentView {
                   .padding(.horizontal, OmiSpacing.xxs)
 
                   if item.offset != filteredSkills.last?.offset {
-                    Divider()
-                      .opacity(0.3)
+                    GlassSeparator()
                   }
                 }
               }
@@ -773,7 +772,7 @@ extension SettingsContentView {
       }
       .padding(OmiSpacing.lg)
 
-      Divider().opacity(0.3)
+      GlassSeparator()
 
       // Content
       ScrollView {

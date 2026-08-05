@@ -28,8 +28,7 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
 
           if notificationsEnabled {
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             notificationFrequencySlider(settingId: "notifications.frequency")
 
@@ -49,6 +48,8 @@ extension SettingsContentView {
                 }
             }
 
+            GlassSeparator()
+
             settingRow(
               title: "Focus Notifications", subtitle: "Show notification on focus changes",
               settingId: "notifications.focus"
@@ -63,6 +64,8 @@ extension SettingsContentView {
                       focus: FocusSettingsResponse(notificationsEnabled: newValue)))
                 }
             }
+
+            GlassSeparator()
 
             settingRow(
               title: "Task Notifications",
@@ -80,6 +83,8 @@ extension SettingsContentView {
                 }
             }
 
+            GlassSeparator()
+
             settingRow(
               title: "Insight Notifications",
               subtitle: "Show notification when an insight is generated",
@@ -95,6 +100,8 @@ extension SettingsContentView {
                       insight: InsightSettingsResponse(notificationsEnabled: newValue)))
                 }
             }
+
+            GlassSeparator()
 
             settingRow(
               title: "Memory Notifications",
@@ -136,8 +143,7 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
 
           if dailySummaryEnabled {
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             settingRow(
               title: "Summary Time", subtitle: "When to send your daily summary",
@@ -183,7 +189,7 @@ extension SettingsContentView {
             updateRecordingPermission(newValue)
           }
 
-          Divider()
+          GlassSeparator()
 
           privacyToggleRow(
             icon: "cloud.fill",

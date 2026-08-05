@@ -132,10 +132,79 @@ final class GlassButtonPrimitiveTests: XCTestCase {
     XCTAssertLessThan(OmiButtonStyle.minHeight(.compact), OmiButtonStyle.minHeight(.regular))
   }
 
-  func testDisabledIsOneOpacityRatherThanASecondPalette() {
-    // A greyed-out fill and a greyed-out label are two more contrast pairs to keep true, and neither
-    // says anything the dimming does not.
-    XCTAssertEqual(OmiButtonStyle.disabledOpacity, 0.45)
+  // MARK: - The second failure: a disabled button that is a smudge rather than a button that is off
+
+  /// The disabled label has to be readable **on the disabled fill**, which is the pair the retired
+  /// single-opacity model could not keep: dimming the whole control composites its fill and its
+  /// label toward the same panel, so the two converge on it.
+  ///
+  /// 4.5:1 and not the 3:1 used above, because unlike the enabled kinds — where `systemRed` is a
+  /// hue the palette does not get to choose and which sets the floor at 3.55:1 — this style picks
+  /// *both* sides of the disabled pair outright. Nothing forces it under the bar WCAG 2.2 SC 1.4.3
+  /// sets for text at this size (a 13 pt semibold label is not "large text": that needs 18 pt, or
+  /// 14 pt bold).
+  func testADisabledButtonKeepsItsLabelLegibleOnItsOwnFill() {
+    let ratio = contrast(resolved(OmiButtonStyle.disabledLabel), resolved(OmiButtonStyle.disabledFill))
+    XCTAssertGreaterThanOrEqual(
+      ratio, 4.5,
+      """
+      The disabled button draws its label at \(String(format: "%.2f", ratio)):1 on its own fill. \
+      This is what "Check Now" on Settings → About looked like: a grey pill with grey words on it.
+      """
+    )
+  }
+
+  /// The witness that keeps the bar above from being vacuous: the model that shipped.
+  ///
+  /// `opacity(0.45)` over the whole control, recomputed here as the composite it actually produced
+  /// on the light-pinned panel. Every kind lands under 4.5:1 — the filled ones because the white
+  /// label cannot dim away from a panel that is already white, `.secondary` because it has no fill
+  /// to separate from at all. Written as the arithmetic rather than as a remembered number so that
+  /// a future palette change re-derives it instead of inheriting it.
+  func testTheRetiredSingleOpacityModelFailedThatBarForEveryKind() {
+    let retiredDisabledOpacity: CGFloat = 0.45
+    let panel = resolved(Ink.surface)
+
+    for kind in OmiButtonStyle.Kind.allCases {
+      let label = dim(resolved(OmiButtonStyle.label(kind)), by: retiredDisabledOpacity, over: panel)
+      // `.secondary` has no fill of its own, so what its label dimmed against was the panel.
+      let ground =
+        kind == .secondary
+        ? panel
+        : dim(resolved(OmiButtonStyle.fill(kind, pressed: false)), by: retiredDisabledOpacity, over: panel)
+
+      XCTAssertLessThan(
+        contrast(label, ground), 4.5,
+        """
+        A single \(retiredDisabledOpacity) opacity now clears the disabled bar for \(kind), so the \
+        palette moved and the assertion above has stopped meaning anything. Re-derive it.
+        """
+      )
+    }
+  }
+
+  func testADisabledButtonIsStillDrawnAsAButton() {
+    // A button is a shape before it is a label. The enabled `.primary` is a filled capsule and the
+    // enabled `.secondary` is an outlined one; whichever it was, the disabled state keeps an
+    // outline, which is the part that still says "control" once the fill has gone inert.
+    XCTAssertEqual(OmiButtonStyle.disabledBorder, Ink.hairline)
+    XCTAssertNotEqual(OmiButtonStyle.disabledBorder, Color.clear)
+
+    // …and it has to *read* as off, so every kind's live state has to differ from it. Two branches
+    // of a state ternary that resolve to the same colour are a state that was never drawn.
+    for kind in OmiButtonStyle.Kind.allCases {
+      XCTAssertNotEqual(
+        OmiButtonStyle.fill(kind, pressed: false), OmiButtonStyle.disabledFill,
+        "\(kind) fills the same enabled and disabled")
+    }
+    XCTAssertNotEqual(OmiButtonStyle.label(.primary), OmiButtonStyle.disabledLabel)
+    XCTAssertNotEqual(OmiButtonStyle.label(.secondary), OmiButtonStyle.disabledLabel)
+  }
+
+  func testTheDisabledLabelStaysOnARungGlassIsAllowedToUse() {
+    // Glass carries two rungs (see `Ink.tertiary`): the obvious "just set it fainter" fix for a
+    // disabled label is the one rung that measures under AA on this panel.
+    XCTAssertNotEqual(OmiButtonStyle.disabledLabel, Ink.tertiary)
     XCTAssertLessThan(OmiButtonStyle.pressedFillOpacity, 1.0)
   }
 
@@ -174,6 +243,12 @@ final class GlassButtonPrimitiveTests: XCTestCase {
       out = ground.blended(withFraction: raw.alphaComponent, of: raw.withAlphaComponent(1)) ?? raw
     }
     return out
+  }
+
+  /// What `.opacity(alpha)` on a whole control produced: the already-resolved colour composited
+  /// again, this time onto the panel the control sits on.
+  private func dim(_ color: NSColor, by alpha: CGFloat, over ground: NSColor) -> NSColor {
+    ground.blended(withFraction: alpha, of: color) ?? color
   }
 
   private func luminance(_ color: NSColor) -> Double {

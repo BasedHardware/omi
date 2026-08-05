@@ -65,8 +65,7 @@ extension SettingsContentView {
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           // List of excluded apps
           if rewindSettings.excludedApps.isEmpty {
@@ -84,20 +83,25 @@ extension SettingsContentView {
               Spacer()
             }
           } else {
-            LazyVStack(spacing: OmiSpacing.sm) {
-              ForEach(Array(rewindSettings.excludedApps).sorted(), id: \.self) { appName in
+            // A rule between rows rather than a gap between them. A column of thirty app names on
+            // one card ran together at `OmiSpacing.sm`: nothing said where one row ended, so it
+            // read as a block of text with icons in it. The inset hairline is what makes it a list.
+            let excluded = Array(rewindSettings.excludedApps).sorted()
+            LazyVStack(spacing: 0) {
+              ForEach(excluded, id: \.self) { appName in
+                if appName != excluded.first { SettingsRowDivider() }
                 ExcludedAppRow(
                   appName: appName,
                   onRemove: {
                     rewindSettings.includeApp(appName)
                   }
                 )
+                .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
               }
             }
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           // Add app section
           AppRuleEditorView(

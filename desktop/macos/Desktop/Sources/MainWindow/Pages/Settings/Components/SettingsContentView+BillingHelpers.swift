@@ -327,10 +327,20 @@ extension SettingsContentView {
     VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-          Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
-            .scaledFont(size: OmiType.micro, weight: .bold)
-            .foregroundColor(accent)
-            .tracking(0.8)
+          // The tint is the disc, not the word — the same measurement `SettingsStatusChip`
+          // documents. These are *named system colours* on a light panel: `systemGreen` sets a
+          // 10 pt bold eyebrow at ≈1.6:1 against this card and `systemBlue` at ≈2.4:1, so the
+          // plan's colour was there and the plan's name could not be read. Moving the hue to a
+          // 6 pt disc keeps the tier legible at a glance *and* legible as words.
+          HStack(spacing: 5) {
+            Circle()
+              .fill(accent)
+              .frame(width: 6, height: 6)
+            Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
+              .scaledFont(size: OmiType.micro, weight: .bold)
+              .foregroundColor(Ink.secondary)
+              .tracking(0.8)
+          }
 
           Text(plan.title)
             .scaledFont(size: OmiType.heading, weight: .bold)
@@ -345,16 +355,20 @@ extension SettingsContentView {
 
         Spacer()
 
+        // Selection is carried by the tile's own fill and border, so the price does not also change
+        // colour to say it. The selected branch of both of these used to tint the copy — and at
+        // `accent.opacity(0.8)` on a selected card that was the faintest text on the pane, i.e. the
+        // state that most wanted reading was the one hardest to read.
         VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
           Text(planSummaryText(for: plan))
             .scaledFont(size: OmiType.subheading, weight: .bold)
-            .foregroundColor(isSelected ? accent : Ink.primary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
 
           Text("starting price")
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(isSelected ? accent.opacity(0.8) : Ink.secondary)
+            .foregroundColor(Ink.secondary)
         }
         .fixedSize(horizontal: true, vertical: false)
       }
@@ -370,9 +384,11 @@ extension SettingsContentView {
               Circle()
                 .fill(accent.opacity(0.16))
                 .frame(width: 18, height: 18)
+              // The disc carries the tint; the mark on it is ink. A `systemGreen` glyph on a 16%
+              // `systemGreen` disc is the same sub-2:1 pair the eyebrow had.
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.micro, weight: .bold)
-                .foregroundColor(accent)
+                .foregroundColor(Ink.primary)
             }
             Text(feature)
               .scaledFont(size: OmiType.body, weight: .medium)
@@ -382,8 +398,7 @@ extension SettingsContentView {
       }
 
       if isSelected && canPurchase {
-        Divider()
-          .overlay(Ink.hairline)
+        GlassSeparator()
 
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -462,11 +477,14 @@ extension SettingsContentView {
         HStack {
           Text("Current Plan")
             .scaledFont(size: OmiType.caption, weight: .bold)
+            .foregroundColor(Ink.primary)
           Spacer()
+          // The glyph keeps the tint — it is a graphical object, which is a 3:1 bar rather than a
+          // 4.5:1 one — and the words next to it stop being set in a hue that cannot clear either.
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: OmiType.caption)
+            .foregroundColor(accent)
         }
-        .foregroundColor(accent)
         .padding(.vertical, OmiSpacing.sm)
       } else {
         Button(action: {
@@ -486,13 +504,17 @@ extension SettingsContentView {
     }
     .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, alignment: .leading)
+    // The tile is now the pane's *only* card here rather than content inside one, so at rest it is
+    // exactly the card every other pane draws — `Ink.rowFill` behind an `Ink.separator` hairline.
+    // It was `Ink.wash` behind `Ink.hairline`, which are the well and control-outline tokens: right
+    // for something sitting on a card, a shade too heavy once it *is* the card.
     .background(
       RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
-        .fill(isSelected ? accent.opacity(0.12) : Ink.wash)
+        .fill(isSelected ? accent.opacity(0.12) : Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
             .stroke(
-              isSelected ? accent.opacity(0.85) : Ink.hairline,
+              isSelected ? accent.opacity(0.85) : Ink.separator,
               lineWidth: isSelected ? 1.5 : 1)
         )
     )

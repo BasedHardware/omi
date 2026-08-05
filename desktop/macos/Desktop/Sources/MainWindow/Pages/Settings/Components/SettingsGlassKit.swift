@@ -138,11 +138,19 @@ struct SettingsKeyHint: View {
   }
 }
 
-/// The hairline between two rows in a card, inset so it starts where the copy does.
+/// The hairline between two rows in a card, inset so it starts where the copy does rather than
+/// running under the icon tile.
+///
+/// It is `GlassSeparator` (`GlassContentChrome.swift`) with an inset, and **not** a `Divider`,
+/// because a `Divider` in this design system cannot be given the system's colour: the twenty-eight
+/// rules that used to be spelled `Divider().background(Ink.hairline)` were all silently drawing the
+/// untinted system separator. `.background` paints *behind* the line a `Divider` draws rather than
+/// through it, so the tint never reached a pixel while the call site read, at a glance, like a
+/// deliberate choice. A `Rectangle` filled with `Ink.separator` has no such gap between what it says
+/// and what it draws, which is the whole reason to have one shared word for a rule.
 struct SettingsRowDivider: View {
   var body: some View {
-    Divider()
-      .overlay(Ink.separator)
+    GlassSeparator()
       .padding(.leading, SettingsGlassMetrics.rowDividerInset)
   }
 }

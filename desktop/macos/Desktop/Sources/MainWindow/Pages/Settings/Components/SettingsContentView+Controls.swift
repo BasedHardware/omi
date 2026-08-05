@@ -505,8 +505,7 @@ extension SettingsContentView {
             Spacer()
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           // Links
           linkRow(title: "What's New", url: AppBuild.changelogURLString)
@@ -607,8 +606,7 @@ extension SettingsContentView {
             .cornerRadius(SettingsGlassMetrics.controlRadius)
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           settingRow(
             title: "Automatic Updates",
@@ -650,8 +648,7 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           settingRow(
             title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
@@ -763,6 +760,27 @@ extension SettingsContentView {
       } else {
         card
       }
+    }
+  }
+
+  /// A block that is deep-linkable but is **not** a card — because its content already is one.
+  ///
+  /// `settingsCard` bundles two things a call site usually wants together: the card chrome, and the
+  /// `settingId` anchor that search and deep links resolve against. When the content is itself a row
+  /// of cards — the plan chooser, whose tiles carry their own fill, radius and selected border — the
+  /// first is a second ground stacked on the first and the second is still needed. This is the half
+  /// of `settingsCard` that survives that split, so a `settingId` never has to be dropped or renamed
+  /// to get out of a card.
+  @ViewBuilder
+  func settingsGroup<Content: View>(
+    settingId: String? = nil, @ViewBuilder content: () -> Content
+  ) -> some View {
+    let group = content().frame(maxWidth: .infinity, alignment: .leading)
+    if let settingId = settingId {
+      group.modifier(
+        SettingHighlightModifier(settingId: settingId, highlightedSettingId: $highlightedSettingId))
+    } else {
+      group
     }
   }
 

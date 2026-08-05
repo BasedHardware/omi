@@ -39,8 +39,7 @@ extension SettingsContentView {
             .disabled(isDeletingAccount)
           }
 
-          Divider()
-            .overlay(Ink.hairline)
+          GlassSeparator()
 
           HStack(alignment: .center, spacing: OmiSpacing.lg) {
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
@@ -162,7 +161,7 @@ extension SettingsContentView {
             .frame(width: 32, height: 32)
           }
 
-          Divider().overlay(Ink.hairline)
+          GlassSeparator()
 
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Included in your trial")
@@ -198,7 +197,7 @@ extension SettingsContentView {
             Spacer()
           }
 
-          Divider().overlay(Ink.hairline)
+          GlassSeparator()
 
           Button(action: {
             selectedPlanIdForCheckout = "operator"
@@ -304,8 +303,7 @@ extension SettingsContentView {
           }
 
           if let periodText = currentPlanPeriodText {
-            Divider()
-              .overlay(Ink.hairline)
+            GlassSeparator()
 
             Text(periodText)
               .scaledFont(size: OmiType.caption)
@@ -354,14 +352,17 @@ extension SettingsContentView {
       }
 
       if shouldShowPlanPurchaseOptions {
-        settingsCard(settingId: "planusage.purchase") {
-          VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-            // All plan cards share the row width — no horizontal scrolling.
-            HStack(alignment: .top, spacing: OmiSpacing.lg) {
-              ForEach(subscriptionPlansForDisplay) { plan in
-                subscriptionPlanCard(plan)
-                  .frame(maxWidth: .infinity, alignment: .topLeading)
-              }
+        // Deliberately a `settingsGroup` and not a `settingsCard`: each plan tile draws its own
+        // fill, corner and selected border, so wrapping the row in a card put a card inside a card
+        // — two grounds, two radii and two borders for one block of content, against the one-card
+        // recipe every other pane follows. The tiles *are* the cards; the group only carries the
+        // `settingId` so the deep link still lands.
+        settingsGroup(settingId: "planusage.purchase") {
+          // All plan cards share the row width — no horizontal scrolling.
+          HStack(alignment: .top, spacing: OmiSpacing.lg) {
+            ForEach(subscriptionPlansForDisplay) { plan in
+              subscriptionPlanCard(plan)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
           }
         }
@@ -463,7 +464,7 @@ extension SettingsContentView {
           .fixedSize(horizontal: false, vertical: true)
 
         if let info = overageInfo, info.isOveragePlan {
-          Divider().overlay(Ink.hairline)
+          GlassSeparator()
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Your current cycle")
               .scaledFont(size: OmiType.subheading, weight: .semibold)

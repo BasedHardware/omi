@@ -17,7 +17,22 @@ enum ChatPromptTimelineMetrics {
   static let hoveredWidth: CGFloat = 26
   static let markHeight: CGFloat = 2
 
-  static let restOpacity: Double = 0.18
+  /// A mark nobody is pointing at is a **hairline**, and this is the alpha that makes that literal
+  /// rather than aspirational.
+  ///
+  /// The rail's ink is `Ink.primary`, which on the light-pinned panel is near-black. At the 0.18
+  /// this was tuned to on the dark palette — where the same alpha of a near-*white* ink barely lifts
+  /// off the surface — a resting mark composites nearly twice as dark as `Ink.separator`, the token
+  /// this app draws actual rules with. A hundred of those down the gutter is not a hairline: it is a
+  /// dashed second scrollbar beside the real one, which is the exact thing the file's own doc
+  /// comment says the rail must never become.
+  ///
+  /// So it is pinned to the app's rule weight instead of picked by eye — `separatorColor` is 0.098
+  /// alpha in both appearances, and `ChatPromptTimelineTests` asserts a resting mark is no heavier
+  /// than that. The reach still reads, and it reads *more*: the step from rest to proximity is now
+  /// five-fold rather than under three-fold, so the marks the cursor lifts separate further from the
+  /// ones it does not.
+  static let restOpacity: Double = 0.098
   static let proximityOpacity: Double = 0.5
   static let hoveredOpacity: Double = 0.95
   /// The mark being read is lit, not sized. Growing it would mean the rail

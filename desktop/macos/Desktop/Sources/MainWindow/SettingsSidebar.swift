@@ -325,7 +325,34 @@ struct SettingsSearchItem: Identifiable {
 }
 
 enum SettingsSidebarMetrics {
-  static let expandedWidth: CGFloat = 260
+  /// The settings sidebar is a **table of contents**, not a content column.
+  ///
+  /// It was 260 — the width of the app's *main* sidebar, which carries conversation titles and has
+  /// something to do with the room. Nine section names do not, and that width spent the difference
+  /// on whitespace to the right of "About" while the pane beside it is the thing anyone reads.
+  ///
+  /// The value is **derived from the longest label rather than chosen**, because this row truncates
+  /// (`lineLimit(1)`, `.tail`) and a truncated item in a table of contents is worse than a wide one.
+  /// "Notifications & Privacy" needs 196 pt including its fixtures — the icon column, the gap after
+  /// it and the row's two side paddings — measured through the real font by
+  /// `SettingsSidebarItemLayoutTests`, at the *selected* weight, which is the wider of the two.
+  ///
+  /// The two numbers below the floor were both tried on a build and both truncated:
+  ///
+  /// - **196**, the settings kit's nominal width, renders "Notifications & P…".
+  /// - **216**, which clears the 196 pt requirement by 4 pt on paper, still renders
+  ///   "Notifications & Priva…" — a bare fit is not a fit once the scroll container and subpixel
+  ///   rounding have taken their share.
+  ///
+  /// So the width carries **`labelSlack`** rather than trusting the arithmetic to the last point,
+  /// and the guard test asserts the slack rather than the fit. 232 is still 28 pt narrower than the
+  /// 260 this started at, which was the app's *main* sidebar width — that one carries conversation
+  /// titles and has something to do with the room; nine section names do not.
+  static let expandedWidth: CGFloat = 232
+
+  /// Headroom over the measured label requirement. See `expandedWidth`: a zero-slack fit truncated
+  /// on a real build, so the fit is held open by this rather than by luck.
+  static let labelSlack: CGFloat = 12
   static let horizontalInset: CGFloat = OmiSpacing.sm
   static let itemAvailableWidth = expandedWidth - 2 * horizontalInset
 }
@@ -553,7 +580,10 @@ struct SettingsSidebarItem: View {
         EmptyView()
       } else {
         Button(action: onTap) {
-          HStack(spacing: OmiSpacing.md) {
+          // The settings kit's row metrics rather than generic spacing tokens, so a row in the
+          // table of contents and a row in the pane beside it are the same object at the same
+          // rhythm — and so the narrower sidebar keeps the longest label off its own edge.
+          HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
             Image(systemName: icon)
               .scaledFont(size: OmiType.subheading)
               .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
@@ -566,10 +596,10 @@ struct SettingsSidebarItem: View {
               .truncationMode(.tail)
               .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 0)
           }
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.md)
+          .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
+          .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
           .contentShape(Rectangle())
           .background(
             // Selection is the one thing on this pane that is actionable and is not already a

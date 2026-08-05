@@ -499,6 +499,46 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
     }
   }
 
+  /// A resting mark is a hairline, measured against the app's own rule weight rather than judged.
+  ///
+  /// The rail draws in `Ink.primary`, which is near-black on the light-pinned panel, so its resting
+  /// alpha *is* how heavy the mark looks. At the 0.18 this was tuned to on the dark palette it
+  /// composited nearly twice as dark as a real separator, and a hundred of them down the gutter read
+  /// as a dashed second scrollbar — the one thing the rail's doc comment says it must not be.
+  ///
+  /// `separatorColor` is the external anchor: it is AppKit's own answer to "how heavy is a rule",
+  /// it is 0.098 alpha in both appearances, and it moves if Apple moves it.
+  func testARestingMarkIsNoHeavierThanTheAppsOwnRule() {
+    let separatorAlpha = Double(
+      (NSColor.separatorColor.usingColorSpace(.sRGB) ?? .black).alphaComponent)
+
+    XCTAssertLessThanOrEqual(
+      ChatPromptTimelineMetrics.restOpacity, separatorAlpha + 0.001,
+      """
+      A resting mark draws at \(ChatPromptTimelineMetrics.restOpacity) of near-black against a rule \
+      weight of \(separatorAlpha). That is a dashed second scrollbar, not a hairline.
+      """
+    )
+
+    // …and it is still *there*. A hairline that rounds to nothing is a rail nobody can find, which
+    // is the failure in the other direction.
+    XCTAssertGreaterThan(ChatPromptTimelineMetrics.restOpacity, 0.05)
+  }
+
+  /// The cursor's reach has to read, and it reads by contrast against the resting weight — so the
+  /// step is asserted as a ratio rather than as two numbers that can drift apart.
+  func testTheProximityRampLiftsAMarkClearOfItsRestingWeight() {
+    let lift = ChatPromptTimelineMetrics.proximityOpacity / ChatPromptTimelineMetrics.restOpacity
+    XCTAssertGreaterThanOrEqual(lift, 3.0, "the cursor's pull no longer separates a mark")
+
+    for state in [
+      ChatPromptTimelineMetrics.proximityOpacity, ChatPromptTimelineMetrics.hoveredOpacity,
+      ChatPromptTimelineMetrics.activeOpacity,
+    ] {
+      XCTAssertGreaterThan(state, ChatPromptTimelineMetrics.restOpacity)
+    }
+  }
+
   func testASingleMarkSitsOnTheCentreLine() {
     XCTAssertEqual(
       ChatPromptTimelineMetrics.positions(count: 1, railHeight: railHeight), [railHeight / 2])

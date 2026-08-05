@@ -1354,7 +1354,7 @@ struct ImportConnectorCard: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(snapshot.primaryText)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(snapshot.isConnected ? Ink.listeningGreen : Ink.secondary)
+              .foregroundColor(snapshot.isConnected ? Ink.primary : Ink.secondary)  // green: ≈1.6:1 here
 
             if let secondaryText = snapshot.secondaryText {
               Text(secondaryText)
@@ -1782,7 +1782,7 @@ struct ImportConnectorSheet: View {
     } else if let statusMessage = runState?.statusMessage {
       Text(statusMessage)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(Ink.listeningGreen)
+        .foregroundColor(Ink.primary)  // green measures ≈1.6:1 here; see SettingsStatusChip
     } else if let errorMessage = runState?.errorMessage {
       Text(UserFacingErrorPresentation.message(from: errorMessage, while: .integration(connector.title)))
         .scaledFont(size: OmiType.caption, weight: .medium)

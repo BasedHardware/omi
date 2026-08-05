@@ -35,8 +35,7 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
 
           if focusEnabled {
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             settingRow(
               title: "Visual Glow Effect", subtitle: "Show colored border when focus changes",
@@ -106,8 +105,7 @@ extension SettingsContentView {
               }
             }
 
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Excluded Apps for Focus Analysis
             VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -209,8 +207,7 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
 
           if taskEnabled {
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Task Agent (chat / investigate) toggle
             HStack {
@@ -276,8 +273,7 @@ extension SettingsContentView {
               }
             }
 
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Extraction Interval Slider
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -377,8 +373,7 @@ extension SettingsContentView {
               }
             }
 
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Allowed Apps for Task Extraction (Whitelist)
             VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -443,8 +438,7 @@ extension SettingsContentView {
               )
             }
 
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Browser Window Keywords
             VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -473,8 +467,7 @@ extension SettingsContentView {
               )
             }
 
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Task Prioritization Re-score
             settingRow(
@@ -544,8 +537,7 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
 
           if insightEnabled {
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Frequency Slider
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -645,8 +637,7 @@ extension SettingsContentView {
               }
             }
 
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Excluded Apps for Advice
             VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -748,8 +739,7 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
 
           if memoryEnabled {
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Extraction Interval Slider
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -836,8 +826,7 @@ extension SettingsContentView {
               .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
 
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             // Excluded Apps for Memory Extraction
             VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -970,8 +959,7 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           settingRow(
             title: "Auto-Generate Goals",

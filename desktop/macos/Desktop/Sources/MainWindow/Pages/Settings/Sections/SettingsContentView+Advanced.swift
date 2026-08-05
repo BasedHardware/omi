@@ -188,7 +188,7 @@ extension SettingsContentView {
           }
 
           if chatBridgeMode == "claudeCode" && chatProvider?.isClaudeConnected == true {
-            Divider()
+            GlassSeparator()
 
             HStack {
               Image(systemName: "checkmark.circle.fill")
@@ -454,8 +454,7 @@ extension SettingsContentView {
             }
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           if let text = aiProfileText {
             if isEditingAIProfile {
@@ -596,8 +595,7 @@ extension SettingsContentView {
             Spacer()
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           if let stats = advancedStats {
             statRow(label: "Conversations", value: stats.conversations)
@@ -664,8 +662,7 @@ extension SettingsContentView {
             Spacer()
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           // Tier picker — radio-style selector
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -680,8 +677,7 @@ extension SettingsContentView {
           }
 
           if currentTierLevel > 0 {
-            Divider()
-              .background(Ink.hairline)
+            GlassSeparator()
 
             Text("Progress")
               .scaledFont(size: OmiType.subheading, weight: .semibold)

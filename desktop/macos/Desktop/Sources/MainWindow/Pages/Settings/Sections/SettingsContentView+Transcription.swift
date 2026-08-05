@@ -217,8 +217,7 @@ extension SettingsContentView {
             }
           }
 
-          Divider()
-            .background(Ink.hairline)
+          GlassSeparator()
 
           // Add new word input
           HStack(spacing: OmiSpacing.sm) {

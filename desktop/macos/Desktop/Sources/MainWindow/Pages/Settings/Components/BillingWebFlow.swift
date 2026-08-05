@@ -37,7 +37,7 @@ struct BillingWebFlowSheet: View {
       .padding(.vertical, OmiSpacing.lg)
       .background(Ink.rowFill)
 
-      Divider()
+      GlassSeparator()
 
       BillingWebView(flow: flow, onComplete: onComplete)
         .frame(minWidth: 860, minHeight: 680)
