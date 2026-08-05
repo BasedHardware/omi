@@ -1,8 +1,8 @@
-// Backend-mediated Google sign-in (system browser + loopback callback), main
+// Backend-mediated provider sign-in (system browser + loopback callback), main
 // process. Ports the macOS app's flow (AuthService.swift signIn(provider:)):
 //   1. PKCE verifier/challenge + CSRF state
 //   2. loopback HTTP listener on 127.0.0.1:<random port>/callback
-//   3. system browser → {api}/v1/auth/authorize (backend drives Google OAuth)
+//   3. system browser → {api}/v1/auth/authorize (backend drives provider OAuth)
 //   4. loopback receives ?code&state → validate → branded page → close listener
 //   5. POST {api}/v1/auth/token → Firebase custom token (renderer signs in)
 //
@@ -21,7 +21,7 @@ import {
   parseLoopbackCallback,
   successHtml
 } from './omiAuth'
-import type { GoogleSignInResult } from '../../shared/types'
+import type { SignInProvider, SignInResult } from '../../shared/types'
 
 // If the user closes the browser tab / never finishes the consent, no callback
 // ever arrives — fail loud after this long instead of hanging forever.
@@ -30,7 +30,7 @@ export const SIGN_IN_TIMEOUT_MS = 5 * 60_000
 export const CANCELLED_MESSAGE = 'Sign-in was cancelled — the browser never completed it'
 export const SUPERSEDED_MESSAGE = 'Superseded by a newer sign-in attempt'
 
-export type GoogleSignInDeps = {
+export type SignInDeps = {
   apiBase: string
   openExternal: (url: string) => void | Promise<void>
   log?: (msg: string, extra?: unknown) => void
@@ -56,7 +56,10 @@ export function redactAuthorizeUrl(authorizeUrl: string): string {
 }
 
 /** Run the full sign-in flow. Never rejects — errors come back as {ok:false}. */
-export async function startGoogleSignIn(deps: GoogleSignInDeps): Promise<GoogleSignInResult> {
+export async function startSignIn(
+  provider: SignInProvider,
+  deps: SignInDeps
+): Promise<SignInResult> {
   activeCancel?.(SUPERSEDED_MESSAGE)
   const log = deps.log ?? ((): void => {})
 
@@ -66,7 +69,7 @@ export async function startGoogleSignIn(deps: GoogleSignInDeps): Promise<GoogleS
 
   let loopback: { code: string; redirectUri: string }
   try {
-    loopback = await runLoopback({ state, codeChallenge, deps, log })
+    loopback = await runLoopback({ provider, state, codeChallenge, deps, log })
   } catch (e) {
     const error = (e as Error).message
     log('sign-in failed before token exchange', { error })
@@ -96,12 +99,13 @@ export async function startGoogleSignIn(deps: GoogleSignInDeps): Promise<GoogleS
 }
 
 function runLoopback(args: {
+  provider: SignInProvider
   state: string
   codeChallenge: string
-  deps: GoogleSignInDeps
+  deps: SignInDeps
   log: (msg: string, extra?: unknown) => void
 }): Promise<{ code: string; redirectUri: string }> {
-  const { state, codeChallenge, deps, log } = args
+  const { provider, state, codeChallenge, deps, log } = args
   return new Promise((resolve, reject) => {
     let settled = false
     let timer: NodeJS.Timeout | undefined
@@ -137,7 +141,7 @@ function runLoopback(args: {
         res.writeHead(404).end()
         return
       }
-      const outcome = parseLoopbackCallback(req.url ?? '', state)
+      const outcome = parseLoopbackCallback(req.url ?? '', state, provider)
       if (outcome.kind === 'ignore') {
         res.writeHead(404).end()
         return
@@ -160,6 +164,7 @@ function runLoopback(args: {
       redirectUri = `http://127.0.0.1:${addr.port}${CALLBACK_PATH}`
       const authorizeUrl = buildAuthorizeUrl({
         apiBase: deps.apiBase,
+        provider,
         redirectUri,
         state,
         codeChallenge
