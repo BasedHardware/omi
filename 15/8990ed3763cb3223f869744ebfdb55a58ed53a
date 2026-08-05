@@ -1,0 +1,44 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_7cd513c767d878 450
+desktop/macos/Desktop/Sources/MainWindow/GlassShellChrome.swift
+  s_569f1df936cc22::t_e58b1b7002d58f 9-12
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_569f1df936cc22::t_427d061ec67512 697-700
+  s_569f1df936cc22::t_733f9fa778c70f 2361,2364-2367
+  s_569f1df936cc22::t_182ed1659b7d2f 2447,2451,3325
+  s_569f1df936cc22::t_0c083e64901ed3 2461-2462,2467
+  s_569f1df936cc22::t_e448364115cae1 2476
+  s_569f1df936cc22::t_693de7253c1ea1 2515,2520-2523
+  s_569f1df936cc22::t_fc2a8c25a7f80d 470,473-474,878,881,1202,1206,1214,1224,1228,1512,1514,1560,1562,2581,2585,2677,2683,2685,2734,2738,2852,2854,2871,2888,2891,3004,3006,3021,3136,3156,3159,3216,3276,3280,3328,3359,3434,3491,3516,3527,3570,3597,3867,3911,3915,3998,4008,4072,4115,4125,4148
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_569f1df936cc22::t_70ab15e260b8dd 619
+  s_569f1df936cc22::t_dc5033e097aaac 1098
+desktop/macos/Desktop/Sources/MainWindow/Pages/HomePresentationTokens.swift
+  s_569f1df936cc22::t_622acc5ae813cf 25-35,39-77
+  s_569f1df936cc22::t_c930e1d3cb7adc 78-79
+desktop/macos/Desktop/Tests/ShellGlassGroundTests.swift
+  s_569f1df936cc22::t_5fa876447d0447 1-145
+desktop/macos/Desktop/Sources/MainWindow/ShellGlassGround.swift
+  s_569f1df936cc22::t_b51ba23fd90045 1-69
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_569f1df936cc22::t_24ab12a3007934 264,267
+desktop/macos/Desktop/Tests/GlassLegibilityTests.swift
+  s_569f1df936cc22::t_0219dfe7b47864 193-215,244-287
+  s_569f1df936cc22::t_afce2753f5c50d 216-243
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "158990ed3763cb3223f869744ebfdb55a58ed53a",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
