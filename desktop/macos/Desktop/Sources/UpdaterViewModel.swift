@@ -398,6 +398,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     )
     let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Found update v\(version)")
+    discardDeferredInstall()
     Task { @MainActor in
       AnalyticsManager.shared.updateAvailable(
         version: version,
@@ -415,6 +416,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Called when no update is available
   func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
     logSync("Sparkle: No update available")
+    discardDeferredInstall()
     Task { @MainActor in
       self.viewModel?.updateAvailable = false
       self.viewModel?.updateRestartImminent = false
@@ -433,6 +435,9 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       error: nsError,
       updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
     )
+    // Always drop a quiet-moment wait on abort so the deferred install cannot
+    // fire after we clear progress flags (stale "Update waiting…" / surprise relaunch).
+    discardDeferredInstall()
     if diagnostics.reason == .noUpdate {
       logSync("Sparkle: Already up to date")
       Task { @MainActor in
@@ -542,6 +547,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     logSync(
       "Sparkle: Next launch will \(restoreMainWindow ? "restore" : "suppress") the main window after update"
     )
+    discardDeferredInstall()
     Task { @MainActor in
       AnalyticsManager.shared.updateInstallStarted(attempt: attempt)
       self.viewModel?.updateAvailable = false
@@ -572,6 +578,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync(
           "Sparkle: Deferring update v\(version) — speech detected \(Int(secondsSinceSpeech))s ago (active recording)"
         )
+        // Replace any prior quiet-moment wait so only one deferred install owns the flags.
+        discardDeferredInstall()
         Task { @MainActor in
           self.viewModel?.availableVersion = version
           self.viewModel?.updateAvailable = true
@@ -583,6 +591,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
           silenceWindow: UpdaterDelegate.activeCallSilenceWindow,
           lastSpeechProvider: { VADGateService.lastSpeechAt },
           install: { [weak self] in
+            self?.deferredInstall = nil
             Task { @MainActor in
               self?.viewModel?.updateDeferredForActiveRecording = false
               self?.viewModel?.updateRestartImminent = true
@@ -596,6 +605,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     }
 
     logSync("Sparkle: Triggering immediate installation for v\(version)")
+    discardDeferredInstall()
     Task { @MainActor in
       self.viewModel?.availableVersion = version
       self.viewModel?.updateAvailable = true
@@ -609,6 +619,13 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Minimum seconds of VAD silence required before an auto-install is allowed.
   /// Matches the typical pause threshold at which a real conversation has wound down.
   fileprivate static let activeCallSilenceWindow: TimeInterval = 120
+
+  /// Drop any quiet-moment wait so a later abort / superseding update / install
+  /// cannot leave `updateDeferredForActiveRecording` stuck or fire after cancel.
+  private func discardDeferredInstall() {
+    deferredInstall?.cancel()
+    deferredInstall = nil
+  }
 }
 
 final class DeferredUpdateInstall {
@@ -640,6 +657,13 @@ final class DeferredUpdateInstall {
   func start(now: Date = Date()) {
     pendingWorkItem?.cancel()
     scheduleNextCheck(now: now)
+  }
+
+  /// Cancel a pending quiet-moment wait. After cancel, ``install`` will not run.
+  func cancel() {
+    pendingWorkItem?.cancel()
+    pendingWorkItem = nil
+    didInstall = true
   }
 
   private func scheduleNextCheck(now: Date) {
