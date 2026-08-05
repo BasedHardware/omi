@@ -1,0 +1,22 @@
+desktop/lock-in/Sources/LockInApp/Views/ShareCard.swift
+  s_acebfdccb4f1d0::t_e64db99b9955ad 16-23
+  s_acebfdccb4f1d0::t_34f1892ac75eb5 79
+  s_acebfdccb4f1d0::t_89e67ca9423235 77
+  s_acebfdccb4f1d0::t_11922a3b1d941e 199-202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d1ce8add6a2441be958eace6653d12d84ecc4846",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
