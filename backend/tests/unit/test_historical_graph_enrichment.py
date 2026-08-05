@@ -34,6 +34,56 @@ class _FailingPlanner:
         raise RuntimeError("transient gateway failure")
 
 
+class _CursorStore:
+    def __init__(self):
+        self.cursor = historical_runner.HistoricalGraphEnrichmentCursor()
+        self.advances: list[tuple[int, str | None]] = []
+
+    def read(self, _uid: str, **_kwargs: object):
+        return self.cursor
+
+    def advance(self, _uid: str, *, expected_generation: int, resume_after: MemoryItem | None, **_kwargs: object):
+        if expected_generation != self.cursor.generation:
+            return False
+        self.advances.append((expected_generation, resume_after.memory_id if resume_after is not None else None))
+        self.cursor = historical_runner.HistoricalGraphEnrichmentCursor(
+            generation=expected_generation + 1,
+            resume_after_updated_at=resume_after.updated_at if resume_after is not None else None,
+            resume_after_memory_id=resume_after.memory_id if resume_after is not None else None,
+        )
+        return True
+
+
+class _CursorSnapshot:
+    def __init__(self, payload: dict[str, object] | None):
+        self.exists = payload is not None
+        self._payload = payload
+
+    def to_dict(self):
+        return self._payload
+
+
+class _CursorRef:
+    def __init__(self, payload: dict[str, object] | None):
+        self.payload = payload
+
+    def get(self, *, transaction: object | None = None):
+        return _CursorSnapshot(self.payload)
+
+
+class _CursorTransaction:
+    def set(self, ref: _CursorRef, payload: dict[str, object]):
+        ref.payload = payload
+
+
+class _CursorDb:
+    def __init__(self, ref: _CursorRef):
+        self.ref = ref
+
+    def document(self, _path: str):
+        return self.ref
+
+
 def _item(**overrides: object) -> MemoryItem:
     now = datetime.now(timezone.utc)
     payload: dict[str, object] = {
@@ -163,6 +213,7 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
     control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
     failing = _item(memory_id="mem_failing")
     ready = _item(memory_id="mem_ready")
+    cursor_store = _CursorStore()
     planner = _Planner(
         {
             "eligible": True,
@@ -175,8 +226,10 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
     monkeypatch.setattr(historical_runner, "_control", lambda *_args, **_kwargs: control)
     monkeypatch.setattr(
         historical_runner,
-        "_candidates",
-        lambda *_args, **_kwargs: [failing, ready],
+        "_candidate_page",
+        lambda *_args, **_kwargs: historical_runner.HistoricalGraphCandidatePage(
+            items=[failing, ready], last_scanned=ready, exhausted=False
+        ),
     )
 
     def plan(item: MemoryItem, **_kwargs: object):
@@ -202,9 +255,107 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
         apply_limit=1,
         db_client=object(),
         llm=object(),
+        cursor_store=cursor_store,
     )
 
-    assert report["outcomes"] == {"committed": 1, "planner_error": 1}
+    assert report["outcomes"] == {"committed": 1, "cursor_advanced": 1, "planner_error": 1}
+    assert cursor_store.advances == [(0, "mem_ready")]
+
+
+def test_historical_runner_rotates_cursor_past_a_bounded_scan_window(monkeypatch: pytest.MonkeyPatch):
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    pages = {
+        None: _item(memory_id="mem_head"),
+        "mem_head": _item(memory_id="mem_middle"),
+        "mem_middle": _item(memory_id="mem_tail"),
+    }
+    seen: list[str] = []
+    cursor_store = _CursorStore()
+
+    monkeypatch.setattr(historical_runner, "_control", lambda *_args, **_kwargs: control)
+
+    def candidate_page(*_args: object, cursor: historical_runner.HistoricalGraphEnrichmentCursor, **_kwargs: object):
+        item = pages[cursor.resume_after_memory_id]
+        return historical_runner.HistoricalGraphCandidatePage(
+            items=[item], last_scanned=item, exhausted=item.memory_id == "mem_tail"
+        )
+
+    monkeypatch.setattr(historical_runner, "_candidate_page", candidate_page)
+    monkeypatch.setattr(
+        historical_runner,
+        "_plan_with_deadline",
+        lambda *, item, **_kwargs: (
+            seen.append(item.memory_id)
+            or SimpleNamespace(
+                status=GraphEnrichmentStatus.ready,
+                operation=SimpleNamespace(operation_id=item.memory_id),
+                patch_payload={},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        historical_runner,
+        "apply_long_term_patch_firestore",
+        lambda **_kwargs: SimpleNamespace(status=ApplyStatus.committed),
+    )
+
+    for _ in range(3):
+        run_enrichment(
+            uid="u1",
+            firestore_project="test",
+            limit=1,
+            scan_limit=1,
+            apply=True,
+            confirm_uid="u1",
+            structured_only=False,
+            db_client=object(),
+            llm=object(),
+            cursor_store=cursor_store,
+        )
+
+    assert seen == ["mem_head", "mem_middle", "mem_tail"]
+    assert cursor_store.advances == [(0, "mem_head"), (1, "mem_middle"), (2, None)]
+
+
+def test_historical_graph_cursor_cas_rejects_a_stale_writer():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    ref = _CursorRef({"generation": 2, "resume_after_memory_id": "newer"})
+    transaction = _CursorTransaction()
+
+    stale = historical_runner._advance_historical_graph_cursor_txn(
+        transaction, ref, control, False, 1, _item(memory_id="stale"), datetime.now(timezone.utc)
+    )
+    current = historical_runner._advance_historical_graph_cursor_txn(
+        transaction, ref, control, False, 2, _item(memory_id="current"), datetime.now(timezone.utc)
+    )
+
+    assert stale is False
+    assert current is True
+    assert ref.payload is not None
+    assert ref.payload["generation"] == 3
+    assert ref.payload["resume_after_memory_id"] == "current"
+
+
+def test_historical_graph_cursor_resets_boundary_when_the_account_generation_changes():
+    item = _item(memory_id="old_boundary")
+    ref = _CursorRef(
+        {
+            "generation": 4,
+            "account_generation": 1,
+            "planner_version": historical_runner.HISTORICAL_GRAPH_PLANNER_VERSION,
+            "replan_existing": False,
+            "resume_after_updated_at": item.updated_at,
+            "resume_after_memory_id": item.memory_id,
+        }
+    )
+
+    cursor = historical_runner.FirestoreHistoricalGraphCursorStore(_CursorDb(ref)).read(
+        "u1",
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=2, source_generation=2),
+        replan_existing=False,
+    )
+
+    assert cursor == historical_runner.HistoricalGraphEnrichmentCursor(generation=4)
 
 
 def test_historical_planner_deadline_interrupts_a_stuck_sync_call(monkeypatch: pytest.MonkeyPatch):
