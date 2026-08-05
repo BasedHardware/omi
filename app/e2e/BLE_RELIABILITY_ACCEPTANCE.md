@@ -21,10 +21,12 @@ flutter test \
   test/services/capture/device_audio_streaming_policy_test.dart \
   test/services/capture/live_transcript_preview_test.dart \
   test/services/wals/ring_storage_sync_test.dart \
+  test/unit/audio_player_utils_test.dart \
   test/unit/conversation_audio_assembler_test.dart \
   test/unit/device_transport_exclusive_release_test.dart \
   test/unit/firmware_dfu_connection_handoff_test.dart \
   test/unit/local_wal_sync_test.dart \
+  test/unit/wal_upload_resilience_test.dart \
   test/unit/native_ble_transport_exclusive_release_test.dart \
   test/unit/omi_mcu_dfu_policy_test.dart \
   test/unit/omi_ready_generation_time_sync_test.dart \
@@ -233,6 +235,8 @@ next disruption until the tester has seen the restoration notice.
 | Page disposal | Leave the firmware page while terminal cleanup is in flight | Disposal and the later terminal callback share one cleanup/reclaim future; neither strands nor duplicates the BLE owner |
 | Fast Sync | Begin with a known non-empty pendant backlog, start Fast Sync, disrupt BLE during transfer, then restore it | The fixed snapshot resumes without a second tap; durable records are not acknowledged early; newer capture does not expand the target; transfer finishes in timestamp order without duplicates; live preview resumes immediately |
 | Fast Sync cancel | Start Fast Sync, wait for one bounded range to begin, then cancel | At most the in-flight bounded range finishes and is durably acknowledged; no further historical range begins; live preview resumes without reconnect or app restart |
+| Recovered playback | Play a known recovered recording, let another app own audio, return, then play it again | Both attempts are audible; route activation precedes player start; completion/stop releases the owned session; a route failure is visible and cannot leave an advancing silent player |
+| Oversized cloud transaction | Inject or select one immutable batch that receives HTTP 413 with healthy recordings queued behind it | Every rejected source file remains local; the deterministic batch stops automatic retrying; later healthy recordings upload in the same drain; a manual retry remains available and surfaces the boundary failure |
 
 ## Cross-host ownership handoff
 
@@ -286,6 +290,16 @@ rows or change the local-files upload boundary. It is valid to retain multiple
 bounded ring/archive artifacts internally, but adjacent artifacts inside the
 configured conversation-silence boundary must appear as one logical recording
 and upload as one ordered multipart job.
+
+If that complete multipart transaction receives HTTP 413, the app must retain
+every immutable source and quarantine only that transaction from automatic
+retry. It must continue uploading later healthy recordings; a deterministic
+size rejection is not evidence that the network or whole lane is offline.
+Do not split one logical conversation into independent asynchronous jobs as an
+app-only workaround: without a durable shared owner, those jobs can race into
+duplicate or fragmented conversations. A recording that exceeds the request
+boundary needs a resumable/direct-upload server contract or a durable
+sequential chunk protocol.
 
 Run this case with `autoSyncOfflineRecordings=false`. Charging never authorizes
 a deep drain; only a Sync tap or explicit automatic offline-sync opt-in may
