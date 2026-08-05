@@ -5,10 +5,11 @@
 FROM omi-onprem-backend:latest
 USER root
 
-# git + helm + jq: a set of repo-root contract tests shell out to them (changed-files scope,
-# helm-rendered deployment contracts, and the auto-dev backend scope step which parses GitHub API
-# proofs with jq). Without them those tests error out spuriously.
-RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates jq \
+# git + helm + jq + gettext-base(envsubst): a set of repo-root contract tests shell out to them
+# (changed-files scope, helm-rendered deployment contracts, the auto-dev backend scope step which
+# parses GitHub API proofs with jq, and the agent-vm startup-publisher test which renders the startup
+# script via envsubst). Without them those tests error out spuriously.
+RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates jq gettext-base \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL https://get.helm.sh/helm-v3.16.3-linux-amd64.tar.gz -o /tmp/helm.tgz \
     && tar -xzf /tmp/helm.tgz -C /tmp && mv /tmp/linux-amd64/helm /usr/local/bin/helm \

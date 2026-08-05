@@ -273,8 +273,8 @@ def run_canonical_short_term_maintenance_for_cohort(
             graph_page_size = canonical_graph_backfill_page_size()
             graph_report = run_enrichment(
                 uid=uid,
-                # The database client is injected above; this is retained only
-                # for the CLI contract and is never used by this cron path.
+                # firestore_project is a CLI-contract argument only; on this cron path persistence
+                # goes through the neutral store port (db_client stays the default, unused).
                 firestore_project=os.getenv("GOOGLE_CLOUD_PROJECT", "canonical-memory"),
                 limit=graph_page_size,
                 apply=True,
@@ -282,7 +282,6 @@ def run_canonical_short_term_maintenance_for_cohort(
                 structured_only=False,
                 apply_limit=graph_page_size,
                 scan_limit=canonical_graph_backfill_scan_size(page_size=graph_page_size),
-                db_client=client,
             )
             graph_outcomes = graph_report.get("outcomes", {})
             summary.graph_enriched_total += int(graph_outcomes.get("committed", 0))

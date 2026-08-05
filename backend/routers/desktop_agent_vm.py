@@ -3,6 +3,8 @@ import hashlib
 import ipaddress
 import logging
 import os
+import re
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -10,13 +12,15 @@ from typing import Any
 
 import google.auth
 import google.auth.transport.requests
+import google.oauth2.id_token
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from database.store import get_document_store, sentinels
 from database import users as users_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from services.agent_vm_lifecycle import startup_wrapper
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
@@ -27,6 +31,10 @@ _ZONE = "us-central1-a"
 _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 _READY_TIMEOUT_SECONDS = 300
 _READY_POLL_SECONDS = 5
+_STOP_BROKER_RATE_LIMIT = 30
+_STOP_BROKER_RATE_WINDOW_SECONDS = 60
+_stop_broker_attempts: dict[str, list[float]] = {}
+_stop_broker_attempts_lock = threading.Lock()
 
 
 class AccountDeletionAccessBlocked(RuntimeError):
@@ -85,7 +93,11 @@ def _project() -> str:
 
 
 def _source_image(project: str) -> str:
-    return os.getenv("GCE_SOURCE_IMAGE") or f"projects/{project}/global/images/family/omi-agent"
+    return (
+        os.getenv("GCE_SOURCE_IMAGE")
+        or os.getenv("AGENT_VM_BOOT_IMAGE")
+        or f"projects/{project}/global/images/family/omi-agent"
+    )
 
 
 def _gcs_bucket() -> str:
@@ -100,6 +112,29 @@ def _service_account() -> str:
     if not service_account:
         raise RuntimeError("GCE_SERVICE_ACCOUNT is not configured")
     return service_account
+
+
+def _agent_vm_startup_uri(bucket: str) -> str:
+    return os.getenv("AGENT_VM_STARTUP_URI") or f"https://storage.googleapis.com/{bucket}/startup.sh"
+
+
+def _agent_vm_startup_metadata(bucket: str) -> dict[str, str]:
+    startup_uri = _agent_vm_startup_uri(bucket)
+    startup_sha256 = os.getenv("AGENT_VM_STARTUP_SHA256")
+    metadata = {
+        "startup-script": startup_wrapper(startup_uri, startup_sha256),
+        "omi-agent-reconciler-schema": "1",
+    }
+    for key, env_name in (
+        ("omi-agent-release", "AGENT_VM_RELEASE_ID"),
+        ("omi-agent-image-digest", "AGENT_VM_IMAGE_DIGEST"),
+        ("omi-agent-startup-sha256", "AGENT_VM_STARTUP_SHA256"),
+        ("omi-agent-boot-image", "AGENT_VM_BOOT_IMAGE"),
+    ):
+        value = os.getenv(env_name)
+        if value:
+            metadata[key] = value
+    return metadata
 
 
 def _get_vm(uid: str) -> dict[str, Any] | None:
@@ -299,7 +334,7 @@ async def _create_vm(
     project: str, source_image: str, bucket: str, vm_name: str, auth_token: str, service_account: str
 ) -> str:
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{_ZONE}/instances"
-    startup = f"#!/bin/bash\ncurl -sf https://storage.googleapis.com/{bucket}/startup.sh -o /tmp/omi-startup.sh && bash /tmp/omi-startup.sh\n"
+    startup_metadata = _agent_vm_startup_metadata(bucket)
     body = {
         "name": vm_name,
         "machineType": f"zones/{_ZONE}/machineTypes/e2-small",
@@ -330,7 +365,10 @@ async def _create_vm(
         ],
         "tags": {"items": ["omi-agent-vm"]},
         "metadata": {
-            "items": [{"key": "startup-script", "value": startup}, {"key": "auth-token", "value": auth_token}]
+            "items": [
+                *[{"key": key, "value": value} for key, value in startup_metadata.items()],
+                {"key": "auth-token", "value": auth_token},
+            ]
         },
     }
     token = await run_blocking(db_executor, _get_access_token)
@@ -407,6 +445,116 @@ async def _delete_vm(project: str, vm_name: str, zone: str) -> None:
     operation = response.json().get("name")
     if operation:
         await _operation(project, zone, operation)
+
+
+def _verify_agent_vm_identity(token: str) -> dict[str, Any]:
+    audience = os.getenv("AGENT_VM_STOP_AUDIENCE", "").strip()
+    if not audience:
+        raise RuntimeError("Agent VM stop broker audience is not configured")
+    claims = google.oauth2.id_token.verify_token(
+        token,
+        request=google.auth.transport.requests.Request(),
+        audience=audience,
+    )
+    if not isinstance(claims, dict):
+        raise ValueError("Agent VM identity token claims are not an object")
+    return claims
+
+
+def _compute_identity_fields(claims: dict[str, Any]) -> tuple[str, str, str, str, str]:
+    google_claims = claims.get("google")
+    compute = google_claims.get("compute_engine") if isinstance(google_claims, dict) else None
+    if not isinstance(compute, dict):
+        raise ValueError("Agent VM identity token is not a full Compute Engine identity token")
+    project = str(compute.get("project_id") or "")
+    name = str(compute.get("instance_name") or "")
+    zone = str(compute.get("zone") or "")
+    instance_id = str(compute.get("instance_id") or "")
+    email = str(claims.get("email") or "")
+    if not project or not name or not zone or not instance_id or not email or claims.get("email_verified") is not True:
+        raise ValueError("Agent VM identity token is missing required Compute Engine claims")
+    if (
+        project != _project()
+        or not re.fullmatch(r"[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?", zone)
+        or not re.fullmatch(r"omi-agent-[a-z0-9-]+", name)
+        or not instance_id.isdigit()
+    ):
+        raise ValueError("Agent VM identity token is outside the broker scope")
+    expected_service_account = os.getenv("GCE_RUNTIME_SERVICE_ACCOUNT") or _service_account()
+    if email != expected_service_account:
+        raise ValueError("Agent VM identity token is not from the Agent VM runtime identity")
+    return project, zone, name, email, instance_id
+
+
+def _find_vm_owner(vm_name: str) -> tuple[str, dict[str, Any]] | None:
+    snapshots = _store().query("users", filters=[("agentVm.vmName", "==", vm_name)], limit=2)
+    owner: tuple[str, dict[str, Any]] | None = None
+    for snapshot in snapshots:
+        data = snapshot.to_dict() or {}
+        vm = data.get("agentVm")
+        if isinstance(vm, dict) and vm.get("vmName") == vm_name:
+            if owner is not None:
+                raise ValueError("Agent VM name maps to multiple owners")
+            owner = str(snapshot.id), vm
+    return owner
+
+
+def _stop_broker_rate_allowed(request: Request) -> bool:
+    subject = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    cutoff = now - _STOP_BROKER_RATE_WINDOW_SECONDS
+    with _stop_broker_attempts_lock:
+        for key, stamps in list(_stop_broker_attempts.items()):
+            recent = [stamp for stamp in stamps if stamp >= cutoff]
+            if recent:
+                _stop_broker_attempts[key] = recent
+            else:
+                _stop_broker_attempts.pop(key, None)
+        attempts = list(_stop_broker_attempts.get(subject, []))
+        if len(attempts) >= _STOP_BROKER_RATE_LIMIT:
+            _stop_broker_attempts[subject] = attempts
+            return False
+        attempts.append(now)
+        _stop_broker_attempts[subject] = attempts
+        return True
+
+
+@router.post("/v2/agent/vm/stop-self")
+async def stop_self(request: Request) -> dict[str, str]:
+    """Broker the idle VM stop after verifying the VM's full GCE identity.
+
+    The endpoint intentionally has no Firebase-user dependency: only a VM can
+    present the audience-bound Google identity token, and the Firestore owner
+    lookup is the second authorization boundary.
+    """
+    if not _stop_broker_rate_allowed(request):
+        raise HTTPException(status_code=429, detail="Agent VM stop broker rate limit exceeded")
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing VM identity")
+    try:
+        claims = await run_blocking(db_executor, _verify_agent_vm_identity, header[7:].strip())
+        project, zone, vm_name, _, instance_id = _compute_identity_fields(claims)
+        owner = await run_blocking(db_executor, _find_vm_owner, vm_name)
+    except (RuntimeError, ValueError, KeyError) as exc:
+        raise HTTPException(status_code=403, detail="Invalid Agent VM identity") from exc
+    if owner is None:
+        raise HTTPException(status_code=404, detail="Agent VM owner not found")
+    uid, vm = owner
+    owner_zone = str(vm.get("zone") or "")
+    if not owner_zone or owner_zone != zone:
+        raise HTTPException(status_code=403, detail="Agent VM identity zone does not match its owner record")
+    auth_token = str(vm.get("authToken") or "")
+    if not auth_token or not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+        raise HTTPException(status_code=409, detail="Agent VM owner is no longer active")
+    status, instance = await _instance(project, zone, vm_name)
+    if instance is None:
+        raise HTTPException(status_code=404, detail="Agent VM instance not found")
+    if str(instance.get("id") or "") != instance_id or str(instance.get("name") or "") != vm_name:
+        raise HTTPException(status_code=403, detail="Agent VM runtime identity does not match the live instance")
+    if status == "RUNNING":
+        await _stop_vm(project, vm_name, zone)
+    return {"status": "stopping", "vmName": vm_name}
 
 
 async def _delete_late_vm_or_record(uid: str, project: str, vm_name: str, zone: str) -> None:

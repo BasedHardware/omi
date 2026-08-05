@@ -9,9 +9,12 @@ import pytest
 
 from database import knowledge_graph as kg_db
 from models.memory_promotion import (
+    PROMOTION_GRAPH_PLAN_V2_VERSION,
+    GraphRelationEndpoint,
     MemoryGraphAssertion,
     PromotionGraphPlan,
     build_memory_graph_assertion,
+    canonical_graph_entity_id,
 )
 from tests.store_fakes import FakeDocumentStore
 from utils.memory import kg_graph_traversal
@@ -169,18 +172,24 @@ def test_get_knowledge_graph_merges_current_assertion_and_replaces_its_stale_leg
 
 
 def test_canonical_entity_ids_join_two_fenced_assertions_into_a_two_hop_path():
-    alpha = "ent_" + "a" * 20
-    beta = "ent_" + "b" * 20
-    gamma = "ent_" + "c" * 20
+    alpha = canonical_graph_entity_id("Alpha")
+    beta = canonical_graph_entity_id("Beta")
+    gamma = canonical_graph_entity_id("Gamma")
     first_plan = PromotionGraphPlan(
+        schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
         subject_entity_id=alpha,
         predicate="depends_on",
-        arguments={"object": {"entity_id": beta, "label": "Beta"}},
+        subject=GraphRelationEndpoint(entity_id=alpha, label="Alpha", node_type="organization"),
+        object=GraphRelationEndpoint(entity_id=beta, label="Beta", node_type="organization"),
+        qualifiers={"source": "roadmap"},
     )
     second_plan = PromotionGraphPlan(
+        schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
         subject_entity_id=beta,
         predicate="depends_on",
-        arguments={"object": {"entity_id": gamma, "label": "Gamma"}},
+        subject=GraphRelationEndpoint(entity_id=beta, label="Beta", node_type="organization"),
+        object=GraphRelationEndpoint(entity_id=gamma, label="Gamma", node_type="organization"),
+        qualifiers={"confidence": "high"},
     )
     first = build_memory_graph_assertion(
         uid=UID,
@@ -212,6 +221,36 @@ def test_canonical_entity_ids_join_two_fenced_assertions_into_a_two_hop_path():
         (alpha, beta),
         (beta, gamma),
     }
+
+
+def test_v2_qualifiers_never_project_as_nodes_or_edges():
+    subject = canonical_graph_entity_id("Subject")
+    object_id = canonical_graph_entity_id("Object")
+    assertion = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-v2-qualified",
+        item_revision=1,
+        content_hash="hash-v2-qualified",
+        evidence_ids=["ev-v2-qualified"],
+        graph_plan=PromotionGraphPlan(
+            schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
+            subject_entity_id=subject,
+            predicate="depends_on",
+            subject=GraphRelationEndpoint(entity_id=subject, label="Subject", node_type="organization"),
+            object=GraphRelationEndpoint(entity_id=object_id, label="Object", node_type="organization"),
+            qualifiers={"location": "Seattle", "priority": "high"},
+        ),
+        commit_id="commit-v2-qualified",
+        commit_sequence=1,
+        created_at=NOW,
+    )
+
+    records = assertion.graph_records()
+
+    assert {node["id"] for node in records["nodes"]} == {subject, object_id}
+    assert [(edge["source_id"], edge["target_id"], edge["label"]) for edge in records["edges"]] == [
+        (subject, object_id, "depends_on")
+    ]
 
 
 @pytest.mark.parametrize(

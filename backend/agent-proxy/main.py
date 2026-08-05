@@ -38,6 +38,13 @@ from utils.executors import (
     start_background_task,
 )
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from services.agent_vm_lifecycle import (
+    SESSION_LEASE_TTL_SECONDS,
+    claim_session_lease,
+    heartbeat_session_lease,
+    reconcile_requested,
+    release_session_lease,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +65,11 @@ ACCOUNT_DELETION_IDLE_RECHECK_INTERVAL = 30  # seconds
 # tiny grace window; on timeout we seed history (a fresh amnesiac session is the worse
 # failure than a one-time duplicate).
 VM_HELLO_TIMEOUT = 3.0  # seconds
+AGENT_VM_SESSION_LEASES_ENABLED = os.getenv("AGENT_VM_SESSION_LEASES_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 # Encryption — optional; required for users with enhanced data protection.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
@@ -556,6 +568,9 @@ async def _send_startup_event(websocket: WebSocket, uid: str, payload: Dict[str,
 
 async def _close_client(websocket: WebSocket, uid: str, code: int, reason: str) -> None:
     """Close the client socket, tolerating a client that already went away."""
+    # Record typed terminal closes so the outer session cleanup does not append a
+    # misleading normal-close frame after a startup or drain failure.
+    setattr(websocket, "_agent_proxy_typed_close_sent", True)
     try:
         await websocket.close(code=code, reason=reason)
     except Exception as e:
@@ -605,6 +620,90 @@ async def _ensure_vm_running_or_close(
     except AccountDeletionAccessBlocked:
         await _admit_account_access_or_close(websocket, uid)
         return None, True
+
+
+async def _prepare_vm_for_session(
+    websocket: WebSocket,
+    uid: str,
+    vm: Dict[str, Any],
+    lease_lost: asyncio.Event,
+) -> Optional[Tuple[Dict[str, Any], str, str]]:
+    """Resolve and verify the VM after transactional session admission."""
+    vm_ip = vm.get("ip")
+    vm_token = vm.get("authToken")
+
+    if vm.get("status") == "ready" and _is_usable_vm_ip(vm_ip):
+        try:
+            headers = {"Authorization": f"Bearer {vm_token}"} if vm_token else {}
+            async with httpx.AsyncClient(timeout=3) as client:
+                resp = await client.get(f"http://{vm_ip}:8080/health", headers=headers)
+                if resp.status_code != 200:
+                    raise RuntimeError(f"health returned {resp.status_code}")
+        except Exception:
+            logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
+            await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
+            candidate_vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm, health_failed=True)
+            if deletion_blocked or lease_lost.is_set():
+                return None
+            if (
+                candidate_vm is None
+                or candidate_vm.get("status") != "ready"
+                or not _is_usable_vm_ip(candidate_vm.get("ip"))
+            ):
+                await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
+                await _close_client(websocket, uid, 4002, "VM startup failed")
+                return None
+            vm = candidate_vm
+            vm_ip = vm["ip"]
+            vm_token = vm["authToken"]
+            if not await _wait_for_vm_healthy(vm_ip, vm_token):
+                await _send_startup_event(
+                    websocket,
+                    uid,
+                    {
+                        "type": "error",
+                        "code": "agent_vm_not_ready",
+                        "state": "provisioning",
+                        "retryable": True,
+                        "message": "Your agent is still starting. Please try again shortly.",
+                    },
+                )
+                await _close_client(websocket, uid, 4003, "VM not healthy")
+                return None
+    else:
+        await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
+        candidate_vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm)
+        if deletion_blocked or lease_lost.is_set():
+            return None
+        if (
+            candidate_vm is None
+            or candidate_vm.get("status") != "ready"
+            or not _is_usable_vm_ip(candidate_vm.get("ip"))
+        ):
+            await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
+            await _close_client(websocket, uid, 4002, "VM startup failed")
+            return None
+        vm = candidate_vm
+        vm_ip = vm["ip"]
+        vm_token = vm["authToken"]
+        if not await _wait_for_vm_healthy(vm_ip, vm_token):
+            await _send_startup_event(
+                websocket,
+                uid,
+                {
+                    "type": "error",
+                    "code": "agent_vm_not_ready",
+                    "state": "provisioning",
+                    "retryable": True,
+                    "message": "Your agent is still starting. Please try again shortly.",
+                },
+            )
+            await _close_client(websocket, uid, 4003, "VM not healthy")
+            return None
+
+    if lease_lost.is_set():
+        return None
+    return vm, str(vm_ip), str(vm_token)
 
 
 # --------------- encryption helpers ---------------
@@ -867,6 +966,25 @@ async def agent_ws(websocket: WebSocket):
         await _close_client(websocket, uid, 4002, "Agent VM not ready")
         return
 
+    # A reconciler drain prevents new sessions while allowing already leased
+    # sessions to finish.  The lease is re-read after readiness because a drain
+    # can begin while a stopped VM is being started.
+    if reconcile_requested(vm):
+        await websocket.accept()
+        await _send_startup_event(
+            websocket,
+            uid,
+            {
+                "type": "error",
+                "code": "agent_vm_draining",
+                "state": "draining",
+                "retryable": True,
+                "message": "Your agent is being updated. Please retry shortly.",
+            },
+        )
+        await _close_client(websocket, uid, 1013, "Agent VM is draining")
+        return
+
     # Accept WebSocket first so we can send status messages during VM startup
     await websocket.accept()
 
@@ -875,115 +993,166 @@ async def agent_ws(websocket: WebSocket):
     if not await _admit_account_access_or_close(websocket, uid):
         return
 
-    vm_ip = vm.get("ip")
-    vm_token = vm.get("authToken")
+    lease_id = uuid.uuid4().hex
+    lease_claimed = False
+    lease_lost = asyncio.Event()
+    lease_heartbeat_task: Optional[asyncio.Task[None]] = None
+    active_vm_ws: Any = None
 
-    # Fast path: if Firestore says ready with an IP, try connecting directly (skip GCE check).
-    # Only fall back to GCE check + restart if the VM isn't reachable.
-    if vm.get("status") == "ready" and _is_usable_vm_ip(vm_ip):
-        try:
-            headers = {"Authorization": f"Bearer {vm_token}"} if vm_token else {}
-            async with httpx.AsyncClient(timeout=3) as client:
-                resp = await client.get(f"http://{vm_ip}:8080/health", headers=headers)
-                if resp.status_code != 200:
-                    raise Exception(f"health returned {resp.status_code}")
-        except Exception:
-            # VM not reachable — check GCE and restart/reset if needed
-            logger.info(f"[agent-proxy] uid={uid} VM {vm_ip} not reachable, checking GCE...")
-            await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
-            vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm, health_failed=True)
-            if deletion_blocked:
-                return
-            if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-                await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
-                await _close_client(websocket, uid, 4002, "VM startup failed")
-                return
-            vm_ip = vm["ip"]
-            vm_token = vm["authToken"]
-            # Wait for VM to be healthy after restart
-            healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
-            if not healthy:
-                await _send_startup_event(
-                    websocket,
-                    uid,
-                    {
-                        "type": "error",
-                        "code": "agent_vm_not_ready",
-                        "state": "provisioning",
-                        "retryable": True,
-                        "message": "Your agent is still starting. Please try again shortly.",
-                    },
-                )
-                await _close_client(websocket, uid, 4003, "VM not healthy")
-                return
-    else:
-        # No IP or not ready — must restart
-        await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
-        vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm)
-        if deletion_blocked:
-            return
-        if not vm or vm.get("status") != "ready" or not vm.get("ip"):
-            await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
-            await _close_client(websocket, uid, 4002, "VM startup failed")
-            return
-        vm_ip = vm["ip"]
-        vm_token = vm["authToken"]
-        healthy = await _wait_for_vm_healthy(vm_ip, vm_token)
-        if not healthy:
+    async def session_lease_heartbeat() -> None:
+        consecutive_failures_started_at: float | None = None
+        while True:
+            await asyncio.sleep(30)
+            try:
+                alive = await run_blocking(db_executor, heartbeat_session_lease, uid, lease_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # A transient Firestore failure is not evidence that the lease
+                # is gone.  However, if heartbeat errors persist longer than the
+                # lease TTL, the Firestore record will expire and the reconciler
+                # can see zero active sessions while the WebSocket stays open.
+                # Fail closed before that happens.
+                now = time.monotonic()
+                if consecutive_failures_started_at is None:
+                    consecutive_failures_started_at = now
+                elif now - consecutive_failures_started_at >= SESSION_LEASE_TTL_SECONDS:
+                    logger.error(
+                        "[agent-proxy] uid=%s session lease heartbeat failed for %ds (>= TTL %ds); failing closed",
+                        uid,
+                        int(now - consecutive_failures_started_at),
+                        SESSION_LEASE_TTL_SECONDS,
+                    )
+                    lease_lost.set()
+                    await _send_startup_event(
+                        websocket,
+                        uid,
+                        {
+                            "type": "error",
+                            "code": "agent_vm_draining",
+                            "state": "draining",
+                            "retryable": True,
+                            "message": "Your agent is being updated. Please retry shortly.",
+                        },
+                    )
+                    if active_vm_ws is not None:
+                        try:
+                            await active_vm_ws.close()
+                        except Exception:
+                            pass
+                    await _close_client(websocket, uid, 1013, "Agent VM is draining")
+                    return
+                logger.warning(f"[agent-proxy] uid={uid} session lease heartbeat unavailable", exc_info=True)
+                continue
+            consecutive_failures_started_at = None
+            if alive:
+                continue
+            lease_lost.set()
             await _send_startup_event(
                 websocket,
                 uid,
                 {
                     "type": "error",
-                    "code": "agent_vm_not_ready",
-                    "state": "provisioning",
+                    "code": "agent_vm_draining",
+                    "state": "draining",
                     "retryable": True,
-                    "message": "Your agent is still starting. Please try again shortly.",
+                    "message": "Your agent is being updated. Please retry shortly.",
                 },
             )
-            await _close_client(websocket, uid, 4003, "VM not healthy")
-            return
-
-    vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
-
-    # Fence the session write independently from VM startup. The create helper
-    # also checks the marker transactionally with the Firestore write.
-    if not await _admit_account_access_or_close(websocket, uid):
-        return
-    try:
-        chat_session = await run_blocking(db_executor, _get_or_create_chat_session, uid)
-    except AccountDeletionAccessBlocked:
-        await _admit_account_access_or_close(websocket, uid)
-        return
-    chat_session_id = chat_session['id']
-
-    logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
-
-    async def _connect_vm_with_retry() -> Any:
-        """User-blocking connect: retry transient failures with progress events."""
-        for attempt in range(1, 4):
-            try:
-                return await websockets.connect(vm_uri, ping_interval=600, ping_timeout=600)
-            except Exception as e:
-                if classify_error(e) != "transient" or attempt == 3:
-                    raise
-                logger.warning(f"[agent-proxy] uid={uid} vm connect attempt {attempt} failed, retrying", exc_info=True)
+            if active_vm_ws is not None:
                 try:
-                    await websocket.send_text(json.dumps({"type": "status", "message": "Connecting to your agent…"}))
+                    await active_vm_ws.close()
                 except Exception:
                     pass
-                await asyncio.sleep(attempt)
+            await _close_client(websocket, uid, 1013, "Agent VM is draining")
+            return
 
-    @asynccontextmanager
-    async def _connected_vm() -> AsyncIterator[Any]:
-        vm_ws = await _connect_vm_with_retry()
-        try:
-            yield vm_ws
-        finally:
-            await vm_ws.close()
+    async def release_claimed_session() -> None:
+        nonlocal lease_claimed
+        if lease_heartbeat_task is not None and not lease_heartbeat_task.done():
+            lease_heartbeat_task.cancel()
+            await asyncio.gather(lease_heartbeat_task, return_exceptions=True)
+        if lease_claimed:
+            try:
+                await run_blocking(db_executor, release_session_lease, uid, lease_id)
+            except Exception:
+                logger.warning(f"[agent-proxy] uid={uid} failed to release session lease", exc_info=True)
+            finally:
+                lease_claimed = False
 
     try:
+        if AGENT_VM_SESSION_LEASES_ENABLED:
+            lease_claimed = await run_blocking(
+                db_executor,
+                claim_session_lease,
+                uid,
+                str(vm.get("vmName") or ""),
+                str(vm.get("authToken") or ""),
+                lease_id,
+            )
+            if not lease_claimed:
+                lease_lost.set()
+                await _send_startup_event(
+                    websocket,
+                    uid,
+                    {
+                        "type": "error",
+                        "code": "agent_vm_draining",
+                        "state": "draining",
+                        "retryable": True,
+                        "message": "Your agent is being updated. Please retry shortly.",
+                    },
+                )
+                await _close_client(websocket, uid, 1013, "Agent VM is draining")
+                return
+            lease_heartbeat_task = asyncio.create_task(session_lease_heartbeat(), name=f"ws:{uid}:lease-heartbeat")
+
+        prepared = await _prepare_vm_for_session(websocket, uid, vm, lease_lost)
+        if prepared is None:
+            return
+        vm, vm_ip, vm_token = prepared
+        vm_uri = f"ws://{vm_ip}:8080/ws?token={vm_token}"
+
+        if not await _admit_account_access_or_close(websocket, uid):
+            return
+        try:
+            chat_session = await run_blocking(db_executor, _get_or_create_chat_session, uid)
+        except AccountDeletionAccessBlocked:
+            await _admit_account_access_or_close(websocket, uid)
+            return
+        chat_session_id = chat_session['id']
+
+        logger.info(f"[agent-proxy] uid={uid} connecting to vm={vm_ip}")
+
+        async def _connect_vm_with_retry() -> Any:
+            """User-blocking connect: retry transient failures with progress events."""
+            for attempt in range(1, 4):
+                try:
+                    return await websockets.connect(vm_uri, ping_interval=600, ping_timeout=600)
+                except Exception as e:
+                    if classify_error(e) != "transient" or attempt == 3:
+                        raise
+                    logger.warning(
+                        f"[agent-proxy] uid={uid} vm connect attempt {attempt} failed, retrying", exc_info=True
+                    )
+                    try:
+                        await websocket.send_text(
+                            json.dumps({"type": "status", "message": "Connecting to your agent…"})
+                        )
+                    except Exception:
+                        pass
+                    await asyncio.sleep(attempt)
+
+        @asynccontextmanager
+        async def _connected_vm() -> AsyncIterator[Any]:
+            vm_ws = await _connect_vm_with_retry()
+            try:
+                yield vm_ws
+            finally:
+                await vm_ws.close()
+
         async with _connected_vm() as vm_ws:
+            active_vm_ws = vm_ws
             logger.info(f"[agent-proxy] uid={uid} connected")
 
             async def session_access_allowed() -> bool:
@@ -1167,10 +1336,13 @@ async def agent_ws(websocket: WebSocket):
             t2 = asyncio.create_task(vm_to_phone(), name=f"ws:{uid}:vm_to_phone")
             t3 = asyncio.create_task(keepalive_pinger(), name=f"ws:{uid}:keepalive")
             t4 = asyncio.create_task(account_deletion_watcher(), name=f"ws:{uid}:deletion-fence")
-            _, pending = await asyncio.wait([t1, t2, t3, t4], return_when=asyncio.FIRST_COMPLETED)
+            session_tasks = [t1, t2, t3, t4]
+            if lease_heartbeat_task is not None:
+                session_tasks.append(lease_heartbeat_task)
+            done, pending = await asyncio.wait(session_tasks, return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
-            await asyncio.gather(*pending, return_exceptions=True)
+            await asyncio.gather(*done, *pending, return_exceptions=True)
 
     except Exception as e:
         category = classify_error(e)
@@ -1188,8 +1360,10 @@ async def agent_ws(websocket: WebSocket):
         except Exception:
             pass
     finally:
-        try:
-            await websocket.close(code=1000, reason="Session ended")
-        except Exception:
-            pass
+        await release_claimed_session()
+        if not lease_lost.is_set() and not getattr(websocket, "_agent_proxy_typed_close_sent", False):
+            try:
+                await websocket.close(code=1000, reason="Session ended")
+            except Exception:
+                pass
         logger.info(f"[agent-proxy] uid={uid} disconnected")

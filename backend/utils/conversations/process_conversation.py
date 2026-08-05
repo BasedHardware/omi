@@ -72,6 +72,7 @@ from utils.llm.conversation_processing import (
     get_reprocess_transcript_structure,
     extract_action_items,
 )
+from utils.llm.gateway_error_contract import conversation_processing_http_exception
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
@@ -324,8 +325,7 @@ def _get_structured(
             )
         return structured, False
     except Exception as e:
-        logger.error(e)
-        raise HTTPException(status_code=500, detail="Error processing conversation, please try again later")
+        raise conversation_processing_http_exception(e) from e
 
 
 def _get_conversation_obj(

@@ -54,7 +54,6 @@ def test_disabled_cohort_runner_returns_empty_summary_without_running_maintenanc
 def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatch):
     _enable_for(monkeypatch, CANONICAL_A)
     monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "true")
-    client = object()
     monkeypatch.setattr(
         cron,
         "run_canonical_short_term_maintenance",
@@ -69,7 +68,6 @@ def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatc
     monkeypatch.setattr(cron, "run_enrichment", run_graph_enrichment)
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(
-        db_client=client,
         now=NOW,
         run_id="cron-graph-backfill",
     )
@@ -78,7 +76,8 @@ def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatc
     assert summary.graph_enrichment_blocked_total == 0
     assert len(graph_calls) == 1
     assert graph_calls[0]["uid"] == CANONICAL_A
-    assert graph_calls[0]["db_client"] is client
+    # The cron path persists through the neutral store port; db_client is not threaded.
+    assert "db_client" not in graph_calls[0]
     assert graph_calls[0]["apply"] is True
     assert graph_calls[0]["confirm_uid"] == CANONICAL_A
     assert graph_calls[0]["limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
@@ -115,7 +114,7 @@ def test_graph_backfill_uses_one_page_budget_for_apply_and_safe_scan(monkeypatch
     graph_calls: list[dict[str, object]] = []
     monkeypatch.setattr(cron, "run_enrichment", lambda **kwargs: graph_calls.append(kwargs) or {"outcomes": {}})
 
-    cron.run_canonical_short_term_maintenance_for_cohort(db_client=object(), now=NOW, run_id="cron-page-budget")
+    cron.run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-page-budget")
 
     assert graph_calls[0]["limit"] == 10
     assert graph_calls[0]["apply_limit"] == 10

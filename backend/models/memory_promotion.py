@@ -19,7 +19,9 @@ from models.memory_contracts import deterministic_contract_id
 
 PROMOTION_ADMISSION_VERSION = "canonical_memory_promotion_admission.v1"
 PROMOTION_GRAPH_PLAN_VERSION = "canonical_memory_graph_plan.v1"
+PROMOTION_GRAPH_PLAN_V2_VERSION = "canonical_memory_graph_plan.v2"
 PROMOTION_GRAPH_ASSERTION_VERSION = "canonical_memory_graph_assertion.v1"
+PROMOTION_GRAPH_ASSERTION_V2_VERSION = "canonical_memory_graph_assertion.v2"
 PROMOTION_PLANNER_ID = "canonical_batched_promotion"
 PROMOTION_PLANNER_VERSION = "v2"
 PROMOTION_GRAPH_SUBJECT_MAX_LENGTH = 200
@@ -28,6 +30,7 @@ PROMOTION_GRAPH_ARGUMENT_MAX_COUNT = 16
 PROMOTION_GRAPH_ARGUMENT_KEY_MAX_LENGTH = 64
 PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES = 8 * 1024
 PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH = 8
+CanonicalGraphNodeType = Literal["person", "place", "organization", "thing", "concept"]
 
 
 def canonical_graph_entity_id(label: str) -> str:
@@ -94,7 +97,7 @@ def _validate_json_value(value: Any, *, depth: int, ancestors: set[int]) -> None
         ancestors.remove(container_id)
 
 
-def _validate_and_normalize_arguments(value: Any) -> Dict[str, Any]:
+def _validate_and_normalize_arguments(value: Any, *, require_nonempty: bool = True) -> Dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("promotion graph arguments must be a JSON object")
     arguments = cast(Dict[str, Any], value)
@@ -103,7 +106,7 @@ def _validate_and_normalize_arguments(value: Any) -> Dict[str, Any]:
 
     _validate_json_value(arguments, depth=0, ancestors=set())
     normalized = _normalized_arguments(arguments)
-    if not normalized:
+    if require_nonempty and not normalized:
         raise ValueError("promotion graph plan requires at least one argument")
 
     try:
@@ -126,13 +129,46 @@ def _validate_and_normalize_arguments(value: Any) -> Dict[str, Any]:
     return normalized
 
 
+class GraphRelationEndpoint(BaseModel):
+    """A typed graph endpoint whose identity is derived from its source label."""
+
+    entity_id: str = ""
+    label: str
+    # This is the stable desktop graph vocabulary.  Rejecting unknown model
+    # output here keeps a type change from silently degrading into a concept.
+    node_type: CanonicalGraphNodeType
+
+    @field_validator("label", "node_type")
+    @classmethod
+    def validate_nonblank(cls, value: str) -> str:
+        normalized = " ".join((value or "").split())
+        if not normalized:
+            raise ValueError("graph relation endpoint label and node_type must not be blank")
+        if len(normalized) > PROMOTION_GRAPH_SUBJECT_MAX_LENGTH:
+            raise ValueError("graph relation endpoint fields exceed the maximum length")
+        return normalized
+
+    @model_validator(mode="after")
+    def normalize_entity_id(self):
+        expected = canonical_graph_entity_id(self.label)
+        if self.entity_id and self.entity_id != expected:
+            raise ValueError("graph relation endpoint id must be derived from its label")
+        self.entity_id = expected
+        return self
+
+
 class PromotionGraphPlan(BaseModel):
     """A non-empty graph assertion generated in the same L2 planning call."""
 
-    schema_version: Literal["canonical_memory_graph_plan.v1"] = PROMOTION_GRAPH_PLAN_VERSION
+    schema_version: Literal["canonical_memory_graph_plan.v1", "canonical_memory_graph_plan.v2"] = (
+        PROMOTION_GRAPH_PLAN_VERSION
+    )
     subject_entity_id: str
     predicate: str
-    arguments: Dict[str, Any]
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    subject: GraphRelationEndpoint | None = None
+    object: GraphRelationEndpoint | None = None
+    qualifiers: Dict[str, Any] = Field(default_factory=dict)
     plan_hash: str = ""
 
     @field_validator("subject_entity_id")
@@ -162,18 +198,44 @@ class PromotionGraphPlan(BaseModel):
     @field_validator("arguments", mode="before")
     @classmethod
     def validate_arguments(cls, value: Any) -> Dict[str, Any]:
-        return _validate_and_normalize_arguments(value)
+        return _validate_and_normalize_arguments(value, require_nonempty=False)
+
+    @field_validator("qualifiers", mode="before")
+    @classmethod
+    def validate_qualifiers(cls, value: Any) -> Dict[str, Any]:
+        return _validate_and_normalize_arguments(value, require_nonempty=False)
 
     def hash_payload(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "schema_version": self.schema_version,
             "subject_entity_id": self.subject_entity_id,
             "predicate": self.predicate,
             "arguments": self.arguments,
         }
+        if self.schema_version == PROMOTION_GRAPH_PLAN_V2_VERSION:
+            payload.update(
+                {
+                    "subject": self.subject.model_dump(mode="json") if self.subject else None,
+                    "object": self.object.model_dump(mode="json") if self.object else None,
+                    "qualifiers": self.qualifiers,
+                }
+            )
+        return payload
 
     @model_validator(mode="after")
     def derive_or_validate_hash(self):
+        if self.schema_version == PROMOTION_GRAPH_PLAN_V2_VERSION:
+            if self.subject is None or self.object is None:
+                raise ValueError("v2 graph relation plans require typed subject and object endpoints")
+            if self.subject.entity_id != self.subject_entity_id:
+                raise ValueError("v2 graph relation subject must match subject_entity_id")
+            if self.subject.entity_id == self.object.entity_id:
+                raise ValueError("v2 graph relation plans must not contain self-loops")
+            if self.arguments and self.arguments != self.qualifiers:
+                raise ValueError("v2 graph relation arguments must match qualifiers")
+            self.arguments = self.qualifiers
+        elif not self.arguments:
+            raise ValueError("promotion graph plan requires at least one argument")
         expected = deterministic_contract_id("canonical-promotion-graph-plan", self.hash_payload())
         if self.plan_hash and self.plan_hash != expected:
             raise ValueError("promotion graph plan hash mismatch")
@@ -261,7 +323,9 @@ class MemoryGraphAssertion(BaseModel):
     exist without a version-fenced graph representation.
     """
 
-    schema_version: Literal["canonical_memory_graph_assertion.v1"] = PROMOTION_GRAPH_ASSERTION_VERSION
+    schema_version: Literal["canonical_memory_graph_assertion.v1", "canonical_memory_graph_assertion.v2"] = (
+        PROMOTION_GRAPH_ASSERTION_VERSION
+    )
     assertion_id: str
     uid: str
     memory_id: str
@@ -271,6 +335,9 @@ class MemoryGraphAssertion(BaseModel):
     subject_entity_id: str
     predicate: str
     arguments: Dict[str, Any]
+    subject: GraphRelationEndpoint | None = None
+    object: GraphRelationEndpoint | None = None
+    qualifiers: Dict[str, Any] = Field(default_factory=dict)
     graph_plan_hash: str
     commit_id: str
     commit_sequence: int
@@ -312,16 +379,65 @@ class MemoryGraphAssertion(BaseModel):
     @model_validator(mode="after")
     def validate_plan_hash(self):
         plan = PromotionGraphPlan(
+            schema_version=(
+                PROMOTION_GRAPH_PLAN_V2_VERSION
+                if self.schema_version == PROMOTION_GRAPH_ASSERTION_V2_VERSION
+                else PROMOTION_GRAPH_PLAN_VERSION
+            ),
             subject_entity_id=self.subject_entity_id,
             predicate=self.predicate,
             arguments=self.arguments,
+            subject=self.subject,
+            object=self.object,
+            qualifiers=self.qualifiers,
             plan_hash=self.graph_plan_hash,
         )
         self.arguments = plan.arguments
+        self.subject = plan.subject
+        self.object = plan.object
+        self.qualifiers = plan.qualifiers
         return self
 
     def graph_records(self) -> Dict[str, List[Dict[str, Any]]]:
         """Derive stable graph nodes/edges without another model call."""
+        if self.schema_version == PROMOTION_GRAPH_ASSERTION_V2_VERSION:
+            assert self.subject is not None and self.object is not None
+            nodes = {
+                self.subject.entity_id: {
+                    "id": self.subject.entity_id,
+                    "label": self.subject.label,
+                    "node_type": self.subject.node_type,
+                    "aliases": [],
+                    "memory_ids": [self.memory_id],
+                },
+                self.object.entity_id: {
+                    "id": self.object.entity_id,
+                    "label": self.object.label,
+                    "node_type": self.object.node_type,
+                    "aliases": [],
+                    "memory_ids": [self.memory_id],
+                },
+            }
+            return {
+                "nodes": list(nodes.values()),
+                "edges": [
+                    {
+                        "id": "edge_"
+                        + deterministic_contract_id(
+                            "canonical-graph-edge",
+                            {
+                                "source_id": self.subject.entity_id,
+                                "target_id": self.object.entity_id,
+                                "label": self.predicate,
+                            },
+                        )[:24],
+                        "source_id": self.subject.entity_id,
+                        "target_id": self.object.entity_id,
+                        "label": self.predicate,
+                        "memory_ids": [self.memory_id],
+                    }
+                ],
+            }
         nodes: Dict[str, Dict[str, Any]] = {
             self.subject_entity_id: {
                 "id": self.subject_entity_id,
@@ -418,6 +534,11 @@ def build_memory_graph_assertion(
         )[:32]
     )
     return MemoryGraphAssertion(
+        schema_version=(
+            PROMOTION_GRAPH_ASSERTION_V2_VERSION
+            if graph_plan.schema_version == PROMOTION_GRAPH_PLAN_V2_VERSION
+            else PROMOTION_GRAPH_ASSERTION_VERSION
+        ),
         assertion_id=assertion_id,
         uid=uid,
         memory_id=memory_id,
@@ -427,6 +548,9 @@ def build_memory_graph_assertion(
         subject_entity_id=graph_plan.subject_entity_id,
         predicate=graph_plan.predicate,
         arguments=graph_plan.arguments,
+        subject=graph_plan.subject,
+        object=graph_plan.object,
+        qualifiers=graph_plan.qualifiers,
         graph_plan_hash=graph_plan.plan_hash,
         commit_id=commit_id,
         commit_sequence=commit_sequence,
@@ -469,18 +593,22 @@ def valid_promotion_admission(
 
 __all__ = [
     "MemoryGraphAssertion",
+    "CanonicalGraphNodeType",
     "PROMOTION_ADMISSION_VERSION",
     "PROMOTION_GRAPH_ASSERTION_VERSION",
+    "PROMOTION_GRAPH_ASSERTION_V2_VERSION",
     "PROMOTION_GRAPH_ARGUMENT_KEY_MAX_LENGTH",
     "PROMOTION_GRAPH_ARGUMENT_MAX_COUNT",
     "PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH",
     "PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES",
     "PROMOTION_GRAPH_PLAN_VERSION",
+    "PROMOTION_GRAPH_PLAN_V2_VERSION",
     "PROMOTION_GRAPH_PREDICATE_MAX_LENGTH",
     "PROMOTION_GRAPH_SUBJECT_MAX_LENGTH",
     "PROMOTION_PLANNER_ID",
     "PROMOTION_PLANNER_VERSION",
     "PromotionAdmissionReceipt",
+    "GraphRelationEndpoint",
     "PromotionGraphPlan",
     "build_memory_graph_assertion",
     "build_promotion_admission_receipt",

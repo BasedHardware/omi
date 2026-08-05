@@ -16,25 +16,33 @@ from routers import desktop_agent_vm
 
 
 def test_vm_publish_transaction_refuses_deletion_admitted_before_commit():
-    deletion = type('Snapshot', (), {'exists': True, 'to_dict': lambda self: {'wipe_status': 'running'}})()
+    # A deletion admitted before commit must short-circuit on the neutral store-port transaction: the
+    # deletion marker is read, the user doc is never read, and nothing is written.
+    reads: list[str] = []
 
-    class Ref:
-        def __init__(self, snapshot):
-            self.snapshot = snapshot
-            self.reads = 0
+    class _Snap:
+        def __init__(self, data):
+            self.exists = True
+            self._data = data
 
-        def get(self, transaction=None):
-            self.reads += 1
-            return self.snapshot
+        def to_dict(self):
+            return self._data
 
-    deletion_ref = Ref(deletion)
-    user_ref = Ref(type('Snapshot', (), {'exists': True, 'to_dict': lambda self: {'agentVm': {}}})())
-    transaction = type('Transaction', (), {'set': lambda *args, **kwargs: None})()
-    raw = getattr(desktop_agent_vm._set_vm_if_current_txn, 'to_wrap', desktop_agent_vm._set_vm_if_current_txn)
+    class _Tx:
+        def get(self, path):
+            reads.append(path)
+            if path.startswith("account_deletions/"):
+                return _Snap({'wipe_status': 'running'})
+            return _Snap({'agentVm': {}})
 
-    assert raw(transaction, deletion_ref, user_ref, 'vm', 'token', 'ready', '34.1.2.3', 'zone') is False
-    assert deletion_ref.reads == 1
-    assert user_ref.reads == 0
+        def set(self, path, data, *, merge=False):
+            raise AssertionError("must not write when deletion blocks access")
+
+    result = desktop_agent_vm._set_vm_if_current_txn(
+        _Tx(), "account_deletions/u", "users/u", 'vm', 'token', 'ready', '34.1.2.3', 'zone'
+    )
+    assert result is False
+    assert reads == ["account_deletions/u"]
 
 
 @pytest.mark.asyncio
@@ -343,6 +351,183 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
             "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
         }
     ]
+
+
+def test_stop_broker_rejects_identity_from_the_wrong_project_or_service_account(monkeypatch):
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+
+    with pytest.raises(ValueError, match="outside the broker scope"):
+        desktop_agent_vm._compute_identity_fields(
+            {
+                "email": "runtime@project.iam.gserviceaccount.com",
+                "email_verified": True,
+                "google": {
+                    "compute_engine": {
+                        "project_id": "other-project",
+                        "instance_name": "omi-agent-user",
+                        "instance_id": "123456789",
+                        "zone": "us-central1-a",
+                    }
+                },
+            }
+        )
+
+    with pytest.raises(ValueError, match="runtime identity"):
+        desktop_agent_vm._compute_identity_fields(
+            {
+                "email": "other@project.iam.gserviceaccount.com",
+                "email_verified": True,
+                "google": {
+                    "compute_engine": {
+                        "project_id": "project",
+                        "instance_name": "omi-agent-user",
+                        "instance_id": "123456789",
+                        "zone": "us-central1-a",
+                    }
+                },
+            }
+        )
+
+
+def test_stop_broker_reads_the_full_nested_compute_identity(monkeypatch):
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+
+    assert desktop_agent_vm._compute_identity_fields(
+        {
+            "email": "runtime@project.iam.gserviceaccount.com",
+            "email_verified": True,
+            "google": {
+                "compute_engine": {
+                    "project_id": "project",
+                    "instance_name": "omi-agent-user",
+                    "instance_id": 123456789,
+                    "zone": "us-central1-a",
+                    "instance_creation_timestamp": 1785900000,
+                }
+            },
+        }
+    ) == ("project", "us-central1-a", "omi-agent-user", "runtime@project.iam.gserviceaccount.com", "123456789")
+
+
+def test_stop_broker_owner_lookup_is_a_bounded_indexed_query(monkeypatch):
+    recorded: dict = {}
+    snapshot = type(
+        "Snapshot",
+        (),
+        {
+            "id": "uid",
+            "to_dict": lambda self: {"agentVm": {"vmName": "omi-agent-user", "zone": "us-central1-a"}},
+        },
+    )()
+
+    class _Store:
+        def query(self, collection, *, filters=None, limit=None, **_):
+            recorded["collection"] = collection
+            recorded["filters"] = filters
+            recorded["limit"] = limit
+            return [snapshot]
+
+    monkeypatch.setattr(desktop_agent_vm, "_store", lambda: _Store())
+
+    uid, vm = desktop_agent_vm._find_vm_owner("omi-agent-user") or (None, None)
+
+    assert uid == "uid"
+    assert vm["vmName"] == "omi-agent-user"
+    # Bounded, indexed lookup expressed on the neutral store port.
+    assert recorded == {
+        "collection": "users",
+        "filters": [("agentVm.vmName", "==", "omi-agent-user")],
+        "limit": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_stop_broker_binds_token_zone_and_instance_id_to_owner_and_runtime(monkeypatch):
+    class Request:
+        headers = {"authorization": "Bearer identity-token"}
+        client = None
+
+    claims = {
+        "email": "runtime@project.iam.gserviceaccount.com",
+        "email_verified": True,
+        "google": {
+            "compute_engine": {
+                "project_id": "project",
+                "instance_name": "omi-agent-user",
+                "instance_id": "123456789",
+                "zone": "us-central1-a",
+            }
+        },
+    }
+
+    async def direct_run_blocking(_executor, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_stop_broker_rate_allowed", lambda _request: True)
+    monkeypatch.setattr(desktop_agent_vm, "_verify_agent_vm_identity", lambda _token: claims)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_find_vm_owner",
+        lambda _name: (
+            "uid",
+            {"vmName": "omi-agent-user", "zone": "us-central1-b", "authToken": "owner-token"},
+        ),
+    )
+
+    with pytest.raises(HTTPException, match="zone does not match") as zone_error:
+        await desktop_agent_vm.stop_self(Request())
+    assert zone_error.value.status_code == 403
+
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_find_vm_owner",
+        lambda _name: (
+            "uid",
+            {"vmName": "omi-agent-user", "zone": "us-central1-a", "authToken": "owner-token"},
+        ),
+    )
+    monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: True)
+
+    async def wrong_instance(*_args):
+        return "RUNNING", {"id": "987654321", "name": "omi-agent-user"}
+
+    monkeypatch.setattr(desktop_agent_vm, "_instance", wrong_instance)
+    with pytest.raises(HTTPException, match="runtime identity does not match") as instance_error:
+        await desktop_agent_vm.stop_self(Request())
+    assert instance_error.value.status_code == 403
+
+
+def test_stop_broker_rate_limit_is_bounded(monkeypatch):
+    class Client:
+        host = "198.51.100.10"
+
+    class Request:
+        client = Client()
+
+    desktop_agent_vm._stop_broker_attempts.clear()
+    monkeypatch.setattr(desktop_agent_vm, "_STOP_BROKER_RATE_LIMIT", 2)
+    assert desktop_agent_vm._stop_broker_rate_allowed(Request())
+    assert desktop_agent_vm._stop_broker_rate_allowed(Request())
+    assert not desktop_agent_vm._stop_broker_rate_allowed(Request())
+
+
+def test_new_vm_startup_metadata_contains_release_checksum_and_boot_image(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/family/omi-agent")
+
+    metadata = desktop_agent_vm._agent_vm_startup_metadata("bucket")
+
+    assert "sha256sum /tmp/omi-startup.sh" in metadata["startup-script"]
+    assert metadata["omi-agent-startup-sha256"] == "c" * 64
+    assert metadata["omi-agent-boot-image"].endswith("/family/omi-agent")
 
 
 @pytest.mark.asyncio
