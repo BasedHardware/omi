@@ -167,6 +167,7 @@ def run_canonical_legacy_backfill_page(
     checkpoint_store = FirestoreCheckpointStore(client)
     cohort_uids, pending_uids = _cohort_uids_with_pending_checkpoints(checkpoint_store)
     selected_uids = tuple(pending_uids[: config.page_size])
+    enrollment_hook = partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids), db_client=client)
     bulk_config = BulkMigrationConfig(
         dry_run=config.dry_run,
         max_users_per_run=config.page_size,
@@ -179,7 +180,7 @@ def run_canonical_legacy_backfill_page(
 
     def inventory_fn(uid: str):
         if not config.dry_run:
-            _cohort_enrollment_hook(uid, db_client=client)
+            enrollment_hook(uid)
         return inventory_legacy_user(uid, db_client=client)
 
     def backfill_fn(
@@ -188,7 +189,7 @@ def run_canonical_legacy_backfill_page(
         resume: bool,
         stop_requested: Callable[[], bool],
     ) -> BackfillReport:
-        _cohort_enrollment_hook(uid, db_client=client)
+        enrollment_hook(uid)
         return backfill_user(
             uid,
             dry_run=False,
@@ -206,9 +207,7 @@ def run_canonical_legacy_backfill_page(
         inventory_fn=inventory_fn,
         pause_fn=lambda: read_global_pause(client),
         checkpoint_store=None if config.dry_run else checkpoint_store,
-        enroll_fn=None
-        if config.dry_run
-        else partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids), db_client=client),
+        enroll_fn=None if config.dry_run else enrollment_hook,
         backfill_fn=None if config.dry_run else backfill_fn,
     )
 

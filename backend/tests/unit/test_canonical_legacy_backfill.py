@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 
@@ -94,6 +95,10 @@ def _seed_rollout_control(db: _Db, uid: str, *, stage: str = "write", writes_blo
     db.documents[MemoryCollections(uid).memory_control_state] = payload
 
 
+def _allow_canonical_writes(monkeypatch) -> None:
+    monkeypatch.setattr(backfill, "canonical_write_decision", lambda *args, **kwargs: SimpleNamespace(enabled=True))
+
+
 @pytest.fixture(autouse=True)
 def _canonical_test_cohort(monkeypatch):
     set_canonical_cohort(monkeypatch, "already-done", "cohort-a", "cohort-b")
@@ -127,9 +132,7 @@ def test_default_config_does_not_stage_or_write(monkeypatch):
 def test_enrollment_hook_rejects_non_cohort_uid():
     """A non-cohort uid must never reach terminal read_ready via this seam."""
     with pytest.raises(ValueError, match="non-cohort"):
-        backfill._cohort_enrollment_hook(
-            "intruder", canonical_uids=frozenset({"cohort-a"}), db_client=_Db()
-        )
+        backfill._cohort_enrollment_hook("intruder", canonical_uids=frozenset({"cohort-a"}), db_client=_Db())
 
 
 def test_helper_does_not_import_terminal_graph_or_cron_owners():
@@ -144,6 +147,7 @@ def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypa
     db = _Db()
     _seed_checkpoint(db, "already-done", MigrationState.read_ready)
     _seed_rollout_control(db, "cohort-a")
+    _allow_canonical_writes(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["already-done", "cohort-a", "cohort-b"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     calls: list[str] = []
@@ -172,6 +176,7 @@ def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypa
 def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
     db = _Db()
     _seed_rollout_control(db, "cohort-a")
+    _allow_canonical_writes(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     calls: list[str] = []
@@ -200,6 +205,7 @@ def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
 def test_row_page_is_forwarded_and_only_durable_checkpoints_are_written(monkeypatch):
     db = _Db()
     _seed_rollout_control(db, "cohort-a")
+    _allow_canonical_writes(monkeypatch)
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     stage_kwargs: list[dict] = []
@@ -264,7 +270,7 @@ def test_page_fails_closed_without_write_stage_enrollment_control(monkeypatch, c
     monkeypatch.setattr(backfill, "backfill_user", stage)
 
     page = backfill.run_canonical_legacy_backfill_page(
-        config=backfill.CanonicalLegacyBackfillConfig(page_size=1),
+        config=backfill.CanonicalLegacyBackfillConfig(page_size=1, dry_run=False),
         db_client=db,
     )
 
