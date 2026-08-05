@@ -100,6 +100,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         "DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED=true",
         "failure() && env.DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED == 'true'",
         "rollback verification found",
+        "extract_single_cloud_run_traffic_revision.py",
         "Upload desktop backend acceptance evidence",
     )
     for fragment in required:
@@ -143,6 +144,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             workflow=workflow,
         )
     )
+    # Static workflow tripwire: deploy-cloudrun's parseFlags splits an unquoted
+    # --args=-m,... token, making Python treat -m as a gcloud flag instead of a
+    # container argument.  The quoted full token preserves the intended argv.
+    if "'--args=-m,jobs.agent_vm_reconciler'" not in text:
+        errors.append(f"{workflow}: Agent VM reconciler Python module argument must remain action-parser-safe")
 
     if production:
         for fragment in (
@@ -252,6 +258,8 @@ def validate_recovery_workflow(text: str) -> list[str]:
         "group: desktop-backend-prod",
         "cancel-in-progress: false",
         "environment: prod",
+        "Checkout recovery controls",
+        "actions/checkout@v7",
         "recover-desktop-backend-prod",
         "serving.knative.dev/service",
         'ready.get("status") != "True"',
@@ -263,6 +271,7 @@ def validate_recovery_workflow(text: str) -> list[str]:
         "recovered-desktop-backend-health.json",
         "jq -e",
         "recovery rollback found",
+        "extract_single_cloud_run_traffic_revision.py",
     ):
         if fragment not in text:
             errors.append(f"desktop_backend_recover_prod.yml: missing recovery guard {fragment!r}")
