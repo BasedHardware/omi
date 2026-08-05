@@ -1,0 +1,87 @@
+desktop/lock-in/Sources/LockInApp/Onboarding/TableStep.swift
+  s_acebfdccb4f1d0::t_125c4116c5ac60 1-81,86-104,114-345
+  s_acebfdccb4f1d0::t_9817395c9609ae 105-113
+  s_acebfdccb4f1d0::t_b9d333801b859c 82-85
+desktop/lock-in/Sources/LockInApp/Views/History/HistoryView.swift
+  s_acebfdccb4f1d0::t_1eaecdd1898822 2-39,41-59,67-92,94-100,103-116,118,120-139,145-151,155-156,158-159,161-162,166-167,169-188
+  s_acebfdccb4f1d0::t_92ddff78ba793e 93,101-102,117,119
+  s_acebfdccb4f1d0::t_4f56b6017a0bce 140-144,152-154,157,160,163-164,168
+  s_acebfdccb4f1d0::t_4005f1b3457409 40
+  s_acebfdccb4f1d0::t_8d52f9300a8240 60-66
+  s_acebfdccb4f1d0::t_b7f9ae6d5f4570 1
+  s_acebfdccb4f1d0::t_68e656edcb1f11 165
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingView.swift
+  s_acebfdccb4f1d0::t_abae2a23336ac7 6,8-17,52-54,64-65,103
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingChrome.swift
+  s_acebfdccb4f1d0::t_c44010bc7e0298 1
+  s_acebfdccb4f1d0::t_f2cc6de5639cab 2-77,79-104
+  s_acebfdccb4f1d0::t_73c99335d98500 78
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingTables.swift
+  s_acebfdccb4f1d0::t_252a821c909ccd 1-52
+desktop/lock-in/Sources/LockInApp/Onboarding/IntroStep.swift
+  s_acebfdccb4f1d0::t_7793a0bf7cf497 192
+  s_acebfdccb4f1d0::t_081e103d3b63db 174,176,182-186
+  s_acebfdccb4f1d0::t_3907c882553628 1-173,175,177-181,187-191,193-226
+desktop/lock-in/Sources/LockInApp/Views/History/DayDetail.swift
+  s_acebfdccb4f1d0::t_b72bf193fdb1db 1-186
+desktop/lock-in/Sources/LockInApp/Views/History/HistoryModel.swift
+  s_acebfdccb4f1d0::t_5841edabe5b2a1 45-52,55
+  s_acebfdccb4f1d0::t_57d8cf75436a10 29-34
+  s_acebfdccb4f1d0::t_6aafdce3cbac65 111-115
+  s_acebfdccb4f1d0::t_c2daa62b652f22 1-28,35-44,53-54,56-94,101-102,104-105,107-110,116-155,158-162,167,176-196,203-209,212-213
+  s_acebfdccb4f1d0::t_3b65a0265b8ded 163-166,168-175
+  s_acebfdccb4f1d0::t_ff17e09d27fd97 156-157
+  s_acebfdccb4f1d0::t_a401ffaefac902 200
+  s_acebfdccb4f1d0::t_b9cc71ffb99a12 95-100,103,106
+  s_acebfdccb4f1d0::t_7a6c2e498a7f6f 197-199,201-202
+  s_acebfdccb4f1d0::t_9a3541b54d0e0f 210-211
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingWindow.swift
+  s_acebfdccb4f1d0::t_7420a07fe2680a 24-27,29-33
+  s_acebfdccb4f1d0::t_f21ebe3504961f 67-68
+  s_acebfdccb4f1d0::t_589c1e01190694 17-23,28,34-35
+desktop/lock-in/Sources/LockInCore/DayHistory.swift
+  s_acebfdccb4f1d0::t_93fe93a50af922 1-255
+desktop/lock-in/Tests/LockInCoreTests/DayHistoryTests.swift
+  s_acebfdccb4f1d0::t_0de6d90c778155 91-92
+  s_acebfdccb4f1d0::t_9dca9afcfbebf9 1-50,52-90,93-234
+  s_acebfdccb4f1d0::t_32f4a1e07b762a 51
+desktop/lock-in/Sources/LockInApp/Onboarding/PermissionStep.swift
+  s_acebfdccb4f1d0::t_ca93b9275b0783 211,213,217-218,222-223,225,227,231
+  s_acebfdccb4f1d0::t_3a77e0fa7d09ed 1-110,112-117,152-210,212,214-216,219-221,224,226,228-230,232-314
+  s_acebfdccb4f1d0::t_f24813fea5efaa 111,118-151
+desktop/lock-in/Sources/LockInApp/Views/History/StreakChain.swift
+  s_acebfdccb4f1d0::t_01a0f592f3f142 20-22
+  s_acebfdccb4f1d0::t_c5c5fa6adb394e 71-75,81-83,87-88,91,93-95,107-108,110,115-125,128
+  s_acebfdccb4f1d0::t_f93f8df6207e16 54-60
+  s_acebfdccb4f1d0::t_24e49d3a785e28 6-10
+  s_acebfdccb4f1d0::t_066ecb96db08ce 1-5,11-19,23-53,61-70,76-80,84-86,89-90,92,96-106,109,111-114,126-127,129-162
+desktop/lock-in/Sources/LockInApp/Views/History/MonthGrid.swift
+  s_acebfdccb4f1d0::t_99f83076ef9869 133,151
+  s_acebfdccb4f1d0::t_3ef627d00e4b1a 20-21
+  s_acebfdccb4f1d0::t_c30b3465626897 113-120
+  s_acebfdccb4f1d0::t_13ea92c8c24be8 166
+  s_acebfdccb4f1d0::t_5833755a29ef64 1-19,22-112,121-132,134-150,152-165,167-185
+desktop/lock-in/Sources/LockInApp/Onboarding/GoalsStep.swift
+  s_acebfdccb4f1d0::t_dd8982220f33b4 1-68,76-152,154-279
+  s_acebfdccb4f1d0::t_c4a557508a2a74 153
+  s_acebfdccb4f1d0::t_8b6f9fad643ce4 69-75
+desktop/lock-in/Sources/LockInApp/Views/History/HistoryCell.swift
+  s_acebfdccb4f1d0::t_1549fef7592795 1-22,24,31-62
+  s_acebfdccb4f1d0::t_ba99d9f689cce4 23,25-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "95b6a81538a187d2e7057caebe59a929b719f5bc",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
