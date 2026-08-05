@@ -492,31 +492,33 @@ struct ChatPage: View {
   // MARK: - Input Area
 
   private var inputArea: some View {
-    ChatInputView(
-      onSend: { text in
-        AnalyticsManager.shared.chatMessageSent(
-          messageLength: text.count, hasSelectedAppContext: selectedApp != nil, source: "main_chat")
-        chatProvider.dismissOnboardingOpener()
-        Task { await chatProvider.sendMainDraft(text) }
-      },
-      onStop: {
-        chatProvider.stopAgent(owner: .mainChat)
-      },
-      isSending: chatProvider.isSending,
-      isStopping: chatProvider.isStopping,
-      mode: $chatProvider.chatMode,
-      inputText: $chatProvider.draftText,
-      attachments: $chatProvider.pendingAttachments,
-      onAttachmentsAdded: { urls in
-        let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
-        chatProvider.addAttachments(toAdd)
-      },
-      onAttachmentRemoved: { id in
-        chatProvider.removePendingAttachment(id: id)
-      }
-    )
-    .padding(.horizontal, ChatComposerLayout.pageMargin)
-    .padding(.bottom, ChatComposerLayout.pageMargin)
+    ChatDraftScope(draft: chatProvider.composerDraft) { draft in
+      ChatInputView(
+        onSend: { text in
+          AnalyticsManager.shared.chatMessageSent(
+            messageLength: text.count, hasSelectedAppContext: selectedApp != nil, source: "main_chat")
+          chatProvider.dismissOnboardingOpener()
+          Task { await chatProvider.sendMainDraft(text) }
+        },
+        onStop: {
+          chatProvider.stopAgent(owner: .mainChat)
+        },
+        isSending: chatProvider.isSending,
+        isStopping: chatProvider.isStopping,
+        mode: $chatProvider.chatMode,
+        inputText: draft,
+        attachments: $chatProvider.pendingAttachments,
+        onAttachmentsAdded: { urls in
+          let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+          chatProvider.addAttachments(toAdd)
+        },
+        onAttachmentRemoved: { id in
+          chatProvider.removePendingAttachment(id: id)
+        }
+      )
+      .padding(.horizontal, ChatComposerLayout.pageMargin)
+      .padding(.bottom, ChatComposerLayout.pageMargin)
+    }
   }
 
   /// Copy the entire conversation to clipboard

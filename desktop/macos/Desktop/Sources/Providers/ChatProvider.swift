@@ -1149,12 +1149,12 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Published State
   @Published var chatMode: ChatMode = .act
-  @Published var draftText = "" {
-    didSet {
-      guard !isRestoringDraft else { return }
-      draftRevision &+= 1
-      ChatDraftStore.shared.setText(draftText, for: activeDraftKey)
-    }
+  /// Composer text. Stored on `composerDraft` so typing wakes only the
+  /// composer subtree, not every view observing this provider.
+  let composerDraft = ChatComposerDraft()
+  var draftText: String {
+    get { composerDraft.text }
+    set { composerDraft.setText(newValue) }
   }
   /// Files staged for attachment to the next message. Cleared when the message is sent.
   @Published var pendingAttachments: [ChatAttachment] = []
@@ -1280,9 +1280,6 @@ class ChatProvider: ObservableObject {
   /// This lets a single pill run Hermes/OpenClaw without changing the user's
   /// global chat provider preference stored in `chatBridgeMode`.
   private let bridgeHarnessOverride: AgentHarnessMode?
-  private var activeDraftKey = ChatDraftKey.mainChat(contextID: "omi:default")
-  private var isRestoringDraft = false
-  private var draftRevision: UInt64 = 0
 
   var hasBridgeHarnessOverride: Bool {
     bridgeHarnessOverride != nil
@@ -1513,9 +1510,7 @@ class ChatProvider: ObservableObject {
 
   init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
     self.bridgeHarnessOverride = bridgeHarnessOverride
-    isRestoringDraft = true
-    draftText = ChatDraftStore.shared.text(for: activeDraftKey)
-    isRestoringDraft = false
+    composerDraft.restore()
     log("ChatProvider initialized, will start Claude bridge on first use")
 
     // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
@@ -1661,19 +1656,11 @@ class ChatProvider: ObservableObject {
   }
 
   private func restoreDraftForCurrentContextIfNeeded() {
-    let nextKey = currentDraftKey
-    guard nextKey != activeDraftKey else { return }
-    activeDraftKey = nextKey
-    isRestoringDraft = true
-    draftText = ChatDraftStore.shared.text(for: nextKey)
-    isRestoringDraft = false
+    composerDraft.activate(key: currentDraftKey)
   }
 
   private func resetDraftAfterSignOut() {
-    activeDraftKey = .mainChat(contextID: "omi:default")
-    isRestoringDraft = true
-    draftText = ""
-    isRestoringDraft = false
+    composerDraft.reset(to: .mainChat(contextID: "omi:default"))
   }
 
   /// Pre-start the active bridge so the first query doesn't wait for process launch
@@ -5581,12 +5568,12 @@ class ChatProvider: ObservableObject {
   /// and typing a new draft while acceptance is pending is never overwritten.
   @discardableResult
   func sendMainDraft(_ text: String) async -> String? {
-    let submittedRevision = draftRevision
+    let submittedRevision = composerDraft.revision
     return await sendMessage(
       text,
       onAccepted: { [weak self] in
         guard let self,
-          self.draftRevision == submittedRevision,
+          self.composerDraft.revision == submittedRevision,
           self.draftText == text
         else { return }
         self.draftText = ""

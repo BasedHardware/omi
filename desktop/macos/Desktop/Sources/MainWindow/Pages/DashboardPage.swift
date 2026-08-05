@@ -652,35 +652,37 @@ struct DashboardPage: View {
       dashboardChatErrorCard
         .padding(.horizontal, OmiSpacing.section)
 
-      ChatInputView(
-        onSend: { text in
-          AnalyticsManager.shared.chatMessageSent(
-            messageLength: text.count,
-            hasSelectedAppContext: selectedApp != nil,
-            source: "dashboard_chat"
-          )
-          Task { await chatProvider.sendMainDraft(text) }
-        },
-        onStop: {
-          chatProvider.stopAgent(owner: .mainChat)
-        },
-        isSending: chatProvider.isSending,
-        isStopping: chatProvider.isStopping,
-        placeholder: "Ask omi anything",
-        mode: $chatProvider.chatMode,
-        inputText: $chatProvider.draftText,
-        attachments: $chatProvider.pendingAttachments,
-        onAttachmentsAdded: { urls in
-          let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
-          chatProvider.addAttachments(toAdd)
-        },
-        onAttachmentRemoved: { id in
-          chatProvider.removePendingAttachment(id: id)
-        }
-      )
-      .padding(.horizontal, OmiSpacing.section)
-      .padding(.top, OmiSpacing.md)
-      .padding(.bottom, OmiSpacing.xl)
+      ChatDraftScope(draft: chatProvider.composerDraft) { draft in
+        ChatInputView(
+          onSend: { text in
+            AnalyticsManager.shared.chatMessageSent(
+              messageLength: text.count,
+              hasSelectedAppContext: selectedApp != nil,
+              source: "dashboard_chat"
+            )
+            Task { await chatProvider.sendMainDraft(text) }
+          },
+          onStop: {
+            chatProvider.stopAgent(owner: .mainChat)
+          },
+          isSending: chatProvider.isSending,
+          isStopping: chatProvider.isStopping,
+          placeholder: "Ask omi anything",
+          mode: $chatProvider.chatMode,
+          inputText: draft,
+          attachments: $chatProvider.pendingAttachments,
+          onAttachmentsAdded: { urls in
+            let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+            chatProvider.addAttachments(toAdd)
+          },
+          onAttachmentRemoved: { id in
+            chatProvider.removePendingAttachment(id: id)
+          }
+        )
+        .padding(.horizontal, OmiSpacing.section)
+        .padding(.top, OmiSpacing.md)
+        .padding(.bottom, OmiSpacing.xl)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.clear)
@@ -760,13 +762,12 @@ struct DashboardPage: View {
   /// connect tray), the persistent ask bar anchored beneath it, and the
   /// suggested questions under the bar while the hub is showing.
   private func homeStage(stageWidth: CGFloat, stageHeight: CGFloat) -> some View {
-    let askBarWidth = homeAskBarWidth(for: stageWidth)
-    return Group {
+    Group {
       if homeMode == .hub {
-        homeHubStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
+        homeHubStage(stageWidth: stageWidth)
           .transition(.homeHubStage)
       } else {
-        homePanelStage(stageWidth: stageWidth, askBarWidth: askBarWidth)
+        homePanelStage(stageWidth: stageWidth, askBarWidth: homeChatColumnWidth(for: stageWidth))
       }
     }
     .padding(.top, homeMode.topPadding(hub: Self.homeStageTopPadding))
@@ -776,7 +777,7 @@ struct DashboardPage: View {
   /// Hub layout: the greeting headline and knows-list rows centered on the
   /// stage over the memory constellation, with the goals/error surfaces and
   /// the ask bar docked as one column at the bottom.
-  private func homeHubStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View {
+  private func homeHubStage(stageWidth: CGFloat) -> some View {
     // Keep the knows-list column tight so short rows (e.g. "Call Rabia") don't
     // strand their trailing icon across a wide gap; long one-liners still fit.
     let columnWidth = min(CGFloat(520), homeStageContentWidth(for: stageWidth))
@@ -793,21 +794,25 @@ struct DashboardPage: View {
 
       Spacer(minLength: 0)
 
-      VStack(spacing: 0) {
-        dashboardIntelligenceError
-          .frame(width: askBarWidth)
-          .padding(.bottom, intelligenceStore.error == nil ? 0 : OmiSpacing.sm)
+      // Only this column's width tracks the typed text, so only it subscribes.
+      ChatDraftScope(draft: chatProvider.composerDraft) { draft in
+        let askBarWidth = homeHubAskBarWidth(for: stageWidth, draft: draft.wrappedValue)
+        VStack(spacing: 0) {
+          dashboardIntelligenceError
+            .frame(width: askBarWidth)
+            .padding(.bottom, intelligenceStore.error == nil ? 0 : OmiSpacing.sm)
 
-        FocusedGoalsSection(
-          store: intelligenceStore,
-          onOpenGoal: { goalID in await openGoal(goalID) },
-          onShowAll: { showingAllGoals = true }
-        )
-        .frame(width: askBarWidth)
-        .padding(.bottom, hasFocusedGoalsSurface ? OmiSpacing.md : 0)
-
-        homeAskBar
+          FocusedGoalsSection(
+            store: intelligenceStore,
+            onOpenGoal: { goalID in await openGoal(goalID) },
+            onShowAll: { showingAllGoals = true }
+          )
           .frame(width: askBarWidth)
+          .padding(.bottom, hasFocusedGoalsSurface ? OmiSpacing.md : 0)
+
+          homeAskBar
+            .frame(width: askBarWidth)
+        }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1247,27 +1252,29 @@ struct DashboardPage: View {
   }
 
   private var homeAskBar: some View {
-    HomeAskBar(
-      text: $chatProvider.draftText,
-      isSending: chatProvider.isSending,
-      isStopping: chatProvider.isStopping,
-      isConnectActive: homeMode == .connect,
-      focus: $homeAskFieldFocused,
-      attachments: $chatProvider.pendingAttachments,
-      onAttachmentsAdded: { urls in
-        let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
-        chatProvider.addAttachments(toAdd)
-      },
-      onAttachmentRemoved: { id in
-        chatProvider.removePendingAttachment(id: id)
-      },
-      onSend: sendFromHomeAskBar,
-      onStop: { chatProvider.stopAgent(owner: .mainChat) },
-      onConnect: toggleHomeConnectPanel,
-      // Tapping the bar begins a fresh chat and focuses it to type, staying on
-      // the hero; only sending enters the chat surface (see sendFromHomeAskBar).
-      onActivate: { focusHomeAskBar() }
-    )
+    ChatDraftScope(draft: chatProvider.composerDraft) { draft in
+      HomeAskBar(
+        text: draft,
+        isSending: chatProvider.isSending,
+        isStopping: chatProvider.isStopping,
+        isConnectActive: homeMode == .connect,
+        focus: $homeAskFieldFocused,
+        attachments: $chatProvider.pendingAttachments,
+        onAttachmentsAdded: { urls in
+          let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+          chatProvider.addAttachments(toAdd)
+        },
+        onAttachmentRemoved: { id in
+          chatProvider.removePendingAttachment(id: id)
+        },
+        onSend: sendFromHomeAskBar,
+        onStop: { chatProvider.stopAgent(owner: .mainChat) },
+        onConnect: toggleHomeConnectPanel,
+        // Tapping the bar begins a fresh chat and focuses it to type, staying on
+        // the hero; only sending enters the chat surface (see sendFromHomeAskBar).
+        onActivate: { focusHomeAskBar() }
+      )
+    }
   }
 
   private var homeSuggestedQuestions: [String] {
@@ -1290,24 +1297,17 @@ struct DashboardPage: View {
     min(Self.homeStagePanelMaxWidth, homeStageContentWidth(for: stageWidth))
   }
 
-  private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat {
-    let contentWidth = homeStageContentWidth(for: stageWidth)
-    if homeMode != .hub {
-      // Chat mode: bar and message column share one readable width, edges
-      // aligned (bubbles start/end on the bar's verticals).
-      return min(Self.homeChatColumnMaxWidth, contentWidth)
-    }
+  /// Chat mode: bar and message column share one readable width. Draft-independent.
+  private func homeChatColumnWidth(for stageWidth: CGFloat) -> CGFloat {
+    min(Self.homeChatColumnMaxWidth, homeStageContentWidth(for: stageWidth))
+  }
 
-    let availableWidth = min(Self.homeAskBarMaxWidth, contentWidth)
-    let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else {
-      return min(availableWidth, Self.homeAskBarMinWidth)
-    }
-
-    let attributes: [NSAttributedString.Key: Any] = [
-      .font: NSFont.systemFont(ofSize: 15)
-    ]
-    let measuredTextWidth = (text as NSString).size(withAttributes: attributes).width
+  /// Hub mode: the resting bar grows to fit what has been typed.
+  private func homeHubAskBarWidth(for stageWidth: CGFloat, draft: String) -> CGFloat {
+    let availableWidth = min(Self.homeAskBarMaxWidth, homeStageContentWidth(for: stageWidth))
+    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else { return min(availableWidth, Self.homeAskBarMinWidth) }
+    let measuredTextWidth = (text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 15)]).width
     let chromeWidth: CGFloat = 210
     return min(availableWidth, max(Self.homeAskBarMinWidth, measuredTextWidth + chromeWidth))
   }
