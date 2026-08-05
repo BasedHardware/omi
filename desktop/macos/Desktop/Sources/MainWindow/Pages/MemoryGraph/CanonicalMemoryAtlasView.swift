@@ -541,39 +541,6 @@ enum MemoryAtlasZoomPolicy {
   }
 }
 
-enum MemoryAtlasNodeVisualPolicy {
-  /// Deep inspection keeps dots at a stable, usable size. The dynamic maximum
-  /// zoom adds label fidelity; it must not make a node harder to see or target.
-  static func radius(
-    clusterRank: Int,
-    zoom: CGFloat,
-    compact: Bool,
-    isFullyLabelled: Bool,
-    isInspect: Bool,
-    isFocus: Bool,
-    isSmallAtlas: Bool = false
-  ) -> CGFloat {
-    if isFullyLabelled || isInspect {
-      return clusterRank == 0 ? 16 : 12
-    }
-    // A 2.1pt dot is the right mark among thousands of peers and far too timid
-    // when there are two dozen. Scale the mark to the graph, not just the zoom.
-    if isSmallAtlas && !compact && !isFocus {
-      return clusterRank == 0 ? 9 : 6
-    }
-    if isFocus {
-      return clusterRank == 0 ? 10 : 7.2
-    }
-    if clusterRank == 0 {
-      if compact { return 5 }
-      return zoom >= 4.2 ? 8 : 6
-    }
-    if compact { return zoom >= 1.2 ? 2.4 : 2.1 }
-    if zoom >= 4.2 { return 4.8 }
-    return zoom >= 1.45 ? 2.8 : 2.1
-  }
-}
-
 struct MemoryAtlasRenderPlan {
   let visibleNodes: [MemoryAtlasNodePlacement]
   let visibleEdges: [MemoryAtlasEdgePlacement]
@@ -913,38 +880,6 @@ enum MemoryAtlasRenderPlanner {
     return result
   }
 
-  /// Preserve the precomputed per-cluster salience order while avoiding a
-  /// single dense cluster monopolizing a capped detail viewport.
-  private static func fairPrefix(
-    _ candidates: [MemoryAtlasNodePlacement],
-    limit: Int
-  ) -> [MemoryAtlasNodePlacement] {
-    var unclustered: [MemoryAtlasNodePlacement] = []
-    var byCluster: [MemoryAtlasCluster: [MemoryAtlasNodePlacement]] = [:]
-    for placement in candidates {
-      if let cluster = placement.cluster {
-        byCluster[cluster, default: []].append(placement)
-      } else {
-        unclustered.append(placement)
-      }
-    }
-
-    var result = Array(unclustered.prefix(limit))
-    var nextIndexes = [Int](repeating: 0, count: MemoryAtlasCluster.allCases.count)
-    while result.count < limit {
-      var appended = false
-      for (clusterIndex, cluster) in MemoryAtlasCluster.allCases.enumerated() where result.count < limit {
-        let index = nextIndexes[clusterIndex]
-        guard let placements = byCluster[cluster], index < placements.count else { continue }
-        result.append(placements[index])
-        nextIndexes[clusterIndex] = index + 1
-        appended = true
-      }
-      if !appended { break }
-    }
-    return result
-  }
-
   /// Labels admitted without collision, plus the subset drawn above their mark.
   private struct AdmittedLabels {
     var placements: [MemoryAtlasNodePlacement] = []
@@ -1018,9 +953,17 @@ enum MemoryAtlasLayoutEngine {
     // Graph responses are external data. Coalesce duplicate identifiers at the
     // boundary so a malformed server response cannot trap while building a UI.
     let nodes = uniqueNodes(from: graph.atlasNodes)
+    let assertionNodeIDs = Set(nodes.map(\.id))
+    // A canonical memory without a verified relationship is still a real
+    // memory. It belongs in the atlas as a neutral, explicitly unconnected
+    // mark rather than being silently removed from the user's browser. Keep it
+    // out of the semantic layout below: using a type field or an inferred edge
+    // here would make an unsupported claim about what that memory relates to.
+    let catalogNodes = uniqueNodes(from: graph.catalogNodes ?? [])
+      .filter { !assertionNodeIDs.contains($0.id) }
     let edges = uniqueEdges(from: graph.edges)
 
-    guard !nodes.isEmpty else {
+    guard !nodes.isEmpty || !catalogNodes.isEmpty else {
       return MemoryAtlasSnapshot(nodes: [], edges: [], anchorNodeID: nil, clusterCenters: [:])
     }
 
@@ -1220,6 +1163,25 @@ enum MemoryAtlasLayoutEngine {
           )
         )
       }
+    }
+
+    // Catalog records deliberately receive no cluster and no edge. The outer
+    // halo is an honest visual distinction from assertion-backed constellations
+    // while keeping every canonical memory reachable through zoom, search, and
+    // selection. Ordering by stable id keeps a refresh from shuffling the map.
+    let catalogPositions = MemoryAtlasForceLayout.haloPositions(
+      groups: catalogNodes.sorted { $0.id < $1.id }.map { [$0.id] }, area: Self.layoutArea)
+    let catalogRankBase = placements.count
+    for (index, node) in catalogNodes.sorted(by: { $0.id < $1.id }).enumerated() {
+      placements.append(
+        MemoryAtlasNodePlacement(
+          node: node,
+          cluster: nil,
+          normalizedPosition: catalogPositions[node.id] ?? MemoryAtlasCluster.starCenter,
+          degree: 0,
+          clusterRank: catalogRankBase + index
+        )
+      )
     }
 
     let positions = Dictionary(lastWriteWins: placements.map { ($0.id, $0.normalizedPosition) })
@@ -3135,6 +3097,35 @@ private struct CanonicalMemoryAtlasSurface: View {
       if !mutedPath.isEmpty {
         context.fill(mutedPath, with: .color(cluster.color.opacity(0.1)))
       }
+    }
+
+    // Catalog marks are deliberately neutral. They are durable memories, not
+    // concepts or members of a relationship cluster, and their outer placement
+    // is the only spatial statement the atlas makes about them.
+    var catalogPrimaryPath = Path()
+    var catalogMutedPath = Path()
+    for placement in plan.visibleNodes
+    where placement.cluster == nil && placement.id != snapshot.anchorNodeID && placement.id != selectedNodeID {
+      let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
+      let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
+      let radius = nodeRadius(for: placement)
+      let center = point(for: placement.normalizedPosition, in: size)
+      guard
+        paintBounds.intersects(
+          CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+      else { continue }
+      let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+      if related && matches {
+        catalogPrimaryPath.addEllipse(in: rect)
+      } else {
+        catalogMutedPath.addEllipse(in: rect)
+      }
+    }
+    if !catalogPrimaryPath.isEmpty {
+      context.fill(catalogPrimaryPath, with: .color(OmiColors.textTertiary.opacity(0.44)))
+    }
+    if !catalogMutedPath.isEmpty {
+      context.fill(catalogMutedPath, with: .color(OmiColors.textTertiary.opacity(0.09)))
     }
 
     if let anchorNodeID = snapshot.anchorNodeID,
