@@ -14,7 +14,7 @@ if [[ -z "$project" || -z "$bucket" || -z "$deployer" ]]; then
   echo "AGENT_VM_RECONCILER_PROJECT, AGENT_VM_RECONCILER_BUCKET, and AGENT_VM_RECONCILER_DEPLOYER are required." >&2
   exit 2
 fi
-if [[ "$deployer" != *@*.iam.gserviceaccount.com ]]; then
+if [[ ! "$deployer" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$ ]]; then
   echo "AGENT_VM_RECONCILER_DEPLOYER must be a full Google service-account email." >&2
   exit 2
 fi

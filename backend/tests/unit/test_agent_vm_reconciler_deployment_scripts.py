@@ -110,6 +110,7 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "AGENT_VM_RECONCILER_IAM_APPLY": "1",
         "AGENT_VM_RECONCILER_PROJECT": "based-hardware-dev",
         "AGENT_VM_RECONCILER_BUCKET": "based-hardware-dev-agent",
+        "AGENT_VM_RECONCILER_DEPLOYER": "",
     }
 
     missing_deployer = subprocess.run(
@@ -123,6 +124,21 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert missing_deployer.returncode == 2
     assert "AGENT_VM_RECONCILER_DEPLOYER" in missing_deployer.stderr
     assert not command_log.exists(), "the missing-input guard must run before any gcloud mutation"
+
+    malformed_deployer = subprocess.run(
+        ["bash", "backend/scripts/apply-agent-vm-reconciler-iam.sh"],
+        cwd=REPO_DIR,
+        env={
+            **base_env,
+            "AGENT_VM_RECONCILER_DEPLOYER": "not-an-email",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert malformed_deployer.returncode == 2
+    assert "AGENT_VM_RECONCILER_DEPLOYER must be a full Google service-account email." in malformed_deployer.stderr
+    assert not command_log.exists(), "invalid deployer input must be rejected before any gcloud mutation"
 
     completed = subprocess.run(
         ["bash", "backend/scripts/apply-agent-vm-reconciler-iam.sh"],
