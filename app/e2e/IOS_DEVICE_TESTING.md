@@ -69,6 +69,34 @@ First build in a worktree ≈ 10 min (pods + Xcode). Incremental relaunches are 
 
 **Auth:** if the app boots to onboarding, an agent can drive consent/permission screens, but Sign in with Apple/Google needs the human once (Face ID / device biometrics). Ask, then take over — everything after sign-in is agent-drivable.
 
+### Final unattended handoff is profile/AOT, never debug/JIT
+
+`flutter run` is an attached test session, not the build to leave on the phone
+for a drain or day-long dogfood run. A detached debug/JIT build can die later
+and its next SpringBoard launch can crash in generated native plugin
+registration before Dart starts. That exact failure was observed after about
+23 minutes on 2026-08-05.
+
+Before giving the phone back, build and install the signed profile/AOT app over
+the same isolated bundle identifier:
+
+```bash
+cd app
+PROFILE_APP="$(e2e/scripts/build_signed_ios_physical_dev.sh | tail -1)"
+e2e/scripts/install_ios_dogfood_profile.sh "$PROFILE_APP"
+```
+
+The local-only signing and device identities live in
+`~/.config/omi-mobile-test/ios-physical-test.env`; the scripts fail closed when
+that ignored config is absent. Never put a personal team ID, signing identity,
+provisioning-profile path, or physical device UUID in the repository.
+
+The final installer rejects any Flutter artifact containing the JIT
+`kernel_blob.bin`, verifies the physical-test identity, updates in place so
+auth/pairing/recordings/sync state survive, and proves a terminate/relaunch
+cycle. Do not uninstall to change modes. A successful debug run or detach does
+not satisfy the handoff gate.
+
 ## 4. Connect and drive
 
 ```bash
@@ -113,13 +141,20 @@ Verified order of attack; stop at the first rung that works:
 
 ## 7. Session hygiene & gotchas
 
-- **Keep the phone unlocked.** iOS terminates the debug link after prolonged backgrounding: `"The OS has terminated the Flutter debug connection for being inactive"` — the app keeps running but you must relaunch `flutter run` to reattach. This is a session-ender if you're mid-flow; check the phone before long code-reading pauses.
+- **Keep the phone unlocked during an attached debug session.** iOS terminates
+  the debug link after prolonged backgrounding: `"The OS has terminated the
+  Flutter debug connection for being inactive"`. The process may continue
+  temporarily, but it is not a standalone handoff and may later die or fail to
+  relaunch. Reattach for more debug testing, or install profile/AOT before
+  unattended use.
 - **Test data**: create-then-delete your own artifacts (e.g. a memory literally named "smoke-test — safe to delete"); never exercise destructive flows on the user's real data. If a leftover survives (session died first), tell the user exactly what to remove.
 - **Build side effects**: `flutter run` can dirty `app/ios/Podfile.lock`,
   `app/ios/Flutter/AppFrameworkInfo.plist`, and `app/pubspec.lock`. Restore only
   the mechanical build changes you inspected; do not discard unrelated user
   edits.
-- **After the session**: the phone carries your branch build. Tell the user; App Store reinstall restores the release binary (data survives).
+- **After the session**: the phone must carry the guarded profile/AOT branch
+  build, not the debug/JIT runner. Tell the user which artifact is installed.
+  App Store reinstall restores the release binary (data survives).
 
 ## 8. Known limitations
 

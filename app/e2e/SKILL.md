@@ -84,6 +84,11 @@ agent-flutter snapshot -i --json
 - `agent-flutter screenshot` output path must be under `/tmp`.
 - Check behavior via the run log: `grep -iE 'exception|error' /tmp/omi-flutter.log` after each flow. A `PlatformException` 4001 (Intercom push token, notifications not granted) is benign.
 - iOS terminates the debug connection if the app is backgrounded/locked too long ("The OS has terminated the Flutter debug connection for being inactive") — keep the device unlocked; reconnecting requires relaunching `flutter run`.
+- **Never hand the phone back with that debug/JIT build.** Before an
+  unattended drain or dogfood run, use the signed profile/AOT build and guarded
+  in-place installer in `BLE_RELIABILITY_ACCEPTANCE.md` → "Standalone iOS
+  dogfood builds". The installer rejects `kernel_blob.bin` and cold-launches
+  the exact isolated bundle while preserving its data container.
 - General key guidance (same as Android): prefer `find key "name"`; when a control can't be targeted, add a `ValueKey` in source + hot reload rather than fighting coordinates.
 
 ### Commands

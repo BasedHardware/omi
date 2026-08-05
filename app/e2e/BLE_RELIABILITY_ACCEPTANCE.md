@@ -81,6 +81,23 @@ Never widen production firmware routing to admit a diagnostic build. Keep the
 harness artifact in the permanent CV1 evidence directory with its SHA-256,
 bundle identifier, source commit, firmware build, and exact launch command.
 
+### Standalone iOS dogfood builds
+
+A debug/JIT app is valid only while Flutter tooling is actively attached. It
+may keep running after detach, but a later process death can leave SpringBoard
+relaunch crashing in generated plugin registration before Dart starts. Before
+an unattended drain or dogfood handoff, run
+`app/e2e/scripts/build_signed_ios_physical_dev.sh` in its default profile mode,
+install that signed AOT app over the same isolated bundle identifier, and prove
+one terminate/relaunch cycle. Never uninstall to change modes: the in-place
+update preserves auth, pairing, recordings, and the durable sync manifest.
+The final handoff command is
+`app/e2e/scripts/install_ios_dogfood_profile.sh /absolute/path/to/profile.app`.
+It refuses any bundle containing Flutter's JIT `kernel_blob.bin`, verifies the
+exact Firebase, signing, and bundle identities, installs in place, and performs
+the required cold launch. A generic `flutter run` or a successful debug test
+session is never the final dogfood handoff.
+
 ### Authenticated Android physical-device builds
 
 The hermetic `test.sh` bootstrap intentionally writes an empty `.dev.env` and
