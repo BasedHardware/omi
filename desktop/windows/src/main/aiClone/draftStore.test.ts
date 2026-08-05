@@ -58,4 +58,46 @@ describe('DraftStore', () => {
   it('get returns null for an unknown id', () => {
     expect(store.get('nope')).toBeNull()
   })
+
+  it('take returns and removes the draft in one call', () => {
+    const added = store.add({
+      chatID: 'chat-1',
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'are we still on for 6?',
+      draftText: 'yep, see you then!'
+    })
+    expect(store.take(added.id)).toEqual(added)
+    // A second take (simulating a double-click / overlapping approve call)
+    // must see it already gone — this is the idempotency guarantee.
+    expect(store.take(added.id)).toBeNull()
+    expect(store.get(added.id)).toBeNull()
+  })
+
+  it('take returns null for an unknown id without touching other drafts', () => {
+    const kept = store.add({
+      chatID: 'chat-1',
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'a',
+      draftText: 'a reply'
+    })
+    expect(store.take('nope')).toBeNull()
+    expect(store.get(kept.id)).toEqual(kept)
+  })
+
+  it('clearAll removes every queued draft', () => {
+    store.add({
+      chatID: 'chat-1',
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'a',
+      draftText: 'a reply'
+    })
+    store.add({
+      chatID: 'chat-2',
+      chatDisplayName: 'Sam',
+      incomingMessageText: 'b',
+      draftText: 'b reply'
+    })
+    store.clearAll()
+    expect(store.list()).toEqual([])
+  })
 })
