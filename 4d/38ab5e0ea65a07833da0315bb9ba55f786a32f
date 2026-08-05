@@ -1,0 +1,28 @@
+desktop/lock-in/Sources/LockInApp/Views/MainWindow.swift
+  s_acebfdccb4f1d0::t_7d2a176dc5e818 109
+  s_acebfdccb4f1d0::t_e949e9a9bdd16b 221-267
+desktop/lock-in/Sources/LockInApp/Views/Timeline/TimelineDetail.swift
+  s_acebfdccb4f1d0::t_0d68ddf482b166 252-256
+desktop/lock-in/Sources/LockInApp/Views/Timeline/TimelineView.swift
+  s_acebfdccb4f1d0::t_441af19c22f21d 419-427,445,498-502,507-508,523,533,539-555,589,616-617,619-631,635
+desktop/lock-in/Sources/LockInCore/Timeline.swift
+  s_acebfdccb4f1d0::t_44011869ce63bd 277-282,285,288,292-294,466-467
+desktop/lock-in/Tests/LockInCoreTests/TimelineTests.swift
+  s_acebfdccb4f1d0::t_2f7ae7f31c6ea6 334-349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4d38ab5e0ea65a07833da0315bb9ba55f786a32f",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
