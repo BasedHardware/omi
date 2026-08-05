@@ -1,0 +1,170 @@
+desktop/macos/Desktop/Tests/AppleNotesReaderServiceTests.swift
+  s_dda64593d654e2::t_5692893678be6a 5-47,50-173,175,177-182,185-201,203,207,209-216,218,220-234,236-239,241-247,250-263,266-355,357-394,397-413,416,418-423,425-431,433-435,438-439,441,443-444,446-447,450-461,464-474,477-481,484-486,488-491,493,495-500,504-507,510,516-518,520,522-523,525,528-531,534-552,554,557-564,566,569-570,574-586,588-589,591-615,617-633,635-686,688-746
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/AppleNotesBackgroundRefreshAdapter.swift
+  s_dda64593d654e2::t_1cfc499880f077 5-8,10
+  s_dda64593d654e2::t_74b4b8980346e7 28,35-36,43-44,47-53
+  s_dda64593d654e2::t_80932cf37b255b 1-4,9,11-27,29-34,37-42,45-46,54-55
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshPolicy.swift
+  s_dda64593d654e2::t_fac29a96745afe 1-234
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/CalendarBackgroundRefreshAdapter.swift
+  s_dda64593d654e2::t_ddf8b36561def5 38,45-46,53-54,57-59,61-67
+  s_dda64593d654e2::t_8df34f3f756718 1-4,17-20,23-37,39-44,47-52,55-56,60,68-69
+  s_dda64593d654e2::t_bd69aace6042aa 5-16,21-22
+desktop/macos/Desktop/Sources/Onboarding/OnboardingDataSourcesStepView.swift
+  s_dda64593d654e2::t_158857a1e2a100 135-137,142
+desktop/macos/Desktop/Tests/ConnectorRefreshPolicyTests.swift
+  s_dda64593d654e2::t_27fefdd01bc9e4 1-320
+desktop/macos/Desktop/Tests/DesktopReviewRegressionTests.swift
+  s_dda64593d654e2::t_9d4edda6304104 49-53,65-69,71,73,75-89
+  s_dda64593d654e2::t_3809faae862da9 90-91
+desktop/macos/Desktop/Tests/ConnectorRefreshAdapterTests.swift
+  s_dda64593d654e2::t_ae15f6474134fb 1-165
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshRegistry.swift
+  s_dda64593d654e2::t_098105728d5791 1-19
+desktop/macos/changelog/unreleased/20260804-connector-background-refresh.json
+  s_dda64593d654e2::t_a5f14cc4cfddd3 1-3
+desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesScriptRunner.swift
+  s_dda64593d654e2::t_b77343473b847d 1-116,128-136
+  s_dda64593d654e2::t_ac5524e8df4087 117-127
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/README.md
+  s_dda64593d654e2::t_3ca31fd05d3ac4 35-39
+  s_dda64593d654e2::t_8cb122da5a4b38 91-112
+  s_dda64593d654e2::t_7298315dbaaae0 1-34,40-65,70-90
+  s_dda64593d654e2::t_cf13b720bceffe 66-69
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_dda64593d654e2::t_9472443bd11ced 929-934,936,938-941,943
+  s_dda64593d654e2::t_c1bc21fbffc6a9 238-239
+desktop/macos/Desktop/Tests/ImportConnectorStatusStoreTests.swift
+  s_dda64593d654e2::t_f24a0242e85db9 104,108-112,124-125,127-130
+desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesDiagnostics.swift
+  s_dda64593d654e2::t_a0b067b9009c71 1-36
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/BackgroundRefreshableConnector.swift
+  s_dda64593d654e2::t_1b6b15639a97db 1-37,47-78
+  s_dda64593d654e2::t_9fa389627b2d59 38-46
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshScheduler.swift
+  s_dda64593d654e2::t_b9879a55223caf 1-282,293-449
+  s_dda64593d654e2::t_9f316eee97040e 283-292
+desktop/macos/Desktop/Tests/ConnectorRefreshSchedulerTests.swift
+  s_dda64593d654e2::t_ab00ff97f569e4 499-500
+  s_dda64593d654e2::t_c9ed6f0d6dcb7f 270-339
+  s_dda64593d654e2::t_558c7703ac4d01 61-62,64-67
+  s_dda64593d654e2::t_d8751ae0873122 541-542
+  s_dda64593d654e2::t_b8321492252533 1-60,63,68-87,89-90,94-269,340-488,491-498,501-540,543-635
+  s_dda64593d654e2::t_7aabe5203ee2eb 88,91-93
+  s_dda64593d654e2::t_1c25da6aadba02 489-490
+desktop/macos/e2e/flows/apple-notes-read.yaml
+  s_dda64593d654e2::t_9eab35148c30a5 3-4,7-12,18-24,30-31
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_dda64593d654e2::t_b755de3f77be84 5
+  s_dda64593d654e2::t_5037ec562335d6 16
+desktop/macos/changelog/unreleased/20260804-apple-notes-full-import.json
+  s_dda64593d654e2::t_d7adc793b11cf9 1-3
+desktop/macos/Desktop/Tests/ConnectorRefreshOutcomeMapperTests.swift
+  s_dda64593d654e2::t_540ff9dfac2f9e 1-156
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshOutcomeMapper.swift
+  s_dda64593d654e2::t_f0c4b6cc50993c 1-93
+desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesSyncState.swift
+  s_dda64593d654e2::t_b2e80f2c152330 1-81,86-87,89-95,97-105
+  s_dda64593d654e2::t_7b51a1ad4da9fc 82-85,88,96
+desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesReaderService.swift
+  s_dda64593d654e2::t_26fc8717938440 397-401
+  s_dda64593d654e2::t_e57214aae6981b 3-393,409-605,609,612
+desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift
+  s_dda64593d654e2::t_b560d0215f85e7 1005-1009
+  s_dda64593d654e2::t_865a8785a9e2d1 385-386,394-395,403-404
+  s_dda64593d654e2::t_f27992b25a3c6b 1022-1023
+  s_dda64593d654e2::t_66994b2a735a07 1052-1054,1062
+desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  s_dda64593d654e2::t_859b928217eb9a 46-56
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_dda64593d654e2::t_ef8b9cb2c455e5 2073-2074
+  s_dda64593d654e2::t_17ac65ecb33e40 2077-2087,2090-2092,2094,2097-2099
+  s_dda64593d654e2::t_257ff778a01f66 2071
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
+  s_dda64593d654e2::t_595befed4dd5a1 222-230,232-235,241,248-251
+  s_dda64593d654e2::t_e09702e7b5bfa2 265-268,270-273,275,277-279,281-285,287-289,294-297,300,302-307,309-315,319-335
+  s_dda64593d654e2::t_fbebe656e94ad6 352-355,359
+  s_dda64593d654e2::t_e983bf51a1ec00 338-341,343,347
+  s_dda64593d654e2::t_96e5ef301b9f56 336,372-390
+  s_569f1df936cc22::t_1c976e1dabffa5 337
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/LocalFilesBackgroundRefreshAdapter.swift
+  s_dda64593d654e2::t_1dbcd88aa84f32 1-29,31-39,42-46,49,56-58,61-62,78-79
+  s_dda64593d654e2::t_3eca286e57b4a1 76
+  s_dda64593d654e2::t_94707555c7f23c 30,40-41,47-48,50-55,59-60,63-75,77
+desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
+  s_dda64593d654e2::t_a97fb7c0196c03 1418
+  s_dda64593d654e2::t_1fbaf4ccef6a4a 1464
+desktop/macos/Desktop/Tests/ConnectorImportOperationsTests.swift
+  s_dda64593d654e2::t_2a09d287d3e7b9 22-31,34-44
+  s_dda64593d654e2::t_9b3786f3dde2d4 32-33
+desktop/macos/e2e/flows/connector-import-progress.yaml
+  s_dda64593d654e2::t_245a10b8a083b0 23-32
+desktop/macos/Desktop/Tests/IntegrationConnectTelemetryTests.swift
+  s_dda64593d654e2::t_fbd9dc333a326b 170-180
+desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesOutcomeParser.swift
+  s_dda64593d654e2::t_23e0912030d852 1-174
+desktop/macos/docs/connector-checklist.md
+  s_dda64593d654e2::t_26e40d92ec6921 59-69,72
+desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesScript.swift
+  s_dda64593d654e2::t_c8e38f933cdc17 1-171
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshState.swift
+  s_dda64593d654e2::t_00e175c89cc6f5 1-131
+desktop/macos/Desktop/Sources/Integrations/IntegrationConnectTelemetry.swift
+  s_dda64593d654e2::t_3d589fd80bbb66 50-55
+  s_dda64593d654e2::t_6e3d8931684dba 60
+  s_dda64593d654e2::t_5d9f4e3a9e1bec 21
+  s_dda64593d654e2::t_3c51cc1e7a5814 101-119
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_dda64593d654e2::t_765f061962b174 847-849
+  s_dda64593d654e2::t_b3657b26637269 1321-1324
+  s_dda64593d654e2::t_94f931b8bf56f2 1247-1251
+  s_dda64593d654e2::t_df454aceeb063b 1150-1152,1155,1160-1161
+  s_dda64593d654e2::t_8530dd9709dba2 1268-1269
+  s_dda64593d654e2::t_b0e1e615041303 933-934
+  s_dda64593d654e2::t_cef7bfbcb9def3 1362-1368
+  s_dda64593d654e2::t_0f8aa741eb54e2 873,875-881,883
+desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshPowerProbe.swift
+  s_dda64593d654e2::t_3a35fcfd6c1c27 1-49
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-onboarding.json
+  s_dda64593d654e2::t_3988bc95da8937 4
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_dda64593d654e2::t_a5917ce7dd276d 5
+desktop/macos/Desktop/Tests/fixtures/AppleNotes/empty-library.json
+  s_dda64593d654e2::t_7065c311ff978e 1-6
+desktop/macos/Desktop/Tests/fixtures/AppleNotes/folders-skipped.json
+  s_dda64593d654e2::t_317d28b2bb1a3f 1-34
+desktop/macos/Desktop/Tests/fixtures/AppleNotes/full-836.json
+  s_dda64593d654e2::t_87e4292e9e6905 1
+desktop/macos/Desktop/Tests/fixtures/AppleNotes/full-oversized-body.json
+  s_dda64593d654e2::t_fc14e1a2cbc320 1-25
+desktop/macos/Desktop/Tests/fixtures/AppleNotes/full-with-locked.json
+  s_dda64593d654e2::t_28dadc4977fdfc 1-43
+desktop/macos/Desktop/Tests/fixtures/AppleNotes/malformed-truncated.json
+  s_dda64593d654e2::t_f42a7972d784bc 1-7
+desktop/macos/Desktop/Tests/fixtures/AppleNotes/manifest-836.json
+  s_dda64593d654e2::t_168010db6fb1d6 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "631d4d3dd855097b02d0c7233fb776d917a03f1c",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_dda64593d654e2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dbfd272d-11ca-4338-941e-0bde43ecb895",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
