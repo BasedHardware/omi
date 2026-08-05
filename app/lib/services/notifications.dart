@@ -60,6 +60,21 @@ class NotificationUtil {
     _handleAppLinkOrDeepLink(receivedAction.payload!);
   }
 
+  /// Public entry for FCM background/terminated notification taps (#5126).
+  static void handleNavigateTo(String route) {
+    _handleAppLinkOrDeepLink({'navigate_to': route});
+  }
+
+  /// Extract a chat/conversation deep-link from an FCM data map.
+  /// Returns null when `navigate_to` is missing, empty, or not a String.
+  static String? navigateToFromFcmData(Map<String, dynamic> data) {
+    final navigateTo = data['navigate_to'];
+    if (navigateTo is String && navigateTo.isNotEmpty) {
+      return navigateTo;
+    }
+    return null;
+  }
+
   static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
     WidgetsFlutterBinding.ensureInitialized();
 
