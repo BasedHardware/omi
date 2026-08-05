@@ -1,0 +1,64 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
+  s_569f1df936cc22::t_05b75990abd2e0 4-15,21-25,42
+desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
+  s_569f1df936cc22::t_d28bd0774341ae 79
+  s_569f1df936cc22::t_7395b06340bcca 22-30,35-36,40,42
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchGlassChrome.swift
+  s_569f1df936cc22::t_5edaebea6e3a52 84-95,97,102
+  s_569f1df936cc22::t_71789500030d9d 1-83,96,98-101,103-222,235-236
+  s_569f1df936cc22::t_1f65ea4f9c0b23 223-234
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkMicButton.swift
+  s_569f1df936cc22::t_4961f5c021f87f 1-12,20,24-30,33-37,42-47,53-58,63-79,82-83,85-111
+  s_569f1df936cc22::t_e6691fbe0a2605 13-19,21-23,31-32,38-41,48-52,59-62,80-81,84
+desktop/macos/Desktop/Tests/FloatingGlassChromeTests.swift
+  s_569f1df936cc22::t_1761f632228d38 90-100
+  s_569f1df936cc22::t_060e22318421f5 67-71
+  s_569f1df936cc22::t_a667ceea4582b1 1-66,72-89,101-383
+  s_569f1df936cc22::t_d6577f83b96216 384-386
+desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
+  s_569f1df936cc22::t_86a47e60c4333d 95
+  s_569f1df936cc22::t_141332214b0914 37,39,43
+  s_569f1df936cc22::t_ca88d6961d1ec4 92-94,103
+  s_569f1df936cc22::t_2fdd396ffd229c 65
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  s_569f1df936cc22::t_57d0ff96a5231f 674
+  s_569f1df936cc22::t_a0bc99146b2161 682
+  s_569f1df936cc22::t_ba2a6aab7084cc 1109
+  s_569f1df936cc22::t_c8a64d4d37093f 618
+desktop/macos/Desktop/Tests/PushToTalkButtonTriggerTests.swift
+  s_569f1df936cc22::t_1fb0023ca4ecad 102,105-106
+  s_569f1df936cc22::t_5726a74712cad2 168-186
+  s_569f1df936cc22::t_ae9bdb94960ed7 1-101,103-104,107-132,139,141-143,148-167,187-203
+  s_569f1df936cc22::t_24f87a1f2e61f9 133-138,140,144-147
+desktop/macos/scripts/agent-logic-harness.sh
+  s_569f1df936cc22::t_c3897903bdd73f 185
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkButtonTrigger.swift
+  s_569f1df936cc22::t_51fe9495a1a913 1-125
+desktop/macos/Desktop/Sources/FloatingControlBar/ARCHITECTURE.md
+  s_569f1df936cc22::t_17f610c73b849d 7-17
+  s_569f1df936cc22::t_be9456b0126165 18-42
+desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  s_569f1df936cc22::t_70910d442196d9 173,308,314,334,342,362,456,464,471,483,650
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarReceiptCard.swift
+  s_569f1df936cc22::t_2bcacace40613b 13,22,32
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
+  s_569f1df936cc22::t_322866dd1f736b 65,69,102,113,118,132,136
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchVoiceMorphMark.swift
+  s_569f1df936cc22::t_7ac0ddae9f5faf 339,342
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "b13733fb2f47770cb5a2b667f247578168c5259b",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
