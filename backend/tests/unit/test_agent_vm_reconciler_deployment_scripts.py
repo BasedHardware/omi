@@ -74,7 +74,7 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped()
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
     assert "REFUSED:" in script
     assert (
-        "compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
+        "compute.disks.get,compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
         in script
     )
     assert "Agent VM reconciler scope" in script

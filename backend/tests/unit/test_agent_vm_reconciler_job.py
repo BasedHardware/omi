@@ -255,6 +255,52 @@ def test_empty_reconciler_run_does_not_report_normal_lease_shutdown_as_loss(monk
     assert released
 
 
+def test_lease_heartbeat_exception_marks_lease_lost(monkeypatch):
+    """A transient exception in renew_reconciler_run_lease must set lease_lost so
+    the run stops before the TTL lapses, rather than continuing to mutate VMs."""
+    monkeypatch.setenv("GCE_PROJECT_ID", "project")
+    monkeypatch.setattr(reconciler, "LEASE_HEARTBEAT_SECONDS", 0)
+    monkeypatch.setattr(reconciler, "_init_firebase", lambda: None)
+    monkeypatch.setattr(reconciler, "load_active_release", lambda: (RELEASE, RELEASE.to_mapping()))
+    monkeypatch.setattr(reconciler, "claim_reconciler_run_lease", lambda *_args: True)
+
+    call_count = 0
+
+    def _flaky_renew(*_args):
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("firestore heartbeat error")
+
+    monkeypatch.setattr(reconciler, "renew_reconciler_run_lease", _flaky_renew)
+    monkeypatch.setattr(reconciler, "release_reconciler_run_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "_rollout_phase", lambda *_args, **_kwargs: "remainder")
+    monkeypatch.setattr(reconciler, "_rollout_spec", lambda *_args: (100, 1))
+
+    owner_block = asyncio.Event()
+
+    async def _blocking_reconcile_one(*_args, **_kwargs):
+        """Keep the gather alive long enough for at least one heartbeat cycle."""
+        try:
+            await asyncio.wait_for(owner_block.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            pass
+        return reconciler.ReconcileResult(state="noop", uid="user")
+
+    monkeypatch.setattr(reconciler, "reconcile_one", _blocking_reconcile_one)
+    monkeypatch.setattr(
+        reconciler,
+        "_owners",
+        lambda: [("user", {"vmName": "omi-agent-user", "authToken": "token"})],
+    )
+    monkeypatch.setattr(reconciler, "_advance_rollout", lambda *_args: None)
+
+    with pytest.raises(reconciler.AgentVmLeaseLost, match="lease lost"):
+        try:
+            asyncio.run(reconciler.run_reconciler())
+        finally:
+            owner_block.set()
+
+
 def test_new_release_starts_quarantined_vm_with_a_fresh_retry_budget(monkeypatch):
     class FailingApi:
         def __init__(self, _project: str, _zone: str) -> None:

@@ -271,6 +271,7 @@ jobs:
             AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
             GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
             GCE_RUNTIME_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
+            GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
             AGENT_VM_BOOT_IMAGE=${{ steps.agent-vm-release.outputs.boot_image }}
             AGENT_VM_STARTUP_URI=${{ steps.agent-vm-release.outputs.startup_uri }}
             AGENT_VM_RELEASE_ID=${{ steps.candidate-identity.outputs.source_sha }}

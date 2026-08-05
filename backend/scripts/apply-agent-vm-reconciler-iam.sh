@@ -20,7 +20,7 @@ role_id="omiAgentVmReconciler"
 role="projects/${project}/roles/${role_id}"
 operations_role_id="omiAgentVmReconcilerOperations"
 operations_role="projects/${project}/roles/${operations_role_id}"
-permissions="compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
+permissions="compute.disks.get,compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
 operations_permissions="compute.globalOperations.get,compute.zoneOperations.get"
 zone="us-central1-a"
 

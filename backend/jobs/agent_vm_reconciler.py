@@ -545,7 +545,12 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
         async def heartbeat() -> None:
             while not heartbeat_stop.is_set():
                 await asyncio.sleep(LEASE_HEARTBEAT_SECONDS)
-                if not await asyncio.to_thread(renew_reconciler_run_lease, environment, owner):
+                try:
+                    if not await asyncio.to_thread(renew_reconciler_run_lease, environment, owner):
+                        lease_lost.set()
+                        return
+                except Exception:
+                    logger.exception("Agent VM reconciler lease heartbeat failed")
                     lease_lost.set()
                     return
 

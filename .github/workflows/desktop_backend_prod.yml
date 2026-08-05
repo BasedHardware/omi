@@ -356,6 +356,7 @@ jobs:
             AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
             GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com
             GCE_RUNTIME_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com
+            GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
             AGENT_VM_BOOT_IMAGE=${{ steps.agent-vm-release.outputs.boot_image }}
             AGENT_VM_STARTUP_URI=${{ steps.agent-vm-release.outputs.startup_uri }}
             AGENT_VM_RELEASE_ID=${{ steps.admitted-source.outputs.source_sha }}
@@ -547,7 +548,6 @@ jobs:
             AGENT_VM_ENVIRONMENT=production
             AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
             AGENT_VM_ACTIVE_RELEASE_URI=${{ steps.agent-vm-release.outputs.active_manifest_uri }}
-            AGENT_VM_RECONCILER_MAX_CONCURRENCY=5
 
       - name: Save previous Agent VM release pointer
         if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
