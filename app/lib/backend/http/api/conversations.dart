@@ -510,6 +510,19 @@ class SyncRecoveryWindowExceededException implements Exception {
   String toString() => 'SyncRecoveryWindowExceededException()';
 }
 
+/// Thrown when the upload boundary rejects the complete multipart request as
+/// too large (HTTP 413).
+///
+/// This is deterministic for the same immutable WAL batch. Callers must keep
+/// the source audio, stop automatic retries for that batch, and let unrelated
+/// recordings continue instead of treating it like an offline lane.
+class SyncUploadTooLargeException implements Exception {
+  const SyncUploadTooLargeException();
+
+  @override
+  String toString() => 'SyncUploadTooLargeException()';
+}
+
 /// Classifies a sync 422 as the backend's terminal lookback rejection.
 ///
 /// Keyed on the bounded `code` the sync routes emit, never on human-readable
@@ -620,7 +633,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   if (response.statusCode == 400) {
     throw Exception('Audio file could not be processed by server');
   } else if (response.statusCode == 413) {
-    throw Exception('Audio file is too large to upload');
+    throw const SyncUploadTooLargeException();
   } else if (response.statusCode == 429 ||
       (response.statusCode == 503 &&
           response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {

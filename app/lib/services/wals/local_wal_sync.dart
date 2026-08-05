@@ -2532,6 +2532,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           (wal) =>
               wal.status == WalStatus.miss &&
               wal.storage == WalStorage.disk &&
+              (manualWalIds != null || wal.retryCount < walMaxAutoRetries) &&
               (manualWalIds?.contains(wal.id) ??
                   _isEligibleForDrain(
                     wal,
@@ -2592,6 +2593,7 @@ class LocalWalSyncImpl implements LocalWalSync {
                 wal.status == WalStatus.miss &&
                 wal.storage == WalStorage.disk &&
                 !attemptedWalIds.contains(wal.id) &&
+                (manualWalIds != null || wal.retryCount < walMaxAutoRetries) &&
                 (manualWalIds == null || manualWalIds.contains(wal.id)),
           )
           .toList();
@@ -2803,6 +2805,44 @@ class LocalWalSyncImpl implements LocalWalSync {
               (w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced,
             )
             .length;
+      } on SyncUploadTooLargeException catch (error) {
+        batchesFailed++;
+        final artifactSizes = <int>[];
+        for (final file in preparedUpload?.files ?? const <File>[]) {
+          try {
+            artifactSizes.add(await file.length());
+          } catch (_) {
+            artifactSizes.add(-1);
+          }
+        }
+        final now = nowSeconds();
+        final rejectedWals = Set<Wal>.identity()
+          ..addAll(batchWals)
+          ..addAll(coveredLegacyAliases);
+        for (final wal in rejectedWals) {
+          wal.retryCount = walMaxAutoRetries;
+          wal.lastRetryAt = now;
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+          wal.syncSpeedKBps = null;
+        }
+        DebugLogManager.logError(
+          error,
+          null,
+          'Local upload batch exceeded the request boundary; source audio retained',
+          {
+            'batchWalIds': batchWals.map((wal) => wal.id).toList(),
+            'artifactBytes': artifactSizes,
+            'totalArtifactBytes': artifactSizes.where((size) => size >= 0).fold<int>(0, (sum, size) => sum + size),
+          },
+        );
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        if (manualWal != null) rethrow;
+        // A deterministic 413 applies only to this immutable transaction.
+        // Keep later healthy recordings moving instead of pausing the lane.
+        continue;
       } on SyncRateLimitedException {
         // Pause only this lane. The other lane remains eligible in this drain.
         DebugLogManager.logEvent('local_upload_rate_limited', {
