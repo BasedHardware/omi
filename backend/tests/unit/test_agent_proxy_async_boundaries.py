@@ -409,9 +409,7 @@ async def test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expire
             # Simulate elapsed time exceeding the TTL on the second heartbeat
             # iteration so the fail-closed guard triggers.
             if heartbeat_count >= 2:
-                monkeypatch.setattr(
-                    agent_proxy.time, "monotonic", lambda: float(heartbeat_count * 100)
-                )
+                monkeypatch.setattr(agent_proxy.time, "monotonic", lambda: float(heartbeat_count * 100))
             await real_sleep(0)
             return
         await asyncio.Event().wait()
