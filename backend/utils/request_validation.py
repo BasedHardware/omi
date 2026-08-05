@@ -14,7 +14,6 @@ date validation, filename timestamp parsing, chunked-upload envelopes).
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-import os
 from typing import Annotated, Any, TypeVar, cast
 
 from fastapi import HTTPException, Query
