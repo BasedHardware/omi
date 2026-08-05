@@ -356,9 +356,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           'fixed top-0 left-0 bottom-0 z-50',
           // Desktop animates its width to match the macOS rail
           // (.omiAnimation(.easeInOut(duration: 0.2))); mobile slides instead.
-          // overflow-hidden so labels clip during the animation rather than
-          // wrapping onto a second line as the rail narrows past them.
-          'overflow-hidden transition-transform duration-150 ease-out',
+          // Deliberately NOT overflow-hidden: the collapsed profile menu opens
+          // beside the rail, and clipping the rail clips the menu out of
+          // existence. Label clipping belongs to the rows that have labels.
+          'transition-transform duration-150 ease-out',
           'lg:transition-[width] lg:duration-200 lg:ease-in-out',
           // Desktop: relative in flow
           'lg:relative lg:z-auto',
@@ -368,29 +369,36 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             itself. They share the nav's horizontal padding so they read as one
             column of icons with the destinations below, rather than as a
             separate toolbar. */}
-        <div className={cn('pt-6 pb-3', showText ? 'px-3' : 'px-2')}>
-          <div
-            className={cn(
-              'flex items-center gap-1',
-              showText ? 'justify-between' : 'flex-col gap-2',
-            )}
-          >
-            <Link href="/conversations" className="flex items-center gap-2 px-1">
+        <div className="overflow-hidden px-2 pt-6 pb-3">
+          {/* The mark keeps its own row and the controls keep theirs, in both
+              states. Reflowing them from a row into a column is a second,
+              unrelated motion competing with the width for attention. */}
+          <div className="flex flex-col gap-2">
+            <Link
+              href="/conversations"
+              className="flex h-6 items-center gap-2 px-2"
+              aria-label="Omi"
+            >
               <Image
                 src="/omi-white.webp"
                 alt="Omi"
-                width={showText ? 60 : 32}
-                height={showText ? 24 : 13}
-                className="object-contain"
+                width={60}
+                height={24}
+                className="h-[18px] w-auto flex-shrink-0 object-contain"
               />
-              {showText && (
-                <span className="text-[10px] bg-white/[0.10] text-text-secondary px-1.5 py-0.5 rounded-full font-medium">
-                  Beta
-                </span>
-              )}
+              <span
+                className={cn(
+                  'whitespace-nowrap rounded-full bg-white/[0.10] px-1.5 py-0.5',
+                  'text-[10px] font-medium text-text-secondary',
+                  'transition-opacity duration-150',
+                  showText ? 'opacity-100 delay-75' : 'opacity-0',
+                )}
+              >
+                Beta
+              </span>
             </Link>
 
-            <div className={cn('flex items-center gap-1', !showText && 'flex-col')}>
+            <div className="flex items-center gap-1">
               <button
                 onClick={toggleNotificationCenter}
                 className={cn(
@@ -454,8 +462,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Scrollable middle section */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <nav className={cn('py-2 space-y-1', showText ? 'px-3' : 'px-2')}>
+        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto">
+          <nav className="space-y-1 px-2 py-2">
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
@@ -470,9 +478,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   }}
                   title={!showText ? item.label : undefined}
                   className={cn(
-                    'relative flex items-center rounded-chip',
+                    // One layout for both states. Swapping between a centred
+                    // icon and an icon-plus-label row makes the icon jump at
+                    // the moment the width starts moving; holding the row
+                    // still and letting the label fade out under the clip is
+                    // what makes the collapse read as one motion.
+                    'relative flex items-center gap-3 rounded-chip px-4 py-3',
                     'transition-colors duration-150',
-                    showText ? 'gap-3 px-4 py-3' : 'justify-center p-3',
                     isActive
                       ? 'text-bg-primary'
                       : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
@@ -489,11 +501,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     />
                   )}
                   <span className="flex-shrink-0 relative z-10">{item.icon}</span>
-                  {showText && (
-                    <span className="relative z-10 whitespace-nowrap font-medium">
-                      {item.label}
-                    </span>
-                  )}
+                  <span
+                    className={cn(
+                      'relative z-10 whitespace-nowrap font-medium',
+                      'transition-opacity duration-150',
+                      showText ? 'opacity-100 delay-75' : 'opacity-0',
+                    )}
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}
@@ -640,8 +656,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
             className={cn(
-              'flex w-full items-center transition-colors',
-              showText ? 'gap-3 p-3 hover:bg-bg-tertiary/60' : 'justify-center p-1',
+              'flex w-full items-center gap-3 overflow-hidden p-3 transition-colors',
+              showText && 'hover:bg-bg-tertiary/60',
             )}
             title={!showText ? 'Settings' : undefined}
           >
@@ -667,7 +683,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               )}
             </div>
 
-            {showText && (
+            <div
+              className={cn(
+                'flex min-w-0 flex-1 items-center gap-3',
+                'transition-opacity duration-150',
+                showText ? 'opacity-100 delay-75' : 'opacity-0',
+              )}
+              aria-hidden={!showText}
+            >
               <>
                 {/* Name & email */}
                 <div className="flex-1 min-w-0 text-left">
@@ -697,14 +720,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   />
                 </svg>
               </>
-            )}
+            </div>
           </button>
 
           {/* Collapsed: the menu is a popover beside the rail. */}
           {!showText && menuOpen && (
             <div
               className={cn(
-                'absolute bottom-0 left-full z-50 ml-2 w-64 origin-bottom-left',
+                'absolute bottom-0 left-full z-[60] ml-2 w-64 origin-bottom-left',
                 'overflow-hidden rounded-card border border-stroke bg-bg-raised',
                 'shadow-[0_18px_40px_-12px_rgba(0,0,0,0.6)]',
                 'animate-slideUp',
