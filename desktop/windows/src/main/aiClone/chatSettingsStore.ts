@@ -68,16 +68,24 @@ export class ChatSettingsStore {
   }
 
   /** Create or update a chat's mode/display name. Preserves the existing
-   *  cursor unless the caller explicitly clears it (e.g. re-opting back in
-   *  after 'off' should NOT retroactively draft the gap — same first-poll
-   *  behavior chatMonitor already gives an untouched chat). */
+   *  cursor across a mode change BETWEEN active modes ('draft' <-> 'auto_send'
+   *  — polling never stopped, nothing to reset). But re-enabling a chat that
+   *  was 'off' is different: 'off' chats are skipped entirely by the poll
+   *  loop (see ipc/aiClone.ts), so the old cursor is stale the instant mode
+   *  moves away from 'off' — keeping it would make the next poll treat every
+   *  message that arrived during the pause as "new" and draft/auto-send
+   *  against the whole backlog at once. Reset the cursor on that specific
+   *  transition so the next poll instead treats it like a brand-new chat:
+   *  establish a fresh baseline, draft nothing retroactively (chatMonitor.ts's
+   *  documented first-poll behavior). */
   upsert(setting: Omit<ChatSetting, 'lastSeenTimestamp' | 'lastSeenMessageIds'>): void {
     const all = this.readFile()
     const existing = all[setting.chatID]
+    const reactivatingFromOff = existing?.mode === 'off' && setting.mode !== 'off'
     all[setting.chatID] = {
       ...setting,
-      lastSeenTimestamp: existing?.lastSeenTimestamp,
-      lastSeenMessageIds: existing?.lastSeenMessageIds
+      lastSeenTimestamp: reactivatingFromOff ? undefined : existing?.lastSeenTimestamp,
+      lastSeenMessageIds: reactivatingFromOff ? undefined : existing?.lastSeenMessageIds
     }
     this.writeFile(all)
   }

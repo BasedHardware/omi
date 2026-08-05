@@ -422,6 +422,21 @@ describe('aiClone:setChatMode', () => {
     await call('aiClone:setChatMode', chatID, 'Jordan', 'auto_send')
     expect(new ChatSettingsStore().get(chatID)?.mode).toBe('auto_send')
   })
+
+  it('resets the cursor when a chat is re-enabled after off, through the real IPC path', async () => {
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    const settings = new ChatSettingsStore()
+    await call('aiClone:setChatMode', chatID, 'Jordan', 'draft')
+    settings.setCursor(chatID, 5000, ['msg-during-pause'])
+
+    await call('aiClone:setChatMode', chatID, 'Jordan', 'off')
+    await call('aiClone:setChatMode', chatID, 'Jordan', 'draft')
+
+    // If the cursor had survived the round trip through 'off', the next
+    // poll would treat the whole backlog that arrived during the pause as
+    // new and draft/auto-send against all of it at once.
+    expect(settings.get(chatID)?.lastSeenTimestamp).toBeUndefined()
+  })
 })
 
 describe('idempotency', () => {

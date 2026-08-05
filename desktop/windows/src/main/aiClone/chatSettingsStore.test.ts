@@ -48,12 +48,38 @@ describe('ChatSettingsStore', () => {
     expect(store.get('unknown')).toBeNull()
   })
 
-  it('re-upserting a mode preserves the existing cursor (no retroactive burst on re-opt-in)', () => {
+  it('preserves the cursor across a mode change BETWEEN active modes (polling never stopped)', () => {
     store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'draft' })
     store.setCursor('chat-1', 500)
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'auto_send' })
+    expect(store.get('chat-1')?.lastSeenTimestamp).toBe(500)
+  })
+
+  it('resets the cursor when a chat is re-enabled after being off (no retroactive burst on re-opt-in)', () => {
+    // 'off' chats are skipped entirely by the poll loop — if the cursor
+    // survived the round trip through 'off', the next poll would see every
+    // message that arrived during the pause as "new" and draft/auto-send
+    // against the whole backlog at once.
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'draft' })
+    store.setCursor('chat-1', 500, ['msg-1'])
     store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'off' })
     store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'draft' })
-    expect(store.get('chat-1')?.lastSeenTimestamp).toBe(500)
+    expect(store.get('chat-1')?.lastSeenTimestamp).toBeUndefined()
+    expect(store.get('chat-1')?.lastSeenMessageIds).toBeUndefined()
+  })
+
+  it('re-enabling to auto_send (not just draft) also resets the cursor', () => {
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'auto_send' })
+    store.setCursor('chat-1', 500)
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'off' })
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'auto_send' })
+    expect(store.get('chat-1')?.lastSeenTimestamp).toBeUndefined()
+  })
+
+  it('re-upserting while already off, or off to off, does not need to reset anything meaningful', () => {
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'off' })
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'off' })
+    expect(store.get('chat-1')?.lastSeenTimestamp).toBeUndefined()
   })
 
   it('remove deletes a chat’s settings', () => {
