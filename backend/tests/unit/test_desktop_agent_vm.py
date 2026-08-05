@@ -345,6 +345,63 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
     ]
 
 
+def test_stop_broker_rejects_identity_from_the_wrong_project_or_service_account(monkeypatch):
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+
+    with pytest.raises(ValueError, match="outside the broker scope"):
+        desktop_agent_vm._compute_identity_fields(
+            {
+                "email": "runtime@project.iam.gserviceaccount.com",
+                "google.compute_engine": {
+                    "project_id": "other-project",
+                    "instance_name": "omi-agent-user",
+                    "zone": "projects/other-project/zones/us-central1-a",
+                },
+            }
+        )
+
+    with pytest.raises(ValueError, match="runtime identity"):
+        desktop_agent_vm._compute_identity_fields(
+            {
+                "email": "other@project.iam.gserviceaccount.com",
+                "google.compute_engine": {
+                    "project_id": "project",
+                    "instance_name": "omi-agent-user",
+                    "zone": "projects/project/zones/us-central1-a",
+                },
+            }
+        )
+
+
+def test_stop_broker_rate_limit_is_bounded(monkeypatch):
+    class Client:
+        host = "198.51.100.10"
+
+    class Request:
+        client = Client()
+
+    desktop_agent_vm._stop_broker_attempts.clear()
+    monkeypatch.setattr(desktop_agent_vm, "_STOP_BROKER_RATE_LIMIT", 2)
+    assert desktop_agent_vm._stop_broker_rate_allowed(Request())
+    assert desktop_agent_vm._stop_broker_rate_allowed(Request())
+    assert not desktop_agent_vm._stop_broker_rate_allowed(Request())
+
+
+def test_new_vm_startup_metadata_contains_release_checksum_and_boot_image(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/family/omi-agent")
+
+    metadata = desktop_agent_vm._agent_vm_startup_metadata("bucket")
+
+    assert "sha256sum /tmp/omi-startup.sh" in metadata["startup-script"]
+    assert metadata["omi-agent-startup-sha256"] == "c" * 64
+    assert metadata["omi-agent-boot-image"].endswith("/family/omi-agent")
+
+
 @pytest.mark.asyncio
 async def test_restart_sets_bootstrap_identity_and_waits_for_health(monkeypatch):
     calls = []

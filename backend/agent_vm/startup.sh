@@ -2,6 +2,11 @@
 set -euo pipefail
 
 image="${AGENT_VM_IMAGE}"
+release_id="${AGENT_VM_RELEASE_ID}"
+image_digest="${AGENT_VM_IMAGE_DIGEST}"
+backend_url="${AGENT_VM_BACKEND_URL}"
+stop_audience="${AGENT_VM_STOP_AUDIENCE}"
+startup_sha256="$(sha256sum "${BASH_SOURCE[0]}" | awk '{print $1}')"
 
 metadata_get() {
   curl -fsS -H 'Metadata-Flavor: Google' "$1"
@@ -52,6 +57,9 @@ docker pull "$image"
 docker rm -f omi-agent-vm >/dev/null 2>&1 || true
 docker run --detach --name omi-agent-vm --restart unless-stopped --publish 8080:8080 \
   --env ANTHROPIC_API_KEY="$anthropic_api_key" --env AUTH_TOKEN="$auth_token" --env GEMINI_API_KEY="$gemini_api_key" \
+  --env AGENT_VM_RELEASE_ID="$release_id" --env AGENT_VM_IMAGE_DIGEST="$image_digest" \
+  --env AGENT_VM_STARTUP_SHA256="$startup_sha256" --env BACKEND_URL="$backend_url" \
+  --env AGENT_VM_STOP_AUDIENCE="$stop_audience" \
   --env PLAYWRIGHT_MCP_COMMAND=playwright-mcp \
   --env PLAYWRIGHT_MCP_ARGS='["--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"]' \
   --volume "$data_dir:/root/omi-agent" "$image"

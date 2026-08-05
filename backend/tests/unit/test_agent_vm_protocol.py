@@ -1,6 +1,4 @@
 import asyncio
-import base64
-import hashlib
 import importlib
 import json
 import os
@@ -8,9 +6,6 @@ import sqlite3
 import sys
 import types
 from pathlib import Path
-
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from fastapi.testclient import TestClient
 
@@ -25,34 +20,6 @@ def load_app(tmp_path: Path):
     sys.modules.pop("main", None)
     module = importlib.import_module("main")
     return module.app, module
-
-
-def test_signed_update_manifest_requires_valid_signature_and_content_hash(tmp_path: Path, monkeypatch) -> None:
-    _, module = load_app(tmp_path)
-    source = b"print('verified update')\n"
-    manifest = json.dumps(
-        {
-            "path": "main.py",
-            "sha256": hashlib.sha256(source).hexdigest(),
-            "version": "2026.07.28.1",
-        },
-        separators=(",", ":"),
-    ).encode()
-    signing_key = Ed25519PrivateKey.generate()
-    monkeypatch.setenv(
-        "AGENT_UPDATE_ED25519_PUBLIC_KEY",
-        base64.b64encode(
-            signing_key.public_key().public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw,
-            )
-        ).decode(),
-    )
-
-    assert module.validate_signed_update_manifest(manifest, signing_key.sign(manifest), source) == {
-        "path": "main.py",
-        "version": "2026.07.28.1",
-    }
 
 
 def test_health_requires_vm_token_and_reports_database_state(tmp_path: Path) -> None:

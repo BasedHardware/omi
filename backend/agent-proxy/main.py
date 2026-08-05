@@ -38,6 +38,12 @@ from utils.executors import (
     start_background_task,
 )
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from services.agent_vm_lifecycle import (
+    claim_session_lease,
+    heartbeat_session_lease,
+    reconcile_requested,
+    release_session_lease,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +64,11 @@ ACCOUNT_DELETION_IDLE_RECHECK_INTERVAL = 30  # seconds
 # tiny grace window; on timeout we seed history (a fresh amnesiac session is the worse
 # failure than a one-time duplicate).
 VM_HELLO_TIMEOUT = 3.0  # seconds
+AGENT_VM_SESSION_LEASES_ENABLED = os.getenv("AGENT_VM_SESSION_LEASES_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 # Encryption — optional; required for users with enhanced data protection.
 ENCRYPTION_SECRET = os.getenv('ENCRYPTION_SECRET', '').encode('utf-8')
@@ -867,6 +878,25 @@ async def agent_ws(websocket: WebSocket):
         await _close_client(websocket, uid, 4002, "Agent VM not ready")
         return
 
+    # A reconciler drain prevents new sessions while allowing already leased
+    # sessions to finish.  The lease is re-read after readiness because a drain
+    # can begin while a stopped VM is being started.
+    if reconcile_requested(vm):
+        await websocket.accept()
+        await _send_startup_event(
+            websocket,
+            uid,
+            {
+                "type": "error",
+                "code": "agent_vm_draining",
+                "state": "draining",
+                "retryable": True,
+                "message": "Your agent is being updated. Please retry shortly.",
+            },
+        )
+        await _close_client(websocket, uid, 1013, "Agent VM is draining")
+        return
+
     # Accept WebSocket first so we can send status messages during VM startup
     await websocket.accept()
 
@@ -985,6 +1015,32 @@ async def agent_ws(websocket: WebSocket):
     try:
         async with _connected_vm() as vm_ws:
             logger.info(f"[agent-proxy] uid={uid} connected")
+
+            lease_id = uuid.uuid4().hex
+            lease_claimed = False
+            if AGENT_VM_SESSION_LEASES_ENABLED:
+                lease_claimed = await run_blocking(
+                    db_executor,
+                    claim_session_lease,
+                    uid,
+                    str(vm.get("vmName") or ""),
+                    str(vm.get("authToken") or ""),
+                    lease_id,
+                )
+                if not lease_claimed:
+                    await _send_startup_event(
+                        websocket,
+                        uid,
+                        {
+                            "type": "error",
+                            "code": "agent_vm_draining",
+                            "state": "draining",
+                            "retryable": True,
+                            "message": "Your agent is being updated. Please retry shortly.",
+                        },
+                    )
+                    await vm_ws.close()
+                    return
 
             async def session_access_allowed() -> bool:
                 allowed = await _admit_account_access_or_close(websocket, uid)
@@ -1163,14 +1219,31 @@ async def agent_ws(websocket: WebSocket):
                     if not await session_access_allowed():
                         return
 
+            async def session_lease_heartbeat():
+                if not lease_claimed:
+                    while True:
+                        await asyncio.sleep(3600)
+                while True:
+                    await asyncio.sleep(30)
+                    alive = await run_blocking(db_executor, heartbeat_session_lease, uid, lease_id)
+                    if not alive:
+                        try:
+                            await vm_ws.close()
+                        except Exception:
+                            pass
+                        return
+
             t1 = asyncio.create_task(phone_to_vm(), name=f"ws:{uid}:phone_to_vm")
             t2 = asyncio.create_task(vm_to_phone(), name=f"ws:{uid}:vm_to_phone")
             t3 = asyncio.create_task(keepalive_pinger(), name=f"ws:{uid}:keepalive")
             t4 = asyncio.create_task(account_deletion_watcher(), name=f"ws:{uid}:deletion-fence")
-            _, pending = await asyncio.wait([t1, t2, t3, t4], return_when=asyncio.FIRST_COMPLETED)
+            t5 = asyncio.create_task(session_lease_heartbeat(), name=f"ws:{uid}:lease-heartbeat")
+            _, pending = await asyncio.wait([t1, t2, t3, t4, t5], return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
+            if lease_claimed:
+                await run_blocking(db_executor, release_session_lease, uid, lease_id)
 
     except Exception as e:
         category = classify_error(e)

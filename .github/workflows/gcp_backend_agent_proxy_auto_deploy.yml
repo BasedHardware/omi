@@ -6,6 +6,10 @@ on:
     paths:
       - 'backend/agent-proxy/**'
       - 'backend/charts/agent-proxy/**'
+      - 'backend/services/agent_vm_lifecycle.py'
+      - 'backend/database/_client.py'
+      - 'backend/database/document_ids.py'
+      - 'backend/database/google_credentials.py'
       - 'backend/utils/__init__.py'
       - 'backend/utils/executors.py'
 
