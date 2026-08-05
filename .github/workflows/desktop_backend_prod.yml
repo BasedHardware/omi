@@ -607,7 +607,7 @@ jobs:
           echo "AGENT_VM_ACTIVE_POINTER_PREVIOUS_SAVED=true" >> "$GITHUB_ENV"
 
       - name: Activate accepted Agent VM release
-        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
+        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != '' && env.AGENT_VM_RECONCILER_AVAILABLE == 'true'
         run: |
           set -euo pipefail
           gcloud storage cp \

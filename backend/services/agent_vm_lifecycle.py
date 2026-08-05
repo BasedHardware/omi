@@ -12,8 +12,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import json
 import os
 import re
+import shlex
 import time
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -124,8 +126,6 @@ class AgentVmRelease:
 
 def release_manifest_bytes(raw: Mapping[str, Any]) -> bytes:
     """Return canonical bytes used by publication and hash tests."""
-    import json
-
     return (json.dumps(dict(raw), sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
@@ -156,8 +156,6 @@ def metadata_items(instance: Mapping[str, Any]) -> dict[str, str]:
 
 def startup_wrapper(startup_uri: str, startup_sha256: str | None = None) -> str:
     """Build a GCE wrapper that verifies the immutable startup artifact."""
-    import shlex
-
     if startup_uri.startswith("gs://"):
         bucket, _, object_name = startup_uri[5:].partition("/")
         startup_uri = f"https://storage.googleapis.com/{bucket}/{object_name}"
