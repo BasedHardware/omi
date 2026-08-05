@@ -40,6 +40,13 @@ Write-Host "- Gradle (v8.10)"
 Write-Host "- NDK (28.2.13676358)"
 Write-Host ""
 
+# Honor caller override so local-backend setup actually writes that URL to .dev.env
+# (#9404 review). Default remains community remote staging.
+if ([string]::IsNullOrWhiteSpace($env:API_BASE_URL)) {
+    $script:API_BASE_URL = "https://api.omiapi.com/"
+} else {
+    $script:API_BASE_URL = $env:API_BASE_URL
+}
 
 function SetupFirebase {
     # Create directories if they don't exist
@@ -62,28 +69,60 @@ function SetupFirebase {
 
 # Fail closed when community remote-staging API cannot verify Firebase tokens
 # (#9404 / #5939). Do not text-replace project IDs — regenerate via FlutterFire.
-function Validate-FirebaseApiAlignment {
-    $apiBaseUrl = "https://api.omiapi.com/"
-    $json = Get-Content -Raw "setup/prebuilt/google-services.json"
-    $match = [regex]::Match($json, '"project_id"\s*:\s*"([^"]+)"')
-    $project = if ($match.Success) { $match.Groups[1].Value } else { "" }
+# Compares every prebuilt artifact the app copies (json + dart + plist).
+function Get-FirebaseProjectIdFromPrebuilt {
+    param([string]$Path)
+    $text = Get-Content -Raw $Path
+    if ($Path -like "*.json") {
+        $match = [regex]::Match($text, '"project_id"\s*:\s*"([^"]+)"')
+        if ($match.Success) { return $match.Groups[1].Value }
+        return ""
+    }
+    if ($Path -like "*.plist") {
+        $match = [regex]::Match($text, '<key>PROJECT_ID</key>\s*<string>([^<]+)</string>')
+        if ($match.Success) { return $match.Groups[1].Value }
+        return ""
+    }
+    if ($Path -like "*.dart") {
+        $ids = [regex]::Matches($text, "projectId:\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+        if ($ids.Count -eq 1) { return $ids[0] }
+        return ""
+    }
+    return ""
+}
 
-    if ($apiBaseUrl -eq "https://api.omiapi.com/" -and $project -ne "based-hardware") {
-        if ($env:OMI_ALLOW_FIREBASE_MISMATCH -eq "1") {
-            Write-Host "WARNING: Firebase project '$project' cannot authenticate to $apiBaseUrl."
-            Write-Host "         Continuing because OMI_ALLOW_FIREBASE_MISMATCH=1 (local/emulator only)."
-            Write-Host "         See https://github.com/BasedHardware/omi/issues/9404"
-            return
-        }
-        Write-Host "ERROR: Firebase project '$project' cannot authenticate to $apiBaseUrl."
+function Validate-FirebaseApiAlignment {
+    $jsonProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/google-services.json"
+    $dartProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/firebase_options.dart"
+    $plistProj = Get-FirebaseProjectIdFromPrebuilt "setup/prebuilt/GoogleService-Info.plist"
+
+    if ([string]::IsNullOrWhiteSpace($jsonProj) -or [string]::IsNullOrWhiteSpace($dartProj) -or [string]::IsNullOrWhiteSpace($plistProj)) {
+        Write-Host "ERROR: could not parse Firebase project id from app/setup/prebuilt/* (#9404)."
+        Write-Host "  google-services.json → '$jsonProj'"
+        Write-Host "  firebase_options.dart → '$dartProj'"
+        Write-Host "  GoogleService-Info.plist → '$plistProj'"
+        exit 1
+    }
+    if ($jsonProj -ne $dartProj -or $jsonProj -ne $plistProj) {
+        Write-Host "ERROR: prebuilt Firebase configs disagree on project id (#9404)."
+        Write-Host "  google-services.json → '$jsonProj'"
+        Write-Host "  firebase_options.dart → '$dartProj'"
+        Write-Host "  GoogleService-Info.plist → '$plistProj'"
+        Write-Host "Regenerate the full trio via FlutterFire (do NOT text-replace — #5945)."
+        exit 1
+    }
+    $project = $jsonProj
+
+    if ($script:API_BASE_URL -eq "https://api.omiapi.com/" -and $project -ne "based-hardware") {
+        Write-Host "ERROR: Firebase project '$project' cannot authenticate to $($script:API_BASE_URL)."
         Write-Host "Community remote staging requires Firebase project 'based-hardware' (#9404)."
         Write-Host "Tokens from '$project' are rejected with 401 by the live backend."
         Write-Host ""
         Write-Host "Maintainer action: regenerate app/setup/prebuilt/* via FlutterFire against"
         Write-Host "  based-hardware (do NOT text-replace project IDs — closed PR #5945)."
         Write-Host ""
-        Write-Host "Isolated local backend / emulator workaround:"
-        Write-Host "  `$env:OMI_ALLOW_FIREBASE_MISMATCH='1'; then re-run setup with a local API_BASE_URL"
+        Write-Host "Isolated local backend / emulator workaround (honors API_BASE_URL override):"
+        Write-Host "  `$env:API_BASE_URL='http://127.0.0.1:8000/'; then re-run setup.ps1"
         exit 1
     }
 }
@@ -103,9 +142,8 @@ function SetupProvisioningProfile {
 
 
 function SetupAppEnv {
-    $API_BASE_URL = "https://api.omiapi.com/"
     # Using Set-Content with UTF8 encoding
-    $content = "API_BASE_URL=$API_BASE_URL"
+    $content = "API_BASE_URL=$($script:API_BASE_URL)"
     [System.IO.File]::WriteAllText((Join-Path (Get-Location) ".dev.env"), $content, [System.Text.Encoding]::UTF8)
 }
 

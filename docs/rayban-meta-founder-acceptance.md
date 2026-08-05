@@ -41,9 +41,9 @@ signing errors. Instead:
 - [ ] Keep the original bundle id (`com.friend-app-with-wearable.ios12.development`).
       Community remote staging (`api.omiapi.com`) requires Firebase project
       **`based-hardware`** ([#9404](https://github.com/BasedHardware/omi/issues/9404)).
-      Until prebuilt configs are regenerated, use a local backend with
-      `OMI_ALLOW_FIREBASE_MISMATCH=1` rather than expecting `based-hardware-dev`
-      tokens to pass remote auth (they return 401).
+      Until prebuilt configs are regenerated, use a local backend
+      (`API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios`) rather than expecting
+      `based-hardware-dev` tokens to pass remote auth (they return 401).
 - [ ] Build and install via
       `FLUTTER_BIN=/path/to/flutter-3.41.9/bin/flutter app/scripts/rayban_dat.sh run -d <device-id>`.
       Never hand-install a stale `build/ios/iphoneos/Runner.app`.

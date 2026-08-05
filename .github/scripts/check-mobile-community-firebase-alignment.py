@@ -15,12 +15,13 @@ rejected with 401 after an apparently successful sign-in.
 This checker:
 
 1. Requires community ``setup.sh`` / ``setup.ps1`` to default to the remote
-   staging API and to refuse (or allowlist-escape) a Firebase/API mismatch.
+   staging API and to refuse a Firebase/API mismatch at setup time.
 2. Forbids dead FlutterFire generators that would reintroduce
    ``based-hardware-dev`` configs for that default API.
 3. Asserts every prebuilt Firebase file agrees on one project id.
-4. Allowlists the known prebuilt mismatch only while configs still declare
-   ``based-hardware-dev`` — the allowlist may shrink to empty, never grow.
+4. Allowlists only the known ``based-hardware-dev`` mismatch while configs
+   still declare that project — the allowlist may shrink to empty, never grow
+   and never admit an arbitrary project.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ DEFAULT_ALLOWLIST = Path(".github/scripts/mobile_community_firebase_alignment_al
 
 REMOTE_STAGING_API = "https://api.omiapi.com/"
 REQUIRED_REMOTE_STAGING_FIREBASE = "based-hardware"
+KNOWN_PREBUILT_MISMATCH = "based-hardware-dev"
 PREBUILT_RELATIVE = (
     "app/setup/prebuilt/firebase_options.dart",
     "app/setup/prebuilt/google-services.json",
@@ -45,7 +47,7 @@ SETUP_SCRIPTS = (
     "app/setup.sh",
     "app/setup/scripts/setup.ps1",
 )
-ALIGNMENT_MARKERS = (
+ALIGNMENT_CALL_NAMES = (
     "validate_firebase_api_alignment",
     "Validate-FirebaseApiAlignment",
 )
@@ -81,19 +83,53 @@ def _project_from_prebuilt(path: Path) -> str | None:
 
 
 def _setup_default_api(setup_text: str) -> str | None:
-    # bash: API_BASE_URL=https://...
-    match = re.search(r"(?m)^API_BASE_URL=(https?://\S+)\s*$", setup_text)
+    # bash override-preserving default:
+    #   API_BASE_URL="${API_BASE_URL:-https://api.omiapi.com/}"
+    match = re.search(
+        r'(?m)^API_BASE_URL="?\$\{API_BASE_URL:-?(https?://[^}"\s]+)\}"?\s*$',
+        setup_text,
+    )
     if match:
         return match.group(1).strip()
-    # powershell: $API_BASE_URL = "https://..."
+    # bash legacy: API_BASE_URL=https://...
+    match = re.search(r"(?m)^API_BASE_URL=(https?://\S+)\s*$", setup_text)
+    if match:
+        return match.group(1).strip().strip('"').strip("'")
+    # powershell default literal still present when env override is empty:
+    #   $script:API_BASE_URL = "https://..."  or  $API_BASE_URL = "https://..."
+    match = re.search(
+        r'(?m)\$script:API_BASE_URL\s*=\s*"(https?://[^"]+)"',
+        setup_text,
+    )
+    if match:
+        return match.group(1).strip()
     match = re.search(r'(?m)\$API_BASE_URL\s*=\s*"(https?://[^"]+)"', setup_text)
     if match:
         return match.group(1).strip()
     return None
 
 
+def _has_alignment_invocation(setup_text: str) -> bool:
+    """Require a real call site, not merely the function definition name."""
+    for raw_line in setup_text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if re.match(r"function\s+validate_firebase_api_alignment\b", line):
+            continue
+        if re.match(r"function\s+Validate-FirebaseApiAlignment\b", line):
+            continue
+        if re.match(r"function\s+_firebase_project_id_from_prebuilt\b", line):
+            continue
+        if any(name in line for name in ALIGNMENT_CALL_NAMES):
+            return True
+    return False
+
+
 def load_allowlist(path: Path) -> list[str]:
     raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("allowlist must be a JSON object")
     allowed = raw.get("allowed_prebuilt_projects_while_api_is_remote_staging")
     if not isinstance(allowed, list) or not all(isinstance(x, str) for x in allowed):
         raise ValueError(
@@ -147,10 +183,10 @@ def validate(root: Path, allowlist_path: Path) -> list[str]:
                 f"{relative}: default API_BASE_URL must be {REMOTE_STAGING_API!r} "
                 f"(community remote staging); found {api!r}"
             )
-        if not any(marker in text for marker in ALIGNMENT_MARKERS):
+        if not _has_alignment_invocation(text):
             errors.append(
                 f"{relative}: must call Firebase/API alignment validation "
-                f"({ALIGNMENT_MARKERS[0]} / {ALIGNMENT_MARKERS[1]}) — see #9404"
+                f"({ALIGNMENT_CALL_NAMES[0]} / {ALIGNMENT_CALL_NAMES[1]}) — see #9404"
             )
         if FORBIDDEN_FLUTTERFIRE_DEV_PROJECT.search(text):
             errors.append(
@@ -171,15 +207,19 @@ def validate(root: Path, allowlist_path: Path) -> list[str]:
             )
         return errors
 
-    # Mismatch against the remote-staging contract.
-    if prebuilt_project in allowed_mismatches:
-        # Known debt: only based-hardware-dev is expected while FlutterFire regen is pending.
-        unexpected = [p for p in allowed_mismatches if p != prebuilt_project]
-        if unexpected:
-            errors.append(
-                "allowlist lists projects that are not the current prebuilt project; "
-                f"shrink to exactly [{prebuilt_project!r}] (extra: {unexpected!r})"
-            )
+    # Only the known based-hardware-dev debt may be temporarily allowlisted.
+    if (
+        prebuilt_project == KNOWN_PREBUILT_MISMATCH
+        and allowed_mismatches == [KNOWN_PREBUILT_MISMATCH]
+    ):
+        return errors
+
+    if prebuilt_project == KNOWN_PREBUILT_MISMATCH and allowed_mismatches:
+        errors.append(
+            "allowlist for known based-hardware-dev debt must be exactly "
+            f"[{KNOWN_PREBUILT_MISMATCH!r}] (found {allowed_mismatches!r}); "
+            "never admit arbitrary projects"
+        )
         return errors
 
     errors.append(
@@ -187,8 +227,7 @@ def validate(root: Path, allowlist_path: Path) -> list[str]:
         f"when API is {REMOTE_STAGING_API!r}, but prebuilt declares {prebuilt_project!r}. "
         f"Regenerate app/setup/prebuilt/* via FlutterFire against based-hardware "
         f"(do not text-replace project ids — see #5945). "
-        f"Or, if this is still the known #9404 debt, allowlist must contain "
-        f"{prebuilt_project!r} and may only shrink."
+        f"Temporary CI debt may only allowlist exactly [{KNOWN_PREBUILT_MISMATCH!r}]."
     )
     return errors
 

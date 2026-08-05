@@ -207,10 +207,15 @@ Manual setup gives you full control, allowing you to use your own backend.
     <Warning>
     `setup.sh` / `setup.ps1` copy prebuilt configs from `app/setup/prebuilt/`, then **fail closed** if those configs are not `based-hardware` while the default API is `https://api.omiapi.com/`.
 
-    Until maintainers regenerate the prebuilt trio via FlutterFire against `based-hardware` (do **not** text-replace project IDs — see closed PR [#5945](https://github.com/BasedHardware/omi/pull/5945)), use a local backend:
+    Until maintainers regenerate the prebuilt trio via FlutterFire against `based-hardware` (do **not** text-replace project IDs — see closed PR [#5945](https://github.com/BasedHardware/omi/pull/5945)), point setup at a local backend. `setup.sh` / `setup.ps1` honor an existing `API_BASE_URL` override and validate that `google-services.json`, `firebase_options.dart`, and `GoogleService-Info.plist` agree on one project id:
 
     ```bash
-    API_BASE_URL=http://127.0.0.1:8000/ OMI_ALLOW_FIREBASE_MISMATCH=1 bash setup.sh ios
+    API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios
+    ```
+
+    ```powershell
+    $env:API_BASE_URL='http://127.0.0.1:8000/'
+    # then re-run setup.ps1 from app/
     ```
 
     **Never run `flutterfire configure`** against Omi's bundle IDs — it overwrites the prebuilt prod credentials in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, and `app/android/app/src/prod/`.
@@ -278,7 +283,7 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     - Enable Google/Apple sign-in in Firebase Console
     - Verify SHA1/SHA256 keys are added to Firebase
     - Check bundle IDs match your Firebase configuration
-    - For isolated local backends, point `API_BASE_URL` at your server and set `OMI_ALLOW_FIREBASE_MISMATCH=1` only when intentionally using `based-hardware-dev` / emulator configs
+    - For isolated local backends, point `API_BASE_URL` at your server before running setup (`API_BASE_URL=http://127.0.0.1:8000/ bash setup.sh ios`) when using `based-hardware-dev` / emulator configs against a non-remote API
   </Accordion>
   <Accordion title="iOS: Unable to flip between RX and RW memory protection" icon="apple">
     **Error Message:**
