@@ -421,6 +421,7 @@ class MemoriesViewModel: ObservableObject {
     if let expectedOffset, currentOffset != expectedOffset { return false }
     canonicalLifecycleExposed = page.canonicalLifecycleExposed
     canonicalLifecycleCapabilityEstablished = true
+    defaultMemoryDeleteSupported = page.defaultMemoryDeleteSupported
     persistCanonicalLifecycleExposure(page.canonicalLifecycleExposed)
     if let deviceScopeCapability = deviceScopeSupportedOverride ?? page.deviceScopeSupported {
       deviceScopeSupported = deviceScopeCapability
@@ -478,11 +479,14 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Visibility bulk mutations still use an unscoped legacy endpoint and stay
-  /// disabled. Default-scope deletion has its own server contract.
+  /// disabled. Default-scope deletion is enabled only after the current server
+  /// advertises the scoped-delete contract.
   private var bulkServerMutationsAvailable: Bool { false }
-  private var bulkDeletionServerMutationAvailable: Bool { true }
+  private var bulkDeletionServerMutationAvailable: Bool { defaultMemoryDeleteSupported }
   var areBulkServerMutationsAvailable: Bool { bulkServerMutationsAvailable }
   var isBulkDeletionAvailable: Bool { bulkDeletionServerMutationAvailable }
+
+  @Published private(set) var defaultMemoryDeleteSupported = false
 
   // MARK: - Initialization
 
@@ -625,6 +629,7 @@ class MemoriesViewModel: ObservableObject {
     searchResults = []
     canonicalLifecycleExposed = false
     canonicalLifecycleCapabilityEstablished = false
+    defaultMemoryDeleteSupported = false
     selectedLayerFilter = .defaultAccess
     selectedTags = []
     filteredFromDatabase = []

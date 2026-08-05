@@ -492,11 +492,13 @@ extension APIClient {
 extension APIClient {
   private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
+  private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
 
   struct MemoryListPage {
     let memories: [ServerMemory]
     let canonicalLifecycleExposed: Bool
     let deviceScopeSupported: Bool?
+    let defaultMemoryDeleteSupported: Bool
   }
 
   /// Fetches memories from the API with optional filtering
@@ -586,10 +588,13 @@ extension APIClient {
     let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    let defaultMemoryDeleteSupported =
+      httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     return MemoryListPage(
       memories: memories,
       canonicalLifecycleExposed: canonicalLifecycleExposed,
-      deviceScopeSupported: deviceScopeSupported
+      deviceScopeSupported: deviceScopeSupported,
+      defaultMemoryDeleteSupported: defaultMemoryDeleteSupported
     )
   }
 
