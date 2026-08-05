@@ -46,7 +46,11 @@ final class DesktopReviewPermissionRegressionTests: XCTestCase {
 
 @MainActor
 final class DesktopReviewImportAndChatRegressionTests: XCTestCase {
-  func testAppleNotesImportRequiresFreshVerificationAfterPassiveRefresh() async {
+  /// INV-INT-1: Apple Notes "Connected" must be the answer of a live access
+  /// probe, never a stored timestamp or a one-time-success latch. The same
+  /// persisted import history therefore has to read as connected or not
+  /// connected purely on what the probe says right now.
+  func testAppleNotesConnectedStateFollowsTheLiveProbeNotPersistedHistory() async {
     let suiteName = "DesktopReviewImportAndChatRegressionTests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {
       XCTFail("Expected an isolated user-defaults suite")
@@ -58,21 +62,35 @@ final class DesktopReviewImportAndChatRegressionTests: XCTestCase {
       XCTFail("Expected the Apple Notes import connector")
       return
     }
-    let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
-    store.markSynced(
-      connectorID: connector.id,
-      sourceCount: 3,
-      syncedAt: Date(timeIntervalSince1970: 1_700_000_000)
+    let syncedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let readable = ImportConnectorStatusStore(
+      defaults: defaults,
+      sessionUserID: "test-user",
+      appleNotesProbe: { .connected(noteCount: 834, verifiedAt: syncedAt) }
     )
-    XCTAssertTrue(store.snapshot(for: connector).isConnected)
+    readable.markSynced(connectorID: connector.id, sourceCount: 3, syncedAt: syncedAt)
 
-    await store.refresh()
+    await readable.refresh()
 
-    let snapshot = store.snapshot(for: connector)
+    let connected = readable.snapshot(for: connector)
+    XCTAssertTrue(connected.isConnected)
+    XCTAssertEqual(connected.actionTitle, "Sync now")
+    XCTAssertEqual(connected.primaryText, "3 notes")
+
+    // Same persisted history, revoked Automation access.
+    let revoked = ImportConnectorStatusStore(
+      defaults: defaults,
+      sessionUserID: "test-user",
+      appleNotesProbe: {
+        .needsAccess(message: "Allow Omi to control Notes.", reasonCode: "automation_permission_denied")
+      }
+    )
+
+    await revoked.refresh()
+
+    let snapshot = revoked.snapshot(for: connector)
     XCTAssertFalse(snapshot.isConnected)
     XCTAssertEqual(snapshot.actionTitle, "Connect")
-    XCTAssertEqual(snapshot.primaryText, "Reconnect to verify access")
-    XCTAssertTrue(snapshot.secondaryText?.hasPrefix("Last imported ") == true)
   }
 
   func testCompactTranscriptExpansionAnchorsToTheFirstVisibleRow() {

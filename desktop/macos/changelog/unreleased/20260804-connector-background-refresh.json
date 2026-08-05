@@ -1,0 +1,3 @@
+{
+  "change": "Connected data sources now refresh in the background instead of staying frozen at their last manual import"
+}

@@ -43,6 +43,17 @@ class ViewModelContainer: ObservableObject {
     ChatProvider.mainInstance = provider
     RecurringTaskScheduler.shared.configure(taskChatCoordinator: taskChatCoordinator)
 
+    // Import connectors had no owner for periodic refresh, so a one-time import
+    // stayed frozen forever while the UI still rendered it as "connected"
+    // (INV-INT-1 forbids exactly that latch). The scheduler only refreshes
+    // connectors that declare `supportsUnattendedRefresh`, so no background tick
+    // can raise a macOS consent prompt.
+    ConnectorRefreshScheduler.shared.configure(
+      statusStoreProvider: { [weak self] in self?.homeStatusStore.connectorStatusStore },
+      connectors: ConnectorRefreshRegistry.live()
+    )
+    ConnectorRefreshScheduler.shared.start()
+
     // Bind the headless task automation actions (create/toggle/delete/reorder/dump)
     // to this canonical, long-lived TasksViewModel so omi-ctl can drive TASK-01/02/03
     // without the Tasks page being on screen. Gated to the automation bridge, which

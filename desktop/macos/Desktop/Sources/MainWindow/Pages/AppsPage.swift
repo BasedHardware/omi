@@ -844,7 +844,9 @@ final class ImportConnectorStatusStore: ObservableObject {
     var lastSyncedAt: Date?
     var lastDeltaCount: Int?
     var availabilityText: String?
-    var requiresVerification = false
+    /// Live, in-session proof that the connector is readable right now. Never
+    /// persisted: a stored value would be the latch INV-INT-1 forbids.
+    var liveAccessVerified = false
   }
 
   struct Snapshot {
@@ -868,9 +870,17 @@ final class ImportConnectorStatusStore: ObservableObject {
   private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
   private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
   private var sessionUserID: String?
+  private let appleNotesProbe: @Sendable () async -> AppleNotesConnectionStatus
 
-  init(defaults: UserDefaults = .standard, sessionUserID: String? = nil) {
+  init(
+    defaults: UserDefaults = .standard,
+    sessionUserID: String? = nil,
+    appleNotesProbe: @escaping @Sendable () async -> AppleNotesConnectionStatus = {
+      await AppleNotesReaderService.shared.connectionStatus(userInitiated: false)
+    }
+  ) {
     self.defaults = defaults
+    self.appleNotesProbe = appleNotesProbe
     self.sessionUserID = Self.normalizedUserID(
       sessionUserID ?? defaults.string(forKey: .authUserId)
     )
@@ -920,7 +930,8 @@ final class ImportConnectorStatusStore: ObservableObject {
       defaults.set(metrics.memoryCount, forKey: storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID))
     }
     metrics.lastSyncedAt = syncedAt
-    metrics.requiresVerification = false
+    // A completed import IS a live read, so it proves access for this session.
+    metrics.liveAccessVerified = true
     defaults.set(
       syncedAt.timeIntervalSince1970,
       forKey: storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
@@ -993,11 +1004,6 @@ final class ImportConnectorStatusStore: ObservableObject {
         let timestamp = defaults.double(forKey: lastSyncedAtKey)
         if timestamp > 0 {
           metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
-          // Apple Notes access is revocable and its security-scoped folder
-          // grant can disappear between launches. A persisted import proves
-          // history, not current readability, so require an explicit refresh
-          // before displaying it as connected.
-          metrics.requiresVerification = connector.id == "apple-notes"
         }
       }
       if defaults.bool(forKey: hasLastDeltaKey) {
@@ -1009,9 +1015,6 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     hydrateLegacyManualImports()
-
-    // A remembered path is not enough to call Apple Notes connected. The
-    // status becomes connected only after the reader proves the store is readable.
   }
 
   private func hydrateLegacyManualImports() {
@@ -1144,18 +1147,18 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
   }
 
+  /// INV-INT-1: "Connected" for Apple Notes is a live probe result, never a
+  /// stored timestamp. The probe is prompt-free — it only addresses Notes when
+  /// Automation access is already granted — so a passive refresh can run it.
   private func refreshAppleNotesMetrics() async {
-    // Reading NoteStore.sqlite is reserved for the explicit Connect/Import
-    // action. Marking a persisted import as unverified keeps passive refreshes
-    // honest without opening the protected Notes store.
     guard var metrics = metricsByID["apple-notes"], metrics.lastSyncedAt != nil else { return }
-    metrics.requiresVerification = true
+    metrics.liveAccessVerified = await appleNotesProbe().isConnected
     metricsByID["apple-notes"] = metrics
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
-    if metrics.requiresVerification {
-      return false
+    if connector.id == "apple-notes" {
+      return metrics.liveAccessVerified
     }
     if metrics.lastSyncedAt != nil {
       return true
@@ -1169,10 +1172,6 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String {
-    if connector.id == "apple-notes", metrics.requiresVerification {
-      return "Reconnect to verify access"
-    }
-
     if let sourceCount = metrics.sourceCount {
       if let memoryCount = metrics.memoryCount, memoryCount > 0 {
         return
@@ -1199,12 +1198,6 @@ final class ImportConnectorStatusStore: ObservableObject {
     metrics: ConnectorMetrics,
     isConnected: Bool
   ) -> String? {
-    if connector.id == "apple-notes", metrics.requiresVerification,
-      let lastSyncedAt = metrics.lastSyncedAt
-    {
-      return "Last imported \(relativeTimestamp(lastSyncedAt))"
-    }
-
     if let lastSyncedAt = metrics.lastSyncedAt {
       var text = "Synced \(relativeTimestamp(lastSyncedAt))"
       if let lastDeltaCount = metrics.lastDeltaCount, lastDeltaCount > 0 {
@@ -1251,6 +1244,11 @@ final class ImportConnectorStatusStore: ObservableObject {
 struct ImportsSection: View {
   private let connectors = ImportConnector.all
   @ObservedObject var statusStore: ImportConnectorStatusStore
+  /// Background refresh parks a connector whose credential or grant died. The
+  /// status store cannot know that — it only records the last successful sync —
+  /// so a parked connector would otherwise keep rendering as healthy, which is
+  /// the class of dishonesty `INV-INT-1` forbids.
+  @ObservedObject private var refreshScheduler = ConnectorRefreshScheduler.shared
   let onSelectConnector: (ImportConnector) -> Void
 
   var body: some View {
@@ -1267,7 +1265,8 @@ struct ImportsSection: View {
         ForEach(connectors) { connector in
           ImportConnectorCard(
             connector: connector,
-            snapshot: statusStore.snapshot(for: connector)
+            snapshot: statusStore.snapshot(for: connector),
+            attentionMessage: refreshScheduler.attention[connector.id]?.message
           ) {
             onSelectConnector(connector)
           }
@@ -1319,6 +1318,10 @@ struct ImportConnectorRow: View {
 struct ImportConnectorCard: View {
   let connector: ImportConnector
   let snapshot: ImportConnectorStatusStore.Snapshot
+  /// Set when background refresh has parked this connector. It replaces the
+  /// "Synced …" line rather than sitting beside it: a connector that can no
+  /// longer sync must not read as freshly synced.
+  var attentionMessage: String?
   let action: () -> Void
 
   @State private var isHovering = false
@@ -1356,7 +1359,13 @@ struct ImportConnectorCard: View {
               .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(snapshot.isConnected ? OmiColors.textSecondary : OmiColors.textTertiary)
 
-            if let secondaryText = snapshot.secondaryText {
+            if let attentionMessage {
+              Text(attentionMessage)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.warning)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            } else if let secondaryText = snapshot.secondaryText {
               Text(secondaryText)
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)

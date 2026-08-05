@@ -167,7 +167,17 @@ final class IntegrationConnectTelemetryTests: XCTestCase {
   func testSurfaceEnumIsClosedSet() {
     XCTAssertEqual(
       Set(IntegrationConnectTelemetry.Surface.allCases.map(\.rawValue)),
-      ["apps", "onboarding"])
+      ["apps", "onboarding", "background"])
+  }
+
+  func testBackgroundSurfaceIsDistinctInEmittedPayloads() {
+    // `ConnectorRefreshScheduler` routes unattended refreshes through the same
+    // runner as a user-initiated connect. Without its own surface value every
+    // existing connect-funnel query would start counting timer-driven runs.
+    let payload = IntegrationConnectTelemetry.attemptedPayload(
+      integrationName: "Apple Notes", connectorID: "apple-notes",
+      surface: .background, stage: "import")
+    XCTAssertEqual(payload["surface"] as? String, "background")
   }
 
   func testNoContentFailureClassIsNotReconnectRequired() {

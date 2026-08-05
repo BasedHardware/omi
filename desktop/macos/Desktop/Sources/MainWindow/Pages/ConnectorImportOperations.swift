@@ -219,22 +219,36 @@ enum ConnectorImportOperations {
     }
   }
 
+  /// `userInitiated: false` is the unattended (background refresh) path.
+  ///
+  /// It performs the raw import only. Raw artifacts are idempotent — the backend
+  /// dedupes them on `external_id` + `content_hash`
+  /// (`backend/database/memory_imports.py`), so replaying a background pass adds
+  /// nothing. LLM synthesis is *not* idempotent: it emits items with no external
+  /// id, so drifting model output would mint fresh duplicate artifacts on every
+  /// refresh forever. This repo has already paid for that once with a
+  /// server-side purge after a mass-duplication incident.
   @MainActor
-  static func importCalendar(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
+  static func importCalendar(
+    progress: ConnectorImportRunner.ProgressSink,
+    userInitiated: Bool = true
+  ) async -> Outcome {
     do {
       let events = try await CalendarReaderService.shared.readEvents(
         daysBack: 365,
         daysForward: 30,
         maxResults: 500,
-        userInitiated: true
+        userInitiated: userInitiated
       )
       progress.update(
         title: "Importing calendar events",
         detail: "Saving events as memories and generating action-oriented summaries."
       )
       let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
-      let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
-      let memoryCount = rawImport.saved + synthesis.memories
+      var memoryCount = rawImport.saved
+      if userInitiated {
+        memoryCount += await CalendarReaderService.shared.synthesizeFromEvents(events: events).memories
+      }
       return .success(
         SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count),
         message: "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
@@ -248,61 +262,101 @@ enum ConnectorImportOperations {
     }
   }
 
+  /// Apple Notes is read through Notes.app over Apple Events, so the only
+  /// recoverable access failure is the macOS Automation grant — there is no
+  /// folder to pick. See `importCalendar` for why `userInitiated: false` skips
+  /// synthesis.
   @MainActor
-  static func importAppleNotes(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
+  static func importAppleNotes(
+    progress: ConnectorImportRunner.ProgressSink,
+    userInitiated: Bool = true
+  ) async -> Outcome {
     do {
-      return try await runAppleNotesImport(progress: progress)
+      return try await runAppleNotesImport(progress: progress, userInitiated: userInitiated)
     } catch let error as AppleNotesReaderError {
-      guard error.shouldPromptForFolderSelection else {
-        return .failure(message: error.localizedDescription)
+      let failureClass = IntegrationConnectTelemetry.ErrorClass(error)
+      guard error.shouldPromptForAutomationPermission else {
+        return .failure(message: error.localizedDescription, failureClass: failureClass)
       }
-      switch await selectAppleNotesFolder() {
-      case .denied(let message):
-        return .failure(message: message ?? error.localizedDescription)
-      case .granted:
-        do {
-          return try await runAppleNotesImport(progress: progress)
-        } catch {
-          return .failure(message: error.localizedDescription)
-        }
-      }
+      return .failure(
+        message: "Omi needs permission to control Apple Notes. Choose Allow when macOS asks, or "
+          + "turn on Notes for Omi in System Settings › Privacy & Security › Automation, then import again.",
+        failureClass: failureClass
+      )
     } catch {
-      return .failure(message: error.localizedDescription)
+      return .failure(
+        message: error.localizedDescription,
+        failureClass: IntegrationConnectTelemetry.ErrorClass.fromMessage(error.localizedDescription))
     }
   }
 
   @MainActor
-  private static func runAppleNotesImport(progress: ConnectorImportRunner.ProgressSink) async throws -> Outcome {
+  private static func runAppleNotesImport(
+    progress: ConnectorImportRunner.ProgressSink,
+    userInitiated: Bool
+  ) async throws -> Outcome {
     progress.update(
       title: "Importing Apple Notes",
-      detail: "Reading recent notes and turning useful content into memories."
+      detail: "Reading your notes and turning useful content into memories."
     )
-    let notes = try await AppleNotesReaderService.shared.readRecentNotes(
-      maxResults: 250,
-      userInitiated: true
-    )
-    let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
-    let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
-    let memoryCount = rawImport.saved + synthesis.memories
+    let result = try await AppleNotesReaderService.shared.syncChangedNotes(userInitiated: userInitiated)
+    let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: result.changed)
+    var memoryCount = rawImport.saved
+    if userInitiated {
+      memoryCount += await AppleNotesReaderService.shared.synthesizeFromNotes(notes: result.changed).memories
+    }
     return .success(
-      SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count),
-      message: "Imported \(notes.count.formatted()) notes and saved \(memoryCount.formatted()) memories."
+      SyncResult(sourceCount: result.totalNotes, memoryCount: memoryCount, newItems: result.changed.count),
+      message: appleNotesCompletionMessage(
+        importedNotes: result.changed.count,
+        totalNotes: result.totalNotes,
+        memoryCount: memoryCount,
+        lockedSkipped: result.lockedSkipped
+      )
     )
   }
 
+  /// Names the locked-note shortfall explicitly. Password-protected notes are
+  /// invisible to the export, so without this line an under-import reads as a
+  /// complete one.
+  static func appleNotesCompletionMessage(
+    importedNotes: Int,
+    totalNotes: Int,
+    memoryCount: Int,
+    lockedSkipped: Int
+  ) -> String {
+    var message =
+      "Imported \(importedNotes.formatted()) of \(totalNotes.formatted()) notes "
+      + "and saved \(memoryCount.formatted()) memories."
+    if lockedSkipped > 0 {
+      let noun = lockedSkipped == 1 ? "note" : "notes"
+      message += " (\(lockedSkipped.formatted()) locked \(noun) skipped)"
+    }
+    return message
+  }
+
+  /// - Parameter analyticsSurface: Who asked for this scan. Defaulted so the
+  ///   user-initiated Apps-tab path is unchanged; the background refresh adapter
+  ///   passes its own value so timer-driven scans do not inflate the
+  ///   `import_connector_sheet` numbers a human is supposed to be behind.
   @MainActor
-  static func rescanLocalFiles() async -> Outcome {
+  static func rescanLocalFiles(analyticsSurface: String = "import_connector_sheet") async -> Outcome {
     let previousCount = await currentIndexedFileCount()
     AnalyticsManager.shared.onboardingChatToolUsed(
       tool: "scan_files",
-      properties: ["surface": "import_connector_sheet"]
+      properties: ["surface": analyticsSurface]
     )
     let result = await ChatToolExecutor.scanLocalFiles()
 
     guard result.didCompleteSuccessfully, result.hasReadableUserFileTarget else {
+      // A scan that could not complete proves nothing, and a previously proven
+      // grant may well be what just went away — revoke it rather than let the
+      // scheduler keep believing an unattended rescan is safe.
+      recordLocalFilesUnattendedGrant(proven: false)
       return .failure(message: localFilesFailureLine(for: result))
     }
 
+    recordLocalFilesUnattendedGrant(proven: result.deniedUserFolders.isEmpty)
     let updatedCount = await currentIndexedFileCount()
     let newItems = max(updatedCount - previousCount, 0)
     return .success(
@@ -312,6 +366,25 @@ enum ConnectorImportOperations {
         newItems: newItems,
         deniedFolders: result.deniedUserFolders
       )
+    )
+  }
+
+  /// Records whether this user-initiated scan proved a prompt-free grant. This
+  /// is the only writer of `ConnectorRefreshState.unattendedGrantProven`, and
+  /// therefore the only thing that can ever make local files eligible for
+  /// background refresh.
+  ///
+  /// The scan walks `~/Downloads`, `~/Documents`, and `~/Desktop` with
+  /// `FileManager`, and the *first* touch of each raises a macOS TCC dialog. So
+  /// an unattended rescan is prompt-free only after a user-initiated scan has
+  /// already answered every one of those dialogs — which the scan reports as no
+  /// denied user folders. Recording `false` matters just as much: a folder
+  /// revoked in System Settings takes the connector straight back out of the
+  /// background rotation.
+  private static func recordLocalFilesUnattendedGrant(proven: Bool) {
+    ConnectorRefreshStateStore().recordUnattendedGrant(
+      proven: proven,
+      for: LocalFilesBackgroundRefreshAdapter.connectorIdentifier
     )
   }
 
@@ -344,47 +417,6 @@ enum ConnectorImportOperations {
     folders
       .map { $0.hasPrefix("~/") ? String($0.dropFirst(2)) : $0 }
       .joined(separator: ", ")
-  }
-
-  private enum FolderSelection {
-    case granted
-    /// nil message means the user cancelled the panel; the caller falls
-    /// back to the error that prompted the selection.
-    case denied(message: String?)
-  }
-
-  @MainActor
-  private static func selectAppleNotesFolder() async -> FolderSelection {
-    let fileManager = FileManager.default
-    let home = fileManager.homeDirectoryForCurrentUser
-    let notesContainerURL =
-      home
-      .appendingPathComponent("Library/Group Containers/group.com.apple.notes", isDirectory: true)
-    let groupContainersURL =
-      home
-      .appendingPathComponent("Library/Group Containers", isDirectory: true)
-
-    let panel = NSOpenPanel()
-    panel.message = "Select your Apple Notes data folder to grant access."
-    panel.prompt = "Open"
-    panel.canChooseFiles = false
-    panel.canChooseDirectories = true
-    panel.allowsMultipleSelection = false
-    panel.directoryURL =
-      fileManager.fileExists(atPath: notesContainerURL.path)
-      ? notesContainerURL
-      : groupContainersURL
-
-    guard panel.runModal() == .OK, let selectedURL = panel.url else {
-      return .denied(message: nil)
-    }
-
-    do {
-      _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: selectedURL.path)
-      return .granted
-    } catch {
-      return .denied(message: error.localizedDescription)
-    }
   }
 
   private static func currentIndexedFileCount() async -> Int {

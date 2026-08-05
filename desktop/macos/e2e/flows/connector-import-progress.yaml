@@ -20,6 +20,16 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingMemoryLogImportService.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshScheduler.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshPolicy.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshState.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshOutcomeMapper.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshRegistry.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/ConnectorRefreshPowerProbe.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/BackgroundRefreshableConnector.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/AppleNotesBackgroundRefreshAdapter.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/CalendarBackgroundRefreshAdapter.swift
+  - desktop/macos/Desktop/Sources/Integrations/BackgroundRefresh/LocalFilesBackgroundRefreshAdapter.swift
 preconditions:
   - automation_bridge_ready
   - auth_ready

@@ -1,7 +1,7 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2182,
-    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1835
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1808
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Chat-first capability wiring remains with onboarding's shared chat surface so rollout state cannot diverge across entry points. Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
