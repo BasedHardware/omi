@@ -23,6 +23,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/utils/ble_disconnect_grace.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
@@ -88,7 +89,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _discoveryTimer;
-  final Debouncer _disconnectDebouncer = Debouncer(delay: const Duration(milliseconds: 500));
+  // Must exceed native auto-reconnect windows (Android 3s / iOS ~200ms) so
+  // short RF blips do not tear down live capture and spawn conversation shards
+  // (#6678). Reconnect cancels this debouncer before side-effects run.
+  final Debouncer _disconnectDebouncer = Debouncer(delay: bleDisconnectCaptureGrace(isAndroid: Platform.isAndroid));
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
   void Function(BtDevice device)? onDeviceConnected;
