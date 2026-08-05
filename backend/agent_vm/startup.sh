@@ -26,7 +26,7 @@ secret_access() {
 
 auth_token="$(metadata_get 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/auth-token')"
 anthropic_api_key="$(secret_access DESKTOP_ANTHROPIC_API_KEY)"
-gemini_secret_name="${AGENT_VM_GEMINI_SECRET_NAME:-GEMINI_API_KEY}"
+gemini_secret_name="${AGENT_VM_GEMINI_SECRET_NAME}"
 gemini_api_key="$(secret_access "$gemini_secret_name")"
 data_dir="${AGENT_VM_DATA_DIR:-/var/lib/omi-agent}"
 mkdir -p "$data_dir"

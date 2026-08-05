@@ -209,6 +209,7 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *args: _stopped_instance())
+    monkeypatch.setattr(desktop_agent_vm, "_service_account", lambda: "service-account")
     monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: writes.append(args) or True)
     tasks = BackgroundTasks()
 
@@ -323,6 +324,7 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
     monkeypatch.setattr(desktop_agent_vm, "_gce_request", fake_gce_request)
     monkeypatch.setattr(desktop_agent_vm, "_operation", fake_operation)
     monkeypatch.setattr(desktop_agent_vm, "_instance", fake_instance)
+    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", lambda *_args: _async_result(None))
 
     ip = await desktop_agent_vm._create_vm(
         "project",
@@ -341,6 +343,99 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
             "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_restart_sets_bootstrap_identity_and_waits_for_health(monkeypatch):
+    calls = []
+
+    async def set_service_account(*args):
+        calls.append(("service-account", args))
+
+    async def start_vm(*args):
+        calls.append(("start", args))
+        return "203.0.113.10"
+
+    async def wait_for_ready(*args):
+        calls.append(("health", args))
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_set_service_account", set_service_account)
+    monkeypatch.setattr(desktop_agent_vm, "_start_vm", start_vm)
+    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", wait_for_ready)
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: calls.append(("ready", args)))
+
+    await desktop_agent_vm._restart_background(
+        "uid",
+        "project",
+        {"vmName": "omi-agent-user", "zone": "zone", "authToken": "omi-token"},
+        "agent-bootstrap@example.iam.gserviceaccount.com",
+    )
+
+    assert [name for name, _ in calls] == ["service-account", "start", "health", "ready"]
+
+
+@pytest.mark.asyncio
+async def test_rebootstrap_stops_legacy_running_vm_before_identity_migration(monkeypatch):
+    calls = []
+
+    async def stop_vm(*args):
+        calls.append(("stop", args))
+
+    async def set_service_account(*args):
+        calls.append(("service-account", args))
+
+    async def start_vm(*args):
+        calls.append(("start", args))
+        return "203.0.113.10"
+
+    async def wait_for_ready(*args):
+        calls.append(("health", args))
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_stop_vm", stop_vm)
+    monkeypatch.setattr(desktop_agent_vm, "_set_service_account", set_service_account)
+    monkeypatch.setattr(desktop_agent_vm, "_start_vm", start_vm)
+    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", wait_for_ready)
+    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: calls.append(("ready", args)))
+
+    await desktop_agent_vm._rebootstrap_background(
+        "uid",
+        "project",
+        {"vmName": "omi-agent-user", "zone": "zone", "authToken": "omi-token"},
+        "agent-bootstrap@example.iam.gserviceaccount.com",
+    )
+
+    assert [name for name, _ in calls] == ["stop", "service-account", "start", "health", "ready"]
+
+
+@pytest.mark.asyncio
+async def test_health_readiness_requires_unauthenticated_rejection(monkeypatch):
+    calls = []
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url, headers=None):
+            calls.append(headers)
+            if headers is None:
+                return httpx.Response(401)
+            return httpx.Response(200, json={"status": "ok"})
+
+    monkeypatch.setattr(desktop_agent_vm.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
+    await desktop_agent_vm._wait_for_vm_ready("203.0.113.10", "omi-token")
+
+    assert calls == [None, {"Authorization": "Bearer omi-token"}]
 
 
 async def _stopped_instance():
