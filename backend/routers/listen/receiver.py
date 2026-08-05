@@ -31,6 +31,7 @@ else:
 
 from fastapi.websockets import WebSocketDisconnect
 
+import database.users as users_db
 from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
 from utils.aac import AACDecoder
@@ -329,12 +330,16 @@ class ListenReceiver:
     async def _process_photo(self, image_b64: str, temporary_id: str) -> None:
         photo_id = str(uuid.uuid4())
         await self.host.asend_event(PhotoProcessingEvent(temp_id=temporary_id, photo_id=photo_id))
-        # Custom-STT sessions without an LLM BYOK key must not incur Omi-paid LLM
-        # spend (same gate as post-processing, #7690): store the photo without a
-        # generated description instead of calling describe_image. Defer the BYOK
-        # key lookup so Omi-STT sessions never pay for it.
+        # Custom-STT sessions without an active LLM BYOK enrollment + request key
+        # must not incur Omi-paid LLM spend (same discriminator as
+        # process_conversation, #7690). WebSocket BYOK headers are copied into
+        # context in _admit without HTTP middleware validation, so a raw
+        # X-BYOK-* header alone is not enough — require users_db.is_byok_active.
+        # Defer both lookups so Omi-STT sessions never pay for them.
         if self.host.use_custom_stt:
-            has_llm_byok_key = bool(get_byok_key('openai') or get_byok_key('anthropic'))
+            has_llm_byok_key = bool(
+                users_db.is_byok_active(self.host.request.uid) and (get_byok_key('openai') or get_byok_key('anthropic'))
+            )
             skip_photo_description = should_skip_custom_stt_postprocessing(
                 uses_custom_stt=True,
                 has_llm_byok_key=has_llm_byok_key,
