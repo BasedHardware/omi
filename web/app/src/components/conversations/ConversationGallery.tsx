@@ -3,16 +3,13 @@
 import { useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { TimelineDayGroup } from '@/lib/timeline';
+import type { TimelineDayGroup } from '@/lib/conversationTimeline';
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
-import {
-  TimelineConversationTile,
-  TimelineTileSkeleton,
-} from './TimelineConversationTile';
-import { TimelineRecapTile } from './TimelineRecapTile';
+import { ConversationTile, ConversationTileSkeleton } from './ConversationTile';
+import { RecapTile } from './RecapTile';
 
-interface TimelineGalleryProps {
+interface ConversationGalleryProps {
   groups: TimelineDayGroup[];
   selectedId: string | null;
   onConversationClick: (conversation: Conversation) => void;
@@ -31,7 +28,7 @@ interface TimelineGalleryProps {
 // Distance from the bottom of the scroller at which the next page is fetched.
 const LOAD_MORE_THRESHOLD_PX = 400;
 
-export function TimelineGallery({
+export function ConversationGallery({
   groups,
   selectedId,
   onConversationClick,
@@ -45,7 +42,7 @@ export function TimelineGallery({
   hasMore = false,
   onLoadMore,
   loading = false,
-}: TimelineGalleryProps) {
+}: ConversationGalleryProps) {
   // Guards against firing loadMore repeatedly for one scroll gesture while the
   // in-flight page has not yet grown the list.
   const loadRequestedRef = useRef(false);
@@ -85,14 +82,14 @@ export function TimelineGallery({
           >
             {group.items.map((item) =>
               item.kind === 'recap' ? (
-                <TimelineRecapTile
+                <RecapTile
                   key={`recap-${item.id}`}
                   recap={item.recap}
                   isSelected={selectedId === item.id}
                   onClick={() => onRecapClick(item.recap)}
                 />
               ) : (
-                <TimelineConversationTile
+                <ConversationTile
                   key={`conversation-${item.id}`}
                   conversation={item.conversation}
                   isSelected={selectedId === item.id}
@@ -119,7 +116,7 @@ export function TimelineGallery({
   );
 }
 
-export function TimelineGallerySkeleton() {
+export function ConversationGallerySkeleton() {
   return (
     <div className="px-5 pb-8">
       {[0, 1].map((section) => (
@@ -127,7 +124,7 @@ export function TimelineGallerySkeleton() {
           <div className="h-3 w-24 rounded bg-bg-tertiary animate-pulse mb-4" />
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {[0, 1, 2, 3].map((tile) => (
-              <TimelineTileSkeleton key={tile} />
+              <ConversationTileSkeleton key={tile} />
             ))}
           </div>
         </div>

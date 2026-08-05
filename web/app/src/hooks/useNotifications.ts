@@ -108,16 +108,16 @@ function getNotificationRoute(notification: OmiNotification): string {
   // Recaps merged into Timeline: a recap is a tile in the day it summarises.
   if (navigateTo.startsWith('/daily-summary')) {
     const recapId = navigateTo.split('/').pop();
-    return recapId ? `/timeline?recap=${recapId}` : '/timeline';
+    return recapId ? `/conversations?recap=${recapId}` : '/conversations';
   }
 
   if (navigateTo.startsWith('/recaps')) {
     const recapId = navigateTo.split('/').pop();
-    return recapId ? `/timeline?recap=${recapId}` : '/timeline';
+    return recapId ? `/conversations?recap=${recapId}` : '/conversations';
   }
 
   if (navigateTo.startsWith('/conversations')) {
-    return navigateTo.replace('/conversations', '/timeline');
+    return navigateTo.replace('/conversations', '/conversations');
   }
 
   if (navigateTo.startsWith('/apps')) {

@@ -402,7 +402,7 @@ export function RecapDetailPanel({
     if (onConversationClick) {
       onConversationClick(conversationId);
     } else {
-      router.push(`/timeline?id=${conversationId}`);
+      router.push(`/conversations?id=${conversationId}`);
     }
   };
 

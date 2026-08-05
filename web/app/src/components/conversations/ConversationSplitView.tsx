@@ -29,7 +29,7 @@ import {
 } from '@/components/conversations/FolderDialog';
 import { MoveFolderDialog } from '@/components/conversations/MoveFolderDialog';
 import { RecapDetailPanel } from '@/components/recaps/RecapDetailPanel';
-import { TimelineGallery, TimelineGallerySkeleton } from './TimelineGallery';
+import { ConversationGallery, ConversationGallerySkeleton } from './ConversationGallery';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { PageToolbar } from '@/components/layout/PageToolbar';
 import { useToast } from '@/components/ui/Toast';
@@ -46,7 +46,7 @@ import {
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 import type { Folder, CreateFolderRequest, UpdateFolderRequest } from '@/types/folder';
-import { buildTimelineDayGroups, countTimelineItems } from '@/lib/timeline';
+import { buildTimelineDayGroups, countTimelineItems } from '@/lib/conversationTimeline';
 
 // Detail pane width constraints
 const MIN_PANEL_WIDTH = 360;
@@ -56,7 +56,7 @@ const DEFAULT_PANEL_WIDTH = 480;
 type Selection =
   { kind: 'conversation'; id: string } | { kind: 'recap'; id: string } | null;
 
-export function TimelineSplitView() {
+export function ConversationSplitView() {
   const { user } = useAuth();
   const { setContext } = useChat();
   const { showToast } = useToast();
@@ -723,7 +723,7 @@ export function TimelineSplitView() {
           {/* Loading state */}
           {isLoading && dayGroups.length === 0 && (
             <div className="flex-1 overflow-y-auto pt-4">
-              <TimelineGallerySkeleton />
+              <ConversationGallerySkeleton />
             </div>
           )}
 
@@ -760,7 +760,7 @@ export function TimelineSplitView() {
 
           {dayGroups.length > 0 && (
             <div className="flex-1 overflow-hidden pt-4">
-              <TimelineGallery
+              <ConversationGallery
                 groups={dayGroups}
                 selectedId={selection?.id ?? null}
                 onConversationClick={handleConversationClick}
