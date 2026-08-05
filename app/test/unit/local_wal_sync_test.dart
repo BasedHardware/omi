@@ -275,14 +275,15 @@ void main() {
       expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
     });
 
-    test('only a conversation-bound recent WAL counts as live capture', () {
+    test('only recent WALs with server capture proof use the fresh lane', () {
       const now = 2000000000;
-      Wal at(int ageSeconds, {String? conversationId}) =>
-          Wal(timerStart: now - ageSeconds, codec: BleAudioCodec.opus, seconds: 60, conversationId: conversationId);
 
-      expect(isLiveCaptureWal(at(60), now), isFalse);
-      expect(isLiveCaptureWal(at(60, conversationId: 'c'), now), isTrue);
-      expect(isLiveCaptureWal(at(7 * 60 * 60, conversationId: 'c'), now), isFalse);
+      expect(syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: false), SyncUploadLane.backfill);
+      expect(syncUploadLaneForTimestamp(now - 60, now, hasServerCaptureProof: true), SyncUploadLane.fresh);
+      expect(
+        syncUploadLaneForTimestamp(now - 7 * 60 * 60, now, hasServerCaptureProof: true),
+        SyncUploadLane.backfill,
+      );
     });
 
     test('active unbound continuity stays local without a server conversation owner', () {
@@ -337,6 +338,32 @@ void main() {
       final batch = nextSyncUploadBatch([historical, ...closedConversation], now);
 
       expect(batch, [historical]);
+    });
+
+    test('live capture claim requires every pending WAL for one recent server owner', () {
+      const now = 2000000000;
+      Wal owned(int offset) => Wal(
+            timerStart: now - offset,
+            codec: BleAudioCodec.opus,
+            seconds: 2,
+            status: WalStatus.miss,
+            storage: WalStorage.disk,
+            conversationId: 'server-owner',
+            uploadIntent: WalUploadIntent.liveContinuity,
+          );
+      final first = owned(2);
+      final second = owned(1);
+
+      expect(canClaimLiveCapture([first, second], [first, second], now), isTrue);
+      expect(canClaimLiveCapture([second], [first, second], now), isFalse);
+      expect(
+        canClaimLiveCapture(
+          [owned(7 * 60 * 60)],
+          [owned(7 * 60 * 60)],
+          now,
+        ),
+        isFalse,
+      );
     });
 
     test('bound archive waits for canonical repair while unbound archive remains opt-in backfill', () {
@@ -882,6 +909,7 @@ void main() {
           files, {
           onUploadProgress,
           conversationId,
+          claimLiveCapture = false,
           syncLane = SyncUploadLane.fresh,
           replaceTranscript = false,
         }) async {
@@ -983,6 +1011,42 @@ void main() {
   });
 
   group('historical ring archive migration', () {
+    test('sequence order survives a backward RTC correction between contiguous ranges', () async {
+      final directory = await Directory.systemTemp.createTemp('omi_ring_rtc_correction_');
+      addTearDown(() async {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      });
+      await File('${directory.path}/before.bin').writeAsBytes([1, 0, 0, 0, 1], flush: true);
+      await File('${directory.path}/after.bin').writeAsBytes([1, 0, 0, 0, 2], flush: true);
+      final archiveSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async => true,
+        walPathResolver: (path) async => path == null ? null : '${directory.path}/$path',
+        silenceFrameFactory: (_) => [0],
+        conversationBoundarySecondsProvider: () => 120,
+      )..testWals = [
+          _historicalRingWal(
+            timerStart: 2000,
+            captureEndSeconds: 2001,
+            sourceId: 'ring_10_20',
+            filePath: 'before.bin',
+          ),
+          _historicalRingWal(
+            timerStart: 1000,
+            captureEndSeconds: 1001,
+            sourceId: 'ring_20_30',
+            filePath: 'after.bin',
+          ),
+        ];
+
+      await archiveSync.prepareHistoricalRingFragments(nowSeconds: 3000);
+
+      expect(archiveSync.testWals, hasLength(1));
+      expect(archiveSync.testWals.single.sourceId, 'archive2_ring_10_30_2000');
+      expect(archiveSync.testWals.single.timerStart, 2000);
+      expect(archiveSync.testWals.single.seconds, 1);
+    });
+
     test('sub-two-second VAD pauses stay one open conversation until the true capture end closes', () async {
       final directory = await Directory.systemTemp.createTemp('omi_ring_vad_wall_clock_');
       addTearDown(() async {
@@ -1683,7 +1747,11 @@ void main() {
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
         uploader: (files,
-            {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh, replaceTranscript = false}) async {
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           uploads.add(
             (
               conversationId: conversationId,
@@ -1904,7 +1972,11 @@ void main() {
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
         uploader: (files,
-            {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh, replaceTranscript = false}) async {
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           uploadBatches.add(files.map((file) => file.uri.pathSegments.last).toList());
           if (uploadBatches.length == 1) uploadStarted.complete();
           if (uploadBatches.length == 2) secondUploadStarted.complete();
@@ -2001,7 +2073,11 @@ void main() {
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
         uploader: (files,
-            {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh, replaceTranscript = false}) async {
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           uploadedFiles.addAll(files.map((candidate) => candidate.uri.pathSegments.last));
           uploadLanes.add(syncLane);
           uploadedReplaceModes.add(replaceTranscript);
@@ -2065,6 +2141,7 @@ void main() {
       final uploadedPayloads = <List<int>>[];
       final uploadedConversationIds = <String?>[];
       final uploadedReplaceModes = <bool>[];
+      final uploadedClaimModes = <bool>[];
       final uploadStarted = Completer<void>();
       final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       const firstFileName = 'audio_test_opus_16000_1_fs320_ring_1_2_1700000001.bin';
@@ -2088,11 +2165,16 @@ void main() {
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
         uploader: (files,
-            {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh, replaceTranscript = false}) async {
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           uploadedBatches.add(files.map((file) => file.uri.pathSegments.last).toList());
           uploadedPayloads.add(await files.single.readAsBytes());
           uploadedConversationIds.add(conversationId);
           uploadedReplaceModes.add(replaceTranscript);
+          uploadedClaimModes.add(claimLiveCapture);
           if (!uploadStarted.isCompleted) uploadStarted.complete();
           return UploadFilesResult.queued('batched-recovery-job');
         },
@@ -2164,6 +2246,7 @@ void main() {
       expect(uploadedPayloads.single.skip(1393), [3, 0, 0, 0, 4, 5, 6]);
       expect(uploadedConversationIds, ['conversation-1']);
       expect(uploadedReplaceModes, [isTrue]);
+      expect(uploadedClaimModes, [isTrue]);
       expect(externalSync.testWals, hasLength(1));
       expect(externalSync.testWals.single.canonicalReplacement, isTrue);
       expect(externalSync.testWals.single.captureEndSeconds, now - 0.25);
@@ -2263,7 +2346,11 @@ void main() {
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
         uploader: (files,
-            {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh, replaceTranscript = false}) async {
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           uploadCalls++;
           return UploadFilesResult.queued('must-not-upload');
         },
@@ -2320,7 +2407,11 @@ void main() {
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
         uploader: (artifacts,
-            {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh, replaceTranscript = false}) async {
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           uploadedArtifactSizes.add(
             await Future.wait(artifacts.map((artifact) => artifact.length())),
           );
@@ -2713,6 +2804,7 @@ void main() {
           files, {
           onUploadProgress,
           conversationId,
+          claimLiveCapture = false,
           syncLane = SyncUploadLane.fresh,
           replaceTranscript = false,
         }) async {
@@ -2767,6 +2859,74 @@ void main() {
       );
       expect(await canonicalFile.readAsBytes(), [1, 0, 0, 0, 7]);
     });
+
+    test('ambiguous canonical ownership preserves recovered ring audio unowned', () async {
+      final recovered = Wal(
+        timerStart: 1001,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        captureEndSeconds: 1002,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: 'ambiguous-recovered.bin',
+        device: 'same-device',
+        sourceId: 'ring_20_21',
+        uploadIntent: WalUploadIntent.historicalBackfill,
+      );
+      final firstOwner = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        captureEndSeconds: 1001,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: 'first-owner.bin',
+        device: 'same-device',
+        sourceId: 'canonical_first-owner_test',
+        conversationId: 'first-owner',
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+      final secondOwner = Wal(
+        timerStart: 1002,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        totalFrames: 1,
+        captureEndSeconds: 1003,
+        status: WalStatus.synced,
+        storage: WalStorage.disk,
+        originalStorage: WalStorage.sdcard,
+        filePath: 'second-owner.bin',
+        device: 'same-device',
+        sourceId: 'canonical_second-owner_test',
+        conversationId: 'second-owner',
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+      var persistCalls = 0;
+      final externalSync = LocalWalSyncImpl(
+        listener,
+        walPersister: (_) async {
+          persistCalls++;
+          return true;
+        },
+        conversationBoundarySecondsProvider: () => 120,
+      )..testWals = [firstOwner, secondOwner];
+
+      expect(
+        await externalSync.addExternalWal(
+          recovered,
+          scheduleUpload: false,
+        ),
+        ExternalWalRegistration.added,
+      );
+
+      expect(recovered.conversationId, isNull);
+      expect(externalSync.testWals, contains(recovered));
+      expect(persistCalls, 1);
+    });
   });
 
   group('syncWal — orphan WAL guard', () {
@@ -2793,6 +2953,7 @@ void main() {
           artifacts, {
           onUploadProgress,
           conversationId,
+          claimLiveCapture = false,
           syncLane = SyncUploadLane.fresh,
           replaceTranscript = false,
         }) async {
@@ -2875,6 +3036,7 @@ void main() {
 
       final uploadedConversationIds = <String?>[];
       final uploadedReplaceModes = <bool>[];
+      final uploadedClaimModes = <bool>[];
       final gate = SyncUploadGate(
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
@@ -2882,11 +3044,13 @@ void main() {
           files, {
           onUploadProgress,
           conversationId,
+          claimLiveCapture = false,
           syncLane = SyncUploadLane.fresh,
           replaceTranscript = false,
         }) async {
           uploadedConversationIds.add(conversationId);
           uploadedReplaceModes.add(replaceTranscript);
+          uploadedClaimModes.add(claimLiveCapture);
           return UploadFilesResult.done(
             SyncLocalFilesResponse(
               newConversationIds: [],
@@ -2921,6 +3085,7 @@ void main() {
 
       expect(uploadedConversationIds, ['conversation-repair']);
       expect(uploadedReplaceModes, [isTrue]);
+      expect(uploadedClaimModes, [isTrue]);
       expect(canonical.status, WalStatus.synced);
     });
 
@@ -2940,6 +3105,7 @@ void main() {
           files, {
           onUploadProgress,
           conversationId,
+          claimLiveCapture = false,
           syncLane = SyncUploadLane.fresh,
           replaceTranscript = false,
         }) async {
@@ -3047,6 +3213,7 @@ SyncUploadGate _completedUploadGate(List<List<String>> uploads) => SyncUploadGat
         files, {
         onUploadProgress,
         conversationId,
+        claimLiveCapture = false,
         syncLane = SyncUploadLane.fresh,
         replaceTranscript = false,
       }) async {

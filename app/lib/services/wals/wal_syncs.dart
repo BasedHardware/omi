@@ -77,11 +77,16 @@ class WalSyncs implements IWalSync {
   /// not a conflicting user-visible sync.
   bool get isRingAudioTailActive => _ringSync.isAudioTailActive;
 
+  bool get isFastRingSyncActive => _ringSync.isFastSyncActive;
+
   /// Latch one manual backlog snapshot onto the active live scheduler.
   ///
   /// Returns null when no live scheduler owns the ring, in which case the
   /// caller should use the ordinary device-storage sync path.
-  Future<RingBacklogDrainReceipt?>? requestActiveRingBacklogDrain() => _ringSync.requestAudioTailBacklogDrain();
+  Future<RingBacklogDrainReceipt?>? requestActiveRingBacklogDrain({
+    IWalSyncProgressListener? progress,
+  }) =>
+      _ringSync.requestAudioTailBacklogDrain(progress: progress);
 
   RingBacklogDrainReceipt? get pendingAutomaticRingBacklogReceipt =>
       _automaticRingBacklogReceipts.isEmpty ? null : _automaticRingBacklogReceipts.values.first;

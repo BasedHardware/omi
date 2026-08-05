@@ -138,10 +138,13 @@ abstract class RingStorageSync implements IWalSync {
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
   bool get isAudioTailActive;
+  bool get isFastSyncActive;
   double get currentSpeedKBps;
   Future<bool> hasFilesToSync();
   Future<void> refreshWalsFromDevice();
-  Future<RingBacklogDrainReceipt?>? requestAudioTailBacklogDrain();
+  Future<RingBacklogDrainReceipt?>? requestAudioTailBacklogDrain({
+    IWalSyncProgressListener? progress,
+  });
   void cancelRequestedAudioTailBacklogDrain();
 }
 

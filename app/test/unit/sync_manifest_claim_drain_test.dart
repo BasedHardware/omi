@@ -48,7 +48,12 @@ void main() {
       _Listener(),
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           claims.add(claimLiveCapture);
           return UploadFilesResult.queued('job-${claims.length}');
         },
@@ -82,14 +87,26 @@ void main() {
   }
 
   test('a conversation split across batches never claims a manifest for a remainder', () async {
-    // The capture manifest is immutable per conversation. Seven WALs drain as
-    // 5 + 2; the first batch cannot claim it, and the second must not either —
-    // a claim covering only the remainder splits one conversation's audio
-    // across both server meters and spends the claim on a subset.
+    // The capture manifest is immutable per conversation. Cross the real
+    // 2,000-WAL logical-capture boundary by one; the first batch cannot claim
+    // it, and the remainder must not either. Reuse one tiny fixture file so
+    // the test exercises production batching without 2,001 filesystem writes.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    sync.testWals = [
-      for (var index = 0; index < 7; index++) await writeWal(now - index, conversationId: 'c1'),
-    ];
+    const fixtureName = 'audio_split_capture.bin';
+    await File('${tempDir.path}/$fixtureName').writeAsBytes(List<int>.filled(64, 1));
+    sync.testWals = List.generate(
+      2001,
+      (index) => Wal(
+        timerStart: now - index,
+        codec: BleAudioCodec.opus,
+        seconds: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        device: 'omi',
+        filePath: fixtureName,
+        conversationId: 'c1',
+      ),
+    );
 
     await sync.syncAll();
 

@@ -1181,10 +1181,12 @@ void main() {
     test('connectivity flicker does not toggle readiness of a ready socket', () {
       final provider = CaptureProvider();
 
-      // Drive the provider into the socket-subscribed state (the scenario the
-      // old getter got wrong): onConnected mirrors the transcript WebSocket
-      // subscribing, which sets _transcriptServiceReady = true.
+      // Drive the provider through the production readiness boundary. A raw
+      // WebSocket connection is not sufficient: the STT service must publish
+      // its explicit ready status before audio or UI claims the session works.
       provider.onConnected();
+      expect(provider.transcriptServiceReady, isFalse);
+      provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
       expect(provider.transcriptServiceReady, isTrue);
 
       // A connectivity flicker must not toggle readiness off. Before the fix

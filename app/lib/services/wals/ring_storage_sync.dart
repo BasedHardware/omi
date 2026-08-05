@@ -143,6 +143,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   static const int defaultPacketsPerRead = 1800;
   static const Duration defaultInactivityTimeout = Duration(seconds: 15);
   static const int _backlogPacketsPerSlice = 96;
+  static const int _fastSyncPacketsPerSlice = 900;
   static const Duration _livePollInterval = Duration(seconds: 1);
   static const Duration _partialLiveRangeDeadline = Duration(seconds: 1);
   static const int _liveFreshnessSeconds = 5;
@@ -160,6 +161,8 @@ class RingStorageSyncImpl implements RingStorageSync {
   int? _requestedBacklogDrainGeneration;
   String? _requestedBacklogDrainDeviceId;
   int? _requestedBacklogTargetSeq;
+  int? _requestedBacklogStartSeq;
+  IWalSyncProgressListener? _requestedBacklogProgress;
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
@@ -178,6 +181,8 @@ class RingStorageSyncImpl implements RingStorageSync {
   bool get isSyncing => _isSyncing;
   @override
   bool get isAudioTailActive => _tailOwnerGeneration != null;
+  @override
+  bool get isFastSyncActive => _requestedBacklogDrain?.isCompleted == false && _requestedBacklogTargetSeq != null;
 
   int _totalBytesDownloaded = 0;
   DateTime? _downloadStartTime;
@@ -652,14 +657,18 @@ class RingStorageSyncImpl implements RingStorageSync {
     return RingSequenceCoverage(ranges);
   }
 
-  /// Ask the active live scheduler to drain the pendant backlog that existed
-  /// at the next safe ring snapshot.
+  /// Ask the active live scheduler to fast-drain the pendant backlog that
+  /// existed at the next safe ring snapshot.
   ///
-  /// The scheduler remains the sole BLE reader and continues to fetch the live
-  /// head before each bounded historical slice. Concurrent manual Sync taps
-  /// share one request, so they cannot start duplicate reads or uploads.
+  /// The scheduler remains the sole BLE reader. Once the immutable target is
+  /// latched, preview delivery pauses while larger sequential ranges are made
+  /// durable on the phone and acknowledged to the pendant. Audio recorded
+  /// after the target stays in the ring and live delivery resumes immediately
+  /// after completion, cancellation, or a recoverable drain failure.
   @override
-  Future<RingBacklogDrainReceipt?>? requestAudioTailBacklogDrain() {
+  Future<RingBacklogDrainReceipt?>? requestAudioTailBacklogDrain({
+    IWalSyncProgressListener? progress,
+  }) {
     final deviceId = _device?.id;
     final generation = _tailOwnerGeneration;
     final existing = _requestedBacklogDrain;
@@ -668,6 +677,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         if (generation != null) {
           _requestedBacklogDrainGeneration = generation;
         }
+        _requestedBacklogProgress ??= progress;
         return existing.future;
       }
       cancelRequestedAudioTailBacklogDrain();
@@ -678,6 +688,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     _requestedBacklogDrainGeneration = generation;
     _requestedBacklogDrainDeviceId = deviceId;
     _requestedBacklogTargetSeq = null;
+    _requestedBacklogStartSeq = null;
+    _requestedBacklogProgress = progress;
     return request.future;
   }
 
@@ -713,6 +725,12 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (!_hasRequestedBacklogDrain(generation)) return;
     if (_requestedBacklogTargetSeq != null) return;
     _requestedBacklogTargetSeq = info.writeSeq;
+    _requestedBacklogStartSeq = info.readSeq;
+    _requestedBacklogProgress?.onWalSyncedProgress(
+      info.readSeq >= info.writeSeq ? 1.0 : 0.0,
+      phase: SyncPhase.downloadingFromDevice,
+      speedKBps: currentSpeedKBps,
+    );
     Logger.debug(
       'RingStorageSync: manual backlog snapshot latched '
       'device=${_requestedBacklogDrainDeviceId!} '
@@ -734,8 +752,34 @@ class RingStorageSyncImpl implements RingStorageSync {
       'RingStorageSync: manual backlog snapshot completed '
       'device=$deviceId read_seq=${info.readSeq} target_write_seq=$target',
     );
+    _requestedBacklogProgress?.onWalSyncedProgress(
+      1.0,
+      phase: SyncPhase.downloadingFromDevice,
+      speedKBps: currentSpeedKBps,
+    );
     _clearRequestedBacklogDrainState();
     request.complete(receipt);
+  }
+
+  void _reportRequestedBacklogProgress(int generation, int readSeq) {
+    if (!_hasRequestedBacklogDrain(generation)) return;
+    final start = _requestedBacklogStartSeq;
+    final target = _requestedBacklogTargetSeq;
+    if (start == null || target == null) return;
+    final total = target - start;
+    final completed = (readSeq - start).clamp(0, total).toInt();
+    _requestedBacklogProgress?.onWalSyncedProgress(
+      total <= 0 ? 1.0 : completed / total,
+      phase: SyncPhase.downloadingFromDevice,
+      speedKBps: currentSpeedKBps,
+    );
+  }
+
+  void _cancelRequestedBacklogDrainAfterFailure(int generation) {
+    if (!_hasRequestedBacklogDrain(generation)) return;
+    final request = _requestedBacklogDrain!;
+    _clearRequestedBacklogDrainState();
+    request.complete(null);
   }
 
   void _clearRequestedBacklogDrainState() {
@@ -743,6 +787,8 @@ class RingStorageSyncImpl implements RingStorageSync {
     _requestedBacklogDrainGeneration = null;
     _requestedBacklogDrainDeviceId = null;
     _requestedBacklogTargetSeq = null;
+    _requestedBacklogStartSeq = null;
+    _requestedBacklogProgress = null;
   }
 
   Future<bool> _advanceLiveTailOrStop({
@@ -858,6 +904,89 @@ class RingStorageSyncImpl implements RingStorageSync {
           reportAutomaticBacklogCompletion(info);
         }
 
+        final requestedTarget = _hasRequestedBacklogDrain(generation) ? _requestedBacklogTargetSeq : null;
+        if (requestedTarget != null && info.readSeq < requestedTarget) {
+          final nextCovered = coverage.firstRangeAtOrAfter(info.readSeq);
+          var fastSyncEnd = nextCovered?.start ?? requestedTarget;
+          if (fastSyncEnd > requestedTarget) fastSyncEnd = requestedTarget;
+          final available = fastSyncEnd - info.readSeq;
+          final sliceLimit = _packetsPerRead < _fastSyncPacketsPerSlice ? _packetsPerRead : _fastSyncPacketsPerSlice;
+          final count = available > sliceLimit ? sliceLimit : available;
+          if (count > 0) {
+            try {
+              final result = await _syncRange(
+                connection,
+                wal,
+                uploadIntent: WalUploadIntent.historicalBackfill,
+                startSeq: info.readSeq,
+                packetCount: count,
+                fallbackAnchor: fallbackAnchor,
+                fallbackFramesBefore: (info.readSeq - sourceReadSeq) * sourceFramesPerRecord,
+                completedRecords: info.readSeq - (_requestedBacklogStartSeq ?? info.readSeq),
+                totalRecords: requestedTarget - (_requestedBacklogStartSeq ?? info.readSeq),
+                advanceAfterCommit: false,
+                scheduleHistoricalUpload: false,
+                conversationTimeoutSeconds: conversationTimeoutSeconds,
+              );
+              if (result == null) {
+                throw const RingStorageException('Fast ring snapshot range did not complete');
+              }
+              coverage.add(info.readSeq, result.nextSeq);
+              final advanced = await _advanceLiveTailOrStop(
+                generation: generation,
+                deviceId: deviceId,
+                connection: connection,
+                nextSeq: result.nextSeq,
+                rejectionMessage: 'Device rejected a fast-sync covered-prefix advance',
+              );
+              if (!advanced) return;
+              DebugLogManager.logEvent('ring_fast_sync_advanced', {
+                'nextSeq': result.nextSeq,
+                'targetWriteSeq': requestedTarget,
+                'records': result.nextSeq - info.readSeq,
+              });
+              info = RingInfo(
+                readSeq: result.nextSeq,
+                writeSeq: info.writeSeq,
+                capacityPackets: info.capacityPackets,
+                droppedPackets: info.droppedPackets,
+                packetSize: info.packetSize,
+              );
+              _reportRequestedBacklogProgress(generation, info.readSeq);
+              _completeRequestedBacklogDrainIfReady(generation, info);
+              if (!_hasRequestedBacklogDrain(generation)) {
+                // Capture audio produced while Fast Sync owned BLE before
+                // returning to the live lane; do not wait for the normal poll.
+                info = await _ringInfoRetryPolicy.run(connection.getRingInfo);
+                lastSnapshotAt = DateTime.now();
+              }
+              continue;
+            } catch (error, stackTrace) {
+              DebugLogManager.logError(
+                error,
+                stackTrace,
+                'Fast ring snapshot failed; resuming live audio',
+                {'device': deviceId, 'targetWriteSeq': requestedTarget},
+              );
+              var connected = false;
+              try {
+                connected = await connection.isConnected();
+              } catch (_) {
+                // A stale native connection can fail the state query itself.
+              }
+              if (!connected) {
+                // Preserve the immutable request across a real disconnect so
+                // a replacement tail for this exact device can adopt it.
+                rethrow;
+              }
+              _cancelRequestedBacklogDrainAfterFailure(generation);
+              // Fast Sync is optional user-requested work. If the transport
+              // itself is healthy, abandon this request and immediately give
+              // BLE ownership back to live transcription.
+            }
+          }
+        }
+
         final livePackets = _livePacketsPerRead(codec);
         final desiredLiveStart =
             info.writeSeq - info.readSeq > livePackets ? info.writeSeq - livePackets : info.readSeq;
@@ -868,6 +997,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         // cloud jobs. A growing read catches up in one bounded transaction;
         // it must never manufacture a new hole merely to shave latency.
         var liveStart = liveCursor ?? desiredLiveStart;
+        if (liveStart < info.readSeq) liveStart = info.readSeq;
         // A reconnect deliberately re-reads recent `miss` ranges so they can
         // enter the replacement STT socket. They are already durable and
         // therefore present in [coverage], but not yet delivered.
@@ -1005,46 +1135,61 @@ class RingStorageSyncImpl implements RingStorageSync {
         // One recovery transfer per live poll. A slow BLE link must not queue a
         // recent repair and an old-history drain ahead of newly captured audio.
         final liveRecoveryCaughtUp = liveCursor == null || liveCursor >= info.writeSeq;
-        final deepBacklogAuthorized = _deepBacklogPolicy() || _hasRequestedBacklogDrain(generation);
+        final deepBacklogAuthorized = _deepBacklogPolicy();
         if (liveRecoveryCaughtUp && !recoveredRecentSlice && deepBacklogAuthorized && backlogEnd > info.readSeq) {
           final available = backlogEnd - info.readSeq;
           final count = available > _backlogPacketsPerSlice ? _backlogPacketsPerSlice : available;
-          final result = await _syncRange(
-            connection,
-            wal,
-            uploadIntent: WalUploadIntent.historicalBackfill,
-            startSeq: info.readSeq,
-            packetCount: count,
-            fallbackAnchor: fallbackAnchor,
-            fallbackFramesBefore: (info.readSeq - sourceReadSeq) * sourceFramesPerRecord,
-            completedRecords: 0,
-            totalRecords: info.unreadPackets,
-            advanceAfterCommit: false,
-            conversationTimeoutSeconds: conversationTimeoutSeconds,
-          );
-          if (result == null) {
-            throw const RingStorageException(
-              'Backlog ring range did not complete',
+          _RingRangeResult? result;
+          try {
+            result = await _syncRange(
+              connection,
+              wal,
+              uploadIntent: WalUploadIntent.historicalBackfill,
+              startSeq: info.readSeq,
+              packetCount: count,
+              fallbackAnchor: fallbackAnchor,
+              fallbackFramesBefore: (info.readSeq - sourceReadSeq) * sourceFramesPerRecord,
+              completedRecords: 0,
+              totalRecords: info.unreadPackets,
+              advanceAfterCommit: false,
+              conversationTimeoutSeconds: conversationTimeoutSeconds,
+            );
+          } catch (error, stackTrace) {
+            DebugLogManager.logError(
+              error,
+              stackTrace,
+              'Optional backlog range failed; live audio remains active',
+              {'device': deviceId},
             );
           }
-          coverage.add(info.readSeq, result.nextSeq);
-          final advanced = await _advanceLiveTailOrStop(
-            generation: generation,
-            deviceId: deviceId,
-            connection: connection,
-            nextSeq: result.nextSeq,
-            rejectionMessage: 'Device rejected a backlog covered-prefix advance',
-          );
-          if (!advanced) return;
-          info = RingInfo(
-            readSeq: result.nextSeq,
-            writeSeq: info.writeSeq,
-            capacityPackets: info.capacityPackets,
-            droppedPackets: info.droppedPackets,
-            packetSize: info.packetSize,
-          );
-          _completeRequestedBacklogDrainIfReady(generation, info);
-          reportAutomaticBacklogCompletion(info);
+          if (result == null) {
+            // Historical auto-sync is optional work. It must never tear down
+            // the live transcription owner and create a reconnect loop.
+            automaticBacklogTargetSeq = null;
+            automaticBacklogCompletionReported = true;
+            DebugLogManager.logWarning(
+              'RingStorageSync: optional backlog range did not complete; live audio remains active',
+              {'device': deviceId},
+            );
+          } else {
+            coverage.add(info.readSeq, result.nextSeq);
+            final advanced = await _advanceLiveTailOrStop(
+              generation: generation,
+              deviceId: deviceId,
+              connection: connection,
+              nextSeq: result.nextSeq,
+              rejectionMessage: 'Device rejected a backlog covered-prefix advance',
+            );
+            if (!advanced) return;
+            info = RingInfo(
+              readSeq: result.nextSeq,
+              writeSeq: info.writeSeq,
+              capacityPackets: info.capacityPackets,
+              droppedPackets: info.droppedPackets,
+              packetSize: info.packetSize,
+            );
+            reportAutomaticBacklogCompletion(info);
+          }
         }
 
         if (_tailGeneration != generation || _isCancelled) break;
@@ -1375,8 +1520,20 @@ class RingStorageSyncImpl implements RingStorageSync {
               );
             }
           }
-        } catch (e) {
+        } catch (e, stackTrace) {
           Logger.debug('RingStorageSync._syncRing: flush error: $e');
+          DebugLogManager.logError(
+            e,
+            stackTrace,
+            'RingStorageSync: durable range flush failed',
+            {
+              'startSeq': sourceStartSeq,
+              'endSeq': sourceEndSeq,
+              'sourceId': sourceId,
+              'frameCount': frames.length,
+              'uploadIntent': effectiveUploadIntent.name,
+            },
+          );
           flushError = true;
           rethrow;
         }
@@ -1595,8 +1752,18 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (transportComplete) {
       try {
         await flushValidatedRange();
-      } catch (e) {
+      } catch (e, stackTrace) {
         Logger.debug('RingStorageSync: final flush error: $e');
+        DebugLogManager.logError(
+          e,
+          stackTrace,
+          'RingStorageSync: validated range could not become durable',
+          {
+            'startSeq': startSeq,
+            'requestedRecords': packetCount,
+            'receivedRecords': recordsConsumed,
+          },
+        );
       }
     }
 
@@ -1629,6 +1796,25 @@ class RingStorageSyncImpl implements RingStorageSync {
         newestTimestamp: newestTimestamp!,
       );
     } else {
+      DebugLogManager.logWarning(
+        'RingStorageSync: bounded range rejected before durable commit',
+        {
+          'startSeq': startSeq,
+          'requestedRecords': packetCount,
+          'transferStartSeq': transferStartSeq,
+          'announcedRecords': announcedPacketCount,
+          'doneNextSeq': doneNextSeq,
+          'receivedRecords': recordsConsumed,
+          'pendingBytes': reassembler.pendingBytes,
+          'reachedDone': reachedDone,
+          'doneOk': doneOk,
+          'flushError': flushError,
+          'cancelled': _isCancelled,
+          'completeRange': receivedCompleteRange,
+          'protocolError': protocolError,
+          'crcVerified': crcVerified,
+        },
+      );
       Logger.debug(
         'RingStorageSync: skipping advance (reachedDone=$reachedDone doneOk=$doneOk flushError=$flushError '
         'cancelled=$_isCancelled completeRange=$receivedCompleteRange protocolError=$protocolError '

@@ -8,6 +8,8 @@ import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/mutex.dart';
 
+export 'package:omi/backend/http/api/conversations.dart' show SyncUploadLane;
+
 typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,

@@ -44,17 +44,42 @@ history. A historical drain requires either one explicit Sync action or the
 existing Auto Sync opt-in. Charging changes scheduling capacity, not user
 authority, and therefore never starts a deep drain.
 
-Once the user authorizes a drain, the live lane remains scheduler authority.
-Historical work runs only in bounded slices, and audio that arrives during one
-of those slices must be fetched before another historical slice begins. Being
-plugged in may supply the power budget for requested work; it does not permit
-backlog transfer to delay, replace, or disable live transcription.
+Automatic historical work remains subordinate to the live lane and runs only
+in bounded slices. Explicit **Fast Sync** is a different, user-visible mode: it
+latches one immutable ring write-sequence target, pauses preview delivery, and
+uses larger sequential reads to move that fixed snapshot to durable phone
+storage. Audio recorded after the target remains on the pendant and must not
+expand the active snapshot. Completion, cancellation, or a recoverable transfer
+failure must release BLE to live capture immediately. Being plugged in may
+supply the power budget for requested work; it does not authorize Fast Sync or
+an automatic deep drain.
+
+The Sync page exposes determinate progress against that immutable target while
+Fast Sync owns BLE. The used/free byte count is a cached device-status sample,
+not a transfer counter: the app must not fabricate a decreasing value because
+newer audio continues entering the ring after the target. A later status read
+may refresh those bytes independently of the target-progress indicator.
 
 This contract is shared Dart policy. Android and iOS provide transport
 ownership but do not choose different backlog behavior. If the transcription
 service is unavailable, storage-authoritative firmware keeps recording on the
 pendant; the app must not move an unbounded queue of tiny ranges onto the
 phone while no live transcript can accept them.
+
+### Internal 3.0.30 black-box harness
+
+Production routing remains exact to the 3.0.29 storage-authoritative test
+line. A physical run against diagnostic firmware 3.0.30 build 110 is valid
+only when the app was compiled and launched with
+`--dart-define OMI_BLACKBOX_HARNESS=true`. Before collecting evidence, the
+runtime log must show both `usesStorageAuthoritativeAudio=true` and an active
+ring-audio owner. The define alone is not evidence: a build missing the
+dev-only policy gate silently falls back to the legacy live characteristic and
+invalidates Fast Sync and preview results.
+
+Never widen production firmware routing to admit a diagnostic build. Keep the
+harness artifact in the permanent CV1 evidence directory with its SHA-256,
+bundle identifier, source commit, firmware build, and exact launch command.
 
 ### Authenticated Android physical-device builds
 
@@ -189,7 +214,8 @@ next disruption until the tester has seen the restoration notice.
 | MCU DFU success | Complete one normal firmware update | The DFU updater releases BLE, one serialized bounded reclaim loop targets only the exact pre-DFU pendant (up to three attempts), normal audio/backlog sync resumes without app restart, and pendant application settings remain unchanged |
 | DFU failure | Abort or use a controlled failing test image before activation | The app clears firmware-update state and runs one bounded reclaim loop for the same pendant; a plugin error plus thrown future must not start a second loop |
 | Page disposal | Leave the firmware page while terminal cleanup is in flight | Disposal and the later terminal callback share one cleanup/reclaim future; neither strands nor duplicates the BLE owner |
-| Backlog | Begin with a known non-empty pendant backlog, disrupt BLE during transfer, then restore it | Durable records are not acknowledged early; transfer resumes, finishes, and preserves timestamp order without duplicates |
+| Fast Sync | Begin with a known non-empty pendant backlog, start Fast Sync, disrupt BLE during transfer, then restore it | The fixed snapshot resumes without a second tap; durable records are not acknowledged early; newer capture does not expand the target; transfer finishes in timestamp order without duplicates; live preview resumes immediately |
+| Fast Sync cancel | Start Fast Sync, wait for one bounded range to begin, then cancel | At most the in-flight bounded range finishes and is durably acknowledged; no further historical range begins; live preview resumes without reconnect or app restart |
 
 ## Cross-host ownership handoff
 
@@ -257,21 +283,27 @@ consume historical backlog.
 3. Confirm adjacent physical archives render as one pending row whose duration
    spans their wall-clock capture interval. A five-minute storage boundary is
    never, by itself, a conversation boundary.
-4. Tap Sync once while continuing to produce audio. Capture the
+4. Tap Fast Sync once while continuing to produce audio. Capture the
    `manual backlog snapshot latched` log and its immutable
-   `target_write_seq=T`. Historical ranges authorized by this tap must end at
-   or before `T`; newer records may stream live but must not expand the
-   historical target.
+   `target_write_seq=T`. Preview is intentionally paused while the fixed
+   snapshot drains. Historical ranges authorized by this tap must end at or
+   before `T`; newer records stay in the ring and must not expand the target.
+   Require the Sync page to show determinate progress toward `T`; do not treat
+   its separately cached storage byte count as live transfer progress.
 5. Disable Bluetooth after `NOTIFY_READ_BEGIN` and before `NOTIFY_DONE`, play a
-   unique offline marker, then re-enable Bluetooth. Do not tap Sync again. The
-   same pendant must reconnect, retry from durable coverage, resume the
-   existing live preview, and emit `manual backlog snapshot completed` for the
-   original `T`.
+   unique offline marker, then re-enable Bluetooth. Do not tap Fast Sync again.
+   The same pendant must reconnect, retry from durable coverage, and emit
+   `manual backlog snapshot completed` for the original `T`. The existing live
+   preview then resumes and includes capture produced after `T`.
 6. After the configured conversation boundary closes, require one logical row
    and one upload job for the continuous run. Every physical member must share
    the terminal job result; sequence coverage through `T` must have no holes or
    duplicate source identities. The offline marker must occur once in
    timestamp order.
+7. Repeat with a second fixed snapshot and cancel during one bounded range.
+   Preserve the cancellation time and the first post-cancel live frame time.
+   Already durable coverage may advance, but no subsequent historical READ may
+   begin and the user must not need to reconnect or reopen the capture screen.
 
 A `429` or server `5xx` is not an end-to-end pass. Confirm bounded retry with
 local data retained, then verify the final transcript when the backend is
@@ -338,6 +370,12 @@ auto-reconnect:
    must never finish after a newer write.
 4. Compare the marker phrases and stored-segment timestamps. Post-reconnect
    audio must not rewind into an earlier conversation.
+5. Inject adjacent, contiguous source ranges whose embedded RTC timestamps jump
+   forward beyond the configured conversation boundary. They must never be
+   assembled into one silence-padded canonical file or reported as one long
+   conversation. Preserve both source sequence and embedded timestamp in the
+   diagnostic evidence; sequence establishes identity, while wall clock owns
+   the conversation boundary.
 
 ## Known DFU telemetry limitation
 

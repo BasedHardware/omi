@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/capture/live_audio_frame_pacer.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
@@ -219,7 +220,7 @@ void main() {
     await session!.cancel();
   });
 
-  test('manual Sync drains one tail-owned snapshot while preserving live priority', () async {
+  test('manual Fast Sync drains one fixed snapshot before returning to live', () async {
     const now = _FakeRingConnection.baseTimestamp + 10000;
     final timestamps = {
       for (var seq = 0; seq < 192; seq++) seq: now - 1000,
@@ -236,6 +237,7 @@ void main() {
       local,
       nowSeconds: now,
       deepBacklogEnabled: false,
+      packetsPerRead: 1800,
     );
     final liveDelivered = Completer<void>();
 
@@ -248,7 +250,8 @@ void main() {
 
     await liveDelivered.future.timeout(const Duration(seconds: 1));
     await connection.secondRead.future.timeout(const Duration(seconds: 3));
-    final firstRequest = sync.requestAudioTailBacklogDrain();
+    final progress = _ProgressListener();
+    final firstRequest = sync.requestAudioTailBacklogDrain(progress: progress);
     final repeatedTap = sync.requestAudioTailBacklogDrain();
 
     expect(firstRequest, isNotNull);
@@ -263,12 +266,17 @@ void main() {
       (start: 0, count: 96),
     ]);
     expect(connection.successfulAdvances, [96, 212]);
+    expect(progress.values.first, 0);
+    expect(progress.values.last, 1);
+    for (var index = 1; index < progress.values.length; index++) {
+      expect(progress.values[index], greaterThanOrEqualTo(progress.values[index - 1]));
+    }
     expect(sync.isAudioTailActive, isTrue);
 
     await session!.cancel();
   });
 
-  test('new live audio preempts the next manual backlog slice', () async {
+  test('audio captured during Fast Sync waits behind its fixed snapshot', () async {
     const now = _FakeRingConnection.baseTimestamp + 10000;
     final connection = _FakeRingConnection(
       readSeq: 0,
@@ -285,6 +293,7 @@ void main() {
       localSync(),
       nowSeconds: now,
       deepBacklogEnabled: false,
+      packetsPerRead: 1800,
     );
 
     final session = await sync.startAudioTail(
@@ -300,14 +309,14 @@ void main() {
     expect(connection.reads.take(4), [
       (start: 480, count: 20),
       (start: 384, count: 96),
-      (start: 0, count: 96),
-      // Twenty records arrived while the preceding backlog slice was in
-      // flight. They must preempt the next historical slice.
+      // The request owns one immutable [0, 500) snapshot. New records remain
+      // safe in the pendant ring until that snapshot is durable on the phone.
+      (start: 0, count: 384),
       (start: 500, count: 20),
     ]);
 
-    sync.cancelRequestedAudioTailBacklogDrain();
-    expect(await request, isNull);
+    expect((await request)?.targetWriteSeq, 500);
+    expect(sync.isAudioTailActive, isTrue);
     await session!.cancel();
   });
 
@@ -365,6 +374,7 @@ void main() {
       local,
       nowSeconds: now,
       deepBacklogEnabled: false,
+      packetsPerRead: 1800,
     );
 
     final start = sync.startAudioTail(
@@ -422,6 +432,7 @@ void main() {
       writeSeq: 212,
       ringInfoGate: firstInfo,
       rejectRead: true,
+      connected: false,
     );
     final replacementConnection = _FakeRingConnection(
       readSeq: 200,
@@ -451,6 +462,7 @@ void main() {
       nowSeconds: now,
       deepBacklogEnabled: false,
       connectionResolver: (_) async => activeConnection,
+      packetsPerRead: 1800,
     );
 
     final firstStart = sync.startAudioTail(
@@ -482,12 +494,15 @@ void main() {
       resumeLiveContinuity: true,
     );
     final receipt = await originalRequest!.timeout(const Duration(seconds: 5));
+    await replacementConnection.secondRead.future.timeout(
+      const Duration(seconds: 3),
+    );
 
     expect(receipt?.deviceId, 'cv1-test');
     expect(receipt?.targetWriteSeq, 212);
     expect(replacementConnection.reads.take(2), [
-      (start: 212, count: 30),
       (start: 200, count: 12),
+      (start: 212, count: 30),
     ]);
     expect(replacementConnection.successfulAdvances, [212]);
     expect(
@@ -508,6 +523,7 @@ void main() {
       writeSeq: 212,
       ringInfoGate: firstInfo,
       rejectRead: true,
+      connected: false,
     );
     final otherConnection = _FakeRingConnection(
       readSeq: 100,
@@ -569,6 +585,7 @@ void main() {
       writeSeq: 212,
       ringInfoGate: firstInfo,
       rejectRead: true,
+      connected: false,
     );
     final sync = ringSync(
       connection,
@@ -628,6 +645,49 @@ void main() {
     ]);
     expect(sync.isAudioTailActive, isTrue);
 
+    await session!.cancel();
+  });
+
+  test('cancelling an in-flight Fast Sync finishes one slice then resumes live', () async {
+    const now = _FakeRingConnection.baseTimestamp + 10000;
+    final fastReadGate = Completer<void>();
+    final connection = _FakeRingConnection(
+      readSeq: 0,
+      writeSeq: 500,
+      growWriteSeqAfterFirstReadBy: 20,
+      growWriteSeqAfterReadNumber: 3,
+      gatedReadNumber: 3,
+      readGate: fastReadGate,
+      timestamps: {
+        for (var seq = 0; seq < 480; seq++) seq: now - 1000,
+        for (var seq = 480; seq < 520; seq++) seq: now,
+      },
+    );
+    final sync = ringSync(
+      connection,
+      localSync(),
+      nowSeconds: now,
+      deepBacklogEnabled: false,
+      packetsPerRead: 1800,
+    );
+
+    final session = await sync.startAudioTail(onLiveFrames: (_) => _delivered());
+    await connection.secondRead.future.timeout(const Duration(seconds: 3));
+    final request = sync.requestAudioTailBacklogDrain()!;
+    await connection.thirdRead.future.timeout(const Duration(seconds: 3));
+
+    sync.cancelRequestedAudioTailBacklogDrain();
+    expect(await request, isNull);
+    fastReadGate.complete();
+    await connection.fourthRead.future.timeout(const Duration(seconds: 3));
+
+    expect(connection.reads.take(4), [
+      (start: 480, count: 20),
+      (start: 384, count: 96),
+      (start: 0, count: 384),
+      (start: 500, count: 20),
+    ]);
+    expect(sync.isAudioTailActive, isTrue);
     await session!.cancel();
   });
 
@@ -1765,6 +1825,23 @@ class _Listener implements IWalSyncListener {
   void onWalUpdated() => onWalUpdatedCallback?.call();
 }
 
+class _ProgressListener implements IWalSyncProgressListener {
+  final List<double> values = [];
+
+  @override
+  void onWalSyncedProgress(
+    double percentage, {
+    double? speedKBps,
+    SyncPhase? phase,
+    int? currentFile,
+    int? totalFiles,
+    int? uploadedBytes,
+    int? totalBytesToUpload,
+  }) {
+    values.add(percentage);
+  }
+}
+
 class _FakeRingConnection implements DeviceConnection {
   static const int baseTimestamp = 1710000000;
 
@@ -1777,6 +1854,8 @@ class _FakeRingConnection implements DeviceConnection {
   final bool failAdvance;
   final bool connected;
   final bool rejectRead;
+  final int? gatedReadNumber;
+  final Completer<void>? readGate;
   final Object? codecError;
   final Completer<RingInfo?>? ringInfoGate;
   final int framesPerRecord;
@@ -1801,6 +1880,8 @@ class _FakeRingConnection implements DeviceConnection {
     this.failAdvance = false,
     this.connected = true,
     this.rejectRead = false,
+    this.gatedReadNumber,
+    this.readGate,
     this.codecError,
     this.ringInfoGate,
     this.framesPerRecord = 1,
@@ -1838,6 +1919,9 @@ class _FakeRingConnection implements DeviceConnection {
     if (reads.length == 2 && !secondRead.isCompleted) secondRead.complete();
     if (reads.length == 3 && !thirdRead.isCompleted) thirdRead.complete();
     if (reads.length == 4 && !fourthRead.isCompleted) fourthRead.complete();
+    if (reads.length == gatedReadNumber) {
+      await readGate?.future;
+    }
     scheduleMicrotask(() {
       _notifications.add(_readBegin(startSeq, count));
       final requested = <int>[];

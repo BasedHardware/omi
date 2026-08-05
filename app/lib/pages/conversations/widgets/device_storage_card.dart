@@ -10,8 +10,13 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 /// bar (amber ≥80%, red ≥95%), and a "used of total · free" summary line.
 class DeviceStorageCard extends StatelessWidget {
   final RingStatus status;
+  final double? drainProgress;
 
-  const DeviceStorageCard({super.key, required this.status});
+  const DeviceStorageCard({
+    super.key,
+    required this.status,
+    this.drainProgress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +27,7 @@ class DeviceStorageCard extends StatelessWidget {
     final fraction = total == 0 ? 0.0 : (used / total).clamp(0.0, 1.0);
     final percent = (fraction * 100).round();
     final nearlyFull = fraction >= 0.95;
+    final boundedDrainProgress = drainProgress?.clamp(0.0, 1.0);
 
     // Neutral white for normal usage (brand INV-UI-1: white/neutral accents);
     // amber/red are reserved for the near-full warning/critical bands.
@@ -64,6 +70,34 @@ class DeviceStorageCard extends StatelessWidget {
             '${l.deviceStorageUsedOfTotal(WavBytesUtil.formatBytes(used, decimals: 0), WavBytesUtil.formatBytes(total, decimals: 0))}  ·  ${l.deviceStorageFree(WavBytesUtil.formatBytes(free, decimals: 0))}',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w400),
           ),
+          if (boundedDrainProgress != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l.syncCardDownloadingTitle,
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w400),
+                  ),
+                ),
+                Text(
+                  '${(boundedDrainProgress * 100).round()}%',
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                key: const ValueKey('device-storage-drain-progress'),
+                value: boundedDrainProgress,
+                minHeight: 4,
+                backgroundColor: Colors.grey.shade800,
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+          ],
           if (nearlyFull) ...[
             const SizedBox(height: 8),
             Text(

@@ -310,40 +310,6 @@ void main() {
     expect(claims, [true, false]);
   });
 
-  test('backfill pacing persists without blocking a fresh upload', () async {
-    final uploadedLanes = <SyncUploadLane>[];
-    final gate = SyncUploadGate(
-      limiter: limiter,
-      fairUseStatusLoader: () async => {'stage': 'none'},
-      uploader: (files,
-          {onUploadProgress,
-          conversationId,
-          claimLiveCapture = false,
-          syncLane = SyncUploadLane.fresh,
-          replaceTranscript = false}) async {
-        uploadedLanes.add(syncLane);
-        return UploadFilesResult.queued('fresh-job');
-      },
-    );
-    limiter.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backfillPaced);
-
-    await expectLater(
-      gate.upload([], lane: SyncUploadLane.backfill),
-      throwsA(
-        isA<SyncRateLimitedException>().having(
-          (error) => error.kind,
-          'kind',
-          SyncRateLimitKind.backfillPaced,
-        ),
-      ),
-    );
-    final fresh = await gate.upload([], lane: SyncUploadLane.fresh);
-
-    expect(fresh.jobId, 'fresh-job');
-    expect(uploadedLanes, [SyncUploadLane.fresh]);
-    expect(limiter.isBackfillLimited, isTrue);
-  });
-
   test('backfill responses are passed to the uploader as a lane hint', () async {
     SyncUploadLane? seenLane;
     final gate = SyncUploadGate(

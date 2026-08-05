@@ -1,5 +1,7 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 
+const bool _blackboxHarnessEnabled = bool.fromEnvironment('OMI_BLACKBOX_HARNESS');
+
 /// The one offline-storage protocol allowed to own a connected device.
 ///
 /// Firmware generations reuse the same BLE characteristics with incompatible
@@ -47,8 +49,12 @@ class DeviceStorageProtocolPolicy {
   /// protocol exposes a capability bit; treating every later version as this
   /// mode would silently disable the legacy live characteristic if a release
   /// changes direction.
-  static bool usesStorageAuthoritativeAudio(String? version) {
-    return _parseVersion(version) == const (3, 0, 29);
+  static bool usesStorageAuthoritativeAudio(
+    String? version, {
+    bool allowBlackboxDiagnosticsFirmware = _blackboxHarnessEnabled,
+  }) {
+    final parsed = _parseVersion(version);
+    return parsed == const (3, 0, 29) || (allowBlackboxDiagnosticsFirmware && parsed == const (3, 0, 30));
   }
 
   static bool supportsModernStorage(String? version) {

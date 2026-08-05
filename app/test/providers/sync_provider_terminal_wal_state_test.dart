@@ -333,6 +333,7 @@ void main() {
         files, {
         onUploadProgress,
         conversationId,
+        claimLiveCapture = false,
         syncLane = SyncUploadLane.fresh,
         replaceTranscript = false,
       }) async {

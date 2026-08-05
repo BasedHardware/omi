@@ -48,7 +48,9 @@ class _FakeSyncs {
 
   void cancelSync() {}
 
-  Future<RingBacklogDrainReceipt?>? requestActiveRingBacklogDrain() {
+  Future<RingBacklogDrainReceipt?>? requestActiveRingBacklogDrain({
+    IWalSyncProgressListener? progress,
+  }) {
     if (!ringAudioTailActive) return null;
     requestedRingDrains++;
     return ringBacklogDrain?.future ??

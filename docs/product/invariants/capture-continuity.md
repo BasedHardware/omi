@@ -35,15 +35,23 @@ or upload retry is not a conversation boundary.
 
 ## Scheduling and power
 
-- Live capture owns the next available BLE transfer slice.
+- Live capture owns the next available BLE transfer slice unless the user has
+  explicitly started Fast Sync.
 - Missing coverage in the still-open conversation may be repaired
   automatically because it restores the active user experience.
 - Older history requires an explicit Sync action or the existing Auto Sync
   opt-in. Charging increases the budget for authorized work; it does not grant
   authority to drain history.
-- Authorized historical transfer runs in bounded slices and yields whenever
-  live coverage is available. If concurrent transfer cannot preserve live
-  transcription on a platform/device pair, historical transfer pauses.
+- Automatic historical transfer runs in bounded slices and yields whenever
+  live coverage is available. Explicit Fast Sync instead latches one immutable
+  write-sequence target, pauses preview delivery, and drains that fixed target
+  with larger sequential reads while the pendant keeps recording newer audio
+  to its ring. Completion, cancellation, or a recoverable transfer failure
+  returns BLE ownership to live capture immediately; it never expands the
+  target to chase newly recorded audio.
+- Fast Sync progress is measured against that immutable target. A cached
+  device used/free byte sample remains labeled as storage state and must not be
+  rewritten as a synthetic transfer counter while newer audio enters the ring.
 - Audio is acknowledged or deleted from the pendant only after the next
   authoritative layer has durably stored its identity and coverage.
 
@@ -69,7 +77,9 @@ or upload retry is not a conversation boundary.
 - Upload, transcribe, summarize, or render raw one-to-nine-second ring/storage
   fragments as separate conversations solely because those files exist.
 - Run automatic deep backlog transfer by default, including while charging.
-- Let backlog transfer delay or disable live capture.
+- Let automatic backlog transfer delay or disable live capture, or let an
+  explicit Fast Sync remain latched after completion, cancellation, or a
+  recoverable failure.
 - Acknowledge a range before durable acceptance, or create a new retry identity
   for the same range.
 - Clear the live preview or create a new conversation solely on transport
@@ -82,7 +92,11 @@ or upload retry is not a conversation boundary.
 - `app/test/unit/conversation_audio_assembler_test.dart` — ordered assembly,
   overlap/deduplication, and conversation-window grouping.
 - `app/test/unit/local_wal_sync_test.dart` — raw-fragment exclusion, logical
-  upload grouping, idempotent coverage, and bounded historical batches.
+  upload grouping, sequence-first RTC correction, live-capture proof,
+  idempotent coverage, and bounded historical batches.
+- `app/test/services/wals/ring_storage_sync_test.dart` — fixed Fast Sync
+  snapshots, progress, disconnect adoption, bounded cancellation, and return
+  to live capture.
 - `app/test/providers/sync_provider_sync_wal_wake_test.dart` — explicit backlog
   authority and live-priority scheduling.
 - `app/test/services/capture/conversation_session_window_test.dart` and

@@ -104,7 +104,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     if (DeviceStorageProtocolPolicy.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
                         deviceProvider.ringStatus != null) ...[
                       const SizedBox(height: 32),
-                      DeviceStorageCard(status: deviceProvider.ringStatus!),
+                      DeviceStorageCard(
+                        status: deviceProvider.ringStatus!,
+                        drainProgress: syncState.isSyncing && syncState.phase == SyncPhase.downloadingFromDevice
+                            ? syncState.progress
+                            : null,
+                      ),
                     ],
                     const SizedBox(height: 32),
                     _buildStorageSettings(userProvider),
@@ -157,7 +162,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           title = l.syncCardDownloadingTitle;
           final cur = s.currentFile ?? 0;
           final tot = s.totalFiles ?? 0;
-          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          if (tot > 0) {
+            progressText = l.syncCardProgressOf(cur, tot);
+          } else {
+            progressText = '${(s.progress.clamp(0.0, 1.0) * 100).round()}%';
+          }
           break;
         case SyncPhase.waitingForInternet:
           title = l.syncCardWaitingInternet;
@@ -210,12 +219,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (showSpinner) ...[
-            const SizedBox(
+            SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
+                value: s.phase == SyncPhase.downloadingFromDevice ? s.progress.clamp(0.0, 1.0) : null,
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent),
+                valueColor: const AlwaysStoppedAnimation(Colors.deepPurpleAccent),
               ),
             ),
             const SizedBox(width: 12),

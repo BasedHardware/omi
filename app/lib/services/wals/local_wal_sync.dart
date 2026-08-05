@@ -106,6 +106,22 @@ SyncUploadLane _syncLaneForWal(Wal wal, int nowSeconds) => syncUploadLaneForTime
       hasServerCaptureProof: wal.conversationId != null || wal.uploadIntent == WalUploadIntent.liveContinuity,
     );
 
+bool isLiveCaptureWal(Wal wal, int nowSeconds) =>
+    wal.conversationId != null &&
+    _syncLaneForWal(wal, nowSeconds) == SyncUploadLane.fresh &&
+    nowSeconds - wal.timerStart <= _freshSyncCutoffSeconds;
+
+/// The server capture manifest is immutable for one conversation. Claim it
+/// only when this upload owns every currently pending WAL for that owner;
+/// claiming a partial batch would permanently strand the siblings.
+@visibleForTesting
+bool canClaimLiveCapture(
+  List<Wal> batch,
+  List<Wal> pendingForConversation,
+  int nowSeconds,
+) =>
+    batch.isNotEmpty && isLiveCaptureWal(batch.first, nowSeconds) && pendingForConversation.length <= batch.length;
+
 bool _isUnboundStorageContinuity(Wal wal) =>
     wal.uploadIntent == WalUploadIntent.liveContinuity &&
     wal.originalStorage == WalStorage.sdcard &&
@@ -158,12 +174,12 @@ List<List<Wal>> _continuousRingRecoveryGroups(
   final groups = <List<Wal>>[];
   for (final bucket in buckets.values) {
     bucket.sort((left, right) {
-      final timeCompare = left.timerStart.compareTo(right.timerStart);
-      if (timeCompare != 0) return timeCompare;
       final leftRange = RingProtocol.parseRecoverySourceRange(left.sourceId);
       final rightRange = RingProtocol.parseRecoverySourceRange(right.sourceId);
       final sequenceCompare = (leftRange?.start ?? 0).compareTo(rightRange?.start ?? 0);
       if (sequenceCompare != 0) return sequenceCompare;
+      final timeCompare = left.timerStart.compareTo(right.timerStart);
+      if (timeCompare != 0) return timeCompare;
       return left.id.compareTo(right.id);
     });
 
@@ -844,9 +860,16 @@ class LocalWalSyncImpl implements LocalWalSync {
         .map((candidate) => candidate.wal.conversationId!)
         .toSet();
     if (nearestOwners.length != 1) {
-      throw StateError(
-        'Recovered ring range ${recovered.id} has ambiguous canonical conversation ownership',
+      DebugLogManager.logWarning(
+        'LocalWalSync: recovered ring range has ambiguous canonical ownership; preserving it unowned',
+        {
+          'walId': recovered.id,
+          'sourceId': recovered.sourceId,
+          'candidateOwnerCount': nearestOwners.length,
+          'nearestGapSeconds': nearestGap,
+        },
       );
+      return;
     }
     recovered.conversationId = nearestOwners.single;
   }
@@ -2547,6 +2570,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     final attemptedWalIds = <String>{};
     final blockedLanes = <SyncUploadLane>{};
     final forcedBackfillConversationIds = <String>{};
+    final unclaimableConversationIds = <String>{};
     final trackedManualConversationId = trackedManualWal?.conversationId;
     if (trackedManualConversationId != null) {
       final pendingConversationCount = _wals
@@ -2606,6 +2630,17 @@ class LocalWalSyncImpl implements LocalWalSync {
           batch.first.conversationId != null && forcedBackfillConversationIds.contains(batch.first.conversationId)
               ? SyncUploadLane.backfill
               : _syncLaneForWal(batch.first, batchNowSeconds);
+      final batchConversationId = batch.first.conversationId;
+      final claimLiveCapture = batchLane == SyncUploadLane.fresh &&
+          !unclaimableConversationIds.contains(batchConversationId) &&
+          canClaimLiveCapture(
+            batch,
+            candidates.where((wal) => wal.conversationId == batchConversationId).toList(),
+            batchNowSeconds,
+          );
+      if (!claimLiveCapture && batchConversationId != null) {
+        unclaimableConversationIds.add(batchConversationId);
+      }
       if (_isCancelled) {
         Logger.debug("LocalWalSync: Upload cancelled");
         DebugLogManager.logWarning('Local upload cancelled', {
@@ -2720,6 +2755,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           preparedUpload.files,
           lane: batchLane,
           conversationId: batchWals.first.conversationId,
+          claimLiveCapture: claimLiveCapture,
           replaceTranscript: batchWals.first.canonicalReplacement,
         );
 

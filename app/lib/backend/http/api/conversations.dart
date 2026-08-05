@@ -451,6 +451,13 @@ class UploadFilesResult {
 /// 429 is backend capacity unless the response carries Omi's explicit reason.
 enum SyncRateLimitKind { fairUse, backendCapacity }
 
+/// Client-side upload scheduling priority.
+///
+/// This does not create a separate persisted rate-limit domain: current
+/// servers apply one upload admission boundary. It only keeps newly captured
+/// continuity work ahead of historical recovery in the local scheduler.
+enum SyncUploadLane { fresh, backfill }
+
 @visibleForTesting
 bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
     conversationId != null && claimLiveCapture;

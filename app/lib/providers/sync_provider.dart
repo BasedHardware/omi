@@ -606,7 +606,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // receipt, every upload/reconcile retry reuses that immutable boundary.
     // This prevents a slow backend from repeatedly latching newer writeSeq.
     final requestedRingDrain = activeRingTail && trigger == WakeTrigger.userRetry && receipt == null
-        ? syncs.requestActiveRingBacklogDrain()
+        ? syncs.requestActiveRingBacklogDrain(progress: this)
         : null;
     final hadEligibleWals = missingWals.isNotEmpty || requestedRingDrain != null || receipt != null;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();

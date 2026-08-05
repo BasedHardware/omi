@@ -63,6 +63,52 @@ void main() {
     ]);
   });
 
+  test('never turns two contiguous one-second ranges into a 17-minute recording', () async {
+    final firstFile = File('${directory.path}/first.bin');
+    final secondFile = File('${directory.path}/second.bin');
+    await firstFile.writeAsBytes(_frame([1]), flush: true);
+    await secondFile.writeAsBytes(_frame([2]), flush: true);
+    final destination = File('${directory.path}/canonical.bin');
+
+    await expectLater(
+      assembleConversationAudio(
+        parts: [
+          ConversationAudioPart(
+            wal: _wal(
+              timerStart: 1000,
+              sourceId: 'ring_10_11',
+              filePath: firstFile.path,
+              status: WalStatus.synced,
+              captureEndSeconds: 1001,
+            ),
+            file: firstFile,
+          ),
+          ConversationAudioPart(
+            wal: _wal(
+              timerStart: 2020,
+              sourceId: 'ring_11_12',
+              filePath: secondFile.path,
+              status: WalStatus.miss,
+              captureEndSeconds: 2021,
+            ),
+            file: secondFile,
+          ),
+        ],
+        destination: destination,
+        silenceFrameFactory: (_) => [0],
+        conversationBoundarySeconds: 120,
+      ),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('conversation boundary'),
+        ),
+      ),
+    );
+    expect(await destination.exists(), isFalse);
+  });
+
   test('marks a missing pendant sequence as a repair instead of fragmenting the upload', () async {
     final firstFile = File('${directory.path}/first.bin');
     final secondFile = File('${directory.path}/second.bin');

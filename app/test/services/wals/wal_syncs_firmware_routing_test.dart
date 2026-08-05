@@ -15,6 +15,24 @@ void main() {
       expect(DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio('Unknown'), isFalse);
     });
 
+    test('internal harness admits 3.0.30 without widening production policy', () {
+      expect(DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio('3.0.30'), isFalse);
+      expect(
+        DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio(
+          '3.0.30+110',
+          allowBlackboxDiagnosticsFirmware: true,
+        ),
+        isTrue,
+      );
+      expect(
+        DeviceStorageProtocolPolicy.usesStorageAuthoritativeAudio(
+          '3.0.31',
+          allowBlackboxDiagnosticsFirmware: true,
+        ),
+        isFalse,
+      );
+    });
+
     test('enriched firmware wins over a raw Unknown connect object', () {
       expect(DeviceStorageProtocolPolicy.resolveFirmware('3.0.20', 'Unknown'), '3.0.20');
       expect(
