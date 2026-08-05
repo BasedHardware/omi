@@ -1,0 +1,81 @@
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimeline.swift
+  s_569f1df936cc22::t_a05405da64b8e7 20-35
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_569f1df936cc22::t_896cb54be71b10 1357
+  s_569f1df936cc22::t_ce2fe736161fe8 1785
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
+  s_569f1df936cc22::t_b00559aee72589 355-365
+  s_569f1df936cc22::t_817d16b52b6fdf 42,164,200,306,467
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
+  s_569f1df936cc22::t_4a38137882685f 86,90,99
+  s_569f1df936cc22::t_21c27d96bfdc0e 87-89,91-92
+  s_acebfdccb4f1d0::t_dfeed5c0dd67ad 68,104
+desktop/macos/Desktop/Tests/SettingsSidebarItemLayoutTests.swift
+  s_569f1df936cc22::t_bf42e61d919040 16-22,25,27-33
+  s_569f1df936cc22::t_774b2bd07206e8 34
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+Controls.swift
+  s_569f1df936cc22::t_733682158b23f6 766-783
+  s_569f1df936cc22::t_e7d48a571c8c2b 508,609,651,784-786
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsGlassKit.swift
+  s_569f1df936cc22::t_e2e7b0d5a52b7a 141-142,153
+  s_569f1df936cc22::t_6748d8ad75a41d 143-150
+desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  s_569f1df936cc22::t_b6c68fa7add2ae 336-338,340-355
+  s_569f1df936cc22::t_277a982c240410 328-330
+  s_569f1df936cc22::t_a8032da59453ac 583-586,599,601-602
+  s_569f1df936cc22::t_9fd3222f1e2c03 331-335,339
+desktop/macos/Desktop/Tests/GlassButtonPrimitiveTests.swift
+  s_569f1df936cc22::t_1f7696791ecf86 248-251
+  s_569f1df936cc22::t_9667db69b28997 135-207,252
+  s_569f1df936cc22::t_69cf3ea5733707 253
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  s_569f1df936cc22::t_c06317c27ec0ef 330-343
+  s_569f1df936cc22::t_190cb436d41eea 387-388,391
+  s_569f1df936cc22::t_02a50ca06a23d2 507-510,513,517
+  s_569f1df936cc22::t_b9bd7a1dd0a9e4 480,482-483,486
+  s_569f1df936cc22::t_0de8cd6fdb6d34 358-361,365,371
+  s_acebfdccb4f1d0::t_c9951fbca93a6a 401
+desktop/macos/Desktop/Tests/ChatPromptTimelineTests.swift
+  s_569f1df936cc22::t_374c39d7ab554a 502-541
+desktop/macos/Desktop/Sources/Theme/OmiButtonStyle.swift
+  s_569f1df936cc22::t_6534f64e4b62d0 48-71
+  s_569f1df936cc22::t_ee4f6782de0a41 157,163-170
+desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
+  s_569f1df936cc22::t_80c22b4bd708f9 182,492,758,960
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/BillingWebFlow.swift
+  s_569f1df936cc22::t_c31858019fd566 40
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
+  s_569f1df936cc22::t_e10c9e81ddc4d5 191,457,598,665,680
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Assistants.swift
+  s_569f1df936cc22::t_9809357ea9198c 38,108,210,276,376,441,470,540,640,742,829,962
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+FloatingBarAndChat.swift
+  s_569f1df936cc22::t_d95c9299b39d90 206,387,575,775
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  s_569f1df936cc22::t_14b2113608de1e 31,51-52,68-69,86-87,104-105,146,192
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
+  s_569f1df936cc22::t_8691f82c0d1bcc 220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ac8fc17dc8bc6c1a7c42c0aa380aeb550c4a4a14",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
