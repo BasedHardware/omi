@@ -382,30 +382,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     return trimmed.isEmpty ? nil : trimmed
   }
 
-  func selectAppleNotesFolderAndSync() async {
-    lastActionError = nil
-
-    let panel = NSOpenPanel()
-    panel.title = "Select your Apple Notes data folder"
-    panel.message = "Choose the Apple Notes group container so Omi can sync your notes."
-    panel.prompt = "Select Folder"
-    panel.canChooseFiles = false
-    panel.canChooseDirectories = true
-    panel.allowsMultipleSelection = false
-    panel.canCreateDirectories = false
-
-    let home = FileManager.default.homeDirectoryForCurrentUser
-    let suggestedURL = home.appendingPathComponent("Library/Group Containers/group.com.apple.notes")
-    if FileManager.default.fileExists(atPath: suggestedURL.path) {
-      panel.directoryURL = suggestedURL
-    }
-
-    guard panel.runModal() == .OK, let selectedURL = panel.url else { return }
-
-    await AppleNotesReaderService.shared.rememberSelectedFolder(path: selectedURL.path)
-    await refreshAppleNotesInsights()
-  }
-
+  /// User-initiated connect/refresh. macOS prompts for Automation access on the
+  /// first Apple Event, so there is no folder to pick.
   func refreshAppleNotesInsights() async {
     lastActionError = nil
     appleNotesInsightsFailed = false
@@ -413,10 +391,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     defer { isSyncingAppleNotes = false }
 
     do {
-      let notes = try await AppleNotesReaderService.shared.readRecentNotes(
-        maxResults: 250,
-        userInitiated: true
-      )
+      let sync = try await AppleNotesReaderService.shared.syncChangedNotes(userInitiated: true)
+      let notes = sync.changed
       if notes.isEmpty {
         appleNotesInsightCount = 0
         appleNotesSummary = ""
@@ -424,10 +400,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         return
       }
 
-      let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
-      let result = await AppleNotesReaderService.shared.synthesizeFromNotes(
-        notes: Array(notes.prefix(120))
-      )
+      let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes)
+      let result = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
       appleNotesInsightCount = notes.count
       appleNotesMemoriesSaved = rawImport.saved + result.memories
       appleNotesSummary =
@@ -1028,10 +1002,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       }
 
       do {
-        let notes = try await AppleNotesReaderService.shared.readRecentNotes(
-          maxResults: 250,
-          userInitiated: false
-        )
+        // Passive on purpose: the onboarding scan must not raise the Automation
+        // prompt. Already-granted Macs import silently; everyone else lands in
+        // the needs-access branch below and sees the Connect action.
+        let sync = try await AppleNotesReaderService.shared.syncChangedNotes(userInitiated: false)
+        let notes = sync.changed
         guard !Task.isCancelled else { return }
 
         if notes.isEmpty {
@@ -1044,13 +1019,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           return
         }
 
-        let rawImport = await AppleNotesReaderService.shared.saveAsMemories(
-          notes: notes,
-          limit: 200
-        )
-        let result = await AppleNotesReaderService.shared.synthesizeFromNotes(
-          notes: Array(notes.prefix(120))
-        )
+        let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes)
+        let result = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
         guard !Task.isCancelled else { return }
 
         if rawImport.saved + result.memories > 0 {
@@ -1079,6 +1049,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         }
         await self.markInsightFinished(.appleNotes)
       } catch {
+        // "macOS has not asked for Automation access yet" is a needs-access
+        // state, not a read failure — render the Connect action, not an error.
+        let needsAccess = (error as? AppleNotesReaderError) == .automationPermissionUndetermined
         log(
           "OnboardingPagedIntroCoordinator: Apple Notes insights unavailable: \(error.localizedDescription)"
         )
@@ -1086,7 +1059,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           self.appleNotesInsightCount = 0
           self.appleNotesSummary = ""
           self.appleNotesMemoriesSaved = 0
-          self.appleNotesInsightsFailed = true
+          self.appleNotesInsightsFailed = !needsAccess
         }
         await self.markInsightFinished(.appleNotes)
       }

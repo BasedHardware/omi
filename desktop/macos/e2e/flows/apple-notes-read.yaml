@@ -1,24 +1,31 @@
 version: 2
 name: apple-notes-read
-tier: 2
-description: Apple Notes read-access probe rejects an invalid folder deterministically (no import/save)
+tier: manual
+description: Apple Notes read-access probe reports a live Automation-permission verdict without importing or saving.
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/AppleNotesReaderService.swift
+  - desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesReaderService.swift
+  - desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesScript.swift
+  - desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesScriptRunner.swift
+  - desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesOutcomeParser.swift
+  - desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesSyncState.swift
+  - desktop/macos/Desktop/Sources/Integrations/AppleNotes/AppleNotesDiagnostics.swift
 preconditions:
   - automation_bridge_ready
 
 steps:
   - id: S1
-    name: Probe rejects a non-Notes folder without crashing
-    # A bogus folderPath fails every branch of resolveSelectedFolder, so validateSelectedFolder
-    # throws .invalidSelectedFolder regardless of whether this machine has an Apple Notes store —
-    # a deterministic, hermetic outcome that still exercises AppleNotesReaderService end to end.
+    name: Probe reports a live read verdict
+    # Was tier 2 while the reader opened NoteStore.sqlite directly: a bogus folderPath failed
+    # every branch of the now-deleted resolveSelectedFolder, so the outcome was hermetic.
+    # The reader drives Notes.app over Apple Events now, so the verdict depends on this
+    # machine's Automation grant and is no longer machine-independent — claiming tier 2 would
+    # be false. Run on a host where Omi is allowed to control Notes; revoke that grant to
+    # exercise the other branch and expect classification=automation_permission_denied.
     bridge.action:
       name: apple_notes_read_probe
       params:
-        folderPath: "/nonexistent/omi-e2e-apple-notes-fixture"
         maxResults: 5
-        remember: false
     expect:
-      result.detail.ok: "false"
+      result.detail.ok: "true"
+      result.detail.classification: "readable"

@@ -101,11 +101,15 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertFalse(reloaded.isConnected)
   }
 
-  func testPersistedAppleNotesSyncDoesNotProveCurrentAccess() {
+  func testPersistedAppleNotesSyncDoesNotProveCurrentAccess() async {
     let testDefaults = makeDefaults()
     let defaults = testDefaults.defaults
     defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
-    let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
+    let store = ImportConnectorStatusStore(
+      defaults: defaults,
+      sessionUserID: "test-user",
+      appleNotesProbe: { .connected(noteCount: 1, verifiedAt: Date(timeIntervalSince1970: 1_700_000_000)) }
+    )
     guard let connector = ImportConnector.all.first(where: { $0.id == "apple-notes" }) else {
       XCTFail("apple-notes connector is not registered")
       return
@@ -117,7 +121,13 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     store.setSessionUserID("other-user")
     store.setSessionUserID("test-user")
 
+    // The import history reloads with the account, but nothing has read Notes
+    // in this session yet — history is not proof of current access.
     XCTAssertFalse(store.snapshot(for: connector).isConnected)
+
+    // Only a live probe can restore Connected.
+    await store.refresh()
+    XCTAssertTrue(store.snapshot(for: connector).isConnected)
   }
 
   func testPositiveCountWithoutSuccessfulSyncDoesNotMarkConnectorConnected() {

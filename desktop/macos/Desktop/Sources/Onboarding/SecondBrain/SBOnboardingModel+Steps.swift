@@ -235,8 +235,8 @@ extension SBOnboardingModel {
       // flips to "on" when FDA is granted from the context step — its poll only
       // drives fdaState, unlike every other connector that writes back its own state.
       contextStates["files"] = "on"
-    // Do not read Apple Notes merely because Full Disk Access changed. The
-    // explicit Connect action owns the data read.
+    // Neither Full Disk Access nor the Automation grant may trigger an Apple
+    // Notes read on its own. The explicit Connect action owns the data read.
     case "accessibility": accState = .on
     case "automation": autoState = .on
     default: break
@@ -926,37 +926,21 @@ extension SBOnboardingModel {
     case "applenotes":
       Task { [weak self] in
         guard let self else { return }
-        // Full Disk Access covers Notes when it applies; if not, grant a
-        // security-scoped folder bookmark (the real, re-sign-proof connect path).
-        var status = await AppleNotesReaderService.shared.connectionStatus(userInitiated: true)
-        if status.isConnected {
+        // Notes is read over Apple Events, so the only thing to grant is macOS
+        // Automation access. A user-initiated probe is what makes macOS ask;
+        // there is no folder to pick.
+        let status = await AppleNotesReaderService.shared.connectionStatus(userInitiated: true)
+        switch status {
+        case .connected:
           self.contextStates["applenotes"] = "on"
-          return
-        }
-        let pickedPath: String? = await MainActor.run {
-          let panel = NSOpenPanel()
-          panel.canChooseDirectories = true
-          panel.canChooseFiles = false
-          panel.allowsMultipleSelection = false
-          panel.prompt = "Grant access"
-          panel.message = "Pick your Notes data folder so I can read it."
-          panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Group Containers/group.com.apple.notes")
-          return panel.runModal() == .OK ? panel.url?.path : nil
-        }
-        guard let path = pickedPath else {
+        case .needsAccess:
           self.contextStates["applenotes"] = "needsSignIn"
-          return
-        }
-        do {
-          _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: path)
-          status = await AppleNotesReaderService.shared.connectionStatus(
-            selectedFolderPath: path,
-            userInitiated: true
-          )
-          self.contextStates["applenotes"] = status.isConnected ? "on" : "needsSignIn"
-        } catch {
+          self.contextDetails["applenotes"] =
+            "Allow Omi to control Notes — choose Allow when macOS asks, or turn on Notes for Omi "
+            + "in System Settings › Privacy & Security › Automation."
+        case .error(let message, _):
           self.contextStates["applenotes"] = "needsSignIn"
+          self.contextDetails["applenotes"] = message
         }
       }
     case "files":

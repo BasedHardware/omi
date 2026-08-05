@@ -18,7 +18,7 @@ import Foundation
 /// content, account IDs, URL query strings, raw exception text, local file
 /// paths, or browser profile names. `error_class` is always a closed-enum value
 /// derived from the connector-native failure enum
-/// (`GmailFailureClass`/`CalendarFailureClass`/`AppleNotesReaderError.reasonCode`)
+/// (`GmailFailureClass`/`CalendarFailureClass`/`AppleNotesReaderError`)
 /// or `PostHogManager.diagnosticErrorClass` — never a raw `message`/
 /// `errorDescription`/`localizedDescription`.
 ///
@@ -47,11 +47,17 @@ enum IntegrationConnectTelemetry {
     case apps = "apps"
     /// Conversational Second-Brain onboarding "connect what I can see" step.
     case onboarding = "onboarding"
+    /// Unattended `ConnectorRefreshScheduler` tick — no user asked for it and
+    /// nobody is watching. Distinct from `.apps` on purpose: background refreshes
+    /// route through the same `ConnectorImportRunner` and would otherwise be
+    /// counted as user-initiated connects, quietly changing the meaning of every
+    /// existing connect-funnel query.
+    case background = "background"
   }
 
   /// Bounded failure classification. Closed set: the union of the
   /// connector-native failure enums (`GmailFailureClass` /
-  /// `CalendarFailureClass` raw values, `AppleNotesReaderError.reasonCode`) and
+  /// `CalendarFailureClass` raw values, `AppleNotesReaderError` cases) and
   /// `PostHogManager.diagnosticErrorClass` outputs, so one `error_class`
   /// dimension serves every connector. Do not add cases that cannot occur.
   enum ErrorClass: String, CaseIterable {
@@ -91,6 +97,25 @@ enum IntegrationConnectTelemetry {
 
     init(_ calendar: CalendarFailureClass) {
       self = ErrorClass(rawValue: calendar.rawValue) ?? .unknown
+    }
+
+    /// Apple Notes reads Notes.app over Apple Events, so its failures are
+    /// automation-permission, app-availability, and script-transport shaped.
+    /// Mapped from the typed case (not `reasonCode`) so a reason-code rename
+    /// cannot silently reclassify a connect failure as `unknown`.
+    init(_ notes: AppleNotesReaderError) {
+      switch notes {
+      case .automationPermissionDenied, .automationPermissionUndetermined:
+        self = .permission
+      case .notesAppUnavailable:
+        self = .storeNotFound
+      case .readTimedOut:
+        self = .timeout
+      case .malformedResponse:
+        self = .invalidResponse
+      case .readFailed, .passiveReadDeclined:
+        self = .unknown
+      }
     }
   }
 

@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "lockedSkipped": 2,
+  "folderMode": "mapped",
+  "notes": [
+    {
+      "id": "x-coredata://6E7A1F30-1111-4A2B-9C3D-000000000001/ICNote/p2000",
+      "title": "Lorem unlocked 2000",
+      "body": "nostrud ut sint ex incididunt non sit cillum et voluptate velit exercitation tempor adipiscing deserunt commodo nulla ea nostrud duis",
+      "truncated": false,
+      "modifiedAt": "2026-01-01T00:00:00.000Z",
+      "createdAt": "2026-01-01T01:07:00.000Z",
+      "folder": "Notes"
+    },
+    {
+      "id": "x-coredata://6E7A1F30-1111-4A2B-9C3D-000000000001/ICNote/p2001",
+      "title": "Lorem unlocked 2001",
+      "body": "sint laboris sunt enim id fugiat velit mollit consequat ut laborum officia laborum est veniam id et quis sed enim",
+      "truncated": false,
+      "modifiedAt": "2026-01-02T01:07:00.000Z",
+      "createdAt": "2026-01-02T01:07:00.000Z",
+      "folder": "Work"
+    },
+    {
+      "id": "x-coredata://6E7A1F30-1111-4A2B-9C3D-000000000001/ICNote/p2002",
+      "title": "Lorem unlocked 2002",
+      "body": "consequat consectetur officia id exercitation in consequat anim excepteur quis incididunt proident ex nisi et dolore commodo sit nisi quis",
+      "truncated": false,
+      "modifiedAt": "2026-01-03T02:14:00.000Z",
+      "createdAt": "2026-01-03T01:07:00.000Z",
+      "folder": "Recipes"
+    },
+    {
+      "id": "x-coredata://6E7A1F30-1111-4A2B-9C3D-000000000001/ICNote/p2003",
+      "title": "Lorem unlocked 2003",
+      "body": "sunt adipiscing proident lorem consequat ut magna nostrud elit ut quis eiusmod pariatur est deserunt mollit reprehenderit cupidatat minim reprehenderit",
+      "truncated": false,
+      "modifiedAt": "2026-01-04T03:21:00.000Z",
+      "createdAt": "2026-01-04T01:07:00.000Z",
+      "folder": "Reading"
+    }
+  ]
+}

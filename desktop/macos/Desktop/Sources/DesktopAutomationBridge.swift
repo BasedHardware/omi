@@ -2068,63 +2068,35 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "apple_notes_read_probe",
       summary: "Probe Apple Notes access without importing or saving memories",
-      params: ["folderPath", "maxResults", "remember"]
+      params: ["maxResults"]
     ) { params in
+      // Clamped at the boundary even though the manifest probe is count-only:
+      // an out-of-range value must never reach a reader call.
       let maxResults = min(max(intParam(params["maxResults"], default: 20), 1), 250)
-      let remember = boolParam(params["remember"], default: false)
 
-      do {
-        let selectedFolderPath: String?
-        if let requestedFolder = try AppleNotesReadProbe.resolveRequestedFolder(path: params["folderPath"]) {
-          let resolved = try await AppleNotesReaderService.shared.validateSelectedFolder(
-            path: requestedFolder.path,
-            remember: remember
-          )
-          selectedFolderPath = resolved.path
-        } else {
-          selectedFolderPath = nil
-        }
-
-        let status = await AppleNotesReaderService.shared.connectionStatus(
-          maxResults: maxResults,
-          selectedFolderPath: selectedFolderPath,
-          userInitiated: true
-        )
-        switch status {
-        case .connected(let noteCount, _):
-          return [
-            "ok": "true",
-            "classification": "readable",
-            "noteCount": "\(noteCount)",
-            "folderSelected": selectedFolderPath == nil ? "false" : "true",
-          ]
-        case .needsAccess(let message, let reasonCode):
-          return [
-            "ok": "false",
-            "classification": reasonCode,
-            "message": message,
-            "needsFolderSelection": "true",
-          ]
-        case .error(let message, let reasonCode):
-          return [
-            "ok": "false",
-            "classification": reasonCode,
-            "message": message,
-            "needsFolderSelection": "false",
-          ]
-        }
-      } catch let error as AppleNotesReaderError {
+      // `connectionStatus` already classifies every reader failure, so the probe
+      // reports its verdict directly instead of re-deriving one from a throw.
+      switch await AppleNotesReaderService.shared.connectionStatus(userInitiated: true) {
+      case .connected(let noteCount, _):
         return [
-          "ok": "false",
-          "classification": error.reasonCode,
-          "message": error.localizedDescription,
-          "needsFolderSelection": "\(error.shouldPromptForFolderSelection)",
+          "ok": "true",
+          "classification": "readable",
+          "noteCount": "\(noteCount)",
+          "maxResults": "\(maxResults)",
         ]
-      } catch {
+      case .needsAccess(let message, let reasonCode):
         return [
           "ok": "false",
-          "classification": "unknown_error",
-          "message": error.localizedDescription,
+          "classification": reasonCode,
+          "message": message,
+          "needsAutomationPermission": "true",
+        ]
+      case .error(let message, let reasonCode):
+        return [
+          "ok": "false",
+          "classification": reasonCode,
+          "message": message,
+          "needsAutomationPermission": "false",
         ]
       }
     }

@@ -19,6 +19,29 @@ final class ConnectorImportOperationsTests: XCTestCase {
     )
   }
 
+  /// Password-protected notes are invisible to the Notes export, so an import
+  /// that silently covers fewer notes than the library holds must say so.
+  func testAppleNotesCompletionMessageNamesSkippedLockedNotes() {
+    XCTAssertEqual(
+      ConnectorImportOperations.appleNotesCompletionMessage(
+        importedNotes: 832, totalNotes: 834, memoryCount: 40, lockedSkipped: 2),
+      "Imported 832 of 834 notes and saved 40 memories. (2 locked notes skipped)"
+    )
+    XCTAssertEqual(
+      ConnectorImportOperations.appleNotesCompletionMessage(
+        importedNotes: 3, totalNotes: 4, memoryCount: 12, lockedSkipped: 1),
+      "Imported 3 of 4 notes and saved 12 memories. (1 locked note skipped)"
+    )
+  }
+
+  func testAppleNotesCompletionMessageOmitsTheLockedClauseWhenNothingWasSkipped() {
+    XCTAssertEqual(
+      ConnectorImportOperations.appleNotesCompletionMessage(
+        importedNotes: 0, totalNotes: 834, memoryCount: 0, lockedSkipped: 0),
+      "Imported 0 of 834 notes and saved 0 memories."
+    )
+  }
+
   func testStatusLineWithoutNewItems() {
     let line = ConnectorImportOperations.localFilesStatusLine(
       indexedCount: 12, newItems: 0, deniedFolders: [])

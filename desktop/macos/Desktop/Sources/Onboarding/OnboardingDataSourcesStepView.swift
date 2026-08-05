@@ -132,12 +132,14 @@ struct OnboardingDataSourcesStepView: View {
         isDisabled: coordinator.appleNotesInsightCount > 0,
         scanFinished: coordinator.appleNotesInsightsFinished,
         scanFailed: coordinator.appleNotesInsightsFailed,
-        actionTitle: coordinator.appleNotesInsightCount > 0 ? nil : "Select Folder",
+        // No folder to pick any more: connecting means letting macOS ask for
+        // Automation access, which the user-initiated sync triggers.
+        actionTitle: coordinator.appleNotesInsightCount > 0 ? nil : "Connect",
         action: coordinator.appleNotesInsightCount > 0
           ? nil
           : {
             Task {
-              await coordinator.selectAppleNotesFolderAndSync()
+              await coordinator.refreshAppleNotesInsights()
             }
           }
       )

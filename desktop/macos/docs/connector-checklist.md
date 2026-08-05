@@ -56,15 +56,20 @@ Work top to bottom. Don't skip the probe or the fixture test.
       Empty data is not the same as a failed connector.
 - [ ] Clamp probe/read parameters before they cross process or network
       boundaries, and test the boundary behavior.
-- [ ] For file-backed local connectors such as Apple Notes, preserve legacy
-      selected parent folders by resolving them through the same canonical
-      folder logic used for new selections. Treat zero readable items as
-      connected, and keep path/access failures separate from schema/read
-      failures so the UI only reopens folder selection when a new folder can
-      actually fix the problem.
+- [ ] For app-scripted local connectors such as Apple Notes, the recoverable
+      access failure is the macOS **Automation** grant (Apple Events), not a
+      folder grant. There is nothing for the user to pick: keep
+      `automationPermissionDenied` / `automationPermissionUndetermined` distinct
+      from app-unavailable, timeout, and unreadable-response failures, and only
+      the first two may tell the user to allow Omi under System Settings ›
+      Privacy & Security › Automation. Treat zero readable items as connected.
+- [ ] Passive probes must not raise a permission dialog. Check the grant first
+      and refuse to send the event when it is undetermined — sending the event
+      *is* the prompt — so the Apps tab can verify "Connected" on every refresh
+      without stealing focus.
 - [ ] Expose a semantic automation probe (for example
       `apple_notes_read_probe`) that returns the same stable classifications the
-      UI uses, including whether folder selection is an appropriate recovery.
+      UI uses, including `needsAutomationPermission` for the two grant states.
 
 ## 6. Sanitized diagnostics for the corpus
 

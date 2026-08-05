@@ -1415,7 +1415,7 @@ final class DesktopDiagnosticsManager {
     "ble_audio",
     "automation_bridge",
     "transcription_retry",
-    "task_reconcile",
+    "task_reconcile", "connector_sync",
     // Named owners for paths that previously collapsed into `area=other` (#10425):
     // screen-capture health flap, memory device-scope, desktop update policy,
     // out-of-turn TTS, task workflow control, and auth-token storage. Keeping them
@@ -1461,7 +1461,7 @@ final class DesktopDiagnosticsManager {
     "bind_failed",
     "db_backoff",
     "state_divergence",
-    "status_inferred",
+    "status_inferred", "sync_state_unreadable",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {
