@@ -24,6 +24,7 @@ from typing import Any, Mapping, Sequence
 
 import firebase_admin
 from google.cloud import storage
+from google.cloud.firestore import DELETE_FIELD
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
@@ -263,6 +264,21 @@ def _select_rollout_owners(
     return selected
 
 
+def _select_reconcile_owners(
+    owners: Sequence[tuple[str, dict[str, Any]]], release_id: str, target_percent: int
+) -> list[tuple[str, dict[str, Any]]]:
+    """Add user-demanded repairs to the rollout cohort without duplicating owners."""
+    selected = _select_rollout_owners(owners, release_id, target_percent)
+    selected_uids = {uid for uid, _ in selected}
+    selected.extend((uid, vm) for uid, vm in owners if uid not in selected_uids and _start_requested(vm))
+    return selected
+
+
+def _start_requested(vm: Mapping[str, Any]) -> bool:
+    reconcile = vm.get("reconcile")
+    return isinstance(reconcile, Mapping) and bool(reconcile.get("startRequested"))
+
+
 def _canonical_image_ref(value: str) -> str:
     marker = "/compute/v1/"
     return value.split(marker, 1)[1] if marker in value else value.lstrip("/")
@@ -308,6 +324,8 @@ async def _update_reconcile(
     fields: Mapping[str, Any],
     *,
     vm_fields: Mapping[str, Any] | None = None,
+    consume_start_request_at: float | None = None,
+    force_consume_start_request: bool = False,
 ) -> bool:
     return await asyncio.to_thread(
         update_vm_reconcile,
@@ -317,6 +335,8 @@ async def _update_reconcile(
         owner,
         fields,
         vm_fields=vm_fields,
+        consume_start_request_at=consume_start_request_at,
+        force_consume_start_request=force_consume_start_request,
     )
 
 
@@ -348,6 +368,9 @@ async def reconcile_one(
         return ReconcileResult(uid, "drift" if reasons else "ready", ",".join(sorted(set(reasons))))
     reconcile_raw = vm.get("reconcile")
     reconcile_state = reconcile_raw if isinstance(reconcile_raw, Mapping) else {}
+    start_requested = bool(reconcile_state.get("startRequested"))
+    start_requested_at = reconcile_state.get("startRequestedAt") if start_requested else None
+    observed_start_request_at = float(start_requested_at) if isinstance(start_requested_at, (int, float)) else None
     if reconcile_state.get("state") == "quarantined" and reconcile_state.get("releaseId") == release.release_id:
         return ReconcileResult(uid, "quarantined", str(reconcile_state.get("lastError") or "operator action required"))
     if not await asyncio.to_thread(claim_vm_lease, uid, vm_name, auth_token, owner, release.release_id):
@@ -363,6 +386,7 @@ async def reconcile_one(
                 auth_token,
                 owner,
                 {"state": "missing", "lastError": "GCE instance not found", **clear_vm_reconcile_lease_fields()},
+                consume_start_request_at=observed_start_request_at,
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording missing VM")
             return ReconcileResult(uid, "missing", "GCE instance not found")
@@ -382,6 +406,7 @@ async def reconcile_one(
                     "observedBootImage": actual,
                     **clear_vm_reconcile_lease_fields(),
                 },
+                consume_start_request_at=observed_start_request_at,
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording boot-image drift")
             return ReconcileResult(
@@ -422,7 +447,7 @@ async def reconcile_one(
                 return ReconcileResult(uid, "deferred", f"{active} active session(s)")
 
         status = str(instance.get("status") or "UNKNOWN")
-        if not reasons and status in {"TERMINATED", "STOPPED"}:
+        if not reasons and status in {"TERMINATED", "STOPPED"} and not start_requested:
             if not await _update_reconcile(
                 uid,
                 vm_name,
@@ -440,6 +465,7 @@ async def reconcile_one(
                     **clear_vm_reconcile_lease_fields(),
                 },
                 vm_fields={"status": "stopped"},
+                consume_start_request_at=observed_start_request_at,
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording stopped VM")
             return ReconcileResult(uid, "ready", "stopped; idle self-stop preserved")
@@ -498,6 +524,7 @@ async def reconcile_one(
                 "privateIp": private_ip,
                 **({"ip": public_ip} if public_ip else {}),
             },
+            consume_start_request_at=observed_start_request_at,
         ):
             return ReconcileResult(uid, "stale", "owner lease lost before final CAS")
         return ReconcileResult(uid, "ready", release.release_id)
@@ -523,8 +550,15 @@ async def reconcile_one(
                 "retryCount": retry_count,
                 "lastError": type(exc).__name__,
                 "retryAt": retry_at,
-                **clear_vm_reconcile_lease_fields(),
+                # A demand start is the retry's eligibility signal. Retain it
+                # until terminal quarantine so the scheduled reconciler can
+                # honor retryAt without requiring another client request.
+                "lease": DELETE_FIELD,
+                "drainRequested": DELETE_FIELD,
+                "drainRequestedAt": DELETE_FIELD,
             },
+            consume_start_request_at=observed_start_request_at if retry_state == "quarantined" else None,
+            force_consume_start_request=retry_state == "quarantined",
         ):
             return ReconcileResult(uid, "stale", "owner lease lost while recording failure")
         return ReconcileResult(uid, retry_state, type(exc).__name__)
@@ -566,7 +600,8 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
             )
             target_percent, max_concurrency = _rollout_spec(raw_manifest, phase)
             owners = await asyncio.to_thread(_owners)
-            selected = _select_rollout_owners(owners, release.release_id, target_percent)
+            rollout_selected = _select_rollout_owners(owners, release.release_id, target_percent)
+            selected = _select_reconcile_owners(owners, release.release_id, target_percent)
             semaphore = asyncio.Semaphore(max_concurrency)
 
             async def one(uid: str, vm: dict[str, Any]) -> ReconcileResult:
@@ -585,7 +620,11 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
         for result in results:
             counts[result.state] = counts.get(result.state, 0) + 1
         if not dry_run:
-            await asyncio.to_thread(_advance_rollout, environment, release.release_id, phase, results, len(selected))
+            rollout_uids = {uid for uid, _ in rollout_selected}
+            rollout_results = [result for result in results if result.uid in rollout_uids]
+            await asyncio.to_thread(
+                _advance_rollout, environment, release.release_id, phase, rollout_results, len(rollout_selected)
+            )
         logger.info("Agent VM reconciliation complete: %s", counts)
         return results
     finally:

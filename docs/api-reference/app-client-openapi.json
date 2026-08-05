@@ -25497,7 +25497,7 @@
     },
     "/v1/agent/vm-ensure": {
       "post": {
-        "description": "Check VM status; if stopped/terminated, restart it in the background.",
+        "description": "Queue a fenced reconciliation when the persisted VM is unavailable.",
         "operationId": "ensure_vm_v1_agent_vm_ensure_post",
         "parameters": [
           {

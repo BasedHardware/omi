@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 import jobs.agent_vm_reconciler as reconciler
+import services.agent_vm_lifecycle as lifecycle
 from services.agent_vm_lifecycle import AgentVmRelease
 
 RELEASE = AgentVmRelease.from_mapping(
@@ -85,6 +86,76 @@ def test_reconcile_preserves_a_healthy_stopped_vm(monkeypatch):
     assert "idle self-stop preserved" in result.detail
     assert FakeApi.starts == 0
     assert updates[-1]["vm_fields"] == {"status": "stopped"}
+
+
+def test_reconcile_starts_a_current_vm_only_after_fenced_start_request(monkeypatch):
+    class StartRequestedApi:
+        starts = 0
+        waits: list[tuple[str, str, AgentVmRelease]] = []
+
+        def __init__(self, _project: str, _zone: str) -> None:
+            self.instance = {
+                "status": "STOPPED",
+                "metadata": {},
+                "serviceAccounts": [],
+                "disks": [{"boot": True, "source": "projects/project/zones/us-central1-a/disks/omi-agent-user"}],
+                "networkInterfaces": [{"networkIP": "10.128.0.9", "accessConfigs": [{"natIP": "34.1.2.3"}]}],
+            }
+
+        async def get_instance(self, _vm_name: str) -> dict[str, Any] | None:
+            return self.instance
+
+        async def request(self, _method: str, _url: str) -> Any:
+            class Response:
+                @staticmethod
+                def raise_for_status() -> None:
+                    return None
+
+                @staticmethod
+                def json() -> dict[str, str]:
+                    return {"sourceImage": "projects/project/global/images/omi-agent-20260805"}
+
+            return Response()
+
+        async def start(self, _vm_name: str) -> None:
+            type(self).starts += 1
+            self.instance["status"] = "RUNNING"
+
+        def private_instance_ip(self, _instance: dict[str, Any]) -> str:
+            return "10.128.0.9"
+
+        def instance_ip(self, _instance: dict[str, Any]) -> str:
+            return "34.1.2.3"
+
+        async def wait_for_runtime(self, private_ip: str, auth_token: str, release: AgentVmRelease) -> None:
+            type(self).waits.append((private_ip, auth_token, release))
+
+    updates: list[dict[str, Any]] = []
+    StartRequestedApi.starts = 0
+    StartRequestedApi.waits = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", StartRequestedApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: [])
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *args, **kwargs: updates.append((args, kwargs)) or True
+    )
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {"vmName": "omi-agent-user", "authToken": "token", "reconcile": {"startRequested": True}},
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "ready"
+    assert StartRequestedApi.starts == 1
+    assert StartRequestedApi.waits == [("10.128.0.9", "token", RELEASE)]
+    assert updates[-1][0][4]["state"] == "ready"
+    assert updates[-1][1]["vm_fields"] == {"status": "ready", "privateIp": "10.128.0.9", "ip": "34.1.2.3"}
 
 
 def test_boot_image_drift_requires_operator_recreate_without_mutating_vm(monkeypatch):
@@ -215,6 +286,33 @@ def test_small_fleet_selects_one_deterministic_sentinel(monkeypatch):
     assert first == second
 
 
+def test_start_requests_bypass_the_release_cohort_without_displacing_it(monkeypatch):
+    owners = [
+        ("cohort", {"vmName": "cohort"}),
+        ("demand", {"vmName": "demand", "reconcile": {"startRequested": True}}),
+    ]
+    monkeypatch.setattr(reconciler, "rollout_selected", lambda uid, *_args: uid == "cohort")
+
+    assert reconciler._select_reconcile_owners(owners, RELEASE.release_id, 1) == owners
+
+
+def test_terminal_reconcile_write_preserves_a_newer_start_request():
+    terminal_fields = lifecycle.clear_vm_reconcile_lease_fields()
+
+    preserved = lifecycle._reconcile_update_fields(terminal_fields, {"startRequestedAt": 20.0}, 10.0)
+    consumed = lifecycle._reconcile_update_fields(terminal_fields, {"startRequestedAt": 10.0}, 10.0)
+
+    assert "startRequested" not in preserved
+    assert "startRequestedAt" not in preserved
+    assert consumed["startRequested"] is lifecycle.DELETE_FIELD
+    assert consumed["startRequestedAt"] is lifecycle.DELETE_FIELD
+
+
+def test_active_lifecycle_lease_blocks_new_session_admission():
+    assert lifecycle.reconcile_requested({"reconcile": {"lease": {"expiresAt": 101}}}, now=100)
+    assert not lifecycle.reconcile_requested({"reconcile": {"lease": {"expiresAt": 100}}}, now=100)
+
+
 def test_recognized_rollout_phase_honors_manifest_and_environment_overrides(monkeypatch):
     assert reconciler._rollout_spec(
         {"rollout": {"phase": "sentinel", "targetPercent": 7, "maxConcurrency": 3}}, "sentinel"
@@ -330,6 +428,39 @@ def test_new_release_starts_quarantined_vm_with_a_fresh_retry_budget(monkeypatch
 
     assert result.state == "retry"
     assert calls[-1][0][4]["retryCount"] == 1
+
+
+def test_demanded_retry_retains_start_request_until_terminal_quarantine(monkeypatch):
+    class FailingApi:
+        def __init__(self, _project: str, _zone: str) -> None:
+            pass
+
+        async def get_instance(self, _vm_name: str) -> dict[str, Any] | None:
+            raise RuntimeError("provider unavailable")
+
+    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", FailingApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "update_vm_reconcile", lambda *args, **kwargs: calls.append((args, kwargs)) or True)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "authToken": "token",
+                "reconcile": {"releaseId": RELEASE.release_id, "startRequested": True, "startRequestedAt": 10.0},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "retry"
+    fields, kwargs = calls[-1][0][4], calls[-1][1]
+    assert "startRequested" not in fields
+    assert kwargs["consume_start_request_at"] is None
 
 
 def test_same_release_quarantine_remains_visible_without_reclaim(monkeypatch):
