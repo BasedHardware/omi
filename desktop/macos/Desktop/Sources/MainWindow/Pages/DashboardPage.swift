@@ -467,11 +467,11 @@ struct DashboardPage: View {
               ProgressView()
               Text("Loading source...")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.primary)
             }
             .padding(OmiSpacing.xl)
-            .background(Ink.rowFill)
-            .cornerRadius(OmiChrome.smallControlRadius)
+            // A modal over the transcript is a free-floating object: real glass.
+            .glassFloatingBar(cornerRadius: OmiChrome.smallControlRadius)
           }
         }
       }
@@ -694,9 +694,11 @@ struct DashboardPage: View {
       let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
       let panelWidth = homeStageContentWidth(for: proxy.size.width)
 
+      // No canvas of its own. The shell's `glassShellGround()` is the one ground in this
+      // window; Home used to paint a near-black gradient over it edge to edge, which
+      // survived the palette conversion and left every `Ink` colour on the page — all of
+      // which resolve *dark* on the light-pinned panel — drawn near-black on near-black.
       ZStack(alignment: .topTrailing) {
-        HomeCanvasBackground()
-
         // Clicking anywhere outside the chat / connect panel collapses
         // back to the resting surface (panels and the ask bar consume their
         // own clicks above this catcher). When chat history exists, chat IS
@@ -873,10 +875,10 @@ struct DashboardPage: View {
           .padding(.horizontal, OmiSpacing.md)
           .frame(height: 34)
           .frame(maxWidth: .infinity)
-          .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(HomePalette.tile.opacity(0.5)))
+          .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Ink.rowFill))
           .overlay(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-              .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
+              .stroke(Ink.separator, lineWidth: 1)
           )
           .contentShape(.rect(cornerRadius: 11))
         }
@@ -1197,11 +1199,11 @@ struct DashboardPage: View {
     .padding(OmiSpacing.lg)
     .background(
       RoundedRectangle(cornerRadius: 28, style: .continuous)
-        .fill(HomePalette.panel.opacity(0.94))
+        .fill(Ink.rowFillHover)
     )
     .overlay(
       RoundedRectangle(cornerRadius: 28, style: .continuous)
-        .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+        .stroke(Ink.separator, lineWidth: 1)
     )
     .overlay(alignment: .topTrailing) {
       HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
@@ -1209,7 +1211,7 @@ struct DashboardPage: View {
       }
       .padding(OmiSpacing.md)
     }
-    .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
+    .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
     .frame(width: homeStagePanelWidth(for: stageWidth))
   }
 
@@ -1219,11 +1221,11 @@ struct DashboardPage: View {
       .frame(maxWidth: .infinity, alignment: .topLeading)
       .background(
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-          .fill(Color.white.opacity(0.025))
+          .fill(Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-          .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
   }
 
@@ -1507,9 +1509,9 @@ struct DashboardPage: View {
         .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
         .overlay(
           RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
-            .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
+        .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
         .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
         .transition(.scale(scale: 0.95).combined(with: .opacity))
         .accessibilityAddTraits(.isModal)
@@ -1555,9 +1557,9 @@ struct DashboardPage: View {
           .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
           .overlay(
             RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
-              .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
+              .stroke(Ink.separator, lineWidth: 1)
           )
-          .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
+          .shadow(color: .black.opacity(0.12), radius: 20, y: 8)
           .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
           .transition(.scale(scale: 0.96).combined(with: .opacity))
           .accessibilityAddTraits(.isModal)
@@ -2356,20 +2358,16 @@ struct HomeAskBar: View {
     }
     .background(
       RoundedRectangle(cornerRadius: 29, style: .continuous)
-        .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
+        .fill(HomeAskBarPalette.wellFill(isEngaged: isHovering || isFocused))
     )
     .overlay {
-      if isDropTargeted {
-        RoundedRectangle(cornerRadius: 29, style: .continuous)
-          .stroke(Color.white.opacity(0.42), lineWidth: 1)
-      } else {
-        RoundedRectangle(cornerRadius: 29, style: .continuous)
-          .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
-      }
+      RoundedRectangle(cornerRadius: 29, style: .continuous)
+        .stroke(
+          HomeAskBarPalette.wellStroke(isFocused: isFocused, isDropTargeted: isDropTargeted),
+          lineWidth: isDropTargeted ? 1.5 : 1)
     }
     // Keep the composer visually separate without casting a large, opaque bezel
     // into the transcript. These are intentionally only 10% of the old shadow.
-    .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.011 : 0.0045), radius: isFocused ? 2.2 : 1.6)
     .shadow(color: .black.opacity(isFocused ? 0.045 : 0.034), radius: 2.4, y: 1)
     .contentShape(.rect(cornerRadius: 29))
     .onTapGesture {
@@ -2446,11 +2444,11 @@ struct HomeAskBar: View {
     Button(action: handleSubmit) {
       ZStack {
         Circle()
-          .fill(Color.white)
+          .fill(HomeAskBarPalette.primaryFill)
 
         Image(systemName: "arrow.up")
           .scaledFont(size: OmiType.body, weight: .bold)
-          .foregroundStyle(Color.black)
+          .foregroundStyle(HomeAskBarPalette.primaryLabel)
       }
       .frame(width: 34, height: 34)
       .contentShape(Circle())
@@ -2460,11 +2458,13 @@ struct HomeAskBar: View {
     .accessibilityLabel("Send message")
   }
 
+  // Same weight as Send, because it is the same slot: a filled disc that turns into a wash the
+  // moment a turn starts is a button that disappears exactly when it becomes the only one.
   private var stopButton: some View {
     Button(action: onStop) {
       ZStack {
         Circle()
-          .fill(Color.white.opacity(0.14))
+          .fill(HomeAskBarPalette.primaryFill)
 
         if isStopping {
           ProgressView()
@@ -2473,7 +2473,7 @@ struct HomeAskBar: View {
         } else {
           Image(systemName: "square.fill")
             .scaledFont(size: OmiType.micro, weight: .bold)
-            .foregroundStyle(HomePalette.ink)
+            .foregroundStyle(HomeAskBarPalette.primaryLabel)
         }
       }
       .frame(width: 34, height: 34)
@@ -2512,12 +2512,15 @@ struct HomeAskBarConnectButton: View {
         Text("Connect")
           .scaledFont(size: OmiType.caption, weight: .semibold)
       }
-      .foregroundStyle(isActive ? Color.black : HomePalette.ink)
+      .foregroundStyle(isActive ? HomeAskBarPalette.primaryLabel : HomeAskBarPalette.secondaryLabel)
       .padding(.horizontal, OmiSpacing.md)
       .frame(height: 34)
       .background(
         Capsule(style: .continuous)
-          .fill(isActive ? Color.white : Color.white.opacity(isHovering ? 0.14 : 0.07))
+          .fill(
+            isActive
+              ? HomeAskBarPalette.primaryFill
+              : HomeAskBarPalette.secondaryFill(isHovering: isHovering))
       )
       .overlay(
         Capsule(style: .continuous)
@@ -2575,11 +2578,11 @@ private struct HomeKnowsRowView: View {
       .frame(maxWidth: .infinity)
       .background(
         RoundedRectangle(cornerRadius: 13, style: .continuous)
-          .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.62))
+          .fill(isHovering ? HomePalette.tileHover : Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 13, style: .continuous)
-          .stroke(HomePalette.hairline.opacity(isHovering ? 1 : 0.55), lineWidth: 1)
+          .stroke(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1)
       )
       .contentShape(.rect(cornerRadius: 13))
     }
@@ -2655,22 +2658,6 @@ private struct HomeKnowsRowView: View {
   ]
 }
 
-private struct HomeCanvasBackground: View {
-  var body: some View {
-    // A clean, flat neutral-dark canvas — no muddy glow. One very soft
-    // top-to-bottom lift keeps the surface from reading dead-flat.
-    LinearGradient(
-      colors: [
-        Color(red: 0.056, green: 0.058, blue: 0.065),
-        Color(red: 0.040, green: 0.042, blue: 0.048),
-      ],
-      startPoint: .top,
-      endPoint: .bottom
-    )
-    .ignoresSafeArea()
-  }
-}
-
 private struct HomePrimaryRouteButton: View {
   let title: String
   let brand: ConnectorBrand
@@ -2687,15 +2674,15 @@ private struct HomePrimaryRouteButton: View {
           .scaledFont(size: OmiType.body, weight: .semibold)
           .lineLimit(1)
       }
-      .foregroundStyle(.white)
+      .foregroundStyle(HomeAskBarPalette.primaryLabel)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .frame(minWidth: 118)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(HomePalette.green.opacity(isHovering ? 0.92 : 1))
+          .fill(HomeAskBarPalette.primaryFill.opacity(isHovering ? 0.88 : 1))
       )
-      .shadow(color: HomePalette.green.opacity(isHovering ? 0.22 : 0.12), radius: 12, y: 5)
+      .shadow(color: .black.opacity(isHovering ? 0.12 : 0.08), radius: 10, y: 4)
       .contentShape(.rect(cornerRadius: OmiChrome.smallControlRadius))
     }
     .buttonStyle(.plain)
@@ -2744,11 +2731,11 @@ private struct HomeInlineAction: View {
       .padding(.vertical, OmiSpacing.sm)
       .background(
         Capsule(style: .continuous)
-          .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.72))
+          .fill(isHovering ? HomePalette.tileHover : Ink.rowFill)
       )
       .overlay(
         Capsule(style: .continuous)
-          .stroke(isHovering ? HomePalette.green.opacity(0.3) : HomePalette.hairline.opacity(0.42), lineWidth: 1)
+          .stroke(isHovering ? HomePalette.green.opacity(0.3) : Ink.separator, lineWidth: 1)
       )
       .contentShape(Capsule())
     }
@@ -2862,9 +2849,9 @@ private struct HomeSourceIconTile: View {
       )
       .overlay(
         RoundedRectangle(cornerRadius: 17, style: .continuous)
-          .stroke(isHovering ? HomePalette.glow.opacity(0.58) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
+          .stroke(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1)
       )
-      .shadow(color: isHovering ? HomePalette.glow.opacity(0.16) : .clear, radius: 14)
+      .shadow(color: .black.opacity(isHovering ? 0.10 : 0), radius: 12, y: 4)
       .contentShape(.rect(cornerRadius: 17))
     }
     .buttonStyle(.plain)
@@ -2881,7 +2868,7 @@ private struct HomeSourceIconTile: View {
     } else if let systemImage {
       ZStack {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(Color.white.opacity(0.05))
+          .fill(Ink.rowFill)
         Image(systemName: systemImage)
           .scaledFont(size: 19, weight: .semibold)
           .foregroundStyle(HomePalette.secondary)
@@ -2898,10 +2885,10 @@ private struct HomeOmiDeviceIcon: View {
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .fill(Color.white.opacity(0.05))
+        .fill(Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
 
       if let deviceImage = OmiDeviceImage.shared {
@@ -3014,9 +3001,9 @@ private struct HomeDataSourceCard: View {
       )
       .overlay(
         RoundedRectangle(cornerRadius: 15, style: .continuous)
-          .stroke(isHovering ? HomePalette.glow.opacity(0.5) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
+          .stroke(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1)
       )
-      .shadow(color: isHovering ? HomePalette.glow.opacity(0.12) : .clear, radius: 12)
+      .shadow(color: .black.opacity(isHovering ? 0.08 : 0), radius: 10, y: 3)
       .contentShape(.rect(cornerRadius: 15))
     }
     .buttonStyle(.plain)
@@ -3031,7 +3018,7 @@ private struct HomeDataSourceCard: View {
     } else if let systemImage {
       ZStack {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(Color.white.opacity(0.04))
+          .fill(Ink.rowFill)
         Image(systemName: systemImage)
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundStyle(HomePalette.secondary)
@@ -3146,7 +3133,7 @@ private struct HomeAIChoiceButton: View {
   private var buttonStroke: some View {
     RoundedRectangle(cornerRadius: 15, style: .continuous)
       .stroke(
-        HomePalette.hairline.opacity(isHovering ? 1 : 0.9),
+        isHovering ? Ink.hairline : Ink.separator,
         lineWidth: 1
       )
   }
@@ -3166,10 +3153,10 @@ private struct HomeOmiMarkIcon: View {
   var body: some View {
     ZStack {
       RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .fill(Color.white.opacity(0.08))
+        .fill(Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
 
       if let image = Self.markImage {
@@ -3226,7 +3213,7 @@ private struct HomeOrbitButton: View {
           if let badge {
             Text(badge)
               .scaledFont(size: 8, weight: .bold)
-              .foregroundStyle(.white)
+              .foregroundStyle(HomeAskBarPalette.primaryLabel)
               .padding(.horizontal, OmiSpacing.xxs)
               .padding(.vertical, OmiSpacing.hairline)
               .background(Capsule(style: .continuous).fill(HomePalette.green))
@@ -3286,11 +3273,11 @@ private struct HomeDestinationCapsule: View {
       .padding(OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: 15, style: .continuous)
-          .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.82))
+          .fill(isHovering ? HomePalette.tileHover : Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 15, style: .continuous)
-          .stroke(isHovering ? HomePalette.green.opacity(0.32) : HomePalette.hairline.opacity(0.45), lineWidth: 1)
+          .stroke(isHovering ? HomePalette.green.opacity(0.32) : Ink.separator, lineWidth: 1)
       )
       .contentShape(.rect(cornerRadius: 15))
     }
@@ -3335,10 +3322,10 @@ private struct HomeCommandCard: View {
           }
           .frame(maxWidth: .infinity)
           .padding(.vertical, OmiSpacing.sm)
-          .foregroundStyle(.white)
+          .foregroundStyle(HomeAskBarPalette.primaryLabel)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-              .fill(HomePalette.green)
+              .fill(HomeAskBarPalette.primaryFill)
           )
         }
         .buttonStyle(.plain)
@@ -3369,7 +3356,7 @@ private struct HomeCommandCard: View {
     )
     .overlay(
       RoundedRectangle(cornerRadius: 13, style: .continuous)
-        .stroke(HomePalette.hairline.opacity(0.72), lineWidth: 1)
+        .stroke(Ink.separator, lineWidth: 1)
     )
     .frame(maxWidth: 720)
   }
@@ -3444,7 +3431,7 @@ private struct HomeSourceTile: View {
       )
       .overlay(
         RoundedRectangle(cornerRadius: 9, style: .continuous)
-          .stroke(isHovering ? HomePalette.green.opacity(0.4) : HomePalette.hairline.opacity(0.3), lineWidth: 1)
+          .stroke(isHovering ? HomePalette.green.opacity(0.4) : Ink.separator, lineWidth: 1)
       )
       .contentShape(.rect(cornerRadius: 9))
     }
@@ -3501,7 +3488,7 @@ private struct HomeMemoryMetricCard: View {
       HStack(spacing: OmiSpacing.md) {
         ZStack {
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .fill(Color.white.opacity(0.055))
+            .fill(Ink.rowFill)
 
           Image(systemName: systemImage)
             .scaledFont(size: OmiType.subheading, weight: .semibold)
@@ -3526,7 +3513,7 @@ private struct HomeMemoryMetricCard: View {
 
         Image(systemName: "arrow.up.right")
           .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundStyle(isHovering ? HomePalette.glow : HomePalette.faint)
+          .foregroundStyle(isHovering ? Ink.primary : Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.md)
       .frame(height: 76)
@@ -3537,7 +3524,7 @@ private struct HomeMemoryMetricCard: View {
       )
       .overlay(
         RoundedRectangle(cornerRadius: 17, style: .continuous)
-          .stroke(isHovering ? HomePalette.glow.opacity(0.56) : HomePalette.hairline.opacity(0.86), lineWidth: 1)
+          .stroke(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1)
       )
       .contentShape(.rect(cornerRadius: 17))
     }
@@ -3580,7 +3567,7 @@ private struct HomeMetricPill: View {
       )
       .overlay(
         Capsule(style: .continuous)
-          .stroke(isHovering ? HomePalette.green.opacity(0.34) : HomePalette.hairline.opacity(0.64), lineWidth: 1)
+          .stroke(isHovering ? HomePalette.green.opacity(0.34) : Ink.separator, lineWidth: 1)
       )
       .contentShape(Capsule())
     }
@@ -3607,7 +3594,7 @@ private struct HomeGlassPanel<Content: View>: View {
       )
       .overlay(
         RoundedRectangle(cornerRadius: 22, style: .continuous)
-          .stroke(HomePalette.hairline.opacity(0.8), lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
       .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
   }
@@ -3877,7 +3864,7 @@ private struct HomeDestinationRow: View {
       .stroke(
         prominence == .primary
           ? HomePalette.green.opacity(isHovering ? 0.42 : 0.24)
-          : HomePalette.hairline.opacity(isHovering ? 0.7 : 0.4),
+          : isHovering ? Ink.hairline : Ink.separator,
         lineWidth: 1
       )
   }
@@ -3921,11 +3908,11 @@ private struct HomeMetricTile: View {
       .frame(minHeight: 86, alignment: .topLeading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .fill(Color.white.opacity(isHovering ? 0.08 : 0.04))
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-          .stroke(isHovering ? accent.opacity(0.34) : Color.white.opacity(0.07), lineWidth: 1)
+          .stroke(isHovering ? accent.opacity(0.34) : Ink.separator, lineWidth: 1)
       )
       .contentShape(.rect(cornerRadius: OmiChrome.controlRadius))
     }
@@ -4008,7 +3995,7 @@ struct HomeStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.16 : 0.10)
     }
-    return isHovering ? HomePalette.tile.opacity(0.6) : Color.clear
+    return isHovering ? Ink.rowFill : Color.clear
   }
 
   private var statusStroke: Color {
@@ -4018,7 +4005,7 @@ struct HomeStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.54 : 0.38)
     }
-    return HomePalette.hairline.opacity(isHovering ? 0.6 : 0.0)
+    return isHovering ? Ink.hairline : Ink.separator
   }
 }
 
@@ -4082,7 +4069,7 @@ struct HomeListeningStatusButton: View {
       // resting pill compact.
       if isHovering {
         Rectangle()
-          .fill(HomePalette.hairline.opacity(0.65))
+          .fill(Ink.separator)
           .frame(width: 1, height: 18)
           .transition(.opacity)
 
@@ -4125,7 +4112,7 @@ struct HomeListeningStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.16 : 0.10)
     }
-    return isHovering ? HomePalette.tile.opacity(0.6) : Color.clear
+    return isHovering ? Ink.rowFill : Color.clear
   }
 
   private var statusStroke: Color {
@@ -4135,7 +4122,7 @@ struct HomeListeningStatusButton: View {
     if status.isBlocked {
       return status.indicator.opacity(isHovering ? 0.54 : 0.38)
     }
-    return HomePalette.hairline.opacity(isHovering ? 0.6 : 0.0)
+    return isHovering ? Ink.hairline : Ink.separator
   }
 }
 
@@ -4158,7 +4145,7 @@ private struct HomeIconActionButton: View {
         )
         .overlay(
           Circle()
-            .stroke(HomePalette.hairline.opacity(isHovering ? 0.8 : 0.58), lineWidth: 1)
+            .stroke(isHovering ? Ink.hairline : Ink.separator, lineWidth: 1)
         )
         .contentShape(Circle())
     }

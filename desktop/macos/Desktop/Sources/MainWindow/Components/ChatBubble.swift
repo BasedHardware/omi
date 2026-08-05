@@ -261,9 +261,10 @@ struct ChatBubble: View {
         if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
           if isExpanded {
             Button(action: { isExpanded.toggle() }) {
+              // Pairs with `showMoreButton`; left `.white`, it vanished on the light panel.
               Text("Show less")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.accent)
             }
             .buttonStyle(.plain)
           } else if message.sender == .user, shouldTruncate {
@@ -312,13 +313,6 @@ struct ChatBubble: View {
           ? Ink.rowFillHover : Color.clear
       )
       .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
-      .overlay(
-        RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous)
-          .strokeBorder(
-            message.sender == .user ? Color.clear : Color.clear,
-            lineWidth: 1
-          )
-      )
       .padding(.top, OmiSpacing.hairline)
   }
 
@@ -350,10 +344,6 @@ struct ChatBubble: View {
           // An assistant block reads directly on the panel: the glass is the ground.
           .background(Color.clear)
           .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
-          .overlay(
-            RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous)
-              .strokeBorder(Color.clear, lineWidth: 1)
-          )
           .padding(.top, OmiSpacing.hairline)
       )
     case .toolCalls(_, let calls):

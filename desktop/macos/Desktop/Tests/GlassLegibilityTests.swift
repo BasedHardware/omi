@@ -190,6 +190,101 @@ final class GlassLegibilityTests: XCTestCase {
     )
   }
 
+  // MARK: - Home: the page that kept its own ground
+
+  func testHomePaintsNoGroundOfItsOwn() {
+    // The reported defect. Home's palette was mapped onto `Ink` — so every colour on the page
+    // resolved *dark* against the light-pinned panel — but the page still painted a near-black
+    // canvas edge to edge underneath them (`HomeCanvasBackground`, a hardcoded 0.056/0.058/0.065
+    // gradient with `.ignoresSafeArea()`). Dark type on a dark canvas inside a light window: the
+    // whole transcript, the greeting, the knows list and the connect tray were present, hit-
+    // testable, and unreadable.
+    //
+    // Stated as "the page is transparent" rather than as a contrast ratio because that is the
+    // actual contract — `glassShellGround()` owns the one ground in this window, and a second
+    // opaque ground is wrong even on the days it happens to be light enough to read on.
+    XCTAssertEqual(
+      resolved(HomePalette.paper).alphaComponent, 0,
+      """
+      Home is painting a ground of its own. The window already has exactly one \
+      (`glassShellGround`); a page that paints a second decides the colour every `Ink` token on \
+      it is read against, and `Ink` is resolving for the panel's light appearance, not for this.
+      """
+    )
+  }
+
+  /// **Static checker, not behavioural coverage.** It reads source rather than running it, and it
+  /// is here because the behavioural assertion above cannot reach the defect it is paired with:
+  /// `HomePalette.paper` was *already* `Color.clear` when Home went dark. The ground came from a
+  /// second view stacked under the page with a literal RGB gradient in it, and no token that any
+  /// test could resolve ever changed. A component-scoped tripwire on the literal is the only thing
+  /// that would have failed on that commit.
+  ///
+  /// Scoped to Home's own file and to `Color(red:` specifically: a page hosted on the panel has no
+  /// business mixing its own opaque colour at all, and every legitimate surface on it is a token.
+  func testStaticCheck_HomeMixesNoColourLiteralOfItsOwn() {
+    let home = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()  // Tests
+      .deletingLastPathComponent()  // Desktop
+      .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
+    guard let source = try? String(contentsOf: home, encoding: .utf8) else {
+      return XCTFail("Could not read DashboardPage.swift at \(home.path)")
+    }
+    XCTAssertFalse(
+      source.contains("Color(red:"),
+      """
+      Home mixes a colour literal. This page is hosted on the shell's glass and every surface on \
+      it has to be an `Ink`/`PageGlass` token, because only a token tracks the panel's pinned \
+      appearance. The literal that shipped here was a near-black canvas under a page whose type \
+      had already been converted to resolve dark.
+      """
+    )
+  }
+
+  func testHomeProseAndTheAskBarsFilledButtonsAreReadableWhereTheyAreDrawn() {
+    // Home's two rungs land straight on the panel now that the canvas is gone.
+    for (name, color) in [("ink", HomePalette.ink), ("secondary", HomePalette.secondary)] {
+      XCTAssertGreaterThanOrEqual(
+        contrastOnGlass(color), 4.5,
+        "HomePalette.\(name) fails WCAG AA on the glass Home is actually drawn on.")
+    }
+
+    // The ask bar's Send / Stop / active-Connect were a white disc with a black glyph and a white
+    // capsule with black text — a filled control picked for a near-black page, which on light
+    // glass is a control you cannot find wearing a label you can read. Both halves have to work:
+    // the label against its own fill, and the fill against the panel it sits on.
+    XCTAssertGreaterThanOrEqual(
+      contrast(HomeAskBarPalette.primaryLabel, on: HomeAskBarPalette.primaryFill), 4.5,
+      "The ask bar's filled action button cannot read its own label.")
+    XCTAssertGreaterThanOrEqual(
+      contrastOnGlass(HomeAskBarPalette.primaryFill), 3.0,
+      """
+      The ask bar's primary action does not clear the 3:1 non-text bar against the panel, so the \
+      button itself is invisible even when the glyph on it is not.
+      """
+    )
+    XCTAssertGreaterThanOrEqual(
+      contrast(HomeAskBarPalette.secondaryLabel, on: HomeAskBarPalette.secondaryFill(isHovering: false)),
+      4.5,
+      "Connect-at-rest cannot read its own label.")
+  }
+
+  func testTheAskBarsRestAndEngagedStatesAreTellableApart() {
+    // The well was one wash at two alphas eight percent apart — about 0.4/255 once composited,
+    // i.e. a focus state with no visible difference. Hover and focus are the only feedback this
+    // control has; if they collapse, the bar never looks focused.
+    let rest = composite(resolved(HomeAskBarPalette.wellFill(isEngaged: false)), over: glassGround)
+    let engaged = composite(resolved(HomeAskBarPalette.wellFill(isEngaged: true)), over: glassGround)
+    XCTAssertGreaterThan(
+      abs(relativeLuminance(rest) - relativeLuminance(engaged)), 0.005,
+      "The ask bar's resting and engaged wells composite to the same colour.")
+
+    XCTAssertNotEqual(
+      HomeAskBarPalette.wellStroke(isFocused: true, isDropTargeted: false),
+      HomeAskBarPalette.wellStroke(isFocused: false, isDropTargeted: false),
+      "The focus ring is the same colour as the resting edge; focus is invisible.")
+  }
+
   func testTheSeparatorIsAVisibleEdgeOnTheLightPanel() {
     // Several converted files drew their borders as `Color.white.opacity(0.05…0.18)` — hairlines
     // that existed only because the page behind them was near-black. On glass they were nothing.
