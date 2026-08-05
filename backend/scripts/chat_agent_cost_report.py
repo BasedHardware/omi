@@ -36,9 +36,10 @@ DEFAULT_DAYS = 7
 MICRO_USD_PER_USD = 1_000_000
 TOKENS_PER_MILLION = 1_000_000
 
-# Cache writes are billed at a TTL-dependent multiple of the input rate, so the
-# 5-minute and 1-hour components are never collapsed into one number.
+# Cache writes are billed at a TTL-dependent rate, so the 5-minute, 30-minute,
+# and 1-hour components are never collapsed into one number.
 TTL_FIVE_MINUTES = '5m'
+TTL_THIRTY_MINUTES = '30m'
 TTL_ONE_HOUR = '1h'
 
 
@@ -63,6 +64,7 @@ class Totals:
     cached_input_tokens: int = 0
     uncached_input_tokens: int = 0
     cache_write_5m_tokens: int = 0
+    cache_write_30m_tokens: int = 0
     cache_write_1h_tokens: int = 0
     cache_write_untagged_tokens: int = 0
     output_tokens: int = 0
@@ -114,6 +116,8 @@ def accumulate(totals: Totals, row: Mapping[str, Any]) -> None:
     ttl = _str_field(row, 'cache_write_ttl', '')
     if ttl == TTL_ONE_HOUR:
         totals.cache_write_1h_tokens += cache_write
+    elif ttl == TTL_THIRTY_MINUTES:
+        totals.cache_write_30m_tokens += cache_write
     elif ttl == TTL_FIVE_MINUTES:
         totals.cache_write_5m_tokens += cache_write
     else:
@@ -151,6 +155,11 @@ def cost_components(totals: Totals, rates: Rates) -> list[Component]:
         Component(
             'uncached input', totals.uncached_input_tokens, _cost(totals.uncached_input_tokens, rates.input_micro_usd)
         ),
+        Component(
+            'cache write 30m',
+            totals.cache_write_30m_tokens,
+            _cost(totals.cache_write_30m_tokens, rates.cache_write_micro_usd),
+        ),
         Component('cache write 1h', untagged_and_1h, _cost(untagged_and_1h, rates.cache_write_1h_micro_usd)),
         Component(
             'cache write 5m',
@@ -172,7 +181,12 @@ def write_read_ratio(totals: Totals) -> float | None:
     reads = totals.cached_input_tokens
     if reads <= 0:
         return None
-    writes = totals.cache_write_1h_tokens + totals.cache_write_5m_tokens + totals.cache_write_untagged_tokens
+    writes = (
+        totals.cache_write_1h_tokens
+        + totals.cache_write_30m_tokens
+        + totals.cache_write_5m_tokens
+        + totals.cache_write_untagged_tokens
+    )
     return writes / reads
 
 
@@ -311,7 +325,7 @@ def render(totals: Totals, rates: Rates, feature: str) -> str:
     if totals.cache_write_untagged_tokens:
         lines.append(
             f'  {totals.cache_write_untagged_tokens:,} cache-write token(s) had no single TTL '
-            "('mixed' or absent); priced at the 1h rate."
+            "('mixed', absent, or unrecognized); priced at the 1h rate."
         )
     return '\n'.join(lines)
 

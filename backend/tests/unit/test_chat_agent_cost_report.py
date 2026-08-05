@@ -125,6 +125,34 @@ def test_untagged_cache_writes_are_reported_and_priced_at_the_one_hour_rate(repo
     assert "had no single TTL" in report.render(totals, rates, 'chat_agent')
 
 
+def test_luna_30_minute_cache_writes_use_the_luna_write_rate(report) -> None:
+    """The managed Luna route reports explicit 30-minute writes, not Anthropic TTLs."""
+    totals = report.build_totals(
+        [
+            _row(
+                actual_model_version='gpt-5.6-luna',
+                cache_write_tokens=1_000_000,
+                cache_write_ttl='30m',
+                estimated_cost_micro_usd=250_000,
+            )
+        ]
+    )
+
+    assert totals.cache_write_30m_tokens == 1_000_000
+    assert totals.cache_write_5m_tokens == 0
+    assert totals.cache_write_1h_tokens == 0
+    assert totals.cache_write_untagged_tokens == 0
+
+    card_path = BACKEND_ROOT / 'llm_gateway' / 'config' / 'cost_rate_cards.yaml'
+    rates = report.load_rates('gpt-5.6-luna', card_path)
+    by_name = {component.name: component for component in report.cost_components(totals, rates)}
+
+    assert rates.cache_write_micro_usd == 250_000
+    assert by_name['cache write 30m'].cost_micro_usd == 250_000
+    assert by_name['cache write 1h'].cost_micro_usd == 0
+    assert 'cache write 30m' in report.render(totals, rates, 'chat_agent')
+
+
 def test_malformed_ledger_row_contributes_its_readable_fields(report) -> None:
     """Best-effort ledger writes can omit or corrupt a field; the report must not abort."""
     totals = report.build_totals(
