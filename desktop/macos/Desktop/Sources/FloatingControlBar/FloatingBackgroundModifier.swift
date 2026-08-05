@@ -1,52 +1,28 @@
 import OmiTheme
 import SwiftUI
 
-/// NSVisualEffectView wrapper for dark blur background.
-struct VisualEffectView: NSViewRepresentable {
-  var material: NSVisualEffectView.Material
-  var blendingMode: NSVisualEffectView.BlendingMode
-  var alphaValue: CGFloat
-
-  func makeNSView(context: Context) -> NSVisualEffectView {
-    let view = NSVisualEffectView()
-    view.material = material
-    view.blendingMode = blendingMode
-    view.state = .active
-    view.alphaValue = alphaValue
-    return view
-  }
-
-  func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-    nsView.material = material
-    nsView.blendingMode = blendingMode
-    nsView.alphaValue = alphaValue
-  }
-}
-
-/// Background modifier using NSVisualEffectView with dark blur or solid background.
+/// The floating bar's ground.
+///
+/// It used to build its own translucent surface here — its own material, its own alpha, its own scrim
+/// and its own border — which is the "two grounds" failure `InkGlass` exists to stop: four numbers
+/// that have to agree, kept in a file that says nothing about the three other surfaces they have to
+/// agree *with*. It draws the same pill it always did, but every value now comes from
+/// `NotchGlassChrome`, which defers to `InkGlass` for all of them except the two that make this
+/// surface black (see that file's header).
+///
+/// The border in particular was `Color.black.opacity(0.5)` — a *dark* line around a dark panel, which
+/// reads as a gap rather than as an edge. `NotchGlass.edge` is the same faint light line every other
+/// panel in the app is outlined with.
 struct FloatingBackgroundModifier: ViewModifier {
   let cornerRadius: CGFloat
   @ObservedObject private var settings = ShortcutSettings.shared
 
   func body(content: Content) -> some View {
-    content
-      .background(
-        Group {
-          if settings.solidBackground {
-            Color(nsColor: NSColor(white: 0.12, alpha: 1.0))
-          } else {
-            ZStack {
-              VisualEffectView(material: .hudWindow, blendingMode: .behindWindow, alphaValue: 0.95)
-              Color.black.opacity(0.18)
-            }
-          }
-        }
-      )
-      .clipShape(.rect(cornerRadius: cornerRadius))
-      .overlay(
-        RoundedRectangle(cornerRadius: cornerRadius)
-          .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
-      )
+    // The user's own opt-out, honoured through the same seam Reduce Transparency uses rather than as
+    // a second background branch: "solid" and "the accessibility setting is on" are the same request.
+    content.notchGlassPanel(
+      cornerRadius: cornerRadius,
+      reduceTransparency: settings.solidBackground || InkReduceTransparency.isEnabled)
   }
 }
 
@@ -63,7 +39,7 @@ struct FloatingLoadingSpinner: View {
   var body: some View {
     Circle()
       .trim(from: 0.1, to: 0.9)
-      .stroke(Color.white, lineWidth: 2)
+      .stroke(NotchGlass.primary, lineWidth: 2)
       .rotationEffect(.degrees(isSpinning ? 360 : 0))
       .onAppear { isSpinning = true }
       .omiAnimation(

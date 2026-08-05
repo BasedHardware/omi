@@ -62,11 +62,11 @@ struct NotchSystemControlsView: View {
   private func currentAppRow(_ name: String) -> some View {
     HStack(spacing: OmiSpacing.xxs) {
       Circle()
-        .fill(screenCaptureOn ? Color.white.opacity(0.55) : Color.white.opacity(0.22))
+        .fill(screenCaptureOn ? NotchGlass.ink(.w55) : NotchGlass.ink(.w25))
         .frame(width: 5, height: 5)
       Text(name)
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(.white.opacity(0.62))
+        .foregroundColor(NotchGlass.secondary)
         .lineLimit(1)
         .truncationMode(.tail)
     }
@@ -99,7 +99,7 @@ struct NotchSystemControlsView: View {
     HStack(spacing: 3) {
       Text(title)
         .scaledFont(size: 8, weight: .semibold)
-        .foregroundStyle(.white.opacity(0.54))
+        .foregroundStyle(NotchGlass.ink(.w55))
       shortcutKeys(keys)
     }
     .accessibilityElement(children: .combine)
@@ -110,12 +110,12 @@ struct NotchSystemControlsView: View {
     ForEach(ShortcutHintLayout.visibleTokens(for: keys), id: \.self) { key in
       Text(key)
         .scaledFont(size: 8, weight: .medium)
-        .foregroundStyle(.white.opacity(0.75))
+        .foregroundStyle(NotchGlass.ink(.w75))
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .padding(.horizontal, key.count > 1 ? 3 : 0)
         .frame(minWidth: 12, minHeight: 12)
-        .background(Color.white.opacity(0.12))
+        .background(NotchGlass.fillHover)
         .cornerRadius(OmiChrome.stripRadius)
     }
     .fixedSize(horizontal: true, vertical: false)
@@ -129,11 +129,11 @@ struct NotchSystemControlsView: View {
         Text(label)
           .scaledFont(size: OmiType.micro, weight: .semibold)
       }
-      .foregroundColor(isOn ? .white : .white.opacity(0.45))
+      .foregroundColor(NotchGlass.controlLabel(isActive: isOn))
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xxs)
       .background(
-        Capsule().fill(isOn ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+        Capsule().fill(NotchGlass.controlFill(isActive: isOn, isHovering: false))
       )
       .contentShape(Capsule())
     }

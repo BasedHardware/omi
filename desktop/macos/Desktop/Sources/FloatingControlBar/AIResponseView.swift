@@ -170,7 +170,7 @@ struct AIResponseView: View {
             .scaledFont(size: OmiType.caption)
             .foregroundColor(.secondary)
             .frame(width: 30, height: 16)
-            .background(Color.white.opacity(0.1))
+            .background(NotchGlass.ink(.w1))
             .cornerRadius(OmiChrome.stripRadius)
           Text("to clear")
             .scaledFont(size: OmiType.caption)
@@ -305,13 +305,13 @@ struct AIResponseView: View {
         HStack(alignment: .top, spacing: OmiSpacing.sm) {
           Text(exchange.question ?? "")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white)
+            .foregroundColor(NotchGlass.primary)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Color.white.opacity(0.1))
+        .background(NotchGlass.ink(.w1))
         .cornerRadius(OmiChrome.elementRadius)
       }
 
@@ -331,7 +331,7 @@ struct AIResponseView: View {
             ScrollView {
               Text(userInput)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(.white)
+                .foregroundColor(NotchGlass.primary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -339,7 +339,7 @@ struct AIResponseView: View {
           } else {
             Text(userInput)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.white)
+              .foregroundColor(NotchGlass.primary)
               .lineLimit(1)
               .truncationMode(.head)
               .textSelection(.enabled)
@@ -359,7 +359,7 @@ struct AIResponseView: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(Color.white.opacity(0.1))
+      .background(NotchGlass.ink(.w1))
       .cornerRadius(OmiChrome.elementRadius)
       .contextMenu {
         Button("Copy") {
@@ -453,7 +453,7 @@ struct AIResponseView: View {
           HStack(spacing: OmiSpacing.xs) {
             Text("Continue in Omi")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.white.opacity(0.85))
+              .foregroundColor(NotchGlass.ink(.w85))
             Spacer(minLength: 0)
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: OmiType.body)
@@ -461,14 +461,14 @@ struct AIResponseView: View {
           }
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xs)
-          .background(Color.white.opacity(0.10))
+          .background(NotchGlass.ink(.w1))
           .cornerRadius(OmiChrome.elementRadius)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("Open the Omi app to keep chatting")
       }
-      .chatComposerShell(fill: OmiColors.backgroundSecondary.opacity(0.82))
+      .chatComposerShell(fill: NotchGlass.fill)
     }
   }
 
@@ -480,7 +480,7 @@ struct AIResponseView: View {
 
       Text("Share link copied to your clipboard")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(.white)
+        .foregroundColor(NotchGlass.primary)
 
       Spacer(minLength: 0)
     }
@@ -647,7 +647,7 @@ struct MessageHoverOverlay<Content: View>: View {
             Button(action: { showInfoPopover.toggle() }) {
               Image(systemName: "info.circle")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(showInfoPopover ? .white : .secondary)
+                .foregroundColor(NotchGlass.controlLabel(isActive: showInfoPopover))
             }
             .buttonStyle(.plain)
             .help("View response context")
