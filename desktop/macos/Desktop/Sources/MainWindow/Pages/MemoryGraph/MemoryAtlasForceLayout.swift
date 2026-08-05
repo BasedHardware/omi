@@ -1427,46 +1427,24 @@ enum MemoryAtlasForceLayout {
   /// so scattering them through the middle would have the map assert structure
   /// that is not there. A faint outer halo says what is true: present, not
   /// connected to anything yet.
-  /// Each group takes one place on the rim and its members cluster there.
-  ///
-  /// Stringing every entity along the perimeter one slot at a time produced
-  /// visibly even rows and columns of dots down the edges of the canvas, which
-  /// read as a rendering artefact rather than as content. Placing a
-  /// three-entity island as one small clump says what is true — these three
-  /// know each other and nothing else — and looks deliberate.
+  /// Use a circular peripheral field: a rectangular rim is a rendering artefact,
+  /// while a hollow ring separates loose memories too far from the real graph.
   static func haloPositions(groups: [[String]], area: CGRect) -> [String: CGPoint] {
     guard !groups.isEmpty else { return [:] }
 
     var positions: [String: CGPoint] = [:]
-    let perRing = 44
+    let baseRadius = Double(min(area.width, area.height)) * 0.5
+    let goldenAngle = Double.pi * (3 - sqrt(5))
     for (offset, group) in groups.enumerated() {
-      let ring = offset / perRing
-      let indexInRing = offset % perRing
-      let occupancy = min(groups.count - ring * perRing, perRing)
-      // Deterministic per-slot jitter, so the rim reads as scattered rather
-      // than as a dotted rule drawn around the map.
-      let wobble = (stableFraction("halo-\(group.first ?? "")") - 0.5) * 0.9
-      let angle = 2 * Double.pi * (Double(indexInRing) + 0.5 + wobble) / Double(max(occupancy, 1))
-
-      // Seated just outside where the structure actually reaches in *this*
-      // direction, rather than on a fixed rim around everything.
-      //
-      // The map is not a disc and its shape changes with the account. A rim at
-      // a constant multiple of the drawing area strands an unconnected entity
-      // halfway across empty canvas whenever the structure happens to stop
-      // early on that side — which is most sides, since the fit only guarantees
-      // the *furthest* entities reach the edge. Following the silhouette keeps
-      // the same claim (outside everything, connected to nothing) at a distance
-      // that reads as deliberate instead of as debris.
-      //
-      // Depth still varies per seat: the band has to look scattered, or a run
-      // of singletons draws an evenly spaced arc that reads as a rendering
-      // artefact rather than as content.
-      let depth = 0.98 + 0.16 * stableFraction("depth-\(group.first ?? "")")
-      let spread = (1.0 + haloClearance + 0.03 * Double(ring)) * depth
-      let halfWidth = Double(area.width) / 2 * spread
-      let halfHeight = Double(area.height) / 2 * spread
-      let reach = 1 / max(abs(cos(angle)) / halfWidth, abs(sin(angle)) / halfHeight)
+      // Golden-angle seats avoid ruled rows. A uniform-area radial sample fills
+      // the peripheral field instead of turning the catalog into a hollow ring.
+      let wobble = (stableFraction("halo-\(group.first ?? "")") - 0.5) * 0.11
+      let angle = Double(offset) * goldenAngle + wobble
+      let innerRadius = baseRadius * 0.40
+      let outerRadius = baseRadius * (1.0 + haloClearance + 0.16)
+      let radialFraction = stableFraction("depth-\(group.first ?? "")")
+      let reach = sqrt(
+        innerRadius * innerRadius + (outerRadius * outerRadius - innerRadius * innerRadius) * radialFraction)
       let seat = CGPoint(
         x: area.midX + CGFloat(cos(angle) * reach),
         y: area.midY + CGFloat(sin(angle) * reach))
