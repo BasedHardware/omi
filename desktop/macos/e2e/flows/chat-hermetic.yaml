@@ -39,6 +39,8 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+JournalProjection.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider+OrphanRepair.swift
   - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatDraftScope.swift
   # The marker query enters AgentClient.Session through the serialized context
   # admission path before the exact stub reply is asserted below.
   - desktop/macos/Desktop/Sources/Chat/AgentContextAdmissionGate.swift
