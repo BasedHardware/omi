@@ -1,0 +1,53 @@
+desktop/macos/Desktop/Package.swift
+  s_569f1df936cc22::t_9372f92c45ec14 102-103
+  s_569f1df936cc22::t_35cc4669fc7156 101
+desktop/macos/Desktop/Sources/Theme/OmiColors.swift
+  s_569f1df936cc22::t_f966a8db8ec21d 3-15
+desktop/macos/Desktop/Sources/Theme/InkGlass.swift
+  s_569f1df936cc22::t_4907a77731edbc 1-428,434-588
+  s_569f1df936cc22::t_05eecb99a9c4a1 429-433
+desktop/macos/Desktop/Sources/Theme/Ink.swift
+  s_569f1df936cc22::t_45f4ef83ba998b 1-324,329-480,486-550
+  s_569f1df936cc22::t_782f6784d06207 325-328
+  s_569f1df936cc22::t_3646ebb4e1564e 481-485
+desktop/macos/Desktop/Sources/Startup/OmiFontRegistration.swift
+  s_569f1df936cc22::t_587ed1f4de0476 25-26,28-34,38
+  s_569f1df936cc22::t_aaaf1b40ecab0e 4-9
+desktop/macos/Desktop/Tests/GlassButtonPrimitiveTests.swift
+  s_569f1df936cc22::t_e880a40f8d9a20 15-20,22-25
+  s_569f1df936cc22::t_e5b0477abb804c 1-14,21,26-52,79-194
+  s_569f1df936cc22::t_bda7fcdd534d95 53-70,74,76-78
+  s_569f1df936cc22::t_02591f711e432e 71-73,75
+desktop/macos/Desktop/Sources/Theme/WindowGlass.swift
+  s_569f1df936cc22::t_b5f84494f2b9f3 1-95
+desktop/macos/Desktop/Sources/Theme/InkType.swift
+  s_569f1df936cc22::t_81802e645f0ded 1-387
+desktop/macos/Desktop/Sources/Theme/OmiButtonStyle.swift
+  s_569f1df936cc22::t_88629d494fd595 3-17,19-20,22,24,28,41-46,48-51,53-55,57-67,70-71,73-74,78-81,83-102,106-109,114-115,125,130-133,137-148
+desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
+  s_569f1df936cc22::t_e21631c5c368e9 35
+  s_569f1df936cc22::t_cefb5958868598 31-34,40
+  s_569f1df936cc22::t_50bd014dbfae80 11-19
+  s_569f1df936cc22::t_2d0da7c0bd2b73 3-10
+  s_569f1df936cc22::t_d18915096aed39 26-30,36-39,41,51,55
+desktop/macos/Desktop/Sources/Theme/OmiChrome.swift
+  s_569f1df936cc22::t_56577b1a16f468 19-34
+desktop/macos/Desktop/Sources/Resources/Fonts/OpenRunde-OFL.txt
+  s_569f1df936cc22::t_c73b0cd041088a 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "c7197590857cb6134c1e64cdf9025df0cb69c5a4",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
