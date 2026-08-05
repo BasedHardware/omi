@@ -87,8 +87,8 @@ const navItems: NavItem[] = [
     icon: <House className="w-5 h-5" />,
   },
   {
-    label: 'Timeline',
-    href: '/timeline',
+    label: 'Conversations',
+    href: '/conversations',
     icon: <GanttChartSquare className="w-5 h-5" />,
   },
   {
@@ -143,7 +143,7 @@ function MenuRow({
   const content = (
     <>
       <Icon className="w-4 h-4 flex-shrink-0" />
-      <span className="text-sm">{label}</span>
+      <span className="whitespace-nowrap text-sm">{label}</span>
     </>
   );
 
@@ -168,6 +168,77 @@ function MenuRow({
   );
 }
 
+/**
+ * The profile menu's contents, shared by both of its presentations: grown
+ * inside the profile surface when the rail is expanded, and floated beside the
+ * rail when it is collapsed. One list, so the two cannot drift apart.
+ */
+function ProfileMenuRows({
+  onNavigate,
+  onSignOut,
+}: {
+  onNavigate: () => void;
+  onSignOut: () => void;
+}) {
+  return (
+    <>
+      <div className="p-2 space-y-0.5">
+        <MenuRow
+          href="/connectors"
+          icon={Puzzle}
+          label="Connectors"
+          onNavigate={onNavigate}
+        />
+        {settingsMenuItems.map((item) => (
+          <MenuRow
+            key={item.id}
+            href={`/settings?section=${item.id}`}
+            icon={item.icon}
+            label={item.label}
+            onNavigate={onNavigate}
+          />
+        ))}
+      </div>
+
+      <div className="border-t border-stroke/60 p-2 space-y-0.5">
+        <MenuRow
+          href="https://omi.me/download"
+          icon={Download}
+          label="Download"
+          external
+          onNavigate={onNavigate}
+        />
+        <MenuRow href="/help" icon={LifeBuoy} label="Help" onNavigate={onNavigate} />
+        <MenuRow
+          href="https://feedback.omi.me"
+          icon={MessageSquare}
+          label="Feedback"
+          external
+          onNavigate={onNavigate}
+        />
+        <MenuRow
+          href="http://discord.omi.me"
+          icon={DiscordIcon}
+          label="Discord"
+          external
+          onNavigate={onNavigate}
+        />
+        <button
+          onClick={onSignOut}
+          className={cn(
+            'w-full flex items-center gap-3 rounded-element px-3 py-2',
+            'text-red-400/80 hover:text-red-400 hover:bg-red-500/[0.08]',
+            'transition-colors',
+          )}
+        >
+          <LogOut className="w-4 h-4 flex-shrink-0" />
+          <span className="whitespace-nowrap text-sm">Sign Out</span>
+        </button>
+      </div>
+    </>
+  );
+}
+
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
@@ -179,8 +250,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { toggleNotificationCenter, unreadCount } = useNotificationContext();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-  const [isTemporaryExpand, setIsTemporaryExpand] = useState(false);
   const [mobileAppDismissed, setMobileAppDismissed] = useState(false);
   // Dismissal runs in two beats: the burst fires over the still-present banner,
   // then the banner pops out. Collapsing them into one state would unmount the
@@ -208,10 +277,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     const handleClickOutside = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setShowUserMenu(false);
-        if (isTemporaryExpand) {
-          setIsExpanded(false);
-          setIsTemporaryExpand(false);
-        }
       }
     };
 
@@ -224,7 +289,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       clearTimeout(timer);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showUserMenu, isTemporaryExpand]);
+  }, [showUserMenu]);
 
   // Toggle expand/collapse
   const handleToggleExpand = useCallback(() => {
@@ -236,17 +301,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       }
       return newValue;
     });
-    setIsTemporaryExpand(false); // Manual toggle makes it permanent
   }, []);
 
   const closeUserMenu = useCallback(() => {
     setShowUserMenu(false);
-    if (isTemporaryExpand) {
-      setIsExpanded(false);
-      setIsTemporaryExpand(false);
-    }
     if (!isDesktop) onClose();
-  }, [isTemporaryExpand, isDesktop, onClose]);
+  }, [isDesktop, onClose]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -259,9 +319,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   // On mobile, sidebar should always show text (behave as expanded)
   const showText = !isDesktop || isExpanded;
 
-  // The menu only makes sense with labels visible; collapsed, the profile
-  // button expands the rail first.
-  const menuOpen = showUserMenu && showText;
+  const menuOpen = showUserMenu;
 
   return (
     <>
@@ -282,8 +340,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Sidebar - Mobile: slide in/out, Desktop: CSS transition for width */}
       <aside
         ref={sidebarRef}
-        onMouseEnter={() => isDesktop && setIsHeaderHovered(true)}
-        onMouseLeave={() => isDesktop && setIsHeaderHovered(false)}
         style={{
           // Mobile: slide in/out
           transform: !isDesktop ? `translateX(${isOpen ? 0 : -280}px)` : undefined,
@@ -298,7 +354,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           'flex flex-col flex-shrink-0',
           // Mobile: fixed overlay with slide transition
           'fixed top-0 left-0 bottom-0 z-50',
-          'transition-transform duration-150 ease-out lg:transition-none',
+          // Desktop animates its width to match the macOS rail
+          // (.omiAnimation(.easeInOut(duration: 0.2))); mobile slides instead.
+          // overflow-hidden so labels clip during the animation rather than
+          // wrapping onto a second line as the rail narrows past them.
+          'overflow-hidden transition-transform duration-150 ease-out',
+          'lg:transition-[width] lg:duration-200 lg:ease-in-out',
           // Desktop: relative in flow
           'lg:relative lg:z-auto',
         )}
@@ -314,7 +375,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               showText ? 'justify-between' : 'flex-col gap-2',
             )}
           >
-            <Link href="/timeline" className="flex items-center gap-2 px-1">
+            <Link href="/conversations" className="flex items-center gap-2 px-1">
               <Image
                 src="/omi-white.webp"
                 alt="Omi"
@@ -398,7 +459,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             {navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
-                (item.href === '/timeline' && pathname?.startsWith('/timeline'));
+                (item.href === '/conversations' &&
+                  pathname?.startsWith('/conversations'));
               return (
                 <Link
                   key={item.href}
@@ -428,7 +490,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   )}
                   <span className="flex-shrink-0 relative z-10">{item.icon}</span>
                   {showText && (
-                    <span className="relative z-10 font-medium">{item.label}</span>
+                    <span className="relative z-10 whitespace-nowrap font-medium">
+                      {item.label}
+                    </span>
                   )}
                 </Link>
               );
@@ -517,18 +581,24 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             })()}
         </AnimatePresence>
 
-        {/* Footer: one surface that is the profile at rest and the whole menu
-            when open. The menu grows upward out of the profile row rather than
-            floating over it, so the thing you clicked stays put and becomes the
-            base of what opened — no separate copy of your name and avatar. */}
+        {/* Footer: the profile at rest and the whole menu when open.
+
+            Expanded, the menu grows upward inside the same surface, so the row
+            you clicked stays put and becomes the base of what opened — no
+            second copy of your name and avatar. Collapsed there is no surface
+            to grow, so it opens beside the rail instead of forcing the rail
+            open: widening the whole sidebar to show a menu moves every other
+            thing on screen to answer a question about one of them. */}
         <div
           ref={userMenuRef}
           className={cn(
             // flex-shrink-0: the rail is a flex column whose nav takes the
             // slack, so without this the footer is the item that gives way and
             // the opened menu is silently squeezed back to the profile row.
-            'flex-shrink-0 overflow-hidden border border-stroke bg-bg-raised',
-            'm-3 rounded-card',
+            'relative m-3 flex-shrink-0',
+            // Collapsed, the avatar is the whole control and stands on the raw
+            // window; the card would be chrome drawn around a single circle.
+            showText && 'overflow-hidden rounded-card border border-stroke bg-bg-raised',
           )}
         >
           {/* Opened by max-height, not by height:auto and not by a 0fr->1fr grid
@@ -538,109 +608,50 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               so `1fr` resolves against zero free space. A max-height ceiling
               needs neither, and the menu is a fixed set of rows so a ceiling is
               safe — it is checked by a test rather than left to drift. */}
-          <div
-            className={cn(
-              'overflow-hidden',
-              'transition-[max-height,opacity] duration-300',
-              // Overshooting ease: the panel arrives slightly past its mark and
-              // settles, which reads as the surface lifting rather than as a
-              // box being resized.
-              '[transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
-              menuOpen ? 'opacity-100' : 'opacity-0 duration-200',
-            )}
-            style={{ maxHeight: menuOpen ? PROFILE_MENU_MAX_HEIGHT : 0 }}
-            aria-hidden={!menuOpen}
-          >
+          {showText && (
             <div
-              inert={!menuOpen}
               className={cn(
-                'transition-transform duration-300',
+                'overflow-hidden',
+                'transition-[max-height,opacity] duration-300',
+                // Overshooting ease: the panel arrives slightly past its mark
+                // and settles, which reads as the surface lifting rather than
+                // as a box being resized.
                 '[transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
-                // Held down a little while closed so the rows slide up out of
-                // the profile row rather than appearing already in place.
-                menuOpen ? 'translate-y-0' : 'translate-y-3',
+                menuOpen ? 'opacity-100' : 'opacity-0 duration-200',
               )}
+              style={{ maxHeight: menuOpen ? PROFILE_MENU_MAX_HEIGHT : 0 }}
+              aria-hidden={!menuOpen}
             >
-              <div className="p-2 space-y-0.5">
-                <MenuRow
-                  href="/connectors"
-                  icon={Puzzle}
-                  label="Connectors"
-                  onNavigate={closeUserMenu}
-                />
-                {settingsMenuItems.map((item) => (
-                  <MenuRow
-                    key={item.id}
-                    href={`/settings?section=${item.id}`}
-                    icon={item.icon}
-                    label={item.label}
-                    onNavigate={closeUserMenu}
-                  />
-                ))}
-              </div>
-
-              <div className="border-t border-stroke/60 p-2 space-y-0.5">
-                <MenuRow
-                  href="https://omi.me/download"
-                  icon={Download}
-                  label="Download"
-                  external
-                  onNavigate={closeUserMenu}
-                />
-                <MenuRow
-                  href="/help"
-                  icon={LifeBuoy}
-                  label="Help"
-                  onNavigate={closeUserMenu}
-                />
-                <MenuRow
-                  href="https://feedback.omi.me"
-                  icon={MessageSquare}
-                  label="Feedback"
-                  external
-                  onNavigate={closeUserMenu}
-                />
-                <MenuRow
-                  href="http://discord.omi.me"
-                  icon={DiscordIcon}
-                  label="Discord"
-                  external
-                  onNavigate={closeUserMenu}
-                />
-                <button
-                  onClick={handleSignOut}
-                  className={cn(
-                    'w-full flex items-center gap-3 rounded-element px-3 py-2',
-                    'text-red-400/80 hover:text-red-400 hover:bg-red-500/[0.08]',
-                    'transition-colors',
-                  )}
-                >
-                  <LogOut className="w-4 h-4 flex-shrink-0" />
-                  <span className="text-sm">Sign Out</span>
-                </button>
+              <div
+                inert={!menuOpen}
+                className={cn(
+                  'transition-transform duration-300',
+                  '[transition-timing-function:cubic-bezier(0.34,1.4,0.5,1)]',
+                  // Held down a little while closed so the rows slide up out of
+                  // the profile row rather than appearing already in place.
+                  menuOpen ? 'translate-y-0' : 'translate-y-3',
+                )}
+              >
+                <ProfileMenuRows onNavigate={closeUserMenu} onSignOut={handleSignOut} />
               </div>
             </div>
-          </div>
+          )}
 
           <button
-            onClick={() => {
-              if (isExpanded) {
-                setShowUserMenu(!showUserMenu);
-              } else {
-                // In collapsed mode, temporarily expand sidebar and show user menu
-                setIsExpanded(true);
-                setIsTemporaryExpand(true);
-                setShowUserMenu(true);
-              }
-            }}
+            onClick={() => setShowUserMenu(!showUserMenu)}
             className={cn(
-              'w-full flex items-center transition-colors hover:bg-bg-tertiary/60',
-              showText ? 'gap-3 p-3' : 'justify-center p-3',
+              'flex w-full items-center transition-colors',
+              showText ? 'gap-3 p-3 hover:bg-bg-tertiary/60' : 'justify-center p-1',
             )}
             title={!showText ? 'Settings' : undefined}
           >
             {/* Avatar */}
-            <div className="w-9 h-9 rounded-full overflow-hidden bg-bg-tertiary flex-shrink-0 ring-2 ring-bg-tertiary">
+            <div
+              className={cn(
+                'h-9 w-9 flex-shrink-0 overflow-hidden rounded-full',
+                showText && 'bg-bg-tertiary ring-2 ring-bg-tertiary',
+              )}
+            >
               {user?.photoURL ? (
                 <Image
                   src={user.photoURL}
@@ -650,7 +661,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   className="object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-text-tertiary text-sm font-medium">
+                <div className="flex h-full w-full items-center justify-center text-sm font-medium text-text-tertiary">
                   {user?.displayName?.charAt(0) || 'U'}
                 </div>
               )}
@@ -660,16 +671,18 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <>
                 {/* Name & email */}
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium text-text-primary truncate">
+                  <p className="truncate whitespace-nowrap text-sm font-medium text-text-primary">
                     {user?.displayName || 'User'}
                   </p>
-                  <p className="text-xs text-text-quaternary truncate">{user?.email}</p>
+                  <p className="truncate whitespace-nowrap text-xs text-text-quaternary">
+                    {user?.email}
+                  </p>
                 </div>
 
                 {/* Dropdown indicator */}
                 <svg
                   className={cn(
-                    'w-4 h-4 text-text-quaternary transition-transform',
+                    'h-4 w-4 flex-shrink-0 text-text-quaternary transition-transform',
                     showUserMenu && 'rotate-180',
                   )}
                   fill="none"
@@ -686,6 +699,20 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </>
             )}
           </button>
+
+          {/* Collapsed: the menu is a popover beside the rail. */}
+          {!showText && menuOpen && (
+            <div
+              className={cn(
+                'absolute bottom-0 left-full z-50 ml-2 w-64 origin-bottom-left',
+                'overflow-hidden rounded-card border border-stroke bg-bg-raised',
+                'shadow-[0_18px_40px_-12px_rgba(0,0,0,0.6)]',
+                'animate-slideUp',
+              )}
+            >
+              <ProfileMenuRows onNavigate={closeUserMenu} onSignOut={handleSignOut} />
+            </div>
+          )}
         </div>
       </aside>
     </>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from '@tschk/moonshine-next/image';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Target, MessageCircle } from 'lucide-react';
+import { Plus, Target } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useChat } from '@/hooks/useChat';
 import { useGoals } from '@/hooks/useGoals';
@@ -37,49 +37,6 @@ const quickPrompts = [
   'What should I remember?',
   'Summarize my recent conversations',
 ];
-
-/** Telegram's mark; lucide has no brand icons. */
-function TelegramIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M21.94 4.6l-3.02 14.25c-.23 1.01-.83 1.26-1.68.78l-4.64-3.42-2.24 2.16c-.25.25-.45.45-.93.45l.33-4.72 8.6-7.77c.37-.33-.08-.52-.58-.19l-10.63 6.7-4.58-1.43c-1-.31-1.02-1 .21-1.48l17.9-6.9c.83-.3 1.56.2 1.26 1.57z" />
-    </svg>
-  );
-}
-
-/**
- * Omi answers on Telegram and iMessage too, so the two are offered where the
- * conversation is rather than buried in settings. `sms:` opens Messages with
- * the number filled in.
- */
-function ChannelLinks() {
-  const linkClass = cn(
-    'flex h-8 w-8 items-center justify-center rounded-full',
-    'text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary',
-  );
-  return (
-    <div className="flex items-center gap-1">
-      <a
-        href="https://t.me/omi_me_bot"
-        target="_blank"
-        rel="noopener noreferrer"
-        className={linkClass}
-        title="Chat with Omi on Telegram"
-        aria-label="Chat with Omi on Telegram"
-      >
-        <TelegramIcon className="h-[18px] w-[18px]" />
-      </a>
-      <a
-        href="sms:+16468591414"
-        className={linkClass}
-        title="Text Omi on iMessage"
-        aria-label="Text Omi on iMessage"
-      >
-        <MessageCircle className="h-[18px] w-[18px]" />
-      </a>
-    </div>
-  );
-}
 
 function firstName(displayName: string | null | undefined): string | null {
   const name = displayName?.trim().split(/\s+/)[0];
@@ -153,12 +110,6 @@ export function HomePage() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* The channel links sit at the top-left of the chat surface: the same
-          assistant, reachable where you already are. */}
-      <div className="flex flex-shrink-0 items-center justify-between px-5 pt-4">
-        <ChannelLinks />
-      </div>
-
       {error && (
         <div className="flex-shrink-0 border-b border-error/20 bg-error/10 px-6 py-3">
           <p className="text-sm text-error">{error}</p>
