@@ -162,9 +162,7 @@ def run_canonical_legacy_backfill_page(
         inventory_fn=lambda uid: inventory_legacy_user(uid, db_client=client),
         pause_fn=lambda: read_global_pause(client),
         checkpoint_store=None if config.dry_run else checkpoint_store,
-        enroll_fn=None
-        if config.dry_run
-        else partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids)),
+        enroll_fn=None if config.dry_run else partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids)),
         backfill_fn=None if config.dry_run else backfill_fn,
     )
 
