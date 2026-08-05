@@ -1,75 +1,61 @@
-"""The one model call in the edition.
+"""The model calls in the edition.
 
-Everything else in the paper is computed. This writes the two things that genuinely need
-prose: the lede, and the argument against a position the ledger already proved is
-one-sided. Both are grounded — the prompt forbids introducing any fact not present in the
-day's own record, because a paper that invents a detail about someone's life is finished.
+Four things genuinely need writing rather than computing: yesterday's story,
+the newsletter clustering, the ranking of external material, and the cover
+line. Everything else in the paper is arithmetic over stored records.
+
+Two rules bind every prompt here.
+
+**Only the record.** No prompt may introduce a fact absent from the material
+handed to it. A paper that invents a detail about someone's life is finished,
+and it fails in the one direction the reader cannot check.
+
+**Short, simple, conversational, non-redundant.** Say it once. Plain words. If a
+smart friend would not say it out loud, it does not get printed.
 """
 
 import json
 import logging
 import re
 
-from models.paper import Counterpoint, Lede
+from models.paper import (
+    Commitment,
+    Cover,
+    ForYou,
+    NewsletterStory,
+    NewsLine,
+    PaperItem,
+    SourceRef,
+    Today,
+    Yesterday,
+)
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.log_sanitizer import sanitize
+
+from .context import DayContext, record_lines
+from .interests import rubric_text
 
 logger = logging.getLogger(__name__)
 
 _FENCE_RE = re.compile(r'^\s*```(?:json)?\s*|\s*```\s*$')
 
-_PROMPT = """You are the editor of a one-page personal newspaper. The reader is its only \
-subject. Write in plain, declarative newspaper prose — no second-person coaching, no \
-motivational language, no emoji.
+# Length ceilings. The page is finite by construction, so these are enforced on
+# output rather than merely requested in the prompt — prompt compliance is not
+# a guarantee, and an over-long section silently breaks the one-page contract.
+MAX_HEADLINE_WORDS = 9
+MAX_STORY_CHARS = 700
+MAX_SUMMARY_CHARS = 300
+MAX_WHY_CHARS = 400
 
-HARD RULE: use only facts present in THE RECORD below. Introduce nothing else. No names, \
-numbers, places or events that do not appear there. If the record is too thin, return an \
-empty string for that field.
-
-THE RECORD (today, {date}):
-{record}
-{stance_block}
-Return only JSON, no fences:
-{{
-  "headline": "<= 9 words, title case, states what happened. No colon-subtitle format.",
-  "body": "2-3 sentences of plain past-tense reportage on that headline.",
-  "counterpoint": "{counterpoint_instruction}"
-}}"""
-
-_STANCE_TEMPLATE = """
-A POSITION THE READER HAS TAKEN {days} SEPARATE DAYS WITHOUT ONCE ARGUING THE OTHER SIDE:
-"{position}"
-"""
-
-_COUNTERPOINT_ASK = (
-    'The strongest good-faith argument AGAINST that position, 2-3 sentences. '
-    'Address the reader as "you". Be direct and specific, not balanced. Do not hedge or '
-    'restate their view approvingly first.'
+_STYLE = (
+    'Write short, simple, conversational sentences. Say each thing once. Plain words. '
+    'No preamble, no motivational language, no emoji, no second-person coaching. '
+    'No em dashes, semicolons or ellipses.'
 )
 
 
-def _record_for(summary: dict) -> str:
-    """Flatten one day's summary into the grounding record the prompt may draw on."""
-    lines = []
-    if summary.get('headline'):
-        lines.append(f"Day headline: {summary['headline']}")
-    if summary.get('overview'):
-        lines.append(f"Overview: {summary['overview']}")
-    for highlight in (summary.get('highlights') or [])[:6]:
-        topic = (highlight or {}).get('topic') or ''
-        detail = (highlight or {}).get('summary') or ''
-        if topic or detail:
-            lines.append(f"- {topic}: {detail}".strip())
-    for decision in (summary.get('decisions_made') or [])[:5]:
-        text = (decision or {}).get('decision')
-        if text:
-            lines.append(f"- Decided: {text}")
-    return '\n'.join(lines)
-
-
 def _parse(raw: str) -> dict:
-    """Best-effort JSON out of a model response. Returns {} rather than raising."""
     cleaned = _FENCE_RE.sub('', raw or '').strip()
     try:
         parsed = json.loads(cleaned)
@@ -78,56 +64,321 @@ def _parse(raw: str) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def write_editorial(
-    uid: str,
-    summary: dict,
-    stance: Counterpoint | None,
-) -> tuple[Lede | None, Counterpoint | None]:
-    """Write the lede and, when a stance qualifies, the counterpoint argument.
+def _ask(uid: str, prompt: str, cache_key: str) -> dict:
+    """One model call, returning {} on any failure.
 
-    Falls back to the stored day headline on any model or parse failure — a degraded
-    edition still prints something true. The counterpoint is dropped entirely rather than
-    filled with a generic argument.
+    Callers degrade to stored text rather than raising: a partial edition still
+    prints something true.
     """
-    record = _record_for(summary)
-    source_date = str(summary.get('date') or '')
-    if not record.strip():
-        return None, None
-
-    stance_block = ''
-    counterpoint_instruction = 'Return an empty string. There is no position to argue against.'
-    if stance is not None:
-        stance_block = _STANCE_TEMPLATE.format(days=stance.days_asserted, position=stance.position)
-        counterpoint_instruction = _COUNTERPOINT_ASK
-
-    prompt = _PROMPT.format(
-        date=source_date,
-        record=record,
-        stance_block=stance_block,
-        counterpoint_instruction=counterpoint_instruction,
-    )
-
     try:
         with track_usage(uid, Features.PAPER):
-            response = get_llm('paper', cache_key='omi-paper-edition').invoke(prompt)
+            response = get_llm('paper', cache_key=cache_key).invoke(prompt)
         content = getattr(response, 'content', response)
-        payload = _parse(content if isinstance(content, str) else str(content))
-    except Exception as e:  # noqa: BLE001 — a failed edition must still print.
-        logger.warning('paper: editorial generation failed, falling back: %s', sanitize(str(e)))
-        payload = {}
+        return _parse(content if isinstance(content, str) else str(content))
+    except Exception as e:  # noqa: BLE001 — a failed section must still leave a paper.
+        logger.warning('paper: model call %s failed: %s', cache_key, sanitize(str(e)))
+        return {}
 
-    headline = str(payload.get('headline') or '').strip() or str(summary.get('headline') or '').strip()
-    lede = None
-    if headline:
-        lede = Lede(
-            headline=headline,
-            body=str(payload.get('body') or '').strip() or str(summary.get('overview') or '').strip(),
-            source_date=source_date,
+
+def _clip(text: object, limit: int) -> str:
+    """Trim to a ceiling on a word boundary."""
+    value = str(text or '').strip()
+    if len(value) <= limit:
+        return value
+    return value[:limit].rsplit(' ', 1)[0].rstrip(',.;:') + '.'
+
+
+def _clip_words(text: object, limit: int) -> str:
+    words = str(text or '').strip().split()
+    return ' '.join(words[:limit])
+
+
+# ---------------------------------------------------------------------------
+# Yesterday
+# ---------------------------------------------------------------------------
+
+_YESTERDAY_PROMPT = """You are writing the "yesterday" section of one person's daily paper. \
+The reader is its only subject.
+
+THE RECORD (everything captured on {day}):
+{record}
+
+HARD RULE: use only what is in the record. No names, numbers, places or events that do not \
+appear there. If the record is too thin for a field, return an empty string for it.
+
+{style}
+
+Return only JSON, no fences:
+{{
+  "headline": "<= {max_words} words. What the day was actually about.",
+  "story": "3 to 5 sentences on what they did and worked through. Past tense.",
+  "decisions": ["<a decision they actually made, quoted close to the record>"],
+  "unacted": "<one idea they raised and did not act on, or empty string if none>"
+}}"""
+
+
+def write_yesterday(uid: str, context: DayContext) -> Yesterday | None:
+    """Yesterday's story, grounded in the day's own record."""
+    lines = record_lines(context)
+    if not lines:
+        return None
+
+    summary = context.summary or {}
+    payload = _ask(
+        uid,
+        _YESTERDAY_PROMPT.format(
+            day=context.day.isoformat(),
+            record='\n'.join(lines),
+            style=_STYLE,
+            max_words=MAX_HEADLINE_WORDS,
+        ),
+        'omi-paper-yesterday',
+    )
+
+    headline = _clip_words(payload.get('headline'), MAX_HEADLINE_WORDS) or str(summary.get('headline') or '').strip()
+    story = _clip(payload.get('story'), MAX_STORY_CHARS) or str(summary.get('overview') or '').strip()
+    if not headline and not story and not context.focus:
+        return None
+
+    decisions = [str(d).strip() for d in (payload.get('decisions') or []) if str(d).strip()][:5]
+    if not decisions:
+        decisions = [
+            str((d or {}).get('decision') or '').strip()
+            for d in (summary.get('decisions_made') or [])[:5]
+            if (d or {}).get('decision')
+        ]
+
+    return Yesterday(
+        headline=headline,
+        story=story,
+        focus=context.focus,
+        decisions=decisions,
+        unacted=_clip(payload.get('unacted'), MAX_SUMMARY_CHARS),
+        source_date=context.day.isoformat(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Today
+# ---------------------------------------------------------------------------
+
+_TODAY_PROMPT = """Write one plain sentence describing the shape of this person's day.
+
+EVENTS TODAY:
+{events}
+
+WHAT THEY OWE:
+{commitments}
+
+{style}
+
+Use only what is above. If there is nothing scheduled and nothing owed, return an empty \
+string for the note.
+
+Return only JSON, no fences:
+{{"note": "<one sentence, or empty string>"}}"""
+
+
+def build_today(uid: str, events: list, commitments: list[Commitment]) -> Today:
+    """Today's shape. Deterministic apart from the one framing line."""
+    today = Today(events=events, commitments=commitments)
+    if today.is_clear:
+        return today
+
+    event_lines = '\n'.join(f'- {e.title} at {e.start or "unspecified time"}' for e in events) or '(none)'
+    owed_lines = '\n'.join(f'- {c.text}' for c in commitments[:10]) or '(none)'
+
+    payload = _ask(
+        uid,
+        _TODAY_PROMPT.format(events=event_lines, commitments=owed_lines, style=_STYLE),
+        'omi-paper-today',
+    )
+    today.note = _clip(payload.get('note'), MAX_SUMMARY_CHARS)
+    return today
+
+
+# ---------------------------------------------------------------------------
+# Newsletters
+# ---------------------------------------------------------------------------
+
+_NEWSLETTER_PROMPT = """Cluster these newsletter messages into distinct stories.
+
+Four newsletters covering one funding round is ONE story, listing all four publications.
+
+MESSAGES:
+{messages}
+
+{rubric}
+
+HARD RULE: every story must come from the messages above. Do not add context you know from \
+elsewhere. Do not invent numbers. If a message is pure advertising with no information, drop it.
+
+{style}
+
+Return only JSON, no fences:
+{{
+  "stories": [
+    {{
+      "summary": "<one sentence. What happened.>",
+      "publications": ["<publication names from the messages that covered it>"],
+      "why": "<one short clause on why it matters to this reader, or empty string>"
+    }}
+  ]
+}}
+
+Most significant first. At most {limit} stories."""
+
+
+def cluster_newsletters(uid: str, messages: list[dict], profile, limit: int = 12) -> list[NewsletterStory]:
+    """Collapse many newsletters into one line per story."""
+    if not messages:
+        return []
+
+    rendered = []
+    for message in messages[:40]:
+        publication = str(message.get('publication') or 'Unknown')
+        subject = str(message.get('subject') or '')
+        snippet = str(message.get('snippet') or str(message.get('body') or ''))[:400]
+        rendered.append(f'[{publication}] {subject}\n{snippet}')
+
+    rubric = rubric_text(profile)
+    payload = _ask(
+        uid,
+        _NEWSLETTER_PROMPT.format(
+            messages='\n\n'.join(rendered),
+            rubric=f'THIS READER:\n{rubric}\n' if rubric else '',
+            style=_STYLE,
+            limit=limit,
+        ),
+        'omi-paper-newsletters',
+    )
+
+    stories: list[NewsletterStory] = []
+    for raw in (payload.get('stories') or [])[:limit]:
+        if not isinstance(raw, dict):
+            continue
+        summary = _clip(raw.get('summary'), MAX_SUMMARY_CHARS)
+        publications = [str(p).strip() for p in (raw.get('publications') or []) if str(p).strip()]
+        story = NewsletterStory(
+            summary=summary,
+            sources=[SourceRef(name=name) for name in publications[:6]],
+            why=_clip(raw.get('why'), MAX_SUMMARY_CHARS),
+        )
+        # A story with no publication behind it cannot be checked, so it is not printed.
+        if story.is_printable:
+            stories.append(story)
+    return stories
+
+
+# ---------------------------------------------------------------------------
+# For you
+# ---------------------------------------------------------------------------
+
+_RANK_PROMPT = """Rank these papers for one reader and explain each in their terms.
+
+THIS READER:
+{rubric}
+
+CANDIDATES:
+{candidates}
+
+A paper earns its place by moving something this reader is actually working on, not by \
+being interesting in general. If fewer than {limit} clear that bar, return fewer. Never pad.
+
+HARD RULE: use only the candidate text above. Do not add findings, numbers or authors that \
+are not there.
+
+{style}
+
+Return only JSON, no fences:
+{{
+  "picks": [
+    {{
+      "index": <0-based index into CANDIDATES>,
+      "what_it_says": "2 to 3 plain sentences.",
+      "why_it_matters": "The specific thing of theirs it moves, and what it changes.",
+      "experiment": "One concrete thing they could test in an afternoon."
+    }}
+  ]
+}}"""
+
+
+def rank_for_you(
+    uid: str,
+    candidates: list[PaperItem],
+    news: list[NewsLine],
+    profile,
+    limit: int = 3,
+) -> ForYou:
+    """Pick and explain the external material worth this reader's attention."""
+    for_you = ForYou(news=news)
+    rubric = rubric_text(profile)
+    if not candidates or not rubric:
+        return for_you
+
+    rendered = '\n\n'.join(
+        f'[{index}] {item.title}\n{item.what_it_says or ""}'.strip() for index, item in enumerate(candidates[:30])
+    )
+    payload = _ask(
+        uid,
+        _RANK_PROMPT.format(rubric=rubric, candidates=rendered, limit=limit, style=_STYLE),
+        'omi-paper-rank',
+    )
+
+    picked: list[PaperItem] = []
+    for raw in (payload.get('picks') or [])[:limit]:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            index = int(raw.get('index', -1))
+        except (TypeError, ValueError):
+            continue
+        if not 0 <= index < len(candidates):
+            continue
+        base = candidates[index]
+        picked.append(
+            base.model_copy(
+                update={
+                    'what_it_says': _clip(raw.get('what_it_says'), MAX_WHY_CHARS) or base.what_it_says,
+                    'why_it_matters': _clip(raw.get('why_it_matters'), MAX_WHY_CHARS),
+                    'experiment': _clip(raw.get('experiment'), MAX_SUMMARY_CHARS),
+                }
+            )
         )
 
-    counterpoint = None
-    argument = str(payload.get('counterpoint') or '').strip()
-    if stance is not None and argument:
-        counterpoint = stance.model_copy(update={'argument': argument})
+    for_you.papers = picked
+    return for_you
 
-    return lede, counterpoint
+
+# ---------------------------------------------------------------------------
+# Cover
+# ---------------------------------------------------------------------------
+
+_COVER_PROMPT = """Write the cover line for today's edition.
+
+WHAT IS IN IT:
+{contents}
+
+{style}
+
+Use only what is above. Return only JSON, no fences:
+{{
+  "thesis": "<the through-line across today's material, one short sentence>",
+  "emphasis": "<one word from that sentence to set in accent>",
+  "standfirst": "<one sentence under it, or empty string>"
+}}"""
+
+
+def write_cover(uid: str, contents: list[str]) -> Cover:
+    if not contents:
+        return Cover()
+    payload = _ask(
+        uid,
+        _COVER_PROMPT.format(contents='\n'.join(f'- {line}' for line in contents[:20]), style=_STYLE),
+        'omi-paper-cover',
+    )
+    return Cover(
+        thesis=_clip(payload.get('thesis'), MAX_SUMMARY_CHARS),
+        emphasis=_clip_words(payload.get('emphasis'), 2),
+        standfirst=_clip(payload.get('standfirst'), MAX_SUMMARY_CHARS),
+    )

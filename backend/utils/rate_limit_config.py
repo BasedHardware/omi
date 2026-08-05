@@ -96,6 +96,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),
+    # One edition is several model calls, an image generation and a set of web
+    # searches. It is a once-a-morning object, so this bounds retries and abuse
+    # while leaving room to re-read and to iterate during a day.
+    "paper:edition": (10, 3600),
     # Integration (key = app_id:uid)
     "integration:conversations": (10, 3600),
     "integration:memories": (60, 3600),

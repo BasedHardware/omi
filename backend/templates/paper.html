@@ -1,258 +1,217 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PAPER — {{ dateline }}</title>
-    <style>
-      /* One sheet. Warm paper, soft-black ink, hairline rules, one warm accent.
-         Type sizes follow the premium-editorial convention: body 19/1.65, measure
-         ~62ch, headline capped well under 48px — restraint at the top of the scale is
-         what reads as confidence. No boxes, no shadows, no radius in the reading flow. */
-      @page {
-        size: A4;
-        margin: 20mm;
-      }
+<head>
+<meta charset="utf-8">
+<title>PAPER — {{ dateline }}</title>
+<style>
+  /* Print-first. The screen view is the sheet, not a web page that also prints. */
+  @page { size: A4; margin: 18mm 16mm; }
 
-      :root {
-        --ink: #333333; /* body ink is never pure black */
-        --ink-strong: #131313; /* masthead and quoted words only */
-        --meta: #757575;
-        --paper: #fffaf1; /* warm, not white */
-        --rule: #e2ded4; /* hairline, near-paper */
-        --rule-strong: #131313; /* the masthead rule, and only that */
-        --accent: #f09000; /* the single warm accent, used in exactly one place */
-        --serif: 'Iowan Old Style', 'New York', Charter, Athelas, 'Palatino Linotype', Palatino,
-          'Book Antiqua', Georgia, serif;
-        --mono: ui-monospace, 'SF Mono', 'Iosevka', 'Roboto Mono', Menlo, Consolas, monospace;
-      }
+  :root {
+    --paper: #fffaf1;
+    --ink: #333;
+    --muted: #6b6560;
+    --rule: #ddd6c9;
+    --accent: #b25f00;
+  }
 
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+  * { box-sizing: border-box; }
 
-      body {
-        background: var(--paper);
-        color: var(--ink);
-        font-family: var(--serif);
-        font-size: 19px;
-        line-height: 1.65;
-        -webkit-font-smoothing: antialiased;
-        font-kerning: normal;
-        text-rendering: optimizeLegibility;
-      }
+  body {
+    margin: 0 auto;
+    max-width: 46rem;
+    padding: 2rem 1.5rem 4rem;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    font-size: 19px;
+    line-height: 1.65;
+  }
 
-      .sheet {
-        max-width: 38rem; /* ~62ch at 19px */
-        margin: 0 auto;
-        padding: 4.5rem 1.5rem 3rem;
-      }
+  .furniture {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
 
-      /* ---- masthead ---- */
-      .masthead {
-        text-align: center;
-        color: var(--ink-strong);
-        font-size: clamp(2.75rem, 13vw, 4rem);
-        line-height: 1;
-        font-weight: 400;
-        letter-spacing: 0.16em;
-        text-indent: 0.16em; /* optical centring against the trailing letterspace */
-      }
+  header { border-bottom: 2px solid var(--ink); padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+  h1 { font-size: 2.6rem; letter-spacing: 0.18em; margin: 0 0 0.35rem; font-weight: normal; }
+  .masthead-row { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 
-      /* The dateline is furniture, not prose — second voice, mono. */
-      .dateline {
-        margin-top: 1.25rem;
-        padding: 0.7rem 0;
-        border-top: 1px solid var(--rule-strong);
-        border-bottom: 1px solid var(--rule-strong);
-        text-align: center;
-        font-family: var(--mono);
-        font-size: 0.6875rem;
-        letter-spacing: 0.14em;
-        color: var(--meta);
-        text-transform: uppercase;
-      }
+  .cover { font-size: 1.25rem; line-height: 1.45; margin: 0 0 2rem; }
+  .cover em { font-style: italic; color: var(--accent); }
+  .standfirst { color: var(--muted); font-size: 1rem; margin-top: 0.4rem; }
 
-      /* ---- the lede ---- */
-      .lede {
-        margin-top: 3.5rem;
-      }
+  section { margin: 0 0 2.25rem; page-break-inside: avoid; }
+  section > h2 {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); font-weight: normal;
+    border-bottom: 1px solid var(--rule); padding-bottom: 0.35rem; margin: 0 0 0.9rem;
+  }
+  h3 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 0.5rem; font-weight: normal; }
+  p { margin: 0 0 0.8rem; }
 
-      .lede h1 {
-        color: var(--ink-strong);
-        font-size: clamp(1.875rem, 6.5vw, 2.5rem); /* ceiling 40px, well under 48 */
-        line-height: 1.12;
-        font-weight: 400;
-        letter-spacing: -0.019em;
-        text-wrap: balance;
-      }
+  ul { margin: 0 0 0.8rem; padding-left: 1.1rem; }
+  li { margin-bottom: 0.35rem; }
 
-      .lede p {
-        margin-top: 1.5rem;
-      }
+  .focus { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; margin: 0.75rem 0 1rem; }
+  .focus div { white-space: nowrap; }
+  .focus b { font-weight: normal; }
+  .focus span { color: var(--muted); }
 
-      /* ---- blocks ---- */
-      /* Divider space is 1.5x paragraph space — the ratio does the work. */
-      section {
-        margin-top: 3rem;
-        padding-top: 2rem;
-        border-top: 1px solid var(--rule);
-      }
+  .agenda { list-style: none; padding: 0; }
+  .agenda li { display: flex; gap: 0.75rem; }
+  .agenda time { color: var(--muted); min-width: 3.5rem; font-variant-numeric: tabular-nums; }
 
-      h2 {
-        font-family: var(--mono);
-        font-size: 0.625rem;
-        font-weight: 400;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-        color: var(--meta);
-        margin-bottom: 1.5rem;
-      }
+  .story-sources { color: var(--muted); font-size: 0.85rem; }
+  .why { color: var(--accent); }
 
-      p + p {
-        margin-top: 1rem;
-      }
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--muted); font-size: 0.9rem; margin-top: 0.5rem; }
 
-      .loop + .loop {
-        margin-top: 1.75rem;
-      }
+  .degraded { border-top: 1px solid var(--rule); padding-top: 0.75rem; }
+  .degraded li { color: var(--muted); }
 
-      .loop p,
-      .lede p {
-        text-wrap: pretty;
-      }
+  .empty { color: var(--muted); font-style: italic; }
 
-      .stamp {
-        display: block;
-        margin-top: 0.35rem;
-        font-family: var(--mono);
-        font-size: 0.625rem;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--meta);
-      }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #14120f; --ink: #e8e2d8; --muted: #9a9288; --rule: #322d26; --accent: #e09540; }
+  }
+</style>
+</head>
+<body>
 
-      /* The one place the paper raises its voice: your own words, quoted back at you.
-         Also the only appearance of the accent. */
-      blockquote {
-        margin: 1.1rem 0 1.4rem;
-        padding-left: 1.2rem;
-        border-left: 3px solid var(--accent);
-        color: var(--ink-strong);
-        font-style: italic;
-      }
+<header>
+  <h1>PAPER</h1>
+  <div class="masthead-row furniture">
+    <span>{{ dateline }}</span>
+    <span>{% if reader_name %}{{ reader_name }} · {% endif %}No. {{ edition.issue_number }}</span>
+  </div>
+</header>
 
-      .desk-name {
-        color: var(--ink-strong);
-      }
+{% if edition.cover.thesis %}
+<p class="cover">
+  {{ edition.cover.thesis }}
+  {% if edition.cover.standfirst %}<span class="standfirst">{{ edition.cover.standfirst }}</span>{% endif %}
+</p>
+{% endif %}
 
-      .stamp + p {
-        margin-top: 0.75rem;
-      }
+{% if edition.yesterday %}
+<section>
+  <h2>Yesterday</h2>
+  {% if edition.yesterday.headline %}<h3>{{ edition.yesterday.headline }}</h3>{% endif %}
+  {% if edition.yesterday.story %}<p>{{ edition.yesterday.story }}</p>{% endif %}
 
-      .margin-note {
-        font-style: italic;
-      }
+  {% if edition.yesterday.focus %}
+  <div class="focus furniture">
+    {% for block in edition.yesterday.focus %}
+    <div><b>{{ block.label }}</b> <span>{{ block.minutes | hours }}</span></div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
-      /* ---- the hard stop ---- */
-      .end {
-        margin-top: 4rem;
-        padding-top: 1.4rem;
-        border-top: 1px solid var(--rule-strong);
-        text-align: center;
-        font-family: var(--mono);
-        font-size: 0.625rem;
-        letter-spacing: 0.26em;
-        text-transform: uppercase;
-        color: var(--meta);
-      }
+  {% if edition.yesterday.decisions %}
+  <ul>
+    {% for decision in edition.yesterday.decisions %}<li>{{ decision }}</li>{% endfor %}
+  </ul>
+  {% endif %}
 
-      .quiet {
-        margin-top: 3rem;
-        text-align: center;
-        color: var(--meta);
-      }
+  {% if edition.yesterday.unacted %}
+  <p><span class="furniture">Still open</span><br>{{ edition.yesterday.unacted }}</p>
+  {% endif %}
+</section>
+{% endif %}
 
-      @media print {
-        :root {
-          --paper: #ffffff;
-        }
-        .sheet {
-          padding: 0;
-          max-width: none;
-        }
-        body {
-          font-size: 11pt;
-          line-height: 1.5;
-        }
-        section {
-          break-inside: avoid;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="sheet">
-      <header>
-        <div class="masthead">PAPER</div>
-        <div class="dateline">
-          {% if reader %}{{ reader }} &middot; {% endif %}{{ dateline }} &middot; No. {{ edition.issue_number }}
-        </div>
-      </header>
+{% if edition.today %}
+<section>
+  <h2>Today</h2>
+  {% if edition.today.is_clear %}
+  <p class="empty">Nothing scheduled.</p>
+  {% else %}
+    {% if edition.today.note %}<p>{{ edition.today.note }}</p>{% endif %}
+    {% if edition.today.events %}
+    <ul class="agenda">
+      {% for event in edition.today.events %}
+      <li>
+        <time>{{ event.start | clock }}</time>
+        <span>{{ event.title }}{% if event.attendees %} <span class="story-sources">with {{ event.attendees | join(', ') }}</span>{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% if edition.today.commitments %}
+    <ul>
+      {% for commitment in edition.today.commitments %}
+      <li>{{ commitment.text }}{% if commitment.due %} <span class="story-sources">due {{ commitment.due }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  {% endif %}
+</section>
+{% endif %}
 
-      {% if edition.lede %}
-        <div class="lede">
-          <h1>{{ edition.lede.headline }}</h1>
-          {% if edition.lede.body %}<p>{{ edition.lede.body }}</p>{% endif %}
-        </div>
-      {% endif %}
+{% if edition.newsletters %}
+<section>
+  <h2>Newsletters</h2>
+  <ul>
+    {% for story in edition.newsletters %}
+    <li>
+      {{ story.summary }}
+      {% if story.sources %}<span class="story-sources">({{ story.sources | map(attribute='name') | join(', ') }})</span>{% endif %}
+      {% if story.why %}<br><span class="why">{{ story.why }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
-      {% if edition.open_loops %}
-        <section>
-          <h2>Open Loops</h2>
-          {% for entry in edition.open_loops %}
-            <div class="loop">
-              <p>{{ entry.question }}</p>
-              <span class="stamp">{{ age(entry.days_open) }}</span>
-            </div>
-          {% endfor %}
-        </section>
-      {% endif %}
+{% if not edition.for_you.is_empty %}
+<section>
+  <h2>For you</h2>
+  {% for item in edition.for_you.papers %}
+  <h3>{% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}</h3>
+  {% if item.authors or item.identifier %}
+  <p class="furniture">{{ item.identifier }}{% if item.authors %} · {{ item.authors }}{% endif %}</p>
+  {% endif %}
+  {% if item.what_it_says %}<p>{{ item.what_it_says }}</p>{% endif %}
+  {% if item.why_it_matters %}<p class="why">{{ item.why_it_matters }}</p>{% endif %}
+  {% if item.experiment %}<p><span class="furniture">Try</span><br>{{ item.experiment }}</p>{% endif %}
+  {% endfor %}
 
-      {% if edition.counterpoint %}
-        <section>
-          <h2>Counterpoint</h2>
-          <span class="stamp">Your position, {{ edition.counterpoint.days_asserted }} separate days</span>
-          <blockquote>{{ edition.counterpoint.position }}</blockquote>
-          <p>{{ edition.counterpoint.argument }}</p>
-        </section>
-      {% endif %}
+  {% if edition.for_you.tools %}
+  <ul>
+    {% for tool in edition.for_you.tools %}
+    <li><b>{{ tool.name }}</b> {{ tool.what }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
 
-      {% if edition.desk %}
-        <section>
-          <h2>The Desk</h2>
-          {% for item in edition.desk %}
-            <p class="desk-name">{{ item.name }}</p>
-            <span class="stamp">Quiet {{ silence(item.days_since) }}</span>
-            {% if item.context %}<p>{{ item.context }}</p>{% endif %}
-          {% endfor %}
-        </section>
-      {% endif %}
+{% if edition.photo and edition.photo.is_printable %}
+<section>
+  <h2>Yesterday, drawn</h2>
+  <figure>
+    <img src="data:image/png;base64,{{ edition.photo.image_b64 }}" alt="{{ edition.photo.moment }}">
+    <figcaption>{{ edition.photo.caption or edition.photo.moment }}</figcaption>
+  </figure>
+</section>
+{% endif %}
 
-      {% if edition.margin %}
-        <section>
-          <h2>The Margin</h2>
-          <p class="margin-note">{{ edition.margin.insight }}</p>
-        </section>
-      {% endif %}
+{% if edition.degraded_sources %}
+<section class="degraded">
+  <h2>Sources</h2>
+  <ul>
+    {% for health in edition.degraded_sources %}
+    <li>{{ health.source }} unavailable{% if health.note %} — {{ health.note }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
 
-      {% if edition.is_empty %}
-        <p class="quiet">Nothing to print today.</p>
-      {% endif %}
-
-      <div class="end">End of edition</div>
-    </div>
-  </body>
+</body>
 </html>

@@ -1,8 +1,9 @@
 """Render an edition to paper.
 
-Two outputs from one model: HTML sized for an actual sheet of A4, and plaintext at a
-fixed column width. The plaintext path is not decoration — it is what a thermal printer
-consumes, so shipping it now keeps the hardware step a driver swap rather than a rewrite.
+Two outputs from one model: HTML sized for an actual sheet, and plaintext at a
+fixed column width. The plaintext path is not decoration — it is what a thermal
+printer consumes, so keeping it working makes the hardware step a driver swap
+rather than a rewrite.
 """
 
 import pathlib
@@ -11,7 +12,7 @@ from datetime import date
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from models.paper import Brief, Edition
+from models.paper import Edition
 
 _TEMPLATES = pathlib.Path(__file__).parent.parent.parent / 'templates'
 
@@ -27,122 +28,156 @@ TEXT_WIDTH = 42
 
 
 def _dateline(iso_date: str) -> str:
-    """`SUNDAY, AUGUST 2, 2026` — falls back to the raw string if unparseable."""
+    """`SUNDAY, AUGUST 2, 2026` — falls back to the raw string if unparseable.
+
+    Built without ``%-d``. That directive is a glibc extension that raises on
+    Windows and musl, and it sat outside the parse guard, so an unsupported
+    platform failed the whole render instead of falling back as documented.
+    """
     try:
         parsed = date.fromisoformat(iso_date[:10])
     except (ValueError, TypeError):
         return iso_date
-    return parsed.strftime('%A, %B %-d, %Y').upper()
+    return f'{parsed.strftime("%A, %B")} {parsed.day}, {parsed.year}'.upper()
 
 
-def _age(days: int) -> str:
-    """`OPEN 1 DAY` / `OPEN 6 DAYS` — the age is the point of the block."""
-    return f"OPEN {days} DAY" if days == 1 else f"OPEN {days} DAYS"
+def _clock(iso_stamp: str) -> str:
+    """`09:30` from an ISO timestamp, or empty when there isn't one."""
+    if not iso_stamp:
+        return ''
+    try:
+        return iso_stamp[11:16] if len(iso_stamp) >= 16 else ''
+    except (TypeError, IndexError):
+        return ''
 
 
-def _silence(days: int) -> str:
-    return f"{days} DAY" if days == 1 else f"{days} DAYS"
+def _hours(minutes: int) -> str:
+    """`1h 40m` / `25m` — focus time as a person would say it."""
+    if minutes < 60:
+        return f'{minutes}m'
+    hours, rest = divmod(minutes, 60)
+    return f'{hours}h' if rest == 0 else f'{hours}h {rest}m'
+
+
+_env.filters['dateline'] = _dateline
+_env.filters['clock'] = _clock
+_env.filters['hours'] = _hours
 
 
 def render_html(edition: Edition, reader_name: str = '') -> str:
-    """Print-ready HTML. One page, black on white, no interactivity."""
+    """The edition as a printable page."""
     return _env.get_template('paper.html').render(
         edition=edition,
-        reader=(reader_name or '').strip().upper(),
+        reader_name=reader_name,
         dateline=_dateline(edition.date),
-        age=_age,
-        silence=_silence,
     )
 
 
-def _pct(value: float, bars: list) -> float:
-    """Bar width as a share of the largest bar in its own chart.
-
-    Scaling per-chart rather than to a fixed axis is what lets a caption say the
-    bars are not comparable across charts without the drawing contradicting it.
-    """
-    try:
-        largest = max(abs(float(v)) for _, v in bars)
-    except (ValueError, TypeError):
-        return 0.0
-    if not largest:
-        return 0.0
-    return round(abs(float(value)) / largest * 100, 2)
+# ---------------------------------------------------------------------------
+# Plaintext — 42 columns, for the printer.
+# ---------------------------------------------------------------------------
 
 
-def _group_news(brief: Brief) -> list[tuple[str, list]]:
-    """News lines grouped by category, first-seen order preserved."""
-    grouped: dict[str, list] = {}
-    for line in brief.news:
-        grouped.setdefault(line.category, []).append(line)
-    return list(grouped.items())
+def _wrap(text: str, indent: str = '') -> list[str]:
+    """Wrap to the column width, honouring an indent on continuation lines."""
+    if not text:
+        return []
+    return textwrap.wrap(
+        text,
+        width=TEXT_WIDTH,
+        initial_indent=indent,
+        subsequent_indent=indent,
+    ) or [indent + text[:TEXT_WIDTH]]
 
 
-def render_brief(brief: Brief, cover_url: str = '') -> str:
-    """The full morning briefing: dark cover, then the reading pages."""
-    return _env.get_template('brief.html').render(
-        brief=brief,
-        cover_url=cover_url,
-        dateline=_dateline(brief.date),
-        pct=_pct,
-        news_by_category=_group_news(brief),
-    )
+def _rule(char: str = '-') -> str:
+    return char * TEXT_WIDTH
+
+
+def _heading(title: str) -> list[str]:
+    return ['', title.upper()[:TEXT_WIDTH], _rule()]
 
 
 def render_text(edition: Edition, reader_name: str = '') -> str:
-    """Fixed-width plaintext for a thermal printer."""
-    out: list[str] = []
-    rule = '-' * TEXT_WIDTH
+    """The edition at 42 columns.
 
-    def block(label: str) -> None:
-        out.extend(['', rule, label, ''])
+    Every line is width-aware, including headers built from user data — a long
+    name must wrap rather than blow past the column count.
+    """
+    lines: list[str] = []
 
-    def wrap(text: str, indent: str = '') -> None:
-        out.extend(textwrap.wrap(text, TEXT_WIDTH - len(indent), initial_indent=indent, subsequent_indent=indent))
+    masthead = 'PAPER' if not reader_name else f'PAPER — {reader_name}'
+    lines.extend(_wrap(masthead))
+    lines.extend(_wrap(_dateline(edition.date)))
+    lines.append(_wrap(f'No. {edition.issue_number}')[0])
+    lines.append(_rule('='))
 
-    out.append('PAPER'.center(TEXT_WIDTH))
-    out.append('=' * TEXT_WIDTH)
-    meta = ' * '.join(
-        filter(
-            None,
-            [(reader_name or '').strip().upper(), _dateline(edition.date), f'NO. {edition.issue_number}'],
-        )
-    )
-    out.extend(textwrap.wrap(meta, TEXT_WIDTH))
+    if edition.cover.thesis:
+        lines.append('')
+        lines.extend(_wrap(edition.cover.thesis))
 
-    if edition.lede:
-        out.append('')
-        wrap(edition.lede.headline.upper())
-        if edition.lede.body:
-            out.append('')
-            wrap(edition.lede.body)
+    yesterday = edition.yesterday
+    if yesterday:
+        lines.extend(_heading('Yesterday'))
+        if yesterday.headline:
+            lines.extend(_wrap(yesterday.headline))
+            lines.append('')
+        lines.extend(_wrap(yesterday.story))
+        for block in yesterday.focus:
+            lines.extend(_wrap(f'{block.label}: {_hours(block.minutes)}', indent='  '))
+        for decision in yesterday.decisions:
+            lines.extend(_wrap(f'- {decision}'))
+        if yesterday.unacted:
+            lines.append('')
+            lines.extend(_wrap(f'Still open: {yesterday.unacted}'))
 
-    if edition.open_loops:
-        block('OPEN LOOPS')
-        for loop in edition.open_loops:
-            wrap(loop.question)
-            out.append(f'  {_age(loop.days_open)}')
-            out.append('')
-        out.pop()
+    today = edition.today
+    if today and not today.is_clear:
+        lines.extend(_heading('Today'))
+        if today.note:
+            lines.extend(_wrap(today.note))
+            lines.append('')
+        for event in today.events:
+            stamp = _clock(event.start)
+            prefix = f'{stamp}  ' if stamp else ''
+            lines.extend(_wrap(f'{prefix}{event.title}'))
+        for commitment in today.commitments:
+            due = f' (due {commitment.due})' if commitment.due else ''
+            lines.extend(_wrap(f'[ ] {commitment.text}{due}'))
+    elif today:
+        lines.extend(_heading('Today'))
+        lines.extend(_wrap('Nothing scheduled.'))
 
-    if edition.counterpoint:
-        block('COUNTERPOINT')
-        wrap(f'You have said this on {edition.counterpoint.days_asserted} separate days:')
-        out.append('')
-        wrap(edition.counterpoint.position, indent='  ')
-        out.append('')
-        wrap(edition.counterpoint.argument)
+    if edition.newsletters:
+        lines.extend(_heading('Newsletters'))
+        for story in edition.newsletters:
+            lines.extend(_wrap(f'- {story.summary}'))
+            names = ', '.join(source.name for source in story.sources)
+            if names:
+                lines.extend(_wrap(f'({names})', indent='  '))
 
-    if edition.desk:
-        block('THE DESK')
-        for item in edition.desk:
-            out.append(f'{item.name.upper()} - QUIET {_silence(item.days_since)}')
-            if item.context:
-                wrap(item.context)
+    for_you = edition.for_you
+    if not for_you.is_empty:
+        lines.extend(_heading('For you'))
+        for item in for_you.papers:
+            lines.extend(_wrap(item.title))
+            if item.why_it_matters:
+                lines.extend(_wrap(item.why_it_matters, indent='  '))
+            if item.experiment:
+                lines.extend(_wrap(f'Try: {item.experiment}', indent='  '))
+            lines.append('')
+        for tool in for_you.tools:
+            lines.extend(_wrap(f'- {tool.name}: {tool.what}'))
 
-    if edition.margin:
-        block('THE MARGIN')
-        wrap(edition.margin.insight)
+    if edition.photo and edition.photo.is_printable:
+        lines.extend(_heading('Yesterday, drawn'))
+        lines.extend(_wrap(edition.photo.caption or edition.photo.moment))
 
-    out.extend(['', '=' * TEXT_WIDTH, 'END OF EDITION'.center(TEXT_WIDTH), ''])
-    return '\n'.join(out)
+    degraded = edition.degraded_sources
+    if degraded:
+        lines.extend(_heading('Sources'))
+        for health in degraded:
+            note = f': {health.note}' if health.note else ''
+            lines.extend(_wrap(f'- {health.source} unavailable{note}'))
+
+    return '\n'.join(lines).rstrip() + '\n'
