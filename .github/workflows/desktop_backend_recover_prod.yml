@@ -31,6 +31,9 @@ jobs:
       id-token: 'write'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout recovery controls
+        uses: actions/checkout@v7
+
       - name: Google Auth
         uses: google-github-actions/auth@v3
         with:
@@ -130,7 +133,7 @@ jobs:
           serving_revision="$(gcloud run services describe "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --format='value(status.traffic[percent=100].revisionName)')"
+            --format=json | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py)"
           if [[ "$serving_revision" != "$REVISION" ]]; then
             echo "ERROR: serving revision is $serving_revision, expected $REVISION." >&2
             exit 1
@@ -166,7 +169,7 @@ jobs:
           restored_revision="$(gcloud run services describe "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --format='value(status.traffic[percent=100].revisionName)')"
+            --format=json | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py)"
           if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
             echo "ERROR: recovery rollback found $restored_revision, expected $PREVIOUS_REVISION." >&2
             exit 1

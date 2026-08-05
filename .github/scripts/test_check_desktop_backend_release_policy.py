@@ -238,6 +238,13 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
         self.assertTrue(any("desktop_qualify_beta.yml" in error for error in errors), errors)
 
+    def test_rejects_an_agent_vm_job_argument_that_deploy_cloudrun_would_split(self) -> None:
+        mutated = self.dev.replace("'--args=-m,jobs.agent_vm_reconciler'", "--args=-m,jobs.agent_vm_reconciler", 1)
+
+        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+
+        self.assertTrue(any("action-parser-safe" in error for error in errors), errors)
+
     def test_rejects_beta_qualification_without_development_python_health(self) -> None:
         mutated = self.qualification.replace(
             "https://api.omiapi.com/v1/health",
@@ -293,6 +300,13 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_recovery_workflow(mutated)
         self.assertTrue(any("manual traffic-only" in error for error in errors), errors)
         self.assertTrue(any("Ready" in error or "ready" in error for error in errors), errors)
+
+    def test_recovery_requires_checked_out_controls_for_traffic_verification(self) -> None:
+        mutated = self.recovery.replace("      - name: Checkout recovery controls\n        uses: actions/checkout@v7\n\n", "", 1)
+
+        errors = POLICY.validate_recovery_workflow(mutated)
+
+        self.assertTrue(any("Checkout recovery controls" in error for error in errors), errors)
 
     def test_rejects_workflow_chat_contract_drift(self) -> None:
         mutated = self.dev.replace("CHAT_CONTRACT_VERSION: '1'", "CHAT_CONTRACT_VERSION: '2'")

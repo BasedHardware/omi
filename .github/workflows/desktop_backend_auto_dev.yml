@@ -12,6 +12,7 @@ on:
       - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/scripts/desktop_backend_candidate_probe.py'
       - '.github/scripts/verify_desktop_backend_image_lineage.py'
+      - '.github/scripts/extract_single_cloud_run_traffic_revision.py'
       - 'backend/scripts/resolve_cloud_run_tagged_url.py'
       - 'backend/scripts/wait_cloud_run_candidate_readiness.py'
       - 'backend/scripts/firebase_release_probe_token.py'
@@ -490,7 +491,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
           flags: >-
             --command=python
-            --args=-m,jobs.agent_vm_reconciler
+            '--args=-m,jobs.agent_vm_reconciler'
             --max-retries=0
             --task-timeout=3600s
             --service-account=agent-vm-reconciler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
@@ -586,7 +587,7 @@ jobs:
           restored_revision="$(gcloud run services describe "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --format='value(status.traffic[percent=100].revisionName)')"
+            --format=json | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py)"
           if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
             echo "ERROR: rollback verification found $restored_revision, expected $PREVIOUS_REVISION." >&2
             exit 1
