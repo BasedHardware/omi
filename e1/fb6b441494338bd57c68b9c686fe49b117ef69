@@ -1,0 +1,73 @@
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingWindow.swift
+  s_acebfdccb4f1d0::t_441da0da959d43 47-48
+  s_acebfdccb4f1d0::t_c509012e8e974c 46
+backend/tests/unit/test_lock_in.py
+  s_acebfdccb4f1d0::t_6d7a9dee124eef 1-95,97-639
+  s_acebfdccb4f1d0::t_d37bbe148da415 96
+  s_acebfdccb4f1d0::t_f9aeb2dcae14b3 640-647
+desktop/lock-in/Sources/LockInSync/LockInAPI.swift
+  s_acebfdccb4f1d0::t_88b1fce46675c0 1-244
+backend/database/lock_in.py
+  s_acebfdccb4f1d0::t_32bdbeb5ffe5ac 1-450
+backend/models/lock_in.py
+  s_acebfdccb4f1d0::t_8f51ddfb19409d 96
+  s_acebfdccb4f1d0::t_521ba227d55d0b 1-95,97-127,150-208
+  s_acebfdccb4f1d0::t_3eb21637928eb4 128-149
+desktop/lock-in/Sources/LockInSync/SyncLog.swift
+  s_acebfdccb4f1d0::t_a6185b3700ebc5 1-23
+desktop/lock-in/Tests/LockInSyncTests/WireContractTests.swift
+  s_acebfdccb4f1d0::t_59e00ea5a9d129 1-169
+desktop/lock-in/Sources/LockInSync/SessionStore.swift
+  s_acebfdccb4f1d0::t_bf0fc2c36b50b2 1-197
+backend/utils/rate_limit_config.py
+  s_acebfdccb4f1d0::t_dd5ff81798ee53 129-137
+desktop/lock-in/Tests/LockInSyncTests/SyncServiceTests.swift
+  s_acebfdccb4f1d0::t_93ae43fc219e70 7
+  s_acebfdccb4f1d0::t_19055d17843c3b 332,340-342,344-363
+  s_acebfdccb4f1d0::t_c6cb4f13df3082 1-6,8-331,333-339,343,364-365
+desktop/lock-in/Sources/LockInSync/SyncService.swift
+  s_acebfdccb4f1d0::t_a9f8f4e7ba27c1 53-58,63-65,71-72
+  s_acebfdccb4f1d0::t_57e7b510df4250 42-43
+  s_acebfdccb4f1d0::t_a2260a9f3157bf 139,144-147,151-153,155,163-165
+  s_acebfdccb4f1d0::t_03f418a7005267 1-41,44-52,59-62,66-70,73-138,140-143,148-150,154,156-162,166-257,262-264,266-267,269,271-281
+  s_acebfdccb4f1d0::t_ac2f1db8fddb0a 258-261,265,268,270
+backend/main.py
+  s_acebfdccb4f1d0::t_3157718c2bb2d3 71
+  s_acebfdccb4f1d0::t_0fc5ab2344e1ba 207
+desktop/lock-in/Tests/LockInSyncTests/OmiAuthTests.swift
+  s_acebfdccb4f1d0::t_a1a5b5e076148a 1-204
+desktop/lock-in/scripts/build.sh
+  s_acebfdccb4f1d0::t_c357734a691849 33-57
+desktop/lock-in/Sources/LockInSync/LoopbackCallbackServer.swift
+  s_acebfdccb4f1d0::t_dfcac20605ca9f 1-435
+desktop/lock-in/Package.swift
+  s_acebfdccb4f1d0::t_e852fc2a02ba6b 29-38,41,63-64
+  s_acebfdccb4f1d0::t_16a421688daa42 60-62
+desktop/lock-in/Tests/LockInSyncTests/DayOutboxTests.swift
+  s_acebfdccb4f1d0::t_72595a432cadd7 1-108
+desktop/lock-in/Sources/LockInSync/DayOutbox.swift
+  s_acebfdccb4f1d0::t_f90c49110780ee 1-122
+backend/routers/lock_in.py
+  s_acebfdccb4f1d0::t_bdccc2853b865b 1-240
+desktop/lock-in/Sources/LockInSync/OmiAuth.swift
+  s_acebfdccb4f1d0::t_8632b527990ab4 1-610
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingSignIn.swift
+  s_acebfdccb4f1d0::t_d1dd224520a9c9 21-33
+  s_acebfdccb4f1d0::t_8097efdec1b730 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e1fb6b441494338bd57c68b9c686fe49b117ef69",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
