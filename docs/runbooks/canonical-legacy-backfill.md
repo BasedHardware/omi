@@ -38,6 +38,14 @@ change `MEMORY_MODE`, add the UID to `CANONICAL_MEMORY_USERS`, grant default
 memory reads, or open the global read gate. Those remain explicit later rollout
 actions.
 
+For a code-whitelisted user on an enabled maintenance deployment, the scheduler
+owns the same bounded progression: it creates only the known inert onboarding
+state, advances only that exact state to write, and invokes this checkpointed
+page. At terminal staging it reconciles only a scheduler-owned write control to
+the trusted state-head generation and permits graph enrichment for that user.
+Existing write/read controls are preserved; malformed or manually altered
+controls fail closed. The scheduler does not perform the later read cutover.
+
 ### 1. Prepare an explicit UID file
 
 Use either repeatable `--uid` flags or a UTF-8 newline-delimited/JSON UID file:
