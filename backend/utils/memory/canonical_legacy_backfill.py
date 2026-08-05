@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from functools import partial
 from typing import Any, Optional
 
 from database._client import get_firestore_client
@@ -43,7 +44,7 @@ class CanonicalLegacyBackfillConfig:
     max_rows_per_user: int = DEFAULT_MAX_ROWS_PER_USER
     max_estimated_tokens_per_run: int = 100_000
     wall_clock_seconds: Optional[float] = None
-    dry_run: bool = False
+    dry_run: bool = True
 
     def __post_init__(self) -> None:
         if self.page_size <= 0 or self.page_size > MAX_COHORT_PAGE_SIZE:
@@ -90,9 +91,26 @@ def _pending_uids(cohort_uids: tuple[str, ...], checkpoint_store: FirestoreCheck
     return [uid for uid in cohort_uids if checkpoint_store.read(uid).state != MigrationState.read_ready]
 
 
-def _cohort_enrollment_hook(uid: str) -> None:
-    """Satisfy the bulk state machine without writing rollout documents."""
-    del uid
+def _cohort_enrollment_hook(
+    uid: str,
+    *,
+    canonical_uids: frozenset[str],
+) -> None:
+    """Assert the uid is code-enrolled before advancing its checkpoint.
+
+    The bulk state machine treats ``enroll_fn`` as a side effect that makes a
+    user write-ready; once it returns, the checkpoint advances through
+    ``enrolled`` toward the terminal ``read_ready`` state. Because this seam is
+    not the enrollment owner, it must only advance users the cohort whitelist
+    has already enrolled. Passing ``enroll_fn`` to ``run_bulk_migration`` without
+    this guard would let a non-enrolled uid reach ``read_ready``, permanently
+    blocking the real enrollment owner until the checkpoint is manually repaired.
+    """
+    if uid not in canonical_uids:
+        raise ValueError(
+            f"refusing to advance checkpoint for non-cohort uid {uid!r}: "
+            "canonical legacy backfill is not the enrollment owner"
+        )
 
 
 def run_canonical_legacy_backfill_page(
@@ -144,7 +162,9 @@ def run_canonical_legacy_backfill_page(
         inventory_fn=lambda uid: inventory_legacy_user(uid, db_client=client),
         pause_fn=lambda: read_global_pause(client),
         checkpoint_store=None if config.dry_run else checkpoint_store,
-        enroll_fn=None if config.dry_run else _cohort_enrollment_hook,
+        enroll_fn=None
+        if config.dry_run
+        else partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids)),
         backfill_fn=None if config.dry_run else backfill_fn,
     )
 

@@ -93,6 +93,35 @@ def test_config_rejects_unbounded_pages():
         backfill.CanonicalLegacyBackfillConfig(max_rows_per_user=backfill.MAX_ROWS_PER_USER + 1)
 
 
+def test_config_defaults_to_dry_run():
+    """The default config must be fail-safe: no durable writes without opt-in."""
+    assert backfill.CanonicalLegacyBackfillConfig().dry_run is True
+
+
+def test_default_config_does_not_stage_or_write(monkeypatch):
+    """An unparameterized page run inventories only and writes no checkpoints."""
+    db = _Db()
+    monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
+    monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
+    monkeypatch.setattr(backfill, "backfill_user", lambda *a, **k: pytest.fail("dry-run must not stage"))
+
+    page = backfill.run_canonical_legacy_backfill_page(db_client=db)
+
+    assert page.summary.dry_run is True
+    assert db.writes == []
+
+
+def test_enrollment_hook_rejects_non_cohort_uid():
+    """A non-cohort uid must never reach terminal read_ready via this seam."""
+    with pytest.raises(ValueError, match="non-cohort"):
+        backfill._cohort_enrollment_hook("intruder", canonical_uids=frozenset({"cohort-a"}))
+
+
+def test_enrollment_hook_accepts_cohort_uid():
+    """A whitelisted uid advances through the checkpoint normally."""
+    backfill._cohort_enrollment_hook("cohort-a", canonical_uids=frozenset({"cohort-a"}))
+
+
 def test_helper_does_not_import_terminal_graph_or_cron_owners():
     source = inspect.getsource(backfill)
 
@@ -115,7 +144,7 @@ def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypa
     monkeypatch.setattr(backfill, "backfill_user", stage)
 
     page = backfill.run_canonical_legacy_backfill_page(
-        config=backfill.CanonicalLegacyBackfillConfig(page_size=1),
+        config=backfill.CanonicalLegacyBackfillConfig(page_size=1, dry_run=False),
         db_client=db,
     )
 
@@ -140,7 +169,7 @@ def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
         return _backfill_report(uid, **kwargs)
 
     monkeypatch.setattr(backfill, "backfill_user", stage)
-    config = backfill.CanonicalLegacyBackfillConfig(page_size=1)
+    config = backfill.CanonicalLegacyBackfillConfig(page_size=1, dry_run=False)
 
     first = backfill.run_canonical_legacy_backfill_page(config=config, db_client=db)
     calls_after_first = list(calls)
@@ -169,7 +198,7 @@ def test_row_page_is_forwarded_and_only_durable_checkpoints_are_written(monkeypa
     monkeypatch.setattr(backfill, "backfill_user", stage)
 
     page = backfill.run_canonical_legacy_backfill_page(
-        config=backfill.CanonicalLegacyBackfillConfig(page_size=1, max_rows_per_user=7),
+        config=backfill.CanonicalLegacyBackfillConfig(page_size=1, max_rows_per_user=7, dry_run=False),
         db_client=db,
     )
 
