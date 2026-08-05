@@ -148,9 +148,14 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             "",
             1,
         )
-        removed_env = self.dev.replace(
-            "--remove-env-vars=OMI_DESKTOP_RELEASE_TAG",
-            "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG",
+        without_google_adc_reset = self.dev.replace(
+            "GOOGLE_APPLICATION_CREDENTIALS,",
+            "",
+            1,
+        )
+        without_service_account_reset = self.dev.replace(
+            "SERVICE_ACCOUNT_JSON,",
+            "",
             1,
         )
         runtime_signer = self.dev.replace(
@@ -159,13 +164,25 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
             1,
         )
+        for credential_env in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+            with self.subTest(credential_env=credential_env):
+                readded_credential = self.dev.replace(
+                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n"
+                    f"            {credential_env}=/secrets/firebase/service-account.json\n",
+                    1,
+                )
+                errors = POLICY.validate_deploy_workflow(readded_credential, production=False)
+                self.assertTrue(any("must not set" in error and credential_env in error for error in errors), errors)
 
         missing_errors = POLICY.validate_deploy_workflow(missing_mount, production=False)
-        removed_errors = POLICY.validate_deploy_workflow(removed_env, production=False)
+        google_adc_errors = POLICY.validate_deploy_workflow(without_google_adc_reset, production=False)
+        service_account_errors = POLICY.validate_deploy_workflow(without_service_account_reset, production=False)
         signer_errors = POLICY.validate_deploy_workflow(runtime_signer, production=False)
 
         self.assertTrue(any("SERVICE_ACCOUNT_JSON" in error for error in missing_errors), missing_errors)
-        self.assertTrue(any("must not be removed" in error for error in removed_errors), removed_errors)
+        self.assertTrue(any("GOOGLE_APPLICATION_CREDENTIALS" in error for error in google_adc_errors), google_adc_errors)
+        self.assertTrue(any("SERVICE_ACCOUNT_JSON" in error for error in service_account_errors), service_account_errors)
         self.assertTrue(any("must never become" in error for error in signer_errors), signer_errors)
 
     def test_rejects_mutable_image_and_direct_traffic_deploy(self) -> None:
@@ -316,6 +333,15 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         mutated = self.dev[:start] + commented_block + unnamed_peer + self.dev[start + len(block):]
                         errors = POLICY.validate_deploy_workflow(mutated, production=False)
                         self.assertTrue(any(step in error and env_var in error for error in errors), errors)
+
+    def test_requires_dev_adc_and_an_explicit_firebase_auth_credential_path(self) -> None:
+        without_auth_path = self.dev.replace(
+            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+            "",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(without_auth_path, production=False)
+        self.assertTrue(any("Firebase auth credentials" in error for error in errors), errors)
 
     def test_rejects_baked_credentials_or_python_contract_version_drift(self) -> None:
         errors = POLICY.validate_contract_sources(
