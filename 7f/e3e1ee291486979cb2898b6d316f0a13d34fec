@@ -1,0 +1,44 @@
+desktop/context-for-claude/Sources/ContextCore/ClaudeSkill.swift
+  s_f9cf795562ebc2::t_f1c2b88e6df9e5 1-150
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeRegistrar.swift
+  s_f9cf795562ebc2::t_6baf92b2484ce3 133-161
+  s_f9cf795562ebc2::t_f78a406dd5b93f 105
+  s_f9cf795562ebc2::t_3c8821dce14324 119
+  s_569f1df936cc22::t_e2d56d86b11dd3 162
+desktop/context-for-claude/scripts/uninstall.sh
+  s_f9cf795562ebc2::t_dee7f50233f17c 125-134
+desktop/context-for-claude/Tests/ContextCoreTests/ClaudeSkillTests.swift
+  s_f9cf795562ebc2::t_a34c543b921013 1-143
+desktop/context-for-claude/ARCHITECTURE.md
+  s_f9cf795562ebc2::t_b8baff666520d0 102-105,109-120
+  s_f9cf795562ebc2::t_93579bebbb9a60 36,121
+desktop/context-for-claude/README.md
+  s_f9cf795562ebc2::t_4502293118091c 67,76,80-89
+  s_569f1df936cc22::t_46eb89f679a7ce 90
+desktop/context-for-claude/CONTRACTS.md
+  s_f9cf795562ebc2::t_66586282965d64 227-237,240-241,245,254,273-287,300-303,499-522
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7fe3e1ee291486979cb2898b6d316f0a13d34fec",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_f9cf795562ebc2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "87718b64-2d87-41d0-8d2b-db7e0dc1ca81",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
