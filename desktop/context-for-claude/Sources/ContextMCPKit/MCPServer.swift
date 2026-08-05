@@ -34,6 +34,12 @@ public final class MCPServer {
     people and topics named in the request, and `recent` when the request assumes context you were \
     not given ("this", "that email", "help me with this").
 
+    When the user asks you to remember a durable fact, preference, identity detail, decision, or \
+    standing instruction, call `create_memory` and save it to Omi. Do not say it was saved until the \
+    tool succeeds. Use `get_memories` to inspect durable facts, `edit_memory` to correct one, and \
+    `delete_memory` only when the user explicitly asks you to forget it. A captured transcript is \
+    not the same thing as a durable memory.
+
     Routing, when the question is about the recent past: `recent` for the current session (the last \
     minutes to an hour, and the only tool that sees them in full), `screen` for what was on their \
     display, `activity` for where the time went, `recall` to search across everything by name or \

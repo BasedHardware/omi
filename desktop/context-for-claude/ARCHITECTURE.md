@@ -33,7 +33,7 @@ structural decision follows from it:
 | Target | Kind | Depends on | Contains |
 |---|---|---|---|
 | `ContextCore` | library | GRDB | Storage, queries, and every pure policy. No AppKit, no AVFoundation — it has to link into the MCP binary. |
-| `ContextMCPKit` | library | ContextCore | JSON-RPC framing, the seven tools, MCP handshake. |
+| `ContextMCPKit` | library | ContextCore | JSON-RPC framing, the eleven tools, MCP handshake, Omi memory reads and writes. |
 | `ContextMCP` | executable | ContextMCPKit | `main.swift`. Opens the store read-only, pumps stdio. |
 | `ContextApp` | executable | ContextCore, FluidAudio, Sparkle | Capture, transcription, menu bar, onboarding, Claude registration, auto-update. |
 | `context_for_claude_windows_core_smoke` | Windows executable | `ContextForClaude::core`, swift-winrt | Calls the portable C ABI for a session decision and ranking score. |
@@ -107,10 +107,12 @@ thing pruned.
 
 ## The MCP surface
 
-Seven tools — `recall`, `recent`, `conversations`, `transcript`, `screen`, `activity`, `status` —
-returning Markdown rather than JSON, because Claude reads prose better than it reads a dump. Tool
-descriptions are written to tell Claude *when to reach for them*; they are the product's real
-interface and deserve more care than the code behind them.
+Eleven tools — `recall`, `recent`, `conversations`, `transcript`, `screen`, `activity`, `status`,
+`get_memories`, `create_memory`, `edit_memory`, and `delete_memory` — return Markdown rather than
+JSON, because Claude reads prose better than it reads a dump. Memory writes go through Omi's
+canonical `/v1/mcp/memories` API using the provisioned MCP key; CFC does not create a second local
+memory store. Tool descriptions are written to tell Claude *when to reach for them*; they are the
+product's real interface and deserve more care than the code behind them.
 
 `status` exists so that "I have no record of that" can be distinguished from "that never happened".
 

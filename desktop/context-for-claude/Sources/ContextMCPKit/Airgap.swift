@@ -10,9 +10,10 @@ import Foundation
 /// left this binary reading `api.omi.me` on every `recall`. A promise kept in one process and broken
 /// in the sibling it spawns is not a promise; this type is the other half of it.
 ///
-/// **There is exactly one remote client in this target** — ``OmiBackend``, the read-only client for
-/// `https://api.omi.me/v1/mcp/*`. Everything else the seven tools read is local: the capture
-/// database, the main Omi app's `omi.db` (``OmiMemoryStore``), and the query stamp. Neither
+/// **There is exactly one remote client in this target** — ``OmiBackend`` for
+/// `https://api.omi.me/v1/mcp/*`. Everything else the MCP tools do is local or passes through this
+/// client: the capture database, the main Omi app's `omi.db` (``OmiMemoryStore``), and the query
+/// stamp. Neither
 /// `ContextCore` nor `ContextMCP` opens a socket. That is why suppressing egress here costs a tool
 /// its *account* half and never its answer — and it is a property worth re-checking rather than
 /// assuming, because it is what makes this switch safe to honour unconditionally.

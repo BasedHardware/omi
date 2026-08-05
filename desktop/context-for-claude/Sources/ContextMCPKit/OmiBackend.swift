@@ -135,14 +135,11 @@ public enum OmiBackendError: Error, Sendable, Equatable {
         case .unauthorized:
             return "the Omi MCP API key was rejected (HTTP 401) — it has expired or been revoked"
         case .forbidden:
-            return "the Omi MCP API key does not carry read access to this data (HTTP 403)"
+            return "the Omi MCP API key does not carry the required access for this operation (HTTP 403)"
         case .notFound:
             return "the Omi account holds no such record (HTTP 404)"
         case .rateLimited:
-            return """
-            the account hit Omi's read rate limit (HTTP 429; 300 requests an hour) — it will \
-            recover on its own within the hour
-            """
+            return "the account hit Omi's MCP rate limit (HTTP 429) — it will recover on its own within the hour"
         case .timedOut:
             return "the request timed out after \(Int(OmiBackend.requestTimeout)) s"
         case let .offline(detail):
@@ -352,11 +349,13 @@ public struct OmiHistoryProbe: Sendable {
 
 // MARK: - Client
 
-/// Read-only client for `https://api.omi.me/v1/mcp/*`.
+/// Client for `https://api.omi.me/v1/mcp/*`.
 ///
 /// Synchronous on purpose: `Tools.call` is synchronous and the process exists only to answer one
 /// question at a time, so an async ladder would buy nothing and cost a bridge at every call site.
-/// Every public method returns a value — nothing here throws into a tool.
+/// Every public method returns a value — nothing here throws into a tool. Memory mutations use the
+/// same provisioned MCP key as reads; the backend's persisted `memories.write` grant is the
+/// authorization boundary, not a second credential or a local shadow database.
 public final class OmiBackend: @unchecked Sendable {
     public static let shared = OmiBackend()
 
@@ -491,6 +490,72 @@ public final class OmiBackend: @unchecked Sendable {
         }
     }
 
+    /// Lists durable Omi memories without the semantic search used by `recall`.
+    public func getMemories(
+        limit: Int,
+        offset: Int = 0,
+        categories: [String] = [],
+        sort: String = "created_desc"
+    ) -> OmiResult<[OmiMemory]> {
+        var items: [URLQueryItem] = [
+            .init(name: "limit", value: String(clamp(limit, 1, 500))),
+            .init(name: "offset", value: String(max(0, offset))),
+            .init(name: "sort", value: sort),
+        ]
+        let categoryValue = categories
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ",")
+        if !categoryValue.isEmpty { items.append(.init(name: "categories", value: categoryValue)) }
+
+        return get([OmiMemory].self, path: "v1/mcp/memories", query: items, ttl: 30)
+    }
+
+    /// Creates a durable Omi memory. The server assigns the category when one is not supplied.
+    public func createMemory(content: String, category: String? = nil) -> OmiResult<OmiMemory> {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return .unavailable(.malformedResponse("memory content must not be empty"))
+        }
+        let request = CreateMemoryRequest(content: trimmed, category: category?.nonEmpty)
+        guard let body = try? JSONEncoder().encode(request) else {
+            return .unavailable(.malformedResponse("could not encode memory content"))
+        }
+        let result = write(
+            OmiMemory.self,
+            method: "POST",
+            path: "v1/mcp/memories",
+            body: body)
+        if case .ok = result { cache.remove(matching: "/v1/mcp/memories") }
+        return result
+    }
+
+    /// Changes only the content of an existing durable Omi memory.
+    public func editMemory(id: String, content: String) -> OmiResult<Bool> {
+        guard let path = memoryPath(id), let value = content.nonEmpty else {
+            return .unavailable(.malformedResponse("memory id and content must not be empty"))
+        }
+        let result = write(
+            OmiMutationResponse.self,
+            method: "PATCH",
+            path: path,
+            query: [.init(name: "value", value: value)])
+        let mapped = map(result) { _ in true }
+        if case .ok = mapped { cache.remove(matching: "/v1/mcp/memories") }
+        return mapped
+    }
+
+    /// Deletes an existing durable Omi memory.
+    public func deleteMemory(id: String) -> OmiResult<Bool> {
+        guard let path = memoryPath(id) else {
+            return .unavailable(.malformedResponse("memory id must not be empty"))
+        }
+        let result = write(OmiMutationResponse.self, method: "DELETE", path: path)
+        let mapped = map(result) { _ in true }
+        if case .ok = mapped { cache.remove(matching: "/v1/mcp/memories") }
+        return mapped
+    }
+
     /// Vector search over the account's conversations.
     ///
     /// This endpoint takes plain `YYYY-MM-DD` dates and reads them in the server's own calendar, so
@@ -607,7 +672,7 @@ public final class OmiBackend: @unchecked Sendable {
         let cacheKey = url.absoluteString
         if let cached = cache.lookup(cacheKey) {
             switch cached {
-            case let .success(data): return decode(type, data, path: path)
+            case let .success(data): return decode(type, data, path: path, method: "GET")
             case let .failure(error): return .unavailable(error)
             }
         }
@@ -639,10 +704,10 @@ public final class OmiBackend: @unchecked Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
 
-        switch send(request, path: path) {
+        switch send(request, path: path, method: "GET") {
         case let .success(data):
             cache.store(cacheKey, .success(data), ttl: ttl)
-            return decode(type, data, path: path)
+            return decode(type, data, path: path, method: "GET")
         case let .failure(error):
             // Terminal failures are held for the life of the process; a transient one is held only
             // briefly, so a flaky network recovers within the session without hammering the budget.
@@ -651,7 +716,41 @@ public final class OmiBackend: @unchecked Sendable {
         }
     }
 
-    private func send(_ request: URLRequest, path: String) -> Result<Data, OmiBackendError> {
+    private func write<T: Decodable & Sendable>(
+        _ type: T.Type,
+        method: String,
+        path: String,
+        query: [URLQueryItem] = [],
+        body: Data? = nil
+    ) -> OmiResult<T> {
+        guard let credential else { return .unavailable(.notConfigured) }
+        guard var components = URLComponents(url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
+        else { return .unavailable(.malformedResponse("could not build a URL for \(path)")) }
+        components.queryItems = query.isEmpty ? nil : query
+        guard let url = components.url else {
+            return .unavailable(.malformedResponse("could not build a URL for \(path)"))
+        }
+        guard !isAirgapped() else {
+            MCPNetworkEgress.recordSuppression()
+            return .unavailable(.airgapped)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = Self.requestTimeout
+        request.setValue("Bearer \(credential.key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("context-for-claude-mcp/1.0", forHTTPHeaderField: "User-Agent")
+        request.httpBody = body
+
+        switch send(request, path: path, method: method) {
+        case let .success(data): return decode(type, data, path: path, method: method)
+        case let .failure(error): return .unavailable(error)
+        }
+    }
+
+    private func send(_ request: URLRequest, path: String, method: String) -> Result<Data, OmiBackendError> {
         let box = Box<Result<Data, OmiBackendError>>(.failure(.timedOut))
         let semaphore = DispatchSemaphore(value: 0)
 
@@ -695,20 +794,25 @@ public final class OmiBackend: @unchecked Sendable {
         // read loop, because Claude is waiting on stdout.
         if semaphore.wait(timeout: .now() + Self.requestTimeout + 2) == .timedOut {
             task.cancel()
-            MCPServer.note("omi: GET /\(path) timed out")
+            MCPServer.note("omi: \(method) /\(path) timed out")
             return .failure(.timedOut)
         }
         if case let .failure(error) = box.value {
-            MCPServer.note("omi: GET /\(path) failed — \(error.reason)")
+            MCPServer.note("omi: \(method) /\(path) failed — \(error.reason)")
         }
         return box.value
     }
 
-    private func decode<T: Decodable & Sendable>(_ type: T.Type, _ data: Data, path: String) -> OmiResult<T> {
+    private func decode<T: Decodable & Sendable>(
+        _ type: T.Type,
+        _ data: Data,
+        path: String,
+        method: String
+    ) -> OmiResult<T> {
         do {
             return .ok(try JSONDecoder().decode(type, from: data))
         } catch {
-            MCPServer.note("omi: GET /\(path) decode failed")
+            MCPServer.note("omi: \(method) /\(path) decode failed")
             return .unavailable(.malformedResponse("unexpected response shape"))
         }
     }
@@ -736,7 +840,33 @@ public final class OmiBackend: @unchecked Sendable {
         return true
     }
 
+    private func memoryPath(_ id: String) -> String? {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        guard let escaped = trimmed.addingPercentEncoding(withAllowedCharacters: unreserved), !escaped.isEmpty else {
+            return nil
+        }
+        return "v1/mcp/memories/\(escaped)"
+    }
+
     private func clamp(_ value: Int, _ lower: Int, _ upper: Int) -> Int { min(max(value, lower), upper) }
+}
+
+private struct CreateMemoryRequest: Encodable {
+    let content: String
+    let category: String?
+}
+
+private struct OmiMutationResponse: Decodable, Sendable {
+    let status: String?
+}
+
+private extension String {
+    var nonEmpty: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
 }
 
 // MARK: - Process-local state
@@ -769,6 +899,12 @@ private final class ResponseCache: @unchecked Sendable {
         let expiry = ttl == .greatestFiniteMagnitude ? Double.greatestFiniteMagnitude
             : Date().timeIntervalSince1970 + ttl
         entries[key] = Entry(expiresAt: expiry, result: result)
+    }
+
+    func remove(matching path: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        entries = entries.filter { !$0.key.contains(path) }
     }
 }
 

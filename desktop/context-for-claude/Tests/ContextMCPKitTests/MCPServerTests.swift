@@ -101,6 +101,9 @@ final class MCPServerTests: XCTestCase {
         XCTAssertTrue(
             instructions.contains("a few minutes ago"),
             "the tutorial's own suggested question has to be one the instructions claim")
+        XCTAssertTrue(
+            instructions.contains("create_memory"),
+            "durable memory requests must point Claude at the write tool")
     }
 
     func testNotificationsAreNeverAnswered() {
@@ -122,16 +125,19 @@ final class MCPServerTests: XCTestCase {
 
     // MARK: - Tools
 
-    func testToolsListAdvertisesExactlyTheSevenTools() throws {
+    func testToolsListAdvertisesExactlyTheElevenTools() throws {
         let server = MCPServer(store: nil)
 
         let response = try XCTUnwrap(server.handle(line: request(id: 2, method: "tools/list")))
         let tools = try XCTUnwrap(try parse(response)["result"]?["tools"]?.arrayValue)
 
-        XCTAssertEqual(tools.count, 7)
+        XCTAssertEqual(tools.count, 11)
         XCTAssertEqual(
             Set(tools.compactMap { $0["name"]?.stringValue }),
-            ["recall", "recent", "conversations", "transcript", "screen", "activity", "status"])
+            [
+                "recall", "recent", "conversations", "transcript", "screen", "activity", "status",
+                "get_memories", "create_memory", "edit_memory", "delete_memory",
+            ])
         for tool in tools {
             XCTAssertNotNil(tool["description"]?.stringValue)
             XCTAssertEqual(tool["inputSchema"]?["type"]?.stringValue, "object")

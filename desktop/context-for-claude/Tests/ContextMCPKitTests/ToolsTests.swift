@@ -7,7 +7,7 @@ import XCTest
 // testing, and testing them through a live Omi account would be neither hermetic nor possible.
 @testable import ContextMCPKit
 
-/// The seven tools: their declarations, their date arguments, and what they say when there is
+/// The eleven tools: their declarations, their date arguments, and what they say when there is
 /// nothing to say.
 ///
 /// The declarations are as much of the product as the queries behind them — a tool Claude cannot
@@ -17,6 +17,7 @@ final class ToolsTests: XCTestCase {
     /// Claude session, so this list is deliberately spelled out rather than derived.
     private let expectedNames: Set<String> = [
         "recall", "recent", "conversations", "transcript", "screen", "activity", "status",
+        "get_memories", "create_memory", "edit_memory", "delete_memory",
     ]
 
     /// name → the parameters the contract gives it.
@@ -28,12 +29,16 @@ final class ToolsTests: XCTestCase {
         "screen": ["since", "until", "app", "limit"],
         "activity": ["since", "until"],
         "status": [],
+        "get_memories": ["limit", "offset", "sort", "categories"],
+        "create_memory": ["content", "category"],
+        "edit_memory": ["memory_id", "content"],
+        "delete_memory": ["memory_id"],
     ]
 
     // MARK: - Declarations
 
-    func testToolsAreExactlyTheSevenInTheContract() {
-        XCTAssertEqual(Tools.all.count, 7)
+    func testToolsAreExactlyTheElevenInTheContract() {
+        XCTAssertEqual(Tools.all.count, 11)
         XCTAssertEqual(Set(Tools.all.map(\.name)), expectedNames)
     }
 
@@ -69,12 +74,35 @@ final class ToolsTests: XCTestCase {
             "recall": ["query"],
             "transcript": ["session_id"],
             "activity": ["since"],
+            "create_memory": ["content"],
+            "edit_memory": ["memory_id", "content"],
+            "delete_memory": ["memory_id"],
         ]
 
         for tool in Tools.all {
             let declared = Set((tool.inputSchema["required"]?.arrayValue ?? []).compactMap(\.stringValue))
             XCTAssertEqual(declared, required[tool.name] ?? [], "\(tool.name) required list drifted")
         }
+    }
+
+    func testMemoryWritesFailClearlyWhenNoOmiKeyIsConfigured() throws {
+        let create = try Tools.call(
+            name: "create_memory",
+            arguments: ["content": .string("Nik is the founder")],
+            store: nil)
+        XCTAssertTrue(create.contains("no Omi MCP API key is configured"), create)
+
+        let edit = try Tools.call(
+            name: "edit_memory",
+            arguments: ["memory_id": .string("memory-1"), "content": .string("corrected")],
+            store: nil)
+        XCTAssertTrue(edit.contains("no Omi MCP API key is configured"), edit)
+
+        let delete = try Tools.call(
+            name: "delete_memory",
+            arguments: ["memory_id": .string("memory-1")],
+            store: nil)
+        XCTAssertTrue(delete.contains("no Omi MCP API key is configured"), delete)
     }
 
     // MARK: - Date arguments
@@ -1059,7 +1087,7 @@ final class ToolsTests: XCTestCase {
     /// path, and the one line that answered the question went unread.
     ///
     /// Asserted across every tool through the clamp the server actually applies, because the
-    /// renderer budget that only four of the seven pass through was never the whole ceiling.
+    /// renderer budget that only four of the eleven pass through was never the whole ceiling.
     func testNoToolResultExceedsTheClientInlineCeiling() {
         let oversized = String(
             repeating: "- **1:06 PM** · *me* · live: a captured line long enough to matter\n", count: 5_000)

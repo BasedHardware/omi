@@ -74,7 +74,9 @@ Cutting a release — including generating the Context-only update key — is
 
 ## What Claude gets
 
-Seven tools. The descriptions are written for Claude, so it reaches for them unprompted.
+Eleven tools. The descriptions are written for Claude, so it reaches for them unprompted. In
+addition to searching captured context, Claude can list, create, edit, and delete durable Omi
+memories through the user's provisioned MCP key; those writes go to Omi's canonical memory store.
 
 | tool | answers |
 |---|---|
@@ -85,6 +87,10 @@ Seven tools. The descriptions are written for Claude, so it reaches for them unp
 | `screen` | What was on screen: window titles and their text |
 | `activity` | The shape of a day — contiguous blocks per app |
 | `status` | Capture health and coverage windows, for both halves |
+| `get_memories` | The user's durable Omi memories, listed directly |
+| `create_memory` | Save a durable fact to Omi's canonical memory store |
+| `edit_memory` | Correct the content of an existing Omi memory |
+| `delete_memory` | Remove an Omi memory when the user asks to forget it |
 
 `status` is the one that makes the rest trustworthy: it reports exactly what window of time was
 recorded, so Claude can tell "that never happened" apart from "that was never captured". On Intel,
@@ -103,6 +109,7 @@ Context for Claude.app                        context-for-claude-mcp
   sys ─┼→ AudioMixer ─→ /v4/listen ─┐
        │                 (cloud ASR) │
        └→ Parakeet* ────────────────┼→ context.db (SQLite, WAL, FTS5) ←┘ read-only
+                                    └→ Omi memories (canonical API writes)
   screen → Vision OCR ──────────────┘         │
                                               └→ Omi account (from-segments + screen-activity)
 
@@ -141,7 +148,7 @@ validation commands: `windows/README.md`.
 ## Tests
 
 ```bash
-swift test        # 67 tests
+swift test        # 1,057 tests
 ```
 
 Hermetic — no network, no live services. Note that `OmiKeyResolver` deliberately refuses to resolve

@@ -76,6 +76,10 @@ public enum Tools {
         ToolDefinition(name: "screen", description: screenDescription, inputSchema: screenSchema),
         ToolDefinition(name: "activity", description: activityDescription, inputSchema: activitySchema),
         ToolDefinition(name: "status", description: statusDescription, inputSchema: statusSchema),
+        ToolDefinition(name: "get_memories", description: getMemoriesDescription, inputSchema: getMemoriesSchema),
+        ToolDefinition(name: "create_memory", description: createMemoryDescription, inputSchema: createMemorySchema),
+        ToolDefinition(name: "edit_memory", description: editMemoryDescription, inputSchema: editMemorySchema),
+        ToolDefinition(name: "delete_memory", description: deleteMemoryDescription, inputSchema: deleteMemorySchema),
     ]
 
     /// Executes a tool and returns the text payload for the MCP content block.
@@ -99,10 +103,14 @@ public enum Tools {
         case "screen": text = try runScreen(arguments, store)
         case "activity": text = try runActivity(arguments, store)
         case "status": text = runStatus(store, openError)
+        case "get_memories": text = try runGetMemories(arguments)
+        case "create_memory": text = try runCreateMemory(arguments)
+        case "edit_memory": text = try runEditMemory(arguments)
+        case "delete_memory": text = try runDeleteMemory(arguments)
         default: throw ToolError.unknownTool(name)
         }
         // The last thing before the transport, and deliberately here rather than in `renderMerged`:
-        // three of the seven tools render outside it and so carry no budget at all, and `activity`
+        // Several tools render outside it and so carry no row budget of their own, and `activity`
         // has no row limit at any layer — a ceiling only some paths respect is not a ceiling.
         return clampToolResult(text, tool: name)
     }
@@ -346,6 +354,30 @@ extension Tools {
     account, so they are a floor on what was sampled, never the date the user's record begins. \
     Searching with a `since` older than anything printed there is expected and does return results.
     """
+
+    static let getMemoriesDescription = """
+    List the durable facts Omi currently remembers about the user. Use this when you need to inspect
+    the memory collection itself rather than search for a particular topic. These are account-backed
+    Omi memories, not the live transcript captured by Context for Claude.
+    """
+
+    static let createMemoryDescription = """
+    Save a durable fact to the user's Omi memories. Use this when the user asks you to remember a
+    preference, identity detail, decision, standing instruction, or other fact for future chats.
+    Save the user's request directly and do not claim it was saved until this tool succeeds. This
+    writes to Omi's canonical memory store so the memory is available across Omi and future Context
+    for Claude sessions.
+    """
+
+    static let editMemoryDescription = """
+    Change the content of an existing Omi memory. Use this only when the user identifies a memory
+    that should be corrected or updated. Pass the memory id returned by `get_memories` or `recall`.
+    """
+
+    static let deleteMemoryDescription = """
+    Delete an existing Omi memory. Use this when the user explicitly asks to forget or remove a
+    durable fact. Pass the memory id returned by `get_memories` or `recall`.
+    """
 }
 
 // MARK: - Schemas
@@ -433,6 +465,40 @@ extension Tools {
     }
 
     static var statusSchema: JSONValue { Schema.object() }
+
+    static var getMemoriesSchema: JSONValue {
+        Schema.object(
+            properties: [
+                ("limit", Schema.integer("Maximum number of durable memories to return.", default: 100)),
+                ("offset", Schema.integer("Number of memories to skip before returning results.")),
+                ("sort", Schema.string("Ordering: created_desc, updated_desc, scoring_desc, or manual_first.")),
+                ("categories", Schema.array("Optional memory categories to include, such as preferences or facts.")),
+            ])
+    }
+
+    static var createMemorySchema: JSONValue {
+        Schema.object(
+            properties: [
+                ("content", Schema.string("The durable fact to save to Omi.")),
+                ("category", Schema.string("Optional Omi memory category.")),
+            ],
+            required: ["content"])
+    }
+
+    static var editMemorySchema: JSONValue {
+        Schema.object(
+            properties: [
+                ("memory_id", Schema.string("The Omi memory id to edit.")),
+                ("content", Schema.string("The replacement durable fact text.")),
+            ],
+            required: ["memory_id", "content"])
+    }
+
+    static var deleteMemorySchema: JSONValue {
+        Schema.object(
+            properties: [("memory_id", Schema.string("The Omi memory id to delete."))],
+            required: ["memory_id"])
+    }
 }
 
 /// Hand-built JSON Schema fragments. Explicit cases rather than literals so the type checker never
@@ -453,6 +519,14 @@ private enum Schema {
 
     static func string(_ description: String) -> JSONValue {
         .object(["type": .string("string"), "description": .string(description)])
+    }
+
+    static func array(_ description: String) -> JSONValue {
+        .object([
+            "type": .string("array"),
+            "description": .string(description),
+            "items": .object(["type": .string("string")]),
+        ])
     }
 
     static func integer(_ description: String) -> JSONValue {
@@ -919,6 +993,96 @@ extension Tools {
             queryFailure = openError.localizedDescription
         }
         return renderStatus(local, queryFailure: queryFailure) + "\n\n" + renderOmiStatus()
+    }
+
+    private static func runGetMemories(_ args: JSONValue?) throws -> String {
+        let limit = clamp(intArg(args, "limit") ?? 100, 1, 500)
+        let offset = max(0, intArg(args, "offset") ?? 0)
+        let sort = stringArg(args, "sort") ?? "created_desc"
+        guard ["created_desc", "updated_desc", "scoring_desc", "manual_first"].contains(sort) else {
+            throw ToolError.invalidArgument(
+                argument: "sort",
+                value: sort,
+                expected: "Use created_desc, updated_desc, scoring_desc, or manual_first.")
+        }
+        let categories: [String]
+        if let raw = args?["categories"] {
+            guard let values = raw.arrayValue else {
+                throw ToolError.invalidArgument(
+                    argument: "categories",
+                    value: literalDescription(raw),
+                    expected: "It must be an array of category strings.")
+            }
+            categories = values.compactMap(\.stringValue).compactMap(nonEmpty)
+            guard categories.count == values.count else {
+                throw ToolError.invalidArgument(
+                    argument: "categories",
+                    value: literalDescription(raw),
+                    expected: "Every category must be a string.")
+            }
+        } else {
+            categories = []
+        }
+
+        switch OmiBackend.shared.getMemories(limit: limit, offset: offset, categories: categories, sort: sort) {
+        case let .ok(memories):
+            guard !memories.isEmpty else {
+                return offset == 0
+                    ? "Omi has no durable memories matching that request."
+                    : "Omi has no more durable memories at offset \(offset)."
+            }
+            return "**Omi memories** · \(memories.count) returned\n\n" + renderMemories(memories)
+        case let .unavailable(error):
+            return memoryOperationFailure("read Omi memories", error)
+        }
+    }
+
+    private static func runCreateMemory(_ args: JSONValue?) throws -> String {
+        guard let content = stringArg(args, "content") else {
+            throw ToolError.missingArgument(tool: "create_memory", argument: "content")
+        }
+        let category = stringArg(args, "category")
+        switch OmiBackend.shared.createMemory(content: content, category: category) {
+        case let .ok(memory):
+            let categorySuffix = memory.category.flatMap(nonEmpty).map { " (\($0))" } ?? ""
+            return "Saved Omi memory\(categorySuffix): \(collapse(memory.content))\nMemory id: `\(memory.id)`"
+        case let .unavailable(error):
+            return memoryOperationFailure("save this Omi memory", error)
+        }
+    }
+
+    private static func runEditMemory(_ args: JSONValue?) throws -> String {
+        guard let id = stringArg(args, "memory_id") else {
+            throw ToolError.missingArgument(tool: "edit_memory", argument: "memory_id")
+        }
+        guard let content = stringArg(args, "content") else {
+            throw ToolError.missingArgument(tool: "edit_memory", argument: "content")
+        }
+        switch OmiBackend.shared.editMemory(id: id, content: content) {
+        case .ok:
+            return "Updated Omi memory `\(id)`."
+        case let .unavailable(error):
+            return memoryOperationFailure("update Omi memory `\(id)`", error)
+        }
+    }
+
+    private static func runDeleteMemory(_ args: JSONValue?) throws -> String {
+        guard let id = stringArg(args, "memory_id") else {
+            throw ToolError.missingArgument(tool: "delete_memory", argument: "memory_id")
+        }
+        switch OmiBackend.shared.deleteMemory(id: id) {
+        case .ok:
+            return "Deleted Omi memory `\(id)`."
+        case let .unavailable(error):
+            return memoryOperationFailure("delete Omi memory `\(id)`", error)
+        }
+    }
+
+    private static func memoryOperationFailure(_ operation: String, _ error: OmiBackendError) -> String {
+        var out = "Could not \(operation): \(error.reason)."
+        if error == .notConfigured { out += "\n\n" + OmiBackend.notConfiguredSentence }
+        if error == .airgapped, let blocked = MCPNetworkEgress.signInBlockedNote { out += " " + blocked }
+        return out
     }
 }
 
