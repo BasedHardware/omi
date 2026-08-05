@@ -8,6 +8,7 @@ import {
 } from '@/lib/audioCapture';
 import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
 import { processInProgressConversation, finalizeConversationById, getTranscriptionPreferences } from '@/lib/api';
+import { applyLiveTranscriptSegment } from '@/lib/transcriptSegments';
 
 /**
  * Hook to manage recording lifecycle.
@@ -89,16 +90,9 @@ export function useRecording() {
         clientConversationId,
         onSegment: (segment: TranscriptSegment) => {
           if (!isMountedRef.current) return;
-          setSegments((prev) => {
-            // Update existing segment or add new one
-            const existingIndex = prev.findIndex((s) => s.id === segment.id);
-            if (existingIndex >= 0) {
-              const updated = [...prev];
-              updated[existingIndex] = segment;
-              return updated;
-            }
-            return [...prev, segment];
-          });
+          // Bound the live UI list so ~1h sessions do not freeze Chrome (#5399).
+          // Server audio still holds the full session for finalize-on-stop.
+          setSegments((prev) => applyLiveTranscriptSegment(prev, segment));
         },
         onConversationSession: (conversationId) => {
           conversationIdRef.current = conversationId;
@@ -111,7 +105,10 @@ export function useRecording() {
           // Socket connected
         },
         onDisconnected: () => {
-          // Socket disconnected
+          // Surface disconnects that leave recording "alive" while audio drops
+          // (#5399 / #10941). Token-refresh close events are ignored inside the socket.
+          if (!isMountedRef.current) return;
+          console.warn('Transcription socket disconnected while recording may still be active');
         },
       });
 
