@@ -5,8 +5,8 @@ import SwiftUI
 /// (transcription minutes, monthly chat/floating-bar messages, etc).
 ///
 /// Rendered as a `.overlay` on `DesktopHomeView.mainContent` so it appears
-/// above every page. The user can dismiss it with the X button or the
-/// "Not now" button; clicking "Upgrade" navigates to Settings → Plan & Usage.
+/// above every page. The user can dismiss it with the X button or by clicking the
+/// dim outside the card; clicking "Upgrade" navigates to Settings → Plan & Usage.
 struct UsageLimitPopupView: View {
   let reason: String
   let onUpgrade: () -> Void

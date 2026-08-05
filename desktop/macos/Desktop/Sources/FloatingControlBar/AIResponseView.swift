@@ -440,10 +440,15 @@ struct AIResponseView: View {
   private var followUpInputView: some View {
     VStack(spacing: 0) {
       HStack(spacing: OmiSpacing.xs) {
+        // `NotchGlass.quiet`, never SwiftUI's `.secondary`. This row is inside the pill, whose ink is
+        // the white-on-black scale (`NotchGlassChrome`); `.secondary` is a semantic label colour that
+        // resolves against whatever colour scheme happens to be in the environment, which is a
+        // different ladder that only *looks* right here because the panel forces `.dark`. One glyph
+        // reading off a second scale is how a surface drifts.
         Button(action: { shareLink() }) {
           Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(showShareFeedback ? .green : .secondary)
+            .foregroundColor(showShareFeedback ? Ink.listeningGreen : NotchGlass.quiet)
         }
         .buttonStyle(.plain)
         .help("Copy share link")
@@ -457,7 +462,7 @@ struct AIResponseView: View {
             Spacer(minLength: 0)
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.secondary)
+              .foregroundColor(NotchGlass.quiet)
           }
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xs)

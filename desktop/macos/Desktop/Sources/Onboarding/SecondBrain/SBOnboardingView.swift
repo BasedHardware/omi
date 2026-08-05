@@ -135,11 +135,22 @@ struct SBOnboardingView: View {
           }
           .padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 10)
         }
+        // **The thread sits on the floor of the card, not its ceiling.** The panel is a fixed
+        // 540 × 640 so it never jumps as the conversation grows, which means the first three steps
+        // — the first screens a new user ever sees — otherwise draw one short paragraph at the top
+        // of a card with ~380 pt of visibly empty card under it. Emptiness a border draws a box
+        // around is not whitespace, it is an unfinished panel. Anchored to the bottom, a short
+        // thread reads the way every chat does before you scroll, and the action the step is asking
+        // for lands near the thumb instead of stranded mid-card.
+        .defaultScrollAnchor(.bottom)
         .onChange(of: model.thread.count) { _, _ in scrollDown(proxy) }
         .onChange(of: model.showWidget) { _, _ in scrollDown(proxy) }
         .onChange(of: model.streamingText) { _, _ in scrollDown(proxy) }
         .onChange(of: model.shortcutPicked) { _, _ in scrollDown(proxy) }
         .onChange(of: model.shortcutPressed) { _, _ in scrollDown(proxy) }
+        // Revealing the assistants list grows the widget *below* the fold, so without this the
+        // rows it just opened are clipped by the card's lower edge and nothing moves.
+        .onChange(of: showAIAssistants) { _, _ in scrollDown(proxy) }
       }
       // No progress dots — the user shouldn't count steps or feel a finish line. The strip is still
       // reserved rather than drawn over, which is the part that matters: a foot the column cannot
@@ -448,12 +459,17 @@ struct SBOnboardingView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(InkButtonStyle(kind: action == .recheck ? .secondary : .primary))
+        // The escape is a *control*, not a caption. As a bare `.plain` run of `statusLabel` this was
+        // an 11 pt grey line sitting 10 pt under a full-width filled pill — the shape of a footnote,
+        // on the one screen where the user most needs to know they are not trapped. `screenDemoWidget`
+        // already learned this ("it used to be a tiny, easily-missed text link") and shipped the
+        // secondary capsule; every skip in this flow is that same object now.
         Button {
           onContinue()
         } label: {
-          Text("Skip for now").inkStyle(InkType.statusLabel, color: Ink.secondary)
+          Text("Skip for now").frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(InkButtonStyle(kind: .secondary))
       }
     }
     .frame(maxWidth: 380, alignment: .leading)
@@ -502,8 +518,9 @@ struct SBOnboardingView: View {
               model.requestPerm("full_disk_access")
             }
           }
-          .buttonStyle(.plain)
-          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          // A capsule, not a run of caption type: this asks macOS for a permission, which is the
+          // heaviest thing on this card after Continue. `.secondary` keeps Continue the one primary.
+          .buttonStyle(InkButtonStyle(kind: .secondary))
         }
         SBInkButton(title: "Continue", isDefaultAction: true) { model.finishFilesStep() }
       }
@@ -515,9 +532,10 @@ struct SBOnboardingView: View {
           .fixedSize(horizontal: false, vertical: true)
         HStack(spacing: 10) {
           SBInkButton(title: "Retry") { model.retryLocalFileScan() }
+          // The way past a failed scan is the only thing on this card the user may actually want,
+          // so it is a capsule beside Retry rather than caption type trailing it.
           Button("Continue without a scan") { model.finishFilesStep() }
-            .buttonStyle(.plain)
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .buttonStyle(InkButtonStyle(kind: .secondary))
         }
       }
       .frame(maxWidth: 380, alignment: .leading)
@@ -621,7 +639,7 @@ struct SBOnboardingView: View {
         .padding(.top, 6)
       }
       // Continue only appears once the key has actually been pressed; before that,
-      // just a quiet Skip so the user is never stuck.
+      // the same secondary Skip capsule every other step offers, so the user is never stuck.
       Group {
         if model.shortcutPressed {
           SBInkButton(title: "Continue", isDefaultAction: true) {
@@ -631,9 +649,9 @@ struct SBOnboardingView: View {
           Button {
             isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
           } label: {
-            Text("Skip for now").inkStyle(InkType.statusLabel, color: Ink.secondary)
+            Text("Skip for now").frame(maxWidth: .infinity)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(InkButtonStyle(kind: .secondary))
         }
       }
       .padding(.top, 6)
@@ -709,6 +727,11 @@ struct SBOnboardingView: View {
               .font(.system(size: 11, weight: .semibold))
               .foregroundStyle(Ink.secondary)
           }
+          // **The row is the target, not the two glyphs on it.** A `.plain` button hit-tests its
+          // rendered label, and a `Spacer` renders nothing — so without this the whole span between
+          // the title and the chevron, which is most of the row, was dead. It looked like a
+          // disclosure and behaved like one only if you happened to press the word.
+          .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.vertical, 12)
@@ -807,10 +830,15 @@ struct SBOnboardingView: View {
     case "unavailable": Text("not installed").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
     case "error":
       Button("Retry", action: action)
-        .buttonStyle(InkButtonStyle(kind: .primary))
+        .buttonStyle(InkButtonStyle(kind: .secondary))
     default:
+      // `.secondary`, and this is a hierarchy decision rather than a taste one. There are six
+      // connector rows on the context card and one Continue under them; filled, the six read as six
+      // primary actions and the step's actual proceed action is the seventh identical black pill —
+      // a wall of ink on a card whose whole job is to feel optional. Outlined, "Connect" is still
+      // plainly a button and Continue is the only filled thing on the card.
       Button(state == "needsSignIn" ? "Retry" : "Connect", action: action)
-        .buttonStyle(InkButtonStyle(kind: .primary))
+        .buttonStyle(InkButtonStyle(kind: .secondary))
     }
   }
 
@@ -821,14 +849,20 @@ struct SBOnboardingView: View {
       Button {
         model.capture(SBOnboardingModel.defaultCaptureSelection)
       } label: {
-        HStack(spacing: 4) {
-          Text("● Only during meetings")
-          // The qualifier is on the filled capsule, so it steps down in *alpha* on the label colour
-          // rather than moving to another rung — the ladder is for type on the panel, and there is no
-          // second ink inside a primary button.
-          Text("· from my calendar").opacity(0.75)
-        }
-        .frame(maxWidth: .infinity)
+        // **One `Text`, not an `HStack` of two.** The label is wider than the capsule's 340 pt
+        // measure, and side by side the first run wrapped to two lines while the qualifier stayed on
+        // one and centred itself against them — a lopsided block inside the pill, on the last card
+        // of the flow. Concatenated, the whole label wraps as a single centred paragraph.
+        //
+        // The qualifier still steps down in *alpha* on the label colour rather than moving to another
+        // rung — the ladder is for type on the panel, and there is no second ink inside a primary
+        // button. `Ink.surface` restated here because a per-run colour is the only way to vary one
+        // inside a concatenation, and `Ink.surface` is exactly what `InkButtonStyle` sets for
+        // `.primary`.
+        (Text("● Only during meetings ")
+          + Text("· from my calendar").foregroundColor(Ink.surface.opacity(0.75)))
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: .infinity)
       }
       .buttonStyle(InkButtonStyle(kind: .primary))
       .keyboardShortcut(.defaultAction)
