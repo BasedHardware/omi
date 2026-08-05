@@ -41,9 +41,23 @@ path with the exact image reference before the fleet can converge.
 
 ## Installation order
 
-Deploy Agent Proxy with session leases first. Deploy the desktop backend and
-provision the dedicated job identity, deploy the job, then install the
-Scheduler trigger using the refuse-by-default helpers:
+Deploy Agent Proxy with session leases first. Before the desktop-backend
+deployment, provision the dedicated job identity and grant the environment's
+CI deploy service account permission to attach exactly that identity to the
+Cloud Run Job. The helper refuses to infer the deployer or grant project-wide
+Service Account User:
+
+```bash
+AGENT_VM_RECONCILER_IAM_APPLY=1 \
+AGENT_VM_RECONCILER_PROJECT=based-hardware-dev \
+AGENT_VM_RECONCILER_BUCKET=based-hardware-dev-agent \
+AGENT_VM_RECONCILER_DEPLOYER=local-development-joan@based-hardware-dev.iam.gserviceaccount.com \
+bash backend/scripts/apply-agent-vm-reconciler-iam.sh
+```
+
+Use the corresponding CI deploy service account and bucket in each environment.
+Then deploy the desktop backend (which creates or updates the Job), and install
+the Scheduler trigger only after the Agent Proxy lease check succeeds:
 
 ```bash
 AGENT_VM_RECONCILER_SCHEDULER_APPLY=1 \
@@ -59,8 +73,11 @@ when absent and grants it `roles/run.invoker` on the named Cloud Run Job. The
 job identity is provisioned per environment with
 `backend/scripts/apply-agent-vm-reconciler-iam.sh`; it receives Firestore
 read/write, bucket object-read, and condition-scoped Agent VM Compute lifecycle
-permissions. The reconciler job uses its attached identity and Application
-Default Credentials; it does not mount the desktop backend's Firebase key.
+permissions. The CI deploy identity receives `roles/iam.serviceAccountUser`
+only on that reconciler identity, so it can deploy the Job without being able
+to attach unrelated service accounts. The reconciler job uses its attached
+identity and Application Default Credentials; it does not mount the desktop
+backend's Firebase key.
 Validate the installed trigger with
 `backend/scripts/validate_agent_vm_reconciler_scheduler.py` before the first
 live execution.

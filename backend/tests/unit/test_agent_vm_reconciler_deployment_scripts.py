@@ -1,5 +1,7 @@
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -73,7 +75,7 @@ def test_scheduler_apply_resumes_existing_trigger_then_validates_exact_contract(
     assert "--scheduler-service-account \"$scheduler_sa\"" in script
 
 
-def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped():
+def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(tmp_path):
     script = _read("backend/scripts/apply-agent-vm-reconciler-iam.sh")
 
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
@@ -89,6 +91,75 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped()
     assert "instances/omi-agent-" in script
     assert "roles/storage.objectViewer" in script
     assert "roles/iam.serviceAccountUser" in script
+    assert 'AGENT_VM_RECONCILER_DEPLOYER:-}' in script
+    assert "AGENT_VM_RECONCILER_DEPLOYER must be a full Google service-account email." in script
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    command_log = tmp_path / "gcloud.log"
+    fake_gcloud = fake_bin / "gcloud"
+    fake_gcloud.write_text(
+        "#!/usr/bin/env bash\n" "printf '%s\\n' \"$*\" >> \"$FAKE_GCLOUD_LOG\"\n",
+        encoding="utf-8",
+    )
+    fake_gcloud.chmod(0o755)
+    base_env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "FAKE_GCLOUD_LOG": str(command_log),
+        "AGENT_VM_RECONCILER_IAM_APPLY": "1",
+        "AGENT_VM_RECONCILER_PROJECT": "based-hardware-dev",
+        "AGENT_VM_RECONCILER_BUCKET": "based-hardware-dev-agent",
+        "AGENT_VM_RECONCILER_DEPLOYER": "",
+    }
+
+    missing_deployer = subprocess.run(
+        ["bash", "backend/scripts/apply-agent-vm-reconciler-iam.sh"],
+        cwd=REPO_DIR,
+        env=base_env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert missing_deployer.returncode == 2
+    assert "AGENT_VM_RECONCILER_DEPLOYER" in missing_deployer.stderr
+    assert not command_log.exists(), "the missing-input guard must run before any gcloud mutation"
+
+    malformed_deployer = subprocess.run(
+        ["bash", "backend/scripts/apply-agent-vm-reconciler-iam.sh"],
+        cwd=REPO_DIR,
+        env={
+            **base_env,
+            "AGENT_VM_RECONCILER_DEPLOYER": "not-an-email",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert malformed_deployer.returncode == 2
+    assert "AGENT_VM_RECONCILER_DEPLOYER must be a full Google service-account email." in malformed_deployer.stderr
+    assert not command_log.exists(), "invalid deployer input must be rejected before any gcloud mutation"
+
+    completed = subprocess.run(
+        ["bash", "backend/scripts/apply-agent-vm-reconciler-iam.sh"],
+        cwd=REPO_DIR,
+        env={
+            **base_env,
+            "AGENT_VM_RECONCILER_DEPLOYER": "local-development-joan@based-hardware-dev.iam.gserviceaccount.com",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    commands = command_log.read_text(encoding="utf-8")
+    assert (
+        "iam service-accounts add-iam-policy-binding "
+        "agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--project=based-hardware-dev "
+        "--member=serviceAccount:local-development-joan@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=roles/iam.serviceAccountUser"
+    ) in commands
 
 
 def test_revoke_script_removes_all_conditional_bindings_and_verifies_absence():
