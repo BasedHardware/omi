@@ -300,12 +300,12 @@ def test_historical_runner_allows_a_bounded_scan_for_unenriched_candidates():
         )
 
 
-def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_candidate(
+def test_historical_runner_holds_the_external_planner_to_the_item_limit_even_with_a_larger_scan(
     monkeypatch: pytest.MonkeyPatch,
 ):
     control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
     failing = _item(memory_id="mem_failing")
-    ready = _item(memory_id="mem_ready")
+    later = _item(memory_id="mem_later")
     cursor_store = _CursorStore()
     planner = _Planner(
         {
@@ -323,7 +323,7 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
         historical_runner,
         "_candidate_page",
         lambda *_args, **_kwargs: historical_runner.HistoricalGraphCandidatePage(
-            items=[failing, ready], last_scanned=ready, exhausted=False
+            items=[failing, later], last_scanned=later, exhausted=False
         ),
     )
 
@@ -353,8 +353,8 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
         cursor_store=cursor_store,
     )
 
-    assert report["outcomes"] == {"committed": 1, "cursor_advanced": 1, "planner_error": 1}
-    assert cursor_store.advances == [(0, "mem_ready")]
+    assert report["outcomes"] == {"cursor_advanced": 1, "planner_error": 1}
+    assert cursor_store.advances == [(0, "mem_failing")]
 
 
 def test_historical_runner_rotates_cursor_past_a_bounded_scan_window(monkeypatch: pytest.MonkeyPatch):

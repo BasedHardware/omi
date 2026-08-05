@@ -236,16 +236,6 @@ struct MemoryAtlasTimeline: Equatable {
   }
 }
 
-struct MemoryAtlasNodePlacement: Identifiable {
-  let node: KnowledgeGraphNode
-  let cluster: MemoryAtlasCluster?
-  let normalizedPosition: CGPoint
-  let degree: Int
-  let clusterRank: Int
-
-  var id: String { node.id }
-}
-
 struct MemoryAtlasEdgePlacement: Identifiable {
   let edge: KnowledgeGraphEdge
   let source: CGPoint
@@ -538,39 +528,6 @@ enum MemoryAtlasZoomPolicy {
   ) -> CGSize {
     let ratio = nextZoom / max(currentZoom, minimumZoom)
     return CGSize(width: pan.width * ratio, height: pan.height * ratio)
-  }
-}
-
-enum MemoryAtlasNodeVisualPolicy {
-  /// Deep inspection keeps dots at a stable, usable size. The dynamic maximum
-  /// zoom adds label fidelity; it must not make a node harder to see or target.
-  static func radius(
-    clusterRank: Int,
-    zoom: CGFloat,
-    compact: Bool,
-    isFullyLabelled: Bool,
-    isInspect: Bool,
-    isFocus: Bool,
-    isSmallAtlas: Bool = false
-  ) -> CGFloat {
-    if isFullyLabelled || isInspect {
-      return clusterRank == 0 ? 16 : 12
-    }
-    // A 2.1pt dot is the right mark among thousands of peers and far too timid
-    // when there are two dozen. Scale the mark to the graph, not just the zoom.
-    if isSmallAtlas && !compact && !isFocus {
-      return clusterRank == 0 ? 9 : 6
-    }
-    if isFocus {
-      return clusterRank == 0 ? 10 : 7.2
-    }
-    if clusterRank == 0 {
-      if compact { return 5 }
-      return zoom >= 4.2 ? 8 : 6
-    }
-    if compact { return zoom >= 1.2 ? 2.4 : 2.1 }
-    if zoom >= 4.2 { return 4.8 }
-    return zoom >= 1.45 ? 2.8 : 2.1
   }
 }
 
@@ -908,39 +865,13 @@ enum MemoryAtlasRenderPlanner {
     let tierCount = includeBackgroundNodes ? tiers.count : 3
     for tierIndex in 0..<tierCount where result.count < limit {
       let remaining = limit - result.count
-      result.append(contentsOf: fairPrefix(tiers[tierIndex], limit: remaining))
-    }
-    return result
-  }
-
-  /// Preserve the precomputed per-cluster salience order while avoiding a
-  /// single dense cluster monopolizing a capped detail viewport.
-  private static func fairPrefix(
-    _ candidates: [MemoryAtlasNodePlacement],
-    limit: Int
-  ) -> [MemoryAtlasNodePlacement] {
-    var unclustered: [MemoryAtlasNodePlacement] = []
-    var byCluster: [MemoryAtlasCluster: [MemoryAtlasNodePlacement]] = [:]
-    for placement in candidates {
-      if let cluster = placement.cluster {
-        byCluster[cluster, default: []].append(placement)
-      } else {
-        unclustered.append(placement)
-      }
-    }
-
-    var result = Array(unclustered.prefix(limit))
-    var nextIndexes = [Int](repeating: 0, count: MemoryAtlasCluster.allCases.count)
-    while result.count < limit {
-      var appended = false
-      for (clusterIndex, cluster) in MemoryAtlasCluster.allCases.enumerated() where result.count < limit {
-        let index = nextIndexes[clusterIndex]
-        guard let placements = byCluster[cluster], index < placements.count else { continue }
-        result.append(placements[index])
-        nextIndexes[clusterIndex] = index + 1
-        appended = true
-      }
-      if !appended { break }
+      result.append(
+        contentsOf: fairPrefix(
+          tiers[tierIndex],
+          limit: remaining,
+          prioritizeCatalog: matchingNodeIDs != nil && tierIndex <= 1
+        )
+      )
     }
     return result
   }
@@ -1018,9 +949,18 @@ enum MemoryAtlasLayoutEngine {
     // Graph responses are external data. Coalesce duplicate identifiers at the
     // boundary so a malformed server response cannot trap while building a UI.
     let nodes = uniqueNodes(from: graph.atlasNodes)
-    let edges = uniqueEdges(from: graph.edges)
-
-    guard !nodes.isEmpty else {
+    let assertionNodeIDs = Set(nodes.map(\.id))
+    // A canonical memory without a verified relationship is still a real
+    // memory. It belongs in the atlas as a neutral, explicitly unconnected
+    // mark rather than being silently removed from the user's browser. Keep it
+    // out of the semantic layout below: using a type field or an inferred edge
+    // here would make an unsupported claim about what that memory relates to.
+    let catalogNodes = uniqueNodes(from: graph.catalogNodes ?? [])
+      .filter { !assertionNodeIDs.contains($0.id) }
+    let edges = uniqueEdges(from: graph.edges).filter {
+      assertionNodeIDs.contains($0.sourceId) && assertionNodeIDs.contains($0.targetId)
+    }
+    guard !nodes.isEmpty || !catalogNodes.isEmpty else {
       return MemoryAtlasSnapshot(nodes: [], edges: [], anchorNodeID: nil, clusterCenters: [:])
     }
 
@@ -1193,7 +1133,8 @@ enum MemoryAtlasLayoutEngine {
           cluster: nil,
           normalizedPosition: layout.positions[anchor.id] ?? MemoryAtlasCluster.starCenter,
           degree: neighborIDs[anchor.id]?.count ?? 0,
-          clusterRank: 0
+          clusterRank: 0,
+          isCatalog: false
         )
       )
     }
@@ -1216,10 +1157,30 @@ enum MemoryAtlasLayoutEngine {
             cluster: cluster,
             normalizedPosition: layout.positions[node.id] ?? MemoryAtlasCluster.starCenter,
             degree: neighborIDs[node.id]?.count ?? 0,
-            clusterRank: index
+            clusterRank: index,
+            isCatalog: false
           )
         )
       }
+    }
+
+    // Catalog records deliberately receive no cluster and no edge. The outer
+    // halo is an honest visual distinction from assertion-backed constellations
+    // while keeping every canonical memory reachable through zoom, search, and
+    // selection. Ordering by stable id keeps a refresh from shuffling the map.
+    let catalogPositions = MemoryAtlasForceLayout.haloPositions(
+      groups: catalogNodes.sorted { $0.id < $1.id }.map { [$0.id] }, area: Self.layoutArea)
+    for (index, node) in catalogNodes.sorted(by: { $0.id < $1.id }).enumerated() {
+      placements.append(
+        MemoryAtlasNodePlacement(
+          node: node,
+          cluster: nil,
+          normalizedPosition: catalogPositions[node.id] ?? MemoryAtlasCluster.starCenter,
+          degree: 0,
+          clusterRank: index + 1,
+          isCatalog: true
+        )
+      )
     }
 
     let positions = Dictionary(lastWriteWins: placements.map { ($0.id, $0.normalizedPosition) })
@@ -1429,8 +1390,11 @@ enum MemoryAtlasLayoutEngine {
 
   /// One phrasing for "how big is this map", so the header and the timeline
   /// footer cannot describe the same thing in two different ways.
-  static func countLabel(entities: Int, connections: Int) -> String {
-    "\(entities) entit\(entities == 1 ? "y" : "ies") · \(connections) connection\(connections == 1 ? "" : "s")"
+  static func countLabel(entities: Int, memories: Int? = nil, connections: Int) -> String {
+    let entityLabel = "\(entities) entit\(entities == 1 ? "y" : "ies")"
+    let connectionLabel = "\(connections) connection\(connections == 1 ? "" : "s")"
+    guard let memories else { return "\(entityLabel) · \(connectionLabel)" }
+    return "\(entityLabel) · \(memories) memor\(memories == 1 ? "y" : "ies") · \(connectionLabel)"
   }
 
   /// Whether the account holder's own connections should recede into the
@@ -2016,16 +1980,18 @@ struct CanonicalMemoryAtlasPage: View {
   /// Opens a cited memory on the Memories surface this page came from.
   let onOpenMemory: (String) -> Void
 
-  /// Reads the same memoized snapshot the surface below is drawing, so the two
-  /// cannot drift. Free after the first build — the cache is keyed on graph
-  /// content and the surface has already paid for it.
+  /// Reads the memoized snapshot drawn below, so the counts cannot drift.
   private var headerCountLabel: String {
     if let projection = viewModel.canonicalAtlasProjection {
       return MemoryAtlasLayoutEngine.countLabel(
-        entities: projection.snapshot.nodes.count, connections: projection.snapshot.edges.count)
+        entities: projection.snapshot.nodes.filter { !$0.isCatalog }.count,
+        memories: projection.snapshot.nodes.filter(\.isCatalog).count,
+        connections: projection.snapshot.edges.count)
     }
     return MemoryAtlasLayoutEngine.countLabel(
-      entities: viewModel.graphResponse.atlasNodes.count, connections: viewModel.graphResponse.edges.count)
+      entities: viewModel.graphResponse.atlasNodes.count,
+      memories: viewModel.graphResponse.catalogNodes?.count,
+      connections: viewModel.graphResponse.edges.count)
   }
 
   var body: some View {
@@ -2052,16 +2018,8 @@ struct CanonicalMemoryAtlasPage: View {
 
         Spacer()
 
-        // The map's own counts, not the server response's.
-        //
-        // The header used to report `graphResponse`, which counts things this
-        // page does not draw: a duplicate id, a "The User" node folded into
-        // you, and every extra edge the server emitted for one relationship
-        // ("includes" and "with" between the same two entities). On a real
-        // account that read "1,097 entities · 1,544 connections" directly above
-        // a timeline saying 1,096 and 1,377 — the same map, described twice,
-        // disagreeing. A count nobody can reconcile costs more trust than it
-        // buys completeness, and the drawn map is the one the user can check.
+        // Show the semantic map and the complete canonical-memory catalog as
+        // distinct counts; catalog records are visible but never fake edges.
         Text(headerCountLabel)
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
@@ -3137,6 +3095,35 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
     }
 
+    // Catalog marks are deliberately neutral. They are durable memories, not
+    // concepts or members of a relationship cluster, and their outer placement
+    // is the only spatial statement the atlas makes about them.
+    var catalogPrimaryPath = Path()
+    var catalogMutedPath = Path()
+    for placement in plan.visibleNodes
+    where placement.cluster == nil && placement.id != snapshot.anchorNodeID && placement.id != selectedNodeID {
+      let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
+      let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
+      let radius = nodeRadius(for: placement)
+      let center = point(for: placement.normalizedPosition, in: size)
+      guard
+        paintBounds.intersects(
+          CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+      else { continue }
+      let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+      if related && matches {
+        catalogPrimaryPath.addEllipse(in: rect)
+      } else {
+        catalogMutedPath.addEllipse(in: rect)
+      }
+    }
+    if !catalogPrimaryPath.isEmpty {
+      context.fill(catalogPrimaryPath, with: .color(OmiColors.textTertiary.opacity(0.44)))
+    }
+    if !catalogMutedPath.isEmpty {
+      context.fill(catalogMutedPath, with: .color(OmiColors.textTertiary.opacity(0.09)))
+    }
+
     if let anchorNodeID = snapshot.anchorNodeID,
       let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID })
     {
@@ -3910,11 +3897,13 @@ private struct CanonicalMemoryAtlasSurface: View {
     if isInspectMode {
       if selected { return 64 }
       if placement.id == snapshot.anchorNodeID { return 50 }
+      if placement.isCatalog { return 34 }
       if placement.clusterRank == 0 { return 42 }
       return 34
     }
     if selected { return compact ? 28 : (isFocusMode ? 50 : 34) }
     if placement.id == snapshot.anchorNodeID { return compact ? 24 : (isFocusMode ? 38 : 29) }
+    if placement.isCatalog { return compact ? 10 : (isFocusMode ? 22 : 13) }
     if placement.clusterRank == 0 { return compact ? 19 : (isFocusMode ? 32 : 23) }
     return compact ? 10 : (isFocusMode ? 22 : 13)
   }

@@ -46,6 +46,7 @@ from services.agent_vm_lifecycle import (
     update_vm_reconcile,
     validate_release_manifest,
 )
+from utils.env_loader import firebase_admin_options
 from utils.observability.fallback import record_fallback
 
 logging.basicConfig(level=logging.INFO)
@@ -79,9 +80,12 @@ def _init_firebase() -> None:
         pass
     service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
     if service_account_json:
-        firebase_admin.initialize_app(firebase_admin.credentials.Certificate(json.loads(service_account_json)))
+        firebase_admin.initialize_app(
+            firebase_admin.credentials.Certificate(json.loads(service_account_json)),
+            options=firebase_admin_options(),
+        )
     else:
-        firebase_admin.initialize_app()
+        firebase_admin.initialize_app(options=firebase_admin_options())
 
 
 def _read_gcs_uri(uri: str) -> bytes:
@@ -530,9 +534,9 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
     _init_firebase()
     release, raw_manifest = load_active_release()
     environment = os.getenv("AGENT_VM_ENVIRONMENT", release.environment)
-    project = os.getenv("GCE_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
+    project = os.getenv("GCE_PROJECT_ID")
     if not project:
-        raise RuntimeError("GCE_PROJECT_ID, FIREBASE_PROJECT_ID, or GCP_PROJECT_ID is required")
+        raise RuntimeError("GCE_PROJECT_ID is required for Agent VM reconciliation")
     owner = f"{os.getenv('K_REVISION', 'local')}:{uuid.uuid4().hex}"
     if not dry_run and not await asyncio.to_thread(claim_reconciler_run_lease, environment, owner):
         logger.info("Agent VM reconciler skipped: another run owns the %s lease", environment)

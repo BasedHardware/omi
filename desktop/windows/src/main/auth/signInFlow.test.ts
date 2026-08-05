@@ -4,12 +4,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { connect as netConnect } from 'node:net'
 import {
-  startGoogleSignIn,
+  startSignIn,
   redactAuthorizeUrl,
   CANCELLED_MESSAGE,
   SUPERSEDED_MESSAGE,
-  type GoogleSignInDeps
-} from './googleSignInFlow'
+  type SignInDeps
+} from './signInFlow'
 
 function fakeJwt(payload: Record<string, unknown>): string {
   const b64url = (o: unknown): string =>
@@ -41,7 +41,7 @@ function browserThatRedirects(query: (redirectUri: string, state: string) => str
   }
 }
 
-function deps(overrides: Partial<GoogleSignInDeps>): GoogleSignInDeps {
+function deps(overrides: Partial<SignInDeps>): SignInDeps {
   return {
     apiBase: 'https://api.omi.example',
     openExternal: () => {},
@@ -50,7 +50,11 @@ function deps(overrides: Partial<GoogleSignInDeps>): GoogleSignInDeps {
   }
 }
 
-describe('startGoogleSignIn', () => {
+function startGoogleSignIn(overrides: Partial<SignInDeps>) {
+  return startSignIn('google', deps(overrides))
+}
+
+describe('startSignIn', () => {
   it('completes the full loopback round-trip and token exchange', async () => {
     let capturedAuthorize = ''
     const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
@@ -88,6 +92,23 @@ describe('startGoogleSignIn', () => {
       familyName: undefined
     })
     expect(capturedAuthorize).toContain('/v1/auth/authorize?provider=google')
+  })
+
+  it('uses the same loopback flow for Apple', async () => {
+    let capturedAuthorize = ''
+    const result = await startSignIn(
+      'apple',
+      deps({
+        openExternal: async (url) => {
+          capturedAuthorize = url
+          await browserThatRedirects(
+            (_r, state) => `code=APPLE-CODE&state=${encodeURIComponent(state)}`
+          )(url)
+        }
+      })
+    )
+    expect(result.ok).toBe(true)
+    expect(capturedAuthorize).toContain('/v1/auth/authorize?provider=apple')
   })
 
   it('rejects a state mismatch without exchanging the code', async () => {
