@@ -1,0 +1,290 @@
+desktop/macos/Desktop/Sources/Onboarding/OnboardingHowDidYouHearStepView.swift
+  s_569f1df936cc22::t_a3b3bcdd37fc2b 85
+  s_569f1df936cc22::t_8473432b86d39e 101-106
+desktop/macos/Desktop/Sources/SignInView.swift
+  s_569f1df936cc22::t_71dda29fe6884d 5-14,23-35,38-62,64-78,80,82,84-99,101,104,106-109,114,119-124,126-127,132,136
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicSequence.swift
+  s_569f1df936cc22::t_ece2c66d200f42 1-344
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindows.swift
+  s_569f1df936cc22::t_fea5fc17354700 1-295
+  s_569f1df936cc22::t_5c8d30fa76a1f1 296-297
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingIntroGate.swift
+  s_569f1df936cc22::t_ca56bdb8b7ac59 1-46
+desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
+  s_569f1df936cc22::t_873cf841b5bbab 298-301,305-310,312-354,363
+  s_569f1df936cc22::t_4b4d47ba6011d8 402-403,405-423,425-436,438-491,506-523,531-532,534-535,537
+  s_569f1df936cc22::t_d94b02ffb73d6e 356-358,360-362
+  s_569f1df936cc22::t_bc18c0b6974ad2 7-27
+  s_569f1df936cc22::t_7235c0243ffccc 546-547,552,564,571,574,583-588,615
+  s_569f1df936cc22::t_b31ddcf3e4dea3 355,492-498
+desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
+  s_569f1df936cc22::t_7233c5260d38f5 684,691-693
+  s_569f1df936cc22::t_62d64640e21a66 861,865,872,878
+  s_569f1df936cc22::t_7d0872c9779014 705,708,712
+  s_569f1df936cc22::t_df9754185866a7 918
+  s_569f1df936cc22::t_0f0fb935ba7b47 941
+  s_569f1df936cc22::t_9dbfe7a3e4a414 887,892,895,898,901,907-908
+  s_569f1df936cc22::t_cc89c6e405a02b 956-957,964,970,974,982,985
+  s_569f1df936cc22::t_7e36f014291572 51
+  s_569f1df936cc22::t_6aba0fac4e5705 731
+  s_569f1df936cc22::t_db7bbd4e022970 742,748,752,755,759,762,766-767
+desktop/macos/Desktop/Tests/SBPostOnboardingGuidanceWiringTests.swift
+  s_569f1df936cc22::t_1f2b33e5a7b0f4 1-4,30-31,34-37,39,41-44,59-62,65-140,142-145,148-159,161-162
+  s_569f1df936cc22::t_f3b258d3739436 5-7
+  s_569f1df936cc22::t_c67de13b1506b7 141,146
+  s_569f1df936cc22::t_5f1e37498d2497 19-29
+  s_569f1df936cc22::t_fc47634356b4f6 8-18,32-33,38,40
+  s_569f1df936cc22::t_407a73ddd05760 45-58,63-64
+  s_569f1df936cc22::t_18d9e2c2cdf34f 160
+  s_569f1df936cc22::t_939c20e7be549c 147
+desktop/macos/Desktop/Tests/SBOnboardingPermissionFlowTests.swift
+  s_569f1df936cc22::t_ab4db7853c4943 39-41,43-45
+  s_569f1df936cc22::t_74ad16616b0618 1-38,42,46-381
+  s_569f1df936cc22::t_5b9f1dd502a1cd 382-399
+desktop/macos/Desktop/Sources/Onboarding/OnboardingTrustStepView.swift
+  s_569f1df936cc22::t_512c189ec4aa8d 70-71,75,78
+  s_569f1df936cc22::t_0b0438e048b38a 47
+  s_569f1df936cc22::t_ed3afa6c3f9977 87-91,96,100,105-108,111-112,119
+desktop/macos/Desktop/Sources/Onboarding/OnboardingFileScanStepView.swift
+  s_569f1df936cc22::t_7c11f2077d6bb1 64-65,68,74,79-80
+  s_569f1df936cc22::t_2afc1952fcc145 27-29,31-34,36-44,47-51
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingSound.swift
+  s_569f1df936cc22::t_0abdc6bc36c8c8 267-270
+  s_569f1df936cc22::t_d4fdb883d87310 313,316,321-324,326-328
+  s_569f1df936cc22::t_7c6ca96b146805 357-360,363
+  s_569f1df936cc22::t_e8d68184728662 1-197,222-230,232-266,271-312,314-315,317-320,325,329-356,361-362,364-427,430,432,439-648
+  s_569f1df936cc22::t_e65b3121340704 231
+  s_569f1df936cc22::t_e9cf61be9a7cea 428-429,431,433-438
+  s_569f1df936cc22::t_258ef3b2dfe387 198-221
+desktop/macos/scripts/make-onboarding-sounds.py
+  s_569f1df936cc22::t_117b67f630c502 1-491
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicMark.swift
+  s_569f1df936cc22::t_17446991afbd51 1-366
+desktop/macos/Desktop/Sources/Onboarding/OnboardingGoalStepView.swift
+  s_569f1df936cc22::t_d09c85772e1a97 54-55,63-64
+  s_569f1df936cc22::t_b9c17ccbf1bee4 144,148-151,155-159
+  s_569f1df936cc22::t_1ecd82d951adf1 74
+desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
+  s_569f1df936cc22::t_fc3f5b64b8c6f4 324,327
+  s_569f1df936cc22::t_7477c69075de17 1747,1817,2142
+  s_569f1df936cc22::t_fdbe730a0f2081 495
+  s_569f1df936cc22::t_0c2ed12bf26854 2111,2117,2122,2132
+  s_569f1df936cc22::t_f218425e241398 303,306
+  s_569f1df936cc22::t_d666fb9117cf84 1877
+  s_569f1df936cc22::t_f29c6535215949 2065,2078
+  s_569f1df936cc22::t_c6dc9c8bdbeda3 152
+  s_569f1df936cc22::t_fb1a8d5d4b268f 238
+  s_569f1df936cc22::t_e41ef19a059415 258,261-263
+  s_569f1df936cc22::t_98e8137e870dd3 1974
+  s_569f1df936cc22::t_d5b38f924fce58 1758-1759,1828-1829,2153-2154
+  s_569f1df936cc22::t_ee82a61d6474ec 1928
+  s_569f1df936cc22::t_e3298e8a428afa 1969
+  s_569f1df936cc22::t_9c3db4baac64db 1787,1793,1798,1808
+  s_569f1df936cc22::t_00344b3b0658a9 1890,1901
+  s_569f1df936cc22::t_e10bbd67b1a889 390
+  s_569f1df936cc22::t_2cd487a959830a 145
+  s_569f1df936cc22::t_b9cfcebf816668 399
+  s_569f1df936cc22::t_daf1b6c770b18a 407
+  s_569f1df936cc22::t_3c68542cf205c2 382
+  s_569f1df936cc22::t_9df679f22b6ae4 160,167
+  s_569f1df936cc22::t_c71c11c6695191 1937,1939
+  s_569f1df936cc22::t_a11146cf1f3c64 1717,1723,1728,1738
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_569f1df936cc22::t_a64edd43af15e8 580-581,584,586,603-604
+  s_569f1df936cc22::t_48227c57d08502 335,337,346,348,355,358
+  s_569f1df936cc22::t_bbb5544a1f5ef6 825-829,831,833,838,840
+  s_569f1df936cc22::t_01e6026e342602 387-389,393,403-404,406-409,411,416-419,422-424,438-440,445,447
+  s_569f1df936cc22::t_b1fe4ef55aa930 859-861,863-865,868
+  s_569f1df936cc22::t_d0ffb6a7a6beff 782-784
+  s_569f1df936cc22::t_aae6bb89b75932 127
+  s_569f1df936cc22::t_a0cf9767773760 634
+  s_569f1df936cc22::t_f83bf236348783 284,286
+  s_569f1df936cc22::t_9e363aae9164dc 61-65,67-69
+  s_569f1df936cc22::t_601fe24a0d9c78 706,710,716,721,726
+  s_569f1df936cc22::t_d233da2c8abdf7 506,513-515,520
+  s_569f1df936cc22::t_539d1ccb5c5763 651,653,658,664-665,669,674
+  s_569f1df936cc22::t_c279ffe62930e0 611-612,618-619
+  s_569f1df936cc22::t_1b7d092268e18b 547-551,554,556-557,559
+  s_569f1df936cc22::t_3f408aa72c0a37 491-503
+  s_569f1df936cc22::t_526f22450a0d35 187-188,192-193,199-200,204-205,207
+  s_569f1df936cc22::t_da44d43bcf38b6 744,748
+  s_569f1df936cc22::t_9e71d22c113d87 86-89
+  s_569f1df936cc22::t_eafea3307c0650 470,473-475,481,483-484,487-488
+  s_569f1df936cc22::t_f4d71477982556 324
+  s_569f1df936cc22::t_075bab375c05af 256-260,263,270,272-275
+  s_569f1df936cc22::t_ab5d1b1b053a76 306,309-310
+  s_569f1df936cc22::t_c7e24a7254dbb2 591-597
+  s_569f1df936cc22::t_6d8f0fb379f466 144-146,149-151,158,160,171,173
+  s_569f1df936cc22::t_afd3e708af8ea5 396-401,405,410,412-415,420-421,429,431,435,441-443,448,450,454
+  s_569f1df936cc22::t_e47c02f8221871 687,689
+  s_569f1df936cc22::t_870aa4e74080e2 565-568
+  s_569f1df936cc22::t_dd229595b71044 24-35
+  s_569f1df936cc22::t_34b7e9330a29c7 375,377
+  s_569f1df936cc22::t_64a422987de8ca 800-802,804-807,809-810,812-813
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindowArt.swift
+  s_569f1df936cc22::t_ec4df82ca87480 1-25,29-542
+  s_569f1df936cc22::t_e761d9e5b747dd 26-28
+desktop/macos/Desktop/Sources/PostOnboardingPromptViews.swift
+  s_569f1df936cc22::t_129bf2ae6a7130 4-14,20-36
+  s_569f1df936cc22::t_c1a0c586e5ed1a 231-247
+  s_569f1df936cc22::t_b40f7c8d86fabf 56,77-91,93-96,98-102,104-109,111-113,115-133,137,139-140,142-215,228,230,298-300
+  s_569f1df936cc22::t_58c2aef4125e65 37,44,53-55,57,62,66,225-227,229,250,258,297,310
+desktop/macos/Desktop/Sources/Onboarding/OnboardingWelcomeStepView.swift
+  s_569f1df936cc22::t_92d41870f4ecfa 58
+  s_569f1df936cc22::t_971d25870c547a 28-29,36,38,47
+desktop/macos/Desktop/Tests/OmiOnboardingSoundTests.swift
+  s_569f1df936cc22::t_15e20378ee174c 1-113,152-316
+  s_569f1df936cc22::t_a587c02c4170f0 114-151
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBPostOnboardingGuidance.swift
+  s_569f1df936cc22::t_1a2be3e2bd560b 1-253
+desktop/macos/Desktop/Tests/SBPostOnboardingGuidanceTests.swift
+  s_569f1df936cc22::t_2ec848d4fe1238 1-234
+desktop/macos/Desktop/Sources/Onboarding/OnboardingGlassChrome.swift
+  s_569f1df936cc22::t_c63e2bacabc933 1-163
+desktop/macos/Desktop/Tests/SBOnboardingIntroGateTests.swift
+  s_569f1df936cc22::t_ac4e135a791f56 1-58
+desktop/macos/Desktop/Sources/FileIndexing/OnboardingLoadingAnimation.swift
+  s_569f1df936cc22::t_729981c071b230 100-101
+  s_569f1df936cc22::t_02e8eeedb5f31e 54-57,59
+  s_569f1df936cc22::t_c2508e6eccf9d3 112
+  s_569f1df936cc22::t_123d27a87fd555 1,7-10,16-20
+  s_569f1df936cc22::t_458f241ae14f8d 72-73
+  s_569f1df936cc22::t_7913bd5c487cf7 30-31
+desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarDemoView.swift
+  s_569f1df936cc22::t_d102ff15981e7e 38,45
+  s_569f1df936cc22::t_ac983b574dd6e9 113
+  s_569f1df936cc22::t_65215f75b5c114 274,276-278,280
+  s_569f1df936cc22::t_5637d22e0b128c 84,91-92
+  s_569f1df936cc22::t_485a78d90037a4 59,61,65,67,70
+  s_569f1df936cc22::t_ce9a2bb1f2c8f2 238-240,244,248-249,251-252,255
+desktop/macos/Desktop/Sources/Onboarding/OnboardingTasksStepView.swift
+  s_569f1df936cc22::t_f23b282057c95d 63
+  s_569f1df936cc22::t_788217c630519b 155,158-159,161,163,166-167,174
+  s_569f1df936cc22::t_5366acb04dbe01 128
+  s_569f1df936cc22::t_c095d6e5dd9200 74-75,77,85,91-93,98,100
+desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarShortcutStepView.swift
+  s_569f1df936cc22::t_0313cfe6a741fd 216,219
+  s_569f1df936cc22::t_22ce1a537b2ac4 41,48
+  s_569f1df936cc22::t_dad11778410855 57,59,61,64,69
+  s_569f1df936cc22::t_9812c45893e779 128,137,140
+  s_569f1df936cc22::t_636b8327762b56 149-150
+  s_569f1df936cc22::t_02d668cc7dfaa9 164,169-170,174-175,180,183-184,187,189-192,196
+  s_569f1df936cc22::t_45c4ef21a93b85 97
+desktop/macos/Desktop/Tests/OmiCinematicTests.swift
+  s_569f1df936cc22::t_28edeb286b3d49 1-291,302-382
+  s_569f1df936cc22::t_1ee616b38198ac 292-301
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionRuntime.swift
+  s_569f1df936cc22::t_74e899b1f1889e 1-58,72-78,80-82,84-93,109-270,272-277,279,289-309
+  s_569f1df936cc22::t_426d657eaa010c 59-71,79,83,94-108
+  s_569f1df936cc22::t_73924d32106567 271,278,280-288
+desktop/macos/Desktop/Sources/Onboarding/OnboardingDataSourcesStepView.swift
+  s_569f1df936cc22::t_9c3cbebe8e5aa7 280-281,284,296
+  s_569f1df936cc22::t_6542af935aaaed 164,168
+  s_569f1df936cc22::t_724ab12451ab2d 35-36,46,48-49,54,57
+  s_569f1df936cc22::t_36c9ce35731367 238,247,252
+  s_569f1df936cc22::t_f22a65b07bc9eb 198-199,204,210,218,223
+desktop/macos/Desktop/Sources/Onboarding/OnboardingLanguageStepView.swift
+  s_569f1df936cc22::t_bb832fcda094d1 71-72,78,84-85
+  s_569f1df936cc22::t_0013735ddd4b9e 94,102-103
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_569f1df936cc22::t_3c98c6c1fec81b 617-627,635-639,654-660,670
+  s_569f1df936cc22::t_1ae673afbcd005 629-630
+  s_569f1df936cc22::t_db1846ddb6767f 349-371
+desktop/macos/Desktop/Sources/Onboarding/OnboardingPermissionStepView.swift
+  s_569f1df936cc22::t_c8257d89c6a4c2 116
+  s_569f1df936cc22::t_af08d96d2f3d89 127
+  s_569f1df936cc22::t_5b8b1e470dffff 48-51,54-55,60,66-67,69-70,72,83,89-90,96-97
+desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
+  s_569f1df936cc22::t_b5774a15a17f24 462,466
+  s_569f1df936cc22::t_7afaa6a2d736c2 691,697,702,707
+  s_569f1df936cc22::t_99679243fd4153 317,321,323,327,329
+  s_569f1df936cc22::t_82716ac42f5a8b 346,352
+  s_569f1df936cc22::t_b1bd58d872d07e 771,775
+  s_569f1df936cc22::t_aa99b3818a52b6 680
+  s_569f1df936cc22::t_d3a7de2450f160 179,198
+  s_569f1df936cc22::t_4f3539285e41ad 265
+  s_569f1df936cc22::t_6ce90128e5e519 732-733,738,743,747,749,755
+  s_569f1df936cc22::t_4ba9d48a316571 577-579,586,591,596
+  s_569f1df936cc22::t_8276ffd9c76365 627,629,632,634,643,645
+  s_569f1df936cc22::t_ef0cf000591129 423,426,428-429
+  s_569f1df936cc22::t_d4e64b8986c7c8 182-195
+  s_569f1df936cc22::t_eeeb0bc30b7f59 294
+  s_569f1df936cc22::t_cc8d8e9dca1e8f 564
+  s_569f1df936cc22::t_7140d77b637cd2 212-215
+  s_569f1df936cc22::t_550714d8dc3e6c 231
+  s_569f1df936cc22::t_ab5330be0849af 656
+  s_569f1df936cc22::t_614c7e9957b0f0 534-536,542,546
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicDirector.swift
+  s_569f1df936cc22::t_17b28bc161494f 1-410
+desktop/macos/Desktop/Tests/OmiCinematicDirectorTests.swift
+  s_569f1df936cc22::t_30b1737232ae41 19-31,33,35-38
+  s_569f1df936cc22::t_4c88aa7064e873 53-65
+  s_569f1df936cc22::t_63c811493c8515 1-18,32,34,39-52,66-133,141-142,144-145,147,171,173,179-303,305-311,314-361
+  s_569f1df936cc22::t_638f7e73891065 304,312-313
+  s_569f1df936cc22::t_f5c91963f03e2b 134-136,140,159,166
+  s_569f1df936cc22::t_524096ff358492 137-139,143,146,148-158,160-165,167-170,172,174-178
+desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceShortcutStepView.swift
+  s_569f1df936cc22::t_19d29e7b07997b 152-153
+  s_569f1df936cc22::t_bb7f8a4d64b1ab 92
+  s_569f1df936cc22::t_554c94f7efb7be 186-187,190,194,199,207,209-212,216
+  s_569f1df936cc22::t_a6298594928245 36,43
+  s_569f1df936cc22::t_930b83fca46aed 131,140,143
+  s_569f1df936cc22::t_a74c0e6f19c410 236,239
+  s_569f1df936cc22::t_10f954a012613c 167,172-173,177-178,183
+  s_569f1df936cc22::t_92e66ebeb40f0a 52,54,56,59,64
+desktop/macos/Desktop/Sources/Onboarding/OnboardingExportsStepView.swift
+  s_569f1df936cc22::t_c287e309a437ba 146-147,149-150,160,163
+  s_569f1df936cc22::t_487ec5ded1273e 40
+  s_569f1df936cc22::t_472bb43f9735ee 113,117,121
+  s_569f1df936cc22::t_6d8dae32f08783 98,103
+desktop/macos/Desktop/Tests/OnboardingGlassChromeTests.swift
+  s_569f1df936cc22::t_3c4a2e8ac51f59 1-221
+  s_569f1df936cc22::t_2534bc2c8440dd 222
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_569f1df936cc22::t_beb210270a2a8e 9-11,13-16,19,38-42,62
+  s_569f1df936cc22::t_5c53d65f5f9ea8 165-167
+  s_569f1df936cc22::t_40ae1b98a0c6cf 182-184,186-194
+  s_569f1df936cc22::t_37bad287e7c051 139-144
+  s_569f1df936cc22::t_f3e886a335d90f 345-348,350-355
+  s_569f1df936cc22::t_740ac8712520ab 108-112
+  s_569f1df936cc22::t_50bb1ab42a7adb 94-95
+desktop/macos/Desktop/Sources/Onboarding/OnboardingNotificationStepView.swift
+  s_569f1df936cc22::t_2cb94337b7bcae 152
+  s_569f1df936cc22::t_e415fec942003c 104,107,110-111,116
+  s_569f1df936cc22::t_4a79c041152f6b 124-127
+  s_569f1df936cc22::t_7cb84f20ded433 25,29-30,33,40
+  s_569f1df936cc22::t_94828f14d3fc06 135
+  s_569f1df936cc22::t_bda17ba8447566 162-168
+  s_569f1df936cc22::t_b6746ef536fd53 48-49,51,55-57,63,73-75,80,82
+desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceDemoView.swift
+  s_569f1df936cc22::t_9e06030fa956f5 98
+  s_569f1df936cc22::t_cc9091de26c6df 151,153,156,158,163,167
+  s_569f1df936cc22::t_1e056117fb1144 67-68,75,82-83
+  s_569f1df936cc22::t_4176652cc5ff4f 51-53,56,58
+  s_569f1df936cc22::t_87aa273ebf2197 237-238,242,246-247,249-250
+  s_569f1df936cc22::t_314acbd792b162 34,41
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingCinematic.swift
+  s_569f1df936cc22::t_d6b2d0e09525b1 1-42,46-48,50-105,110-214
+  s_569f1df936cc22::t_3cae4c932b2acc 106-109
+  s_569f1df936cc22::t_d8f1107516d34e 43-45,49
+desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
+  s_569f1df936cc22::t_e5e583aa10bb47 1,7-12,17,20,23-25,28,30-31,33-36,51,54-61,64,66
+desktop/macos/Desktop/Sources/FileIndexing/FileIndexingView.swift
+  s_569f1df936cc22::t_717bae29a672f4 61,72,78,83,91-92,95-96,105,115,131,139,142,149,162,200,210,213-215,247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ac862ef157b495d473d493e5fac9d67cf07c8c4b",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
