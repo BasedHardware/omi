@@ -102,16 +102,21 @@ def test_split_alert_exports_preserve_error_count_no_data_contract():
 
 
 def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
-    """Managed GKE must not page on control-plane targets it cannot expose."""
+    """Managed GKE must not page on control-plane targets it cannot expose.
+
+    kube-prometheus-stack gates each control-plane PrometheusRule group on the
+    component ``enabled`` flag, so ``enabled: false`` alone suppresses the
+    ``*Down`` alerts. Do not also set ``defaultRules.disabled`` — that would
+    keep the alert off after a future self-managed control-plane re-enable.
+    """
     values = yaml.safe_load(PROD_STACK_VALUES.read_text(encoding="utf-8"))
 
     for component in ("kubeProxy", "kubeScheduler", "kubeControllerManager"):
         assert values[component]["enabled"] is False
 
-    disabled = values["defaultRules"]["disabled"]
-    assert disabled["KubeProxyDown"] is True
-    assert disabled["KubeSchedulerDown"] is True
-    assert disabled["KubeControllerManagerDown"] is True
+    disabled = (values.get("defaultRules") or {}).get("disabled") or {}
+    for alert in ("KubeProxyDown", "KubeSchedulerDown", "KubeControllerManagerDown"):
+        assert alert not in disabled
 
 
 def test_combined_alert_export_matches_every_split_source_rule():
