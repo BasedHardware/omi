@@ -1,0 +1,39 @@
+desktop/context-for-claude/ARCHITECTURE.md
+  s_f9cf795562ebc2::t_de3e9b162646b8 36,110-115,119-131
+desktop/context-for-claude/CONTRACTS.md
+  s_f9cf795562ebc2::t_6b45548a7348ab 227-237,240-241,245,254,257-260,277-291,304-307,531-554
+desktop/context-for-claude/README.md
+  s_f9cf795562ebc2::t_41f39683db497d 77-80,89,97-107
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeRegistrar.swift
+  s_f9cf795562ebc2::t_15ab196aa42295 105,119,133-162
+desktop/context-for-claude/Sources/ContextCore/ClaudeSkill.swift
+  s_569f1df936cc22::t_29cb65a432ca06 1-152
+desktop/context-for-claude/Tests/ContextCoreTests/ClaudeSkillTests.swift
+  s_f9cf795562ebc2::t_4e47ff4e7cb9c7 1-147
+desktop/context-for-claude/scripts/uninstall.sh
+  s_f9cf795562ebc2::t_f46bcabb0c0836 125-134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d7120b42c79af95dea90bca8099d7f70d76d1ac5",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_f9cf795562ebc2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "87718b64-2d87-41d0-8d2b-db7e0dc1ca81",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
