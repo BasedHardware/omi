@@ -1,0 +1,37 @@
+desktop/lock-in/site/download.html
+  s_acebfdccb4f1d0::t_0d08e5252c0349 19
+  s_acebfdccb4f1d0::t_fd7607f55514f3 140
+  s_acebfdccb4f1d0::t_614943c7efeb33 121
+  s_acebfdccb4f1d0::t_3e96974bc29e5f 182-183
+  s_acebfdccb4f1d0::t_da39930530d8e2 50
+  s_acebfdccb4f1d0::t_6611087a9db73a 41-49,51,53-54
+desktop/lock-in/site/index.html
+  s_acebfdccb4f1d0::t_3f8a3f8a490d0e 259-263,265-270,273-281,283-285,291,294-310
+  s_acebfdccb4f1d0::t_2ffccedc29fef0 119,121
+  s_acebfdccb4f1d0::t_e9fd10c4f2136d 44-45,52-53
+  s_acebfdccb4f1d0::t_bae4f156f3bb56 46-51,55
+  s_acebfdccb4f1d0::t_5586fb0d97f54e 95-96,98
+  s_acebfdccb4f1d0::t_0f4453f1e72662 163-165,172,177
+  s_acebfdccb4f1d0::t_ea62e0b5de4c77 56-57
+  s_acebfdccb4f1d0::t_4fcce4bce79834 19
+  s_acebfdccb4f1d0::t_34cacb7b1f9060 113-117,120,122-131,133-138
+  s_acebfdccb4f1d0::t_885530628cdf79 220-225,227,229,231,233-236
+  s_acebfdccb4f1d0::t_2d1ca976557bd6 54
+  s_acebfdccb4f1d0::t_a9f676126a3580 118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "61056ce00d967ea4a1e20df323f3f1eba424eb7b",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
