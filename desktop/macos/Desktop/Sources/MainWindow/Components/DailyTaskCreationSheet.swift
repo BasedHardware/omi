@@ -17,7 +17,7 @@ struct DailyTaskCreationSheet: View {
         HStack {
           Image(systemName: "repeat.circle.fill")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.primary)
 
           Text("Create Daily Task")
             .scaledFont(size: OmiType.heading, weight: .semibold)
@@ -114,7 +114,7 @@ struct DailyTaskCreationSheet: View {
             RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
               .fill(
                 taskDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                  ? Ink.secondary : Ink.accent)
+                  ? Ink.secondary : Ink.primary)
           )
         }
         .buttonStyle(.plain)
@@ -136,7 +136,7 @@ struct DailyTaskCreationSheet: View {
     switch level {
     case "high": return Ink.errorRed
     case "medium": return PageGlass.warning
-    case "low": return Ink.accent
+    case "low": return Ink.secondary
     default: return Ink.secondary
     }
   }

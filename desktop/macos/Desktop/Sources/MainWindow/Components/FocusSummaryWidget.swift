@@ -77,7 +77,7 @@ struct FocusSummaryWidget: View {
           value: String(format: "%.0f", stats.focusRate),
           unit: "%",
           icon: "chart.pie.fill",
-          color: Ink.accent
+          color: Ink.primary
         )
 
         FocusStatCard(
@@ -85,7 +85,7 @@ struct FocusSummaryWidget: View {
           value: "\(stats.sessionCount)",
           unit: "",
           icon: "clock.fill",
-          color: Ink.accent
+          color: Ink.primary
         )
       }
     }

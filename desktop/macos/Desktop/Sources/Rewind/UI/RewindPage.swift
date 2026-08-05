@@ -437,9 +437,9 @@ struct RewindPage: View {
       }
       rewindToggle
     }
-    .padding(.horizontal, OmiSpacing.lg)
-    .padding(.vertical, OmiSpacing.sm)
-    .background(Ink.rowFillHover.opacity(0.8))
+    .padding(.horizontal, OmiSpacing.xxl)
+    .padding(.vertical, OmiSpacing.md)
+    .overlay(alignment: .bottom) { GlassSeparator() }
   }
 
   // MARK: - Timeline Content Body (without top bar)
@@ -552,7 +552,7 @@ struct RewindPage: View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
+        .foregroundColor(isSearchFocused ? Ink.primary : Ink.secondary)
 
       TextField("Search your screen history...", text: $viewModel.searchQuery)
         .textFieldStyle(.plain)
@@ -599,7 +599,7 @@ struct RewindPage: View {
         .fill(Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(isSearchFocused ? Ink.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+            .stroke(isSearchFocused ? Ink.hairline : Color.clear, lineWidth: 1)
         )
     )
   }
@@ -994,12 +994,12 @@ struct RewindPage: View {
       } else {
         ZStack {
           Circle()
-            .fill(Ink.accent.opacity(0.1))
+            .fill(Ink.rowFill)
             .frame(width: 80, height: 80)
 
           Image(systemName: "clock.arrow.circlepath")
             .scaledFont(size: 36)
-            .foregroundColor(Ink.accent.opacity(0.6))
+            .foregroundColor(Ink.secondary)
         }
 
         Text("No Screenshots Yet")
@@ -1294,14 +1294,14 @@ struct RewindPage: View {
         // Saving indicator
         ZStack {
           Circle()
-            .fill(Ink.accent.opacity(0.3))
+            .fill(Ink.primary.opacity(0.3))
             .frame(width: 24, height: 24)
             .scaleEffect(isSavingPulsing ? 1.5 : 1.0)
             .opacity(isSavingPulsing ? 0.0 : 0.6)
 
           Image(systemName: "arrow.up.circle.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.primary)
             .scaleEffect(isSavingPulsing ? 1.1 : 1.0)
         }
         .omiAnimation(
@@ -1367,7 +1367,7 @@ struct RewindPage: View {
   private func audioToggle(appState: AppState) -> some View {
     ZStack {
       Capsule()
-        .fill(appState.isTranscribing ? Ink.accent : Ink.errorRed)
+        .fill(appState.isTranscribing ? Ink.listeningGreen : Ink.errorRed)
         .frame(width: 36, height: 20)
 
       Circle()
@@ -1448,7 +1448,7 @@ struct SearchResultListItem: View {
             AppIconView(appName: screenshot.appName, size: 16)
             Text(screenshot.appName)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.accent)
+              .foregroundColor(Ink.primary)
             if let windowTitle = screenshot.windowTitle, !windowTitle.isEmpty {
               Text("›")
                 .foregroundColor(Ink.secondary)
@@ -1505,11 +1505,11 @@ struct SearchResultListItem: View {
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isSelected ? Ink.accent.opacity(0.15) : (isHovered ? Ink.rowFill : Color.clear))
+          .fill(isSelected ? PageGlass.chipFill(isActive: true) : (isHovered ? Ink.rowFill : Color.clear))
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isSelected ? Ink.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+          .stroke(isSelected ? Ink.hairline : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -1597,7 +1597,7 @@ struct SearchResultGroupItem: View {
             AppIconView(appName: group.appName, size: 16)
             Text(group.appName)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.accent)
+              .foregroundColor(Ink.primary)
             if let windowTitle = group.windowTitle, !windowTitle.isEmpty {
               Text("›")
                 .foregroundColor(Ink.secondary)
@@ -1627,10 +1627,10 @@ struct SearchResultGroupItem: View {
                 Text("\(group.count) screenshots")
               }
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.accent.opacity(0.8))
+              .foregroundColor(Ink.secondary)
               .padding(.horizontal, OmiSpacing.xs)
               .padding(.vertical, OmiSpacing.hairline)
-              .background(Ink.accent.opacity(0.15))
+              .background(Ink.rowFillHover)
               .cornerRadius(OmiChrome.stripRadius)
             }
 
@@ -1670,11 +1670,11 @@ struct SearchResultGroupItem: View {
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isSelected ? Ink.accent.opacity(0.15) : (isHovered ? Ink.rowFill : Color.clear))
+          .fill(isSelected ? PageGlass.chipFill(isActive: true) : (isHovered ? Ink.rowFill : Color.clear))
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isSelected ? Ink.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+          .stroke(isSelected ? Ink.hairline : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -1791,7 +1791,7 @@ struct SearchResultRow: View {
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.primary)
         }
       }
       .padding(.horizontal, OmiSpacing.md)
@@ -1800,11 +1800,11 @@ struct SearchResultRow: View {
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
           .fill(
             isSelected
-              ? Ink.accent.opacity(0.2) : (isHovered ? Ink.secondary : Ink.secondary))
+              ? PageGlass.chipFill(isActive: true) : (isHovered ? Ink.rowFill : Color.clear))
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isSelected ? Ink.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+          .stroke(isSelected ? Ink.hairline : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)

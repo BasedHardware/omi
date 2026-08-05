@@ -65,7 +65,7 @@ struct LiveNotesView: View {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "sparkles")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(monitor.isAiEnabled ? Ink.accent : Ink.secondary)
+          .foregroundColor(monitor.isAiEnabled ? Ink.primary : Ink.secondary)
 
         Toggle("", isOn: $monitor.isAiEnabled)
           .toggleStyle(OmiToggleStyle())
@@ -147,7 +147,7 @@ struct LiveNotesView: View {
         Button(action: addManualNote) {
           Image(systemName: "plus.circle.fill")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(manualNoteText.isEmpty ? Ink.secondary : Ink.accent)
+            .foregroundColor(manualNoteText.isEmpty ? Ink.secondary : Ink.primary)
         }
         .buttonStyle(.plain)
         .disabled(manualNoteText.isEmpty)
@@ -225,7 +225,7 @@ private struct NoteRowView: View {
       if note.isAiGenerated {
         Image(systemName: "sparkles")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(Ink.accent)
+          .foregroundColor(Ink.primary)
           .frame(width: 14)
       } else {
         Image(systemName: "pencil")

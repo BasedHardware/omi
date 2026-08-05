@@ -228,6 +228,7 @@ struct ConversationRowView: View {
             .frame(width: 22, height: 22)
             .background(Circle().fill(Ink.rowFill))
         }
+        .tint(Ink.primary)
         .menuStyle(.borderlessButton)
         .frame(width: 22)
         .help("Move to folder")

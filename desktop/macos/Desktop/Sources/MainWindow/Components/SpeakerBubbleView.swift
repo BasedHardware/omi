@@ -60,7 +60,7 @@ struct SpeakerBubbleView: View {
             }
             .padding(.vertical, OmiSpacing.hairline)
             .contentShape(Rectangle())
-            .foregroundColor(personName != nil ? Ink.accent : Ink.secondary)
+            .foregroundColor(personName != nil ? Ink.primary : Ink.secondary)
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
@@ -125,9 +125,7 @@ struct SpeakerBubbleView: View {
 
   private var avatar: some View {
     Circle()
-      .fill(
-        isUser ? Ink.accent : (personName != nil ? Ink.accent.opacity(0.3) : Ink.rowFillHover)
-      )
+      .fill(isUser ? Ink.primary : Ink.rowFillHover)
       .frame(width: 32, height: 32)
       .overlay(
         Text(avatarInitial)

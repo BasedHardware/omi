@@ -132,14 +132,7 @@ struct FolderTabsStrip: View {
       .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isSelected ? Ink.primary.opacity(0.12) : Ink.rowFillHover.opacity(0.6))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isSelected ? Ink.primary.opacity(0.3) : Color.clear, lineWidth: 1)
-      )
+      .glassChip(isActive: isSelected)
     }
     .buttonStyle(.plain)
   }

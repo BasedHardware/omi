@@ -261,7 +261,7 @@ struct LiveNameSpeakerSheet: View {
     Button(action: action) {
       Text(label)
         .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
-        .foregroundColor(isSelected ? Ink.surface : (isAction ? Ink.accent : Ink.primary))
+        .foregroundColor(isSelected ? Ink.surface : Ink.primary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
@@ -271,7 +271,7 @@ struct LiveNameSpeakerSheet: View {
         .overlay(
           Capsule()
             .stroke(
-              isSelected ? Ink.separator : (isAction ? Ink.accent.opacity(0.3) : Color.clear), lineWidth: 1)
+              isSelected ? Ink.separator : (isAction ? Ink.hairline : Color.clear), lineWidth: 1)
         )
     }
     .buttonStyle(.plain)

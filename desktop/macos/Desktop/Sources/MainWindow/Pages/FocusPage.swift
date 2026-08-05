@@ -244,6 +244,7 @@ struct FocusPage: View {
                 .stroke(Ink.separator, lineWidth: 1)
             )
         }
+        .tint(Ink.primary)
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()

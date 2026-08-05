@@ -109,12 +109,23 @@ enum PageGlass {
     state == .selected ? Ink.separator : .clear
   }
 
-  /// A chip's fill. The active chip is the one step of extra weight a filter row gets.
+  /// A chip's fill.
+  ///
+  /// **The active step is deliberately much heavier than the rest step, and that is a fix rather
+  /// than a preference.** Active used to be `Ink.rowFillHover` over `Ink.rowFill` — four hundredths
+  /// of alpha apart. On the dark chrome those two tokens sat on a near-black page and read as two
+  /// steps; on glass they composite onto a ground that is already 35% desktop, and a filter row of
+  /// six chips showed no legible difference between the one that was on and the five that were off.
+  /// A filter whose state you cannot see is a filter that silently lies about what the list contains.
+  ///
+  /// `Ink.primary` at 0.14 rather than a heavier `rowFill`: it is the same ink the active chip's
+  /// *label* is set in, so "on" reads as one object getting darker rather than as a second colour.
   static func chipFill(isActive: Bool) -> Color {
-    isActive ? Ink.rowFillHover : Ink.rowFill
+    isActive ? Color(nsColor: .labelColor).opacity(0.14) : Ink.rowFill
   }
 
-  /// A chip's outline.
+  /// A chip's outline. The active chip carries the control outline (`Ink.hairline`) so its edge is
+  /// legible even where the fill lands on an unusually dark patch of desktop.
   static func chipStroke(isActive: Bool) -> Color {
     isActive ? Ink.hairline : Ink.separator
   }

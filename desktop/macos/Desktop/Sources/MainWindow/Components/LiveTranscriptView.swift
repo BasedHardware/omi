@@ -130,7 +130,7 @@ struct ConversationsLiveTranscript: View {
         if onExpand != nil {
           Image(systemName: "arrow.up.left.and.arrow.down.right")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(isHovered ? Ink.secondary : Ink.secondary)
+            .foregroundColor(isHovered ? Ink.primary : Ink.secondary)
         }
       }
       if monitor.isEmpty {
@@ -323,7 +323,7 @@ private struct LiveSegmentView: View {
   }
 
   private var bubbleColor: Color {
-    isUser ? Ink.accent.opacity(0.3) : Ink.rowFillHover
+    isUser ? PageGlass.speakerTints[0] : Ink.rowFillHover
   }
 
   var body: some View {
@@ -353,7 +353,7 @@ private struct LiveSegmentView: View {
             HStack(spacing: OmiSpacing.xxs) {
               Text(speakerLabel)
                 .scaledFont(size: OmiType.caption, weight: personName != nil ? .semibold : .medium)
-                .foregroundColor(personName != nil ? Ink.accent : Ink.secondary)
+                .foregroundColor(personName != nil ? Ink.primary : Ink.secondary)
 
               if personName == nil {
                 Image(systemName: "pencil")
@@ -420,14 +420,12 @@ private struct LiveSegmentView: View {
 
   private var speakerAvatar: some View {
     Circle()
-      .fill(
-        isUser ? Ink.accent : (personName != nil ? Ink.accent.opacity(0.6) : Ink.rowFillHover)
-      )
+      .fill(isUser ? Ink.primary : Ink.rowFillHover)
       .frame(width: 24, height: 24)
       .overlay(
         Text(isUser ? "Y" : (personName?.prefix(1).uppercased() ?? String(segment.speaker)))
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.primary)
+          .foregroundColor(isUser ? Ink.surface : Ink.primary)
       )
   }
 }

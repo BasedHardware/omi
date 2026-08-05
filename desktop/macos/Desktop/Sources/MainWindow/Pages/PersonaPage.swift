@@ -160,7 +160,7 @@ struct PersonaPage: View {
           .foregroundColor(Ink.surface)
           .padding(.horizontal, OmiSpacing.xl)
           .padding(.vertical, OmiSpacing.sm)
-          .background(Ink.accent)
+          .background(Ink.primary)
           .cornerRadius(OmiChrome.elementRadius)
       }
       .buttonStyle(.plain)
@@ -176,12 +176,12 @@ struct PersonaPage: View {
       // Icon
       ZStack {
         Circle()
-          .fill(Ink.accent.opacity(0.15))
+          .fill(Ink.rowFillHover)
           .frame(width: 100, height: 100)
 
         Image(systemName: "person.crop.circle.badge.plus")
           .scaledFont(size: 44)
-          .foregroundColor(Ink.accent)
+          .foregroundColor(Ink.primary)
       }
 
       VStack(spacing: OmiSpacing.sm) {
@@ -209,7 +209,7 @@ struct PersonaPage: View {
         .foregroundColor(Ink.surface)
         .padding(.horizontal, OmiSpacing.xxl)
         .padding(.vertical, OmiSpacing.md)
-        .background(Ink.accent)
+        .background(Ink.primary)
         .cornerRadius(OmiChrome.smallControlRadius)
       }
       .buttonStyle(.plain)
@@ -238,7 +238,7 @@ struct PersonaPage: View {
         // Avatar
         ZStack {
           Circle()
-            .fill(Ink.accent.opacity(0.15))
+            .fill(Ink.rowFillHover)
             .frame(width: 80, height: 80)
 
           if !persona.image.isEmpty, let url = URL(string: persona.image) {
@@ -249,14 +249,14 @@ struct PersonaPage: View {
             } placeholder: {
               Image(systemName: "person.fill")
                 .scaledFont(size: 32)
-                .foregroundColor(Ink.accent)
+                .foregroundColor(Ink.primary)
             }
             .frame(width: 80, height: 80)
             .clipShape(Circle())
           } else {
             Image(systemName: "person.fill")
               .scaledFont(size: 32)
-              .foregroundColor(Ink.accent)
+              .foregroundColor(Ink.primary)
           }
         }
 
@@ -335,7 +335,7 @@ struct PersonaPage: View {
             .cornerRadius(OmiChrome.elementRadius)
             .overlay(
               RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .stroke(Ink.secondary.opacity(0.5), lineWidth: 1)
+                .stroke(Ink.hairline, lineWidth: 1)
             )
         } else {
           Text(persona.description.isEmpty ? "No description yet" : persona.description)
@@ -393,7 +393,7 @@ struct PersonaPage: View {
                 .foregroundColor(Ink.surface)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, OmiSpacing.md)
-                .background(Ink.accent)
+                .background(Ink.primary)
                 .cornerRadius(OmiChrome.elementRadius)
             }
             .buttonStyle(.plain)
@@ -413,10 +413,10 @@ struct PersonaPage: View {
               Text(isRegenerating ? "Regenerating..." : "Regenerate from Memories")
             }
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, OmiSpacing.md)
-            .background(Ink.accent.opacity(0.15))
+            .background(Ink.rowFillHover)
             .cornerRadius(OmiChrome.elementRadius)
           }
           .buttonStyle(.plain)
@@ -439,7 +439,7 @@ struct PersonaPage: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(isWarning ? PageGlass.warning : Ink.accent)
+          .foregroundColor(isWarning ? PageGlass.warning : Ink.primary)
 
         Text(title)
           .scaledFont(size: OmiType.caption)
@@ -661,7 +661,7 @@ private struct CreatePersonaSheetContent: View {
       .padding(OmiSpacing.xl)
 
       Divider()
-        .background(Ink.secondary.opacity(0.3))
+        .background(Ink.rowFillHover)
 
       // Form
       VStack(alignment: .leading, spacing: OmiSpacing.xl) {
@@ -680,7 +680,7 @@ private struct CreatePersonaSheetContent: View {
             .cornerRadius(OmiChrome.elementRadius)
             .overlay(
               RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .stroke(Ink.secondary.opacity(0.5), lineWidth: 1)
+                .stroke(Ink.hairline, lineWidth: 1)
             )
         }
 
@@ -720,7 +720,7 @@ private struct CreatePersonaSheetContent: View {
           .cornerRadius(OmiChrome.elementRadius)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-              .stroke(Ink.secondary.opacity(0.5), lineWidth: 1)
+              .stroke(Ink.hairline, lineWidth: 1)
           )
 
           Text("3-30 characters, lowercase letters, numbers, and underscores only")
@@ -738,7 +738,7 @@ private struct CreatePersonaSheetContent: View {
         }
         .foregroundColor(Ink.secondary)
         .padding(OmiSpacing.md)
-        .background(Ink.accent.opacity(0.1))
+        .background(Ink.rowFillHover)
         .cornerRadius(OmiChrome.elementRadius)
 
         Spacer()
@@ -775,7 +775,7 @@ private struct CreatePersonaSheetContent: View {
           .foregroundColor(Ink.surface)
           .frame(maxWidth: .infinity)
           .padding(.vertical, OmiSpacing.md)
-          .background(canCreate ? Ink.accent : Ink.secondary)
+          .background(canCreate ? Ink.primary : Ink.secondary)
           .cornerRadius(OmiChrome.smallControlRadius)
         }
         .buttonStyle(.plain)

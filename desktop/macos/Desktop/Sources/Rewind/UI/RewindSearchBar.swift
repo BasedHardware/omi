@@ -18,7 +18,7 @@ struct RewindSearchBar: View {
       // Search field
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "magnifyingglass")
-          .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
+          .foregroundColor(isSearchFocused ? Ink.primary : Ink.secondary)
           .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
         TextField("Search your screen history...", text: $searchQuery)
@@ -60,7 +60,7 @@ struct RewindSearchBar: View {
           .fill(Ink.rowFillHover)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(isSearchFocused ? Ink.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+              .stroke(isSearchFocused ? Ink.hairline : Color.clear, lineWidth: 1)
           )
       )
 

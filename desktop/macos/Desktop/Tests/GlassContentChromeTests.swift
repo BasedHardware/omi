@@ -52,8 +52,19 @@ final class GlassContentChromeTests: XCTestCase {
     // to be a visible difference, not just a different call site.
     XCTAssertNotEqual(PageGlass.chipFill(isActive: true), PageGlass.chipFill(isActive: false))
     XCTAssertNotEqual(PageGlass.chipStroke(isActive: true), PageGlass.chipStroke(isActive: false))
-    XCTAssertEqual(PageGlass.chipFill(isActive: false), Ink.rowFill)
-    XCTAssertEqual(PageGlass.chipFill(isActive: true), Ink.rowFillHover)
+
+    // Assert the ordering, not the identity of the token that produces it. Pinning the active
+    // fill to a named token is what let the defect through the first time: two tokens collapsed
+    // onto one wash and the assertion still passed. What has to be true is that "on" is visibly
+    // heavier than "off" — so measure it.
+    func alpha(_ color: Color) -> CGFloat {
+      NSColor(color).usingColorSpace(.sRGB)?.alphaComponent ?? 0
+    }
+    let rest = alpha(PageGlass.chipFill(isActive: false))
+    let active = alpha(PageGlass.chipFill(isActive: true))
+    XCTAssertGreaterThan(
+      active, rest + 0.02,
+      "The active chip must be visibly heavier than the resting one, not merely a different token.")
   }
 
   func testStateColoursAreNamedSystemColoursAndNotTheErrorRed() {

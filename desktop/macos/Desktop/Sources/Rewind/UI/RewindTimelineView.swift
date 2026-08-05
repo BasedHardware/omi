@@ -448,10 +448,10 @@ struct ScreenshotPreviewView: View {
               Text("\(matchCount) match\(matchCount == 1 ? "" : "es")")
                 .scaledFont(size: OmiType.caption)
             }
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xxs)
-            .background(Ink.accent.opacity(0.15))
+            .background(Ink.rowFillHover)
             .cornerRadius(OmiChrome.stripRadius)
           }
         }
@@ -632,8 +632,8 @@ struct ScreenshotPreviewView: View {
     var searchStart = lowercasedText.startIndex
     while let range = lowercasedText.range(of: lowercasedQuery, range: searchStart..<lowercasedText.endIndex) {
       if let attrRange = Range(range, in: result) {
-        result[attrRange].foregroundColor = Ink.accent
-        result[attrRange].backgroundColor = Ink.accent.opacity(0.2)
+        result[attrRange].foregroundColor = Ink.primary
+        result[attrRange].backgroundColor = PageGlass.warning.opacity(0.32)
         result[attrRange].font = .system(size: 11, weight: .semibold)
       }
       searchStart = range.upperBound

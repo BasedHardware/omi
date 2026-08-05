@@ -170,7 +170,7 @@ struct TaskChatPanel: View {
             .truncationMode(.middle)
           Spacer()
         }
-        .foregroundColor(Ink.secondary.opacity(0.7))
+        .foregroundColor(Ink.secondary)
         .padding(.top, OmiSpacing.xxs)
       }
     }
@@ -187,7 +187,7 @@ struct TaskChatPanel: View {
 
       Image(systemName: "text.bubble")
         .scaledFont(size: 36)
-        .foregroundColor(Ink.secondary.opacity(0.4))
+        .foregroundColor(Ink.secondary)
 
       Text("Open a task thread")
         .scaledFont(size: OmiType.body, weight: .medium)
@@ -210,7 +210,7 @@ struct TaskChatPanel: View {
     VStack(spacing: OmiSpacing.md) {
       Image(systemName: "bubble.left.and.bubble.right")
         .scaledFont(size: 32)
-        .foregroundColor(Ink.secondary.opacity(0.5))
+        .foregroundColor(Ink.secondary)
 
       Text("Work on this with Omi")
         .scaledFont(size: OmiType.body, weight: .medium)
@@ -393,7 +393,7 @@ struct TaskChatPanelPlaceholder: View {
         Spacer()
         Image(systemName: coordinator.errorMessage == nil ? "text.bubble" : "exclamationmark.triangle")
           .scaledFont(size: 36)
-          .foregroundColor(Ink.secondary.opacity(0.4))
+          .foregroundColor(Ink.secondary)
         Text(coordinator.errorMessage == nil ? "Select a task to continue" : "Couldn’t open this work")
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(Ink.secondary)

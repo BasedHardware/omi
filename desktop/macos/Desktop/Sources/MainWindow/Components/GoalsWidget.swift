@@ -55,7 +55,7 @@ struct GoalsWidget: View {
               Text(isGeneratingGoal ? "Generating..." : "Generate AI Goal")
                 .scaledFont(size: OmiType.body, weight: .medium)
             }
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
             .glassChip(isActive: true)
@@ -697,7 +697,7 @@ struct GoalEditSheet: View {
             .padding(.vertical, OmiSpacing.sm)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .fill(Ink.accent)
+                .fill(Ink.primary)
             )
         }
         .buttonStyle(.plain)
@@ -787,7 +787,7 @@ struct GoalInsightSheet: View {
             .stroke(Ink.rowFillHover, lineWidth: 3)
           Circle()
             .trim(from: 0, to: min(goal.progress / 100, 1.0))
-            .stroke(Ink.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .stroke(Ink.primary, style: StrokeStyle(lineWidth: 3, lineCap: .round))
             .rotationEffect(.degrees(-90))
         }
         .frame(width: 36, height: 36)
@@ -864,7 +864,7 @@ struct GoalInsightSheet: View {
             .padding(.vertical, OmiSpacing.sm)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .fill(Ink.accent)
+                .fill(Ink.primary)
             )
         }
         .buttonStyle(.plain)

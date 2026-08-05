@@ -63,13 +63,13 @@ struct GoalsHistoryPage: View {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "trophy")
             .scaledFont(size: OmiType.hero)
-            .foregroundColor(Ink.secondary.opacity(0.5))
+            .foregroundColor(Ink.secondary)
           Text("No goals history yet")
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundColor(Ink.secondary)
           Text("Completed and removed goals will appear here")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary.opacity(0.7))
+            .foregroundColor(Ink.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
@@ -164,12 +164,12 @@ struct CompletedGoalRow: View {
           // Type badge
           Text(typeBadgeText)
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.xs)
             .padding(.vertical, OmiSpacing.hairline)
             .background(
               Capsule()
-                .fill(Ink.accent.opacity(0.15))
+                .fill(Ink.rowFillHover)
             )
 
           // Final value
@@ -186,7 +186,7 @@ struct CompletedGoalRow: View {
         if isCompleted {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Color(red: 0.133, green: 0.773, blue: 0.369))
+            .foregroundColor(Ink.listeningGreen)
 
           if !completionDateText.isEmpty {
             Text(completionDateText)
@@ -196,11 +196,11 @@ struct CompletedGoalRow: View {
         } else {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.secondary.opacity(0.5))
+            .foregroundColor(Ink.secondary)
 
           Text("Removed")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary.opacity(0.7))
+            .foregroundColor(Ink.secondary)
         }
       }
     }

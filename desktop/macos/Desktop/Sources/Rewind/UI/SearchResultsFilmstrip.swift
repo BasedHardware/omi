@@ -306,7 +306,7 @@ struct FilmstripThumbnail: View {
         .overlay(
           RoundedRectangle(cornerRadius: isHovered ? 12 : 8)
             .stroke(
-              isSelected ? Ink.accent : (isHovered ? Ink.secondary : Ink.secondary),
+              isSelected ? Ink.accent : (isHovered ? Ink.primary : Ink.hairline),
               lineWidth: isSelected ? 3 : (isHovered ? 2 : 1)
             )
         )
@@ -317,7 +317,7 @@ struct FilmstripThumbnail: View {
         )
         // Hover glow
         .shadow(
-          color: isHovered && !isSelected ? Ink.secondary : .clear,
+          color: isHovered && !isSelected ? Ink.primary.opacity(0.35) : .clear,
           radius: isHovered ? 8 : 0
         )
         // Screenpipe-style scale and lift

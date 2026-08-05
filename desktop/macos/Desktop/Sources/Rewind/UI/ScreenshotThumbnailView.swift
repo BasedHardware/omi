@@ -232,7 +232,7 @@ struct SearchContextSnippet: View {
     var searchStart = lowercasedSnippet.startIndex
     while let range = lowercasedSnippet.range(of: lowercasedQuery, range: searchStart..<lowercasedSnippet.endIndex) {
       if let attrRange = Range(range, in: result) {
-        result[attrRange].foregroundColor = Ink.accent
+        result[attrRange].foregroundColor = Ink.primary
         result[attrRange].font = .system(size: 10, weight: .semibold)
       }
       searchStart = range.upperBound

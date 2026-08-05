@@ -313,13 +313,20 @@ struct ConversationsPage: View {
       if searchQuery.isEmpty && appState.canLoadMoreConversations
         && !(isMultiSelectMode && !selectedConversationIds.isEmpty)
       {
-        Button("Load older conversations") {
+        Button {
           Task {
             await appState.loadMoreConversations()
           }
+        } label: {
+          Text("Load older conversations")
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(Ink.primary)
+            .padding(.horizontal, OmiSpacing.lg)
+            .frame(height: 34)
+            .glassFloatingBar(cornerRadius: 17)
         }
-        .buttonStyle(.bordered)
-        .padding(.bottom, OmiSpacing.md)
+        .buttonStyle(.plain)
+        .padding(.bottom, OmiSpacing.lg)
         .accessibilityIdentifier("conversations-load-more")
       }
 
@@ -487,7 +494,7 @@ struct ConversationsPage: View {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "magnifyingglass")
             .scaledFont(size: 32)
-            .foregroundColor(Ink.secondary.opacity(0.5))
+            .foregroundColor(Ink.secondary)
           Text("No conversations found")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
@@ -634,18 +641,10 @@ struct ConversationsPage: View {
               .scaledFont(size: OmiType.caption, weight: .medium)
           }
         }
-        .foregroundColor(appState.selectedDateFilter != nil ? Ink.surface : Ink.secondary)
+        .foregroundColor(appState.selectedDateFilter != nil ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .background(
-          Capsule(style: .continuous)
-            .fill(appState.selectedDateFilter != nil ? Ink.primary : PageGlass.chipFill(isActive: false))
-        )
-        .overlay(
-          Capsule(style: .continuous)
-            .strokeBorder(
-              appState.selectedDateFilter != nil ? Color.clear : Ink.separator, lineWidth: 1)
-        )
+        .glassChip(isActive: appState.selectedDateFilter != nil)
       }
       .buttonStyle(.plain)
       .disabled(isFilteringDate)
@@ -752,7 +751,7 @@ struct ConversationsPage: View {
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
         .foregroundColor(
-          selectedConversationIds.count >= 2 ? Ink.primary : Ink.secondary
+          selectedConversationIds.count >= 2 ? Ink.surface : Ink.secondary
         )
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
@@ -762,8 +761,8 @@ struct ConversationsPage: View {
         )
         .overlay(
           Capsule()
-            .stroke(
-              selectedConversationIds.count >= 2 ? Ink.separator : Color.clear, lineWidth: 1)
+            .strokeBorder(
+              selectedConversationIds.count >= 2 ? Color.clear : Ink.separator, lineWidth: 1)
         )
       }
       .buttonStyle(.plain)

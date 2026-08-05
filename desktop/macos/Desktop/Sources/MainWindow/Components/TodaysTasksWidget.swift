@@ -134,19 +134,19 @@ struct TaskRowView: View {
           if task.recurrenceRule == "daily" {
             Image(systemName: "repeat")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(Ink.accent.opacity(0.7))
+              .foregroundColor(Ink.secondary)
           }
         }
 
         if task.recurrenceRule == "daily" {
           Text("Daily")
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(Ink.accent.opacity(0.8))
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.xs)
             .padding(.vertical, OmiSpacing.hairline)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                .fill(Ink.accent.opacity(0.1))
+                .fill(Ink.rowFillHover)
             )
         }
       }

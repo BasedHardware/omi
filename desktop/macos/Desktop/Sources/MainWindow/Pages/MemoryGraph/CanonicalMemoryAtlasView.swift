@@ -2444,7 +2444,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         let (regions, quietened) = territory(in: proxy.size, plan: plan)
 
         ZStack {
-          Color.clear
+          Color.black  // The mat. See `.glassMediaMat` on `.clipped()` below.
 
           atlasCanvas(size: proxy.size, plan: plan, regions: regions, quietened: quietened)
             // Camera gestures belong to the painted atlas only. Keeping them
@@ -2502,24 +2502,24 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
         .onAppear { viewportSize = proxy.size }
         .onChange(of: proxy.size) { _, newSize in viewportSize = newSize }
-        // Zooming back out to the whole map is leaving the place you were in,
-        // whether or not you pressed its name to do it. Without this the map
-        // keeps hiding every other coastline long after the user has stopped
-        // looking at one region, and the only way back is a control they have
-        // no reason to know about.
+        // Zooming back out is leaving the place you were in, pressed or not. Without this the
+        // map keeps hiding every other coastline long after the user stopped looking at one,
+        // and the only way back is a control they have no reason to know about.
         .onChange(of: zoom) { _, level in
           guard enteredRegionID != nil, let departureZoom, level < departureZoom else { return }
           leaveNeighbourhood()
         }
-        // A neighbourhood id belongs to the snapshot that detected it. Rebuild
-        // the graph and the same ground can come back under a different number,
-        // or not at all — and being inside a place that no longer exists is a
-        // mode with nothing on screen to explain it and no control to end it.
+        // A neighbourhood id belongs to the snapshot that detected it: rebuild and the same
+        // ground can return under a different number, or not at all. Being inside a place that
+        // no longer exists is a mode with nothing on screen to explain it and no way out.
         .onChange(of: snapshot.neighbourhoods.map(\.id)) { _, regions in
           guard let entered = enteredRegionID, !regions.contains(entered) else { return }
           leaveNeighbourhood()
         }
-        .clipped()
+        // The one dark surface a content page may draw: the map is emissive (light nodes, haloes
+        // and labels, like a star chart) and vanished on the panel's near-white ground. The mat
+        // also flips the environment so `Ink` resolves *up* for the chrome laid over it.
+        .clipped().glassMediaMat()
       }
 
       VStack(spacing: 0) {

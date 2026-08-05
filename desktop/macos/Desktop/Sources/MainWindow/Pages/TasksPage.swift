@@ -3760,8 +3760,8 @@ struct TasksPage: View {
   private var headerView: some View {
     HStack(spacing: OmiSpacing.sm) {
       Text("Tasks")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
+        .inkStyle(InkType.firstTitle, color: Ink.primary)
+        .fixedSize()
 
       // Search field
       HStack(spacing: OmiSpacing.sm) {
@@ -3791,8 +3791,7 @@ struct TasksPage: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(Ink.rowFill)
-      .cornerRadius(OmiChrome.elementRadius)
+      .glassField()
 
       if !viewModel.isMultiSelectMode {
         completedToggleButton
@@ -3891,7 +3890,7 @@ struct TasksPage: View {
           .overlay(
             Text("Nothing here")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary.opacity(0.7))
+              .foregroundColor(Ink.secondary)
           )
       } else {
         ForEach(tasks, id: \.id) { task in
@@ -3913,11 +3912,10 @@ struct TasksPage: View {
     } label: {
       Image(systemName: "plus")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
+        .foregroundColor(Ink.surface)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.rowFill)
-        .cornerRadius(OmiChrome.elementRadius)
+        .background(Capsule(style: .continuous).fill(Ink.primary))
     }
     .buttonStyle(.plain)
     .help("Add task (⌘N)")
@@ -4393,7 +4391,10 @@ struct TasksPage: View {
           }
         }
         .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
+        .padding(.top, OmiSpacing.sm)
+        // Clearance for the floating hint bar and undo toast. They overlay the scroll rather
+        // than sit under it, so without this the last row is permanently covered.
+        .padding(.bottom, 72)
       }
       .refreshable {
         await viewModel.loadTasks()
@@ -4605,7 +4606,7 @@ struct TaskCategorySection: View {
           .overlay {
             if isTopDropTargeted {
               Rectangle()
-                .fill(Ink.accent)
+                .fill(Ink.primary)
                 .frame(height: 2)
             }
           }
@@ -4747,7 +4748,7 @@ struct TaskDragDropModifier: ViewModifier {
         .overlay(alignment: dropAbove ? .top : .bottom) {
           if isDropTarget {
             Rectangle()
-              .fill(Ink.accent)
+              .fill(Ink.primary)
               .frame(height: 2)
               .transition(.opacity)
           }
@@ -4953,7 +4954,7 @@ private struct TaskBoardCard: View {
           } label: {
             Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(task.completed ? Ink.secondary : Ink.secondary)
+              .foregroundColor(task.completed ? Ink.primary : Ink.secondary)
           }
           .buttonStyle(.plain)
           .help(task.completed ? "Mark not done" : "Mark done")
@@ -4991,8 +4992,8 @@ private struct TaskBoardCard: View {
   private func priorityChip(_ priority: String) -> some View {
     let color: Color
     switch priority.lowercased() {
-    case "high": color = Color(red: 1.0, green: 0.42, blue: 0.42)
-    case "medium": color = Ink.secondary
+    case "high": color = Ink.errorRed
+    case "medium": color = PageGlass.warning
     default: color = Ink.secondary
     }
     return Text(priority.capitalized)
@@ -5011,7 +5012,7 @@ private struct TaskBoardCard: View {
       Text(Self.dueFormatter.string(from: due))
         .scaledFont(size: OmiType.micro, weight: .medium)
     }
-    .foregroundColor(overdue ? Color(red: 1.0, green: 0.42, blue: 0.42) : Ink.secondary)
+    .foregroundColor(overdue ? PageGlass.warning : Ink.secondary)
     .padding(.horizontal, 7)
     .padding(.vertical, 2)
     .background(Capsule().fill(Ink.rowFillHover))
@@ -5609,7 +5610,7 @@ struct TaskRow: View {
               .foregroundColor(Ink.surface)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.vertical, OmiSpacing.xxs)
-              .background(Ink.rowFillHover)
+              .background(Ink.primary)
               .clipShape(Capsule())
             }
             .buttonStyle(.plain)
@@ -5727,18 +5728,18 @@ struct TaskRow: View {
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
         .fill(
           isKeyboardSelected
-            ? Ink.accent.opacity(0.10)
+            ? PageGlass.chipFill(isActive: true)
             : (isHovering || isDragging
-              ? Ink.rowFillHover : (isNewlyCreated ? Ink.accent.opacity(0.15) : Color.clear)))
+              ? Ink.rowFillHover : (isNewlyCreated ? Ink.rowFill : Color.clear)))
     )
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .stroke(isKeyboardSelected ? Ink.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+        .stroke(isKeyboardSelected ? Ink.hairline : Color.clear, lineWidth: 1)
     )
     .overlay(alignment: .leading) {
       if isKeyboardSelected {
         RoundedRectangle(cornerRadius: 2)
-          .fill(Ink.accent)
+          .fill(Ink.primary)
           .frame(width: 3)
           .padding(.vertical, OmiSpacing.xxs)
       }
@@ -6055,7 +6056,7 @@ struct PriorityBadgeInteractive: View {
           }
         }
         .foregroundColor(
-          badgeHovering ? badgeColor : (priority != nil ? Ink.secondary : Ink.secondary))
+          badgeHovering ? badgeColor : (priority != nil ? Ink.primary : Ink.secondary))
       }
       .buttonStyle(.plain)
       .onHover { hovering in
@@ -6066,7 +6067,7 @@ struct PriorityBadgeInteractive: View {
           ForEach(["high", "medium", "low"], id: \.self) { value in
             let color: Color =
               value == "high"
-              ? Ink.primary : value == "medium" ? Ink.secondary : Ink.secondary
+              ? Ink.errorRed : value == "medium" ? PageGlass.warning : Ink.secondary
             let isSelected = priority == value
 
             Button {
@@ -6142,7 +6143,7 @@ struct TagBadgeInteractive: View {
           }
         }
         .foregroundColor(
-          badgeHovering ? Ink.primary : (tags.isEmpty ? Ink.secondary : Ink.secondary))
+          badgeHovering ? Ink.primary : (tags.isEmpty ? Ink.secondary : Ink.primary))
       }
       .buttonStyle(.plain)
       .onHover { hovering in
@@ -6202,7 +6203,7 @@ struct TagBadgeInteractive: View {
               .foregroundColor(Ink.surface)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.xs)
-              .background(Capsule().fill(Ink.accent))
+              .background(Capsule().fill(Ink.primary))
           }
           .buttonStyle(.plain)
           .frame(maxWidth: .infinity, alignment: .trailing)
@@ -6238,11 +6239,10 @@ struct NewBadge: View {
   var body: some View {
     Text("New")
       .scaledFont(size: OmiType.micro, weight: .semibold)
-      .foregroundColor(Ink.accent)
+      .foregroundColor(Ink.surface)
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.hairline)
-      .background(Ink.accent.opacity(0.15))
-      .cornerRadius(OmiChrome.stripRadius)
+      .background(Capsule(style: .continuous).fill(Ink.primary))
   }
 }
 
@@ -6494,7 +6494,7 @@ struct UndoToastView: View {
           .padding(.vertical, OmiSpacing.xs)
           .background(
             Capsule()
-              .fill(Ink.rowFillHover)
+              .fill(Ink.primary)
           )
       }
       .buttonStyle(.plain)
@@ -6522,7 +6522,7 @@ struct InlineTaskCreationRow: View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
       // Circle placeholder (matches TaskRow checkbox)
       Circle()
-        .stroke(Ink.accent.opacity(0.5), lineWidth: 1.5)
+        .stroke(Ink.hairline, lineWidth: 1.5)
         .frame(width: 20, height: 20)
         .padding(.leading, OmiSpacing.md)
 
@@ -6545,15 +6545,15 @@ struct InlineTaskCreationRow: View {
     .padding(.vertical, OmiSpacing.xs)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(Ink.accent.opacity(0.05))
+        .fill(Ink.rowFill)
     )
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .stroke(Ink.accent.opacity(0.3), lineWidth: 1)
+        .stroke(Ink.hairline, lineWidth: 1)
     )
     .overlay(alignment: .leading) {
       RoundedRectangle(cornerRadius: 2)
-        .fill(Ink.accent)
+        .fill(Ink.primary)
         .frame(width: 3)
         .padding(.vertical, OmiSpacing.xxs)
     }
@@ -6593,11 +6593,8 @@ struct KeyboardHintBar: View {
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
-    .background(
-      Capsule()
-        .fill(Ink.rowFill)
-        .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
-    )
+    // 19 = half the bar's own height, so the panel is the stadium everything floating is cut to.
+    .glassFloatingBar(cornerRadius: 19)
   }
 
   private func keyboardHint(_ key: String, label: String) -> some View {

@@ -186,6 +186,7 @@ struct InsightPage: View {
                 .stroke(Ink.separator, lineWidth: 1)
             )
         }
+        .tint(Ink.primary)
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
@@ -266,15 +267,12 @@ struct InsightPage: View {
         if count > 0 {
           Text("\(count)")
             .geistMono(size: 11, tracking: 0)
-            .foregroundStyle(isSelected ? Ink.secondary : Ink.secondary)
+            .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
         }
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 7)
-      .background(
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .fill(isSelected ? Ink.rowFillHover : Ink.rowFill)
-      )
+      .glassChip(isActive: isSelected)
     }
     .buttonStyle(.plain)
   }
@@ -539,7 +537,7 @@ struct InsightTimelineRow: View {
           // The realization itself, quoted.
           Text(insight.insight.insight)
             .geist(size: 16, weight: insight.isRead ? .regular : .medium)
-            .foregroundStyle(insight.isRead ? Ink.primary : Ink.primary)
+            .foregroundStyle(insight.isRead ? Ink.secondary : Ink.primary)
             .lineSpacing(3)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)

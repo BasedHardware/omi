@@ -171,7 +171,7 @@ private struct MemoryExportRow: View {
               .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(
                 status.hasConnection || status.exportedCount > 0
-                  ? Ink.secondary : Ink.secondary)
+                  ? Ink.primary : Ink.secondary)
 
             if let statusSecondaryText {
               Text(statusSecondaryText)

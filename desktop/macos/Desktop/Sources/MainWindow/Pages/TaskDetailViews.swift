@@ -21,7 +21,7 @@ struct TaskDetailButton: View {
     } label: {
       Image(systemName: "info.circle")
         .scaledFont(size: OmiType.micro)
-        .foregroundColor(showTooltip ? Ink.secondary : Ink.secondary)
+        .foregroundColor(showTooltip ? Ink.primary : Ink.secondary)
     }
     .buttonStyle(.plain)
     .onHover { hovering in

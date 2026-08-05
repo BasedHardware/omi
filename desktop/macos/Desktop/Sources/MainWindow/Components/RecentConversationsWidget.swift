@@ -21,7 +21,7 @@ struct RecentConversationsWidget: View {
         Button(action: onViewAll) {
           Text("View All")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }

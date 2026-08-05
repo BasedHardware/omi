@@ -2160,8 +2160,7 @@ struct MemoriesPage: View {
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.surface)
         .frame(width: 44, height: 44)
-        .background(Ink.primary)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Capsule(style: .continuous).fill(Ink.primary))
     }
     .buttonStyle(.plain)
     .help("Add Memory")
@@ -2624,8 +2623,7 @@ struct MemoriesPage: View {
         .foregroundColor(Ink.surface)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.accent)
-        .cornerRadius(OmiChrome.elementRadius)
+        .background(Capsule(style: .continuous).fill(Ink.primary))
       }
       .buttonStyle(.plain)
       .padding(.top, OmiSpacing.sm)
@@ -2699,8 +2697,7 @@ struct MemoriesPage: View {
         .foregroundColor(Ink.surface)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.accent)
-        .cornerRadius(OmiChrome.elementRadius)
+        .background(Capsule(style: .continuous).fill(Ink.primary))
       }
       .buttonStyle(.plain)
     }
@@ -2874,7 +2871,7 @@ private struct MemoryDetailButton: View {
   var body: some View {
     Image(systemName: "info.circle")
       .scaledFont(size: OmiType.micro)
-      .foregroundColor(showTooltip ? Ink.secondary : Ink.secondary)
+      .foregroundColor(showTooltip ? Ink.primary : Ink.secondary)
       .frame(width: 20, height: 20)
       .contentShape(Rectangle())
       .onHover { hovering in
@@ -3190,6 +3187,7 @@ struct MemoryDetailPanel: View {
           .frame(width: 24, height: 24)
           .contentShape(Rectangle())
       }
+      .tint(Ink.primary)
       .menuStyle(.borderlessButton)
       .menuIndicator(.hidden)
       .frame(width: 24)
