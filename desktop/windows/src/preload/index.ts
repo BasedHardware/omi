@@ -59,7 +59,10 @@ import type {
   XConnectorSession,
   XStatus,
   XSyncResult,
-  XRunState
+  XRunState,
+  AiCloneChatMode,
+  AiCloneIncomingMessageEvent,
+  AiCloneSubmitDraftArgs
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import type {
@@ -391,6 +394,23 @@ const omi: OmiBridgeApi = {
   codingAgentDetect: () => ipcRenderer.invoke('codingAgent:detect'),
   codingAgentCodexKeyStatus: () => ipcRenderer.invoke('codingAgent:codexKeyStatus'),
   codingAgentSetCodexKey: (key: string) => ipcRenderer.invoke('codingAgent:setCodexKey', key),
+  aiCloneConnect: (accessToken: string) => ipcRenderer.invoke('aiClone:connect', accessToken),
+  aiCloneStatus: () => ipcRenderer.invoke('aiClone:status'),
+  aiCloneDisconnect: () => ipcRenderer.invoke('aiClone:disconnect'),
+  aiCloneListChats: () => ipcRenderer.invoke('aiClone:listChats'),
+  aiCloneSetChatMode: (chatID: string, displayName: string, mode: AiCloneChatMode) =>
+    ipcRenderer.invoke('aiClone:setChatMode', chatID, displayName, mode),
+  aiCloneListDrafts: () => ipcRenderer.invoke('aiClone:listDrafts'),
+  aiCloneApproveDraft: (id: string, editedText?: string) =>
+    ipcRenderer.invoke('aiClone:approveDraft', id, editedText),
+  aiCloneDismissDraft: (id: string) => ipcRenderer.invoke('aiClone:dismissDraft', id),
+  onAiCloneIncomingMessage: (cb: (event: AiCloneIncomingMessageEvent) => void) => {
+    const listener = (_e: unknown, event: AiCloneIncomingMessageEvent): void => cb(event)
+    ipcRenderer.on('aiClone:incomingMessage', listener)
+    return () => ipcRenderer.removeListener('aiClone:incomingMessage', listener)
+  },
+  aiCloneSubmitDraft: (args: AiCloneSubmitDraftArgs) =>
+    ipcRenderer.invoke('aiClone:submitDraft', args),
   chatGetEngine: () => ipcRenderer.invoke('chat:getEngine'),
   mainChatSend: (args: MainChatSendArgs) => ipcRenderer.invoke('mainChat:send', args),
   mainChatCancel: (runId: string) => ipcRenderer.invoke('mainChat:cancel', runId),

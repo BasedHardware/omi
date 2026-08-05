@@ -11,6 +11,7 @@ import {
   Keyboard,
   Bell,
   Info,
+  MessageCircle,
   type LucideIcon
 } from 'lucide-react'
 
@@ -18,6 +19,7 @@ export type SettingsTabId =
   | 'general'
   | 'memories'
   | 'agents'
+  | 'ai-clone'
   | 'transcription'
   | 'rewind'
   | 'notifications'
@@ -32,6 +34,7 @@ export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon
   { id: 'general', label: 'General', Icon: SettingsIcon },
   { id: 'memories', label: 'Memories', Icon: Brain },
   { id: 'agents', label: 'Agents', Icon: Bot },
+  { id: 'ai-clone', label: 'AI Clone', Icon: MessageCircle },
   { id: 'transcription', label: 'Transcription', Icon: AudioLines },
   { id: 'rewind', label: 'Rewind', Icon: History },
   { id: 'notifications', label: 'Notifications', Icon: Bell },

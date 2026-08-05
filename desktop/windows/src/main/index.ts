@@ -20,7 +20,6 @@ import { installContextMenu } from './contextMenu'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 import type { ConversationFolder, LiveNote } from '../shared/types'
 import {
-  isListenSessionOwnedBy,
   registerOmiListenHandlers,
   startTestListenSession,
   stopTestListenSession
@@ -84,6 +83,7 @@ import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
+import { registerAiCloneHandlers, clearAiCloneUserData } from './ipc/aiClone'
 import { initClaudeAgentConfigDir } from './codingAgent/agentConfigDir'
 import { registerMainChatHandlers } from './ipc/mainChat'
 import { registerAgentCardHandlers } from './ipc/agentCards'
@@ -123,10 +123,6 @@ import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
-import {
-  startRewindForegroundCaptureTrigger,
-  stopRewindForegroundCaptureTrigger
-} from './rewind/foregroundCaptureTrigger'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
@@ -838,18 +834,12 @@ app.whenReady().then(async () => {
   // Sign-out teardown: clear every user-scoped table so a second account on this
   // machine can't see the prior user's local data (renderer authTeardown.ts).
   ipcMain.handle('db:wipeUserData', async () => wipeUserData())
-  registerOmiListenHandlers((ownerId) => {
-    const captureWc = getCaptureWc()
-    const mainWc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
-    return ownerId === mainWc?.id || ownerId === captureWc?.id
-  })
+  registerOmiListenHandlers()
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
   // command/event is missed. Reads the capture wc live so a respawn is picked up.
-  registerCaptureBridge(
-    getCaptureWc,
-    () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
-    isListenSessionOwnedBy
+  registerCaptureBridge(getCaptureWc, () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
   )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
@@ -937,6 +927,10 @@ app.whenReady().then(async () => {
   // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
   // only when a task actually runs).
   registerCodingAgentHandlers()
+  // AI clone (Track 2): Beeper-backed auto-reply IPC + background poll loop.
+  // Cheap to register unconditionally — the poll timer only actually does
+  // anything once a Beeper access token is connected (Settings → AI Clone).
+  registerAiCloneHandlers()
   // Main-chat (kernel-routed pi-mono) IPC. DARK: the door exists but nothing in the
   // renderer calls it yet; default typed chat still routes through /v2/messages.
   registerMainChatHandlers()
@@ -979,6 +973,13 @@ app.whenReady().then(async () => {
   onSessionReset(() => {
     resetPendingDeletes()
     resetBackendDegraded()
+    // AI clone (Track 2): Beeper token, per-chat settings, and queued drafts
+    // are exactly the same shape of problem as the two resets above — none
+    // of it is epoch-guarded, so without this it would survive into the
+    // next account's session. This used to be wired ONLY into the heavier
+    // explicit wipeUserData() path (main/ipc/db.ts), which does not fire on
+    // an ordinary sign-out — onSessionReset is the hook that actually does.
+    clearAiCloneUserData()
   })
   // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
   // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
@@ -1160,10 +1161,6 @@ app.whenReady().then(async () => {
         // fresh install, and any change the user makes in Settings survives restarts.
         // OCR/retention loops are cheap no-ops until frames exist.
         { name: 'rewindCapture', run: () => startRewindCapture() },
-        {
-          name: 'rewindForegroundCapture',
-          run: () => startRewindForegroundCaptureTrigger()
-        },
         { name: 'rewindOcr', run: () => startRewindOcr() },
         // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
         // and the launch backfill only move once the renderer relays a Firebase
@@ -1512,7 +1509,6 @@ app.on('will-quit', () => {
   flushPerfMarks()
   automationBridge.dispose()
   stopAutomationTargetTracker()
-  stopRewindForegroundCaptureTrigger()
   // Kill the long-running OCR/window-info helper subprocess. Without this it
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).

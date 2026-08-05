@@ -17,6 +17,7 @@ overrides:
 
 allowBuilds:
   '@firebase/util': true
+  '@google/genai': true
   better-sqlite3: true
   electron: true
   electron-winstaller: true

@@ -116,6 +116,25 @@ describe('candidateAgents', () => {
     activate('acp', 'openclaw', 'hermes')
     expect(candidateAgents('hermes', {})).toEqual(['hermes', 'acp', 'openclaw'])
   })
+
+  it('demotes OpenClaw behind tool-capable agents for a tool-heavy unnamed task', () => {
+    activate('openclaw', 'acp', 'hermes')
+    const prompt = 'run the tests and fix the failing build'
+    const ranked = candidateAgents(undefined, {}, process.env, prompt)
+    expect(ranked.indexOf('openclaw')).toBeGreaterThan(ranked.indexOf('acp'))
+    expect(ranked.indexOf('openclaw')).toBeGreaterThan(ranked.indexOf('hermes'))
+  })
+
+  it('still puts a named agent first even when it scores worse for the task', () => {
+    activate('openclaw', 'acp')
+    const prompt = 'run the tests and fix the failing build'
+    expect(candidateAgents('openclaw', {}, process.env, prompt)[0]).toBe('openclaw')
+  })
+
+  it('falls back to the static order for an empty/ambiguous prompt (no signal)', () => {
+    activate('acp', 'codex')
+    expect(candidateAgents(undefined, {}, process.env, '')).toEqual(['acp', 'codex'])
+  })
 })
 
 describe('runCodingAgentTask', () => {

@@ -13,6 +13,7 @@ import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
 import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
 import { AgentsTab } from '../components/settings/tabs/AgentsTab'
+import { AiCloneTab } from '../components/settings/tabs/AiCloneTab'
 import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
 import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
 import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
@@ -25,6 +26,7 @@ import { Memories } from './Memories'
 const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
   general: GeneralTab,
   agents: AgentsTab,
+  'ai-clone': AiCloneTab,
   transcription: TranscriptionTab,
   rewind: RewindTab,
   notifications: NotificationsTab,
