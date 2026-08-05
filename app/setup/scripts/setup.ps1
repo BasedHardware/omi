@@ -56,37 +56,36 @@ function SetupFirebase {
     Copy-Item "setup/prebuilt/firebase_options.dart" -Destination "lib/firebase_options_prod.dart"
     Copy-Item "setup/prebuilt/google-services.json" -Destination "android/app/src/prod/"
     Copy-Item "setup/prebuilt/GoogleService-Info.plist" -Destination "ios/Config/Prod/"
+
+    Validate-FirebaseApiAlignment
 }
 
+# Fail closed when community remote-staging API cannot verify Firebase tokens
+# (#9404 / #5939). Do not text-replace project IDs — regenerate via FlutterFire.
+function Validate-FirebaseApiAlignment {
+    $apiBaseUrl = "https://api.omiapi.com/"
+    $json = Get-Content -Raw "setup/prebuilt/google-services.json"
+    $match = [regex]::Match($json, '"project_id"\s*:\s*"([^"]+)"')
+    $project = if ($match.Success) { $match.Groups[1].Value } else { "" }
 
-function SetupFirebaseWithServiceAccount {
-    dart pub global activate flutterfire_cli
-
-    # Dev configuration
-    flutterfire config `
-        --platforms="android,ios,web" `
-        --out="lib/firebase_options_dev.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12.development" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/dev/" `
-        --ios-out="ios/Config/Dev/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
-        --ios-target="Runner" `
-        --yes
-
-    # Prod configuration
-    flutterfire config `
-        --platforms="android,ios,web" `
-        --out="lib/firebase_options_prod.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12" `
-        --android-app-id="com.friend.ios.dev" `
-        --android-out="android/app/src/prod/" `
-        --ios-out="ios/Config/Prod/" `
-        --service-account="$env:FIREBASE_SERVICE_ACCOUNT_KEY" `
-        --project="based-hardware-dev" `
-        --ios-target="Runner" `
-        --yes
+    if ($apiBaseUrl -eq "https://api.omiapi.com/" -and $project -ne "based-hardware") {
+        if ($env:OMI_ALLOW_FIREBASE_MISMATCH -eq "1") {
+            Write-Host "WARNING: Firebase project '$project' cannot authenticate to $apiBaseUrl."
+            Write-Host "         Continuing because OMI_ALLOW_FIREBASE_MISMATCH=1 (local/emulator only)."
+            Write-Host "         See https://github.com/BasedHardware/omi/issues/9404"
+            return
+        }
+        Write-Host "ERROR: Firebase project '$project' cannot authenticate to $apiBaseUrl."
+        Write-Host "Community remote staging requires Firebase project 'based-hardware' (#9404)."
+        Write-Host "Tokens from '$project' are rejected with 401 by the live backend."
+        Write-Host ""
+        Write-Host "Maintainer action: regenerate app/setup/prebuilt/* via FlutterFire against"
+        Write-Host "  based-hardware (do NOT text-replace project IDs — closed PR #5945)."
+        Write-Host ""
+        Write-Host "Isolated local backend / emulator workaround:"
+        Write-Host "  `$env:OMI_ALLOW_FIREBASE_MISMATCH='1'; then re-run setup with a local API_BASE_URL"
+        exit 1
+    }
 }
 
 function SetupProvisioningProfile {

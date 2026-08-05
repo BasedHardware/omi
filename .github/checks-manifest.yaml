@@ -619,6 +619,16 @@ checks:
     triggers: ["codemagic.yaml", "app/lib/env/dev_env.dart", "app/lib/env/prod_env.dart", "app/lib/main.dart", "app/lib/utils/environment_detector.dart", "desktop/macos/Desktop/Sources/AppBuild.swift", "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift", "desktop/macos/Desktop/Sources/GoogleService-Info*.plist", "backend/charts/**", ".github/workflows/**", "docs/runbooks/desktop-backend-cloud-run-ownership.md", ".github/scripts/check-mobile-production-routing.py", ".github/scripts/test_check_mobile_production_routing.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "INV-DATA-1 mutation-tests every production-family mobile and desktop routing authority and rejects retired GKE desktop-backend ownership"
+  - id: mobile-community-firebase-alignment
+    command: ["python3", ".github/scripts/check-mobile-community-firebase-alignment.py"]
+    triggers: ["app/setup.sh", "app/setup/scripts/setup.ps1", "app/setup/prebuilt/**", ".github/scripts/check-mobile-community-firebase-alignment.py", ".github/scripts/test_check_mobile_community_firebase_alignment.py", ".github/scripts/mobile_community_firebase_alignment_allowlist.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9404 community remote staging (api.omiapi.com) must use Firebase based-hardware; shrink-only allowlist until FlutterFire regen"
+  - id: mobile-community-firebase-alignment-fixtures
+    command: ["python3", ".github/scripts/test_check_mobile_community_firebase_alignment.py"]
+    triggers: ["app/setup.sh", "app/setup/scripts/setup.ps1", "app/setup/prebuilt/**", ".github/scripts/check-mobile-community-firebase-alignment.py", ".github/scripts/test_check_mobile_community_firebase_alignment.py", ".github/scripts/mobile_community_firebase_alignment_allowlist.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9404 mutation-tests setup validators, forbids based-hardware-dev FlutterFire regen, and requires allowlist shrink when prebuilt is fixed"
   - id: desktop-backend-release-boundary
     command: ["python3", ".github/scripts/check-desktop-backend-release-policy.py"]
     triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_qualify_beta.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]

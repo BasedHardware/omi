@@ -87,36 +87,45 @@ function setup_firebase() {
   cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
   cp setup/prebuilt/google-services.json android/app/src/prod/
   cp setup/prebuilt/GoogleService-Info.plist ios/Config/Prod/
+
+  validate_firebase_api_alignment
 }
 
-##########################################
-# Setup Firebase with Service Account Json
-##########################################
-function setup_firebase_with_service_account() {
-  dart pub global activate flutterfire_cli
-  flutterfire config \
-    --platforms="android,ios,web" \
-    --out=lib/firebase_options_dev.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-    --android-app-id=com.friend.ios.dev \
-    --android-out=android/app/src/dev/  \
-    --ios-out=ios/Config/Dev/ \
-    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
-    --project="based-hardware-dev" \
-    --ios-target="Runner" \
-    --yes
+##############################################################################
+# Fail closed when community remote-staging API cannot verify Firebase tokens
+# (#9404 / #5939). Do not text-replace project IDs — regenerate via FlutterFire.
+##############################################################################
+function validate_firebase_api_alignment() {
+  local project
+  project="$(
+    python3 - <<'PY'
+import re
+from pathlib import Path
+text = Path("setup/prebuilt/google-services.json").read_text(encoding="utf-8")
+match = re.search(r'"project_id"\s*:\s*"([^"]+)"', text)
+print(match.group(1) if match else "")
+PY
+  )"
 
-  flutterfire config \
-    --platforms="android,ios,web" \
-    --out=lib/firebase_options_prod.dart \
-    --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-    --android-app-id=com.friend.ios.dev \
-    --android-out=android/app/src/prod/ \
-    --ios-out=ios/Config/Prod/ \
-    --service-account="$FIREBASE_SERVICE_ACCOUNT_KEY" \
-    --project="based-hardware-dev" \
-    --ios-target="Runner" \
-    --yes
+  if [[ "${API_BASE_URL}" == "https://api.omiapi.com/" && "${project}" != "based-hardware" ]]; then
+    if [[ "${OMI_ALLOW_FIREBASE_MISMATCH:-}" == "1" ]]; then
+      echo "WARNING: Firebase project '${project}' cannot authenticate to ${API_BASE_URL}."
+      echo "         Continuing because OMI_ALLOW_FIREBASE_MISMATCH=1 (local/emulator only)."
+      echo "         See https://github.com/BasedHardware/omi/issues/9404"
+      return 0
+    fi
+    echo "ERROR: Firebase project '${project}' cannot authenticate to ${API_BASE_URL}."
+    echo "Community remote staging requires Firebase project 'based-hardware' (#9404)."
+    echo "Tokens from '${project}' are rejected with 401 by the live backend."
+    echo ""
+    echo "Maintainer action: regenerate app/setup/prebuilt/* via FlutterFire against"
+    echo "  based-hardware for com.friend.ios.dev / com.friend-app-with-wearable.ios12.development"
+    echo "  (do NOT text-replace project IDs — closed PR #5945)."
+    echo ""
+    echo "Isolated local backend / emulator workaround:"
+    echo "  API_BASE_URL=http://127.0.0.1:8000/ OMI_ALLOW_FIREBASE_MISMATCH=1 bash setup.sh ios"
+    exit 1
+  fi
 }
 
 ######################################
