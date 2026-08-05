@@ -40,7 +40,12 @@ struct DesktopTopBar: View {
         TopNavigationBarLayout(
           expandedNavigation: { navPills },
           compactNavigation: { compactNavigationMenu },
-          persistentControls: { CaptureListeningControls(appState: appState, onRewind: onRewind) },
+          persistentControls: {
+            HStack(spacing: OmiSpacing.sm) {
+              DesktopUpdateStatusChip()
+              CaptureListeningControls(appState: appState, onRewind: onRewind)
+            }
+          },
           settings: { settingsButton }
         )
         .frame(width: laneWidth)

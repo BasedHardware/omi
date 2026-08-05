@@ -406,6 +406,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       )
       self.viewModel?.updateAvailable = true
       self.viewModel?.availableVersion = version
+      self.viewModel?.updateRestartImminent = false
+      self.viewModel?.updateDeferredForActiveRecording = false
       self.viewModel?.lastUpdateFailure = nil
     }
   }
@@ -415,6 +417,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     logSync("Sparkle: No update available")
     Task { @MainActor in
       self.viewModel?.updateAvailable = false
+      self.viewModel?.updateRestartImminent = false
+      self.viewModel?.updateDeferredForActiveRecording = false
       self.viewModel?.lastUpdateFailure = nil
     }
   }
@@ -433,6 +437,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       logSync("Sparkle: Already up to date")
       Task { @MainActor in
         self.viewModel?.lastUpdateFailure = nil
+        self.viewModel?.updateRestartImminent = false
+        self.viewModel?.updateDeferredForActiveRecording = false
       }
     } else {
       logSync(
@@ -456,6 +462,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       Task { @MainActor in
         AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
         self.viewModel?.lastUpdateFailure = diagnostics
+        self.viewModel?.updateRestartImminent = false
+        self.viewModel?.updateDeferredForActiveRecording = false
       }
     }
   }
@@ -537,6 +545,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     Task { @MainActor in
       AnalyticsManager.shared.updateInstallStarted(attempt: attempt)
       self.viewModel?.updateAvailable = false
+      self.viewModel?.updateRestartImminent = false
+      self.viewModel?.updateDeferredForActiveRecording = false
     }
   }
 
@@ -562,11 +572,23 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync(
           "Sparkle: Deferring update v\(version) — speech detected \(Int(secondsSinceSpeech))s ago (active recording)"
         )
+        Task { @MainActor in
+          self.viewModel?.availableVersion = version
+          self.viewModel?.updateAvailable = true
+          self.viewModel?.updateDeferredForActiveRecording = true
+          self.viewModel?.updateRestartImminent = false
+        }
         deferredInstall = DeferredUpdateInstall(
           version: version,
           silenceWindow: UpdaterDelegate.activeCallSilenceWindow,
           lastSpeechProvider: { VADGateService.lastSpeechAt },
-          install: installationBlock
+          install: { [weak self] in
+            Task { @MainActor in
+              self?.viewModel?.updateDeferredForActiveRecording = false
+              self?.viewModel?.updateRestartImminent = true
+            }
+            installationBlock()
+          }
         )
         deferredInstall?.start()
         return true
@@ -574,6 +596,12 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     }
 
     logSync("Sparkle: Triggering immediate installation for v\(version)")
+    Task { @MainActor in
+      self.viewModel?.availableVersion = version
+      self.viewModel?.updateAvailable = true
+      self.viewModel?.updateDeferredForActiveRecording = false
+      self.viewModel?.updateRestartImminent = true
+    }
     installationBlock()
     return true
   }
@@ -732,6 +760,12 @@ final class UpdaterViewModel: ObservableObject {
 
   /// Version string of the available update
   @Published var availableVersion: String = ""
+
+  /// Sparkle is about to invoke the install/relaunch block (user should see a restart warning).
+  @Published var updateRestartImminent: Bool = false
+
+  /// Auto-install is waiting for VAD silence so an active recording is not interrupted.
+  @Published var updateDeferredForActiveRecording: Bool = false
 
   /// Last non-successful Sparkle update failure, if one needs user recovery.
   @Published var lastUpdateFailure: UpdateFailureDiagnostics?

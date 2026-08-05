@@ -545,7 +545,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Check Now") {
+            Button(updaterViewModel.updateSessionInProgress ? "Checking…" : "Check Now") {
               updaterViewModel.checkForUpdates()
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -555,6 +555,44 @@ extension SettingsContentView {
                 ? "Check for app updates"
                 : updaterViewModel.updateSessionInProgress
                   ? "An update is already downloading…" : "Already checking for updates…")
+          }
+
+          let updateStatus = DesktopUpdateStatusPresentation.kind(
+            sessionInProgress: updaterViewModel.updateSessionInProgress,
+            updateAvailable: updaterViewModel.updateAvailable,
+            availableVersion: updaterViewModel.availableVersion,
+            restartImminent: updaterViewModel.updateRestartImminent,
+            deferredForRecording: updaterViewModel.updateDeferredForActiveRecording
+          )
+          if updateStatus.isVisible {
+            HStack(alignment: .center, spacing: OmiSpacing.sm) {
+              if updateStatus.showsProgress {
+                ProgressView()
+                  .controlSize(.small)
+              } else {
+                Image(systemName: "arrow.down.circle.fill")
+                  .scaledFont(size: OmiType.body)
+                  .foregroundColor(OmiColors.accent)
+              }
+
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text(updateStatus.title)
+                  .scaledFont(size: OmiType.body, weight: .medium)
+                  .foregroundColor(OmiColors.textPrimary)
+                if let detail = updateStatus.detail {
+                  Text(detail)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(OmiColors.textSecondary)
+                }
+              }
+              Spacer(minLength: 0)
+            }
+            .padding(OmiSpacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(OmiColors.backgroundTertiary)
+            .cornerRadius(OmiChrome.elementRadius)
+            .accessibilityIdentifier("settings-update-status")
+            .accessibilityLabel(updateStatus.accessibilityLabel)
           }
 
           if let lastCheck = updaterViewModel.lastUpdateCheckDate {

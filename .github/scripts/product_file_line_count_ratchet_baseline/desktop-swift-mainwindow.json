@@ -8,7 +8,7 @@
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 4427,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": 1646,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 6633,
-    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1616
+    "desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift": 1553
   },
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": "Chat-first blocks, persisted local evidence, and the shared transcript/preview timestamp render at the existing chat-message resource boundary instead of creating a parallel transcript renderer. Final-assistant Omi mark ownership and canonical expandable tool-call presentation are row-level rendering contracts that belong with bubble equality and layout. The mark remains an overlay so it cannot shift bubbles horizontally, while its owner row reserves the mark's height to prevent an empty streaming reply from clipping at the transcript live edge.",
