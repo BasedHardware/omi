@@ -70,11 +70,11 @@ List<int> intField(int fieldNum, int value) => [...varint((fieldNum << 3) | 0), 
 List<int> bytesField(int fieldNum, List<int> data) => [...varint((fieldNum << 3) | 2), ...varint(data.length), ...data];
 
 List<int> bleWrapper(int index, int seq, int numFrags, List<int> payload) => [
-  ...intField(1, index),
-  ...intField(2, seq),
-  ...intField(3, numFrags),
-  ...bytesField(4, payload),
-];
+      ...intField(1, index),
+      ...intField(2, seq),
+      ...intField(3, numFrags),
+      ...bytesField(4, payload),
+    ];
 
 /// Type-8 RX: f8 → f6 EPOCH_MS (varint), as described in #5734.
 List<int> type8ClockPacket({required int index, required int epochMs}) =>
@@ -105,13 +105,54 @@ void main() {
       expect(LimitlessDeviceConnection.extractType8PendantEpochMs(payload), isNull);
     });
 
-    test('flash-page correction subtracts measured drift', () {
-      // Pendant RTC was 5 minutes ahead of phone when measured.
+    test('returns null for unterminated varint in Type-8 payload', () {
+      // field 8 length-delimited with an unterminated varint length prefix (all 0x80).
+      final payload = <int>[
+        (8 << 3) | 2, // field 8, wire type 2
+        0x80, 0x80, 0x80, // unterminated length varint
+      ];
+      expect(LimitlessDeviceConnection.extractType8PendantEpochMs(payload), isNull);
+    });
+  });
+
+  group('flash-page timestamp correction (#5734)', () {
+    test('subtracts drift when a pendant page timestamp is present', () {
       const driftOffsetMs = 5 * 60 * 1000;
       const rawTimestampMs = 1750000000000;
-      final corrected = rawTimestampMs - driftOffsetMs;
-      expect(corrected, rawTimestampMs - driftOffsetMs);
-      expect(corrected, lessThan(rawTimestampMs));
+      const phoneNowMs = 1750000600000;
+      expect(
+        LimitlessDeviceConnection.correctedFlashPageTimestampMs(
+          pageTimestampMs: rawTimestampMs,
+          clockDriftOffsetMs: driftOffsetMs,
+          phoneNowMs: phoneNowMs,
+        ),
+        rawTimestampMs - driftOffsetMs,
+      );
+    });
+
+    test('does not double-correct DateTime.now fallback when page timestamp is missing', () {
+      const driftOffsetMs = 5 * 60 * 1000;
+      const phoneNowMs = 1750000600000;
+      expect(
+        LimitlessDeviceConnection.correctedFlashPageTimestampMs(
+          pageTimestampMs: null,
+          clockDriftOffsetMs: driftOffsetMs,
+          phoneNowMs: phoneNowMs,
+        ),
+        phoneNowMs,
+      );
+    });
+
+    test('treats null drift as zero correction', () {
+      const rawTimestampMs = 1750000000000;
+      expect(
+        LimitlessDeviceConnection.correctedFlashPageTimestampMs(
+          pageTimestampMs: rawTimestampMs,
+          clockDriftOffsetMs: null,
+          phoneNowMs: 0,
+        ),
+        rawTimestampMs,
+      );
     });
   });
 

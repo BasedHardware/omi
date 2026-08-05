@@ -41,6 +41,19 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Null when no Type-8 clock was observed (fail-open: no correction).
   int? get clockDriftOffsetMs => _clockDriftOffsetMs;
 
+  /// Corrects a pendant flash-page RTC using connect-time drift (#5734).
+  ///
+  /// When [pageTimestampMs] is null, returns [phoneNowMs] unchanged — the
+  /// fallback is already phone wall clock and must not be double-corrected.
+  static int correctedFlashPageTimestampMs({
+    required int? pageTimestampMs,
+    required int? clockDriftOffsetMs,
+    required int phoneNowMs,
+  }) {
+    if (pageTimestampMs == null) return phoneNowMs;
+    return pageTimestampMs - (clockDriftOffsetMs ?? 0);
+  }
+
   int _highestReceivedIndex = -1;
   int _lastAcknowledgedIndex = -1;
 
@@ -87,9 +100,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
-    _rxSubscription = transport
-        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
-        .listen(_handleNotification);
+    _rxSubscription =
+        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
   }
 
   Future<void> _handleTransportReconnected() async {
@@ -150,11 +162,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _initialize() async {
     try {
+      // Freeze drift capture *before* SetCurrentTime leaves the phone so a
+      // Type-8 arriving during the write cannot be mistaken for pre-sync RTC (#5734).
+      _timeSynced = true;
       // Command 1: Time sync (forward-only). Drift was measured from any Type-8
-      // pendant-clock RX during the connect listen window above; freeze it now.
+      // pendant-clock RX during the connect listen window above.
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
-      _timeSynced = true;
       await Future.delayed(const Duration(seconds: 1));
 
       // Command 2: Enable data streaming (skipped in Transcribe Later — pendant records to flash)
@@ -361,10 +375,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
       final byte = data[pos];
       pos++;
       result |= (byte & 0x7f) << shift;
-      if ((byte & 0x80) == 0) break;
+      if ((byte & 0x80) == 0) return [result, pos];
       shift += 7;
+      // protobuf int64 varints are at most 10 bytes; reject overlong/unterminated.
+      if (shift > 63) return [null, startPos];
     }
-    return [result, pos];
+    // Ran off the end still expecting a continuation terminator.
+    return [null, startPos];
   }
 
   /// Handle reassembled payload in real-time mode
@@ -551,10 +568,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
           } else {
             // Audio page that yielded zero frames — genuine parse failure
             final firstBytesLen = flashPageData.length < 64 ? flashPageData.length : 64;
-            final firstBytes = flashPageData
-                .sublist(0, firstBytesLen)
-                .map((b) => b.toRadixString(16).padLeft(2, '0'))
-                .join(' ');
+            final firstBytes =
+                flashPageData.sublist(0, firstBytesLen).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
             DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
               'index': index,
               'session': session,
@@ -1957,7 +1972,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -1971,7 +1987,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;

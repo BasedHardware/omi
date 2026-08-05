@@ -339,9 +339,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           final opusFrames = pageData['opus_frames'] as List<List<int>>? ?? [];
           // Pendant flash pages keep the RTC they were written under. Subtract the
           // connect-time drift so filenames/session gaps match real-time conversations (#5734).
-          final rawTimestampMs = pageData['timestamp_ms'] as int? ?? DateTime.now().millisecondsSinceEpoch;
-          final driftOffsetMs = limitlessConnection.clockDriftOffsetMs ?? 0;
-          final timestampMs = rawTimestampMs - driftOffsetMs;
+          // Only correct when a real page timestamp was parsed — DateTime.now() fallback
+          // is already phone time and must not be double-corrected.
+          final timestampMs = LimitlessDeviceConnection.correctedFlashPageTimestampMs(
+            pageTimestampMs: pageData['timestamp_ms'] as int?,
+            clockDriftOffsetMs: limitlessConnection.clockDriftOffsetMs,
+            phoneNowMs: DateTime.now().millisecondsSinceEpoch,
+          );
           final maxIndex = pageData['max_index'] as int?;
 
           if (maxIndex != null && (lastProcessedIndex == null || maxIndex > lastProcessedIndex)) {
