@@ -20,6 +20,20 @@ import type { AiCloneChatMode } from '../../shared/types'
  *  modes mean. */
 export type ChatReplyMode = AiCloneChatMode
 
+const VALID_MODES: readonly string[] = ['off', 'draft', 'auto_send']
+
+/** Runtime guard for values that *claim* to be a ChatReplyMode but didn't
+ *  come from a typed call site — persisted JSON on disk, or an IPC argument
+ *  from the renderer. TypeScript's `AiCloneChatMode` type is a compile-time
+ *  promise only; a corrupted settings file or a stale/mismatched renderer
+ *  build can hand this code an arbitrary string at runtime. Callers at every
+ *  such boundary (chatSettingsStore's file read, the setChatMode IPC handler)
+ *  must run values through this before trusting them — never assume the type
+ *  annotation was actually honored end to end. */
+export function isValidChatMode(value: unknown): value is ChatReplyMode {
+  return typeof value === 'string' && VALID_MODES.includes(value)
+}
+
 export type ReplyDecision = 'skip' | 'queue_for_review' | 'send'
 
 export interface ReplyDecisionInput {
@@ -44,10 +58,24 @@ export function looksSensitive(text: string): boolean {
 
 export function decideReplyAction(input: ReplyDecisionInput): ReplyDecision {
   const text = input.draftText.trim()
-  if (input.mode === 'off') return 'skip'
   if (!text) return 'skip'
-  if (input.mode === 'draft') return 'queue_for_review'
-  // mode === 'auto_send'
-  if (input.needsInput) return 'queue_for_review'
-  return looksSensitive(text) ? 'queue_for_review' : 'send'
+
+  switch (input.mode) {
+    case 'off':
+      return 'skip'
+    case 'draft':
+      return 'queue_for_review'
+    case 'auto_send':
+      if (input.needsInput) return 'queue_for_review'
+      return looksSensitive(text) ? 'queue_for_review' : 'send'
+    default:
+      // Defense in depth: `input.mode` is typed as ChatReplyMode, but that's
+      // only a compile-time promise. If a corrupted settings file or a stale
+      // IPC caller ever hands this an unrecognized value, fail closed to
+      // 'skip' — never fall through to 'send' for a mode this code doesn't
+      // actually recognize. Every real boundary (chatSettingsStore's file
+      // read, the setChatMode IPC handler) should already have sanitized the
+      // value via isValidChatMode before it gets here; this is the backstop.
+      return 'skip'
+  }
 }

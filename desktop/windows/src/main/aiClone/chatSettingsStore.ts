@@ -4,10 +4,10 @@
 // Plain JSON (not a credential store — no chat ids here are secrets), same
 // synchronous-file-I/O shape as the other stores in this codebase.
 
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
-import type { ChatReplyMode } from './autoReplyPolicy'
+import { isValidChatMode, type ChatReplyMode } from './autoReplyPolicy'
 
 export interface ChatSetting {
   chatID: string
@@ -30,7 +30,21 @@ export class ChatSettingsStore {
     if (!existsSync(this.filePath)) return {}
     try {
       const raw = JSON.parse(readFileSync(this.filePath, 'utf8')) as StoredFile
-      return raw && typeof raw === 'object' ? raw : {}
+      if (!raw || typeof raw !== 'object') return {}
+      // Fail closed: a hand-edited or corrupted file could contain anything
+      // in `mode`. If it's not one of the three real values, coerce to 'off'
+      // rather than letting an unrecognized string reach decideReplyAction —
+      // that function has its own backstop too, but the fix belongs here,
+      // at the point untrusted data enters the system.
+      const sanitized: StoredFile = {}
+      for (const [chatID, setting] of Object.entries(raw)) {
+        if (!setting || typeof setting !== 'object' || typeof setting.chatID !== 'string') continue
+        sanitized[chatID] = {
+          ...setting,
+          mode: isValidChatMode(setting.mode) ? setting.mode : 'off'
+        }
+      }
+      return sanitized
     } catch {
       return {}
     }
@@ -72,5 +86,13 @@ export class ChatSettingsStore {
     const all = this.readFile()
     delete all[chatID]
     this.writeFile(all)
+  }
+
+  /** Drop every chat setting (opted-in chats, modes, cursors). Called on
+   *  sign-out / account switch — see main/ipc/db.ts's wipeUserData — so a
+   *  different Omi account on this machine never inherits which of the
+   *  previous user's Beeper chats were opted into drafting or auto-send. */
+  clearAll(): void {
+    if (existsSync(this.filePath)) rmSync(this.filePath, { force: true })
   }
 }

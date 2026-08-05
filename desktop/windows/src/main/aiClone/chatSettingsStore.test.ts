@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
@@ -14,9 +14,11 @@ import { ChatSettingsStore } from './chatSettingsStore'
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 let store: ChatSettingsStore
+let filePath: string
 
 beforeEach(() => {
-  store = new ChatSettingsStore(join(dir, `settings-${Math.random().toString(36).slice(2)}.json`))
+  filePath = join(dir, `settings-${Math.random().toString(36).slice(2)}.json`)
+  store = new ChatSettingsStore(filePath)
 })
 
 describe('ChatSettingsStore', () => {
@@ -63,6 +65,28 @@ describe('ChatSettingsStore', () => {
   it('list returns all stored chats', () => {
     store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'draft' })
     store.upsert({ chatID: 'chat-2', displayName: 'Sam', mode: 'off' })
-    expect(store.list().map((s) => s.chatID).sort()).toEqual(['chat-1', 'chat-2'])
+    expect(
+      store
+        .list()
+        .map((s) => s.chatID)
+        .sort()
+    ).toEqual(['chat-1', 'chat-2'])
+  })
+
+  it('coerces an unrecognized persisted mode to off (fail closed against a corrupted file)', () => {
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'auto_send' })
+    // Simulate a hand-edited/corrupted file by writing an invalid mode
+    // directly, bypassing upsert's normal typed path.
+    const raw = JSON.parse(readFileSync(filePath, 'utf8'))
+    raw['chat-1'].mode = 'AUTO_SEND'
+    writeFileSync(filePath, JSON.stringify(raw))
+    expect(store.get('chat-1')?.mode).toBe('off')
+  })
+
+  it('clearAll removes every stored chat setting', () => {
+    store.upsert({ chatID: 'chat-1', displayName: 'Jordan', mode: 'draft' })
+    store.upsert({ chatID: 'chat-2', displayName: 'Sam', mode: 'auto_send' })
+    store.clearAll()
+    expect(store.list()).toEqual([])
   })
 })

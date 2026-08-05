@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideReplyAction, looksSensitive } from './autoReplyPolicy'
+import { decideReplyAction, isValidChatMode, looksSensitive } from './autoReplyPolicy'
 
 describe('decideReplyAction', () => {
   it('skips when the chat is off, regardless of draft content', () => {
@@ -38,6 +38,36 @@ describe('decideReplyAction', () => {
       })
     ).toBe('queue_for_review')
   })
+
+  it('fails closed to skip for an unrecognized mode value, never falls through to send', () => {
+    // Simulates a corrupted settings file or a stale caller handing this an
+    // arbitrary string at runtime — TS's ChatReplyMode type doesn't stop
+    // this from happening outside a fully-typed call site.
+    const corrupted = { mode: 'AUTO_SEND', draftText: 'sounds good!' } as unknown as Parameters<
+      typeof decideReplyAction
+    >[0]
+    expect(decideReplyAction(corrupted)).toBe('skip')
+  })
+
+  it('fails closed to skip for an empty-string mode', () => {
+    const corrupted = { mode: '', draftText: 'sounds good!' } as unknown as Parameters<
+      typeof decideReplyAction
+    >[0]
+    expect(decideReplyAction(corrupted)).toBe('skip')
+  })
+})
+
+describe('isValidChatMode', () => {
+  it.each(['off', 'draft', 'auto_send'])('accepts %s', (mode) => {
+    expect(isValidChatMode(mode)).toBe(true)
+  })
+
+  it.each([undefined, null, 42, {}, [], '', 'AUTO_SEND', 'send', 'auto-send'])(
+    'rejects %j',
+    (value) => {
+      expect(isValidChatMode(value)).toBe(false)
+    }
+  )
 })
 
 describe('looksSensitive', () => {
