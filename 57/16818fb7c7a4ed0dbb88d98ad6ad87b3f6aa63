@@ -1,0 +1,33 @@
+desktop/macos/Desktop/Tests/ChatComposerDraftTests.swift
+  s_569f1df936cc22::t_d14620ec1ee79e 1-141
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatDraftScope.swift
+  s_569f1df936cc22::t_237f0bdb30e494 1-26
+desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
+  s_569f1df936cc22::t_baef5ab5b94fd4 1-74
+desktop/macos/Desktop/Tests/ChatErrorStateTests.swift
+  s_569f1df936cc22::t_1ce99128196a51 302-305
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_569f1df936cc22::t_5cf52db52395aa 3
+desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
+  s_569f1df936cc22::t_03dc95714f63c4 495-521
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_569f1df936cc22::t_1ad26fa6f16ae5 655-685,765,767,770,780,797-809,811,813-815,1255-1277,1300-1303,1305-1310
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_569f1df936cc22::t_1197835bccc5ed 1152-1157,1513,1659,1663,5571,5576
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5716818fb7c7a4ed0dbb88d98ad6ad87b3f6aa63",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
