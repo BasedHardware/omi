@@ -337,7 +337,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           emptyExtractions = 0;
 
           final opusFrames = pageData['opus_frames'] as List<List<int>>? ?? [];
-          final timestampMs = pageData['timestamp_ms'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+          // Pendant flash pages keep the RTC they were written under. Subtract the
+          // connect-time drift so filenames/session gaps match real-time conversations (#5734).
+          final rawTimestampMs = pageData['timestamp_ms'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+          final driftOffsetMs = limitlessConnection.clockDriftOffsetMs ?? 0;
+          final timestampMs = rawTimestampMs - driftOffsetMs;
           final maxIndex = pageData['max_index'] as int?;
 
           if (maxIndex != null && (lastProcessedIndex == null || maxIndex > lastProcessedIndex)) {

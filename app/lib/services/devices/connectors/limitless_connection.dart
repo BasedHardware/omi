@@ -18,6 +18,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
   final _rawDataBuffer = <int>[];
   int? _firstFlashPageTimestampMs;
 
+  /// Pendant RTC minus phone wall clock (ms), measured from a Type-8 RX clock
+  /// notification before [SetCurrentTime]. Applied to flash-page timestamps so
+  /// batch uploads align with real-time conversations (#5734).
+  int? _clockDriftOffsetMs;
+  bool _timeSynced = false;
+
   // Fragment reassembly: index -> {seq -> payload}
   final Map<int, Map<int, List<int>>> _fragmentBuffer = {};
 
@@ -30,6 +36,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _isReinitializing = false;
   bool _pendingReinit = false;
   bool _isBatchMode = false;
+
+  /// Drift of pendant RTC vs phone at connect, before forward clock sync.
+  /// Null when no Type-8 clock was observed (fail-open: no correction).
+  int? get clockDriftOffsetMs => _clockDriftOffsetMs;
 
   int _highestReceivedIndex = -1;
   int _lastAcknowledgedIndex = -1;
@@ -77,8 +87,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
-    _rxSubscription =
-        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
+    _rxSubscription = transport
+        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
+        .listen(_handleNotification);
   }
 
   Future<void> _handleTransportReconnected() async {
@@ -139,9 +150,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _initialize() async {
     try {
-      // Command 1: Time sync
+      // Command 1: Time sync (forward-only). Drift was measured from any Type-8
+      // pendant-clock RX during the connect listen window above; freeze it now.
       final timeSyncCmd = _encodeSetCurrentTime(DateTime.now().millisecondsSinceEpoch);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
+      _timeSynced = true;
       await Future.delayed(const Duration(seconds: 1));
 
       // Command 2: Enable data streaming (skipped in Transcribe Later — pendant records to flash)
@@ -152,7 +165,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
       }
 
       _isInitialized = true;
-      DebugLogManager.logInfo('Limitless device initialized successfully');
+      DebugLogManager.logInfo('Limitless device initialized successfully', {
+        if (_clockDriftOffsetMs != null) 'clockDriftOffsetMs': _clockDriftOffsetMs,
+      });
     } catch (e) {
       Logger.debug('Limitless: Initialization failed: $e');
       DebugLogManager.logError(e, null, 'Limitless initialization failed');
@@ -203,12 +218,153 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       _fragmentBuffer.remove(index);
 
+      // Type-8 may carry the pendant RTC; capture drift before SetCurrentTime.
+      _tryCaptureClockDrift(completePayload);
+
       if (_isBatchMode) {
         _handlePendantMessage(completePayload);
       } else {
         _handleRealTimePayload(completePayload);
       }
     }
+  }
+
+  /// Records pendant−phone drift from a Type-8 clock notification.
+  ///
+  /// Wire shape (issue #5734): BLE wrapper f4 payload → f8 inner → f6 EPOCH_MS.
+  /// Only the first pre-sync reading is kept; later Type-8s (post SetCurrentTime)
+  /// would show ~0 drift and must not overwrite the offline-page correction.
+  void _tryCaptureClockDrift(List<int> payload) {
+    if (_timeSynced || _clockDriftOffsetMs != null) return;
+
+    final pendantEpochMs = extractType8PendantEpochMs(payload);
+    if (pendantEpochMs == null || pendantEpochMs <= 1577836800000) return;
+
+    final phoneEpochMs = DateTime.now().millisecondsSinceEpoch;
+    _clockDriftOffsetMs = pendantEpochMs - phoneEpochMs;
+    DebugLogManager.logEvent('limitless_clock_drift_measured', {
+      'pendantEpochMs': pendantEpochMs,
+      'phoneEpochMs': phoneEpochMs,
+      'driftOffsetMs': _clockDriftOffsetMs,
+    });
+  }
+
+  /// Parses Type-8 pendant clock from a BLE-unwrapped payload.
+  ///
+  /// Looks for length-delimited field 8, then field 6 as epoch ms (varint), or
+  /// field 6 length-delimited wrapping field 1 (SetCurrentTime mirror).
+  static int? extractType8PendantEpochMs(List<int> payload) {
+    try {
+      var pos = 0;
+      while (pos < payload.length) {
+        final tag = payload[pos];
+        final fieldNum = tag >> 3;
+        final wireType = tag & 0x07;
+        pos++;
+
+        if (wireType == 2) {
+          final lengthResult = _decodeVarintStatic(payload, pos);
+          final length = lengthResult[0] as int;
+          pos = lengthResult[1] as int;
+          if (length < 0 || pos + length > payload.length) return null;
+          final fieldData = payload.sublist(pos, pos + length);
+          pos += length;
+          if (fieldNum == 8) {
+            final epoch = _extractEpochFromType8Inner(fieldData);
+            if (epoch != null) return epoch;
+          }
+        } else if (wireType == 0) {
+          pos = (_decodeVarintStatic(payload, pos)[1] as int);
+        } else if (wireType == 1) {
+          pos += 8;
+        } else if (wireType == 5) {
+          pos += 4;
+        } else {
+          break;
+        }
+      }
+    } catch (_) {
+      // Not every payload is Type-8; ignore parse failures.
+    }
+    return null;
+  }
+
+  static int? _extractEpochFromType8Inner(List<int> inner) {
+    var pos = 0;
+    while (pos < inner.length) {
+      final tag = inner[pos];
+      final fieldNum = tag >> 3;
+      final wireType = tag & 0x07;
+      pos++;
+
+      if (wireType == 0) {
+        final result = _decodeVarintStatic(inner, pos);
+        final value = result[0] as int;
+        pos = result[1] as int;
+        if (fieldNum == 6) return value;
+      } else if (wireType == 2) {
+        final lengthResult = _decodeVarintStatic(inner, pos);
+        final length = lengthResult[0] as int;
+        pos = lengthResult[1] as int;
+        if (length < 0 || pos + length > inner.length) return null;
+        final nested = inner.sublist(pos, pos + length);
+        pos += length;
+        if (fieldNum == 6) {
+          final epoch = _extractField1Varint(nested);
+          if (epoch != null) return epoch;
+        }
+      } else if (wireType == 1) {
+        pos += 8;
+      } else if (wireType == 5) {
+        pos += 4;
+      } else {
+        break;
+      }
+    }
+    return null;
+  }
+
+  static int? _extractField1Varint(List<int> data) {
+    var pos = 0;
+    while (pos < data.length) {
+      final tag = data[pos];
+      final fieldNum = tag >> 3;
+      final wireType = tag & 0x07;
+      pos++;
+      if (wireType == 0) {
+        final result = _decodeVarintStatic(data, pos);
+        final value = result[0] as int;
+        pos = result[1] as int;
+        if (fieldNum == 1) return value;
+      } else if (wireType == 2) {
+        final lengthResult = _decodeVarintStatic(data, pos);
+        final length = lengthResult[0] as int;
+        pos = lengthResult[1] as int;
+        if (length < 0 || pos + length > data.length) return null;
+        pos += length;
+      } else if (wireType == 1) {
+        pos += 8;
+      } else if (wireType == 5) {
+        pos += 4;
+      } else {
+        break;
+      }
+    }
+    return null;
+  }
+
+  static List<dynamic> _decodeVarintStatic(List<int> data, int startPos) {
+    var result = 0;
+    var shift = 0;
+    var pos = startPos;
+    while (pos < data.length) {
+      final byte = data[pos];
+      pos++;
+      result |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) == 0) break;
+      shift += 7;
+    }
+    return [result, pos];
   }
 
   /// Handle reassembled payload in real-time mode
@@ -395,8 +551,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
           } else {
             // Audio page that yielded zero frames — genuine parse failure
             final firstBytesLen = flashPageData.length < 64 ? flashPageData.length : 64;
-            final firstBytes =
-                flashPageData.sublist(0, firstBytesLen).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+            final firstBytes = flashPageData
+                .sublist(0, firstBytesLen)
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join(' ');
             DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
               'index': index,
               'session': session,
@@ -1799,8 +1957,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -1814,8 +1971,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
