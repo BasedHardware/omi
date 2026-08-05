@@ -276,6 +276,47 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_deploy_workflow(mutated, production=False)
         self.assertTrue(any("production Firebase project" in error for error in errors), errors)
 
+    def test_requires_isolated_runtime_env_for_each_development_deployment(self) -> None:
+        for step in ("Deploy desktop-backend to Cloud Run", "Deploy Agent VM reconciler Cloud Run Job"):
+            with self.subTest(step=step):
+                start = self.dev.index(f"      - name: {step}\n")
+                end = self.dev.find("\n      - name: ", start + 1)
+                block = self.dev[start:] if end < 0 else self.dev[start:end]
+                mutated_block = block.replace(
+                    "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+                    "GOOGLE_CLOUD_PROJECT=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+                    1,
+                )
+                mutated = self.dev[:start] + mutated_block + self.dev[start + len(block):]
+                errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                self.assertTrue(any(step in error and "GOOGLE_CLOUD_PROJECT" in error for error in errors), errors)
+
+                mutated_block = block.replace("GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}", "", 1)
+                mutated = self.dev[:start] + mutated_block + self.dev[start + len(block):]
+                errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                self.assertTrue(any(step in error and "GCE_PROJECT_ID" in error for error in errors), errors)
+
+                for env_var in (
+                    "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+                    "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+                    "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+                    "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
+                ):
+                    with self.subTest(step=step, env_var=env_var):
+                        commented_block = block.replace(env_var, f"# {env_var}", 1)
+                        mutated = self.dev[:start] + commented_block + self.dev[start + len(block):]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                        self.assertTrue(any(step in error and env_var in error for error in errors), errors)
+
+                        unnamed_peer = (
+                            "\n      - uses: actions/checkout@v4\n"
+                            "        env_vars: |\n"
+                            f"          {env_var}\n"
+                        )
+                        mutated = self.dev[:start] + commented_block + unnamed_peer + self.dev[start + len(block):]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                        self.assertTrue(any(step in error and env_var in error for error in errors), errors)
+
     def test_rejects_baked_credentials_or_python_contract_version_drift(self) -> None:
         errors = POLICY.validate_contract_sources(
             dockerfile=self.dockerfile + "\nCOPY google-credentials.json /app/google-credentials.json\n",
