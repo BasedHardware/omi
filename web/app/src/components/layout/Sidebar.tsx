@@ -370,10 +370,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             column of icons with the destinations below, rather than as a
             separate toolbar. */}
         <div className="overflow-hidden px-2 pt-6 pb-3">
-          {/* The mark keeps its own row and the controls keep theirs, in both
-              states. Reflowing them from a row into a column is a second,
-              unrelated motion competing with the width for attention. */}
-          <div className="flex flex-col gap-2">
+          {/* Expanded, the mark and the two shell controls share one line.
+              Collapsed there is not room for both — two 36px controls do not
+              fit in a 56px column — so they stack under the mark. */}
+          <div
+            className={cn(
+              'flex gap-2',
+              showText ? 'flex-row items-center justify-between' : 'flex-col',
+            )}
+          >
             <Link
               href="/conversations"
               className="flex h-6 items-center gap-2 px-2"
