@@ -2,7 +2,7 @@ import type { Entity, Evidence, ProvisionalClaim, Scope } from "../schema";
 
 export interface ScopeRoleRequest {
   strategy: "scope-role-binding";
-  version: "v1";
+  version: "v2";
   claim_revision_id: string;
   predicate: string;
   entity_role_slots: readonly string[];
@@ -28,14 +28,17 @@ export const buildScopeRoleRequest = (claim: ProvisionalClaim, entities: readonl
   const candidate_scope_labels = ownerEntities.flatMap((entity) => entity.labels.length ? entity.labels : [entity.handle]);
   // No identity candidate is not evidence that the capture lacks a scope.
   // Keep the request scope-only and let the pure planner fail role bindings closed.
+  // Strip ambiguous_surface:* before the model sees them: they are extract
+  // offset-collision bookkeeping, not scope/durability signals. Durability
+  // markers (one_off, hedged, …) stay for the planner AND the prompt.
   return {
-    strategy: "scope-role-binding", version: "v1", claim_revision_id: claim.claim_revision_id, predicate: claim.predicate,
+    strategy: "scope-role-binding", version: "v2", claim_revision_id: claim.claim_revision_id, predicate: claim.predicate,
     entity_role_slots: claim.arguments.map((argument) => argument.slot_id),
     argument_surfaces: claim.arguments.map((argument) => ({ slot_id: argument.slot_id, role: argument.role, surface: argument.surface ?? (argument.value.kind === "entity_ref" || argument.value.kind === "source_local_ref" ? argument.value.ref : String(argument.value.value)) })),
     evidence: excerpts,
     candidate_entities: ownerEntities.map((entity) => ({ entity_id: entity.entity_id, labels: entity.labels.length ? entity.labels : [entity.handle] })),
     candidate_scope_labels,
-    ambiguity_markers: claim.ambiguity_markers,
+    ambiguity_markers: claim.ambiguity_markers.filter((marker) => !marker.startsWith("ambiguous_surface:")),
   };
 };
 

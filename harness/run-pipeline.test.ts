@@ -21,6 +21,10 @@ test("subjectPolicyLabels marks owner self-reference, bystander, and generic", (
   expect(subjectPolicyLabels({ ...claim, observed_speaker_slot_id: null, arguments: [{ slot_id: "person", surface: "Alice" }] }, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:generic"]);
   // Extract often omits the self-ref slot; first-person filler on owner evidence still counts.
   expect(subjectPolicyLabels({ ...claim, observed_speaker_slot_id: null }, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" } }])).toEqual(["subject:owner"]);
+  // Non-owner channel stays bystander even with first-person surface (synthetic guest — not a name denylist).
+  expect(subjectPolicyLabels({ observed_speaker_slot_id: null, arguments: [{ slot_id: "subject", surface: "I" }], evidence_refs: ["e1"] }, [{ evidence_id: "e1", source_identity_ref: { local_key: "speaker:session:guest" } }])).toEqual(["subject:bystander"]);
+  // Weak diarization (mega-utterance split): person:owner channel is not authority for sticky owner facts.
+  expect(subjectPolicyLabels(claim, [{ evidence_id: "e1", source_identity_ref: { local_key: "person:owner" }, policy_labels: ["diarization:weak"] }])).toEqual(["subject:generic"]);
 });
 
 test("pipeline runs each selected session once with deterministic fake extraction", async () => {

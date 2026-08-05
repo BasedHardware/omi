@@ -1,18 +1,19 @@
 import type { Database } from "bun:sqlite";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { hostname } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { projectTreeInputSnapshot } from "../core/retrieve";
-import { retrieveDogfood, type ComposeModelPort, type DogfoodResponse } from "../core/retrieve/dogfood";
-import { renderStructuralTree, type RenderModelPort } from "../core/retrieve/render";
-import { buildDeterministicAnchors } from "../core/retrieve/tree";
+import { retrieveAgentic, type AgenticModelPort } from "../core/retrieve/agentic";
+import type { DogfoodResponse } from "../core/retrieve/dogfood";
 import { SqliteLedger } from "../drivers/sqlite";
 
-/** The owner-facing recall path needs both halves of R0-R4: node summaries are what a
- * question is matched against, and the composed answer is what the owner reads. */
-export interface RecallModelPort extends RenderModelPort, ComposeModelPort {}
 export interface CitedSpan { evidence_id: string; excerpt: string | null; capture_session_id: string }
 export interface RecallAnswer extends DogfoodResponse {
-  /** UI provenance for each returned citation, resolved from the same snapshot the answer came from. */
   cited_spans: readonly CitedSpan[];
+  agent_steps?: number;
+  agent_trace?: readonly { tool: string; args: Record<string, unknown> }[];
 }
+export interface RecallModelPort extends AgenticModelPort {}
 export interface RecallRequest {
   db: Database;
   owner_account_id: string;
@@ -20,28 +21,71 @@ export interface RecallRequest {
   model: RecallModelPort;
   as_of?: string;
   account_timezone?: string;
-  /** Render identity is versioned by the caller: the port does not name the model behind it. */
   model_version?: string;
+  /** Override log dir. Default: tracked `benchmark/recall-logs/` (skipped for `:memory:` unless set / OMI_RECALL_LOG_DIR). */
+  log_dir?: string;
 }
 
+/** Tracked dogfood eval log dir (private repo). Not under `.private/` so it can ride git history. */
+export const defaultRecallLogDir = join(dirname(new URL(import.meta.url).pathname), "../../benchmark/recall-logs");
+
+/** Versioned JSONL path for one recall model_version. Null when there is nowhere durable to write. */
+export const recallLogPath = (db: Database, model_version: string, log_dir?: string): string | null => {
+  const dir = log_dir ?? process.env.OMI_RECALL_LOG_DIR ?? (() => {
+    const file = db.filename;
+    if (!file || file === ":memory:") return null;
+    return defaultRecallLogDir;
+  })();
+  return dir ? join(dir, `${model_version}.jsonl`) : null;
+};
+
+const appendRecallLog = (path: string, record: Record<string, unknown>) => {
+  mkdirSync(dirname(path), { recursive: true });
+  appendFileSync(path, `${JSON.stringify(record)}\n`);
+};
+
+/** Owner recall: agentic graph tools over the live claim set, then grounded compose. */
 export const answerQuestion = async (request: RecallRequest): Promise<RecallAnswer> => {
+  const started = Date.now();
   const graph = new SqliteLedger(request.db).snapshot(request.owner_account_id);
-  const input = projectTreeInputSnapshot(graph, { account_timezone: request.account_timezone ?? "UTC" });
-  const model_version = request.model_version ?? "unspecified";
-  // The retrieval tree is rebuilt per question rather than cached: `renderStructuralTree`
-  // takes a cache keyed by the render digest, and this harness has nowhere durable to keep one.
-  const renders = await renderStructuralTree(buildDeterministicAnchors(input), input, request.model, {
-    strategy: "retrieval-node-summary", model_version, prompt_version: "retrieval-node-summary-v1", policy_version: input.classifier_version, schema_version: "retrieval-v1",
-  });
-  // The owner reads their own graph: an empty policy-class grant is the whole-graph
-  // grant for them and authorizes nothing for anyone else.
-  const response = await retrieveDogfood({
-    owner_account_id: request.owner_account_id, query: request.query, as_of: request.as_of,
+  const input = projectTreeInputSnapshot(graph, {
+    account_timezone: request.account_timezone ?? "UTC",
     request_context: { reader_account_id: request.owner_account_id, grant: { grant_id: "owner-recall", policy_classes: [] } },
-  }, graph, input, renders, request.model, model_version);
+  });
+  const model_version = request.model_version ?? "agentic-recall-v2";
+  const response = await retrieveAgentic({
+    owner_account_id: request.owner_account_id,
+    query: request.query,
+    as_of: request.as_of,
+    request_context: { reader_account_id: request.owner_account_id, grant: { grant_id: "owner-recall", policy_classes: [] } },
+  }, graph, input, request.model, model_version);
   const spanById = new Map(input.evidence_index.map((span) => [span.evidence_id, span]));
-  return { ...response, cited_spans: response.citations.flatMap((evidence_id) => {
-    const span = spanById.get(evidence_id);
-    return span ? [{ evidence_id, excerpt: span.excerpt, capture_session_id: span.capture_session_id }] : [];
-  }) };
+  const answer: RecallAnswer = {
+    ...response,
+    cited_spans: response.citations.flatMap((evidence_id) => {
+      const span = spanById.get(evidence_id);
+      return span ? [{ evidence_id, excerpt: span.excerpt, capture_session_id: span.capture_session_id }] : [];
+    }),
+  };
+  // Lightweight eval row: no evidence excerpts / tool args (those bloat + PII; ids + answer are enough to compare versions).
+  const logPath = recallLogPath(request.db, model_version, request.log_dir);
+  if (logPath) {
+    const dbFile = request.db.filename;
+    appendRecallLog(logPath, {
+      schema_version: "recall_log.v2",
+      recorded_at: new Date().toISOString(),
+      host: hostname(),
+      db: dbFile && dbFile !== ":memory:" ? basename(dbFile) : null,
+      model_version,
+      query: request.query,
+      ms: Date.now() - started,
+      answer_text: answer.answer_text,
+      citations: answer.citations,
+      absence: answer.absence?.kind ?? null,
+      grounding: answer.grounding?.status ?? null,
+      agent_steps: answer.agent_steps ?? null,
+      tools: (answer.agent_trace ?? []).map((step) => step.tool),
+    });
+  }
+  return answer;
 };

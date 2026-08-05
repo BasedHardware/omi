@@ -47,7 +47,7 @@ test("GLM dispatches entity plus all three placement strategies with determinist
 
   await expect(model.invoke({ strategy: "local-handle-durable-entity", version: "v1", input: { owner_account_id: "owner", local_handle: { handle: "local:m", mention_ref: "m", antecedent_handle: null, uncertainty: [] }, evidence_refs: ["Alice works on atlas"], candidate_entity_ids: ["entity:alice"], candidate_entities: [{ entity_id: "entity:alice", handle: "alice", labels: ["Alice"] }] } })).resolves.toEqual({ decision: "same", entity_id: "entity:alice" });
   await expect(model.invoke({ strategy: "mention-local-handle", version: "v1", input: mentionRequest })).resolves.toEqual({ mentions: [{ claim_revision_id: "p-1", slot_id: "subject", surface: "Alice", evidence_id: "e:p-1", antecedent_handle: null }] });
-  await expect(model.invoke({ strategy: "scope-role-binding", version: "v1", input: scopeRequest })).resolves.toEqual({ bindings: { subject: "entity:alice" }, scope: { locality: "durable", scope_ref: "project:atlas" } });
+  await expect(model.invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: "entity:alice" }, scope: { locality: "durable", scope_ref: "project:atlas" } });
   // The stated risk survives the parse: an edge whose only diagnostic is
   // discarded reports an outcome nobody can review.
   await expect(model.invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).resolves.toEqual({ decision: "accept_ltm", risk_markers: ["complete_referents"] });
@@ -68,7 +68,10 @@ test("GLM placement parsers reject malformed model output instead of repairing i
   const bad = (body: string) => fixtureProvider(body, body, body);
 
   await expect(modelFor(bad('{"mentions":[{"claim":"k1","slot_id":"subject","span":{"start":0,"end":5},"excerpt":"k1x1","antecedent_handle":null}]}')).invoke({ strategy: "mention-local-handle", version: "v1", input: mentionRequest })).rejects.toThrow("missing required field: surface");
-  await expect(modelFor(bad('{"bindings":{"subject":"c9"},"scope_ref":"project:atlas","confidently_placed":true}')).invoke({ strategy: "scope-role-binding", version: "v1", input: scopeRequest })).rejects.toThrow("binds non-candidate entity");
+  // Unknown candidate labels abstain the slot rather than hard-fail — dream admit
+  // only reads scope.locality (D-d).
+  await expect(modelFor(bad('{"bindings":{"subject":"c9"},"scope_ref":"project:atlas","confidently_placed":true}')).invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: null }, scope: { locality: "durable", scope_ref: "project:atlas" } });
+  await expect(modelFor(bad('{"bindings":{"subject":"null"},"scope_ref":"project:atlas","confidently_placed":false}')).invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: null }, scope: { locality: "durable", scope_ref: "project:atlas" } });
   await expect(modelFor(bad('{not json}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).rejects.toThrow("was not JSON");
   await expect(modelFor(bad('{"decision":"abstain","risk_markers":[""]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).rejects.toThrow("risk_markers must be an array of non-empty strings");
 });
@@ -96,7 +99,7 @@ test("GLM placement abstentions parse without becoming placement approvals, and 
   );
   const model = modelFor(provider);
   await expect(model.invoke({ strategy: "mention-local-handle", version: "v1", input: mentionRequest })).resolves.toEqual({ mentions: [] });
-  await expect(model.invoke({ strategy: "scope-role-binding", version: "v1", input: scopeRequest })).resolves.toEqual({ bindings: { subject: "entity:alice" }, scope: null });
+  await expect(model.invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: "entity:alice" }, scope: null });
   await expect(model.invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
   await expect(model.invoke({ strategy: "not-a-real-edge", version: "v1", input: {} })).rejects.toThrow("does not support strategy");
 });
@@ -193,6 +196,20 @@ test("the compose edge shows excerpts under short labels and maps the cited labe
     citations: ["evidence:3b8d", "evidence:9f2a"],
     assertions: [{ text: "Nora runs the Atlas rollout.", citations: ["evidence:9f2a"] }, { text: "It ships in March.", citations: ["evidence:3b8d"] }],
   });
+});
+
+test("compose prompt is domain-agnostic (no people/tools special rules)", async () => {
+  const provider = fixtureProvider('{"answer":"You have a brother.","assertions":[{"text":"You have a brother.","cites":["s1"]}]}');
+  await modelFor(provider).compose({
+    strategy: "citation-grounded-compose",
+    version: "v1",
+    input: { query: "Who are the people in my life?", evidence_spans: [{ evidence_id: "evidence:1", excerpt: "My brother is an AI researcher" }] },
+  });
+  const prompt = (provider.calls[0] as { messages: { content: string }[] }).messages[0]!.content;
+  expect(prompt).toContain("Who are the people in my life?");
+  expect(prompt).not.toContain("list DISTINCT relationships");
+  expect(prompt).not.toContain("ONE relationship role per sentence");
+  expect(prompt).not.toContain("ONE tool per sentence");
 });
 
 test("a composed assertion citing a label it was never shown keeps the assertion and loses the citation", async () => {

@@ -26,8 +26,16 @@ test("T6 one-off hedged claims are source-local, never durable", () => {
 
 test("C4 scope request exposes predicate, argument surfaces, evidence text, and candidate labels; missing context never reaches a model", () => {
   const request = buildScopeRoleRequest(claim(), [{ ...entity, labels: ["Owner profile"] }], evidence);
-  expect(request).toMatchObject({ predicate: "statement/ai_use", argument_surfaces: [{ slot_id: "subject", role: "subject", surface: "local:owner" }], evidence: [{ evidence_id: "e1", excerpt: "Owner uses AI daily." }], candidate_scope_labels: ["Owner profile"] });
+  expect(request).toMatchObject({ version: "v2", predicate: "statement/ai_use", argument_surfaces: [{ slot_id: "subject", role: "subject", surface: "local:owner" }], evidence: [{ evidence_id: "e1", excerpt: "Owner uses AI daily." }], candidate_scope_labels: ["Owner profile"] });
   expect(() => buildScopeRoleRequest(claim(), [entity], [])).toThrow("lacks retained evidence excerpt");
+});
+
+test("scope request drops ambiguous_surface bookkeeping markers but keeps durability markers", () => {
+  const request = buildScopeRoleRequest(claim(["ambiguous_surface:subject", "one_off", "hedged"]), [entity], evidence);
+  expect(request.ambiguity_markers).toEqual(["one_off", "hedged"]);
+  // Planner still sees the raw claim markers for hedged+one_off downgrade.
+  const plan = planScopeAndRoles(claim(["ambiguous_surface:subject", "hedged", "one_off"]), [entity], { bindings: { subject: "entity:owner" }, scope: { locality: "durable", scope_ref: "topic:ai" } });
+  expect(plan.scope).toEqual({ locality: "source_local", scope_ref: null });
 });
 
 test("source-local refs render their ref rather than the literal undefined", () => {

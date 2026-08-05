@@ -1,8 +1,11 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { prepareDerivation, type AtomicGraphTransition } from "../core/ledger";
 import { SqliteLedger } from "../drivers/sqlite";
-import { answerQuestion, type RecallModelPort } from "./recall";
+import { answerQuestion, recallLogPath, type RecallModelPort } from "./recall";
 
 const owner = "recall-test-owner";
 const versions = { strategy_version: "test", model_version: "deterministic-fake-v1", prompt_version: "test", policy_version: "test", code_version: "test", schema_version: "test", tokenizer_version: "none", tool_version: "test" };
@@ -40,16 +43,30 @@ const ledgerWithMemories = async () => {
 };
 
 type ComposeCall = { query: string; evidence_spans: readonly { evidence_id: string; excerpt: string }[] };
-/** A summary is what a question is matched against, so the fake writes the same readable
- * text a real render edge would: the node's relations plus its excerpts. */
-const recallModel = (compose: RecallModelPort["compose"]): RecallModelPort => ({
-  render: async ({ input }) => {
-    const claims = (input as { claims: readonly { predicate: string; evidence_spans: readonly { excerpt: string | null }[] }[] }).claims;
-    return { summary_text: claims.map((claim) => `${claim.predicate} ${claim.evidence_spans.map((span) => span.excerpt ?? "").join(" ")}`).join(" | "), citations: [] };
-  },
-  compose,
-  invoke: async () => ({ entailed: true }),
-});
+const recallModel = (compose: RecallModelPort["compose"]): RecallModelPort => {
+  let step = 0;
+  return {
+    agentStep: async (messages) => {
+      step += 1;
+      const question = (() => {
+        try {
+          const firstUser = messages.find((message) => message.role === "user");
+          return firstUser ? String((JSON.parse(firstUser.content) as { question?: string }).question ?? "Atlas") : "Atlas";
+        } catch {
+          return "Atlas";
+        }
+      })();
+      if (step === 1) return { tool: "search", args: { query: question, limit: 8 } };
+      // After search, pick evidence ids from the tool result in the last user message.
+      const last = [...messages].reverse().find((message) => message.role === "user" && message.content.includes("hits"));
+      const hits = last ? (JSON.parse(last.content) as { hits?: { evidence_ids?: string[] }[] }).hits ?? [] : [];
+      const evidence_ids = hits.flatMap((hit) => hit.evidence_ids ?? []).slice(0, 4);
+      return { tool: "done", args: { evidence_ids } };
+    },
+    compose,
+    invoke: async () => ({ entailed: true }),
+  };
+};
 const composeFromMatchingSpan = async ({ input }: { input: unknown }) => {
   const { query, evidence_spans } = input as ComposeCall;
   const span = evidence_spans.find((candidate) => candidate.excerpt.toLocaleLowerCase().includes(query.toLocaleLowerCase())) ?? evidence_spans[0]!;
@@ -71,14 +88,80 @@ test("owner recall discloses a query gap rather than composing an answer nothing
   expect(answer.cited_spans).toEqual([]);
 });
 
-test("owner recall refuses an answer whose extra sentence is absent from the grounding manifest", async () => {
+test("owner recall that never calls done still answers from accumulated search hits", async () => {
   const db = await ledgerWithMemories();
+  let composeCalls = 0;
+  const neverDone: RecallModelPort = {
+    agentStep: async () => ({ tool: "search", args: { query: "Atlas", limit: 8 } }),
+    compose: async ({ input }) => {
+      composeCalls += 1;
+      return composeFromMatchingSpan({ input });
+    },
+    invoke: async () => ({ entailed: true }),
+  };
+  const answer = await answerQuestion({ db, owner_account_id: owner, query: "Atlas", model: neverDone });
+  expect(answer).toMatchObject({ answer_text: "Nora runs the Atlas rollout.", citations: ["evidence:atlas"], absence: null, grounding: { status: "grounded" } });
+  expect(answer.agent_trace?.every((step) => step.tool === "search")).toBe(true);
+  expect(composeCalls).toBe(1);
+});
+
+test("owner recall salvages entailed assertions when answer prose overreaches", async () => {
+  const db = await ledgerWithMemories();
+  let composeCalls = 0;
   const smuggled = async ({ input }: { input: unknown }) => {
+    composeCalls += 1;
     const span = (input as ComposeCall).evidence_spans[0]!;
     return { answer_text: `${span.excerpt}. The rollout finished ahead of schedule.`, citations: [span.evidence_id], assertions: [{ text: `${span.excerpt}.`, citations: [span.evidence_id] }] };
   };
   const answer = await answerQuestion({ db, owner_account_id: owner, query: "Atlas", model: recallModel(smuggled) });
-  expect(answer).toMatchObject({ answer_text: null, citations: [], absence: null, grounding: { status: "ungrounded" } });
-  expect(answer.grounding?.status === "ungrounded" && answer.grounding.failures).toContain("answer assertion is absent from grounding manifest: The rollout finished ahead of schedule.");
+  // Manifest mismatch triggers repair; salvage keeps the entailed assertion only.
+  expect(composeCalls).toBe(2);
+  expect(answer).toMatchObject({ absence: null, grounding: { status: "grounded" } });
+  expect(answer.answer_text).toContain("Nora runs the Atlas rollout");
+  expect(answer.answer_text).not.toContain("ahead of schedule");
+  expect(answer.citations).toEqual(["evidence:atlas"]);
+});
+
+test("owner recall query_gaps when no assertion entails", async () => {
+  const db = await ledgerWithMemories();
+  const model: RecallModelPort = {
+    agentStep: async () => ({ tool: "search", args: { query: "Atlas", limit: 8 } }),
+    compose: async ({ input }) => {
+      const span = (input as ComposeCall).evidence_spans[0]!;
+      return { answer_text: "Invented fact.", citations: [span.evidence_id], assertions: [{ text: "Invented fact.", citations: [span.evidence_id] }] };
+    },
+    invoke: async () => ({ entailed: false }),
+  };
+  const answer = await answerQuestion({ db, owner_account_id: owner, query: "Atlas", model });
+  expect(answer).toMatchObject({ answer_text: null, citations: [], absence: { kind: "query_gap", message: "no cited memory matched" }, grounding: null });
   expect(answer.cited_spans).toEqual([]);
+});
+
+test("owner recall appends a versioned JSONL log for every answerQuestion call", async () => {
+  const db = await ledgerWithMemories();
+  const log_dir = mkdtempSync(join(tmpdir(), "recall-log-"));
+  try {
+    expect(recallLogPath(db, "agentic-recall-v2", log_dir)).toBe(join(log_dir, "agentic-recall-v2.jsonl"));
+    await answerQuestion({ db, owner_account_id: owner, query: "Atlas", model: recallModel(composeFromMatchingSpan), log_dir, model_version: "agentic-recall-v2" });
+    await answerQuestion({ db, owner_account_id: owner, query: "kayaking", model: recallModel(composeFromMatchingSpan), log_dir, model_version: "agentic-recall-v2" });
+    const lines = readFileSync(join(log_dir, "agentic-recall-v2.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({
+      schema_version: "recall_log.v2",
+      model_version: "agentic-recall-v2",
+      query: "Atlas",
+      answer_text: "Nora runs the Atlas rollout.",
+      grounding: "grounded",
+      absence: null,
+    });
+    expect(lines[0].cited_spans).toBeUndefined();
+    expect(lines[0].agent_trace).toBeUndefined();
+    expect(Array.isArray(lines[0].tools)).toBe(true);
+    expect(lines[1]).toMatchObject({ query: "kayaking", absence: "query_gap", answer_text: null });
+    expect(typeof lines[0].ms).toBe("number");
+    expect(typeof lines[0].recorded_at).toBe("string");
+    expect(typeof lines[0].host).toBe("string");
+  } finally {
+    rmSync(log_dir, { recursive: true, force: true });
+  }
 });

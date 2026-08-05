@@ -4,7 +4,7 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { Database } from "bun:sqlite";
 import { extractGrounded, materializeGroundedMentions, materializeGroundedProvisional } from "../core/extract/grounded";
 import { checkRelationDistribution, type QualityFinding } from "../core/extract/quality";
-import { ingestConversation } from "../core/extract/ingest";
+import { ingestConversation, splitUtteranceText } from "../core/extract/ingest";
 import { prepareDerivation, type AtomicGraphTransition } from "../core/ledger";
 import { getWritingContext } from "../core/retrieve/writing-context";
 import { assertNoLookahead, type StmItem } from "../core/stm/replay";
@@ -23,7 +23,7 @@ type Corpus = { owner_account_id: string; adapter: Adapter; source_trust?: strin
 
 const digest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const terms = (text: string): readonly string[] => [...new Set(text.toLocaleLowerCase().match(/[\p{L}\p{N}_-]+/gu) ?? [])];
-const versions = { strategy_version: "stage-a-grounded-v1", model_version: "none", prompt_version: "none", policy_version: "stage-a-v1", code_version: "stage-a-v1", schema_version: "stage-a-v1", tokenizer_version: "none", tool_version: "stage-a-v1" };
+const versions = { strategy_version: "stage-a-grounded-v2", model_version: "none", prompt_version: "grounded-extraction-v6", policy_version: "stage-a-v1", code_version: "stage-a-v1", schema_version: "stage-a-v1", tokenizer_version: "none", tool_version: "stage-a-v1" };
 
 const readCorpus = (path: string): Corpus => {
   const corpus: unknown = JSON.parse(readFileSync(path, "utf8"));
@@ -42,8 +42,40 @@ const ingest = async (ledger: SqliteLedger, corpus: Corpus, session: Session, pa
   const adapter = session.adapter ?? corpus.adapter;
   const source_trust = session.source_trust ?? corpus.source_trust;
   const event_kind = session.event_kind ?? corpus.event_kind;
-  const ingested = ingestConversation({ owner_account_id: corpus.owner_account_id, capture_session_id: session.session_id, stream_id: "stage-a", source_trust, event_kind, payload_schema_ref: event_kind, utterances: session.segments.map((segment) => ({ source_unit_ref: segment.event_id, speaker_rendering: segment.speaker_label ?? (segment.is_actor_user ? "owner" : `speaker ${segment.speaker_id}`), source_identity_ref: sourceIdentity(adapter, session.session_id, segment), mention_ref: segment.speaker_id, text: segment.text, event_time: segment.start_at })) });
-  const events = ingested.events.map((event, index) => ({ ...event, event_id: session.segments[index]!.event_id, source_sequence: session.segments[index]!.ingest_sequence, payload: { ...event.payload, is_actor_user: session.segments[index]!.is_actor_user ?? null, person_id: session.segments[index]!.person_id ?? null, adapter } }));
+  // Budgeted units: undiarized mega-segments become multiple evidence rows with the same speaker channel.
+  const units = session.segments.flatMap((segment) => {
+    const parts = splitUtteranceText(segment.text);
+    return parts.map((text, part) => ({
+      segment,
+      source_unit_ref: parts.length === 1 ? segment.event_id : `${segment.event_id}:part${part}`,
+      text,
+    }));
+  });
+  const ingested = ingestConversation({
+    owner_account_id: corpus.owner_account_id,
+    capture_session_id: session.session_id,
+    stream_id: "stage-a",
+    source_trust,
+    event_kind,
+    payload_schema_ref: event_kind,
+    utterances: units.map(({ segment, source_unit_ref, text }) => ({
+      source_unit_ref,
+      speaker_rendering: segment.speaker_label ?? (segment.is_actor_user ? "owner" : `speaker ${segment.speaker_id}`),
+      source_identity_ref: sourceIdentity(adapter, session.session_id, segment),
+      mention_ref: segment.speaker_id,
+      text,
+      event_time: segment.start_at,
+    })),
+  });
+  const events = ingested.events.map((event, index) => {
+    const unit = units[index]!;
+    return {
+      ...event,
+      event_id: unit.source_unit_ref,
+      source_sequence: unit.segment.ingest_sequence,
+      payload: { ...event.payload, is_actor_user: unit.segment.is_actor_user ?? null, person_id: unit.segment.person_id ?? null, adapter },
+    };
+  });
   const revisions: AtomicGraphTransition["revisions"] = [
     ...events.map((event) => ({ kind: "event" as const, revision_id: event.event_revision_id, event })),
     ...ingested.evidence.map((evidence) => ({ kind: "evidence" as const, revision_id: `evidence-revision:${evidence.evidence_id}`, evidence })),
@@ -67,7 +99,7 @@ const FIRST_PERSON = /^(i|i'm|i've|i'll|i'd|me|my|mine|myself|we|we're|we've|us|
 
 export const subjectPolicyLabels = (
   claim: { observed_speaker_slot_id?: string | null; arguments: readonly { slot_id: string; surface?: string | null }[]; evidence_refs: readonly string[] },
-  evidence: readonly { evidence_id: string; source_identity_ref?: { local_key: string } | null }[],
+  evidence: readonly { evidence_id: string; source_identity_ref?: { local_key: string } | null; policy_labels?: readonly string[] | null }[],
 ): readonly string[] => {
   // Extract often omits observed_speaker_slot_id on clear first-person fillers;
   // recover the self-role when owner evidence carries a pronoun argument.
@@ -78,8 +110,13 @@ export const subjectPolicyLabels = (
   if (!speakerSlot || !claim.arguments.some((argument) => argument.slot_id === speakerSlot)) return ["subject:generic"];
   const byId = new Map(evidence.map((item) => [item.evidence_id, item]));
   for (const ref of claim.evidence_refs) {
-    const key = byId.get(ref)?.source_identity_ref?.local_key;
-    if (key === "person:owner") return ["subject:owner"];
+    const item = byId.get(ref);
+    const key = item?.source_identity_ref?.local_key;
+    if (key === "person:owner") {
+      // Mega-utterance splits keep person:owner but diarization was never per-turn — do not promote as sticky owner facts.
+      if (item?.policy_labels?.includes("diarization:weak")) return ["subject:generic"];
+      return ["subject:owner"];
+    }
     if (key) return ["subject:bystander"];
   }
   return ["subject:generic"];
@@ -224,20 +261,38 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
     }
 
     const graph = ledger.snapshot(corpus.owner_account_id), frontier = stm.unconsumed();
-    const extracted = await Promise.all(ingested.map(async ({ session, evidence }) => {
+/** Max evidence units per extract call — undiarized mega-sessions need local windows (compute dial). */
+const EVIDENCE_EXTRACT_WINDOW = 24;
+
+const extracted = await Promise.all(ingested.map(async ({ session, evidence }) => {
       const current: StmItem = { id: `session:${session.session_id}`, session_id: session.session_id, event_time_watermark: session.segments[0]!.start_at, capture_sequence: session.capture_sequence, revision_lineage: session.revision_lineage, ingest_sequence: session.ingest_sequence, entity_refs: [], lexical_terms: [], vector_key: "session", predicate_id: "session", bytes: 0 };
       if (!backfillSessions.has(session.session_id)) assertNoLookahead(current, frontier);
       const context = getWritingContext(graph, { account_timezone: "UTC", policy_version: versions.policy_version, predicate_alias_generation: "none", authorization_generation: "none", stm_generation: frontier.map((item) => item.id).join(":") || "empty", window: { text: session.segments.map((segment) => segment.text).join(" ") } });
       const seed = { claims: syntheticClaims(evidence) };
       const model = dependencies.selectModel?.({ session_id: session.session_id, hermetic_seed: seed }).model ?? selectModel(options, seed).model;
-      calls += 1;
       try {
-        const extraction = await withRetry(session.session_id, () => extractGrounded(model, { context, predicate_registry: context.predicate_signatures.map((signature) => signature.name), entity_registry: context.entity_candidates.map((candidate) => candidate.ref), evidence, version: "stage-a-grounded-v1" }));
-        const outputs = extraction.claims.map((emission, claim_index) => {
-          const claim = materializeGroundedProvisional({ owner_account_id: corpus.owner_account_id, session_id: session.session_id, observed_at: session.segments[0]!.start_at, source_language: "unknown", context, claim_index, emission });
-          return { item: itemFor(session, claim, evidence, emission.argument_origins), mentions: materializeGroundedMentions({ owner_account_id: corpus.owner_account_id, claim, claim_index, mentions: extraction.mentions }) };
-        });
-        return { session, extraction, outputs };
+        const outputs: { item: ReturnType<typeof itemFor>; mentions: ReturnType<typeof materializeGroundedMentions> }[] = [];
+        const dropped: { reason: string; relation: string | null }[] = [];
+        const quality_findings: { code: string; detail: string }[] = [];
+        const predicates: string[] = [];
+        for (let start = 0; start < evidence.length; start += EVIDENCE_EXTRACT_WINDOW) {
+          const window = evidence.slice(start, start + EVIDENCE_EXTRACT_WINDOW);
+          calls += 1;
+          const extraction = await withRetry(session.session_id, () => extractGrounded(model, { context, predicate_registry: context.predicate_signatures.map((signature) => signature.name), entity_registry: context.entity_candidates.map((candidate) => candidate.ref), evidence: window, version: "stage-a-grounded-v2" }));
+          dropped.push(...extraction.dropped);
+          quality_findings.push(...extraction.quality_findings);
+          predicates.push(...extraction.claims.map((claim) => claim.predicate_ref));
+          for (const [offset, emission] of extraction.claims.entries()) {
+            const claim_index = outputs.length + offset;
+            const claim = materializeGroundedProvisional({ owner_account_id: corpus.owner_account_id, session_id: session.session_id, observed_at: session.segments[0]!.start_at, source_language: "unknown", context, claim_index, emission });
+            const windowMentions = extraction.mentions.filter((mention) => mention.claim_index === offset).map((mention) => ({ ...mention, claim_index }));
+            outputs.push({
+              item: itemFor(session, claim, evidence, emission.argument_origins),
+              mentions: materializeGroundedMentions({ owner_account_id: corpus.owner_account_id, claim, claim_index, mentions: windowMentions }),
+            });
+          }
+        }
+        return { session, extraction: { claims: predicates.map((predicate_ref) => ({ predicate_ref })), dropped, quality_findings }, outputs };
       } catch (error) {
         console.error(`extraction failed for ${session.session_id}: ${error instanceof Error ? error.message : error}`);
         return null;
