@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/services/wals/sync_background_task.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/sync_continuation_policy.dart';
+import 'package:omi/backend/preferences.dart';
 
 /// Called with the conversation ids surfaced by a reconcile pass so the
 /// presentation layer can fetch + show them. Provided by the provider so this
@@ -106,13 +109,43 @@ class SyncReconciler {
     unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.foregrounded));
   }
 
-  /// App backgrounded — stop the timer. State is persisted; a later
-  /// foreground/startup poke resumes. (No OS background execution by design.)
+  /// App backgrounded — stop the timer, then optionally run one bounded cloud
+  /// grace pass while the OS still grants execution time (#7221).
   void onBackground() {
     _foreground = false;
     _timer?.cancel();
     _timer = null;
     RecordingTransferCoordinator.instance.setForeground(false);
+    unawaited(_maybeStartScreenLockedGrace());
+  }
+
+  Future<void> _maybeStartScreenLockedGrace() async {
+    final phone = _phone;
+    if (phone == null) return;
+    try {
+      final wals = await phone.getAllWals();
+      final hasMissLocal = wals.any(
+        (w) => w.status == WalStatus.miss && (w.storage == WalStorage.disk || w.storage == WalStorage.mem),
+      );
+      final hasUploaded = wals.any((w) => w.status == WalStatus.uploaded);
+      final autoUpload = !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings;
+      final action = decideScreenLockedSyncContinuation(
+        autoUploadEnabled: autoUpload,
+        hasMissLocalWals: hasMissLocal,
+        hasUploadedWals: hasUploaded,
+      );
+      if (action != SyncContinuationAction.runCloudGracePass) return;
+
+      await SyncBackgroundTask.begin();
+      try {
+        await RecordingTransferCoordinator.instance.wake(WakeTrigger.screenLockedGrace);
+      } finally {
+        await SyncBackgroundTask.end();
+      }
+    } catch (e) {
+      Logger.debug('SyncReconciler: screen-lock grace failed: $e');
+      await SyncBackgroundTask.end();
+    }
   }
 
   void dispose() {

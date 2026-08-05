@@ -548,8 +548,9 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// retryable Pending action.
   @override
   Future<void> deleteAllCorruptedWals() async {
-    final corruptedWals =
-        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
+    final corruptedWals = _wals
+        .where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow)
+        .toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
@@ -574,13 +575,17 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) =>
-      _syncAll(progress: progress, liveCaptureOnly: false);
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress, int? maxBatches}) =>
+      _syncAll(progress: progress, liveCaptureOnly: false, maxBatches: maxBatches);
 
-  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
-      _syncAll(progress: progress, liveCaptureOnly: true);
+  Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress, int? maxBatches}) =>
+      _syncAll(progress: progress, liveCaptureOnly: true, maxBatches: maxBatches);
 
-  Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool liveCaptureOnly}) async {
+  Future<SyncLocalFilesResponse?> _syncAll({
+    IWalSyncProgressListener? progress,
+    required bool liveCaptureOnly,
+    int? maxBatches,
+  }) async {
     await _flush();
     _isCancelled = false;
     _accumulatedResponse = null;
@@ -634,11 +639,16 @@ class LocalWalSyncImpl implements LocalWalSync {
           .toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
+      if (maxBatches != null && batchesCompleted >= maxBatches) {
+        Logger.debug('LocalWalSync: stopping after $maxBatches batch(es) (screen-lock grace)');
+        break;
+      }
       final batch = nextSyncUploadBatch(pending, batchNowSeconds);
       if (batch.isEmpty) break;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
+      final claimLiveCapture =
+          !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),

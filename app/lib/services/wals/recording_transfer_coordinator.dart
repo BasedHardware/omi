@@ -2,11 +2,22 @@ import 'dart:async';
 
 import 'package:omi/utils/logger.dart';
 
-/// The event that made another foreground recording-transfer pass worthwhile.
+/// The event that made another recording-transfer pass worthwhile.
 ///
 /// All recording recovery paths use this closed set so a wake can be audited
 /// without introducing a second recovery owner.
-enum WakeTrigger { startup, foregrounded, connectivityRestored, deviceConnected, cooldownElapsed, userRetry }
+enum WakeTrigger {
+  startup,
+  foregrounded,
+  connectivityRestored,
+  deviceConnected,
+  cooldownElapsed,
+  userRetry,
+
+  /// Bounded cloud upload + reconcile while the OS still grants background time
+  /// after screen lock (#7221). Never starts BLE device drains.
+  screenLockedGrace,
+}
 
 /// Result reported by the production drain seam.
 ///
@@ -23,17 +34,17 @@ class RecordingTransferDrainResult {
 
   /// Nothing eligible to drain (empty backlog). Not a retry signal.
   const RecordingTransferDrainResult.skipped()
-      : attempted = false,
-        failed = false,
-        needsReconciliation = false,
-        contended = false;
+    : attempted = false,
+      failed = false,
+      needsReconciliation = false,
+      contended = false;
 
   /// Drain could not run because another sync owned the seam. Retry later.
   const RecordingTransferDrainResult.contended()
-      : attempted = false,
-        failed = false,
-        needsReconciliation = false,
-        contended = true;
+    : attempted = false,
+      failed = false,
+      needsReconciliation = false,
+      contended = true;
 
   final bool attempted;
   final bool failed;
@@ -57,28 +68,31 @@ class RecordingTransferCoordinator {
     required RecordingTransferPass refreshPending,
     required RecordingTransferDrain drain,
     required bool Function() autoUploadEnabled,
+    RecordingTransferDrain? cloudGraceDrain,
     Stream<bool>? connectivityChanges,
     bool initiallyConnected = true,
     DateTime Function()? clock,
     RecordingTransferCooldownScheduler? scheduleCooldown,
-  })  : _reconcile = reconcile,
-        _discover = discover,
-        _refreshPending = refreshPending,
-        _drain = drain,
-        _autoUploadEnabled = autoUploadEnabled,
-        _clock = clock ?? DateTime.now,
-        _scheduleCooldown = scheduleCooldown {
+  }) : _reconcile = reconcile,
+       _discover = discover,
+       _refreshPending = refreshPending,
+       _drain = drain,
+       _cloudGraceDrain = cloudGraceDrain,
+       _autoUploadEnabled = autoUploadEnabled,
+       _clock = clock ?? DateTime.now,
+       _scheduleCooldown = scheduleCooldown {
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
   }
 
   RecordingTransferCoordinator._singleton()
-      : _reconcile = _noop,
-        _discover = _noop,
-        _refreshPending = _noop,
-        _drain = _skippedDrain,
-        _autoUploadEnabled = _disabled,
-        _clock = DateTime.now;
+    : _reconcile = _noop,
+      _discover = _noop,
+      _refreshPending = _noop,
+      _drain = _skippedDrain,
+      _cloudGraceDrain = null,
+      _autoUploadEnabled = _disabled,
+      _clock = DateTime.now;
 
   static final RecordingTransferCoordinator instance = RecordingTransferCoordinator._singleton();
 
@@ -97,6 +111,7 @@ class RecordingTransferCoordinator {
   RecordingTransferPass _discover;
   RecordingTransferPass _refreshPending;
   RecordingTransferDrain _drain;
+  RecordingTransferDrain? _cloudGraceDrain;
   bool Function() _autoUploadEnabled;
   final DateTime Function() _clock;
   RecordingTransferCooldownScheduler? _scheduleCooldown;
@@ -127,11 +142,13 @@ class RecordingTransferCoordinator {
     required bool Function() autoUploadEnabled,
     required Stream<bool> connectivityChanges,
     required bool initiallyConnected,
+    RecordingTransferDrain? cloudGraceDrain,
   }) {
     _reconcile = reconcile;
     _discover = discover;
     _refreshPending = refreshPending;
     _drain = drain;
+    _cloudGraceDrain = cloudGraceDrain;
     _autoUploadEnabled = autoUploadEnabled;
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
@@ -170,10 +187,11 @@ class RecordingTransferCoordinator {
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
   /// during one pass therefore run at most two passes and never parallel drains.
   Future<void> wake(WakeTrigger trigger) {
-    // Recovery is foreground-only. Persisted WAL state is recovered by the
-    // foreground wake, so background connectivity/device callbacks must not
-    // start discovery or a whole-WAL drain.
-    if (!_foreground) return Future.value();
+    // Recovery is foreground-only except for the bounded screen-lock cloud
+    // grace pass (#7221). Connectivity/device callbacks must not start BLE
+    // discovery or a whole-WAL drain while backgrounded.
+    final allowWhileBackgrounded = trigger == WakeTrigger.screenLockedGrace;
+    if (!_foreground && !allowWhileBackgrounded) return Future.value();
 
     if (!_configured) {
       _wakeBeforeConfigured = _preferWake(_wakeBeforeConfigured, trigger);
@@ -201,10 +219,16 @@ class RecordingTransferCoordinator {
   }
 
   WakeTrigger _preferWake(WakeTrigger? existing, WakeTrigger incoming) {
-    if (existing == WakeTrigger.userRetry || incoming != WakeTrigger.userRetry) {
-      return existing ?? incoming;
+    if (existing == null) return incoming;
+    // userRetry always wins so an explicit Sync tap is not coalesced away.
+    if (existing == WakeTrigger.userRetry || incoming == WakeTrigger.userRetry) {
+      return WakeTrigger.userRetry;
     }
-    return incoming;
+    // Prefer screen-lock cloud grace over quieter background wakes (#7221).
+    if (existing == WakeTrigger.screenLockedGrace || incoming == WakeTrigger.screenLockedGrace) {
+      return WakeTrigger.screenLockedGrace;
+    }
+    return existing;
   }
 
   Future<void> _run(WakeTrigger firstWake) async {
@@ -217,13 +241,16 @@ class RecordingTransferCoordinator {
   }
 
   Future<void> _runPass(WakeTrigger trigger) async {
+    final cloudGrace = trigger == WakeTrigger.screenLockedGrace;
     try {
       // Uploaded jobs are resolved before a whole-WAL drain can offer any
       // retryable bytes. `syncAll` only uploads `miss`, preserving job ids.
       // Reconciling only resolves work already on the server, so a failure here
       // must not stop new recordings from uploading — it is retried instead.
       var reconcileFailed = !await _tryReconcile();
-      await _discover();
+      if (!cloudGrace) {
+        await _discover();
+      }
       await _refreshPending();
 
       final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
@@ -232,7 +259,8 @@ class RecordingTransferCoordinator {
         return;
       }
 
-      final result = await _drain();
+      final drain = cloudGrace ? (_cloudGraceDrain ?? _skippedDrain) : _drain;
+      final result = await drain();
       await _refreshPending();
 
       // Partial upload success still leaves `uploaded` WALs that need the

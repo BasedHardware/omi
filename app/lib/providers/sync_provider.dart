@@ -13,15 +13,14 @@ import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
+import 'package:omi/utils/sync_continuation_policy.dart';
 import 'package:omi/utils/waveform_utils.dart';
 
 enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
 
-List<SyncedConversationPointer> sortSyncedConversationPointers(
-  Iterable<SyncedConversationPointer> pointers,
-) {
+List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedConversationPointer> pointers) {
   final sorted = List<SyncedConversationPointer>.from(pointers);
   sorted.sort((a, b) {
     final aDate = a.conversation.startedAt ?? a.conversation.createdAt;
@@ -214,10 +213,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// exhausted), the file is unreadable, or the server permanently refused it
   /// for being too old. Surfaced explicitly so a failure is never mistaken for
   /// a recording that simply hasn't synced yet.
-  int get needsAttentionWalsCount => _countWhere((s) =>
-      s == WalSyncDisplayState.failed ||
-      s == WalSyncDisplayState.corrupted ||
-      s == WalSyncDisplayState.outsideRecoveryWindow);
+  int get needsAttentionWalsCount => _countWhere(
+    (s) =>
+        s == WalSyncDisplayState.failed ||
+        s == WalSyncDisplayState.corrupted ||
+        s == WalSyncDisplayState.outsideRecoveryWindow,
+  );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -337,12 +338,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
-  })  : _walServiceOverride = walService,
-        _uploadGate = uploadGate ?? SyncUploadGate.instance,
-        _startBackgroundSync = startBackgroundSync,
-        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
-        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+  }) : _walServiceOverride = walService,
+       _uploadGate = uploadGate ?? SyncUploadGate.instance,
+       _startBackgroundSync = startBackgroundSync,
+       _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+       _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+       _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -388,6 +389,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         discover: _discoverPendingWals,
         refreshPending: refreshWals,
         drain: _drainEligibleWals,
+        cloudGraceDrain: _drainCloudGraceWals,
         autoUploadEnabled: () =>
             !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
         connectivityChanges: ConnectivityService().onConnectionChange,
@@ -447,6 +449,36 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     final result = await _performSync(
       operation: () => _walService.getSyncs().syncAll(progress: this),
       context: 'coordinated recording transfer',
+      rethrowOnError: true,
+    );
+    await refreshWals();
+    return RecordingTransferDrainResult(
+      attempted: true,
+      failed: (result?.localUploadFailures ?? 0) > 0,
+      needsReconciliation: uploadedWals.isNotEmpty,
+    );
+  }
+
+  /// Bounded phone-disk uploads only — used by the screen-lock grace wake (#7221).
+  Future<RecordingTransferDrainResult> _drainCloudGraceWals() async {
+    if (_isDisposed || _syncState.isProcessing) return const RecordingTransferDrainResult.contended();
+    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) {
+      return const RecordingTransferDrainResult.contended();
+    }
+
+    final phoneMiss = missingWals.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).toList();
+    if (phoneMiss.isEmpty) return const RecordingTransferDrainResult.skipped();
+
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return const RecordingTransferDrainResult.contended();
+
+    _updateSyncState(_syncState.toIdle());
+    _totalWalsToProcess = phoneMiss.length;
+    _walsProcessedCount = 0;
+    final result = await _performSync(
+      operation: () =>
+          _walService.getSyncs().syncLocalUploadsOnly(progress: this, maxBatches: kScreenLockedCloudGraceMaxBatches),
+      context: 'screen-lock cloud grace upload',
       rethrowOnError: true,
     );
     await refreshWals();
