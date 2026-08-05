@@ -508,6 +508,12 @@ extension SBOnboardingModel {
 
   private func handleShortcutEvent(_ event: NSEvent) -> Bool {
     if shortcutRecording {
+      // The global monitor is here for the *test* phase, so a chord pressed while another app is
+      // focused still counts as "that works". While the step is still **recording** it is a hazard
+      // instead: the first key the user happens to type anywhere on the Mac — a terminal, a
+      // browser, a message — becomes their Omi chord, and the step then congratulates them on it.
+      // Only what is typed at Omi may set it.
+      guard Self.acceptsRecordingSource(appIsActive: NSApp.isActive) else { return false }
       return recordShortcut(from: event)
     }
     guard !shortcutPressed else { return false }
@@ -585,13 +591,31 @@ extension SBOnboardingModel {
       let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
         event,
         allowModifierOnly: isTalk
-      )
+      ),
+      Self.acceptsRecordedChord(shortcut)
     else {
       return event.type == .flagsChanged
     }
     pendingModifierOnlyShortcut = nil
     pickShortcut(shortcut, isTalk: isTalk)
     return true
+  }
+
+  /// Which events may set the chord.
+  ///
+  /// Recording only listens to Omi. Testing (`shortcutPressed`) still listens everywhere, which is
+  /// the whole point of the global monitor.
+  static func acceptsRecordingSource(appIsActive: Bool) -> Bool { appIsActive }
+
+  /// Whether a recorded chord is one this step is allowed to persist.
+  ///
+  /// A key chord with no modifier is not a shortcut, it is a stolen letter: `askOmiShortcut` is
+  /// registered as a **global** hotkey, so persisting a bare `L` makes every `L` typed anywhere on
+  /// the Mac open Omi, and the only way back is Settings. The copy invites it ("Press any key"),
+  /// and nothing downstream refuses it. Both offered open chords carry ⌘ and every offered talk
+  /// chord is modifier-only, so this rejects nothing the step actually presents.
+  static func acceptsRecordedChord(_ shortcut: ShortcutSettings.KeyboardShortcut) -> Bool {
+    !shortcut.modifiers.isEmpty
   }
 
   func answerShortcutOpen() {

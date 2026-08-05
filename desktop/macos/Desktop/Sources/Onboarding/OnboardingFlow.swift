@@ -220,6 +220,10 @@ enum OnboardingFlow {
   /// - "screenAnalysisEnabled": SettingsSyncManager overwrites it from the
   ///   server within ~200ms of sign-in; onboarding force-starts monitoring
   ///   regardless of this setting.
+  /// - `SBOnboardingIntroGate.playedKey`: install-scoped, not account-scoped.
+  ///   The cinematic intro is a first-impression that earns its 8.6s exactly
+  ///   once per Mac — a re-auth or a Reset Onboarding must return the user to
+  ///   step 1, not replay it — so it deliberately survives both clearing sites.
   /// - onboarding chat keys ("onboardingChatMessages", "onboardingACPSessionId",
   ///   mid-onboarding/exploration state): owned by
   ///   `OnboardingChatPersistence.clear()`, which both sites call.

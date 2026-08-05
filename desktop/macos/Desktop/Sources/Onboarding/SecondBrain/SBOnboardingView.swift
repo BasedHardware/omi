@@ -151,6 +151,11 @@ struct SBOnboardingView: View {
         // Revealing the assistants list grows the widget *below* the fold, so without this the
         // rows it just opened are clipped by the card's lower edge and nothing moves.
         .onChange(of: showAIAssistants) { _, _ in scrollDown(proxy) }
+        // The same rule for every widget that grows without touching the thread — a finished file
+        // scan, a permission row turning into the relaunch offer, the demo arming its chord. See
+        // `SBOnboardingModel.widgetShape`: without it the Files step's Continue renders below the
+        // card's lower edge and the step reads as having no way forward.
+        .onChange(of: model.widgetShape) { _, _ in scrollDown(proxy) }
       }
       // No progress dots — the user shouldn't count steps or feel a finish line. The strip is still
       // reserved rather than drawn over, which is the part that matters: a foot the column cannot

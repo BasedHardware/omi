@@ -12,6 +12,20 @@ enum SBOnboardingLanguageCopy {
   }
 }
 
+/// The height-relevant identity of a step's widget — see `SBOnboardingModel.widgetShape`.
+///
+/// A value type rather than a set of `onChange`s in the view, so "the widget grew, scroll to it" is
+/// one rule with one place to add the next widget's state to, instead of a modifier per `@Published`
+/// property that someone has to remember.
+struct SBOnboardingWidgetShape: Equatable {
+  var step: SBOnboardingModel.Step
+  var localFileProfile: SBOnboardingModel.LocalFileProfileState
+  var permission: SBPermissionStepAction?
+  var screenDemoReady: Bool
+  var screenDemoUnavailable: Bool
+  var screenDemoDone: Bool
+}
+
 /// Drives the Second Brain conversational onboarding: a real chat with Omi that
 /// streams word-by-word, collects answers, and performs the SAME live side-effects
 /// as the legacy wizard (name/language → backend, every permission, the summon
@@ -299,6 +313,26 @@ final class SBOnboardingModel: ObservableObject {
       return
         "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
     }
+  }
+
+  /// What the current step's widget is showing, reduced to the things that change its **height**.
+  ///
+  /// The card is a fixed 540 × 640 with a bottom-anchored column, so a widget that grows *in place*
+  /// — without appending to the thread — is clipped by the card's lower edge unless something
+  /// scrolls. That is exactly how the Files step shipped with its Continue unreachable: the scan
+  /// finishing swapped a two-line "scanning…" widget for a four-element "your profile is ready"
+  /// one, no `thread`/`showWidget`/`streamingText` change fired, and the button rendered below the
+  /// fold with nothing to tell the user it was there. `showAIAssistants` already had a bespoke
+  /// `onChange` for the same reason; this is that rule for every widget instead of one.
+  var widgetShape: SBOnboardingWidgetShape {
+    SBOnboardingWidgetShape(
+      step: step,
+      localFileProfile: localFileProfileState,
+      permission: permissionKey(for: step).map { permissionPrimaryAction($0) },
+      screenDemoReady: screenDemoPTTReady,
+      screenDemoUnavailable: screenDemoPTTUnavailable,
+      screenDemoDone: screenDemoDone
+    )
   }
 
   var displayName: String {
