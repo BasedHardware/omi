@@ -718,6 +718,48 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
     assert str(error) not in caplog.text
 
 
+def test_byok_rate_limit_in_action_item_extraction_reaches_composition_boundary(monkeypatch):
+    """A BYOK rate-limit during action-item extraction must not be swallowed by extract_action_items's catch-all.
+
+    extract_action_items catches every exception and returns [] by default. A typed
+    BYOK rate-limit must escape so the composition boundary (_get_structured) maps
+    it to the actionable 429 contract instead of persisting an incomplete conversation.
+    """
+    conversation = MagicMock()
+    conversation.source = ConversationSource.phone
+    conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.photos = []
+    conversation.external_data = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
+    monkeypatch.setattr(
+        process_conversation,
+        'get_transcript_structure',
+        MagicMock(return_value=Structured(emoji='🧠', title='Test', overview='Overview', action_items=[])),
+    )
+    monkeypatch.setattr(
+        process_conversation,
+        'extract_action_items',
+        MagicMock(
+            side_effect=GatewayCredentialFailureError(
+                'rate limited',
+                failure_class=FailureClass.BYOK_RATE_LIMIT,
+            )
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_conversation._get_structured('uid', 'en', conversation)
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail == {
+        'code': 'byok_rate_limit',
+        'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
+    }
+
+
 def test_no_umbrella_conversation_processing_tracking():
     """Verify _get_structured no longer wraps everything in CONVERSATION_PROCESSING."""
     import sys
