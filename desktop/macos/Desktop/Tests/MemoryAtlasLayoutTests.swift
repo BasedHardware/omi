@@ -20,29 +20,58 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(Double(anchor.y), 0.5, accuracy: 1e-9)
   }
 
-  func testCatalogNodesRemainInResponseStateButNeverEnterAtlasProjection() throws {
+  func testCatalogNodesEnterAtlasAsNeutralUnconnectedMarks() throws {
     let assertionNodes = [
       KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
-      KnowledgeGraphNode(id: "omi", label: "Omi", nodeType: .thing),
+      KnowledgeGraphNode(id: "memory:semantic-entity", label: "Omi", nodeType: .thing),
     ]
     let catalogNode = KnowledgeGraphNode(
-      id: "memory:unlinked",
+      id: "canonical-record",
       label: "A durable memory that has no assertion",
       nodeType: .concept)
     let response = KnowledgeGraphResponse(
       nodes: assertionNodes,
-      edges: [KnowledgeGraphEdge(id: "uses", sourceId: "david", targetId: "omi", label: "uses")],
+      edges: [KnowledgeGraphEdge(id: "uses", sourceId: "david", targetId: "memory:semantic-entity", label: "uses")],
       catalogNodes: [catalogNode])
 
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
 
-    XCTAssertEqual(response.catalogNodes?.map(\.id), ["memory:unlinked"])
-    XCTAssertEqual(snapshot.nodes.map(\.id), ["david", "omi"])
-    XCTAssertNil(snapshot.nodeByID[catalogNode.id])
+    XCTAssertEqual(response.catalogNodes?.map(\.id), ["canonical-record"])
+    XCTAssertEqual(snapshot.nodes.map(\.id), ["david", "memory:semantic-entity", catalogNode.id])
+    XCTAssertEqual(snapshot.nodeByID["memory:semantic-entity"]?.isCatalog, false)
+    XCTAssertEqual(snapshot.nodeByID[catalogNode.id]?.cluster, nil)
+    XCTAssertEqual(snapshot.nodeByID[catalogNode.id]?.degree, 0)
+    XCTAssertEqual(snapshot.nodeByID[catalogNode.id]?.isCatalog, true)
+    XCTAssertNotEqual(snapshot.nodeByID[catalogNode.id]?.clusterRank, 0)
     XCTAssertEqual(snapshot.edges.count, 1)
   }
 
-  func testProjectionCarriesCatalogNodesWithoutProjectingThem() {
+  func testCatalogSearchMatchesWinTheirTierWithoutIDPrefixCoupling() {
+    let catalogMatch = MemoryAtlasNodePlacement(
+      node: KnowledgeGraphNode(id: "canonical-record", label: "Matching memory", nodeType: .concept),
+      cluster: nil,
+      normalizedPosition: .zero,
+      degree: 0,
+      clusterRank: 1,
+      isCatalog: true)
+    let semantic = (0..<10).map { index in
+      MemoryAtlasNodePlacement(
+        node: KnowledgeGraphNode(id: "entity-\(index)", label: "Matching entity \(index)", nodeType: .concept),
+        cluster: .concept,
+        normalizedPosition: .zero,
+        degree: 1,
+        clusterRank: index,
+        isCatalog: false)
+    }
+
+    let selected = MemoryAtlasRenderPlanner.fairPrefix(
+      semantic + [catalogMatch], limit: 4, prioritizeCatalog: true)
+
+    XCTAssertTrue(selected.contains(where: { $0.id == catalogMatch.id }))
+    XCTAssertEqual(selected.first?.id, catalogMatch.id)
+  }
+
+  func testProjectionCarriesCatalogNodesIntoTheAtlasPresentation() {
     let catalogNode = KnowledgeGraphNode(
       id: "memory:catalog",
       label: "Catalog memory",
@@ -55,7 +84,24 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let projection = MemoryAtlasProjection(graph: response, userName: nil)
 
     XCTAssertEqual(projection.graph.catalogNodes?.map(\.id), [catalogNode.id])
-    XCTAssertEqual(projection.snapshot.nodes.map(\.id), ["entity"])
+    XCTAssertEqual(projection.snapshot.nodes.map(\.id), ["entity", catalogNode.id])
+    XCTAssertNil(projection.snapshot.nodeByID[catalogNode.id]?.cluster)
+  }
+
+  func testCatalogOnlyAtlasIsStableAndDoesNotCreateEdgesOrClusters() {
+    let catalog = (0..<600).map {
+      KnowledgeGraphNode(id: "memory:\($0)", label: "Canonical memory \($0)", nodeType: .concept)
+    }
+    let response = KnowledgeGraphResponse(nodes: [], edges: [], catalogNodes: catalog)
+
+    let first = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
+    let second = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
+
+    XCTAssertEqual(first.nodes.count, catalog.count)
+    XCTAssertTrue(first.nodes.allSatisfy { $0.cluster == nil && $0.degree == 0 })
+    XCTAssertTrue(first.edges.isEmpty)
+    XCTAssertTrue(first.activeClusters.isEmpty)
+    XCTAssertEqual(first.nodes.map(\.normalizedPosition), second.nodes.map(\.normalizedPosition))
   }
 
   /// Type still decides a node's colour and which constellation it counts
@@ -1206,6 +1252,10 @@ final class MemoryAtlasLayoutTests: XCTestCase {
         entities: snapshot.nodes.count, connections: snapshot.edges.count),
       "2 entities · 1 connection",
       "Three nodes and three edges arrived; two entities and one connection are drawn")
+
+    XCTAssertEqual(
+      MemoryAtlasLayoutEngine.countLabel(entities: 2, memories: 1_093, connections: 1),
+      "2 entities · 1093 memories · 1 connection")
   }
 
   private func placement(label: String, degree: Int) -> MemoryAtlasNodePlacement {
@@ -1214,7 +1264,8 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       cluster: .thing,
       normalizedPosition: .zero,
       degree: degree,
-      clusterRank: 0
+      clusterRank: 0,
+      isCatalog: false
     )
   }
 
