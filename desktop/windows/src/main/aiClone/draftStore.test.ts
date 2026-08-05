@@ -26,6 +26,7 @@ describe('DraftStore', () => {
 
   it('add assigns an id and createdAt, and the draft round-trips', () => {
     const added = store.add({
+      sessionGeneration: 0,
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'are we still on for 6?',
@@ -39,12 +40,14 @@ describe('DraftStore', () => {
 
   it('remove deletes only the targeted draft', () => {
     const a = store.add({
+      sessionGeneration: 0,
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'a',
       draftText: 'a reply'
     })
     const b = store.add({
+      sessionGeneration: 0,
       chatID: 'chat-2',
       chatDisplayName: 'Sam',
       incomingMessageText: 'b',
@@ -61,6 +64,7 @@ describe('DraftStore', () => {
 
   it('take returns and removes the draft in one call', () => {
     const added = store.add({
+      sessionGeneration: 0,
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'are we still on for 6?',
@@ -75,6 +79,7 @@ describe('DraftStore', () => {
 
   it('take returns null for an unknown id without touching other drafts', () => {
     const kept = store.add({
+      sessionGeneration: 0,
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'a',
@@ -86,12 +91,14 @@ describe('DraftStore', () => {
 
   it('clearAll removes every queued draft', () => {
     store.add({
+      sessionGeneration: 0,
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'a',
       draftText: 'a reply'
     })
     store.add({
+      sessionGeneration: 0,
       chatID: 'chat-2',
       chatDisplayName: 'Sam',
       incomingMessageText: 'b',

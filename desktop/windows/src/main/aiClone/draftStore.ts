@@ -15,6 +15,12 @@ export interface PendingDraft {
   incomingMessageText: string
   draftText: string
   createdAt: number
+  /** ipc/aiClone.ts's session generation at the time this draft was queued —
+   *  bumped on connect/disconnect/sign-out. A draft whose generation no
+   *  longer matches the current one belongs to a Beeper connection (or
+   *  account) that isn't live anymore; its chatID is meaningless under
+   *  whatever's connected now and it must not be sent. */
+  sessionGeneration: number
 }
 
 type StoredFile = PendingDraft[]

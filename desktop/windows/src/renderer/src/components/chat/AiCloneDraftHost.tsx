@@ -36,6 +36,7 @@ async function draftAndSubmit(event: AiCloneIncomingMessageEvent): Promise<void>
       incomingMessageText: event.incomingMessageText,
       messageID: event.messageID,
       messageTimestamp: event.messageTimestamp,
+      sessionGeneration: event.sessionGeneration,
       draftText
     })
   } catch (error) {

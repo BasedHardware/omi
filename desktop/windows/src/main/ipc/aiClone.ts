@@ -79,6 +79,32 @@ function broadcast(channel: string, payload: unknown): void {
 // (the only thing the client is keyed on) just changed.
 let cachedClient: { token: string; client: BeeperClient } | null = null
 
+// Bumped on every connect/disconnect/sign-out — i.e. any point where "which
+// Beeper account is this" could change. chatIDs and messageIDs are only
+// meaningful within the connection they were fetched under; a poll or a
+// renderer's LLM call that started under one generation but tries to act
+// (advance a cursor, send a message) after the generation has moved on would
+// otherwise mix state across accounts or send through a connection that's
+// no longer the one the user intended. Every write/send path below captures
+// the generation it started under and re-checks it immediately before
+// acting, not just at the start of a long-running call.
+let sessionGeneration = 0
+
+/** Test-only escape hatch: sessionGeneration is a monotonic counter for the
+ *  life of the process (correctly — it must never reset just because a test
+ *  runs), so test fixtures that need a valid "current" generation (a queued
+ *  draft record, submitDraft args) have to read the real value rather than
+ *  hardcode one that only happens to be right before the first connect() in
+ *  a test run. */
+export function __getSessionGenerationForTests(): number {
+  return sessionGeneration
+}
+
+function bumpSessionGeneration(): void {
+  sessionGeneration += 1
+  cachedClient = null
+}
+
 function clientOrNull(): BeeperClient | null {
   const token = tokenStore().get()
   if (!token) return null
@@ -131,19 +157,43 @@ function isInFlight(messageId: string): boolean {
   return true
 }
 
-/** Advance a chat's read cursor only forward, and only when called — this is
- *  invoked from the submitDraft handler once a message's processing outcome
- *  is known (sent, queued, or explicitly skipped), never optimistically at
- *  poll time. That way a message that's still being drafted when the process
- *  restarts, or whose draft call fails, is picked up again on the next poll
- *  instead of being silently marked "seen" and lost. */
-function advanceCursorIfNewer(chatID: string, messageTimestamp: number): void {
+/** Advance a chat's read cursor forward for one confirmed message, invoked
+ *  from the submitDraft handler once that message's outcome (sent, queued,
+ *  or explicitly skipped) is known — never optimistically at poll time. That
+ *  way a message that's still being drafted when the process restarts, or
+ *  whose draft call fails, is picked up again on the next poll instead of
+ *  being silently marked "seen" and lost.
+ *
+ *  Two sibling messages that share the exact same timestamp are each
+ *  resolved by their OWN separate submitDraft call — so advancing the cursor
+ *  here has to ACCUMULATE into the tie-break id set (chatMonitor.ts's
+ *  lastSeenMessageIds) rather than overwrite it, or confirming the first
+ *  sibling would make the second look "already seen" before it's even been
+ *  processed. Only once a message strictly newer than the current boundary
+ *  arrives does the boundary actually move and the accumulated set reset. */
+function advanceCursorForMessage(
+  chatID: string,
+  messageID: string,
+  messageTimestamp: number
+): void {
   const setting = chatSettings().get(chatID)
   if (!setting) return
-  if (setting.lastSeenTimestamp !== undefined && messageTimestamp <= setting.lastSeenTimestamp) {
+  const currentTs = setting.lastSeenTimestamp
+
+  if (currentTs !== undefined && messageTimestamp < currentTs) return // strictly behind — nothing to do
+
+  if (currentTs !== undefined && messageTimestamp === currentTs) {
+    const ids = new Set(setting.lastSeenMessageIds ?? [])
+    if (ids.has(messageID)) return
+    ids.add(messageID)
+    chatSettings().setCursor(chatID, messageTimestamp, [...ids])
     return
   }
-  chatSettings().setCursor(chatID, messageTimestamp)
+
+  // messageTimestamp > currentTs (or currentTs was undefined): the boundary
+  // moves forward, so only this message needs to be in the tie-break set —
+  // anything from the old boundary is now strictly in the past regardless.
+  chatSettings().setCursor(chatID, messageTimestamp, [messageID])
 }
 
 /** One poll pass over every opted-in chat. Exported for the interval below
@@ -158,11 +208,20 @@ export async function pollAiCloneChats(client: BeeperClient = clientOrNull()!): 
       .filter((c) => c.mode !== 'off')
     for (const setting of chatsToCheck) {
       try {
-        const recent = await client.listRecentMessages(setting.chatID)
+        // A generous batch, not the default: chatMonitor.ts filters by cursor
+        // over whatever comes back regardless of the API's actual sort
+        // order (still unverified — see beeperClient.ts's own note), so a
+        // bigger fetch directly reduces the chance that more messages
+        // arrived between two 60s polls than fit in one page and an older
+        // one gets missed. This bounds the risk, it doesn't eliminate it —
+        // an extremely high-volume chat could still in principle exceed
+        // this in one poll window.
+        const recent = await client.listRecentMessages(setting.chatID, 200)
         const ascending = [...recent].sort((a, b) => a.timestamp - b.timestamp)
-        const { newMessages, latestTimestamp } = selectNewInboundMessages(
+        const { newMessages, latestTimestamp, latestMessageIds } = selectNewInboundMessages(
           ascending.map(toMessageLike),
-          setting.lastSeenTimestamp
+          setting.lastSeenTimestamp,
+          setting.lastSeenMessageIds
         )
 
         // Nothing async pending for this chat this tick (either no new
@@ -171,7 +230,7 @@ export async function pollAiCloneChats(client: BeeperClient = clientOrNull()!): 
         // chatMonitor.ts's documented first-poll behavior.
         if (newMessages.length === 0) {
           if (latestTimestamp !== undefined) {
-            chatSettings().setCursor(setting.chatID, latestTimestamp)
+            chatSettings().setCursor(setting.chatID, latestTimestamp, latestMessageIds)
           }
           continue
         }
@@ -221,6 +280,7 @@ export async function pollAiCloneChats(client: BeeperClient = clientOrNull()!): 
             incomingMessageText: incoming.text ?? '',
             messageID: incoming.id,
             messageTimestamp: incoming.timestamp,
+            sessionGeneration,
             promptText
           }
           broadcast('aiClone:incomingMessage', event)
@@ -267,7 +327,7 @@ export function stopAiClonePolling(): void {
  *  doesn't leave the others uncleared. */
 export function clearAiCloneUserData(): void {
   stopAiClonePolling()
-  cachedClient = null
+  bumpSessionGeneration()
   pollInProgress = false
   inFlightMessages.clear()
   try {
@@ -287,7 +347,21 @@ export function clearAiCloneUserData(): void {
   }
 }
 
-async function resolveDraftSend(chatID: string, text: string): Promise<void> {
+/** @param expectedGeneration  Captured by the caller BEFORE any async work
+ *  (drafting, deciding) started. If the session has moved on since — a
+ *  disconnect, a reconnect to a different Beeper account, or a sign-out —
+ *  by the time we're actually about to send, refuse rather than send through
+ *  whatever connection happens to be live now. sendMessage itself can't be
+ *  cancelled mid-flight once called, so the check has to happen here, right
+ *  before the call, not just once at the top of a long-running handler. */
+async function resolveDraftSend(
+  chatID: string,
+  text: string,
+  expectedGeneration: number
+): Promise<void> {
+  if (expectedGeneration !== sessionGeneration) {
+    throw new Error('Beeper connection changed since this reply was prepared; not sending.')
+  }
   const client = clientOrNull()
   if (!client) throw new Error('Beeper is not connected.')
   await client.sendMessage(chatID, text)
@@ -299,6 +373,7 @@ export function registerAiCloneHandlers(): void {
     const status = await statusFor(probe)
     if (status.connected) {
       tokenStore().set(accessToken)
+      bumpSessionGeneration()
       cachedClient = { token: accessToken, client: probe }
       startPolling()
     }
@@ -309,7 +384,7 @@ export function registerAiCloneHandlers(): void {
 
   ipcMain.handle('aiClone:disconnect', (): void => {
     tokenStore().clear()
-    cachedClient = null
+    bumpSessionGeneration()
     stopAiClonePolling()
   })
 
@@ -361,9 +436,17 @@ export function registerAiCloneHandlers(): void {
         // send itself is slow or a second request slips in mid-flight.
         const draft = drafts().take(id)
         if (!draft) return
+        if (draft.sessionGeneration !== sessionGeneration) {
+          // The Beeper connection has changed (disconnect, reconnect to a
+          // different account, or sign-out) since this draft was queued.
+          // draft.chatID only meant something under the OLD connection —
+          // discard rather than send it through whatever's connected now.
+          // Already removed from the store above; nothing further to do.
+          return
+        }
         const textToSend = editedText?.trim() || draft.draftText
         try {
-          await resolveDraftSend(draft.chatID, textToSend)
+          await resolveDraftSend(draft.chatID, textToSend, draft.sessionGeneration)
         } catch (error) {
           // The send failed after we'd already removed it from the queue —
           // put it back so a transient network error doesn't silently
@@ -375,7 +458,8 @@ export function registerAiCloneHandlers(): void {
             chatID: draft.chatID,
             chatDisplayName: draft.chatDisplayName,
             incomingMessageText: draft.incomingMessageText,
-            draftText: textToSend
+            draftText: textToSend,
+            sessionGeneration: draft.sessionGeneration
           })
           throw error
         }
@@ -400,6 +484,16 @@ export function registerAiCloneHandlers(): void {
       if (resolvingMessageIds.has(args.messageID)) {
         return { action: 'skipped' }
       }
+      if (args.sessionGeneration !== sessionGeneration) {
+        // The Beeper connection changed (disconnect, reconnect to a
+        // different account, or sign-out) at some point between this
+        // message being broadcast and the renderer's LLM call finishing —
+        // which can take several seconds. args.chatID only meant something
+        // under the connection that was live when this message was found;
+        // don't advance any cursor or act on it under whatever's connected
+        // now.
+        return { action: 'skipped' }
+      }
       resolvingMessageIds.add(args.messageID)
       try {
         const setting = chatSettings().get(args.chatID)
@@ -418,14 +512,15 @@ export function registerAiCloneHandlers(): void {
           // without advancing the cursor or releasing the in-flight marker —
           // the message stays eligible for a retry broadcast rather than
           // being marked processed when it wasn't.
-          await resolveDraftSend(args.chatID, args.draftText)
+          await resolveDraftSend(args.chatID, args.draftText, args.sessionGeneration)
           result = { action: 'sent' }
         } else {
           const draft = drafts().add({
             chatID: args.chatID,
             chatDisplayName: args.chatDisplayName,
             incomingMessageText: args.incomingMessageText,
-            draftText: args.draftText
+            draftText: args.draftText,
+            sessionGeneration: args.sessionGeneration
           })
           result = { action: 'queued_for_review', draft }
         }
@@ -433,7 +528,7 @@ export function registerAiCloneHandlers(): void {
         // Only reached once the decision was fully carried out — this is
         // the "successful processing" the cursor and in-flight tracking are
         // gated on.
-        advanceCursorIfNewer(args.chatID, args.messageTimestamp)
+        advanceCursorForMessage(args.chatID, args.messageID, args.messageTimestamp)
         inFlightMessages.delete(args.messageID)
         return result
       } finally {

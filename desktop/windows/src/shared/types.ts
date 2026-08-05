@@ -1583,6 +1583,15 @@ export type AiCloneIncomingMessageEvent = {
    *  comment for why. */
   messageID: string
   messageTimestamp: number
+  /** main's session generation at the moment this message was broadcast —
+   *  echoed back in AiCloneSubmitDraftArgs so main can tell whether the
+   *  Beeper connection changed (disconnect, reconnect to a different
+   *  account, sign-out) at any point between broadcasting this message and
+   *  the renderer finally calling back with a draft. The renderer's LLM
+   *  call can take several seconds; capturing this at call-time in
+   *  submitDraft instead of here would miss a reconnect that happened
+   *  during that window. */
+  sessionGeneration: number
   /** Flattened prompt text (system + user context) ready for a single-string
    *  completion call — see personaDraftPrompt.buildDraftPrompt. */
   promptText: string
@@ -1595,6 +1604,7 @@ export type AiCloneSubmitDraftArgs = {
   draftText: string
   messageID: string
   messageTimestamp: number
+  sessionGeneration: number
 }
 
 /** Outcome of aiCloneSubmitDraft: what actually happened to the drafted reply. */

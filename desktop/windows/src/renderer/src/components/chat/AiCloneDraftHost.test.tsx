@@ -18,6 +18,7 @@ const baseEvent: AiCloneIncomingMessageEvent = {
   incomingMessageText: 'are we still on for 6?',
   messageID: 'msg-1',
   messageTimestamp: 1_700_000_000_000,
+  sessionGeneration: 0,
   promptText: 'system + user context here'
 }
 
@@ -57,6 +58,7 @@ describe('AiCloneDraftHost', () => {
       incomingMessageText: 'are we still on for 6?',
       messageID: 'msg-1',
       messageTimestamp: 1_700_000_000_000,
+      sessionGeneration: 0,
       draftText: 'sounds good, see you then!'
     })
   })

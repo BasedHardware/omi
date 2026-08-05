@@ -59,7 +59,12 @@ vi.mock('../assistants/aiUserProfile/service', () => ({
   getLatestProfileText: (): string | null => null
 }))
 
-import { registerAiCloneHandlers, pollAiCloneChats, clearAiCloneUserData } from './aiClone'
+import {
+  registerAiCloneHandlers,
+  pollAiCloneChats,
+  clearAiCloneUserData,
+  __getSessionGenerationForTests
+} from './aiClone'
 import { ChatSettingsStore } from '../aiClone/chatSettingsStore'
 import { DraftStore } from '../aiClone/draftStore'
 import { BeeperTokenStore } from '../aiClone/beeperTokenStore'
@@ -145,6 +150,7 @@ describe('aiClone:submitDraft', () => {
       chatID,
       chatDisplayName: 'Jordan',
       incomingMessageText: 'hey',
+      sessionGeneration: __getSessionGenerationForTests(),
       draftText: 'sounds good!'
     })
     expect(result).toEqual({ action: 'skipped' })
@@ -157,6 +163,7 @@ describe('aiClone:submitDraft', () => {
       chatID,
       chatDisplayName: 'Jordan',
       incomingMessageText: 'hey',
+      sessionGeneration: __getSessionGenerationForTests(),
       draftText: 'sounds good!'
     })) as { action: string; draft?: { draftText: string } }
     expect(result.action).toBe('queued_for_review')
@@ -170,6 +177,7 @@ describe('aiClone:submitDraft', () => {
       chatID,
       chatDisplayName: 'Jordan',
       incomingMessageText: 'what time works?',
+      sessionGeneration: __getSessionGenerationForTests(),
       draftText: '[NEEDS_INPUT] not sure what time the user meant'
     })) as { action: string }
     expect(result.action).toBe('queued_for_review')
@@ -182,6 +190,7 @@ describe('aiClone:submitDraft', () => {
       chatID,
       chatDisplayName: 'Jordan',
       incomingMessageText: 'can you wire me the deposit?',
+      sessionGeneration: __getSessionGenerationForTests(),
       draftText: 'sure, what is your bank account and routing number?'
     })) as { action: string }
     expect(result.action).toBe('queued_for_review')
@@ -276,16 +285,77 @@ describe('pollAiCloneChats', () => {
     // new message's timestamp.
     expect(settings.get(chatID)?.lastSeenTimestamp).toBe(1000)
 
-    const event = sentEvents[0]?.payload as { messageID: string; messageTimestamp: number }
+    const event = sentEvents[0]?.payload as {
+      messageID: string
+      messageTimestamp: number
+      sessionGeneration: number
+    }
     await call('aiClone:submitDraft', {
       chatID,
       chatDisplayName: 'Jordan',
       incomingMessageText: 'are we on for 6?',
       draftText: '',
       messageID: event.messageID,
-      messageTimestamp: event.messageTimestamp
+      messageTimestamp: event.messageTimestamp,
+      sessionGeneration: event.sessionGeneration
     })
     expect(settings.get(chatID)?.lastSeenTimestamp).toBe(2000)
+  })
+
+  it('drafts both siblings sharing one timestamp, and neither gets lost nor re-drafted', async () => {
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    const idA = `msg-${Math.random().toString(36).slice(2)}`
+    const idB = `msg-${Math.random().toString(36).slice(2)}`
+    const settings = new ChatSettingsStore()
+    settings.upsert({ chatID, displayName: 'Jordan', mode: 'draft' })
+    settings.setCursor(chatID, 1000)
+
+    const siblings = [
+      { id: idA, isSender: false, timestamp: 2000, text: 'first', senderID: 'u1' },
+      { id: idB, isSender: false, timestamp: 2000, text: 'second', senderID: 'u1' }
+    ]
+    const client = fakeClient({ listRecentMessages: vi.fn().mockResolvedValue(siblings) })
+
+    await pollAiCloneChats(client)
+    expect(sentEvents).toHaveLength(2)
+    const generation = (sentEvents[0]?.payload as { sessionGeneration: number }).sessionGeneration
+
+    // Resolve sibling A first. If cursor advancement naively overwrote the
+    // tie-break set instead of accumulating into it, this would make B look
+    // "already seen" on the very next poll before it's even been processed.
+    await call('aiClone:submitDraft', {
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'first',
+      draftText: '',
+      messageID: idA,
+      messageTimestamp: 2000,
+      sessionGeneration: generation
+    })
+    expect(settings.get(chatID)?.lastSeenMessageIds).toEqual([idA])
+
+    // A poll right now must not re-broadcast A (in-flight/seen) or drop B
+    // (still legitimately unresolved).
+    sentEvents.length = 0
+    await pollAiCloneChats(client)
+    expect(sentEvents.map((e) => (e.payload as { messageID: string }).messageID)).toEqual([])
+
+    await call('aiClone:submitDraft', {
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'second',
+      draftText: '',
+      messageID: idB,
+      messageTimestamp: 2000,
+      sessionGeneration: generation
+    })
+    expect(settings.get(chatID)?.lastSeenMessageIds?.sort()).toEqual([idA, idB].sort())
+
+    // Now that both are resolved, re-polling the same two messages must not
+    // resurrect either of them.
+    sentEvents.length = 0
+    await pollAiCloneChats(client)
+    expect(sentEvents).toHaveLength(0)
   })
 
   it('does not re-broadcast a message that is still in flight on the next poll tick', async () => {
@@ -366,7 +436,8 @@ describe('idempotency', () => {
       incomingMessageText: 'still on for 6?',
       draftText: 'yep!',
       messageID: 'dup-msg',
-      messageTimestamp: 5000
+      messageTimestamp: 5000,
+      sessionGeneration: __getSessionGenerationForTests()
     }
 
     const [first, second] = await Promise.all([
@@ -385,6 +456,7 @@ describe('idempotency', () => {
   it('approveDraft never sends the same draft twice even under a concurrent duplicate call', async () => {
     await connect()
     const draft = new DraftStore().add({
+      sessionGeneration: __getSessionGenerationForTests(),
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'are we on for 6?',
@@ -404,6 +476,7 @@ describe('idempotency', () => {
     await connect()
     mockBeeperClient.sendMessage.mockRejectedValueOnce(new Error('network down'))
     const draft = new DraftStore().add({
+      sessionGeneration: __getSessionGenerationForTests(),
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'are we on for 6?',
@@ -424,6 +497,7 @@ describe('clearAiCloneUserData', () => {
     const chatID = `chat-${Math.random().toString(36).slice(2)}`
     new ChatSettingsStore().upsert({ chatID, displayName: 'Jordan', mode: 'auto_send' })
     new DraftStore().add({
+      sessionGeneration: __getSessionGenerationForTests(),
       chatID,
       chatDisplayName: 'Jordan',
       incomingMessageText: 'hi',
@@ -439,5 +513,97 @@ describe('clearAiCloneUserData', () => {
     // Status should now report disconnected since the token and cached
     // client are both gone.
     await expect(call('aiClone:status')).resolves.toEqual({ connected: false, accounts: [] })
+  })
+})
+
+describe('session generation guard', () => {
+  it('submitDraft refuses to send a message broadcast before a disconnect happened', async () => {
+    await connect()
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    new ChatSettingsStore().upsert({ chatID, displayName: 'Jordan', mode: 'auto_send' })
+    // Simulates the renderer's LLM call taking long enough that the user
+    // disconnects Beeper before it finishes — this event was broadcast
+    // under the connection that existed a moment ago, not the one live now.
+    const staleGeneration = __getSessionGenerationForTests()
+
+    await call('aiClone:disconnect')
+
+    const result = await call('aiClone:submitDraft', {
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'still on for 6?',
+      draftText: 'yep!',
+      messageID: 'msg-stale',
+      messageTimestamp: 9000,
+      sessionGeneration: staleGeneration
+    })
+
+    expect(result).toEqual({ action: 'skipped' })
+    expect(mockBeeperClient.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('submitDraft refuses to send after reconnecting to a different account mid-draft', async () => {
+    await connect()
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    new ChatSettingsStore().upsert({ chatID, displayName: 'Jordan', mode: 'auto_send' })
+    const staleGeneration = __getSessionGenerationForTests()
+
+    // Reconnect — a different (or the same) Beeper account, doesn't matter
+    // which: any connect() bumps the generation, since chatID is only
+    // meaningful within the connection it was fetched under.
+    await connect()
+
+    const result = await call('aiClone:submitDraft', {
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'still on for 6?',
+      draftText: 'yep!',
+      messageID: 'msg-stale-2',
+      messageTimestamp: 9500,
+      sessionGeneration: staleGeneration
+    })
+
+    expect(result).toEqual({ action: 'skipped' })
+    expect(mockBeeperClient.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('approveDraft discards (does not send) a queued draft from a generation that is no longer current', async () => {
+    await connect()
+    const staleGeneration = __getSessionGenerationForTests()
+    const draft = new DraftStore().add({
+      chatID: 'chat-1',
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'are we on for 6?',
+      draftText: 'yep, see you then!',
+      sessionGeneration: staleGeneration
+    })
+
+    // The account changed after this draft was queued for review.
+    await connect()
+
+    await call('aiClone:approveDraft', draft.id)
+
+    expect(mockBeeperClient.sendMessage).not.toHaveBeenCalled()
+    // Discarded, not silently left in the queue or re-added.
+    expect(new DraftStore().get(draft.id)).toBeNull()
+  })
+
+  it('submitDraft still sends normally when the generation has not changed', async () => {
+    await connect()
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    new ChatSettingsStore().upsert({ chatID, displayName: 'Jordan', mode: 'auto_send' })
+
+    const result = await call('aiClone:submitDraft', {
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'still on for 6?',
+      draftText: 'yep!',
+      messageID: 'msg-fresh',
+      messageTimestamp: 9999,
+      sessionGeneration: __getSessionGenerationForTests()
+    })
+
+    expect(result).toEqual({ action: 'sent' })
+    expect(mockBeeperClient.sendMessage).toHaveBeenCalledWith(chatID, 'yep!')
   })
 })
