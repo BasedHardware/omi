@@ -1,5 +1,35 @@
 import SwiftUI
 
+struct MemoryAtlasNodePlacement: Identifiable {
+  let node: KnowledgeGraphNode
+  let cluster: MemoryAtlasCluster?
+  let normalizedPosition: CGPoint
+  let degree: Int
+  let clusterRank: Int
+  /// Presentation-only catalog records represent a canonical memory without
+  /// asserting a semantic entity or relationship. Layout is the authoritative
+  /// source for this classification; no id convention is involved.
+  let isCatalog: Bool
+
+  init(
+    node: KnowledgeGraphNode,
+    cluster: MemoryAtlasCluster?,
+    normalizedPosition: CGPoint,
+    degree: Int,
+    clusterRank: Int,
+    isCatalog: Bool
+  ) {
+    self.node = node
+    self.cluster = cluster
+    self.normalizedPosition = normalizedPosition
+    self.degree = degree
+    self.clusterRank = clusterRank
+    self.isCatalog = isCatalog
+  }
+
+  var id: String { node.id }
+}
+
 enum MemoryAtlasNodeVisualPolicy {
   /// Deep inspection keeps dots at a stable, usable size. The dynamic maximum
   /// zoom adds label fidelity; it must not make a node harder to see or target.
@@ -38,7 +68,8 @@ extension MemoryAtlasRenderPlanner {
   /// single dense cluster monopolizing a capped detail viewport.
   static func fairPrefix(
     _ candidates: [MemoryAtlasNodePlacement],
-    limit: Int
+    limit: Int,
+    prioritizeCatalog: Bool = false
   ) -> [MemoryAtlasNodePlacement] {
     var unclustered: [MemoryAtlasNodePlacement] = []
     var byCluster: [MemoryAtlasCluster: [MemoryAtlasNodePlacement]] = [:]
@@ -54,9 +85,12 @@ extension MemoryAtlasRenderPlanner {
     // unclustered but are intentionally background material until a search or
     // selection asks for them. Otherwise a large historical catalog would
     // crowd all assertion-backed constellations out of an overview.
-    let semanticUnclustered = unclustered.filter { !$0.id.hasPrefix("memory:") }
-    let catalogUnclustered = unclustered.filter { $0.id.hasPrefix("memory:") }
-    var result = Array(semanticUnclustered.prefix(limit))
+    let semanticUnclustered = unclustered.filter { !$0.isCatalog }
+    let catalogUnclustered = unclustered.filter(\.isCatalog)
+    // A search tier is the user explicitly asking to see matching memories.
+    // Admit its catalog matches before semantic background so a broad result
+    // cannot disappear merely because an assertion constellation is denser.
+    var result = Array((prioritizeCatalog ? catalogUnclustered : semanticUnclustered).prefix(limit))
     var nextIndexes = [Int](repeating: 0, count: MemoryAtlasCluster.allCases.count)
     while result.count < limit {
       var appended = false
@@ -68,6 +102,9 @@ extension MemoryAtlasRenderPlanner {
         appended = true
       }
       if !appended { break }
+    }
+    if result.count < limit, prioritizeCatalog {
+      result.append(contentsOf: semanticUnclustered.prefix(limit - result.count))
     }
     if result.count < limit {
       result.append(contentsOf: catalogUnclustered.prefix(limit - result.count))
