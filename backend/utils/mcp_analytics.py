@@ -50,6 +50,21 @@ _TOOL_OPERATIONS = {
     "search": "memory_conversation_search",
     "fetch": "memory_conversation_fetch",
 }
+_RESULT_LIST_KEY_BY_TOOL = {
+    "get_memories": "memories",
+    "search_memories": "memories",
+    "get_conversations": "conversations",
+    "search_conversations": "conversations",
+    "search_x_posts": "posts",
+    "get_x_posts": "posts",
+    "get_action_items": "action_items",
+    "search_action_items": "action_items",
+    "get_goals": "goals",
+    "get_chat_messages": "messages",
+    "get_people": "people",
+    "get_screen_activity": "screen_activity",
+    "get_daily_summaries": "daily_summaries",
+}
 _KNOWN_TOOLS = frozenset(
     {
         "get_user_profile",
@@ -149,27 +164,32 @@ def emit_mcp_tool_call(
 
 def result_count_for_tool_result(tool_name: object, result: Mapping[str, Any]) -> int:
     """Return only a capped top-level result cardinality, never result contents."""
-    for value in result.values():
-        if isinstance(value, list):
-            return _bounded_int(len(value), maximum=1_000)
+    if tool_name == "get_user_profile":
+        # ``data_sources_used`` is metadata, not a collection of profiles. A
+        # missing profile is represented by ``{"profile": None, ...}``.
+        return 1 if result.get("profile_text") else 0
+    list_key = _RESULT_LIST_KEY_BY_TOOL.get(_normalize_tool(tool_name))
+    if list_key is not None:
+        value = result.get(list_key)
+        return _bounded_int(len(value), maximum=1_000) if isinstance(value, list) else 0
     operation = _normalize_operation(tool_name)
     if operation.endswith("_get") or operation.endswith("_fetch"):
         return 1 if result else 0
     return 0
 
 
-def error_category_for_code(code: int) -> str:
-    if code in {-32003, -32009}:
+def error_category_for_code(code: int, *, authorization_denied: bool = False) -> str:
+    if authorization_denied or code == -32003:
         return "authorization_denied"
-    if code == -32602:
+    if code in {-32602, -32000}:
         return "validation"
     if code == -32601:
         return "unknown_tool"
     return "internal"
 
 
-def authorization_outcome_for_code(code: int) -> str:
-    return "denied" if code in {-32003, -32009} else "not_applicable"
+def authorization_outcome_for_code(code: int, *, authorization_denied: bool = False) -> str:
+    return "denied" if authorization_denied or code == -32003 else "not_applicable"
 
 
 def _normalize_tool(tool_name: object) -> str:

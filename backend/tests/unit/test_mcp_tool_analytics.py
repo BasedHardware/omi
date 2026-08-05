@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from routers import mcp_sse
 from utils import mcp_analytics
 
@@ -151,3 +153,69 @@ def test_connector_tool_names_share_the_stable_event_contract(monkeypatch):
         assert captured[-1][1] == "MCP Tool Call"
         assert captured[-1][2]["operation"] == operation
         assert captured[-1][2]["client"] == "claude"
+
+
+def test_profile_result_count_ignores_data_source_metadata_and_empty_profiles():
+    assert (
+        mcp_analytics.result_count_for_tool_result(
+            "get_user_profile", {"profile_text": "private", "data_sources_used": ["a", "b"]}
+        )
+        == 1
+    )
+    assert (
+        mcp_analytics.result_count_for_tool_result(
+            "get_user_profile", {"profile": None, "message": "No profile has been generated"}
+        )
+        == 0
+    )
+    assert (
+        mcp_analytics.result_count_for_tool_result(
+            "get_memories", {"metadata": ["not a result"], "memories": [{"id": "one"}, {"id": "two"}]}
+        )
+        == 2
+    )
+
+
+def test_tool_execution_error_analytics_preserves_error_semantics(monkeypatch):
+    events = []
+    monkeypatch.setattr(mcp_sse, "schedule_mcp_tool_call", lambda **event: events.append(event))
+
+    with patch.object(mcp_sse, "execute_tool", side_effect=mcp_sse.ToolExecutionError("query is required")):
+        invalid, _ = mcp_sse.handle_mcp_message(
+            _auth(), {"id": 4, "method": "tools/call", "params": {"name": "search_memories", "arguments": {}}}
+        )
+    with patch.object(
+        mcp_sse, "execute_tool", side_effect=mcp_sse.ToolExecutionError("index unavailable", code=-32009)
+    ):
+        unavailable, _ = mcp_sse.handle_mcp_message(
+            _auth(), {"id": 5, "method": "tools/call", "params": {"name": "search_memories", "arguments": {}}}
+        )
+    with patch.object(mcp_sse, "execute_tool", side_effect=mcp_sse._authorization_denied_error("access denied")):
+        denied, _ = mcp_sse.handle_mcp_message(
+            _auth(), {"id": 6, "method": "tools/call", "params": {"name": "search_memories", "arguments": {}}}
+        )
+
+    assert invalid["error"]["code"] == -32000
+    assert unavailable["error"]["code"] == -32009
+    assert denied["error"]["code"] == -32009
+    assert [(event["authorization_outcome"], event["error_category"]) for event in events] == [
+        ("not_applicable", "validation"),
+        ("not_applicable", "internal"),
+        ("denied", "authorization_denied"),
+    ]
+
+
+def test_unexpected_tool_errors_are_recorded_and_propagated(monkeypatch):
+    events = []
+    monkeypatch.setattr(mcp_sse, "schedule_mcp_tool_call", lambda **event: events.append(event))
+
+    with patch.object(mcp_sse, "execute_tool", side_effect=RuntimeError("private failure")):
+        with pytest.raises(RuntimeError, match="private failure"):
+            mcp_sse.handle_mcp_message(
+                _auth(), {"id": 7, "method": "tools/call", "params": {"name": "get_memories", "arguments": {}}}
+            )
+
+    assert events[0]["outcome"] == "error"
+    assert events[0]["authorization_outcome"] == "not_applicable"
+    assert events[0]["error_category"] == "internal"
+    assert "private failure" not in str(events)

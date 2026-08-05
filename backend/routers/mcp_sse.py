@@ -754,10 +754,16 @@ def openai_apps_challenge():
 class ToolExecutionError(Exception):
     """Exception raised when a tool execution fails."""
 
-    def __init__(self, message: str, code: int = -32000):
+    def __init__(self, message: str, code: int = -32000, *, analytics_authorization_denied: bool = False):
         self.message = message
         self.code = code
+        self.analytics_authorization_denied = analytics_authorization_denied
         super().__init__(self.message)
+
+
+def _authorization_denied_error(message: str) -> ToolExecutionError:
+    """Preserve a product-authorization denial separately from its MCP code."""
+    return ToolExecutionError(message, code=-32009, analytics_authorization_denied=True)
 
 
 def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
@@ -765,7 +771,9 @@ def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
         raise ToolExecutionError("Memory not found", code=-32001) from exc
     if exc.status_code == 402:
         raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002) from exc
-    if exc.status_code in {403, 409, 503}:
+    if exc.status_code == 403:
+        raise _authorization_denied_error(str(exc.detail)) from exc
+    if exc.status_code in {409, 503}:
         raise ToolExecutionError(str(exc.detail), code=-32009) from exc
     raise ToolExecutionError(str(exc.detail)) from exc
 
@@ -848,10 +856,10 @@ def execute_tool(
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
         if memory_system == MemorySystem.CANONICAL:
             filtered = collect_filtered_memories(
@@ -892,7 +900,7 @@ def execute_tool(
         if not mcp_legacy_read_authorized(memory_list_results):
             denied = mcp_denied_read_payload(memory_list_results)
             if denied is not None:
-                raise ToolExecutionError(str(denied), code=-32009)
+                raise _authorization_denied_error(str(denied))
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -922,10 +930,10 @@ def execute_tool(
             raise ToolExecutionError("Content is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
         try:
             write_context = resolve_external_memory_write_context(
                 user_id,
@@ -974,10 +982,10 @@ def execute_tool(
             raise ToolExecutionError("memory_id is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         try:
             MemoryService(db_client=db).delete_external_memory(
@@ -999,10 +1007,10 @@ def execute_tool(
             raise ToolExecutionError("memory_id and content are required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         if not content.strip():
             raise ToolExecutionError("content must not be empty", code=-32602)
@@ -1099,10 +1107,10 @@ def execute_tool(
         fetch_limit = min(limit * 3, 60)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
         if memory_system == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db)
@@ -1121,7 +1129,7 @@ def execute_tool(
         if not mcp_legacy_read_authorized(vector_search_results):
             denied = mcp_denied_read_payload(vector_search_results)
             if denied is not None:
-                raise ToolExecutionError(str(denied), code=-32009)
+                raise _authorization_denied_error(str(denied))
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
@@ -1476,8 +1484,10 @@ def handle_mcp_message(
                 auth_type=mcp_auth_context.auth_type,
                 client_id=mcp_auth_context.client_id,
                 outcome="error",
-                authorization_outcome=authorization_outcome_for_code(e.code),
-                error_category=error_category_for_code(e.code),
+                authorization_outcome=authorization_outcome_for_code(
+                    e.code, authorization_denied=e.analytics_authorization_denied
+                ),
+                error_category=error_category_for_code(e.code, authorization_denied=e.analytics_authorization_denied),
                 duration_ms=(time.monotonic() - started_at) * 1_000,
                 result_count=0,
             )
@@ -1493,6 +1503,19 @@ def handle_mcp_message(
                     }
                 }
             return error, None
+        except Exception:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="internal",
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
+            raise
 
         schedule_mcp_tool_call(
             uid=mcp_auth_context.uid,
