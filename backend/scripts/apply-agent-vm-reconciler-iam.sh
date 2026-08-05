@@ -9,8 +9,13 @@ fi
 
 project="${AGENT_VM_RECONCILER_PROJECT:-}"
 bucket="${AGENT_VM_RECONCILER_BUCKET:-}"
-if [[ -z "$project" || -z "$bucket" ]]; then
-  echo "AGENT_VM_RECONCILER_PROJECT and AGENT_VM_RECONCILER_BUCKET are required." >&2
+deployer="${AGENT_VM_RECONCILER_DEPLOYER:-}"
+if [[ -z "$project" || -z "$bucket" || -z "$deployer" ]]; then
+  echo "AGENT_VM_RECONCILER_PROJECT, AGENT_VM_RECONCILER_BUCKET, and AGENT_VM_RECONCILER_DEPLOYER are required." >&2
+  exit 2
+fi
+if [[ "$deployer" != *@*.iam.gserviceaccount.com ]]; then
+  echo "AGENT_VM_RECONCILER_DEPLOYER must be a full Google service-account email." >&2
   exit 2
 fi
 
@@ -27,6 +32,11 @@ zone="us-central1-a"
 if ! gcloud iam service-accounts describe "$gsa" --project="$project" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$gsa_name" --project="$project" --display-name="Omi Agent VM reconciler"
 fi
+# The CI deploy identity needs actAs only on this dedicated runtime identity to
+# attach it to the Cloud Run Job. Do not grant Service Account User at project
+# scope: that would let the deployer impersonate unrelated service accounts.
+gcloud iam service-accounts add-iam-policy-binding "$gsa" --project="$project" \
+  --member="serviceAccount:${deployer}" --role=roles/iam.serviceAccountUser
 if gcloud iam roles describe "$role_id" --project="$project" >/dev/null 2>&1; then
   gcloud iam roles update "$role_id" --project="$project" --title="Omi Agent VM reconciler" --permissions="$permissions" --stage=GA
 else
