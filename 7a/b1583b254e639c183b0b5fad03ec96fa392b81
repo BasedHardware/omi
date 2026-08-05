@@ -1,0 +1,30 @@
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingResume.swift
+  s_acebfdccb4f1d0::t_7cc32e3d5b8b03 28-29
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingSignIn.swift
+  s_acebfdccb4f1d0::t_492d90e500b8b3 1-28
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingView.swift
+  s_acebfdccb4f1d0::t_d7e10b48ada22d 693,698
+  s_acebfdccb4f1d0::t_ff1c4ace4cca17 658-664,666-667,669-671
+  s_acebfdccb4f1d0::t_2e0f4b24b3413d 7,9-15,19,27-30,32,38,44-46,49-51,55-57,65,72,76-79,85,87,110,130,181,183,185-205,209-218,221,226,228-235,237,240,242-252,254-262,264-265,267,269-289,294-305,307-316,318-329,332-339,342,345,347-349,352-354,356-444,446,449-454,458-477,480,482-487,489-490,495-501,509-510,517-522,525,530-534,538,546,548-567,570,575-578,583,585-588,592,606,610,612-613,619,621-657,673-685,687-692,694-697,699-725,728,734,736-739,746-748,753,755,760
+  s_acebfdccb4f1d0::t_b0bb8b4cb73aeb 455-457
+  s_acebfdccb4f1d0::t_db8cb45948a9c0 589-591,593-601
+  s_acebfdccb4f1d0::t_34e549e248dbbf 86,88,92,97,101
+  s_acebfdccb4f1d0::t_b7deb829ed994c 150-157
+  s_acebfdccb4f1d0::t_0c7498e39c890c 614-618,620
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7ab1583b254e639c183b0b5fad03ec96fa392b81",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
