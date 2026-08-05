@@ -108,7 +108,7 @@ actor AgentVMService {
       }
       if let status, status.status == "provisioning" || status.status == "stopped" {
         if let result = await pollUntilReady(
-          maxAttempts: 30,
+          maxAttempts: 75,
           intervalSeconds: 5,
           ownerID: ownerID,
           generation: generation),
@@ -148,7 +148,7 @@ actor AgentVMService {
     if vmIP == nil || provisionResult.agentStatus == "provisioning" {
       log("AgentVMService: Waiting for VM to be ready...")
       let pollResult = await pollUntilReady(
-        maxAttempts: 30,
+        maxAttempts: 75,
         intervalSeconds: 5,
         ownerID: ownerID,
         generation: generation)
