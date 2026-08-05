@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -204,3 +205,19 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
     )
 
     assert report["outcomes"] == {"committed": 1, "planner_error": 1}
+
+
+def test_historical_planner_deadline_interrupts_a_stuck_sync_call(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(historical_runner, "HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        historical_runner,
+        "plan_historical_graph_enrichment",
+        lambda **_kwargs: time.sleep(1),
+    )
+
+    with pytest.raises(historical_runner.HistoricalGraphPlannerTimeout):
+        historical_runner._plan_with_deadline(
+            item=_item(),
+            control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+            llm=object(),
+        )
