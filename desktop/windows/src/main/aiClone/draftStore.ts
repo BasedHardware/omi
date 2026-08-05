@@ -2,7 +2,7 @@
 // user to approve, edit, or dismiss (Settings → AI Clone's review list). Not
 // a credential store: plain JSON, same shape as chatSettingsStore.ts.
 
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import { randomUUID } from 'crypto'
@@ -59,5 +59,29 @@ export class DraftStore {
 
   get(id: string): PendingDraft | null {
     return this.readFile().find((d) => d.id === id) ?? null
+  }
+
+  /** Atomically find-and-remove a draft in a single synchronous read/write
+   *  pass — no `await` between the read and the write, so two overlapping
+   *  approve calls for the same id (a double-click, or a race between the
+   *  UI and a background auto-send) cannot both see the draft still present.
+   *  The second caller always gets `null` here and must no-op. Callers
+   *  should take() BEFORE sending, not after, so a draft can never be sent
+   *  twice even if the send itself is slow. */
+  take(id: string): PendingDraft | null {
+    const all = this.readFile()
+    const index = all.findIndex((d) => d.id === id)
+    if (index === -1) return null
+    const [draft] = all.splice(index, 1)
+    this.writeFile(all)
+    return draft
+  }
+
+  /** Drop every queued draft. Called on sign-out / account switch — see
+   *  main/ipc/db.ts's wipeUserData — so a different Omi account on this
+   *  machine never inherits drafted replies containing the previous user's
+   *  private message content. */
+  clearAll(): void {
+    if (existsSync(this.filePath)) rmSync(this.filePath, { force: true })
   }
 }

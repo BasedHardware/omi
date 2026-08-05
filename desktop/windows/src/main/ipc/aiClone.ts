@@ -23,7 +23,7 @@ import { BeeperTokenStore } from '../aiClone/beeperTokenStore'
 import { ChatSettingsStore } from '../aiClone/chatSettingsStore'
 import { DraftStore } from '../aiClone/draftStore'
 import { selectNewInboundMessages, type BeeperMessageLike } from '../aiClone/chatMonitor'
-import { decideReplyAction, looksSensitive } from '../aiClone/autoReplyPolicy'
+import { decideReplyAction, isValidChatMode, looksSensitive } from '../aiClone/autoReplyPolicy'
 import {
   buildDraftPrompt,
   draftNeedsInput,
@@ -105,61 +105,132 @@ async function statusFor(client: BeeperClient | null): Promise<AiCloneStatus> {
   }
 }
 
+// Guards against overlapping pollAiCloneChats runs — a slow chat fetch, a
+// manual trigger racing the interval, or a tick firing while the previous one
+// is still awaiting a network call could otherwise run two passes at once and
+// double-broadcast the same message.
+let pollInProgress = false
+
+// Message ids currently broadcast to the renderer and awaiting an
+// aiCloneSubmitDraft callback, keyed to when they were broadcast. This stops
+// the same still-in-flight message from being re-broadcast on the very next
+// poll tick — normal draft round-trip latency (one LLM call) is well under
+// IN_FLIGHT_STALE_MS. An entry older than that is treated as abandoned (the
+// renderer crashed, or silently swallowed an error without calling back) and
+// becomes eligible for a retry broadcast rather than being lost forever.
+const inFlightMessages = new Map<string, number>()
+const IN_FLIGHT_STALE_MS = POLL_INTERVAL_MS * 3
+
+function isInFlight(messageId: string): boolean {
+  const startedAt = inFlightMessages.get(messageId)
+  if (startedAt === undefined) return false
+  if (Date.now() - startedAt > IN_FLIGHT_STALE_MS) {
+    inFlightMessages.delete(messageId)
+    return false
+  }
+  return true
+}
+
+/** Advance a chat's read cursor only forward, and only when called — this is
+ *  invoked from the submitDraft handler once a message's processing outcome
+ *  is known (sent, queued, or explicitly skipped), never optimistically at
+ *  poll time. That way a message that's still being drafted when the process
+ *  restarts, or whose draft call fails, is picked up again on the next poll
+ *  instead of being silently marked "seen" and lost. */
+function advanceCursorIfNewer(chatID: string, messageTimestamp: number): void {
+  const setting = chatSettings().get(chatID)
+  if (!setting) return
+  if (setting.lastSeenTimestamp !== undefined && messageTimestamp <= setting.lastSeenTimestamp) {
+    return
+  }
+  chatSettings().setCursor(chatID, messageTimestamp)
+}
+
 /** One poll pass over every opted-in chat. Exported for the interval below
  *  and for a manual "check now" if a future UI wants one; errors on a single
  *  chat never abort the rest of the cycle. */
 export async function pollAiCloneChats(client: BeeperClient = clientOrNull()!): Promise<void> {
-  const chatsToCheck = chatSettings()
-    .list()
-    .filter((c) => c.mode !== 'off')
-  for (const setting of chatsToCheck) {
-    try {
-      const recent = await client.listRecentMessages(setting.chatID)
-      const ascending = [...recent].sort((a, b) => a.timestamp - b.timestamp)
-      const { newMessages, latestTimestamp } = selectNewInboundMessages(
-        ascending.map(toMessageLike),
-        setting.lastSeenTimestamp
-      )
-      if (latestTimestamp !== undefined) chatSettings().setCursor(setting.chatID, latestTimestamp)
+  if (pollInProgress) return
+  pollInProgress = true
+  try {
+    const chatsToCheck = chatSettings()
+      .list()
+      .filter((c) => c.mode !== 'off')
+    for (const setting of chatsToCheck) {
+      try {
+        const recent = await client.listRecentMessages(setting.chatID)
+        const ascending = [...recent].sort((a, b) => a.timestamp - b.timestamp)
+        const { newMessages, latestTimestamp } = selectNewInboundMessages(
+          ascending.map(toMessageLike),
+          setting.lastSeenTimestamp
+        )
 
-      for (const incoming of newMessages) {
-        const index = ascending.findIndex((m) => m.id === incoming.id)
-        const historyMessages = (index >= 0 ? ascending.slice(0, index) : []).slice(-HISTORY_WINDOW)
-        const history: DraftContextMessage[] = historyMessages
-          .filter((m) => typeof m.text === 'string' && m.text.trim().length > 0)
-          .map((m) => ({
-            senderName: setting.displayName,
-            text: m.text as string,
-            isSelf: m.isSender
-          }))
-
-        const prompt = buildDraftPrompt({
-          personaProfileText: getLatestProfileText(),
-          chatDisplayName: setting.displayName,
-          history,
-          incomingMessage: {
-            senderName: setting.displayName,
-            text: incoming.text ?? '',
-            isSelf: false
+        // Nothing async pending for this chat this tick (either no new
+        // messages, or this is the first-ever poll establishing a baseline
+        // cursor) — safe to advance immediately, matching
+        // chatMonitor.ts's documented first-poll behavior.
+        if (newMessages.length === 0) {
+          if (latestTimestamp !== undefined) {
+            chatSettings().setCursor(setting.chatID, latestTimestamp)
           }
-        })
-        // Renderer's callAgentLLM takes a single prompt string, not a
-        // messages array — fold the system turn into the one user turn it
-        // sends rather than duplicating a chat-completions client here.
-        const promptText = prompt.map((m) => m.content).join('\n\n')
-
-        const event: AiCloneIncomingMessageEvent = {
-          chatID: setting.chatID,
-          chatDisplayName: setting.displayName,
-          mode: setting.mode,
-          incomingMessageText: incoming.text ?? '',
-          promptText
+          continue
         }
-        broadcast('aiClone:incomingMessage', event)
+
+        for (const incoming of newMessages) {
+          if (isInFlight(incoming.id)) continue
+
+          const index = ascending.findIndex((m) => m.id === incoming.id)
+          const historyMessages = (index >= 0 ? ascending.slice(0, index) : []).slice(
+            -HISTORY_WINDOW
+          )
+          const history: DraftContextMessage[] = historyMessages
+            .filter((m) => typeof m.text === 'string' && m.text.trim().length > 0)
+            .map((m) => ({
+              senderName: setting.displayName,
+              text: m.text as string,
+              isSelf: m.isSender
+            }))
+
+          const prompt = buildDraftPrompt({
+            personaProfileText: getLatestProfileText(),
+            chatDisplayName: setting.displayName,
+            history,
+            incomingMessage: {
+              senderName: setting.displayName,
+              text: incoming.text ?? '',
+              isSelf: false
+            }
+          })
+          // Renderer's callAgentLLM takes a single prompt string, not a
+          // messages array. Label each turn explicitly rather than just
+          // concatenating them, so the instruction/data boundary
+          // personaDraftPrompt.ts establishes survives being flattened —
+          // the untrusted <untrusted_chat_content> fencing lives inside the
+          // user turn either way, but this keeps the system turn visually
+          // and textually distinct from it too.
+          const promptText = prompt
+            .map((m) => `[${m.role.toUpperCase()} INSTRUCTIONS]\n${m.content}`)
+            .join('\n\n')
+
+          inFlightMessages.set(incoming.id, Date.now())
+
+          const event: AiCloneIncomingMessageEvent = {
+            chatID: setting.chatID,
+            chatDisplayName: setting.displayName,
+            mode: setting.mode,
+            incomingMessageText: incoming.text ?? '',
+            messageID: incoming.id,
+            messageTimestamp: incoming.timestamp,
+            promptText
+          }
+          broadcast('aiClone:incomingMessage', event)
+        }
+      } catch (error) {
+        console.log(`[aiClone] poll failed for chat ${setting.chatID}: ${messageText(error)}`)
       }
-    } catch (error) {
-      console.log(`[aiClone] poll failed for chat ${setting.chatID}: ${messageText(error)}`)
     }
+  } finally {
+    pollInProgress = false
   }
 }
 
@@ -180,6 +251,40 @@ function startPolling(): void {
 export function stopAiClonePolling(): void {
   if (pollTimer) clearInterval(pollTimer)
   pollTimer = null
+}
+
+/** Sign-out / account-switch teardown. Called from main/ipc/db.ts's
+ *  wipeUserData alongside the other user-scoped, file-backed stores
+ *  (ByokKeyStore, McpKeyStore) — see that file's own comment for why those
+ *  live outside the SQLite wipe. AI Clone's Beeper token, per-chat settings,
+ *  and queued drafts are exactly the same shape of problem: none of them are
+ *  tied to the signed-in Omi account today, so without this, a different
+ *  account signing in on this machine would inherit the previous user's
+ *  Beeper connection, which chats were opted into auto-reply, and any
+ *  drafted replies still sitting in the review queue (which can contain the
+ *  previous user's private message content). Best-effort per store, mirroring
+ *  wipeUserData's own try/catch-per-store pattern, so one store's failure
+ *  doesn't leave the others uncleared. */
+export function clearAiCloneUserData(): void {
+  stopAiClonePolling()
+  cachedClient = null
+  pollInProgress = false
+  inFlightMessages.clear()
+  try {
+    tokenStore().clearAll()
+  } catch {
+    /* best-effort */
+  }
+  try {
+    chatSettings().clearAll()
+  } catch {
+    /* best-effort */
+  }
+  try {
+    drafts().clearAll()
+  } catch {
+    /* best-effort */
+  }
 }
 
 async function resolveDraftSend(chatID: string, text: string): Promise<void> {
@@ -227,19 +332,56 @@ export function registerAiCloneHandlers(): void {
   ipcMain.handle(
     'aiClone:setChatMode',
     (_e, chatID: string, displayName: string, mode: AiCloneChatMode): void => {
-      chatSettings().upsert({ chatID, displayName, mode })
+      // Fail closed: a stale/mismatched renderer build or a malformed IPC
+      // call could hand this an arbitrary string despite the TS signature.
+      // Never persist something decideReplyAction hasn't been told how to
+      // interpret.
+      const safeMode = isValidChatMode(mode) ? mode : 'off'
+      chatSettings().upsert({ chatID, displayName, mode: safeMode })
     }
   )
 
   ipcMain.handle('aiClone:listDrafts', (): AiClonePendingDraft[] => drafts().list())
 
+  // In-memory guard for approveDraft: closes the gap between take()'s
+  // synchronous find-and-remove and the network send that follows it. take()
+  // alone already stops two overlapping calls from both finding the draft,
+  // but this also gives a fast, explicit "already handled" no-op for a
+  // double-click that lands while the first click's send is still in flight.
+  const resolvingDraftIds = new Set<string>()
+
   ipcMain.handle(
     'aiClone:approveDraft',
     async (_e, id: string, editedText?: string): Promise<void> => {
-      const draft = drafts().get(id)
-      if (!draft) return
-      await resolveDraftSend(draft.chatID, editedText?.trim() || draft.draftText)
-      drafts().remove(id)
+      if (resolvingDraftIds.has(id)) return
+      resolvingDraftIds.add(id)
+      try {
+        // take() removes the draft from the store BEFORE we attempt to send
+        // it — not after — so a draft can never be sent twice even if the
+        // send itself is slow or a second request slips in mid-flight.
+        const draft = drafts().take(id)
+        if (!draft) return
+        const textToSend = editedText?.trim() || draft.draftText
+        try {
+          await resolveDraftSend(draft.chatID, textToSend)
+        } catch (error) {
+          // The send failed after we'd already removed it from the queue —
+          // put it back so a transient network error doesn't silently
+          // discard the user's reviewed reply. This can't reintroduce the
+          // double-send this whole guard exists to prevent: nothing else
+          // could have taken() this id in the meantime, since it was gone
+          // from the store for the entire duration of the failed attempt.
+          drafts().add({
+            chatID: draft.chatID,
+            chatDisplayName: draft.chatDisplayName,
+            incomingMessageText: draft.incomingMessageText,
+            draftText: textToSend
+          })
+          throw error
+        }
+      } finally {
+        resolvingDraftIds.delete(id)
+      }
     }
   )
 
@@ -247,32 +389,56 @@ export function registerAiCloneHandlers(): void {
     drafts().remove(id)
   })
 
+  // Guards against the same Beeper message being resolved twice — e.g. a
+  // stale/duplicate broadcast from the in-flight staleness fallback landing
+  // just as the original round-trip finally comes back.
+  const resolvingMessageIds = new Set<string>()
+
   ipcMain.handle(
     'aiClone:submitDraft',
     async (_e, args: AiCloneSubmitDraftArgs): Promise<AiCloneSubmitDraftResult> => {
-      const setting = chatSettings().get(args.chatID)
-      const mode = setting?.mode ?? 'off'
-      const decision = decideReplyAction({
-        mode,
-        draftText: args.draftText,
-        needsInput: draftNeedsInput(args.draftText)
-      })
-
-      if (decision === 'skip') return { action: 'skipped' }
-
-      if (decision === 'send') {
-        await resolveDraftSend(args.chatID, args.draftText)
-        return { action: 'sent' }
+      if (resolvingMessageIds.has(args.messageID)) {
+        return { action: 'skipped' }
       }
+      resolvingMessageIds.add(args.messageID)
+      try {
+        const setting = chatSettings().get(args.chatID)
+        const mode = setting?.mode ?? 'off'
+        const decision = decideReplyAction({
+          mode,
+          draftText: args.draftText,
+          needsInput: draftNeedsInput(args.draftText)
+        })
 
-      // 'queue_for_review'
-      const draft = drafts().add({
-        chatID: args.chatID,
-        chatDisplayName: args.chatDisplayName,
-        incomingMessageText: args.incomingMessageText,
-        draftText: args.draftText
-      })
-      return { action: 'queued_for_review', draft }
+        let result: AiCloneSubmitDraftResult
+        if (decision === 'skip') {
+          result = { action: 'skipped' }
+        } else if (decision === 'send') {
+          // If this throws, we deliberately fall out of the try block below
+          // without advancing the cursor or releasing the in-flight marker —
+          // the message stays eligible for a retry broadcast rather than
+          // being marked processed when it wasn't.
+          await resolveDraftSend(args.chatID, args.draftText)
+          result = { action: 'sent' }
+        } else {
+          const draft = drafts().add({
+            chatID: args.chatID,
+            chatDisplayName: args.chatDisplayName,
+            incomingMessageText: args.incomingMessageText,
+            draftText: args.draftText
+          })
+          result = { action: 'queued_for_review', draft }
+        }
+
+        // Only reached once the decision was fully carried out — this is
+        // the "successful processing" the cursor and in-flight tracking are
+        // gated on.
+        advanceCursorIfNewer(args.chatID, args.messageTimestamp)
+        inFlightMessages.delete(args.messageID)
+        return result
+      } finally {
+        resolvingMessageIds.delete(args.messageID)
+      }
     }
   )
 

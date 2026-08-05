@@ -23,6 +23,7 @@ import { captureError } from '../sentry'
 import { wipeUserDataOn } from './dbWipe'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { McpKeyStore } from '../mcp/mcpKeyStore'
+import { clearAiCloneUserData } from './aiClone'
 import {
   insertVoiceTurnOn,
   listPendingVoiceTurnsOn,
@@ -1012,6 +1013,16 @@ export function wipeUserData(): void {
   // braces — the key file should not linger at all after sign-out).
   try {
     new McpKeyStore().clearAll()
+  } catch {
+    /* best-effort */
+  }
+  // AI clone (Track 2): Beeper token, per-chat opt-in/mode settings, and any
+  // queued drafted replies are all user-scoped and file-backed (not SQLite),
+  // same category of problem as the two stores above — see
+  // clearAiCloneUserData's own comment for why this one specifically matters
+  // (it can hold another account's private message content).
+  try {
+    clearAiCloneUserData()
   } catch {
     /* best-effort */
   }

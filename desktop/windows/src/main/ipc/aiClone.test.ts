@@ -11,6 +11,24 @@ type SendFn = (channel: string, payload: unknown) => void
 const handlers = new Map<string, Handler>()
 const sentEvents: Array<{ channel: string; payload: unknown }> = []
 
+// vi.hoisted: safely usable inside the vi.mock factory below despite vitest
+// hoisting vi.mock calls above normal top-level statements (a plain `const`
+// here would risk the same TDZ trap covered in beeperTokenStore.test.ts /
+// aiClone.ts's own history — see the lazy-singleton comment in aiClone.ts).
+const { mockCreateBeeperClient, mockBeeperClient } = vi.hoisted(() => {
+  const mockBeeperClient = {
+    verifyConnection: vi.fn(),
+    listChats: vi.fn(),
+    listRecentMessages: vi.fn(),
+    sendMessage: vi.fn()
+  }
+  return { mockCreateBeeperClient: vi.fn(() => mockBeeperClient), mockBeeperClient }
+})
+
+vi.mock('../aiClone/beeperClient', () => ({
+  createBeeperClient: mockCreateBeeperClient
+}))
+
 vi.mock('electron', () => ({
   app: { getPath: (): string => dir },
   safeStorage: {
@@ -41,8 +59,9 @@ vi.mock('../assistants/aiUserProfile/service', () => ({
   getLatestProfileText: (): string | null => null
 }))
 
-import { registerAiCloneHandlers, pollAiCloneChats } from './aiClone'
+import { registerAiCloneHandlers, pollAiCloneChats, clearAiCloneUserData } from './aiClone'
 import { ChatSettingsStore } from '../aiClone/chatSettingsStore'
+import { DraftStore } from '../aiClone/draftStore'
 import { BeeperTokenStore } from '../aiClone/beeperTokenStore'
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
@@ -75,8 +94,22 @@ beforeEach(() => {
     const full = join(dir, path)
     if (existsSync(full)) rmSync(full, { force: true })
   }
+  mockBeeperClient.verifyConnection.mockReset().mockResolvedValue([])
+  mockBeeperClient.listChats.mockReset().mockResolvedValue([])
+  mockBeeperClient.listRecentMessages.mockReset().mockResolvedValue([])
+  mockBeeperClient.sendMessage.mockReset().mockResolvedValue(undefined)
   registerAiCloneHandlers()
 })
+
+/** Connects via the real aiClone:connect handler so approveDraft/submitDraft's
+ *  send path (clientOrNull() → the cached client) has something to send
+ *  through, exercising the actual wiring rather than reaching into internals. */
+async function connect(): Promise<void> {
+  mockBeeperClient.verifyConnection.mockResolvedValue([
+    { accountID: 'a1', network: 'WhatsApp', displayName: 'Me' }
+  ])
+  await call('aiClone:connect', 'fake-token')
+}
 
 describe('registerAiCloneHandlers', () => {
   it('registers every AI-clone channel', () => {
@@ -215,5 +248,196 @@ describe('pollAiCloneChats', () => {
     const client = fakeClient()
     await pollAiCloneChats(client)
     expect(client.listRecentMessages).not.toHaveBeenCalled()
+  })
+
+  it('does not advance the cursor for a new message until submitDraft confirms it was processed', async () => {
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    const messageID = `msg-${Math.random().toString(36).slice(2)}`
+    const settings = new ChatSettingsStore()
+    settings.upsert({ chatID, displayName: 'Jordan', mode: 'draft' })
+    settings.setCursor(chatID, 1000)
+
+    const client = fakeClient({
+      listRecentMessages: vi.fn().mockResolvedValue([
+        {
+          id: messageID,
+          isSender: false,
+          timestamp: 2000,
+          text: 'are we on for 6?',
+          senderID: 'u1'
+        }
+      ])
+    })
+
+    await pollAiCloneChats(client)
+    expect(sentEvents).toHaveLength(1)
+    // The message was broadcast, but nothing has confirmed it was actually
+    // handled yet — the cursor must still be at its pre-poll value, not the
+    // new message's timestamp.
+    expect(settings.get(chatID)?.lastSeenTimestamp).toBe(1000)
+
+    const event = sentEvents[0]?.payload as { messageID: string; messageTimestamp: number }
+    await call('aiClone:submitDraft', {
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'are we on for 6?',
+      draftText: '',
+      messageID: event.messageID,
+      messageTimestamp: event.messageTimestamp
+    })
+    expect(settings.get(chatID)?.lastSeenTimestamp).toBe(2000)
+  })
+
+  it('does not re-broadcast a message that is still in flight on the next poll tick', async () => {
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    const messageID = `msg-${Math.random().toString(36).slice(2)}`
+    const settings = new ChatSettingsStore()
+    settings.upsert({ chatID, displayName: 'Jordan', mode: 'draft' })
+    settings.setCursor(chatID, 1000)
+
+    const client = fakeClient({
+      listRecentMessages: vi
+        .fn()
+        .mockResolvedValue([
+          { id: messageID, isSender: false, timestamp: 2000, text: 'hey', senderID: 'u1' }
+        ])
+    })
+
+    await pollAiCloneChats(client)
+    expect(sentEvents).toHaveLength(1)
+
+    // Poll again without ever calling submitDraft for m1 — it's still
+    // "in flight" from the renderer's perspective, so it must not be
+    // rebroadcast a second time.
+    await pollAiCloneChats(client)
+    expect(sentEvents).toHaveLength(1)
+  })
+
+  it('guards against two overlapping poll runs for the same tick', async () => {
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    const settings = new ChatSettingsStore()
+    settings.upsert({ chatID, displayName: 'Jordan', mode: 'draft' })
+
+    let resolveFetch: (() => void) | undefined
+    const listRecentMessages = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = () => resolve([])
+        })
+    )
+    const client = fakeClient({ listRecentMessages })
+
+    const firstRun = pollAiCloneChats(client)
+    const secondRun = pollAiCloneChats(client) // fires while the first is still awaiting the fetch
+    resolveFetch?.()
+    await Promise.all([firstRun, secondRun])
+
+    // The second call should have returned immediately (pollInProgress
+    // guard) without ever calling listRecentMessages itself.
+    expect(listRecentMessages).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('aiClone:setChatMode', () => {
+  it('fails closed to off for an unrecognized mode value instead of persisting it verbatim', async () => {
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    // Cast past the type system the same way a stale renderer build or a
+    // malformed IPC call would arrive at runtime.
+    await call('aiClone:setChatMode', chatID, 'Jordan', 'AUTO_SEND' as unknown)
+    expect(new ChatSettingsStore().get(chatID)?.mode).toBe('off')
+  })
+
+  it('accepts a genuinely valid mode unchanged', async () => {
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    await call('aiClone:setChatMode', chatID, 'Jordan', 'auto_send')
+    expect(new ChatSettingsStore().get(chatID)?.mode).toBe('auto_send')
+  })
+})
+
+describe('idempotency', () => {
+  it('submitDraft never sends the same message twice even under a concurrent duplicate call', async () => {
+    await connect()
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    new ChatSettingsStore().upsert({ chatID, displayName: 'Jordan', mode: 'auto_send' })
+
+    const args = {
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'still on for 6?',
+      draftText: 'yep!',
+      messageID: 'dup-msg',
+      messageTimestamp: 5000
+    }
+
+    const [first, second] = await Promise.all([
+      call('aiClone:submitDraft', args),
+      call('aiClone:submitDraft', args)
+    ])
+
+    expect(mockBeeperClient.sendMessage).toHaveBeenCalledTimes(1)
+    // Exactly one of the two calls actually sent; the other saw the
+    // in-progress guard and no-op'd.
+    const actions = [first, second].map((r) => (r as { action: string }).action)
+    expect(actions.filter((a) => a === 'sent')).toHaveLength(1)
+    expect(actions.filter((a) => a === 'skipped')).toHaveLength(1)
+  })
+
+  it('approveDraft never sends the same draft twice even under a concurrent duplicate call', async () => {
+    await connect()
+    const draft = new DraftStore().add({
+      chatID: 'chat-1',
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'are we on for 6?',
+      draftText: 'yep, see you then!'
+    })
+
+    await Promise.all([
+      call('aiClone:approveDraft', draft.id),
+      call('aiClone:approveDraft', draft.id)
+    ])
+
+    expect(mockBeeperClient.sendMessage).toHaveBeenCalledTimes(1)
+    expect(new DraftStore().get(draft.id)).toBeNull()
+  })
+
+  it('re-queues a draft if the send itself fails, instead of losing it silently', async () => {
+    await connect()
+    mockBeeperClient.sendMessage.mockRejectedValueOnce(new Error('network down'))
+    const draft = new DraftStore().add({
+      chatID: 'chat-1',
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'are we on for 6?',
+      draftText: 'yep, see you then!'
+    })
+
+    await expect(call('aiClone:approveDraft', draft.id)).rejects.toThrow('network down')
+
+    const remaining = new DraftStore().list()
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0]?.draftText).toBe('yep, see you then!')
+  })
+})
+
+describe('clearAiCloneUserData', () => {
+  it('clears the token, chat settings, and drafts, and stops polling', async () => {
+    await connect()
+    const chatID = `chat-${Math.random().toString(36).slice(2)}`
+    new ChatSettingsStore().upsert({ chatID, displayName: 'Jordan', mode: 'auto_send' })
+    new DraftStore().add({
+      chatID,
+      chatDisplayName: 'Jordan',
+      incomingMessageText: 'hi',
+      draftText: 'hey!'
+    })
+    expect(new BeeperTokenStore().has()).toBe(true)
+
+    clearAiCloneUserData()
+
+    expect(new BeeperTokenStore().has()).toBe(false)
+    expect(new ChatSettingsStore().list()).toEqual([])
+    expect(new DraftStore().list()).toEqual([])
+    // Status should now report disconnected since the token and cached
+    // client are both gone.
+    await expect(call('aiClone:status')).resolves.toEqual({ connected: false, accounts: [] })
   })
 })

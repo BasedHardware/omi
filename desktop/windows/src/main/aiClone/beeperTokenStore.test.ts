@@ -50,4 +50,11 @@ describe('BeeperTokenStore', () => {
     store.set('second')
     expect(store.get()).toBe('second')
   })
+
+  it('clearAll() is an alias for clear() (used by sign-out teardown)', () => {
+    store.set('beeper_access_token_abc123')
+    store.clearAll()
+    expect(store.get()).toBeNull()
+    expect(store.has()).toBe(false)
+  })
 })

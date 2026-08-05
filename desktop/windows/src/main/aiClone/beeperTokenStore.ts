@@ -63,6 +63,13 @@ export class BeeperTokenStore {
     if (existsSync(this.filePath)) rmSync(this.filePath, { force: true })
   }
 
+  /** Alias for clear(), matching ByokKeyStore/McpKeyStore's clearAll() naming
+   *  so main/ipc/db.ts's wipeUserData teardown can treat every user-scoped,
+   *  file-backed credential store the same way on sign-out / account switch. */
+  clearAll(): void {
+    this.clear()
+  }
+
   has(): boolean {
     return this.readFile() !== null
   }

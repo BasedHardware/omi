@@ -24,17 +24,27 @@ export function AiCloneDraftHost(): null {
 async function draftAndSubmit(event: AiCloneIncomingMessageEvent): Promise<void> {
   try {
     const draftText = (await callAgentLLM(event.promptText)).trim()
-    if (!draftText) return
+    // Still submit even when the model returned nothing — decideReplyAction
+    // treats a blank draft as 'skip' either way, but calling submitDraft is
+    // what tells main this message was actually processed (advances the
+    // read cursor, releases the in-flight marker). Returning early here
+    // instead would leave the message looking un-processed until the
+    // in-flight staleness fallback eventually retries it.
     await window.omi.aiCloneSubmitDraft({
       chatID: event.chatID,
       chatDisplayName: event.chatDisplayName,
       incomingMessageText: event.incomingMessageText,
+      messageID: event.messageID,
+      messageTimestamp: event.messageTimestamp,
       draftText
     })
   } catch (error) {
-    // Best-effort: a failed draft just means this message doesn't get a
-    // drafted reply this cycle. Never surface this as a user-facing error —
-    // there's no chat thread for a background auto-reply failure to land in.
+    // A failed draft call (LLM error, IPC error) means main never hears back
+    // for this message — it deliberately stays "in flight" rather than being
+    // marked processed, so the poll loop's staleness fallback retries it on
+    // a later tick instead of silently losing it. Never surface this as a
+    // user-facing error — there's no chat thread for a background auto-reply
+    // failure to land in.
     console.log(`[aiClone] failed to draft a reply for chat ${event.chatID}: ${String(error)}`)
   }
 }

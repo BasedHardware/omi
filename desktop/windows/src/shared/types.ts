@@ -127,7 +127,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -288,8 +293,8 @@ export type CaptureCommand =
   // Meeting detection (Phase 5, sent by MAIN): start/stop the auto-capture
   // session (mic + system lanes) for a detected meeting. Serviced by
   // MeetingSessionHost in the capture window.
-  | { type: 'meeting-capture-start'; meetingId: string; attemptId: number; appName: string }
-  | { type: 'meeting-capture-stop'; meetingId: string; attemptId: number }
+  | { type: 'meeting-capture-start'; meetingId: string; appName: string }
+  | { type: 'meeting-capture-stop'; meetingId: string }
 
 /** A mutation to the shared live-conversation store, emitted by the capture
  *  window as it owns the always-on mic session. UI windows apply these via
@@ -307,8 +312,6 @@ export type LiveStoreOp =
 export type CaptureEvent =
   // Live-conversation store mirror (broadcast).
   | { type: 'live'; op: LiveStoreOp }
-  // An audio lane acquired its source and built the PCM pipeline (routed to the owner).
-  | { type: 'audio-source-ready'; sessionId: string }
   // An audio lane's source (mic/system stream) failed (routed to the owner).
   | { type: 'audio-source-error'; sessionId: string; name: string; message: string }
   // Push-to-talk streamed data / lifecycle (routed to the owner).
@@ -330,8 +333,7 @@ export type CaptureEvent =
   | {
       type: 'meeting-capture-status'
       meetingId: string
-      attemptId: number
-      status: 'started' | 'startup-error' | 'runtime-error' | 'saved' | 'save-error'
+      status: 'started' | 'error' | 'saved'
       message?: string
     }
 
@@ -1017,13 +1019,7 @@ export type OmiBridgeApi = {
    *  deletes, idempotent). Resolves to the number of rows rebuilt. */
   rewindRebuildIndex: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
-  /** Display source containing the foreground window, with cursor/primary fallbacks. */
-  rewindCaptureSourceId: () => Promise<string | null>
-  rewindSaveFrame: (
-    data: Uint8Array,
-    sourceId: string
-  ) => Promise<{ captured: boolean; reason?: string }>
-  onRewindCaptureNow: (cb: () => void) => () => void
+  rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
   /** Runtime capture directive (pause + effective cadence) the main process derives
    *  from OS power/lock state; the capture host prefers it over the base interval. */
@@ -1270,6 +1266,28 @@ export type OmiBridgeApi = {
   /** Validate + store (or clear, when blank) the Codex OpenAI API key. A 401 is
    *  reported and not stored; an unreachable network stores with a soft warning. */
   codingAgentSetCodexKey: (key: string) => Promise<CodexKeyResult>
+  // --- AI clone (Track 2: Beeper — Telegram / WhatsApp / iMessage / etc.) ---
+  /** Validate + store a Beeper Desktop access token (client.accounts.list()
+   *  round-trip); returns the resulting status either way. */
+  aiCloneConnect: (accessToken: string) => Promise<AiCloneStatus>
+  aiCloneStatus: () => Promise<AiCloneStatus>
+  aiCloneDisconnect: () => Promise<void>
+  /** Chats across every connected account, merged with each chat's saved
+   *  reply-mode setting (defaults to 'off' for a chat never configured). */
+  aiCloneListChats: () => Promise<AiCloneChatSummary[]>
+  aiCloneSetChatMode: (chatID: string, displayName: string, mode: AiCloneChatMode) => Promise<void>
+  /** Drafts waiting in the review queue (Settings → AI Clone). */
+  aiCloneListDrafts: () => Promise<AiClonePendingDraft[]>
+  /** Send a queued draft as-is, or with edited text, then remove it from the
+   *  queue. */
+  aiCloneApproveDraft: (id: string, editedText?: string) => Promise<void>
+  aiCloneDismissDraft: (id: string) => Promise<void>
+  /** A background poll found a new inbound message on an opted-in chat and
+   *  needs the renderer to draft a reply (see AiCloneIncomingMessageEvent). */
+  onAiCloneIncomingMessage: (cb: (event: AiCloneIncomingMessageEvent) => void) => () => void
+  /** Renderer hands back the drafted reply; main applies autoReplyPolicy
+   *  (send / queue for review / skip) and persists or sends accordingly. */
+  aiCloneSubmitDraft: (args: AiCloneSubmitDraftArgs) => Promise<AiCloneSubmitDraftResult>
   // --- Main chat (kernel-routed pi-mono) ---
   /** Which engine the main typed-chat should use: 'legacy_sse' (the existing
    *  /v2/messages path) or 'pi_mono' (the kernel-routed managed-cloud door).
@@ -1507,6 +1525,84 @@ export type AgentCliDetection = {
 /** Per-agent detection for the three external CLIs (Claude Code is built in). */
 export type AgentDetectionMap = Record<Exclude<CodingAgentId, 'acp'>, AgentCliDetection>
 
+// --- AI clone (Beeper: Telegram / WhatsApp / iMessage / etc.) ---
+// Single source of truth for the per-chat reply mode — main's autoReplyPolicy.ts
+// re-exports this rather than declaring its own, so main and renderer can never
+// drift on what the three modes mean.
+export type AiCloneChatMode = 'off' | 'draft' | 'auto_send'
+
+/** One connected Beeper account (a network the user is signed into — WhatsApp,
+ *  Telegram, iMessage, etc. — Beeper is the aggregation layer across all of
+ *  them, so this is the only per-network surface Omi needs). */
+export type AiCloneAccountSummary = {
+  accountID: string
+  network: string
+  displayName: string
+}
+
+/** Whether Omi can currently reach Beeper Desktop with a working token. */
+export type AiCloneStatus = {
+  connected: boolean
+  accounts: AiCloneAccountSummary[]
+  /** Set when `connected` is false and a token IS stored — i.e. the token was
+   *  rejected or Beeper Desktop isn't running, not simply "never connected". */
+  error?: string
+}
+
+export type AiCloneChatSummary = {
+  chatID: string
+  displayName: string
+  network: string
+  type: 'single' | 'group'
+  mode: AiCloneChatMode
+}
+
+export type AiClonePendingDraft = {
+  id: string
+  chatID: string
+  chatDisplayName: string
+  incomingMessageText: string
+  draftText: string
+  createdAt: number
+}
+
+/** Emitted when a poll finds a new inbound message on an opted-in chat. The
+ *  renderer owns the authenticated model-call path (useChat.ts's
+ *  callAgentLLM), so main hands over an already-built prompt rather than
+ *  calling an LLM itself — it just assembles the context (persona, recent
+ *  history, the incoming message) via personaDraftPrompt.ts. */
+export type AiCloneIncomingMessageEvent = {
+  chatID: string
+  chatDisplayName: string
+  mode: AiCloneChatMode
+  incomingMessageText: string
+  /** The Beeper message id and its epoch-ms timestamp. Echoed back in
+   *  AiCloneSubmitDraftArgs so main only advances that chat's read cursor
+   *  once processing for THIS specific message is confirmed — not
+   *  optimistically at poll time. See ipc/aiClone.ts's cursor-advancement
+   *  comment for why. */
+  messageID: string
+  messageTimestamp: number
+  /** Flattened prompt text (system + user context) ready for a single-string
+   *  completion call — see personaDraftPrompt.buildDraftPrompt. */
+  promptText: string
+}
+
+export type AiCloneSubmitDraftArgs = {
+  chatID: string
+  chatDisplayName: string
+  incomingMessageText: string
+  draftText: string
+  messageID: string
+  messageTimestamp: number
+}
+
+/** Outcome of aiCloneSubmitDraft: what actually happened to the drafted reply. */
+export type AiCloneSubmitDraftResult = {
+  action: 'sent' | 'queued_for_review' | 'skipped'
+  draft?: AiClonePendingDraft
+}
+
 /** Whether a Codex OpenAI API key is stored (never carries the key itself). */
 export type CodexKeyStatus = { hasKey: boolean }
 
@@ -1710,7 +1806,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1804,7 +1906,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
@@ -2535,10 +2644,8 @@ export type MeetingSettings = {
 export type MeetingToastPayload = {
   meetingId: string
   appName: string
-  /** Ask, startup progress, confirmed live capture, or a retryable startup failure. */
-  kind: 'ask' | 'starting' | 'capturing' | 'error'
-  /** Distinguishes a failed start, interrupted capture, and final-save failure. */
-  errorKind?: 'startup' | 'runtime' | 'save'
+  /** 'ask' → "Meeting detected — start capturing?"; 'capturing' → live notice. */
+  kind: 'ask' | 'capturing'
   /** Show the one-time first-run hint line. */
   firstRun?: boolean
 }
