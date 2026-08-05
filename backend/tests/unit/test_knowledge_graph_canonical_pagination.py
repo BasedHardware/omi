@@ -315,9 +315,10 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert "stale-generation" not in {memory_id for refs in db.assertion_ref_pages for memory_id in refs}
 
 
-def test_canonical_graph_separates_unlinked_canonical_memory_from_assertion_graph(monkeypatch):
+def test_canonical_graph_returns_every_canonical_memory_as_a_catalog_record(monkeypatch):
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
     linked_item, linked_assertion = _assertion_and_item("linked", 1, updated_at=NOW.replace(minute=1))
+    linked_item._payload["content"] = "A durable canonical memory with a verified relationship."
     unlinked_updated_at = NOW.replace(minute=2)
     unlinked_item, _unlinked_assertion = _assertion_and_item("unlinked", 2, updated_at=unlinked_updated_at)
     unlinked_item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
@@ -337,7 +338,16 @@ def test_canonical_graph_separates_unlinked_canonical_memory_from_assertion_grap
             "memory_ids": ["unlinked"],
             "created_at": unlinked_updated_at,
             "updated_at": unlinked_updated_at,
-        }
+        },
+        {
+            "id": "memory:linked",
+            "label": "A durable canonical memory with a verified relationship.",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["linked"],
+            "created_at": NOW.replace(minute=1),
+            "updated_at": NOW.replace(minute=1),
+        },
     ]
 
 
