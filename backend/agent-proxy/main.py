@@ -39,6 +39,7 @@ from utils.executors import (
 )
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import (
+    SESSION_LEASE_TTL_SECONDS,
     claim_session_lease,
     heartbeat_session_lease,
     reconcile_requested,
@@ -999,6 +1000,7 @@ async def agent_ws(websocket: WebSocket):
     active_vm_ws: Any = None
 
     async def session_lease_heartbeat() -> None:
+        consecutive_failures_started_at: float | None = None
         while True:
             await asyncio.sleep(30)
             try:
@@ -1006,10 +1008,43 @@ async def agent_ws(websocket: WebSocket):
             except asyncio.CancelledError:
                 raise
             except Exception:
-                # A failed read is not evidence that the lease is gone. Keep the
-                # healthy relay alive and retry until Firestore confirms loss.
+                # A transient Firestore failure is not evidence that the lease
+                # is gone.  However, if heartbeat errors persist longer than the
+                # lease TTL, the Firestore record will expire and the reconciler
+                # can see zero active sessions while the WebSocket stays open.
+                # Fail closed before that happens.
+                now = time.monotonic()
+                if consecutive_failures_started_at is None:
+                    consecutive_failures_started_at = now
+                elif now - consecutive_failures_started_at >= SESSION_LEASE_TTL_SECONDS:
+                    logger.error(
+                        "[agent-proxy] uid=%s session lease heartbeat failed for %ds (>= TTL %ds); failing closed",
+                        uid,
+                        int(now - consecutive_failures_started_at),
+                        SESSION_LEASE_TTL_SECONDS,
+                    )
+                    lease_lost.set()
+                    await _send_startup_event(
+                        websocket,
+                        uid,
+                        {
+                            "type": "error",
+                            "code": "agent_vm_draining",
+                            "state": "draining",
+                            "retryable": True,
+                            "message": "Your agent is being updated. Please retry shortly.",
+                        },
+                    )
+                    if active_vm_ws is not None:
+                        try:
+                            await active_vm_ws.close()
+                        except Exception:
+                            pass
+                    await _close_client(websocket, uid, 1013, "Agent VM is draining")
+                    return
                 logger.warning(f"[agent-proxy] uid={uid} session lease heartbeat unavailable", exc_info=True)
                 continue
+            consecutive_failures_started_at = None
             if alive:
                 continue
             lease_lost.set()

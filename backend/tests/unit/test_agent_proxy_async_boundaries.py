@@ -383,6 +383,72 @@ async def test_transient_lease_heartbeat_error_retries_then_confirmed_loss_drain
 
 
 @pytest.mark.asyncio
+async def test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires(agent_proxy, monkeypatch):
+    """If the heartbeat errors persistently beyond the lease TTL, the session
+    must close rather than keep the WebSocket open while the Firestore record
+    can expire invisibly to the reconciler."""
+    websocket = _IdleAgentWebSocket()
+    vm_ws = _IdleVMProtocol()
+    heartbeat_calls = []
+    released = []
+    real_sleep = asyncio.sleep
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def connect(*_args, **_kwargs):
+        return vm_ws
+
+    heartbeat_count = 0
+
+    async def task_controlled_sleep(seconds):
+        nonlocal heartbeat_count
+        task = asyncio.current_task()
+        if task is not None and task.get_name().endswith(":lease-heartbeat"):
+            heartbeat_count += 1
+            # Simulate elapsed time exceeding the TTL on the second heartbeat
+            # iteration so the fail-closed guard triggers.
+            if heartbeat_count >= 2:
+                monkeypatch.setattr(
+                    agent_proxy.time, "monotonic", lambda: float(heartbeat_count * 100)
+                )
+            await real_sleep(0)
+            return
+        await asyncio.Event().wait()
+
+    def heartbeat(uid, lease_id):
+        heartbeat_calls.append((uid, lease_id))
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: True)
+    monkeypatch.setattr(agent_proxy, "heartbeat_session_lease", heartbeat)
+    monkeypatch.setattr(agent_proxy, "release_session_lease", lambda uid, lease_id: released.append((uid, lease_id)))
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _HealthyProxyHTTPClient)
+    monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
+    monkeypatch.setattr(agent_proxy.asyncio, "sleep", task_controlled_sleep)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert len(heartbeat_calls) >= 2
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+    assert vm_ws.closed is True
+
+
+@pytest.mark.asyncio
 async def test_first_connect_without_vm_returns_typed_retryable_not_ready(agent_proxy, monkeypatch):
     websocket = _AgentWebSocket()
 

@@ -57,6 +57,11 @@ def test_production_workflow_stages_release_renderer_before_checkouting_admitted
 
     assert 'cp .workflow-source/backend/scripts/agent_vm_release.py "$controls/backend/scripts/"' in workflow
     assert 'python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/agent_vm_release.py"' in workflow
+    # The reconciler deploy must be guarded so a pre-reconciler release_sha
+    # does not silently leave a stale or broken Cloud Run Job image.
+    assert "AGENT_VM_RECONCILER_AVAILABLE" in workflow
+    assert "git cat-file -e" in workflow
+    assert "backend/jobs/agent_vm_reconciler.py" in workflow
 
 
 def test_scheduler_apply_resumes_existing_trigger_then_validates_exact_contract():
@@ -77,7 +82,10 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped()
         "compute.disks.get,compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
         in script
     )
-    assert "Agent VM reconciler scope" in script
+    assert "Agent VM reconciler instance scope" in script
+    assert "Agent VM reconciler disk scope" in script
+    assert "compute.googleapis.com/Disk" in script
+    assert "disks/omi-agent-" in script
     assert "instances/omi-agent-" in script
     assert "roles/storage.objectViewer" in script
     assert "roles/iam.serviceAccountUser" in script

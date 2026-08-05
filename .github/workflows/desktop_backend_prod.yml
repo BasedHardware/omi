@@ -525,8 +525,20 @@ jobs:
             --expected-contract-version="$CHAT_CONTRACT_VERSION" \
             --evidence-path=artifacts/desktop-backend-prod-serving.json
 
-      - name: Deploy Agent VM reconciler Cloud Run Job
+      - name: Verify Agent VM reconciler module exists in source
         if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
+        env:
+          RELEASE_SHA: ${{ steps.admitted-source.outputs.source_sha }}
+        run: |
+          if ! git cat-file -e "$RELEASE_SHA:backend/jobs/agent_vm_reconciler.py" 2>/dev/null; then
+            echo "::warning title=Agent VM reconciler skipped::Release SHA $RELEASE_SHA predates the reconciler module; skipping Cloud Run Job deploy."
+            echo "AGENT_VM_RECONCILER_AVAILABLE=false" >> "$GITHUB_ENV"
+          else
+            echo "AGENT_VM_RECONCILER_AVAILABLE=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Deploy Agent VM reconciler Cloud Run Job
+        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != '' && env.AGENT_VM_RECONCILER_AVAILABLE == 'true'
         uses: google-github-actions/deploy-cloudrun@v3
         with:
           job: ${{ env.AGENT_VM_RECONCILER_JOB }}
@@ -602,6 +614,7 @@ jobs:
             "${{ steps.agent-vm-release.outputs.manifest_uri }}" \
             "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
             --if-generation-match="$(cat "$RUNNER_TEMP/agent-vm-active-previous.generation")"
+          echo "AGENT_VM_ACTIVE_POINTER_MUTATED=true" >> "$GITHUB_ENV"
           activated_generation="$(gcloud storage objects describe \
             "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" --format='value(generation)')"
           gcloud storage cp \
@@ -609,7 +622,6 @@ jobs:
             "$RUNNER_TEMP/agent-vm-active-activated.json"
           cmp -s "$RUNNER_TEMP/agent-vm-active-activated.json" "$RUNNER_TEMP/agent-vm-release.json"
           echo "$activated_generation" > "$RUNNER_TEMP/agent-vm-active-activated.generation"
-          echo "AGENT_VM_ACTIVE_POINTER_MUTATED=true" >> "$GITHUB_ENV"
           echo "DESKTOP_BACKEND_PROMOTION_COMPLETED=true" >> "$GITHUB_ENV"
           echo "Activated Agent VM release ${{ steps.admitted-source.outputs.source_sha }} after the reconciler job was deployed." >> "$GITHUB_STEP_SUMMARY"
 

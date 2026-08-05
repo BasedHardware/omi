@@ -40,7 +40,14 @@ fi
 
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
-  --condition="title=Agent VM reconciler scope,description=Only omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Instance' && resource.name.startsWith('projects/${project}/zones/${zone}/instances/omi-agent-')"
+  --condition="title=Agent VM reconciler instance scope,description=Only omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Instance' && resource.name.startsWith('projects/${project}/zones/${zone}/instances/omi-agent-')"
+# Boot-image drift verification reads each VM's boot disk via compute.disks.get.
+# Disk reads are evaluated as compute.googleapis.com/Disk resources, so the
+# instance-scoped condition above does not cover them.  Agent VM boot disks are
+# auto-generated from the instance name, so the same omi-agent- prefix applies.
+gcloud projects add-iam-policy-binding "$project" \
+  --member="serviceAccount:${gsa}" --role="$role" \
+  --condition="title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$operations_role"
 gcloud projects add-iam-policy-binding "$project" --member="serviceAccount:${gsa}" --role=roles/datastore.user
