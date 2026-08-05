@@ -22,6 +22,8 @@ from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
+import httpx
+import openai
 import pytest
 
 from llm_gateway.gateway.errors import GatewayCredentialFailureError, GatewayProviderFailureError
@@ -653,14 +655,49 @@ def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429
     assert sensitive_provider_body not in caplog.text
 
 
+def test_unwrapped_openai_byok_rate_limit_reaches_conversation_composition(monkeypatch, caplog):
+    """The production SDK shape must preserve the actionable BYOK response."""
+    sensitive_provider_body = 'provider-body-with-api-key-and-transcript'
+    conversation = MagicMock()
+    conversation.source = ConversationSource.phone
+    conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.photos = []
+    conversation.external_data = None
+    conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    conversation.finished_at = datetime(2026, 8, 4, 0, 1, tzinfo=timezone.utc)
+
+    sdk_error = openai.RateLimitError(
+        sensitive_provider_body,
+        response=httpx.Response(429, request=httpx.Request('POST', 'http://gateway.test/v1/chat/completions')),
+        body={
+            'code': 'credential_failure',
+            'failure_class': 'byok_rate_limit',
+            'message': sensitive_provider_body,
+        },
+    )
+    monkeypatch.setattr(process_conversation, 'should_discard_conversation', MagicMock(return_value=False))
+    monkeypatch.setattr(process_conversation, 'get_transcript_structure', MagicMock(side_effect=sdk_error))
+
+    with pytest.raises(HTTPException) as exc_info:
+        process_conversation._get_structured('uid', 'en', conversation)
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail == {
+        'code': 'byok_rate_limit',
+        'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
+    }
+    assert sensitive_provider_body not in str(exc_info.value.detail)
+    assert sensitive_provider_body not in caplog.text
+
+
 @pytest.mark.parametrize(
     'error',
     [
-        GatewayCredentialFailureError('byok quota', failure_class=FailureClass.BYOK_QUOTA),
-        GatewayProviderFailureError('omi paid quota', failure_class=FailureClass.PROVIDER_429_OMI_PAID),
+        GatewayCredentialFailureError('provider-body-with-api-key', failure_class=FailureClass.BYOK_QUOTA),
+        GatewayProviderFailureError('provider-body-with-transcript', failure_class=FailureClass.PROVIDER_429_OMI_PAID),
     ],
 )
-def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch, error):
+def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch, caplog, error):
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
@@ -677,6 +714,8 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
 
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == 'Error processing conversation, please try again later'
+    assert type(error).__name__ in caplog.text
+    assert str(error) not in caplog.text
 
 
 def test_no_umbrella_conversation_processing_tracking():

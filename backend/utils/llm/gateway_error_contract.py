@@ -23,9 +23,10 @@ def is_byok_rate_limit_gateway_error(error: BaseException) -> bool:
     """Return whether ``error`` is the gateway's typed BYOK rate-limit failure.
 
     Gateway code may be raised directly in in-process tests, while production
-    callers receive the gateway's OpenAI-compatible error envelope through the
-    SDK. Require both the credential error code and the explicit failure class
-    so generic provider 429s and other BYOK credential failures remain distinct.
+    callers receive either the gateway's OpenAI-compatible error envelope or
+    its unwrapped ``error`` member through the SDK. Require both the credential
+    error code and the explicit failure class so generic provider 429s and other
+    BYOK credential failures remain distinct.
     """
     if (
         _string_value(getattr(error, 'code', None)) == GATEWAY_CREDENTIAL_FAILURE_CODE
@@ -39,7 +40,7 @@ def is_byok_rate_limit_gateway_error(error: BaseException) -> bool:
     body = getattr(error, 'body', None)
     if not isinstance(body, Mapping):
         return False
-    gateway_error = body.get('error')
+    gateway_error = body.get('error', body)
     if not isinstance(gateway_error, Mapping):
         return False
     return (
@@ -61,10 +62,11 @@ def conversation_processing_http_exception(error: BaseException) -> HTTPExceptio
 
     The caller is the authoritative conversation composition boundary. Logging
     the BYOK case by its bounded class avoids leaking provider error bodies,
-    while every other exception retains the existing generic response and log.
+    while every other exception retains the existing generic response and a
+    privacy-safe log entry.
     """
     if is_byok_rate_limit_gateway_error(error):
         logger.warning('Conversation processing halted because the configured BYOK provider is rate limited')
         return HTTPException(status_code=429, detail=BYOK_RATE_LIMIT_ERROR_DETAIL)
-    logger.error(error)
+    logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)

@@ -166,12 +166,13 @@ def test_byok_throttling_is_not_reported_as_a_credential_rejection(monkeypatch, 
     # BYOK throttling is terminal: the gateway must not use an Omi-paid or LKG fallback.
     assert len(provider.calls) == 1
 
-    sdk_error = openai.RateLimitError(
-        'safe gateway error',
-        response=httpx.Response(429, request=httpx.Request('POST', 'http://gateway.test/v1/chat/completions')),
-        body={'error': error},
-    )
-    assert is_byok_rate_limit_gateway_error(sdk_error) is (failure_class == FailureClass.BYOK_RATE_LIMIT)
+    for body in (error, {'error': error}):
+        sdk_error = openai.RateLimitError(
+            'safe gateway error',
+            response=httpx.Response(429, request=httpx.Request('POST', 'http://gateway.test/v1/chat/completions')),
+            body=body,
+        )
+        assert is_byok_rate_limit_gateway_error(sdk_error) is (failure_class == FailureClass.BYOK_RATE_LIMIT)
 
 
 def test_byok_auth_failure_still_reports_a_credential_rejection(monkeypatch):
