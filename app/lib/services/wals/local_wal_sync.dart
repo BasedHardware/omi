@@ -548,9 +548,8 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// retryable Pending action.
   @override
   Future<void> deleteAllCorruptedWals() async {
-    final corruptedWals = _wals
-        .where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow)
-        .toList();
+    final corruptedWals =
+        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
@@ -618,6 +617,10 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     int batchesCompleted = 0;
     int batchesFailed = 0;
+    // Every selected batch consumes the grace budget — including upload failures
+    // and recovery-window rejections — so a transient outage cannot walk the
+    // whole backlog during a screen-lock pass (#7221 / cubic P1).
+    int batchesAttempted = 0;
     int corruptedCount = 0;
     int filesUploaded = 0;
     final totalFilesToUpload = wals.length;
@@ -639,16 +642,16 @@ class LocalWalSyncImpl implements LocalWalSync {
           .toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
-      if (maxBatches != null && batchesCompleted >= maxBatches) {
-        Logger.debug('LocalWalSync: stopping after $maxBatches batch(es) (screen-lock grace)');
+      if (maxBatches != null && batchesAttempted >= maxBatches) {
+        Logger.debug('LocalWalSync: stopping after $maxBatches batch attempt(s) (screen-lock grace)');
         break;
       }
       final batch = nextSyncUploadBatch(pending, batchNowSeconds);
       if (batch.isEmpty) break;
+      batchesAttempted++;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture =
-          !unclaimableConversationIds.contains(batchConversationId) &&
+      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),

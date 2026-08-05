@@ -158,6 +158,56 @@ void main() {
       expect(harness.discoveryPasses, 0);
     });
 
+    test('pending foregrounded wake beats screen-lock grace so unlock still discovers (#7221)', () async {
+      final harness = _TransferHarness(cloudGraceDrain: true);
+      addTearDown(harness.dispose);
+      final reconcileGate = Completer<void>();
+      harness.reconcileGate = reconcileGate;
+
+      harness.coordinator.setForeground(true);
+      final firstWake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      expect(harness.reconcilePasses, 1);
+
+      // While the first pass is gated, queue grace then unlock/foreground.
+      harness.coordinator.setForeground(false);
+      harness.coordinator.wake(WakeTrigger.screenLockedGrace);
+      harness.coordinator.setForeground(true);
+      harness.coordinator.wake(WakeTrigger.foregrounded);
+
+      reconcileGate.complete();
+      await firstWake;
+      await _settle();
+
+      // Second pass must be the full foreground transfer (BLE discover + drain),
+      // not another cloud-only grace pass.
+      expect(harness.discoveryPasses, greaterThanOrEqualTo(1));
+      expect(harness.drainPasses, greaterThanOrEqualTo(1));
+    });
+
+    test('pending deviceConnected wake beats screen-lock grace (#7221)', () async {
+      final harness = _TransferHarness(cloudGraceDrain: true);
+      addTearDown(harness.dispose);
+      final reconcileGate = Completer<void>();
+      harness.reconcileGate = reconcileGate;
+
+      harness.coordinator.setForeground(true);
+      final firstWake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+
+      harness.coordinator.setForeground(false);
+      harness.coordinator.wake(WakeTrigger.screenLockedGrace);
+      harness.coordinator.setForeground(true);
+      harness.coordinator.wake(WakeTrigger.deviceConnected);
+
+      reconcileGate.complete();
+      await firstWake;
+      await _settle();
+
+      expect(harness.discoveryPasses, greaterThanOrEqualTo(1));
+      expect(harness.drainPasses, greaterThanOrEqualTo(1));
+    });
+
     test('startup resumes a pending backlog once without loss or duplication', () async {
       final sharedBacklog = <String>['pending-wal'];
       final drainedWalIds = <String>[];
@@ -241,9 +291,9 @@ class _TransferHarness {
     List<String>? backlog,
     List<String>? drainedWalIds,
     bool cloudGraceDrain = false,
-  }) : _autoUploadEnabled = autoUploadEnabled,
-       backlog = backlog ?? <String>['wal-1'],
-       drainedWalIds = drainedWalIds ?? <String>[] {
+  })  : _autoUploadEnabled = autoUploadEnabled,
+        backlog = backlog ?? <String>['wal-1'],
+        drainedWalIds = drainedWalIds ?? <String>[] {
     coordinator = RecordingTransferCoordinator(
       reconcile: _reconcile,
       discover: _discover,

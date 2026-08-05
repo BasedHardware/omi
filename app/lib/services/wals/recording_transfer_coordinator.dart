@@ -34,17 +34,17 @@ class RecordingTransferDrainResult {
 
   /// Nothing eligible to drain (empty backlog). Not a retry signal.
   const RecordingTransferDrainResult.skipped()
-    : attempted = false,
-      failed = false,
-      needsReconciliation = false,
-      contended = false;
+      : attempted = false,
+        failed = false,
+        needsReconciliation = false,
+        contended = false;
 
   /// Drain could not run because another sync owned the seam. Retry later.
   const RecordingTransferDrainResult.contended()
-    : attempted = false,
-      failed = false,
-      needsReconciliation = false,
-      contended = true;
+      : attempted = false,
+        failed = false,
+        needsReconciliation = false,
+        contended = true;
 
   final bool attempted;
   final bool failed;
@@ -73,26 +73,26 @@ class RecordingTransferCoordinator {
     bool initiallyConnected = true,
     DateTime Function()? clock,
     RecordingTransferCooldownScheduler? scheduleCooldown,
-  }) : _reconcile = reconcile,
-       _discover = discover,
-       _refreshPending = refreshPending,
-       _drain = drain,
-       _cloudGraceDrain = cloudGraceDrain,
-       _autoUploadEnabled = autoUploadEnabled,
-       _clock = clock ?? DateTime.now,
-       _scheduleCooldown = scheduleCooldown {
+  })  : _reconcile = reconcile,
+        _discover = discover,
+        _refreshPending = refreshPending,
+        _drain = drain,
+        _cloudGraceDrain = cloudGraceDrain,
+        _autoUploadEnabled = autoUploadEnabled,
+        _clock = clock ?? DateTime.now,
+        _scheduleCooldown = scheduleCooldown {
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
   }
 
   RecordingTransferCoordinator._singleton()
-    : _reconcile = _noop,
-      _discover = _noop,
-      _refreshPending = _noop,
-      _drain = _skippedDrain,
-      _cloudGraceDrain = null,
-      _autoUploadEnabled = _disabled,
-      _clock = DateTime.now;
+      : _reconcile = _noop,
+        _discover = _noop,
+        _refreshPending = _noop,
+        _drain = _skippedDrain,
+        _cloudGraceDrain = null,
+        _autoUploadEnabled = _disabled,
+        _clock = DateTime.now;
 
   static final RecordingTransferCoordinator instance = RecordingTransferCoordinator._singleton();
 
@@ -223,6 +223,12 @@ class RecordingTransferCoordinator {
     // userRetry always wins so an explicit Sync tap is not coalesced away.
     if (existing == WakeTrigger.userRetry || incoming == WakeTrigger.userRetry) {
       return WakeTrigger.userRetry;
+    }
+    // Full transfer wakes beat screen-lock grace so unlock/reconnect still run
+    // BLE discovery + drain instead of another cloud-only pass (#7221 / cubic P2).
+    bool isFullTransferWake(WakeTrigger t) => t == WakeTrigger.foregrounded || t == WakeTrigger.deviceConnected;
+    if (isFullTransferWake(existing) || isFullTransferWake(incoming)) {
+      return isFullTransferWake(existing) ? existing : incoming;
     }
     // Prefer screen-lock cloud grace over quieter background wakes (#7221).
     if (existing == WakeTrigger.screenLockedGrace || incoming == WakeTrigger.screenLockedGrace) {
