@@ -84,9 +84,9 @@ def _now() -> str:
 
 
 def _project() -> str:
-    project = os.getenv("GCE_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
+    project = os.getenv("GCE_PROJECT_ID")
     if not project:
-        raise RuntimeError("GCE project is not configured")
+        raise RuntimeError("GCE_PROJECT_ID is required for Agent VM control")
     return project
 
 

@@ -19,14 +19,18 @@ from routers import (
     desktop_screen_crisp,
     desktop_tts_updates,
 )
-from utils.env_loader import load_backend_env
+from utils.env_loader import firebase_admin_options, load_backend_env
 from utils.http_client import close_all_clients
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    load_backend_env()
-    prepare_google_credentials()
+def _initialize_firebase_admin() -> None:
+    """Initialize token verification without selecting the Google data project.
+
+    Development serves production Firebase identities but runs its Cloud Run
+    workload (Firestore and Agent VM control) in the development GCP project.
+    ``firebase_admin_options`` therefore pins only Firebase Admin's token
+    audience; ADC continues to use ``GOOGLE_CLOUD_PROJECT`` independently.
+    """
     auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
     if auth_emulator_host:
         for adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
@@ -38,9 +42,16 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     elif service_account_json := os.environ.get("SERVICE_ACCOUNT_JSON"):
         service_account_info = json.loads(service_account_json)
         credentials = firebase_admin.credentials.Certificate(service_account_info)
-        firebase_admin.initialize_app(credentials)
+        firebase_admin.initialize_app(credentials, options=firebase_admin_options())
     else:
-        firebase_admin.initialize_app()
+        firebase_admin.initialize_app(options=firebase_admin_options())
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    load_backend_env()
+    prepare_google_credentials()
+    _initialize_firebase_admin()
     try:
         yield
     finally:
