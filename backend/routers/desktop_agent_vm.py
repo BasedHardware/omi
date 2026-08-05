@@ -16,6 +16,7 @@ import google.oauth2.id_token
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from google.cloud.firestore import DELETE_FIELD, transactional
+from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import users as users_db
@@ -478,31 +479,48 @@ def _verify_agent_vm_identity(token: str) -> dict[str, Any]:
     return claims
 
 
-def _compute_identity_fields(claims: dict[str, Any]) -> tuple[str, str, str, str]:
-    compute = claims.get("google.compute_engine")
+def _compute_identity_fields(claims: dict[str, Any]) -> tuple[str, str, str, str, str]:
+    google_claims = claims.get("google")
+    compute = google_claims.get("compute_engine") if isinstance(google_claims, dict) else None
     if not isinstance(compute, dict):
         raise ValueError("Agent VM identity token is not a full Compute Engine identity token")
     project = str(compute.get("project_id") or "")
     name = str(compute.get("instance_name") or "")
-    zone = str(compute.get("zone") or "").rsplit("/", 1)[-1]
+    zone = str(compute.get("zone") or "")
+    instance_id = str(compute.get("instance_id") or "")
     email = str(claims.get("email") or "")
-    if not project or not name or not zone or not email:
+    if not project or not name or not zone or not instance_id or not email or claims.get("email_verified") is not True:
         raise ValueError("Agent VM identity token is missing required Compute Engine claims")
-    if project != _project() or not re.fullmatch(r"omi-agent-[a-z0-9-]+", name):
+    if (
+        project != _project()
+        or not re.fullmatch(r"[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?", zone)
+        or not re.fullmatch(r"omi-agent-[a-z0-9-]+", name)
+        or not instance_id.isdigit()
+    ):
         raise ValueError("Agent VM identity token is outside the broker scope")
     expected_service_account = os.getenv("GCE_RUNTIME_SERVICE_ACCOUNT") or _service_account()
     if email != expected_service_account:
         raise ValueError("Agent VM identity token is not from the Agent VM runtime identity")
-    return project, zone, name, email
+    return project, zone, name, email, instance_id
 
 
 def _find_vm_owner(vm_name: str) -> tuple[str, dict[str, Any]] | None:
-    for snapshot in get_firestore_client().collection("users").stream():
+    snapshots = (
+        get_firestore_client()
+        .collection("users")
+        .where(filter=FieldFilter("agentVm.vmName", "==", vm_name))
+        .limit(2)
+        .stream()
+    )
+    owner: tuple[str, dict[str, Any]] | None = None
+    for snapshot in snapshots:
         data = snapshot.to_dict() or {}
         vm = data.get("agentVm")
         if isinstance(vm, dict) and vm.get("vmName") == vm_name:
-            return str(snapshot.id), vm
-    return None
+            if owner is not None:
+                raise ValueError("Agent VM name maps to multiple owners")
+            owner = str(snapshot.id), vm
+    return owner
 
 
 def _stop_broker_rate_allowed(request: Request) -> bool:
@@ -540,19 +558,24 @@ async def stop_self(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=401, detail="Missing VM identity")
     try:
         claims = await run_blocking(db_executor, _verify_agent_vm_identity, header[7:].strip())
-        project, zone, vm_name, _ = _compute_identity_fields(claims)
+        project, zone, vm_name, _, instance_id = _compute_identity_fields(claims)
         owner = await run_blocking(db_executor, _find_vm_owner, vm_name)
     except (RuntimeError, ValueError, KeyError) as exc:
         raise HTTPException(status_code=403, detail="Invalid Agent VM identity") from exc
     if owner is None:
         raise HTTPException(status_code=404, detail="Agent VM owner not found")
     uid, vm = owner
+    owner_zone = str(vm.get("zone") or "")
+    if not owner_zone or owner_zone != zone:
+        raise HTTPException(status_code=403, detail="Agent VM identity zone does not match its owner record")
     auth_token = str(vm.get("authToken") or "")
     if not auth_token or not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
         raise HTTPException(status_code=409, detail="Agent VM owner is no longer active")
     status, instance = await _instance(project, zone, vm_name)
     if instance is None:
         raise HTTPException(status_code=404, detail="Agent VM instance not found")
+    if str(instance.get("id") or "") != instance_id or str(instance.get("name") or "") != vm_name:
+        raise HTTPException(status_code=403, detail="Agent VM runtime identity does not match the live instance")
     if status == "RUNNING":
         await _stop_vm(project, vm_name, zone)
     return {"status": "stopping", "vmName": vm_name}

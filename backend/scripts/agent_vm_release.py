@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
+SERVICE_ACCOUNT = re.compile(r"^[^@\s]+@[^@\s]+\.iam\.gserviceaccount\.com$")
 
 
 def canonical_bytes(payload: Mapping[str, Any]) -> bytes:
@@ -63,6 +64,8 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
         raise ValueError("startupUri must use gs:// or storage.googleapis.com")
     if not SHA256.fullmatch(str(payload["startupSha256"])):
         raise ValueError("startupSha256 must be a lowercase SHA-256 digest")
+    if not SERVICE_ACCOUNT.fullmatch(str(payload["serviceAccount"])):
+        raise ValueError("serviceAccount must be a Google service-account email")
     if "manifestSha256" in payload:
         unsigned = dict(payload)
         declared = unsigned.pop("manifestSha256")

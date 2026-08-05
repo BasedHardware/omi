@@ -353,10 +353,14 @@ def test_stop_broker_rejects_identity_from_the_wrong_project_or_service_account(
         desktop_agent_vm._compute_identity_fields(
             {
                 "email": "runtime@project.iam.gserviceaccount.com",
-                "google.compute_engine": {
-                    "project_id": "other-project",
-                    "instance_name": "omi-agent-user",
-                    "zone": "projects/other-project/zones/us-central1-a",
+                "email_verified": True,
+                "google": {
+                    "compute_engine": {
+                        "project_id": "other-project",
+                        "instance_name": "omi-agent-user",
+                        "instance_id": "123456789",
+                        "zone": "us-central1-a",
+                    }
                 },
             }
         )
@@ -365,13 +369,138 @@ def test_stop_broker_rejects_identity_from_the_wrong_project_or_service_account(
         desktop_agent_vm._compute_identity_fields(
             {
                 "email": "other@project.iam.gserviceaccount.com",
-                "google.compute_engine": {
-                    "project_id": "project",
-                    "instance_name": "omi-agent-user",
-                    "zone": "projects/project/zones/us-central1-a",
+                "email_verified": True,
+                "google": {
+                    "compute_engine": {
+                        "project_id": "project",
+                        "instance_name": "omi-agent-user",
+                        "instance_id": "123456789",
+                        "zone": "us-central1-a",
+                    }
                 },
             }
         )
+
+
+def test_stop_broker_reads_the_full_nested_compute_identity(monkeypatch):
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+
+    assert desktop_agent_vm._compute_identity_fields(
+        {
+            "email": "runtime@project.iam.gserviceaccount.com",
+            "email_verified": True,
+            "google": {
+                "compute_engine": {
+                    "project_id": "project",
+                    "instance_name": "omi-agent-user",
+                    "instance_id": 123456789,
+                    "zone": "us-central1-a",
+                    "instance_creation_timestamp": 1785900000,
+                }
+            },
+        }
+    ) == ("project", "us-central1-a", "omi-agent-user", "runtime@project.iam.gserviceaccount.com", "123456789")
+
+
+def test_stop_broker_owner_lookup_is_a_bounded_indexed_query(monkeypatch):
+    calls = []
+    snapshot = type(
+        "Snapshot",
+        (),
+        {
+            "id": "uid",
+            "to_dict": lambda self: {"agentVm": {"vmName": "omi-agent-user", "zone": "us-central1-a"}},
+        },
+    )()
+
+    class Query:
+        def where(self, *, filter):
+            calls.append(("where", filter.field_path, filter.op_string, filter.value))
+            return self
+
+        def limit(self, count):
+            calls.append(("limit", count))
+            return self
+
+        def stream(self):
+            return iter([snapshot])
+
+    class Firestore:
+        def collection(self, name):
+            calls.append(("collection", name))
+            return Query()
+
+    monkeypatch.setattr(desktop_agent_vm, "get_firestore_client", Firestore)
+
+    uid, vm = desktop_agent_vm._find_vm_owner("omi-agent-user") or (None, None)
+
+    assert uid == "uid"
+    assert vm["vmName"] == "omi-agent-user"
+    assert calls == [
+        ("collection", "users"),
+        ("where", "agentVm.vmName", "==", "omi-agent-user"),
+        ("limit", 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stop_broker_binds_token_zone_and_instance_id_to_owner_and_runtime(monkeypatch):
+    class Request:
+        headers = {"authorization": "Bearer identity-token"}
+        client = None
+
+    claims = {
+        "email": "runtime@project.iam.gserviceaccount.com",
+        "email_verified": True,
+        "google": {
+            "compute_engine": {
+                "project_id": "project",
+                "instance_name": "omi-agent-user",
+                "instance_id": "123456789",
+                "zone": "us-central1-a",
+            }
+        },
+    }
+
+    async def direct_run_blocking(_executor, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_stop_broker_rate_allowed", lambda _request: True)
+    monkeypatch.setattr(desktop_agent_vm, "_verify_agent_vm_identity", lambda _token: claims)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_find_vm_owner",
+        lambda _name: (
+            "uid",
+            {"vmName": "omi-agent-user", "zone": "us-central1-b", "authToken": "owner-token"},
+        ),
+    )
+
+    with pytest.raises(HTTPException, match="zone does not match") as zone_error:
+        await desktop_agent_vm.stop_self(Request())
+    assert zone_error.value.status_code == 403
+
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_find_vm_owner",
+        lambda _name: (
+            "uid",
+            {"vmName": "omi-agent-user", "zone": "us-central1-a", "authToken": "owner-token"},
+        ),
+    )
+    monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: True)
+
+    async def wrong_instance(*_args):
+        return "RUNNING", {"id": "987654321", "name": "omi-agent-user"}
+
+    monkeypatch.setattr(desktop_agent_vm, "_instance", wrong_instance)
+    with pytest.raises(HTTPException, match="runtime identity does not match") as instance_error:
+        await desktop_agent_vm.stop_self(Request())
+    assert instance_error.value.status_code == 403
 
 
 def test_stop_broker_rate_limit_is_bounded(monkeypatch):

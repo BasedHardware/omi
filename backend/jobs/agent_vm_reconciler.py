@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ from typing import Any, Mapping, Sequence
 
 import firebase_admin
 from google.cloud import storage
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
 from services.agent_vm_lifecycle import (
@@ -43,6 +46,7 @@ from services.agent_vm_lifecycle import (
     update_vm_reconcile,
     validate_release_manifest,
 )
+from utils.observability.fallback import record_fallback
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -54,6 +58,10 @@ ROLLOUT_PHASES: dict[str, tuple[int, int, str | None]] = {
     "remainder": (100, 5, None),
 }
 ROLLOUT_STABLE_RUNS = 3
+OWNER_DISCOVERY_LIMIT = 10_000
+OWNER_FALLBACK_SCAN_LIMIT = 1_000
+FAILED_JOB_STATES = {"retry", "quarantined", "missing", "stale", "recreate_required"}
+_IMMUTABLE_BOOT_IMAGE = re.compile(r"^projects/[^/]+/global/images/[^/]+$")
 
 
 @dataclass(frozen=True)
@@ -96,32 +104,86 @@ def load_active_release() -> tuple[AgentVmRelease, dict[str, Any]]:
     if not isinstance(raw, dict):
         raise ValueError("active Agent VM release must be a JSON object")
     release = validate_release_manifest(raw)
+    _requested_rollout_phase(raw, release.environment)
     return release, raw
 
 
+def _bounded_limit(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value < 1:
+        raise ValueError(f"{name} must be positive")
+    return value
+
+
+def _owner_from_snapshot(snapshot: Any) -> tuple[str, dict[str, Any]] | None:
+    data = snapshot.to_dict() or {}
+    vm = data.get("agentVm")
+    if isinstance(vm, dict) and isinstance(vm.get("vmName"), str) and isinstance(vm.get("authToken"), str):
+        return str(snapshot.id), vm
+    return None
+
+
 def _owners() -> list[tuple[str, dict[str, Any]]]:
-    owners: list[tuple[str, dict[str, Any]]] = []
-    for snapshot in get_firestore_client().collection("users").stream():
-        data = snapshot.to_dict() or {}
-        vm = data.get("agentVm")
-        if isinstance(vm, dict) and isinstance(vm.get("vmName"), str) and isinstance(vm.get("authToken"), str):
-            owners.append((str(snapshot.id), vm))
-    return owners
+    """Discover owners through the existing nested user field, with a bounded legacy fallback.
+
+    The targeted query uses Firestore's automatic single-field index and reads
+    Agent VM owners rather than every user.  Older fakes/emulators that cannot
+    execute it may use the bounded scan; saturation fails the run so owners are
+    never silently omitted.
+    """
+    users = get_firestore_client().collection("users")
+    owner_limit = _bounded_limit("AGENT_VM_OWNER_DISCOVERY_LIMIT", OWNER_DISCOVERY_LIMIT)
+    try:
+        snapshots = list(users.where(filter=FieldFilter("agentVm.vmName", ">=", "")).limit(owner_limit + 1).stream())
+    except Exception as exc:
+        fallback_limit = _bounded_limit("AGENT_VM_OWNER_FALLBACK_SCAN_LIMIT", OWNER_FALLBACK_SCAN_LIMIT)
+        record_fallback(
+            component="firestore_read",
+            from_mode="agent_vm_owner_query",
+            to_mode="bounded_users_scan",
+            reason="capability_mismatch",
+            outcome="degraded",
+            log=logger,
+        )
+        logger.info("Bounded Agent VM owner compatibility scan limit: %d", fallback_limit)
+        snapshots = list(users.limit(fallback_limit + 1).stream())
+        if len(snapshots) > fallback_limit:
+            raise RuntimeError(
+                "bounded Agent VM owner compatibility scan exhausted; targeted Firestore query is required"
+            ) from exc
+    if len(snapshots) > owner_limit:
+        raise RuntimeError(f"Agent VM owner discovery exceeded configured limit {owner_limit}")
+    return [owner for snapshot in snapshots if (owner := _owner_from_snapshot(snapshot)) is not None]
+
+
+def _requested_rollout_phase(raw: Mapping[str, Any], environment: str) -> str:
+    rollout = raw.get("rollout")
+    if rollout is not None and not isinstance(rollout, Mapping):
+        raise ValueError("rollout must be an object")
+    rollout_map = rollout if isinstance(rollout, Mapping) else {}
+    requested = rollout_map.get("phase") or ("sentinel" if environment == "production" else "remainder")
+    if not isinstance(requested, str) or requested not in ROLLOUT_PHASES:
+        raise ValueError(f"unsupported Agent VM rollout phase: {requested!r}")
+    return requested
 
 
 def _rollout_spec(raw: Mapping[str, Any], phase: str) -> tuple[int, int]:
+    if phase not in ROLLOUT_PHASES:
+        raise ValueError(f"unsupported Agent VM rollout phase: {phase!r}")
     rollout = raw.get("rollout")
     rollout_map = rollout if isinstance(rollout, Mapping) else {}
-    phase_target, phase_concurrency, _ = ROLLOUT_PHASES.get(phase, (100, 5, None))
-    target = (
-        phase_target
-        if phase in ROLLOUT_PHASES
-        else rollout_map.get("targetPercent", os.getenv("AGENT_VM_ROLLOUT_TARGET_PERCENT", phase_target))
+    phase_target, phase_concurrency, _ = ROLLOUT_PHASES[phase]
+    target = os.getenv(
+        "AGENT_VM_ROLLOUT_TARGET_PERCENT",
+        rollout_map.get("targetPercent", phase_target),
     )
-    concurrency = (
-        phase_concurrency
-        if phase in ROLLOUT_PHASES
-        else rollout_map.get("maxConcurrency", os.getenv("AGENT_VM_RECONCILER_MAX_CONCURRENCY", phase_concurrency))
+    concurrency = os.getenv(
+        "AGENT_VM_RECONCILER_MAX_CONCURRENCY",
+        rollout_map.get("maxConcurrency", phase_concurrency),
     )
     try:
         target_percent = max(0, min(100, int(target)))
@@ -137,12 +199,12 @@ def _rollout_phase(environment: str, release_id: str, raw: Mapping[str, Any], *,
     snapshot = ref.get()
     current = snapshot.to_dict() if snapshot.exists else {}
     current_map = current if isinstance(current, dict) else {}
-    if current_map.get("releaseId") == release_id and current_map.get("phase") in ROLLOUT_PHASES:
-        return str(current_map["phase"])
-    rollout = raw.get("rollout")
-    rollout_map = rollout if isinstance(rollout, Mapping) else {}
-    requested = str(rollout_map.get("phase") or ("sentinel" if environment == "production" else "remainder"))
-    phase = requested if requested in ROLLOUT_PHASES else "remainder"
+    if current_map.get("releaseId") == release_id:
+        current_phase = current_map.get("phase")
+        if current_phase not in ROLLOUT_PHASES:
+            raise ValueError(f"stored Agent VM rollout phase is invalid: {current_phase!r}")
+        return str(current_phase)
+    phase = _requested_rollout_phase(raw, environment)
     if persist:
         ref.set(
             {"releaseId": release_id, "phase": phase, "successfulRuns": 0, "updatedAt": time.time()},
@@ -165,7 +227,7 @@ def _advance_rollout(
     current_map = current if isinstance(current, dict) else {}
     if current_map.get("releaseId") != release_id or current_map.get("phase") != phase:
         return
-    successful = (bool(results) or selected_count == 0) and all(result.state == "ready" for result in results)
+    successful = bool(results) and selected_count == len(results) and all(result.state == "ready" for result in results)
     runs = int(current_map.get("successfulRuns", 0) or 0) + 1 if successful else 0
     next_phase = ROLLOUT_PHASES[phase][2]
     if next_phase and runs >= ROLLOUT_STABLE_RUNS:
@@ -183,6 +245,74 @@ def _advance_rollout(
             },
         },
         merge=True,
+    )
+
+
+def _select_rollout_owners(
+    owners: Sequence[tuple[str, dict[str, Any]]], release_id: str, target_percent: int
+) -> list[tuple[str, dict[str, Any]]]:
+    selected = [(uid, vm) for uid, vm in owners if rollout_selected(uid, release_id, target_percent)]
+    if owners and target_percent > 0 and not selected:
+        # A percentage cohort can round to zero in a small fleet.  Select one
+        # deterministic sentinel so advancement always has observed VM evidence.
+        selected = [min(owners, key=lambda owner: hashlib.sha256(f"{release_id}:{owner[0]}".encode()).digest())]
+    return selected
+
+
+def _canonical_image_ref(value: str) -> str:
+    marker = "/compute/v1/"
+    return value.split(marker, 1)[1] if marker in value else value.lstrip("/")
+
+
+async def _boot_image_drift(
+    api: GceAgentVmClient, instance: Mapping[str, Any], release: AgentVmRelease
+) -> tuple[str, str] | None:
+    desired = _canonical_image_ref(release.boot_image)
+    if not _IMMUTABLE_BOOT_IMAGE.fullmatch(desired):
+        return "boot_image_manifest_not_immutable", "unknown"
+    disks = instance.get("disks")
+    boot_disk = (
+        next(
+            (disk for disk in disks if isinstance(disk, Mapping) and disk.get("boot") is True),
+            None,
+        )
+        if isinstance(disks, list)
+        else None
+    )
+    source = boot_disk.get("source") if isinstance(boot_disk, Mapping) else None
+    if not isinstance(source, str) or not source:
+        return "boot_image_source_unverifiable", "unknown"
+    if not source.startswith("http"):
+        source = f"https://compute.googleapis.com/compute/v1/{source.lstrip('/')}"
+    response = await api.request("GET", source)
+    response.raise_for_status()
+    payload = response.json()
+    actual_raw = payload.get("sourceImage") if isinstance(payload, Mapping) else None
+    if not isinstance(actual_raw, str) or not actual_raw:
+        return "boot_image_source_unverifiable", "unknown"
+    actual = _canonical_image_ref(actual_raw)
+    if actual != desired:
+        return "boot_image_recreate_required", actual
+    return None
+
+
+async def _update_reconcile(
+    uid: str,
+    vm_name: str,
+    auth_token: str,
+    owner: str,
+    fields: Mapping[str, Any],
+    *,
+    vm_fields: Mapping[str, Any] | None = None,
+) -> bool:
+    return await asyncio.to_thread(
+        update_vm_reconcile,
+        uid,
+        vm_name,
+        auth_token,
+        owner,
+        fields,
+        vm_fields=vm_fields,
     )
 
 
@@ -204,19 +334,26 @@ async def reconcile_one(
         if instance is None:
             return ReconcileResult(uid, "missing", "GCE instance not found")
         reasons = drift_reasons(instance, release)
+        boot_drift = await _boot_image_drift(api, instance, release)
+        if boot_drift:
+            reasons.append("boot_image")
         if str(instance.get("status")) == "RUNNING":
-            ip = api.instance_ip(instance)
-            if not ip or not await api.runtime_is_current(ip, auth_token, release):
+            private_ip = api.private_instance_ip(instance)
+            if not private_ip or not await api.runtime_is_current(private_ip, auth_token, release):
                 reasons.append("runtime")
         return ReconcileResult(uid, "drift" if reasons else "ready", ",".join(sorted(set(reasons))))
-    if not claim_vm_lease(uid, vm_name, auth_token, owner, release.release_id):
+    reconcile_raw = vm.get("reconcile")
+    reconcile_state = reconcile_raw if isinstance(reconcile_raw, Mapping) else {}
+    if reconcile_state.get("state") == "quarantined" and reconcile_state.get("releaseId") == release.release_id:
+        return ReconcileResult(uid, "quarantined", str(reconcile_state.get("lastError") or "operator action required"))
+    if not await asyncio.to_thread(claim_vm_lease, uid, vm_name, auth_token, owner, release.release_id):
         return ReconcileResult(uid, "busy")
 
     now = time.time()
     try:
         instance = await api.get_instance(vm_name)
         if instance is None:
-            if not update_vm_reconcile(
+            if not await _update_reconcile(
                 uid,
                 vm_name,
                 auth_token,
@@ -225,15 +362,38 @@ async def reconcile_one(
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording missing VM")
             return ReconcileResult(uid, "missing", "GCE instance not found")
+        boot_drift = await _boot_image_drift(api, instance, release)
+        if boot_drift:
+            reason, actual = boot_drift
+            if not await _update_reconcile(
+                uid,
+                vm_name,
+                auth_token,
+                owner,
+                {
+                    "state": "recreate_required",
+                    "lastError": reason,
+                    "driftReasons": [reason],
+                    "requiredBootImage": release.boot_image,
+                    "observedBootImage": actual,
+                    **clear_vm_reconcile_lease_fields(),
+                },
+            ):
+                return ReconcileResult(uid, "stale", "owner lease lost while recording boot-image drift")
+            return ReconcileResult(
+                uid,
+                "recreate_required",
+                f"{reason}; operator must recreate VM from exact immutable image {release.boot_image}",
+            )
         reasons = drift_reasons(instance, release)
         if str(instance.get("status")) == "RUNNING":
-            ip = api.instance_ip(instance)
-            if not ip or not await api.runtime_is_current(ip, auth_token, release):
+            private_ip = api.private_instance_ip(instance)
+            if not private_ip or not await api.runtime_is_current(private_ip, auth_token, release):
                 reasons.append("runtime")
         if reasons:
             if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
                 return ReconcileResult(uid, "stale", "owner lease lost before drain")
-            if not update_vm_reconcile(
+            if not await _update_reconcile(
                 uid,
                 vm_name,
                 auth_token,
@@ -243,7 +403,7 @@ async def reconcile_one(
                 return ReconcileResult(uid, "stale", "owner lease lost while requesting drain")
             active = await asyncio.to_thread(active_session_count, uid, vm_name)
             if active:
-                if not update_vm_reconcile(
+                if not await _update_reconcile(
                     uid,
                     vm_name,
                     auth_token,
@@ -259,7 +419,7 @@ async def reconcile_one(
 
         status = str(instance.get("status") or "UNKNOWN")
         if not reasons and status in {"TERMINATED", "STOPPED"}:
-            if not update_vm_reconcile(
+            if not await _update_reconcile(
                 uid,
                 vm_name,
                 auth_token,
@@ -294,7 +454,7 @@ async def reconcile_one(
             if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
                 return ReconcileResult(uid, "stale", "owner lease lost before metadata update")
             await api.set_service_account(vm_name, release.service_account)
-            await api.set_metadata(vm_name, latest, release)
+            await api.set_metadata(vm_name, latest, release, auth_token)
             status = str((await api.get_instance(vm_name) or {}).get("status") or status)
 
         if status in {"TERMINATED", "STOPPED"}:
@@ -307,12 +467,13 @@ async def reconcile_one(
         latest = await api.get_instance(vm_name)
         if latest is None:
             raise RuntimeError("instance disappeared before readiness verification")
-        ip = api.instance_ip(latest)
-        if not ip:
-            raise RuntimeError("instance has no usable external IP")
-        await api.wait_for_runtime(ip, auth_token, release)
+        private_ip = api.private_instance_ip(latest)
+        if not private_ip:
+            raise RuntimeError("instance has no usable private IP")
+        await api.wait_for_runtime(private_ip, auth_token, release)
+        public_ip = api.instance_ip(latest)
         finished_at = time.time()
-        if not update_vm_reconcile(
+        if not await _update_reconcile(
             uid,
             vm_name,
             auth_token,
@@ -328,7 +489,11 @@ async def reconcile_one(
                 "retryAt": None,
                 **clear_vm_reconcile_lease_fields(),
             },
-            vm_fields={"status": "ready", "ip": ip},
+            vm_fields={
+                "status": "ready",
+                "privateIp": private_ip,
+                **({"ip": public_ip} if public_ip else {}),
+            },
         ):
             return ReconcileResult(uid, "stale", "owner lease lost before final CAS")
         return ReconcileResult(uid, "ready", release.release_id)
@@ -344,7 +509,7 @@ async def reconcile_one(
         )
         retry_at = time.time() + retry_delay_seconds(retry_count)
         retry_state = "quarantined" if retry_count >= 3 else "retry"
-        if not update_vm_reconcile(
+        if not await _update_reconcile(
             uid,
             vm_name,
             auth_token,
@@ -392,7 +557,7 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
             )
             target_percent, max_concurrency = _rollout_spec(raw_manifest, phase)
             owners = await asyncio.to_thread(_owners)
-            selected = [(uid, vm) for uid, vm in owners if rollout_selected(uid, release.release_id, target_percent)]
+            selected = _select_rollout_owners(owners, release.release_id, target_percent)
             semaphore = asyncio.Semaphore(max_concurrency)
 
             async def one(uid: str, vm: dict[str, Any]) -> ReconcileResult:
@@ -428,7 +593,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     results = asyncio.run(run_reconciler(dry_run=bool(args.dry_run)))
-    return 1 if any(result.state == "retry" for result in results) else 0
+    return 1 if any(result.state in FAILED_JOB_STATES for result in results) else 0
 
 
 if __name__ == "__main__":

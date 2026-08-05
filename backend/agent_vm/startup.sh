@@ -55,10 +55,14 @@ registry_token="$(metadata_access_token)"
 printf '%s' "$registry_token" | docker login --username oauth2accesstoken --password-stdin https://gcr.io >/dev/null
 docker pull "$image"
 docker rm -f omi-agent-vm >/dev/null 2>&1 || true
+backend_env=()
+if [[ -n "$backend_url" ]]; then
+  backend_env=(--env "BACKEND_URL=$backend_url")
+fi
 docker run --detach --name omi-agent-vm --restart unless-stopped --publish 8080:8080 \
   --env ANTHROPIC_API_KEY="$anthropic_api_key" --env AUTH_TOKEN="$auth_token" --env GEMINI_API_KEY="$gemini_api_key" \
   --env AGENT_VM_RELEASE_ID="$release_id" --env AGENT_VM_IMAGE_DIGEST="$image_digest" \
-  --env AGENT_VM_STARTUP_SHA256="$startup_sha256" --env BACKEND_URL="$backend_url" \
+  --env AGENT_VM_STARTUP_SHA256="$startup_sha256" "${backend_env[@]}" \
   --env AGENT_VM_STOP_AUDIENCE="$stop_audience" \
   --env PLAYWRIGHT_MCP_COMMAND=playwright-mcp \
   --env PLAYWRIGHT_MCP_ARGS='["--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"]' \

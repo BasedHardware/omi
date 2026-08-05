@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -47,6 +48,10 @@ class AgentVmLeaseLost(RuntimeError):
 
 class AgentVmNotFound(RuntimeError):
     """Raised when the Firestore owner points at a missing GCE instance."""
+
+
+class TrustedAgentVmHealthChannelUnavailable(RuntimeError):
+    """Raised before a VM bearer token could cross an untrusted network."""
 
 
 @dataclass(frozen=True)
@@ -663,7 +668,13 @@ class GceAgentVmClient:
             {"email": service_account, "scopes": ["https://www.googleapis.com/auth/cloud-platform"]},
         )
 
-    async def set_metadata(self, vm_name: str, instance: Mapping[str, Any], release: AgentVmRelease) -> None:
+    async def set_metadata(
+        self,
+        vm_name: str,
+        instance: Mapping[str, Any],
+        release: AgentVmRelease,
+        auth_token: str | None = None,
+    ) -> None:
         metadata = dict(instance.get("metadata") or {})
         items = metadata.get("items")
         current: dict[str, str] = {}
@@ -674,6 +685,8 @@ class GceAgentVmClient:
                 if isinstance(item, Mapping) and isinstance(item.get("key"), str)
             }
         current.update(expected_release_metadata(release))
+        if auth_token:
+            current["auth-token"] = auth_token
         fingerprint = metadata.get("fingerprint")
         if not isinstance(fingerprint, str) or not fingerprint:
             raise RuntimeError("GCE instance metadata fingerprint missing")
@@ -695,19 +708,63 @@ class GceAgentVmClient:
     @staticmethod
     def instance_ip(instance: Mapping[str, Any]) -> str | None:
         try:
-            value = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-            ipaddress.ip_address(str(value))
-            return str(value)
+            value = str(instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"])
+            ipaddress.ip_address(value)
+            return value
         except (KeyError, IndexError, TypeError, ValueError):
             return None
 
+    @staticmethod
+    def private_instance_ip(instance: Mapping[str, Any]) -> str | None:
+        try:
+            value = str(instance["networkInterfaces"][0]["networkIP"])
+            address = ipaddress.ip_address(value)
+            return value if GceAgentVmClient._is_rfc1918(address) else None
+        except (KeyError, IndexError, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _is_rfc1918(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+        if not isinstance(address, ipaddress.IPv4Address):
+            return False
+        return any(
+            address in network
+            for network in (
+                ipaddress.ip_network("10.0.0.0/8"),
+                ipaddress.ip_network("172.16.0.0/12"),
+                ipaddress.ip_network("192.168.0.0/16"),
+            )
+        )
+
+    @staticmethod
+    def _trusted_runtime_url(ip: str) -> str:
+        """Return an HTTP URL only when routing itself is a trusted boundary.
+
+        The VM runtime does not currently terminate TLS. Production therefore
+        requires a private VPC path; local development may explicitly opt into
+        loopback. Any other address/channel fails before auth_token is used.
+        """
+        try:
+            address = ipaddress.ip_address(ip)
+        except ValueError as exc:
+            raise TrustedAgentVmHealthChannelUnavailable("Agent VM readiness address is invalid") from exc
+        channel = os.getenv("AGENT_VM_TRUSTED_HEALTH_CHANNEL", "").strip().lower()
+        if channel == "private-vpc" and GceAgentVmClient._is_rfc1918(address):
+            return f"http://{address}:8080/health"
+        if channel == "loopback-dev" and address.is_loopback and os.getenv("ENVIRONMENT") != "production":
+            return f"http://{address}:8080/health"
+        raise TrustedAgentVmHealthChannelUnavailable(
+            "Agent VM readiness requires AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc and private VPC reachability"
+        )
+
     async def wait_for_runtime(self, ip: str, auth_token: str, release: AgentVmRelease, timeout: int = 300) -> None:
         deadline = time.monotonic() + timeout
+        runtime_url = self._trusted_runtime_url(ip)
         headers = {"Authorization": f"Bearer {auth_token}"}
         async with httpx.AsyncClient(timeout=10) as client:
             while time.monotonic() < deadline:
                 try:
-                    response = await client.get(f"http://{ip}:8080/health", headers=headers)
+                    response = await client.get(runtime_url, headers=headers)
                     payload = response.json()
                     if (
                         response.status_code == 200
@@ -721,10 +778,11 @@ class GceAgentVmClient:
         raise RuntimeError("Agent VM did not report the activated release before the readiness timeout")
 
     async def runtime_is_current(self, ip: str, auth_token: str, release: AgentVmRelease) -> bool:
+        runtime_url = self._trusted_runtime_url(ip)
         try:
             async with httpx.AsyncClient(timeout=8) as client:
                 response = await client.get(
-                    f"http://{ip}:8080/health",
+                    runtime_url,
                     headers={"Authorization": f"Bearer {auth_token}"},
                 )
             payload = response.json()
@@ -742,6 +800,7 @@ __all__ = [
     "GceAgentVmClient",
     "LEASE_HEARTBEAT_SECONDS",
     "RECONCILER_SCHEMA_VERSION",
+    "TrustedAgentVmHealthChannelUnavailable",
     "active_session_count",
     "claim_reconciler_run_lease",
     "claim_session_lease",

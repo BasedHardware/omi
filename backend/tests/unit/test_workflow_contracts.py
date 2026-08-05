@@ -321,6 +321,8 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert "has_desktop_rust" not in desktop_checks
     assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
     assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
+    assert "- 'backend/database/__init__.py'" in agent_proxy_auto_deploy
+    assert "- 'backend/database/account_deletion_policy.py'" in agent_proxy_auto_deploy
     assert "^backend/agent-proxy/Dockerfile$" in detect_changes
     assert "scan_import_time_side_effects.py" in manifest
     assert "check_module_stub_pollution.py" in manifest

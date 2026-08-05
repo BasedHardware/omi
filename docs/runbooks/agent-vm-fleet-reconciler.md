@@ -18,7 +18,10 @@ before acceptance, so an unaccepted candidate cannot escape the staged gate.
 3. A drifted running VM is marked `draining`. Agent Proxy rejects new sessions
    and existing sessions retain a 90-second renewable lease. A VM is stopped
    only after the lease set is empty; stopped VMs are prepared without booting,
-   then started and verified against `/health` with the owner token. A healthy
+   then started and verified against `/health` with the owner token over the
+   private VM network. The reconciler job must use direct VPC egress to the
+   Agent VM subnet and set `AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc`; it
+   refuses to send the bearer token over a NAT address. A healthy
    stopped VM with no drift remains stopped so idle self-stop is preserved.
 4. Success records the observed release and clears the lease/drain fields by
    compare-and-swap. Three successful five-minute runs advance the rollout
@@ -30,6 +33,11 @@ Legacy VMs with absent metadata are ordinary drift and are repaired on their
 first selected reconciliation. A missing GCE instance is recorded as `missing`
 and is left for the existing provisioning/reaper recovery path; the reconciler
 never creates a replacement without the account request path's owner claim.
+
+If the immutable `bootImage` differs from the actual boot disk source, the
+reconciler records `recreate_required` and does not stop, replace, or start the
+VM. An operator must recreate that dev/prod VM through the owner provisioning
+path with the exact image reference before the fleet can converge.
 
 ## Installation order
 

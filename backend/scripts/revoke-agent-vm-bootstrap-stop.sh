@@ -15,7 +15,22 @@ for project in based-hardware-dev based-hardware; do
   gcloud projects remove-iam-policy-binding "$project" \
     --member="serviceAccount:${service_account}" \
     --role="$role" \
-    --condition=None \
-    --quiet >/dev/null 2>&1 || true
-  echo "Removed direct Agent VM stop permission for ${service_account} in ${project}."
+    --all \
+    --quiet
+  policy_file="$(mktemp)"
+  gcloud projects get-iam-policy "$project" --format=json > "$policy_file"
+  SERVICE_ACCOUNT="$service_account" ROLE="$role" python3 - "$policy_file" <<'PY'
+import json
+import os
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as policy_stream:
+    policy = json.load(policy_stream)
+member = f"serviceAccount:{os.environ['SERVICE_ACCOUNT']}"
+role = os.environ["ROLE"]
+if any(binding.get("role") == role and member in binding.get("members", []) for binding in policy.get("bindings", [])):
+    raise SystemExit(f"direct {role} binding remains for {member}")
+PY
+  rm -f "$policy_file"
+  echo "Verified removal of direct Agent VM stop permission for ${service_account} in ${project}."
 done

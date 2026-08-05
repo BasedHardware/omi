@@ -49,6 +49,9 @@ common=(
 
 if gcloud scheduler jobs describe "$scheduler_job" "${common[@]:0:2}" >/dev/null 2>&1; then
   gcloud scheduler jobs update http "$scheduler_job" "${common[@]}"
+  # Updating retains a paused state.  Resuming here makes re-apply converge on
+  # the required enabled contract instead of silently leaving reconciliation off.
+  gcloud scheduler jobs resume "$scheduler_job" "${common[@]:0:2}"
 else
   gcloud scheduler jobs create http "$scheduler_job" "${common[@]}"
 fi
