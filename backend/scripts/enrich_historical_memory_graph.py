@@ -180,11 +180,19 @@ def run_enrichment(
         for item in _candidates(
             uid, control=control, limit=candidate_limit, db_client=db_client, replan_existing=replan_existing
         ):
-            planned = (
-                _structured_plan(item, control)
-                if structured_only
-                else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
-            )
+            try:
+                planned = (
+                    _structured_plan(item, control)
+                    if structured_only
+                    else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+                )
+            # The planner is an external dependency. A transient transport or
+            # provider failure must not make a bounded page fail closed for all
+            # of a user's remaining historical memories; leave this item
+            # unchanged and let a later page retry it.
+            except Exception:
+                report["planner_error"] += 1
+                continue
             if planned is None:
                 report["not_structured"] += 1
             elif planned.status == "ready" and planned.operation is not None:
@@ -197,17 +205,28 @@ def run_enrichment(
         # against a stale observed_head_commit_id.
         retryable_head_mismatches = 0
         max_retryable_head_mismatches = apply_limit * 2
+        planner_error_memory_ids: set[str] = set()
         while applied < apply_limit:
             control = _control(uid, db_client=db_client)
             planned = None
             for item in _candidates(
                 uid, control=control, limit=candidate_limit, db_client=db_client, replan_existing=replan_existing
             ):
-                candidate = (
-                    _structured_plan(item, control)
-                    if structured_only
-                    else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
-                )
+                if item.memory_id in planner_error_memory_ids:
+                    continue
+                try:
+                    candidate = (
+                        _structured_plan(item, control)
+                        if structured_only
+                        else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+                    )
+                # Do not repeatedly select a temporarily failing item during
+                # one page; continue looking through this bounded scan and
+                # retry it on a later execution.
+                except Exception:
+                    report["planner_error"] += 1
+                    planner_error_memory_ids.add(item.memory_id)
+                    continue
                 if candidate is None:
                     continue
                 if candidate.status == "ready" and candidate.operation is not None:
