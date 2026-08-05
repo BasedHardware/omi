@@ -57,6 +57,8 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/integrations/apple_reminders_sync_service.dart';
 import 'package:omi/services/quick_actions_service.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/utils/ble_connect_retry.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
@@ -196,6 +198,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         captureProvider.refreshInProgressConversations();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
+
+        // #6721: Dart-side reconnect after device-ready timeout / stalled native
+        // retries — native iOS also kicks stale peripherals on foreground.
+        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+        final pairedId = SharedPreferencesUtil().btDevice.id;
+        if (shouldAttemptBleReconnectOnResume(
+          hasPairedDevice: pairedId.isNotEmpty,
+          isConnected: deviceProvider.isConnected,
+          isConnecting: deviceProvider.isConnecting,
+          userDisconnected: ServiceManager.instance().device.suppressesAutoReconnect,
+        )) {
+          unawaited(deviceProvider.initiateConnection('AppResumed', boundDeviceOnly: true));
+        }
       }
 
       // Ensure agent VM is running and restart keepalive
@@ -855,8 +870,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -865,8 +880,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );

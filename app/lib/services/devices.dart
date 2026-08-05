@@ -56,10 +56,13 @@ class DeviceService {
 
   DeviceServiceStatus get status => _status;
 
+  /// True after an explicit disconnect/forget until a successful connect.
+  bool get suppressesAutoReconnect => _userDisconnectedBle;
+
   DateTime? _firstConnectedAt;
 
-  // #6610: after device-ready timeout / connect failure, soft-retry with backoff
-  // without disposing the transport (native auto-reconnect must stay alive).
+  // #6721 / #6610: after device-ready timeout / connect failure, soft-retry with
+  // backoff without disposing the transport (native auto-reconnect must stay alive).
   Timer? _bleConnectRetryTimer;
   int _bleConnectRetryAttempt = 0;
   String? _bleConnectRetryDeviceId;
@@ -109,7 +112,8 @@ class DeviceService {
   }
 
   Future<void> _connectToDevice(String id, {required bool softRetry}) async {
-    final reuseExisting = softRetry &&
+    final reuseExisting =
+        softRetry &&
         shouldSoftRetryExistingConnection(existingDeviceId: _connection?.device.id, targetDeviceId: id, force: true);
 
     if (!reuseExisting) {

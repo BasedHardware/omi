@@ -1,4 +1,4 @@
-/// BLE connect retry helpers for post-timeout auto-reconnect (#6610).
+/// BLE connect retry helpers for post-timeout auto-reconnect (#6721 / #6610).
 ///
 /// Pure predicates/delays so the "connecting → timeout → disconnected → retry"
 /// contract can be unit-tested without CoreBluetooth or NativeBleTransport.
@@ -76,4 +76,22 @@ bool shouldInvalidatePendingRetryForDifferentTarget({
   if (!force) return false;
   if (pendingRetryDeviceId == null) return false;
   return pendingRetryDeviceId != targetDeviceId;
+}
+
+/// Whether bringing the app to the foreground should kick a BLE reconnect (#6721).
+///
+/// Native iOS already calls `reconnectStalePeripherals` on foreground; Dart still
+/// needs an `initiateConnection` when the 60s device-ready timeout left the
+/// transport disconnected with no pending soft-retry.
+bool shouldAttemptBleReconnectOnResume({
+  required bool hasPairedDevice,
+  required bool isConnected,
+  required bool isConnecting,
+  required bool userDisconnected,
+}) {
+  if (!hasPairedDevice) return false;
+  if (userDisconnected) return false;
+  if (isConnected) return false;
+  if (isConnecting) return false;
+  return true;
 }

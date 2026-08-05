@@ -95,7 +95,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
   DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics {
+    : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
   }
@@ -350,8 +350,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -390,8 +391,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Known device — use ensureConnection which creates the NativeBleTransport,
     // then connects natively. If native is already connected, it just re-notifies Dart.
     // force: true ensures we retry even if a previous attempt left a stale connection.
-    // softRetry: true reuses the existing transport so a device-ready timeout (#6610)
-    // does not dispose BleBridge registration / cancel native reconnect.
+    // softRetry: true reuses the existing transport so a device-ready timeout
+    // (#6721 / #6610) does not dispose BleBridge registration / cancel native reconnect.
     try {
       await ServiceManager.instance().device.ensureConnection(pairedDeviceId, force: true, softRetry: true);
     } catch (e) {

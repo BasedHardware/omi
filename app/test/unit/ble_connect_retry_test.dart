@@ -151,4 +151,57 @@ void main() {
       );
     });
   });
+
+  group('shouldAttemptBleReconnectOnResume (#6721)', () {
+    test('kicks reconnect when paired but disconnected and not manually stopped', () {
+      expect(
+        shouldAttemptBleReconnectOnResume(
+          hasPairedDevice: true,
+          isConnected: false,
+          isConnecting: false,
+          userDisconnected: false,
+        ),
+        isTrue,
+      );
+    });
+
+    test('skips when already connected, connecting, unpaired, or user disconnected', () {
+      expect(
+        shouldAttemptBleReconnectOnResume(
+          hasPairedDevice: true,
+          isConnected: true,
+          isConnecting: false,
+          userDisconnected: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldAttemptBleReconnectOnResume(
+          hasPairedDevice: true,
+          isConnected: false,
+          isConnecting: true,
+          userDisconnected: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldAttemptBleReconnectOnResume(
+          hasPairedDevice: false,
+          isConnected: false,
+          isConnecting: false,
+          userDisconnected: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldAttemptBleReconnectOnResume(
+          hasPairedDevice: true,
+          isConnected: false,
+          isConnecting: false,
+          userDisconnected: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }
