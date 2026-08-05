@@ -59,8 +59,13 @@ gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
   --condition="title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
 gcloud projects add-iam-policy-binding "$project" \
-  --member="serviceAccount:${gsa}" --role="$operations_role"
-gcloud projects add-iam-policy-binding "$project" --member="serviceAccount:${gsa}" --role=roles/datastore.user
+  --member="serviceAccount:${gsa}" --role="$operations_role" --condition=None
+# Project IAM policies containing scoped bindings require unconditional bindings
+# to say so explicitly.  The operations and datastore roles are intentionally
+# unconditioned because neither permission supports the instance resource
+# condition used above.
+gcloud projects add-iam-policy-binding "$project" \
+  --member="serviceAccount:${gsa}" --role=roles/datastore.user --condition=None
 gcloud storage buckets add-iam-policy-binding "gs://${bucket}" --member="serviceAccount:${gsa}" --role=roles/storage.objectViewer
 
 bootstrap="omi-agent-vm-bootstrap@${project}.iam.gserviceaccount.com"

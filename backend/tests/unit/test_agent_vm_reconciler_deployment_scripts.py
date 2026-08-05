@@ -160,6 +160,16 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "--member=serviceAccount:local-development-joan@based-hardware-dev.iam.gserviceaccount.com "
         "--role=roles/iam.serviceAccountUser"
     ) in commands
+    assert (
+        "projects add-iam-policy-binding based-hardware-dev "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=projects/based-hardware-dev/roles/omiAgentVmReconcilerOperations --condition=None"
+    ) in commands
+    assert (
+        "projects add-iam-policy-binding based-hardware-dev "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=roles/datastore.user --condition=None"
+    ) in commands
 
 
 def test_revoke_script_removes_all_conditional_bindings_and_verifies_absence():
