@@ -50,6 +50,41 @@ class GcpSaKeyRatchetTests(unittest.TestCase):
         self.assertTrue(self.mod.is_scanned_path("backend/main.py"))
         self.assertTrue(self.mod.is_scanned_path(".github/workflows/gcp_backend_pusher.yml"))
         self.assertTrue(self.mod.is_scanned_path("backend/Dockerfile"))
+        self.assertTrue(self.mod.is_scanned_path("backend/charts/agent-proxy/templates/_helpers.tpl"))
+        self.assertTrue(self.mod.is_scanned_path("backend/charts/deepgram-self-hosted/nova-2/README.md.gotmpl"))
+
+    def test_quoted_credentials_json_is_detected(self) -> None:
+        counts = self.mod.count_kinds_in_text(
+            'with:\n  "credentials_json": "${{ secrets.GCP_CREDENTIALS }}"\n'
+            "  'credentials_json': leaked\n"
+            "  credentials_json: bare\n"
+        )
+        self.assertEqual(counts.get("credentials-json-gh-action"), 3)
+
+    def test_google_application_credentials_is_tracked(self) -> None:
+        counts = self.mod.count_kinds_in_text(
+            "- name: GOOGLE_APPLICATION_CREDENTIALS\n  value: /secrets/sa.json\n"
+        )
+        self.assertEqual(counts.get("google-application-credentials-env"), 1)
+
+    def test_new_helm_template_key_path_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(
+                root,
+                "backend/charts/new-service/templates/secret.yaml.tpl",
+                'env:\n  - name: GOOGLE_APPLICATION_CREDENTIALS\n    value: "/keys/sa.json"\n',
+            )
+            self._baseline(root, {})
+            completed = subprocess.run(
+                [sys.executable, str(CHECKER), "--root", str(root)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
+            self.assertIn("google-application-credentials-env", completed.stdout)
+            self.assertIn("backend/charts/new-service/templates/secret.yaml.tpl", completed.stdout)
 
     def test_new_chart_key_path_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

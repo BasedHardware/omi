@@ -46,7 +46,20 @@ SCAN_EXACT_FILES = {
     "backend/agent-proxy/Dockerfile",
 }
 
-TEXT_SUFFIXES = {".py", ".yaml", ".yml", ".json", ".toml", ".env", ".sh", ".md", ".txt", ""}
+TEXT_SUFFIXES = {
+    ".py",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".toml",
+    ".env",
+    ".sh",
+    ".md",
+    ".txt",
+    ".tpl",
+    ".gotmpl",
+    "",
+}
 DOCKERFILE_NAMES = {"Dockerfile", "Dockerfile.dev", "Dockerfile.prod"}
 
 SKIP_PARTS = {
@@ -71,12 +84,18 @@ KIND_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         re.compile(r"\bSERVICE_ACCOUNT_JSON\b"),
     ),
     (
+        "google-application-credentials-env",
+        re.compile(r"\bGOOGLE_APPLICATION_CREDENTIALS\b"),
+    ),
+    (
         "from-service-account-info",
         re.compile(r"\bfrom_service_account_info\b"),
     ),
     (
+        # Match both bare and quoted YAML / action input keys
+        # (credentials_json: / 'credentials_json': / "credentials_json":).
         "credentials-json-gh-action",
-        re.compile(r"\bcredentials_json\s*:"),
+        re.compile(r"""['"]?credentials_json['"]?\s*:"""),
     ),
 )
 
@@ -173,11 +192,11 @@ def baseline_document(entries: dict[str, int]) -> dict[str, object]:
     return {
         "schema_version": 1,
         "note": (
-            "Grandfathered long-lived GCP service-account JSON / credentials_json "
-            "paths for #6800. This list only shrinks: removing a runtime binding "
-            "must lower or delete the matching entry in the same change. Adding "
-            "entries is an explicit admission that production surfaces gained a "
-            "new key path and needs security review."
+            "Grandfathered long-lived GCP service-account JSON / credentials_json / "
+            "GOOGLE_APPLICATION_CREDENTIALS paths for #6800. This list only shrinks: "
+            "removing a runtime binding must lower or delete the matching entry in "
+            "the same change. Adding entries is an explicit admission that "
+            "production surfaces gained a new key path and needs security review."
         ),
         "entries": dict(sorted(entries.items())),
     }
