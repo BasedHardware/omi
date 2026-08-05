@@ -285,3 +285,25 @@ def test_resolve_push_backend_coerces_unknown_to_fcm(monkeypatch):
 
     monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'bogus')
     assert resolve_push_backend() == 'fcm'
+
+
+def test_resolve_push_backend_records_a_fallback_on_invalid_value(monkeypatch):
+    # The silent degrade to FCM on a typo must be visible in omi_fallback_total (record_fallback).
+    import utils.push.selector as selector_mod
+
+    recorded = {}
+    monkeypatch.setattr(selector_mod, 'record_fallback', lambda **kw: recorded.update(kw))
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'bogus')
+    assert selector_mod.resolve_push_backend() == 'fcm'
+    assert recorded['component'] == 'push'
+    assert recorded['to_mode'] == 'fcm'
+    assert recorded['outcome'] == 'degraded'
+
+
+def test_send_one_sync_skips_endpoint_with_invalid_key_set():
+    # A single malformed persisted key set must not abort the fan-out: _send_one_sync returns None
+    # (like a transient failure) instead of raising, so other endpoints still receive the push.
+    from utils.push import unifiedpush
+
+    bad = UnifiedPushEndpoint(url='http://ntfy/x?up=1', p256dh='!!!bad!!!', auth='@@@bad@@@')
+    assert unifiedpush._send_one_sync(bad, b'{"body":"hi"}') is None

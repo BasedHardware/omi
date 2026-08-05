@@ -85,3 +85,22 @@ def test_wrong_length_auth_secret_is_rejected_with_a_clear_error():
     _private_key, p256dh, _auth, _auth_bytes = _recipient()
     with pytest.raises(ValueError, match="auth"):
         wpe.encrypt(b"x", p256dh=p256dh, auth=_b64url(os.urandom(8)))
+
+
+def test_non_base64url_key_raises_a_clear_value_error_not_binascii():
+    # A key with non-base64url characters must surface as a catchable ValueError, not a raw
+    # binascii.Error leaking the crypto internals.
+    _private_key, p256dh, auth, _auth_bytes = _recipient()
+    with pytest.raises(ValueError, match="base64url"):
+        wpe.encrypt(b"x", p256dh="!!! not base64url !!!", auth=auth)
+    with pytest.raises(ValueError, match="base64url"):
+        wpe.encrypt(b"x", p256dh=p256dh, auth="@@@bad@@@")
+
+
+def test_valid_length_but_off_curve_p256dh_raises_value_error():
+    # 65 bytes with the uncompressed prefix but not an actual P-256 point: consistent ValueError at
+    # the boundary, not an opaque failure inside http_ece's ECDH.
+    _private_key, _p256dh, auth, _auth_bytes = _recipient()
+    off_curve = _b64url(b"\x04" + b"\x00" * 64)
+    with pytest.raises(ValueError, match="p256dh"):
+        wpe.encrypt(b"x", p256dh=off_curve, auth=auth)

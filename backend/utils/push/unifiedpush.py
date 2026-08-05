@@ -132,12 +132,22 @@ async def _post_async(url: str, body: bytes, headers: dict) -> Optional[int]:
 
 
 def _send_one_sync(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[int]:
-    body, headers = _encode_for(endpoint, plaintext)
+    try:
+        body, headers = _encode_for(endpoint, plaintext)
+    except ValueError as e:
+        # One malformed persisted key set must not abort the whole fan-out; skip just this endpoint
+        # (treated as a non-fatal failure, like a network error) so the others still receive the push.
+        logger.error('UnifiedPush skipping endpoint with an invalid key set %s: %s', endpoint.url, e)
+        return None
     return _post_sync(_target_url(endpoint.url), body, headers)
 
 
 async def _send_one_async(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Optional[int]:
-    body, headers = _encode_for(endpoint, plaintext)
+    try:
+        body, headers = _encode_for(endpoint, plaintext)
+    except ValueError as e:
+        logger.error('UnifiedPush skipping endpoint with an invalid key set %s: %s', endpoint.url, e)
+        return None
     return await _post_async(_target_url(endpoint.url), body, headers)
 
 

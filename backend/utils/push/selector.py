@@ -7,6 +7,7 @@ without reloading the module. Idiom mirrors ``AUTH_BACKEND`` / ``STORAGE_BACKEND
 import logging
 import os
 
+from utils.observability.fallback import record_fallback
 from utils.push.base import FCM, VALID_BACKENDS
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,15 @@ def resolve_push_backend() -> str:
     # logging a spurious "invalid" error. Only a non-blank unrecognized value is an actual typo.
     value = (os.getenv('PUSH_NOTIFICATION_BACKEND') or '').strip().lower() or FCM
     if value not in VALID_BACKENDS:
-        logger.error("Invalid PUSH_NOTIFICATION_BACKEND=%r; falling back to '%s'", value, FCM)
+        # A typo degrades push delivery to the FCM default — record it as a fallback so the drift is
+        # visible in omi_fallback_total (record_fallback also emits the warning log; never raises).
+        record_fallback(
+            component='push',
+            from_mode=value,
+            to_mode=FCM,
+            reason='config_invalid',
+            outcome='degraded',
+            log=logger,
+        )
         return FCM
     return value
