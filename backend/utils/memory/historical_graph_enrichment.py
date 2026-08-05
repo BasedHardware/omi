@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from models.memory_apply import MemoryControlState, memory_content_hash
 from models.memory_promotion import (
     PROMOTION_GRAPH_PLAN_V2_VERSION,
+    CanonicalGraphNodeType,
     GraphRelationEndpoint,
     PromotionGraphPlan,
 )
@@ -47,10 +48,10 @@ class HistoricalGraphPlannerOutput(BaseModel):
 
     eligible: bool = False
     subject_label: str = ""
-    subject_node_type: str = ""
+    subject_node_type: CanonicalGraphNodeType | str = ""
     predicate: str = ""
     object_label: str = ""
-    object_node_type: str = ""
+    object_node_type: CanonicalGraphNodeType | str = ""
     qualifiers: dict[str, Any] = Field(default_factory=dict)
 
 

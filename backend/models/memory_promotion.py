@@ -30,6 +30,7 @@ PROMOTION_GRAPH_ARGUMENT_MAX_COUNT = 16
 PROMOTION_GRAPH_ARGUMENT_KEY_MAX_LENGTH = 64
 PROMOTION_GRAPH_ARGUMENTS_MAX_JSON_BYTES = 8 * 1024
 PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH = 8
+CanonicalGraphNodeType = Literal["person", "place", "organization", "thing", "concept"]
 
 
 def canonical_graph_entity_id(label: str) -> str:
@@ -135,7 +136,7 @@ class GraphRelationEndpoint(BaseModel):
     label: str
     # This is the stable desktop graph vocabulary.  Rejecting unknown model
     # output here keeps a type change from silently degrading into a concept.
-    node_type: Literal["person", "place", "organization", "thing", "concept"]
+    node_type: CanonicalGraphNodeType
 
     @field_validator("label", "node_type")
     @classmethod
@@ -590,6 +591,7 @@ def valid_promotion_admission(
 
 __all__ = [
     "MemoryGraphAssertion",
+    "CanonicalGraphNodeType",
     "PROMOTION_ADMISSION_VERSION",
     "PROMOTION_GRAPH_ASSERTION_VERSION",
     "PROMOTION_GRAPH_ASSERTION_V2_VERSION",

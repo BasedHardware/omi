@@ -276,6 +276,8 @@ def _assertion_matches_current_item(
     )
     if plan.subject is None and plan.object is None:
         return base_matches
+    if plan.subject is None or plan.object is None:
+        return False
     return (
         base_matches
         and value("subject") == plan.subject.model_dump(mode="json")
