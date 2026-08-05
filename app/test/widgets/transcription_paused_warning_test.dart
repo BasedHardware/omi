@@ -117,6 +117,24 @@ void main() {
       expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
     });
 
+    testWidgets('shows Paused for non-call audio interruption (#4706)', (tester) async {
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      // recordingState=interrupted without micInterrupted → isCallActive is false
+      // (other-app audio / silent stall path, not an active phone call).
+      captureProvider.updateRecordingState(RecordingState.interrupted);
+      expect(captureProvider.isCallActive, isFalse);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      final pausedText = AppLocalizations.of(context).paused;
+      final listeningText = AppLocalizations.of(context).listening;
+
+      expect(find.text(pausedText), findsWidgets);
+      expect(find.text(listeningText), findsNothing);
+    });
+
     testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);

@@ -61,8 +61,8 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     PhoneMicHostApi? hostApi,
     bool registerFlutterApi = true,
     DateTime Function() now = DateTime.now,
-  }) : _hostApi = hostApi ?? PhoneMicHostApi(),
-       _now = now {
+  })  : _hostApi = hostApi ?? PhoneMicHostApi(),
+        _now = now {
     if (registerFlutterApi) {
       PhoneMicFlutterApi.setUp(this);
     }
@@ -290,25 +290,22 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _batchStallReported = false;
   }
 
-  /// Called when the Flutter app returns to foreground. Timers may have been
-  /// suspended while another window played audio (#4706); if frames/progress
-  /// already exceeded the stall threshold, fire the callback immediately.
+  /// Soft-rearm liveness after the app returns to foreground (#4706).
+  ///
+  /// Wall-clock silence from timer suspension / screen lock must not force an
+  /// immediate Dart stop→start (that races the native `appBecameActive` rebuild
+  /// and also false-positives a healthy session). Reset the stall clock so the
+  /// periodic watchdog owns escalation only if frames still don't arrive.
   @override
   void probeStallAfterForeground() {
-    if (!_sessionActive) return;
+    if (!_sessionActive || _interrupted) return;
     if (_batchMode) {
-      if (_batchStallReported || _lastBatchProgressAt == null) return;
-      if (_now().difference(_lastBatchProgressAt!) >= _batchStallThreshold) {
-        _batchStallReported = true;
-        _onBatchStalled?.call();
-      }
+      _lastBatchProgressAt = _now();
+      _batchStallReported = false;
       return;
     }
-    if (_stallReported || _lastByteAt == null || _interrupted) return;
-    if (_now().difference(_lastByteAt!) >= _stallThreshold) {
-      _stallReported = true;
-      _onStalled?.call();
-    }
+    _lastByteAt = _now();
+    _stallReported = false;
   }
 
   void _clearCallbacks() {
