@@ -32,14 +32,16 @@ from utils.memory.short_term_promotion import (
     CanonicalShortTermMaintenanceReport,
     run_canonical_short_term_maintenance,
 )
-from scripts.enrich_historical_memory_graph import MAX_PAGE_SIZE, run_enrichment
+from scripts.enrich_historical_memory_graph import MAX_PAGE_SIZE, MAX_STRUCTURED_SCAN_SIZE, run_enrichment
 
 logger = logging.getLogger(__name__)
 
 MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
 MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED"
 MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE"
+MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE"
 DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
+DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = MAX_STRUCTURED_SCAN_SIZE
 
 
 def _required_memory_processor(item: MemoryItem) -> ProcessedRequiredMemory:
@@ -68,6 +70,22 @@ def canonical_graph_backfill_page_size() -> int:
     except ValueError:
         return DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
     return min(MAX_PAGE_SIZE, max(1, value))
+
+
+def canonical_graph_backfill_scan_size() -> int:
+    """Return the bounded candidate window needed to make cohort pages advance.
+
+    Enrichment writes update ``updated_at``.  A scan no larger than the write
+    page therefore re-reads those just-enriched items and never reaches the
+    remaining historical rows.  Keep the larger read window explicit and
+    independently bounded from the per-user apply budget.
+    """
+    raw = os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, str(DEFAULT_GRAPH_BACKFILL_SCAN_SIZE))
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
+    return min(MAX_STRUCTURED_SCAN_SIZE, max(1, value))
 
 
 @dataclass
@@ -258,6 +276,7 @@ def run_canonical_short_term_maintenance_for_cohort(
                 confirm_uid=uid,
                 structured_only=False,
                 apply_limit=canonical_graph_backfill_page_size(),
+                scan_limit=canonical_graph_backfill_scan_size(),
                 db_client=client,
             )
             graph_outcomes = graph_report.get("outcomes", {})
