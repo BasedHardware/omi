@@ -567,6 +567,9 @@ async def _send_startup_event(websocket: WebSocket, uid: str, payload: Dict[str,
 
 async def _close_client(websocket: WebSocket, uid: str, code: int, reason: str) -> None:
     """Close the client socket, tolerating a client that already went away."""
+    # Record typed terminal closes so the outer session cleanup does not append a
+    # misleading normal-close frame after a startup or drain failure.
+    setattr(websocket, "_agent_proxy_typed_close_sent", True)
     try:
         await websocket.close(code=code, reason=reason)
     except Exception as e:
@@ -1323,7 +1326,7 @@ async def agent_ws(websocket: WebSocket):
             pass
     finally:
         await release_claimed_session()
-        if not lease_lost.is_set():
+        if not lease_lost.is_set() and not getattr(websocket, "_agent_proxy_typed_close_sent", False):
             try:
                 await websocket.close(code=1000, reason="Session ended")
             except Exception:
