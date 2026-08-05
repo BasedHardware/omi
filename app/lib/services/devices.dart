@@ -66,6 +66,9 @@ class DeviceService {
   Timer? _bleConnectRetryTimer;
   int _bleConnectRetryAttempt = 0;
   String? _bleConnectRetryDeviceId;
+
+  /// Bumped on cancel/reset so an already-queued soft-retry exits after mutex.
+  int _bleConnectRetryGeneration = 0;
   bool _userDisconnectedBle = false;
 
   Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
@@ -112,8 +115,7 @@ class DeviceService {
   }
 
   Future<void> _connectToDevice(String id, {required bool softRetry}) async {
-    final reuseExisting =
-        softRetry &&
+    final reuseExisting = softRetry &&
         shouldSoftRetryExistingConnection(existingDeviceId: _connection?.device.id, targetDeviceId: id, force: true);
 
     if (!reuseExisting) {
@@ -163,6 +165,7 @@ class DeviceService {
     _bleConnectRetryTimer?.cancel();
     _bleConnectRetryTimer = null;
     _bleConnectRetryDeviceId = null;
+    _bleConnectRetryGeneration += 1;
   }
 
   void _resetBleConnectRetryState() {
@@ -184,13 +187,14 @@ class DeviceService {
     final delay = nextBleConnectRetryDelay(_bleConnectRetryAttempt);
     _bleConnectRetryAttempt += 1;
     _bleConnectRetryDeviceId = deviceId;
+    final generation = _bleConnectRetryGeneration;
     Logger.debug(
       '[DeviceService] scheduling BLE soft-retry #$_bleConnectRetryAttempt for $deviceId in ${delay.inSeconds}s',
     );
     _bleConnectRetryTimer?.cancel();
     _bleConnectRetryTimer = Timer(delay, () {
       _bleConnectRetryTimer = null;
-      unawaited(ensureConnection(deviceId, force: true, softRetry: true));
+      unawaited(ensureConnection(deviceId, force: true, softRetry: true, softRetryGeneration: generation));
     });
   }
 
@@ -254,12 +258,33 @@ class DeviceService {
 
   final Mutex _mutex = Mutex();
 
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false, bool softRetry = false}) async {
+  Future<DeviceConnection?> ensureConnection(
+    String deviceId, {
+    bool force = false,
+    bool softRetry = false,
+    int? softRetryGeneration,
+  }) async {
     await _mutex.acquire();
     try {
       Logger.debug(
         "ensureConnection ${_connection?.device.id} ${_connection?.status} force=$force softRetry=$softRetry",
       );
+
+      // A retry that was queued before invalidate/reset must not run after a
+      // force-connect to another device (or any cancel) won the mutex race.
+      if (softRetry &&
+          softRetryGeneration != null &&
+          !shouldProceedWithScheduledSoftRetry(
+            scheduledGeneration: softRetryGeneration,
+            currentGeneration: _bleConnectRetryGeneration,
+          )) {
+        Logger.debug(
+          '[DeviceService] dropping superseded soft-retry for $deviceId (gen $softRetryGeneration → $_bleConnectRetryGeneration)',
+        );
+        return _connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected
+            ? _connection
+            : null;
+      }
 
       // A force-connect to a different device supersedes any pending soft-retry
       // for the old one. Without this, a stale retry timer can fire later and

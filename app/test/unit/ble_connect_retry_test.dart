@@ -123,6 +123,14 @@ void main() {
     });
   });
 
+  group('shouldProceedWithScheduledSoftRetry (#6721 cubic)', () {
+    test('proceeds only when the scheduled generation is still current', () {
+      expect(shouldProceedWithScheduledSoftRetry(scheduledGeneration: 3, currentGeneration: 3), isTrue);
+      expect(shouldProceedWithScheduledSoftRetry(scheduledGeneration: 3, currentGeneration: 4), isFalse);
+      expect(shouldProceedWithScheduledSoftRetry(scheduledGeneration: 0, currentGeneration: 1), isFalse);
+    });
+  });
+
   group('shouldKickStuckConnectingAttempt', () {
     test('kicks only after sustained .connecting without manual disconnect', () {
       expect(

@@ -78,6 +78,19 @@ bool shouldInvalidatePendingRetryForDifferentTarget({
   return pendingRetryDeviceId != targetDeviceId;
 }
 
+/// Whether a soft-retry that was queued with [scheduledGeneration] should still
+/// run after acquiring the device-service mutex.
+///
+/// Canceling / resetting the retry counter bumps the live generation so an
+/// already-queued Timer callback (or a callback waiting on the mutex behind a
+/// force-connect to another device) exits instead of switching sessions.
+bool shouldProceedWithScheduledSoftRetry({
+  required int scheduledGeneration,
+  required int currentGeneration,
+}) {
+  return scheduledGeneration == currentGeneration;
+}
+
 /// Whether bringing the app to the foreground should kick a BLE reconnect (#6721).
 ///
 /// Native iOS already calls `reconnectStalePeripherals` on foreground; Dart still

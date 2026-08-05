@@ -48,11 +48,14 @@ final class OmiBleManager: NSObject {
     private var connectingWatchdogTimer: Timer?
 
     /// UUIDs the connecting watchdog just canceled and is about to re-issue.
-    /// `didFailToConnect`/`didDisconnectPeripheral` check this so a delegate
-    /// callback triggered by the watchdog's own cancel doesn't *also* schedule
-    /// its own retry — otherwise the same peripheral gets two overlapping
-    /// `connect()` calls for one stall.
+    /// Exactly one of (watchdog asyncAfter, didFail/didDisconnect) may
+    /// `remove` the UUID and become the sole owner of the reconnect.
     private var watchdogPendingReissue: Set<String> = []
+
+    /// Monotonic connect-attempt generation per UUID. Soft-failure retries
+    /// capture the generation at failure time and bail if a newer
+    /// `issueConnect` (e.g. watchdog re-issue) has already superseded them.
+    private var connectAttemptGeneration: [String: Int] = [:]
 
     /// Tracks peripherals that have connected at least once (for reconnection counting).
     private var everConnected: Set<String> = []
@@ -161,10 +164,25 @@ final class OmiBleManager: NSObject {
     /// a connect issued outside this path is invisible to the watchdog and can
     /// stall in `.connecting` forever with nothing left to recover it).
     private func issueConnect(_ peripheral: CBPeripheral, uuid: String) {
+        connectAttemptGeneration[uuid, default: 0] += 1
         connectAttemptStartTimes[uuid] = Date()
         startConnectingWatchdogIfNeeded()
         peripheral.delegate = self
         centralManager.connect(peripheral, options: nil)
+    }
+
+    /// Single delayed reconnect after fail/disconnect. Rechecks manual
+    /// disconnect and connect-generation so a tap-disconnect or a newer
+    /// `issueConnect` cannot race a stale 200ms retry (#6721 cubic).
+    private func scheduleFailureReconnect(peripheral: CBPeripheral, uuid: String, generation: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
+            guard let self = self else { return }
+            guard !self.manuallyDisconnected.contains(uuid) else { return }
+            guard (self.connectAttemptGeneration[uuid] ?? 0) == generation else { return }
+            let target = self.peripherals[uuid] ?? peripheral
+            if target.state == .connected { return }
+            self.issueConnect(target, uuid: uuid)
+        }
     }
 
     /// CoreBluetooth can leave a peripheral in `.connecting` after backgrounding
@@ -199,15 +217,19 @@ final class OmiBleManager: NSObject {
             NSLog("[OmiBle] connecting watchdog: canceling stuck connect for \(uuid) after \(Int(elapsed))s")
             connectAttemptStartTimes.removeValue(forKey: uuid)
             // Mark before canceling: CoreBluetooth can route this cancel through
-            // didFailToConnect, whose own retry logic must not fire a second,
-            // overlapping connect for the same stall (see didFailToConnect).
+            // didFailToConnect / didDisconnect. Exactly one of this asyncAfter
+            // or that delegate path may consume the flag and re-issue connect.
+            let generation = connectAttemptGeneration[uuid] ?? 0
             watchdogPendingReissue.insert(uuid)
             centralManager.cancelPeripheralConnection(peripheral)
 
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self else { return }
-                self.watchdogPendingReissue.remove(uuid)
+                // Atomic ownership: if the fail/disconnect delegate already
+                // removed this UUID, it owns the single reconnect.
+                guard self.watchdogPendingReissue.remove(uuid) != nil else { return }
                 guard !self.manuallyDisconnected.contains(uuid) else { return }
+                guard (self.connectAttemptGeneration[uuid] ?? 0) == generation else { return }
                 guard let peripheral = self.peripherals[uuid] else { return }
                 if peripheral.state == .connected { return }
                 NSLog("[OmiBle] connecting watchdog: re-issuing connect for \(uuid)")
@@ -691,6 +713,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
+        let failedGeneration = connectAttemptGeneration[uuid] ?? 0
         NSLog("[OmiBle] didFailToConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         connectAttemptStartTimes.removeValue(forKey: uuid)
         cleanupPeripheral(uuid)
@@ -710,19 +733,13 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
 
-        // The connecting watchdog's own cancel can route here on some iOS
-        // versions. Its re-issue (200ms after cancel, see kickStuckConnectingPeripherals)
-        // is the only retry for this stall — scheduling a second one here would
-        // issue two overlapping connect() calls for the same peripheral.
-        let watchdogOwnsRetry = watchdogPendingReissue.remove(uuid) != nil
+        // Claiming the watchdog flag transfers sole reconnect ownership to this
+        // path (the watchdog asyncAfter will no-op). Generation + manual checks
+        // inside scheduleFailureReconnect stop late/duplicate connects.
+        let claimedWatchdogRetry = watchdogPendingReissue.remove(uuid) != nil
 
-        // Retry previously-connected peripherals — otherwise a failed connect silently
-        // drops the user. iOS queues this at the chipset level; it's free while waiting.
-        if !isManual, !pairingLost, everConnected.contains(uuid), !watchdogOwnsRetry {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
-                guard let self = self else { return }
-                self.issueConnect(peripheral, uuid: uuid)
-            }
+        if !isManual, !pairingLost, claimedWatchdogRetry || everConnected.contains(uuid) {
+            scheduleFailureReconnect(peripheral: peripheral, uuid: uuid, generation: failedGeneration)
         }
     }
 
@@ -730,6 +747,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
         let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
+        let failedGeneration = connectAttemptGeneration[uuid] ?? 0
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         connectAttemptStartTimes.removeValue(forKey: uuid)
         cleanupPeripheral(uuid)
@@ -756,17 +774,12 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
 
-        // See didFailToConnect: don't double-issue a connect for a stall the
-        // watchdog is already re-issuing itself.
-        let watchdogOwnsRetry = watchdogPendingReissue.remove(uuid) != nil
+        let claimedWatchdogRetry = watchdogPendingReissue.remove(uuid) != nil
 
-        // Auto-reconnect unless manually disconnected
-        if !isManual, !pairingLost, !watchdogOwnsRetry {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
-                guard let self = self else { return }
-                // iOS handles this at the BLE chipset level — zero CPU/radio cost while waiting
-                self.issueConnect(peripheral, uuid: uuid)
-            }
+        // Auto-reconnect unless manually disconnected. Claiming the watchdog
+        // flag means this path owns the single re-issue for that stall.
+        if !isManual, !pairingLost, claimedWatchdogRetry || everConnected.contains(uuid) {
+            scheduleFailureReconnect(peripheral: peripheral, uuid: uuid, generation: failedGeneration)
         }
     }
 }
