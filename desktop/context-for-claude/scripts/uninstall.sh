@@ -122,6 +122,16 @@ else
     log "kept captured data at $DATA_DIR (re-run with --purge-data to delete it)"
 fi
 
+# The Claude Code skill, unlike the config entries, is a directory this app created and owns every
+# byte of — so removing it here is safe in a way that editing the user's config would not be. Left
+# behind, it would describe an app that is no longer installed.
+SKILL_DIR="$HOME/.claude/skills/$MCP_SERVER_NAME"
+assert_not_production "skill directory" "$SKILL_DIR"
+if [[ -d "$SKILL_DIR" ]]; then
+    log "removing the Claude Code skill at $SKILL_DIR"
+    rm -rf "$SKILL_DIR"
+fi
+
 echo
 log "one manual step is left — this script does not edit your Claude config:"
 echo "  claude mcp remove $MCP_SERVER_NAME"

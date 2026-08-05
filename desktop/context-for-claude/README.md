@@ -74,9 +74,10 @@ Cutting a release — including generating the Context-only update key — is
 
 ## What Claude gets
 
-Eleven tools. The descriptions are written for Claude, so it reaches for them unprompted. In
-addition to searching captured context, Claude can list, create, edit, and delete durable Omi
-memories through the user's provisioned MCP key; those writes go to Omi's canonical memory store.
+Twelve tools. The descriptions are written for Claude, so it reaches for them unprompted. In
+addition to searching captured context, Claude can look at your actual screen, and can list, create,
+edit, and delete durable Omi memories through the user's provisioned MCP key; those writes go to
+Omi's canonical memory store.
 
 | tool | answers |
 |---|---|
@@ -85,12 +86,24 @@ memories through the user's provisioned MCP key; those writes go to Omi's canoni
 | `conversations` | Recent conversations with time, duration, app and preview |
 | `transcript` | One conversation in full (Omi: named speakers; local capture: me/them by mic vs system) |
 | `screen` | What was on screen: window titles and their text |
+| `look` | Your screen **as an image** — the pixels, so Claude can see it |
 | `activity` | The shape of a day — contiguous blocks per app |
 | `status` | Capture health and coverage windows, for both halves |
 | `get_memories` | The user's durable Omi memories, listed directly |
 | `create_memory` | Save a durable fact to Omi's canonical memory store |
 | `edit_memory` | Correct the content of an existing Omi memory |
 | `delete_memory` | Remove an Omi memory when the user asks to forget it |
+
+`look` is the one that changes what Claude can be asked to do. "Does this look right?" stops being a
+question you answer by pasting a screenshot, and Claude can check its own UI work by building it,
+running it, and looking at it. Every result states how old the frame is, because an image with no
+provenance is the one way this can mislead. A frame whose text was redacted comes back **without**
+its picture: the scrub only ever touched text, and the screenshot would show the credential in full.
+
+Claude Code also gets a **skill** (`~/.claude/skills/context-for-claude/`), installed and removed
+alongside the connector. It exists for subagents: a subagent inherits none of the conversation it
+came from, so it is the reader with the least context and the least reason to think of asking for
+more, and the skill is the one artefact it enumerates before it needs a tool.
 
 `status` is the one that makes the rest trustworthy: it reports exactly what window of time was
 recorded, so Claude can tell "that never happened" apart from "that was never captured". On Intel,

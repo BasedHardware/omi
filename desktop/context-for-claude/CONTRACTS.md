@@ -224,14 +224,25 @@ public struct ToolDefinition: Sendable {
     public let inputSchema: JSONValue
 }
 
+public struct ToolImage: Sendable, Equatable {
+    public let base64: String
+    public let mimeType: String
+}
+
+/// What one call produced: prose, and — for `look` alone — the pixels behind it.
+public struct ToolOutput: Sendable, Equatable {
+    public var text: String
+    public var images: [ToolImage]
+}
+
 public enum Tools {
     public static let all: [ToolDefinition]
-    /// Executes a tool against the store and returns the text payload for the MCP content block.
-    public static func call(name: String, arguments: JSONValue?, store: ContextStore?) throws -> String
+    /// Executes a tool against the store and returns the payload for the MCP content blocks.
+    public static func call(name: String, arguments: JSONValue?, store: ContextStore?) throws -> ToolOutput
 }
 ```
 
-Seven tools, exact names and parameters:
+Twelve tools, exact names and parameters:
 
 | name | params |
 |---|---|
@@ -240,8 +251,13 @@ Seven tools, exact names and parameters:
 | `conversations` | `since` (string), `until` (string), `limit` (int, default 30) |
 | `transcript` | `session_id` (int, required) |
 | `screen` | `since` (string), `until` (string), `app` (string), `limit` (int, default 60) |
+| `look` | `at` (string, defaults to now), `app` (string), `count` (int, default 1, capped at 3) |
 | `activity` | `since` (string, required), `until` (string) |
 | `status` | none |
+| `get_memories` | `limit` (int), `offset` (int), `sort` (string), `categories` (array) |
+| `create_memory` | `content` (string, required), `category` (string) |
+| `edit_memory` | `memory_id` (string, required), `content` (string, required) |
+| `delete_memory` | `memory_id` (string, required) |
 
 Descriptions must be written **for Claude**, stating when to reach for the tool, e.g.
 `recall`: *"Search everything the user has said, heard, or had on screen. Use this whenever the user
@@ -258,6 +274,21 @@ the coverage window is, so Claude can distinguish "never happened" from "not cap
 When `store` is nil (database missing), every tool returns a plain sentence explaining that Omi
 Context for Claude has not captured anything yet — never an exception.
 
+`look` is the only tool that fills `ToolOutput.images`, and it holds three rules the others cannot
+break for it:
+
+- **The stored frame is HEIC and is re-encoded as JPEG** (`FrameImages`), bounded to 1568 px on the
+  longest edge. No Claude surface accepts `image/heic`, so an unconverted frame is a rejected
+  request, and an unbounded one is a reply with no room left for prose.
+- **The prose always states the frame's age**, because MCP's `image` block carries no timestamp. A
+  stale frame read as the live screen is the one way this tool can mislead.
+- **A frame whose stored text contains `Redaction.marker` is served without its picture**, and says
+  so. `Redaction.scrub` has only ever touched text; the screenshot beside a scrubbed string still
+  shows the credential in full.
+
+Reads go through `RewindQueries.newestFrames`, keeping that file the only place `frames.imagePath`
+is selected. The path is converted into pixels and never leaves the process as a string.
+
 ### `Sources/ContextMCPKit/MCPServer.swift` — owner: **mcp protocol agent**
 
 ```swift
@@ -269,6 +300,10 @@ public final class MCPServer {
     public func handle(line: String) -> String?
 }
 ```
+
+A tool result's `content` array is the text block first, then one `image` block per
+`ToolOutput.images` entry (`{"type":"image","data":<base64>,"mimeType":"image/jpeg"}` — raw base64,
+never a `data:` URI). Text first is load-bearing: an image block has nowhere to put a timestamp.
 
 Implements `initialize` (`serverInfo` name `"context-for-claude"`, version `"1.0.0"`, capabilities
 `{"tools":{}}`, plus one `icons` entry — the app mark as a 128×128 PNG `data:` URI, see
@@ -492,6 +527,30 @@ enum ClaudeRegistrar {
 ```
 Uses `ClaudeConfig` for all document manipulation. Creates the Claude Desktop config directory and
 file if absent. Never throws out — a failure becomes `false` plus an explanatory `message`.
+
+`register()` also installs the Claude Code skill and `unregister()` removes it, through
+`ClaudeSkill`. Neither may fail the connection over it: the connector works without the skill, and
+a `~/.claude/skills` permission problem must not be reported as "I couldn't connect to Claude Code".
+
+### `Sources/ContextCore/ClaudeSkill.swift` — owner: **registrar agent (pure half)**
+
+```swift
+public enum ClaudeSkill {
+    public static let name: String            // "context-for-claude"
+    public static var directoryURL: URL       // ~/.claude/skills/context-for-claude
+    public static var documentURL: URL        // .../SKILL.md
+    public static let document: String        // YAML frontmatter + Markdown body
+    public static var isInstalled: Bool       // content equality, not mere presence
+    @discardableResult public static func install() throws -> Bool
+    @discardableResult public static func remove() throws -> Bool
+}
+```
+
+The server's `instructions` reach the main loop; this reaches a **subagent**, which is handed a task
+and none of the conversation behind it. Frontmatter `name` must equal the directory name. `install()`
+returns false when the document is already current, so registering on every launch does not churn the
+file. `remove()` deletes the whole directory, and neither ever touches anything else under
+`~/.claude`.
 
 ### `Sources/ContextApp/Integration/LoginItem.swift` — owner: **registrar agent**
 

@@ -33,7 +33,7 @@ structural decision follows from it:
 | Target | Kind | Depends on | Contains |
 |---|---|---|---|
 | `ContextCore` | library | GRDB | Storage, queries, and every pure policy. No AppKit, no AVFoundation — it has to link into the MCP binary. |
-| `ContextMCPKit` | library | ContextCore | JSON-RPC framing, the eleven tools, MCP handshake, Omi memory reads and writes. |
+| `ContextMCPKit` | library | ContextCore | JSON-RPC framing, the twelve tools, frame-to-JPEG conversion, MCP handshake, Omi memory reads and writes. |
 | `ContextMCP` | executable | ContextMCPKit | `main.swift`. Opens the store read-only, pumps stdio. |
 | `ContextApp` | executable | ContextCore, FluidAudio, Sparkle | Capture, transcription, menu bar, onboarding, Claude registration, auto-update. |
 | `context_for_claude_windows_core_smoke` | Windows executable | `ContextForClaude::core`, swift-winrt | Calls the portable C ABI for a session decision and ranking score. |
@@ -107,14 +107,27 @@ thing pruned.
 
 ## The MCP surface
 
-Eleven tools — `recall`, `recent`, `conversations`, `transcript`, `screen`, `activity`, `status`,
-`get_memories`, `create_memory`, `edit_memory`, and `delete_memory` — return Markdown rather than
-JSON, because Claude reads prose better than it reads a dump. Memory writes go through Omi's
-canonical `/v1/mcp/memories` API using the provisioned MCP key; CFC does not create a second local
-memory store. Tool descriptions are written to tell Claude *when to reach for them*; they are the
-product's real interface and deserve more care than the code behind them.
+Twelve tools — `recall`, `recent`, `conversations`, `transcript`, `screen`, `look`, `activity`,
+`status`, `get_memories`, `create_memory`, `edit_memory`, and `delete_memory` — return Markdown
+rather than JSON, because Claude reads prose better than it reads a dump. Memory writes go through
+Omi's canonical `/v1/mcp/memories` API using the provisioned MCP key; CFC does not create a second
+local memory store. Tool descriptions are written to tell Claude *when to reach for them*; they are
+the product's real interface and deserve more care than the code behind them.
 
 `status` exists so that "I have no record of that" can be distinguished from "that never happened".
+
+`look` is the only tool that returns pixels, and it is the reason `Tools.call` returns a
+`ToolOutput` (prose plus images) rather than a string. Three rules hold it together: the text block
+is emitted first and always carries the frame's age, because MCP's image block has no field for a
+timestamp; the stored HEIC is re-encoded as JPEG, which is the only format the client accepts; and a
+frame whose text `Redaction.scrub` marked is served **without** its picture, because the scrub has
+never touched pixels. Reads go through `RewindQueries`, still the only module that selects
+`frames.imagePath` — the file is converted to an image, never handed over as a path.
+
+Beyond the connector, `ClaudeSkill` installs `~/.claude/skills/context-for-claude/SKILL.md` when the
+user connects and deletes it when they disconnect. The server's `instructions` reach the main loop's
+system prompt; the skill is what reaches a subagent, which starts with none of the conversation
+behind its task.
 
 ## Files
 

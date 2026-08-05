@@ -102,6 +102,7 @@ enum ClaudeRegistrar {
 
         let code = connect(.claudeCode, binary: binary)
         let desktop = connect(.claudeDesktop, binary: binary)
+        installSkill()
         let message = registerMessage([(.claudeCode, code), (.claudeDesktop, desktop)])
         ContextLog.info(message, logCategory)
         return Result(
@@ -115,6 +116,7 @@ enum ClaudeRegistrar {
     static func unregister() -> Result {
         let code = disconnect(.claudeCode)
         let desktop = disconnect(.claudeDesktop)
+        removeSkill()
         let message = unregisterMessage([(.claudeCode, code), (.claudeDesktop, desktop)])
         ContextLog.info(message, logCategory)
         return Result(
@@ -126,6 +128,36 @@ enum ClaudeRegistrar {
     static func status() -> (claudeCode: Bool, claudeDesktop: Bool) {
         let binary = mcpBinaryPath
         return (isRegistered(.claudeCode, binary: binary), isRegistered(.claudeDesktop, binary: binary))
+    }
+
+    // MARK: - The skill
+
+    /// Installs the Claude Code skill beside the MCP registration, and never fails the connection
+    /// over it.
+    ///
+    /// Deliberately not part of the `Result`, and deliberately not a surface. The connection is the
+    /// contract — with the server registered, every tool works whether or not this file exists; the
+    /// skill only changes how readily an agent reaches for them, and most of all how readily a
+    /// subagent does. Turning a `~/.claude/skills` permission problem into "I couldn't connect to
+    /// Claude Code" would trade a working connector for an accurate error message.
+    private static func installSkill() {
+        do {
+            if try ClaudeSkill.install() {
+                ContextLog.info("Installed the Claude Code skill at \(displayPath(ClaudeSkill.documentURL.path))", logCategory)
+            }
+        } catch {
+            ContextLog.error("Could not install the Claude Code skill: \(error.localizedDescription)", logCategory)
+        }
+    }
+
+    private static func removeSkill() {
+        do {
+            if try ClaudeSkill.remove() {
+                ContextLog.info("Removed the Claude Code skill", logCategory)
+            }
+        } catch {
+            ContextLog.error("Could not remove the Claude Code skill: \(error.localizedDescription)", logCategory)
+        }
     }
 
     // MARK: - One surface at a time
