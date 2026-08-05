@@ -16,6 +16,8 @@ const baseEvent: AiCloneIncomingMessageEvent = {
   chatDisplayName: 'Jordan',
   mode: 'draft',
   incomingMessageText: 'are we still on for 6?',
+  messageID: 'msg-1',
+  messageTimestamp: 1_700_000_000_000,
   promptText: 'system + user context here'
 }
 
@@ -53,18 +55,22 @@ describe('AiCloneDraftHost', () => {
       chatID: 'chat-1',
       chatDisplayName: 'Jordan',
       incomingMessageText: 'are we still on for 6?',
+      messageID: 'msg-1',
+      messageTimestamp: 1_700_000_000_000,
       draftText: 'sounds good, see you then!'
     })
   })
 
-  it('does not submit when the model returns an empty draft', async () => {
+  it('still submits (with an empty draft) when the model returns nothing, so main can mark the message processed', async () => {
     callAgentLLMSpy.mockResolvedValue('   ')
     render(<AiCloneDraftHost />)
 
     incomingCb?.(baseEvent)
 
-    await waitFor(() => expect(callAgentLLMSpy).toHaveBeenCalledTimes(1))
-    expect(submitDraftSpy).not.toHaveBeenCalled()
+    await waitFor(() => expect(submitDraftSpy).toHaveBeenCalledTimes(1))
+    expect(submitDraftSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ messageID: 'msg-1', draftText: '' })
+    )
   })
 
   it('swallows a callAgentLLM failure instead of throwing', async () => {
