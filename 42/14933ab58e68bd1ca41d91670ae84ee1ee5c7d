@@ -1,0 +1,28 @@
+backend/utils/llm/model_config.py
+  s_6d4a9488ea3cd2::t_58e57b6fab9947 62
+backend/routers/paper.py
+  s_6d4a9488ea3cd2::t_0c86e346ee115d 1-74
+backend/utils/llm/usage_tracker.py
+  s_6d4a9488ea3cd2::t_569712f6f76254 206
+backend/main.py
+  s_6d4a9488ea3cd2::t_2c5c76e3d9f116 72
+  s_6d4a9488ea3cd2::t_b559101f42f5b6 208
+backend/route_policy_manifest.yaml
+  s_6d4a9488ea3cd2::t_9e0fb012d02966 1643-1688
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "4214933ab58e68bd1ca41d91670ae84ee1ee5c7d",
+  "prompts": {},
+  "sessions": {
+    "s_6d4a9488ea3cd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24fa61f6-354f-4a46-b7c7-c2f31453e656",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+backend/docs/llm/model_endpoint_inventory.yaml
+  s_6d4a9488ea3cd2::t_5eb3eeaa108d66 44
+backend/routers/paper.py
+  s_6d4a9488ea3cd2::t_876ad2563b1c34 31-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "52f0f4927c975b97a9daefc81137a470cdb706b3",
+  "prompts": {},
+  "sessions": {
+    "s_6d4a9488ea3cd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24fa61f6-354f-4a46-b7c7-c2f31453e656",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

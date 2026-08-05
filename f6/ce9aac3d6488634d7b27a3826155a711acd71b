@@ -1,0 +1,42 @@
+backend/utils/paper/edition.py
+  s_6d4a9488ea3cd2::t_8239605288e21c 1-92
+backend/models/paper.py
+  s_6d4a9488ea3cd2::t_b0464898f23a33 1-81
+backend/utils/paper/__init__.py
+  s_6d4a9488ea3cd2::t_b3d1cc6c584fcf 1-7
+backend/templates/paper.html
+  s_6d4a9488ea3cd2::t_6788be209360c9 1-7,12-17,28-39,42-47,49,51-55,58-59,62-63,65,70,72,74-79,81-83,87,89-92,94-96,98,101-104,107-110,116-118,120-121,124-128,131,133-136,139,144-147,149-150,155-160,164,166,168-178,182-187,189-214,216,219-258
+  s_6d4a9488ea3cd2::t_09ec7888f9ee6a 8-11,18-27,40-41,48,50,56-57,60-61,64,66-69,71,73,80,84-86,88,93,97,99-100,105-106,111-115,119,122-123,129-130,132,137-138,140-143,148,161-163,165,167,179-181,188
+  s_6d4a9488ea3cd2::t_5987e74d7ee762 215,217-218
+  s_6d4a9488ea3cd2::t_4bf84c76c7ab27 151-154
+backend/utils/paper/render.py
+  s_6d4a9488ea3cd2::t_7e9aec5ba63c46 1-114
+backend/utils/paper/loops.py
+  s_6d4a9488ea3cd2::t_ee7beda54e2869 1-78
+backend/utils/paper/stances.py
+  s_6d4a9488ea3cd2::t_14435a5191ee2a 13-16
+  s_6d4a9488ea3cd2::t_7e1e6937b92061 44-60,63-66,98-114
+  s_6d4a9488ea3cd2::t_89d0133f70a2ce 1-12,17-43,61-62,67-97,115-126
+backend/utils/paper/editorial.py
+  s_6d4a9488ea3cd2::t_5e86fb7fdb7a89 1-133
+backend/utils/paper/text.py
+  s_6d4a9488ea3cd2::t_635dc188002995 1-61
+backend/utils/paper/desk.py
+  s_6d4a9488ea3cd2::t_518faa5ac787cd 1-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f6ce9aac3d6488634d7b27a3826155a711acd71b",
+  "prompts": {},
+  "sessions": {
+    "s_6d4a9488ea3cd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24fa61f6-354f-4a46-b7c7-c2f31453e656",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

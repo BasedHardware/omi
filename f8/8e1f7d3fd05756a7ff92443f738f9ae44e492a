@@ -1,0 +1,24 @@
+backend/tests/unit/test_paper_edition.py
+  s_6d4a9488ea3cd2::t_4ee25aca1a3ffb 1-187,190,192-248
+  s_6d4a9488ea3cd2::t_5285ebb5fd1a34 188-189,191
+backend/tests/unit/test_omi_qos_tiers.py
+  s_6d4a9488ea3cd2::t_0195e6eca200e4 251
+backend/tests/routers/test_paper.py
+  s_6d4a9488ea3cd2::t_fd123bcbb92454 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "f88e1f7d3fd05756a7ff92443f738f9ae44e492a",
+  "prompts": {},
+  "sessions": {
+    "s_6d4a9488ea3cd2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "24fa61f6-354f-4a46-b7c7-c2f31453e656",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
