@@ -167,7 +167,7 @@ export function AiCloneTab(): React.JSX.Element {
                     onChange={(e) =>
                       setMode(chat.chatID, chat.displayName, e.target.value as AiCloneChatMode)
                     }
-                    className="input-field shrink-0"
+                    className="input-field w-44 shrink-0"
                   >
                     {MODES.map((mode) => (
                       <option key={mode} value={mode}>
