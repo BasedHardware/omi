@@ -309,12 +309,11 @@ def _build_canonical_graph_items_query(
 
 
 def _canonical_memory_catalog_node(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Represent a durable canonical memory without inventing a relationship.
+    """Represent every durable canonical memory without inventing a relationship.
 
-    Historical rows may predate the graph-assertion contract.  They remain
-    authoritative memory facts, so the atlas includes them as isolated memory
-    nodes while assertion-backed relationships stay exclusively in the fenced
-    graph records below.
+    The catalog is the one-to-one memory browser. Assertion-backed entities and
+    relationships remain exclusively in the fenced graph records below, so the
+    atlas never needs to infer a relationship merely to show a memory.
     """
     content = item.get('content')
     memory_id = item.get('memory_id')
@@ -406,14 +405,11 @@ def _read_canonical_graph_page_once(
                     account_generation=revision.account_generation,
                     db_client=client,
                 )
-                assertion_memory_ids = {assertion.memory_id for assertion in loaded_assertions}
                 for assertion in loaded_assertions:
                     accepted_assertions.append(assertion)
                     visible_memory_ids.add(assertion.memory_id)
                 for item in eligible_batch:
                     memory_id = cast(str, item['memory_id'])
-                    if memory_id in assertion_memory_ids:
-                        continue
                     catalog_node = _canonical_memory_catalog_node(item)
                     if catalog_node is not None:
                         catalog_nodes.append(catalog_node)
