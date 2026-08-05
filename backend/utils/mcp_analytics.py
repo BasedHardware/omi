@@ -45,6 +45,15 @@ _TOOL_OPERATIONS = {
     "get_conversations": "conversation_list",
     "get_conversation_by_id": "conversation_get",
     "search_conversations": "conversation_search",
+    "get_daily_summaries": "daily_summary_list",
+    "search_x_posts": "x_post_search",
+    "get_x_posts": "x_post_list",
+    "get_action_items": "action_item_list",
+    "search_action_items": "action_item_search",
+    "get_goals": "goal_list",
+    "get_chat_messages": "chat_message_list",
+    "get_people": "people_list",
+    "get_screen_activity": "screen_activity_get",
     # Kept here for the connector branch: once search/fetch reaches this
     # boundary it automatically uses the same event contract.
     "search": "memory_conversation_search",
@@ -186,7 +195,10 @@ def result_count_for_tool_result(tool_name: object, result: Mapping[str, Any]) -
 def error_category_for_code(code: int, *, authorization_denied: bool = False) -> str:
     if authorization_denied or code == -32003:
         return "authorization_denied"
-    if code in {-32602, -32000}:
+    if code in {-32602, -32000, -32001, -32002}:
+        # -32001 (not found) and -32002 (paid-plan/locked) are expected
+        # client/product-gating outcomes, not backend failures; classifying
+        # them as validation keeps the internal-error bucket meaningful.
         return "validation"
     if code == -32601:
         return "unknown_tool"

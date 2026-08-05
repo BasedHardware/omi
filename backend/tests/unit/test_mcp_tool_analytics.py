@@ -221,6 +221,53 @@ def test_unexpected_tool_errors_are_recorded_and_propagated(monkeypatch):
     assert "private failure" not in str(events)
 
 
+def test_not_found_and_paid_plan_errors_are_validation_not_internal(monkeypatch):
+    events = []
+    monkeypatch.setattr(mcp_sse, "schedule_mcp_tool_call", lambda **event: events.append(event))
+
+    for i, code in enumerate((-32001, -32002)):
+        with patch.object(mcp_sse, "execute_tool", side_effect=mcp_sse.ToolExecutionError("expected", code=code)):
+            mcp_sse.handle_mcp_message(
+                _auth(), {"id": 10 + i, "method": "tools/call", "params": {"name": "get_conversation_by_id", "arguments": {}}}
+            )
+
+    assert [event["error_category"] for event in events] == ["validation", "validation"]
+    assert [event["authorization_outcome"] for event in events] == ["not_applicable", "not_applicable"]
+
+
+def test_read_tools_have_named_operations(monkeypatch):
+    captured = []
+    monkeypatch.setattr(
+        mcp_analytics,
+        "emit_posthog_event",
+        lambda distinct_id, event, properties: captured.append(properties),
+    )
+
+    for tool_name in (
+        "get_screen_activity",
+        "get_daily_summaries",
+        "get_action_items",
+        "search_action_items",
+        "get_goals",
+        "get_chat_messages",
+        "get_people",
+        "search_x_posts",
+        "get_x_posts",
+    ):
+        mcp_analytics.emit_mcp_tool_call(
+            uid="uid-test-123",
+            tool_name=tool_name,
+            auth_type="oauth",
+            client_id="omi-chatgpt-prod",
+            outcome="success",
+            authorization_outcome="allowed",
+            error_category="none",
+            duration_ms=1,
+            result_count=0,
+        )
+        assert captured[-1]["operation"] != "other", tool_name
+
+
 def test_screen_activity_summary_result_count_uses_screenshot_total():
     assert (
         mcp_analytics.result_count_for_tool_result(
