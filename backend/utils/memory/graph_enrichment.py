@@ -17,7 +17,12 @@ from models.memory_apply import build_patch_mutation_identity
 from models.memory_admission import valid_required_processing_receipt
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.memory_promotion import PROMOTION_GRAPH_PLAN_VERSION, PromotionGraphPlan
+from models.memory_promotion import (
+    PROMOTION_GRAPH_PLAN_VERSION,
+    PROMOTION_GRAPH_PLAN_V2_VERSION,
+    GraphRelationEndpoint,
+    PromotionGraphPlan,
+)
 from models.memory_promotion import MemoryGraphAssertion
 from models.memory_evidence import SourceState
 from models.product_memory import (
@@ -56,7 +61,10 @@ class GraphEnrichmentPlan(BaseModel):
     schema_version: Literal["canonical_memory_graph_enrichment_plan.v1"] = GRAPH_ENRICHMENT_PLAN_VERSION
     subject_entity_id: str
     predicate: str
-    arguments: Dict[str, Any]
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    subject: GraphRelationEndpoint | None = None
+    object: GraphRelationEndpoint | None = None
+    qualifiers: Dict[str, Any] = Field(default_factory=dict)
     plan_hash: str = ""
 
     @field_validator("subject_entity_id")
@@ -78,14 +86,24 @@ class GraphEnrichmentPlan(BaseModel):
     def normalize_and_hash(self) -> "GraphEnrichmentPlan":
         try:
             validated = PromotionGraphPlan(
-                schema_version=PROMOTION_GRAPH_PLAN_VERSION,
+                schema_version=(
+                    PROMOTION_GRAPH_PLAN_V2_VERSION
+                    if self.subject is not None or self.object is not None
+                    else PROMOTION_GRAPH_PLAN_VERSION
+                ),
                 subject_entity_id=self.subject_entity_id,
                 predicate=self.predicate,
                 arguments=self.arguments,
+                subject=self.subject,
+                object=self.object,
+                qualifiers=self.qualifiers,
             )
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
         self.arguments = validated.arguments
+        self.subject = validated.subject
+        self.object = validated.object
+        self.qualifiers = validated.qualifiers
         # The canonical assertion builder consumes ``PromotionGraphPlan``;
         # share its hash namespace so the receipt, item promotion, and final
         # assertion all bind to one deterministic plan identity.
@@ -97,9 +115,17 @@ class GraphEnrichmentPlan(BaseModel):
 
     def promotion_plan(self) -> PromotionGraphPlan:
         return PromotionGraphPlan(
+            schema_version=(
+                PROMOTION_GRAPH_PLAN_V2_VERSION
+                if self.subject is not None or self.object is not None
+                else PROMOTION_GRAPH_PLAN_VERSION
+            ),
             subject_entity_id=self.subject_entity_id,
             predicate=self.predicate,
             arguments=self.arguments,
+            subject=self.subject,
+            object=self.object,
+            qualifiers=self.qualifiers,
         )
 
 
@@ -186,6 +212,9 @@ def _coerce_plan(plan: GraphEnrichmentPlan | PromotionGraphPlan | Dict[str, Any]
             subject_entity_id=plan.subject_entity_id,
             predicate=plan.predicate,
             arguments=plan.arguments,
+            subject=plan.subject,
+            object=plan.object,
+            qualifiers=plan.qualifiers,
         )
     try:
         return GraphEnrichmentPlan.model_validate(plan)
@@ -232,7 +261,7 @@ def _assertion_matches_current_item(
             return assertion.get(key, default)
         return getattr(assertion, key, default)
 
-    return (
+    base_matches = (
         value("status", "active") == "active"
         and value("uid") == item.uid
         and value("memory_id") == item.memory_id
@@ -244,6 +273,14 @@ def _assertion_matches_current_item(
         and value("subject_entity_id") == plan.subject_entity_id
         and value("predicate") == plan.predicate
         and value("arguments") == plan.arguments
+    )
+    if plan.subject is None and plan.object is None:
+        return base_matches
+    return (
+        base_matches
+        and value("subject") == plan.subject.model_dump(mode="json")
+        and value("object") == plan.object.model_dump(mode="json")
+        and value("qualifiers", {}) == plan.qualifiers
     )
 
 

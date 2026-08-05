@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from models.memory_apply import ApplyStatus, MemoryControlState, memory_content_hash
+from models.memory_promotion import PROMOTION_GRAPH_PLAN_V2_VERSION
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentStatus
 from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment
@@ -132,10 +133,12 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
         llm=_Planner(
             {
                 "eligible": True,
-                "subject_entity_id": "user",
+                "subject_label": "user",
+                "subject_node_type": "person",
                 "predicate": "prefers_update_style",
                 "object_label": "concise updates",
-                "arguments": {"style": "concise"},
+                "object_node_type": "concept",
+                "qualifiers": {"style": "concise"},
             }
         ),
     )
@@ -145,7 +148,34 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
     assert planned.patch_payload["expected_content_hash"] == _item().content_hash
     assert planned.patch_payload["evidence_ids"] == ["ev1"]
     assert planned.patch_payload["subject_entity_id"] == "user"
-    assert planned.patch_payload["arguments"]["object"]["label"] == "concise updates"
+    graph_plan = planned.patch_payload["promotion_audit"]["graph_plan"]
+    assert graph_plan["schema_version"] == PROMOTION_GRAPH_PLAN_V2_VERSION
+    assert graph_plan["object"] == {
+        "entity_id": graph_plan["object"]["entity_id"],
+        "label": "concise updates",
+        "node_type": "concept",
+    }
+    assert graph_plan["qualifiers"] == {"style": "concise"}
+
+
+def test_historical_graph_planner_blocks_an_endpoint_label_not_supported_by_the_memory_text():
+    planned = plan_historical_graph_enrichment(
+        item=_item(),
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+        llm=_Planner(
+            {
+                "eligible": True,
+                "subject_label": "user",
+                "subject_node_type": "person",
+                "predicate": "prefers_update_style",
+                "object_label": "weekly updates",
+                "object_node_type": "concept",
+            }
+        ),
+    )
+
+    assert planned.status == GraphEnrichmentStatus.blocked
+    assert planned.block_code == "not_source_grounded"
 
 
 def test_historical_graph_planner_blocks_when_no_source_grounded_fact_exists():
@@ -175,7 +205,7 @@ def test_replan_candidates_exclude_current_planner_version():
         graph_ready=True,
         promotion={
             "graph_enrichment": True,
-            "graph_enrichment_planner_version": "canonical_historical_graph_enrichment.v2",
+            "graph_enrichment_planner_version": "canonical_historical_graph_enrichment.v3",
         },
     )
     legacy = _item(
@@ -217,9 +247,11 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
     planner = _Planner(
         {
             "eligible": True,
-            "subject_entity_id": "user",
+            "subject_label": "user",
+            "subject_node_type": "person",
             "predicate": "prefers_update_style",
             "object_label": "concise updates",
+            "object_node_type": "concept",
         }
     )
 
