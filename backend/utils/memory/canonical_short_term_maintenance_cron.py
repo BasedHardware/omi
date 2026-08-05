@@ -41,7 +41,11 @@ MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_E
 MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE"
 MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV = "MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE"
 DEFAULT_GRAPH_BACKFILL_PAGE_SIZE = 5
-DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = MAX_STRUCTURED_SCAN_SIZE
+# The historical planner has a hard 20-second deadline per candidate.  Keep
+# the scheduled scan to a small, page-relative look-ahead so one cohort user
+# cannot exhaust the Cloud Run Job's one-hour budget before later users run.
+GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER = 5
+DEFAULT_GRAPH_BACKFILL_SCAN_SIZE = DEFAULT_GRAPH_BACKFILL_PAGE_SIZE * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER
 
 
 def _required_memory_processor(item: MemoryItem) -> ProcessedRequiredMemory:
@@ -72,20 +76,25 @@ def canonical_graph_backfill_page_size() -> int:
     return min(MAX_PAGE_SIZE, max(1, value))
 
 
-def canonical_graph_backfill_scan_size() -> int:
-    """Return the bounded candidate window needed to make cohort pages advance.
+def canonical_graph_backfill_scan_size(*, page_size: int | None = None) -> int:
+    """Return the cursor scan window, bounded to a small current-page multiple.
 
-    Enrichment writes update ``updated_at``.  A scan no larger than the write
-    page therefore re-reads those just-enriched items and never reaches the
-    remaining historical rows.  Keep the larger read window explicit and
-    independently bounded from the per-user apply budget.
+    The durable keyset cursor advances after every completed scan, so the cron
+    no longer needs a corpus-sized candidate window to avoid rereading writes.
+    Keep enough look-ahead to skip temporarily ineligible rows, but cap both
+    the default and an explicit override at five current apply pages.  This
+    bounds serial 20-second planner calls while retaining the global
+    ``MAX_STRUCTURED_SCAN_SIZE`` ceiling.
     """
+    current_page_size = page_size if page_size is not None else canonical_graph_backfill_page_size()
+    current_page_size = min(MAX_PAGE_SIZE, max(1, current_page_size))
+    maximum = min(MAX_STRUCTURED_SCAN_SIZE, current_page_size * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER)
     raw = os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, str(DEFAULT_GRAPH_BACKFILL_SCAN_SIZE))
     try:
         value = int(raw)
     except ValueError:
-        return DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
-    return min(MAX_STRUCTURED_SCAN_SIZE, max(1, value))
+        value = DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
+    return min(maximum, max(current_page_size, value))
 
 
 @dataclass
@@ -266,17 +275,18 @@ def run_canonical_short_term_maintenance_for_cohort(
         if not canonical_graph_backfill_enabled():
             continue
         try:
+            graph_page_size = canonical_graph_backfill_page_size()
             graph_report = run_enrichment(
                 uid=uid,
                 # The database client is injected above; this is retained only
                 # for the CLI contract and is never used by this cron path.
                 firestore_project=os.getenv("GOOGLE_CLOUD_PROJECT", "canonical-memory"),
-                limit=canonical_graph_backfill_page_size(),
+                limit=graph_page_size,
                 apply=True,
                 confirm_uid=uid,
                 structured_only=False,
-                apply_limit=canonical_graph_backfill_page_size(),
-                scan_limit=canonical_graph_backfill_scan_size(),
+                apply_limit=graph_page_size,
+                scan_limit=canonical_graph_backfill_scan_size(page_size=graph_page_size),
                 db_client=client,
             )
             graph_outcomes = graph_report.get("outcomes", {})
