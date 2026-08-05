@@ -351,6 +351,29 @@ def test_canonical_graph_returns_every_canonical_memory_as_a_catalog_record(monk
     ]
 
 
+def test_blank_canonical_content_remains_a_neutral_catalog_record(monkeypatch):
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    blank_updated_at = NOW.replace(minute=3)
+    blank_item, _blank_assertion = _assertion_and_item("blank", 1, updated_at=blank_updated_at)
+    blank_item._payload["content"] = " \n\t "
+    db = _FakeDB([blank_item], {})
+
+    page = kg.get_canonical_knowledge_graph(UID, db_client=db, limit=10)
+
+    assert page.nodes == []
+    assert page.catalog_nodes == [
+        {
+            "id": "memory:blank",
+            "label": "Untitled canonical memory",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["blank"],
+            "created_at": blank_updated_at,
+            "updated_at": blank_updated_at,
+        }
+    ]
+
+
 def test_assertion_loader_rechecks_account_generation_before_fetch():
     stale_item, stale_assertion = _assertion_and_item("stale-generation", 1, account_generation=3)
     db = _fake_db_for([(stale_item, stale_assertion)])

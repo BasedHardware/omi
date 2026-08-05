@@ -318,14 +318,15 @@ def _canonical_memory_catalog_node(item: Dict[str, Any]) -> Optional[Dict[str, A
     content = item.get('content')
     memory_id = item.get('memory_id')
     updated_at = item.get('updated_at')
-    if (
-        not isinstance(content, str)
-        or not content.strip()
-        or not isinstance(memory_id, str)
-        or not isinstance(updated_at, datetime)
-    ):
+    if not isinstance(content, str) or not isinstance(memory_id, str) or not isinstance(updated_at, datetime):
         return None
     label = ' '.join(content.split())
+    # Eligibility, authority, and access are decided before presentation. A
+    # historical item with blank source text is still a canonical memory; do
+    # not erase it from the user's one-to-one browser merely because it has no
+    # safe text to display. The fallback makes no semantic claim or edge.
+    if not label:
+        label = 'Untitled canonical memory'
     return {
         'id': f'memory:{memory_id}',
         'label': label[:240],
