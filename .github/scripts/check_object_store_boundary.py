@@ -67,31 +67,74 @@ def _looks_like_blob_name(name: str) -> bool:
     return name == 'blob' or name.endswith('_blob')
 
 
-def _is_raw_blob_delete(node: ast.Call) -> bool:
-    """A raw GCS ``Blob.delete()`` — receiver/type-aware, because bare ``.delete`` collides everywhere.
+# GCS Blob instance methods whose bare names collide everywhere (a handed Blob could bypass the port
+# through any of them), so they are only flagged when the receiver looks like a Blob — see below.
+_RAW_BLOB_METHODS = frozenset({'delete', 'open', 'exists', 'patch'})
 
-    Caught: ``bucket.blob(key).delete()`` / ``bucket.get_blob(key).delete()`` (the receiver is a GCS
-    blob factory call) and a Blob handed across a module boundary then deleted, ``blob.delete()`` /
-    ``x._blob.delete()`` (receiver named ``blob`` / ``*_blob``). The blessed port form
-    ``get_object_store().delete(...)`` is NOT flagged (its receiver is neither).
+
+def _is_raw_blob_method(node: ast.Call) -> bool:
+    """A raw GCS Blob instance method (delete/open/exists/patch) — receiver/type-aware, because these
+    names collide everywhere.
+
+    Caught: ``bucket.blob(key).<m>()`` / ``bucket.get_blob(key).<m>()`` (the receiver is a GCS blob
+    factory call) and a Blob handed across a module boundary, ``blob.<m>()`` / ``x._blob.<m>()``
+    (receiver named ``blob`` / ``*_blob``). The blessed port form ``get_object_store().<m>(...)`` is
+    NOT flagged (its receiver is neither).
     """
     func = node.func
-    if not (isinstance(func, ast.Attribute) and func.attr == 'delete'):
+    if not (isinstance(func, ast.Attribute) and func.attr in _RAW_BLOB_METHODS):
         return False
     receiver = func.value
-    # ``<...>.blob(...).delete()`` / ``<...>.get_blob(...).delete()`` — receiver is a blob factory call.
+    # ``<...>.blob(...).<m>()`` / ``<...>.get_blob(...).<m>()`` — receiver is a blob factory call.
     if (
         isinstance(receiver, ast.Call)
         and isinstance(receiver.func, ast.Attribute)
         and receiver.func.attr in ('blob', 'get_blob')
     ):
         return True
-    # ``blob.delete()`` / ``self._blob.delete()`` — receiver identifier looks like a Blob.
+    # ``blob.<m>()`` / ``self._blob.<m>()`` — receiver identifier looks like a Blob.
     if isinstance(receiver, ast.Name):
         return _looks_like_blob_name(receiver.id)
     if isinstance(receiver, ast.Attribute):
         return _looks_like_blob_name(receiver.attr)
     return False
+
+
+def _is_s3_client_construction(node: ast.Call) -> bool:
+    """``boto3.client('s3')`` / ``boto3.resource('s3')`` — the raw S3 client the s3 adapter wraps.
+
+    Detected specifically (not a blanket boto3 ban) so unrelated AWS clients are not false positives.
+    The service name is read from the first positional arg or the ``service_name=`` keyword."""
+    func = node.func
+    if not (
+        isinstance(func, ast.Attribute)
+        and func.attr in ('client', 'resource')
+        and isinstance(func.value, ast.Name)
+        and func.value.id == 'boto3'
+    ):
+        return False
+    arg = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == 'service_name'), None)
+    return isinstance(arg, ast.Constant) and arg.value == 's3'
+
+
+def _forbidden_dynamic_import(node: ast.Call, is_forbidden) -> bool:
+    """A literal dynamic import of a forbidden module: ``importlib.import_module('X')``,
+    ``import_module('X')`` (bare, from ``from importlib import import_module``) or ``__import__('X')``.
+
+    The attribute form is restricted to ``importlib.import_module`` so an unrelated helper method named
+    ``import_module`` is not a false positive. The module name is taken from the first positional
+    argument or, if absent, the ``name=`` keyword — so a keyword-form call cannot dodge the check."""
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        if not (func.attr == 'import_module' and isinstance(func.value, ast.Name) and func.value.id == 'importlib'):
+            return False
+    elif isinstance(func, ast.Name):
+        if func.id not in ('import_module', '__import__'):
+            return False
+    else:
+        return False
+    arg = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == 'name'), None)
+    return isinstance(arg, ast.Constant) and isinstance(arg.value, str) and is_forbidden(arg.value)
 
 
 class _BoundaryVisitor(ast.NodeVisitor):
@@ -117,7 +160,11 @@ class _BoundaryVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
         if isinstance(node.func, ast.Attribute) and node.func.attr in _FORBIDDEN_OP_METHODS:
             self.count += 1
-        elif _is_raw_blob_delete(node):
+        elif _is_raw_blob_method(node):
+            self.count += 1
+        elif _is_s3_client_construction(node):
+            self.count += 1
+        elif _forbidden_dynamic_import(node, _is_forbidden_import_module):
             self.count += 1
         self.generic_visit(node)
 
@@ -144,7 +191,8 @@ def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
 def load_baseline(path: Path) -> dict[str, int]:
     payload = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(payload, dict) or not all(
-        isinstance(key, str) and isinstance(value, int) and value >= 0 for key, value in payload.items()
+        isinstance(key, str) and isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        for key, value in payload.items()
     ):
         raise ValueError(f'baseline must be a JSON object of path-to-nonnegative-count entries: {path}')
     return payload

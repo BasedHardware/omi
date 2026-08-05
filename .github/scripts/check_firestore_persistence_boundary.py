@@ -34,8 +34,9 @@ DEFAULT_BASELINE = Path('.github/scripts/firestore_persistence_boundary_baseline
 #  - tests/, testing/ : the test suites (they inject fakes and drive fixtures).
 #  - scripts/    : one-off operational tooling, not deployed runtime (intentional, permanent — ADR-0023).
 #  - agent-proxy/: a separately deployed service with its own firebase_admin app (intentional — ADR-0023).
-#  - migrations/ : removed in WP1; kept here so a re-added dir does not silently slip in.
-EXCLUDED_PREFIXES = ('database/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/', 'migrations/')
+# NOTE: migrations/ is intentionally NOT excluded — a re-added migration that touches Firestore
+# directly must fail this boundary too (the upstream migrations are on the neutral port; verified 0).
+EXCLUDED_PREFIXES = ('database/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/')
 
 _FORBIDDEN_OP_METHODS = frozenset({'document', 'collection', 'collection_group', 'transaction'})
 
@@ -130,7 +131,8 @@ def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
 def load_baseline(path: Path) -> dict[str, int]:
     payload = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(payload, dict) or not all(
-        isinstance(key, str) and isinstance(value, int) and value >= 0 for key, value in payload.items()
+        isinstance(key, str) and isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        for key, value in payload.items()
     ):
         raise ValueError(f'baseline must be a JSON object of path-to-nonnegative-count entries: {path}')
     return payload
@@ -163,7 +165,8 @@ def main() -> int:
     if not errors:
         return 0
     print('FAIL: Firestore persistence boundary breached — go through database/ ports')
-    print('(database.document_store / sentinels / firestore_errors), not the client/SDK.')
+    print('(database.document_store / database.store.sentinels / database.firestore_errors), not the')
+    print('client/SDK. The forbidden re-export is database.sentinels — use database.store.sentinels.')
     print(*errors, sep='\n')
     return 1
 

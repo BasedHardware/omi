@@ -73,3 +73,22 @@ def test_reports_only_count_increases_over_baseline():
         'backend/routers/x.py: found 2, baseline allows 1'
     ]
     assert _MODULE.violations({'backend/routers/x.py': 1}, {'backend/routers/x.py': 1}) == []
+
+
+def test_literal_dynamic_import_of_firebase_auth_is_flagged():
+    # Regression: importlib.import_module('firebase_admin.auth') had no visit_Call to catch it.
+    assert _MODULE.count_boundary_violations("import importlib\nimportlib.import_module('firebase_admin.auth')\n") == 1
+
+
+def test_propagated_alias_reaches_the_auth_surface():
+    # Regression: an alias rebound by assignment (x = fb) still reaches .auth.
+    assert _MODULE.count_boundary_violations("import firebase_admin as fb\nx = fb\nx.auth.verify_id_token(t)\n") == 1
+
+
+def test_load_baseline_rejects_boolean_counts(tmp_path):
+    import json
+
+    path = tmp_path / 'baseline.json'
+    path.write_text(json.dumps({'backend/x.py': True}))
+    with pytest.raises(ValueError):
+        _MODULE.load_baseline(path)

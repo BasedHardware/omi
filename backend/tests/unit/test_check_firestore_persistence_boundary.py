@@ -98,3 +98,17 @@ def test_reports_only_count_increases_over_baseline():
         'backend/routers/x.py: found 2, baseline allows 1'
     ]
     assert _MODULE.violations({'backend/routers/x.py': 1}, {'backend/routers/x.py': 1}) == []
+
+
+def test_migrations_are_no_longer_excluded_from_the_boundary():
+    # Regression: excluding migrations/ let a re-added migration use raw Firestore undetected.
+    assert 'migrations/' not in _MODULE.EXCLUDED_PREFIXES
+
+
+def test_load_baseline_rejects_boolean_counts(tmp_path):
+    import json
+
+    path = tmp_path / 'baseline.json'
+    path.write_text(json.dumps({'backend/x.py': True}))
+    with pytest.raises(ValueError):
+        _MODULE.load_baseline(path)

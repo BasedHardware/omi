@@ -72,3 +72,22 @@ def test_reports_only_count_increases_over_baseline():
         'backend/routers/x.py: found 2, baseline allows 1'
     ]
     assert _MODULE.violations({'backend/routers/x.py': 1}, {'backend/routers/x.py': 1}) == []
+
+
+def test_keyword_form_dynamic_import_is_flagged():
+    # Regression: import_module(name='pinecone') dodged the positional-only check.
+    assert _MODULE.count_boundary_violations("import importlib\nimportlib.import_module(name='pinecone')\n") == 1
+
+
+def test_unrelated_import_module_method_is_not_a_false_positive():
+    # A helper method named import_module (not importlib.import_module) must not be flagged.
+    assert _MODULE.count_boundary_violations("self.import_module('pinecone')\nreg.import_module('pinecone')\n") == 0
+
+
+def test_load_baseline_rejects_boolean_counts(tmp_path):
+    import json
+
+    path = tmp_path / 'baseline.json'
+    path.write_text(json.dumps({'backend/x.py': True}))
+    with pytest.raises(ValueError):
+        _MODULE.load_baseline(path)

@@ -108,3 +108,36 @@ def test_reports_only_count_increases_over_baseline():
         'backend/routers/x.py: found 2, baseline allows 1'
     ]
     assert _MODULE.violations({'backend/routers/x.py': 1}, {'backend/routers/x.py': 1}) == []
+
+
+def test_s3_client_construction_is_flagged():
+    # The S3 backend must be reached through the port too; a raw boto3 s3 client outside it is flagged.
+    assert _MODULE.count_boundary_violations("import boto3\nboto3.client('s3')\nboto3.resource('s3')\n") == 2
+
+
+def test_non_s3_boto3_client_is_not_a_false_positive():
+    assert _MODULE.count_boundary_violations("import boto3\nboto3.client('dynamodb')\n") == 0
+
+
+def test_raw_blob_methods_beyond_delete_are_flagged():
+    # Regression: open/exists/patch on a blob-like receiver bypassed the delete-only check.
+    assert _MODULE.count_boundary_violations("blob.open('r')\nx_blob.exists()\nbucket.blob(k).patch()\n") == 3
+
+
+def test_neutral_port_methods_are_not_false_positives():
+    assert _MODULE.count_boundary_violations("get_object_store().exists(k)\nget_object_store().delete(k)\n") == 0
+
+
+def test_literal_dynamic_import_of_gcs_is_flagged():
+    assert _MODULE.count_boundary_violations(
+        "import importlib\nimportlib.import_module('google.cloud.storage')\n"
+    ) == 1
+
+
+def test_load_baseline_rejects_boolean_counts(tmp_path):
+    import json
+
+    path = tmp_path / 'baseline.json'
+    path.write_text(json.dumps({'backend/x.py': True}))
+    with pytest.raises(ValueError):
+        _MODULE.load_baseline(path)

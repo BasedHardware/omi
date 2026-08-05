@@ -42,6 +42,26 @@ def _is_forbidden_import_module(module: str | None) -> bool:
     return module == 'firebase_admin.auth' or module.startswith('firebase_admin.auth.')
 
 
+def _forbidden_dynamic_import(node: ast.Call, is_forbidden) -> bool:
+    """A literal dynamic import of a forbidden module: ``importlib.import_module('X')``,
+    ``import_module('X')`` (bare, from ``from importlib import import_module``) or ``__import__('X')``.
+
+    The attribute form is restricted to ``importlib.import_module`` so an unrelated helper method named
+    ``import_module`` is not a false positive. The module name is taken from the first positional
+    argument or, if absent, the ``name=`` keyword — so a keyword-form call cannot dodge the check."""
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        if not (func.attr == 'import_module' and isinstance(func.value, ast.Name) and func.value.id == 'importlib'):
+            return False
+    elif isinstance(func, ast.Name):
+        if func.id not in ('import_module', '__import__'):
+            return False
+    else:
+        return False
+    arg = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == 'name'), None)
+    return isinstance(arg, ast.Constant) and isinstance(arg.value, str) and is_forbidden(arg.value)
+
+
 def _firebase_admin_aliases(tree: ast.AST) -> set[str]:
     """Local names bound to the ``firebase_admin`` package by ``import`` statements.
 
@@ -57,6 +77,17 @@ def _firebase_admin_aliases(tree: ast.AST) -> set[str]:
             for alias in node.names:
                 if alias.name == 'firebase_admin' or alias.name.startswith('firebase_admin.'):
                     aliases.add(alias.asname or alias.name.split('.', 1)[0])
+    # Propagated aliases: ``fb2 = fb`` (or ``x = firebase_admin``) rebinds the package to another
+    # name that can still reach ``.auth``. Iterate to a fixpoint so chains (a = fb; b = a) are covered.
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name) and node.value.id in aliases:
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id not in aliases:
+                        aliases.add(target.id)
+                        changed = True
     return aliases
 
 
@@ -88,6 +119,13 @@ class _BoundaryVisitor(ast.NodeVisitor):
             self.count += 1
         self.generic_visit(node)
 
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
+        # Literal ``importlib.import_module('firebase_admin.auth')`` / ``__import__(...)`` that dodges
+        # the static ``import`` (mirrors the vector/object guards).
+        if _forbidden_dynamic_import(node, _is_forbidden_import_module):
+            self.count += 1
+        self.generic_visit(node)
+
 
 def count_boundary_violations(source: str, filename: str = '<unknown>') -> int:
     tree = ast.parse(source, filename=filename)
@@ -112,7 +150,8 @@ def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
 def load_baseline(path: Path) -> dict[str, int]:
     payload = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(payload, dict) or not all(
-        isinstance(key, str) and isinstance(value, int) and value >= 0 for key, value in payload.items()
+        isinstance(key, str) and isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        for key, value in payload.items()
     ):
         raise ValueError(f'baseline must be a JSON object of path-to-nonnegative-count entries: {path}')
     return payload

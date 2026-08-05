@@ -46,6 +46,26 @@ def _is_forbidden_import_module(module: str | None) -> bool:
     )
 
 
+def _forbidden_dynamic_import(node: ast.Call, is_forbidden) -> bool:
+    """A literal dynamic import of a forbidden module: ``importlib.import_module('X')``,
+    ``import_module('X')`` (bare, from ``from importlib import import_module``) or ``__import__('X')``.
+
+    The attribute form is restricted to ``importlib.import_module`` so an unrelated helper method named
+    ``import_module`` is not a false positive. The module name is taken from the first positional
+    argument or, if absent, the ``name=`` keyword — so a keyword-form call cannot dodge the check."""
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        if not (func.attr == 'import_module' and isinstance(func.value, ast.Name) and func.value.id == 'importlib'):
+            return False
+    elif isinstance(func, ast.Name):
+        if func.id not in ('import_module', '__import__'):
+            return False
+    else:
+        return False
+    arg = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == 'name'), None)
+    return isinstance(arg, ast.Constant) and isinstance(arg.value, str) and is_forbidden(arg.value)
+
+
 class _BoundaryVisitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.count = 0
@@ -62,14 +82,8 @@ class _BoundaryVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
-        # Literal dynamic-import forms that dodge the static ``import``: ``importlib.import_module('pinecone')``,
-        # ``import_module('pinecone')`` and ``__import__('pinecone')`` with a forbidden string literal.
-        func = node.func
-        func_name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
-        if func_name in ('import_module', '__import__') and node.args:
-            first = node.args[0]
-            if isinstance(first, ast.Constant) and isinstance(first.value, str) and _is_forbidden_import_module(first.value):
-                self.count += 1
+        if _forbidden_dynamic_import(node, _is_forbidden_import_module):
+            self.count += 1
         self.generic_visit(node)
 
 
@@ -95,7 +109,8 @@ def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
 def load_baseline(path: Path) -> dict[str, int]:
     payload = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(payload, dict) or not all(
-        isinstance(key, str) and isinstance(value, int) and value >= 0 for key, value in payload.items()
+        isinstance(key, str) and isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        for key, value in payload.items()
     ):
         raise ValueError(f'baseline must be a JSON object of path-to-nonnegative-count entries: {path}')
     return payload
