@@ -28,6 +28,11 @@ HistoryDays = Annotated[int, Query(ge=1, le=365)]
 ModelT = TypeVar('ModelT', bound=BaseModel)
 
 
+def maximum_future_skew_seconds() -> int:
+    """Mild client clock skew allowed on sync capture timestamps (default 300s)."""
+    return max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
+
+
 def parse_form_json(
     model_type: type[ModelT] | type[dict[str, Any]], raw_value: str, field_name: str
 ) -> ModelT | dict[str, Any]:
@@ -130,8 +135,7 @@ def parse_sync_filename_timestamp(path: str) -> int | float:
     # Allow mild client clock skew (default 300s) so uploads still succeed; the
     # sync pipeline clamps conversation started/finished to server now (#4770).
     # Far-future values remain invalid.
-    max_future_skew_seconds = max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
-    if timestamp_dt > now + timedelta(seconds=max_future_skew_seconds):
+    if timestamp_dt > now + timedelta(seconds=maximum_future_skew_seconds()):
         raise ValueError('invalid timestamp')
     return timestamp
 

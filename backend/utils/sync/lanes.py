@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable, Optional
 
-from utils.request_validation import parse_sync_filename_timestamp
+from utils.request_validation import maximum_future_skew_seconds, parse_sync_filename_timestamp
 
 
 class SyncLane(str, Enum):
@@ -39,10 +39,6 @@ def fresh_cutoff_seconds() -> int:
 
 def maximum_backfill_age_seconds() -> int:
     return max(fresh_cutoff_seconds(), int(os.getenv('SYNC_BACKFILL_MAX_AGE_SECONDS', str(30 * 24 * 60 * 60))))
-
-
-def maximum_future_skew_seconds() -> int:
-    return max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
 
 
 def batch_clock_shift(

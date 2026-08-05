@@ -98,6 +98,7 @@ from utils.other.storage import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
+from utils.request_validation import maximum_future_skew_seconds
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
@@ -1457,8 +1458,7 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
 
         time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         now_utc = datetime.now(timezone.utc)
-        max_future_skew_seconds = max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
-        if time_val > now_utc + timedelta(seconds=max_future_skew_seconds) or time_val < datetime(
+        if time_val > now_utc + timedelta(seconds=maximum_future_skew_seconds()) or time_val < datetime(
             2024, 1, 1, tzinfo=timezone.utc
         ):
             raise HTTPException(status_code=400, detail='Invalid sync file format: invalid timestamp')
