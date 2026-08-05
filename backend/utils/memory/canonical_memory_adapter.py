@@ -1969,7 +1969,7 @@ def delete_all_canonical_memories(uid: str, *, db_client: Any = None) -> None:
 
 
 def delete_default_canonical_memories(uid: str, *, db_client: Any = None) -> None:
-    """Privacy-delete default-access tiers while leaving Archive untouched."""
+    """Privacy-delete default-access tiers while leaving Archive untouched (not_archive)."""
     _delete_canonical_memories_matching(
         uid,
         db_client=db_client,
