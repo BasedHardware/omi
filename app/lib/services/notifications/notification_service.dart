@@ -11,6 +11,7 @@ import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/notifications/notification_service_fcm.dart' as fcm;
 import 'package:omi/services/notifications/notification_service_basic.dart' as basic;
 import 'package:omi/services/notifications/notification_service_unifiedpush.dart' as unifiedpush;
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Which notification delivery implementation to use.
@@ -47,7 +48,7 @@ NotificationInterface _createPlatformNotificationService() {
   // a platform without the transport (FCM SDK / a UnifiedPush distributor) falls back to local-only.
   // Log it so a missing remote push is diagnosable instead of silently degrading.
   if (selected == NotificationBackend.local && requested != 'local') {
-    debugPrint(
+    Logger.warning(
       'NotificationService: NOTIFICATIONS_BACKEND=$requested has no transport on this platform; '
       'falling back to local-only notifications (no remote push).',
     );
