@@ -13,7 +13,7 @@ import logging
 import os
 from typing import Any, Mapping, Optional
 
-from utils.executors import db_executor, submit_with_context
+from utils.executors import postprocess_executor, submit_with_context
 from utils.integration_telemetry import emit_posthog_event
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ def schedule_mcp_tool_call(
     """Queue optional analytics without delaying or changing the MCP response."""
     try:
         submit_with_context(
-            db_executor,
+            postprocess_executor,
             emit_mcp_tool_call,
             uid=uid,
             tool_name=tool_name,
@@ -168,6 +168,11 @@ def result_count_for_tool_result(tool_name: object, result: Mapping[str, Any]) -
         # ``data_sources_used`` is metadata, not a collection of profiles. A
         # missing profile is represented by ``{"profile": None, ...}``.
         return 1 if result.get("profile_text") else 0
+    if tool_name == "get_screen_activity":
+        # Summary mode returns ``{"apps": {...}, "total_screenshots": N}`` instead
+        # of the ``screen_activity`` row list; count its bounded screenshot total.
+        if "total_screenshots" in result:
+            return _bounded_int(result.get("total_screenshots"), maximum=1_000)
     list_key = _RESULT_LIST_KEY_BY_TOOL.get(_normalize_tool(tool_name))
     if list_key is not None:
         value = result.get(list_key)

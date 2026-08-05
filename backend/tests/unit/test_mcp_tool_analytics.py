@@ -219,3 +219,17 @@ def test_unexpected_tool_errors_are_recorded_and_propagated(monkeypatch):
     assert events[0]["authorization_outcome"] == "not_applicable"
     assert events[0]["error_category"] == "internal"
     assert "private failure" not in str(events)
+
+
+def test_screen_activity_summary_result_count_uses_screenshot_total():
+    assert (
+        mcp_analytics.result_count_for_tool_result(
+            "get_screen_activity", {"apps": {"Safari": {"count": 3}}, "total_screenshots": 7}
+        )
+        == 7
+    )
+    # Non-summary (row list) path still counts the screen_activity list.
+    assert (
+        mcp_analytics.result_count_for_tool_result("get_screen_activity", {"screen_activity": [{"id": 1}, {"id": 2}]})
+        == 2
+    )
