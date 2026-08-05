@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from models.memory_promotion import (
+    GraphRelationEndpoint,
     PROMOTION_GRAPH_ARGUMENT_KEY_MAX_LENGTH,
     PROMOTION_GRAPH_ARGUMENT_MAX_COUNT,
     PROMOTION_GRAPH_ARGUMENTS_MAX_DEPTH,
@@ -19,6 +20,11 @@ from models.memory_promotion import (
     build_promotion_admission_receipt,
     valid_promotion_admission,
 )
+
+
+def test_typed_graph_endpoint_rejects_unknown_desktop_node_type():
+    with pytest.raises(ValidationError, match="node_type"):
+        GraphRelationEndpoint(label="Omi", node_type="account")
 
 
 def _plan(**overrides):

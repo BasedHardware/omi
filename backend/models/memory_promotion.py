@@ -133,7 +133,9 @@ class GraphRelationEndpoint(BaseModel):
 
     entity_id: str = ""
     label: str
-    node_type: str
+    # This is the stable desktop graph vocabulary.  Rejecting unknown model
+    # output here keeps a type change from silently degrading into a concept.
+    node_type: Literal["person", "place", "organization", "thing", "concept"]
 
     @field_validator("label", "node_type")
     @classmethod
