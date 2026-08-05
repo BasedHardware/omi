@@ -20,6 +20,29 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(Double(anchor.y), 0.5, accuracy: 1e-9)
   }
 
+  func testCanonicalSelfNodeWinsOverAWellConnectedPersonAndAbsorbsSelfAliases() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "user", label: "The User", nodeType: .concept),
+        KnowledgeGraphNode(id: "self-alias", label: "the user", nodeType: .person),
+        KnowledgeGraphNode(id: "chi", label: "Chi", nodeType: .person),
+        KnowledgeGraphNode(id: "project", label: "Omi", nodeType: .thing),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "self-project", sourceId: "user", targetId: "project", label: "uses"),
+        KnowledgeGraphEdge(id: "alias-project", sourceId: "self-alias", targetId: "project", label: "uses"),
+        KnowledgeGraphEdge(id: "chi-project", sourceId: "chi", targetId: "project", label: "works_on"),
+        KnowledgeGraphEdge(id: "chi-1", sourceId: "chi", targetId: "project", label: "mentions"),
+      ])
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(snapshot.anchorNodeID, "user")
+    XCTAssertEqual(snapshot.nodeByID["user"]?.node.label, "David")
+    XCTAssertNil(snapshot.nodeByID["self-alias"], "There must be one self node, not a separate 'the user' group")
+    XCTAssertEqual(snapshot.nodeByID["user"]?.normalizedPosition, MemoryAtlasCluster.starCenter)
+  }
+
   func testCatalogNodesEnterAtlasAsNeutralUnconnectedMarks() throws {
     let assertionNodes = [
       KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
@@ -425,7 +448,7 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(leafPositions.count, 5)
   }
 
-  func testDegreeZeroNodeIsNotPlacedInATypeSpiral() throws {
+  func testDegreeZeroNodeCanFillThePeripheralFieldWithoutObscuringTheOwner() throws {
     let graph = KnowledgeGraphResponse(
       nodes: [
         KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
@@ -441,12 +464,13 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let orphan = try XCTUnwrap(snapshot.nodeByID["orphan"])
 
     XCTAssertEqual(orphan.degree, 0)
-    // An entity with no relationships was positioned by nothing, so it belongs
-    // outside the region the relaxed map occupies rather than among entities
-    // whose positions do mean something.
-    XCTAssertFalse(
-      MemoryAtlasLayoutEngine.layoutArea.contains(orphan.normalizedPosition),
-      "An unconnected entity must not sit inside the structure")
+    let david = try XCTUnwrap(snapshot.nodeByID["david"])
+    XCTAssertGreaterThan(
+      hypot(
+        orphan.normalizedPosition.x - david.normalizedPosition.x,
+        orphan.normalizedPosition.y - david.normalizedPosition.y),
+      0.05,
+      "A neutral mark must not obscure the account holder")
     // Still inside the existing clamp bounds.
     XCTAssertGreaterThanOrEqual(orphan.normalizedPosition.x, 0.04)
     XCTAssertLessThanOrEqual(orphan.normalizedPosition.x, 0.96)

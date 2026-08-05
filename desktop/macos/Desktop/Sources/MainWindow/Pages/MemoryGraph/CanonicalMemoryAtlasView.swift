@@ -972,26 +972,28 @@ enum MemoryAtlasLayoutEngine {
 
     let normalizedUserName = userName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-    // Entities that stand in for the account holder rather than naming them.
     let selfSynonyms: Set<String> = ["user", "me", "myself", "i", "the user"]
+    func isSelfNode(_ node: KnowledgeGraphNode) -> Bool {
+      node.id == "user" || selfSynonyms.contains(node.label.lowercased())
+        || node.aliases.contains { selfSynonyms.contains($0.lowercased()) }
+    }
 
+    // Never select the highest-degree person over the account holder.
     let rawAnchor =
       nodes.first {
-        $0.nodeType == .person && normalizedUserName != nil && $0.label.lowercased() == normalizedUserName
-      } ?? nodes.filter { $0.nodeType == .person }.max {
+        normalizedUserName != nil && $0.label.lowercased() == normalizedUserName
+      } ?? nodes.first(where: { $0.id == "user" })
+      ?? nodes.first(where: isSelfNode)
+      ?? nodes.filter { $0.nodeType == .person }.max {
         (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
       }
       ?? nodes.max {
         (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
       }
 
-    // The center of your own map should say your name. The extractor writes a
-    // generic "The User" whenever no memory happens to name you, and collapsing
-    // the synonyms onto that node still left the anchor labelled "The User" —
-    // the one dot the user can identify on sight was the one not identified.
-    // The generic label survives as an alias so search still finds it.
+    // Keep a generic account-holder label searchable, but show the owner name.
     let anchor = rawAnchor.map { node -> KnowledgeGraphNode in
-      guard let userName, !userName.isEmpty, selfSynonyms.contains(node.label.lowercased())
+      guard let userName, !userName.isEmpty, isSelfNode(node)
       else { return node }
       return KnowledgeGraphNode(
         id: node.id,
@@ -1004,11 +1006,7 @@ enum MemoryAtlasLayoutEngine {
       )
     }
 
-    // Collapse every entity that stands in for the account holder — a generic
-    // "User"/"Me" node, or a second person node sharing the user's name — into
-    // the single anchor. Two ego nodes ("User" floating apart from "David") read
-    // as a data bug; the atlas should have exactly one unmistakable "you" at the
-    // center. Their relationships are rerouted onto the anchor below.
+    // Merge generic account-holder aliases into one identifiable center.
     let collapsedIDs: Set<String> = {
       guard let anchor else { return [] }
       return Set(
@@ -1018,7 +1016,7 @@ enum MemoryAtlasLayoutEngine {
           if let normalizedUserName, !normalizedUserName.isEmpty, label == normalizedUserName {
             return true
           }
-          return node.nodeType == .person && selfSynonyms.contains(label)
+          return isSelfNode(node)
         }.map(\.id)
       )
     }()
@@ -2214,9 +2212,11 @@ private struct CanonicalMemoryAtlasSurface: View {
       atlasSnapshot = projection.snapshot
     } else {
       let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ownerName = givenName.isEmpty ? displayName : givenName
       atlasSnapshot = MemoryAtlasSnapshotCache.shared.snapshot(
         for: graph,
-        userName: givenName.isEmpty ? nil : givenName
+        userName: ownerName.isEmpty ? nil : ownerName
       )
     }
     snapshot = atlasSnapshot
