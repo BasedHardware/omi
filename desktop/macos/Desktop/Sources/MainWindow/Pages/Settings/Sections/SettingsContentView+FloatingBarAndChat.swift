@@ -530,19 +530,21 @@ extension SettingsContentView {
                           .scaledFont(size: OmiType.body, weight: .medium)
                           .foregroundColor(Ink.primary)
 
+                        // Project beats Global when both define a skill, so the two origins have
+                        // to be told apart at a glance. Both branches had collapsed onto
+                        // `Ink.secondary` over two washes four thousandths of an alpha apart,
+                        // which is the same chip drawn twice. The chip composes its ground from
+                        // its own tint, the way `SettingsStatusChip` does, so the pair cannot
+                        // drift into a contrast the label does not clear.
+                        let originTint = origin == "Project" ? Ink.accent : Ink.secondary
                         Text(origin)
                           .scaledFont(size: OmiType.micro, weight: .medium)
-                          .foregroundColor(
-                            origin == "Project" ? Ink.secondary : Ink.secondary
-                          )
+                          .foregroundColor(originTint)
                           .padding(.horizontal, OmiSpacing.xxs)
                           .padding(.vertical, OmiSpacing.hairline)
                           .background(
                             RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
-                              .fill(
-                                origin == "Project"
-                                  ? Ink.rowFill
-                                  : Ink.wash)
+                              .fill(originTint.opacity(0.14))
                           )
                       }
 

@@ -206,27 +206,7 @@ struct MicrophonePermissionSection: View {
 
   // Status badge for microphone
   private var microphoneStatusBadge: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      Image(
-        systemName: appState.hasMicrophonePermission
-          ? "checkmark.circle.fill" : (isPermissionDenied ? "xmark.circle.fill" : "exclamationmark.circle.fill")
-      )
-      .scaledFont(size: OmiType.caption)
-      Text(appState.hasMicrophonePermission ? "Granted" : (isPermissionDenied ? "Denied" : "Not Granted"))
-        .scaledFont(size: OmiType.caption, weight: .medium)
-    }
-    .foregroundColor(
-      appState.hasMicrophonePermission ? Ink.listeningGreen : (isPermissionDenied ? Ink.errorRed : SettingsInk.notice)
-    )
-    .padding(.horizontal, OmiSpacing.sm)
-    .padding(.vertical, OmiSpacing.xxs)
-    .background(
-      Capsule()
-        .fill(
-          appState.hasMicrophonePermission
-            ? Ink.listeningGreen.opacity(0.15)
-            : (isPermissionDenied ? Ink.errorRed.opacity(0.15) : SettingsInk.notice.opacity(0.15)))
-    )
+    permissionChip(granted: appState.hasMicrophonePermission, denied: isPermissionDenied)
   }
 
   // Content for DENIED state - shows reset options
@@ -482,19 +462,7 @@ struct ScreenRecordingPermissionSection: View {
                 .foregroundColor(Ink.primary)
 
               if appState.isScreenRecordingStale {
-                HStack(spacing: OmiSpacing.xxs) {
-                  Image(systemName: "exclamationmark.triangle.fill")
-                    .scaledFont(size: OmiType.caption)
-                  Text("Re-enable Required")
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                }
-                .foregroundColor(Ink.errorRed)
-                .padding(.horizontal, OmiSpacing.sm)
-                .padding(.vertical, OmiSpacing.xxs)
-                .background(
-                  Capsule()
-                    .fill(Ink.errorRed.opacity(0.15))
-                )
+                SettingsStatusChip(text: "Re-enable Required", tint: Ink.errorRed)
               } else {
                 statusBadge(isGranted: appState.hasScreenRecordingPermission)
               }
@@ -623,12 +591,16 @@ struct ScreenRecordingPermissionSection: View {
                 Text("Grant")
                   .scaledFont(size: OmiType.caption, weight: .semibold)
               }
+              // The same fill as step 1's button above it, and not `Ink.listeningGreen`: the
+              // inverted label is only legible over `Ink.primary` — `Ink.surface` on `systemGreen`
+              // measures about 2:1 in the light appearance. Green is the *granted* readout on this
+              // page, not the colour of the button that asks; the shield glyph carries that.
               .foregroundColor(Ink.surface)
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.xs)
               .background(
                 RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-                  .fill(Ink.listeningGreen)
+                  .fill(Ink.primary)
               )
             }
             .buttonStyle(.plain)
@@ -822,51 +794,15 @@ struct SystemAudioPermissionSection: View {
   }
 
   private var systemAudioStatusBadge: some View {
-    let label: String
-    let foreground: Color
-    let background: Color
-    let icon: String
-
     if isDisabledBySetting {
-      label = "Disabled"
-      foreground = Ink.secondary
-      background = Ink.rowFill
-      icon = "minus.circle.fill"
-    } else {
-      switch status {
-      case .granted:
-        label = "Granted"
-        foreground = Ink.listeningGreen
-        background = Ink.listeningGreen.opacity(0.15)
-        icon = "checkmark.circle.fill"
-      case .denied:
-        label = "Not Granted"
-        foreground = SettingsInk.notice
-        background = SettingsInk.notice.opacity(0.15)
-        icon = "xmark.circle.fill"
-      case .unsupported:
-        label = "Unsupported"
-        foreground = Ink.secondary
-        background = Ink.rowFill
-        icon = "slash.circle.fill"
-      case .unknown:
-        label = "Unknown"
-        foreground = Ink.secondary
-        background = Ink.rowFill
-        icon = "questionmark.circle.fill"
-      }
+      return SettingsStatusChip(text: "Disabled", tint: Ink.secondary)
     }
-
-    return HStack(spacing: OmiSpacing.xxs) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.caption)
-      Text(label)
-        .scaledFont(size: OmiType.caption, weight: .medium)
+    switch status {
+    case .granted: return SettingsStatusChip(text: "Granted", tint: Ink.listeningGreen)
+    case .denied: return SettingsStatusChip(text: "Not Granted", tint: SettingsInk.notice)
+    case .unsupported: return SettingsStatusChip(text: "Unsupported", tint: Ink.secondary)
+    case .unknown: return SettingsStatusChip(text: "Unknown", tint: Ink.secondary)
     }
-    .foregroundColor(foreground)
-    .padding(.horizontal, OmiSpacing.sm)
-    .padding(.vertical, OmiSpacing.xxs)
-    .background(Capsule().fill(background))
   }
 
   private var expandedContent: some View {
@@ -1051,27 +987,7 @@ struct NotificationPermissionSection: View {
 
   // Status badge for notifications
   private var notificationStatusBadge: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      Image(
-        systemName: appState.hasNotificationPermission
-          ? "checkmark.circle.fill" : (isPermissionDenied ? "xmark.circle.fill" : "exclamationmark.circle.fill")
-      )
-      .scaledFont(size: OmiType.caption)
-      Text(appState.hasNotificationPermission ? "Granted" : (isPermissionDenied ? "Denied" : "Not Granted"))
-        .scaledFont(size: OmiType.caption, weight: .medium)
-    }
-    .foregroundColor(
-      appState.hasNotificationPermission ? Ink.listeningGreen : (isPermissionDenied ? Ink.errorRed : SettingsInk.notice)
-    )
-    .padding(.horizontal, OmiSpacing.sm)
-    .padding(.vertical, OmiSpacing.xxs)
-    .background(
-      Capsule()
-        .fill(
-          appState.hasNotificationPermission
-            ? Ink.listeningGreen.opacity(0.15)
-            : (isPermissionDenied ? Ink.errorRed.opacity(0.15) : SettingsInk.notice.opacity(0.15)))
-    )
+    permissionChip(granted: appState.hasNotificationPermission, denied: isPermissionDenied)
   }
 
   // Content for DENIED state - shows settings instructions
@@ -1160,8 +1076,26 @@ struct NotificationPermissionSection: View {
     tint: isGranted ? Ink.listeningGreen : SettingsInk.notice)
 }
 
-/// Numbered how-to row. Neutral styling by default — purple is off-brand
-/// (repo UI rule: never use purple anywhere).
+/// The three-state version, for the capabilities macOS lets the user *refuse* rather than merely
+/// leave unanswered.
+///
+/// Microphone and Notifications each carried their own hand-rolled capsule — an icon, a tint, a
+/// 15% wash, spelled out twice and differing from the two rows beside them, which already used
+/// `SettingsStatusChip`. Four permission rows on one page had three badge designs between them.
+/// Refused is `Ink.errorRed` and merely unanswered is `SettingsInk.notice`, for the reason
+/// `statusBadge` gives: a permission nobody has answered yet is a thing to do, not a thing that
+/// failed.
+@MainActor private func permissionChip(granted: Bool, denied: Bool) -> some View {
+  if granted {
+    return SettingsStatusChip(text: "Granted", tint: Ink.listeningGreen)
+  }
+  return denied
+    ? SettingsStatusChip(text: "Denied", tint: Ink.errorRed)
+    : SettingsStatusChip(text: "Not Granted", tint: SettingsInk.notice)
+}
+
+/// Numbered how-to row. Neutral by default: the disc is `Ink.rowFill` and the numeral
+/// `Ink.primary`, so the step index reads without spending the one accent on it (INV-UI-1).
 @MainActor private func instructionStep(
   number: Int, text: String,
   numberColor: Color = Ink.primary,

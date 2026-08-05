@@ -18,7 +18,7 @@ struct SafeDismissButton: View {
   var body: some View {
     Image(systemName: icon)
       .scaledFont(size: OmiType.body, weight: .medium)
-      .foregroundColor(isPressed ? Ink.secondary : Ink.secondary)
+      .foregroundColor(Ink.secondary)
       .frame(width: 28, height: 28)
       .background(showBackground ? Ink.wash : Color.clear)
       .clipShape(Circle())
@@ -1354,7 +1354,7 @@ struct ImportConnectorCard: View {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(snapshot.primaryText)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(snapshot.isConnected ? Ink.secondary : Ink.secondary)
+              .foregroundColor(snapshot.isConnected ? Ink.listeningGreen : Ink.secondary)
 
             if let secondaryText = snapshot.secondaryText {
               Text(secondaryText)

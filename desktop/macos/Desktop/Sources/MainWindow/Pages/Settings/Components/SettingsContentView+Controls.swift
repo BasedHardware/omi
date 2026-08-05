@@ -112,9 +112,11 @@ extension SettingsContentView {
               .foregroundColor(Ink.secondary)
           }
           Spacer()
+          // `Ink.primary`, for the reason the frequency readout below is: the accent is a light hue
+          // and a number set in it on this panel is the hardest thing on the row to read.
           Text("\(String(format: "%.1f", currentSpeed))×")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(Ink.accent)
+            .foregroundColor(Ink.primary)
         }
 
         VStack(spacing: OmiSpacing.xs) {
@@ -213,14 +215,18 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
         }
         Spacer()
+        // The value readout, in the same shape `SettingsStatusChip` settled on: the tint is the
+        // ground, the word is `Ink.primary`. Set *in* the accent over 15% of the accent it measured
+        // about 2.8:1 on this panel — the number a slider exists to report was the faintest thing on
+        // the row.
         Text(currentLabel)
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(Ink.accent)
+          .foregroundColor(Ink.primary)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xxs)
           .background(
             RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-              .fill(Ink.accent.opacity(0.15))
+              .fill(Ink.accent.opacity(0.16))
           )
       }
 

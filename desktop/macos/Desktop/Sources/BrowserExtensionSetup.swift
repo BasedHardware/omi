@@ -461,22 +461,30 @@ struct BrowserExtensionSetup: View {
     }
   }
 
+  /// The numbered disc beside a setup step, in the same two shapes `PermissionsPage`'s
+  /// `instructionStep` uses — this sheet and that page are the same instruction, and they were
+  /// drawn differently.
+  ///
+  /// The pending disc set `Ink.surface` on `Ink.hairline`: a white numeral on `labelColor` at 0.22,
+  /// which over the light panel is a pale grey disc with nothing legible on it. `Ink.surface` is the
+  /// *inverted* label and it is only ever correct over an `Ink.primary` fill. The done disc had the
+  /// same shape of problem one step milder — white on `systemGreen` measures about 2:1 — so both
+  /// now compose the ground from the tint the way `SettingsStatusChip` does, which keeps the fill
+  /// and the label a pair rather than two independent choices.
   private func stepBadge(_ number: String, done: Bool = false) -> some View {
-    Group {
+    let tint = done ? Ink.listeningGreen : Ink.primary
+    return Group {
       if done {
         Image(systemName: "checkmark")
           .scaledFont(size: OmiType.caption, weight: .bold)
-          .foregroundColor(Ink.surface)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.listeningGreen))
       } else {
         Text(number)
           .scaledFont(size: OmiType.caption, weight: .bold)
-          .foregroundColor(Ink.surface)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.hairline))
       }
     }
+    .foregroundColor(tint)
+    .frame(width: 22, height: 22)
+    .background(Circle().fill(tint.opacity(0.14)))
   }
 
   /// Strip the "PLAYWRIGHT_MCP_EXTENSION_TOKEN=" prefix if the user copied the full env var line.

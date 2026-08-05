@@ -174,32 +174,43 @@ struct FileIndexingView: View {
 
   // MARK: - Brain Map Phase
 
+  /// This phase has **two different grounds**, and that is what every colour in it turns on:
+  /// with a graph, `MemoryGraphSceneView` renders its own black scene edge to edge; without one,
+  /// there is no scene and the ground is the window's light glass. The white type here was written
+  /// for the scene and survived onto the empty state, where it was white on a near-white panel —
+  /// the headline, the placeholder and its glyph were all invisible in the one state a first-run
+  /// user is most likely to land in.
+  private var hasGraph: Bool { !graphViewModel.isEmpty }
+
   private var brainMapView: some View {
     ZStack {
-      if graphViewModel.isEmpty {
-        // Empty fallback
+      if hasGraph {
+        // 3D graph — SceneKit renders its own black background
+        MemoryGraphSceneView(viewModel: graphViewModel)
+      } else {
+        // Empty fallback, on the light panel: the ladder, not the scene's white.
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "brain")
             .scaledFont(size: OmiType.hero)
-            .foregroundColor(.white.opacity(0.15))
+            .foregroundColor(Ink.hairline)
           Text("Your knowledge graph will grow as omi learns more about you")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.white.opacity(0.4))
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, OmiSpacing.page)
         }
-      } else {
-        // 3D graph — SceneKit renders its own black background
-        MemoryGraphSceneView(viewModel: graphViewModel)
       }
 
       // Floating title + continue button
       VStack {
         Text("Here's what I know about you")
           .font(.system(size: 22, weight: .bold))
-          .foregroundColor(Ink.glow)
-          .shadow(color: .black.opacity(0.7), radius: 12, x: 0, y: 2)
-          .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 4)
+          .foregroundColor(hasGraph ? Ink.glow : Ink.primary)
+          // The shadows are how white type stays readable over a moving scene. Over the light
+          // panel there is nothing to lift the type off, and a dark halo under dark type is just
+          // smudge, so they go with the scene.
+          .shadow(color: .black.opacity(hasGraph ? 0.7 : 0), radius: 12, x: 0, y: 2)
+          .shadow(color: .black.opacity(hasGraph ? 0.4 : 0), radius: 24, x: 0, y: 4)
           .padding(.top, OmiSpacing.page)
 
         Spacer()
@@ -219,14 +230,18 @@ struct FileIndexingView: View {
         .padding(.bottom, OmiSpacing.page)
       }
 
-      // Graph shortcut hints — bottom-left corner
-      VStack {
-        Spacer()
-        HStack {
-          graphShortcutsHint
-            .padding(.leading, OmiSpacing.xl)
-            .padding(.bottom, OmiSpacing.xl)
+      // Graph shortcut hints — bottom-left corner. Only over the scene: every gesture they name
+      // (rotate, pan, zoom, reset) belongs to a graph that is not there in the empty state, and the
+      // plate they sit on is a dark scrim sized for the scene's black, not for the light panel.
+      if hasGraph {
+        VStack {
           Spacer()
+          HStack {
+            graphShortcutsHint
+              .padding(.leading, OmiSpacing.xl)
+              .padding(.bottom, OmiSpacing.xl)
+            Spacer()
+          }
         }
       }
     }

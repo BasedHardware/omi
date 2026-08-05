@@ -1,10 +1,26 @@
+import OmiTheme
 import SwiftUI
 import WebKit
 
 struct HelpPage: View {
   var body: some View {
+    // Crisp is remote content and serves its own opaque white page, so `drawsBackground = false`
+    // on the `WKWebView` buys nothing: full-bleed and `ignoresSafeArea`, it landed as a white sheet
+    // pasted edge to edge over the window's ground, square-cornered against the shell's 22 pt
+    // corners. Nothing here can restyle someone else's page — but it can stop pretending to *be*
+    // the window. Inset to the pane gutters and cut to the card corner, it reads as a panel of
+    // content sitting on the ground, which is what every other page on this surface is.
     CrispWebView()
-      .ignoresSafeArea()
+      .clipShape(
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+          .strokeBorder(Ink.separator, lineWidth: 1)
+      )
+      .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+      .padding(.top, SettingsGlassMetrics.paneTopPadding)
+      .padding(.bottom, SettingsGlassMetrics.paneBottomPadding)
       .onAppear {
         CrispManager.shared.isViewingHelp = true
       }

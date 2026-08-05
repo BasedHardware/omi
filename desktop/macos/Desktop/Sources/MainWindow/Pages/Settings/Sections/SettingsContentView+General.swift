@@ -4,15 +4,27 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+// The row icons here were bare SF Symbols in `Ink.accent`, and both halves of that were wrong on
+// this pane.
+//
+// *Bare* is a layout bug you can see: `rectangle.dashed.badge.record`, `mic.fill`, `bell.fill`,
+// `speaker.wave.2.fill` and `textformat.size` have wildly different optical widths, so the column of
+// titles beside them stepped left and right down the page instead of lining up. That is the exact
+// failure `SettingsIconTile` exists to fix — a fixed 26 pt ground is what makes a column of symbols
+// stop shimmering — and Notifications & Privacy already used it, so General and its neighbour were
+// two different designs.
+//
+// *Accent* spends the one accent on decoration. `Ink.accent` is reserved for the thing that is
+// actionable and is not already a control, which on this surface is the sidebar's selected row; with
+// every icon on the pane in the same blue, the selection had nothing left to say. The tile's default
+// tint is `Ink.primary`, which is what the rest of the pane is set in.
 extension SettingsContentView {
   var generalSection: some View {
     VStack(spacing: OmiSpacing.xl) {
       // Screen Capture toggle
       settingsCard(settingId: "general.screencapture") {
         HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "rectangle.dashed.badge.record")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.accent)
+          SettingsIconTile(symbol: "rectangle.dashed.badge.record")
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Screen Capture")
@@ -58,9 +70,7 @@ extension SettingsContentView {
       // Audio Recording toggle
       settingsCard(settingId: "general.audiorecording") {
         HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "mic.fill")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.accent)
+          SettingsIconTile(symbol: "mic.fill")
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Audio Recording")
@@ -106,9 +116,7 @@ extension SettingsContentView {
       settingsCard(settingId: "general.notifications") {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "bell.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(Ink.accent)
+            SettingsIconTile(symbol: "bell.fill")
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Notifications")
@@ -187,9 +195,7 @@ extension SettingsContentView {
         settingsCard(settingId: "general.systemaudio") {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             HStack(spacing: OmiSpacing.lg) {
-              Image(systemName: "speaker.wave.2.fill")
-                .scaledFont(size: OmiType.subheading)
-                .foregroundColor(Ink.accent)
+              SettingsIconTile(symbol: "speaker.wave.2.fill")
 
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("System Audio")
@@ -235,10 +241,7 @@ extension SettingsContentView {
       settingsCard(settingId: "general.fontsize") {
         VStack(spacing: OmiSpacing.md) {
           HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "textformat.size")
-              .scaledFont(size: 16, weight: .medium)
-              .foregroundColor(Ink.accent)
-              .frame(width: 12)
+            SettingsIconTile(symbol: "textformat.size")
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Font Size")

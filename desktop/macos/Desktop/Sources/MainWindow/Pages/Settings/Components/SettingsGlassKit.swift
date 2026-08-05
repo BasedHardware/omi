@@ -298,19 +298,39 @@ struct SettingsGlassPaneScroll<Content: View>: View {
 /// Its tint is the whole message, so it takes a colour rather than a boolean — but it composes the
 /// ground from that colour instead of taking a second one, because a chip whose fill and label were
 /// chosen independently is a contrast pair nobody keeps true.
+///
+/// **The tint is the dot, not the word.** Setting the *label* in the tint over a wash of the same
+/// tint was the obvious reading of "compose the ground from the colour", and on this light panel it
+/// does not survive a measurement: `systemGreen` is a light hue (relative luminance ≈ 0.45), so
+/// `Granted` in green over 14% green measures about **1.6:1** — the word was there and could not be
+/// read, which is the whole job of a status chip. `systemOrange` lands at ≈2.2:1 and `systemRed` at
+/// ≈3.5:1, so every state this chip has was under AA and the healthy one was the worst.
+///
+/// Darkening the hue is not available: these are *named system colours* on purpose (see `Ink`), and
+/// a hand-mixed dark green is exactly the hand-mixed hue this palette exists to keep out. So the
+/// colour moves to a 6 pt disc — a graphical object, which WCAG asks 3:1 of and which `systemGreen`
+/// clears against this ground — and the word takes `Ink.primary`. The state still reads as colour at
+/// a glance, and it also reads as words, which it did not before.
 struct SettingsStatusChip: View {
   let text: String
   var tint: Color = Ink.secondary
 
   var body: some View {
-    Text(text)
-      .font(.system(size: 11, weight: .medium))
-      .foregroundStyle(tint)
-      .padding(.horizontal, 8)
-      .padding(.vertical, 3)
-      .background(
-        Capsule(style: .continuous).fill(tint.opacity(0.14))
-      )
-      .fixedSize()
+    HStack(spacing: 5) {
+      Circle()
+        .fill(tint)
+        .frame(width: 6, height: 6)
+      Text(text)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(Ink.primary)
+    }
+    .padding(.horizontal, 8)
+    .padding(.vertical, 3)
+    .background(
+      Capsule(style: .continuous).fill(tint.opacity(0.16))
+    )
+    .fixedSize()
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text(text))
   }
 }
