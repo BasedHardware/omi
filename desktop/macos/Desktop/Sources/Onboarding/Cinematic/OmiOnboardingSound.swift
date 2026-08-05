@@ -301,7 +301,11 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
     queue.async { [weak self] in
       guard let self, self.isWired else { return }
       self.loopingAsset = nil
-      self.ramp(to: 0, over: fadeOut) { [weak self] in self?.musicNode.stop() }
+      // `ramp` always calls back on `queue`, so this is already on the queue that owns the graph.
+      self.ramp(to: 0, over: fadeOut) { [weak self] in
+        self?.musicNode.stop()
+        self?.stopEngineIfIdleOnQueue()
+      }
     }
   }
 
@@ -382,8 +386,9 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
     ramp(to: 1, over: fadeIn, then: nil)
   }
 
-  /// Wires the graph on first use and keeps the engine running. `false` means we are silent for the
-  /// rest of the process, which every caller treats as "do nothing".
+  /// Wires the graph on first use and starts the engine, restarting it if `stopEngineIfIdleOnQueue`
+  /// has since parked it. `false` means we are silent for the rest of the process, which every
+  /// caller treats as "do nothing".
   private func prepareEngineOnQueue() -> Bool {
     if isSilenced { return false }
     if !isWired { wireOnQueue() }
@@ -436,6 +441,22 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
   private func stopVoiceOnQueue(at index: Int) {
     guard voices.indices.contains(index) else { return }
     voices[index].stop()
+    stopEngineIfIdleOnQueue()
+  }
+
+  /// Stops the engine once nothing is scheduled on it.
+  ///
+  /// A running `AVAudioEngine` holds a HAL I/O proc open and its render thread awake for the life
+  /// of the process, whether or not anything is audible. Onboarding plays for a couple of minutes
+  /// and the controller is a singleton, so leaving it running meant every session after the intro
+  /// paid for an audio graph rendering silence. The graph itself is kept wired — `wireOnQueue` is
+  /// the expensive part and `prepareEngineOnQueue` restarts a stopped engine on the next cue, so a
+  /// click after the bed has faded still sounds.
+  private func stopEngineIfIdleOnQueue() {
+    guard isWired, engine.isRunning else { return }
+    guard loopingAsset == nil, !musicNode.isPlaying else { return }
+    guard !voices.contains(where: { $0.isPlaying }) else { return }
+    engine.stop()
   }
 
   /// Ramps the bed's mixer. Replaces any ramp already in flight, so a stop during a fade-in starts

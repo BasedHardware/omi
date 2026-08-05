@@ -202,6 +202,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private var agentPillsCancellable: AnyCancellable?
   private var voiceResponseGlowCancellable: AnyCancellable?
   private var draggableBarCancellable: AnyCancellable?
+  private let cursorScreenTracker = CursorScreenTracker()
   private var pttHintCancellable: AnyCancellable?
   private var previousVoiceResponseGlowActive = false
   private var resizeWorkItem: DispatchWorkItem?
@@ -765,6 +766,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     ) { [weak self] _ in
       Task { @MainActor in
         self?.validatePositionOnScreenChange(reason: "screen_parameters_changed")
+        self?.cursorScreenTracker.sync()
       }
     }
 
@@ -785,7 +787,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       }
 
     // Follow cursor across monitors — poll mouse position to move bar instantly
-    startCursorScreenTracking()
+    cursorScreenTracker.start { [weak self] in self?.checkCursorScreen() }
     observeNotchAgentPills()
     observeVoiceResponseGlow()
     observePttHint()
@@ -1151,19 +1153,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       width: width,
       height: chromeHeight + Self.pttStatusBannerBudget
     )
-  }
-
-  private var cursorTrackingTimer: DispatchSourceTimer?
-
-  /// Poll mouse position at ~250ms to move the bar when the cursor enters a different screen.
-  private func startCursorScreenTracking() {
-    let timer = DispatchSource.makeTimerSource(queue: .main)
-    timer.schedule(deadline: .now(), repeating: .milliseconds(250))
-    timer.setEventHandler { [weak self] in
-      self?.checkCursorScreen()
-    }
-    timer.resume()
-    cursorTrackingTimer = timer
   }
 
   private func checkCursorScreen() {

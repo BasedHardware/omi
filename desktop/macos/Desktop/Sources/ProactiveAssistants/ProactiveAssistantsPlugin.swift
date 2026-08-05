@@ -684,7 +684,12 @@ public class ProactiveAssistantsPlugin: NSObject {
       interval: permissionCheckInterval
     ) {
       lastPermissionCheckTime = now
-      let permissionGranted = ScreenCaptureService.checkPermission()
+      // `CGPreflightScreenCaptureAccess` is a TCC round trip — measured ~6 ms. Off the main actor
+      // like the window-server gates below; it is a process-wide read with no actor requirement.
+      let permissionGranted = await Task.detached(priority: .userInitiated) {
+        ScreenCaptureService.checkPermission()
+      }.value
+      guard isMonitoring else { return }
       _hasScreenRecordingPermission = permissionGranted
       if !permissionGranted {
         log("ProactiveAssistantsPlugin: Screen recording permission revoked — stopping monitoring")
@@ -695,17 +700,30 @@ public class ProactiveAssistantsPlugin: NSObject {
       }
     }
 
+    // The two `NSWorkspace` reads stay here: they are main-thread API and cost nothing measurable.
+    // The two window-server scans they feed do not — see `ProactiveCaptureSystemProbe`, which takes
+    // both off the main actor in one hop so this once-a-second tick stops blocking the run loop for
+    // longer than a frame.
+    let dockIsFrontmost =
+      NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.dock"
+    let screenshotAppFrontmost = isScreenshotAppFrontmost()
+    let probe = await Task.detached(priority: .userInitiated) {
+      ProactiveCaptureSystemProbeReader.read(dockIsFrontmost: dockIsFrontmost)
+    }.value
+    guard isMonitoring else { return }
+
     // Skip capture during system modes that block ScreenCaptureKit (Mission Control, Expose, etc.)
     // This avoids burning through consecutive failures and generating unnecessary error events
-    if isInSpecialSystemMode() {
+    if let mode = probe.specialSystemMode {
+      log("SpecialModeDetection: \(mode.logDescription)")
       return
     }
 
     // Yield to an external capture in progress: a frontmost screenshot/recording app, or an
     // active outgoing call screen share. See ProactiveExternalCaptureYield for rationale.
     if externalCaptureYield.shouldYield(
-      isScreenshotAppFrontmost: isScreenshotAppFrontmost(),
-      isScreenShareActive: ConferencingApps.activeScreenSharePresent(),
+      isScreenshotAppFrontmost: screenshotAppFrontmost,
+      isScreenShareActive: probe.isScreenShareActive,
       now: now,
       screenshotBackoffDuration: screenshotAppBackoffDuration,
       shareBackoffDuration: screenShareBackoffDuration
@@ -884,7 +902,12 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         frameCount += 1
         let captureTime = Date()
-        let fullHash = RewindOCRService.dHash(of: cgImage)
+        // A full-screen `CGImage` redrawn into a 9x8 grayscale context — a real decode and
+        // downscale, and it was on the main actor for every captured frame. `CGImage` is immutable,
+        // and the hash is a pure function of it, so nothing about this needed the main thread.
+        let fullHash = await Task.detached(priority: .userInitiated) {
+          RewindOCRService.dHash(of: cgImage)
+        }.value
         captureTrigger.markCaptured(
           app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)
 
@@ -1390,7 +1413,13 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   // MARK: - Special System Mode Detection
 
-  /// Check if the system is in a special mode that blocks screen capture.
+  /// Whether a system mode that blocks ScreenCaptureKit is up, read synchronously.
+  ///
+  /// The rules themselves live in `ProactiveCaptureSystemProbe`. This is the inline reading, for
+  /// the two failure/recovery paths that cannot await one: they run at most every 5 s and only
+  /// while capture is already broken, so the main-thread round trip is affordable there. The 1 Hz
+  /// happy path must not pay it and does not — it takes the same reading off the main actor via
+  /// `ProactiveCaptureSystemProbeReader.read`.
   ///
   /// Known modes that block ScreenCaptureKit:
   /// - **Exposé / Mission Control** (F3 or swipe up): Dock owns all windows
@@ -1402,51 +1431,16 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// When in these modes, ScreenCaptureKit returns "user declined TCCs" error
   /// even though permission is actually granted. This is a transient state.
   private func isInSpecialSystemMode() -> Bool {
-    // Check if Dock is the frontmost app (indicates Exposé/Mission Control)
-    if let frontApp = NSWorkspace.shared.frontmostApplication {
-      if frontApp.bundleIdentifier == "com.apple.dock" {
-        log("SpecialModeDetection: Dock is frontmost app (Exposé/Mission Control active)")
-        return true
-      }
-    }
-
-    // Check for Mission Control windows using CGWindowList
-    // When Mission Control is active, Dock creates a window with no name
-    guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] else {
-      return false
-    }
-
-    for window in windowList {
-      guard let ownerName = window[kCGWindowOwnerName as String] as? String else {
-        continue
-      }
-
-      // Dock window with no name indicates Mission Control/Exposé
-      if ownerName == "Dock" {
-        let windowName = window[kCGWindowName as String] as? String
-        if windowName == nil || windowName?.isEmpty == true {
-          // Check if it's a large window (Mission Control overlay)
-          if let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
-            let width = bounds["Width"],
-            let height = bounds["Height"],
-            width > 500 && height > 300
-          {
-            log(
-              "SpecialModeDetection: Dock overlay window detected (\(Int(width))x\(Int(height))) - Mission Control/Exposé"
-            )
-            return true
-          }
-        }
-      }
-
-      // Notification Center active
-      if ownerName == "NotificationCenter" {
-        log("SpecialModeDetection: Notification Center is active")
-        return true
-      }
-    }
-
-    return false
+    let dockIsFrontmost =
+      NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.dock"
+    let windowList =
+      CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+    guard
+      let mode = ProactiveCaptureSystemProbeReader.specialSystemMode(
+        windowList: windowList, dockIsFrontmost: dockIsFrontmost)
+    else { return false }
+    log("SpecialModeDetection: \(mode.logDescription)")
+    return true
   }
 
   /// Get the current frontmost app for logging
