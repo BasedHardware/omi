@@ -194,6 +194,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         captureProvider.refreshInProgressConversations();
+        // Heal phone-mic sessions that went silent while another app played
+        // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
+        captureProvider.onAppResumed();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
@@ -855,8 +858,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -865,8 +868,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );
