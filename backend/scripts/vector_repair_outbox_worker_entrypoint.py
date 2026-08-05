@@ -55,6 +55,10 @@ PINECONE_API_KEY_ENV = "PINECONE_API_KEY"
 PINECONE_INDEX_NAME_ENV = "PINECONE_INDEX_NAME"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
 VECTOR_STORE_BACKEND_ENV = "VECTOR_STORE_BACKEND"
+QDRANT_URL_ENV = "QDRANT_URL"
+# When set, embeddings go through an on-prem OpenAI-compatible endpoint (its own optional
+# OMI_EMBEDDINGS_API_KEY), so the cloud OPENAI_API_KEY is not required — see utils/llm/clients.py.
+EMBEDDINGS_BASE_URL_ENV = "OMI_EMBEDDINGS_BASE_URL"
 
 
 @dataclass(frozen=True)
@@ -181,7 +185,16 @@ def build_vector_repair_outbox_production_dependencies(
     if backend == "pinecone":
         _required_dependency_env(env, PINECONE_API_KEY_ENV)
         _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
-    _required_dependency_env(env, OPENAI_API_KEY_ENV)
+    elif backend == "qdrant":
+        # Fail fast on the Qdrant connection here, before any record is leased — otherwise a missing
+        # QDRANT_URL only surfaces lazily inside the adapter on first use, turning a config error into
+        # repeated post-lease record failures/retries.
+        _required_dependency_env(env, QDRANT_URL_ENV)
+    # The cloud OpenAI key is required only when no on-prem OpenAI-compatible embeddings endpoint is
+    # configured. With OMI_EMBEDDINGS_BASE_URL set, embeddings use that endpoint (optional
+    # OMI_EMBEDDINGS_API_KEY), so demanding OPENAI_API_KEY would break the documented Qdrant/on-prem path.
+    if not (env.get(EMBEDDINGS_BASE_URL_ENV) or "").strip():
+        _required_dependency_env(env, OPENAI_API_KEY_ENV)
 
     vector_module = module_loader("utils.vector")
     firestore_client_module = module_loader("database._client")

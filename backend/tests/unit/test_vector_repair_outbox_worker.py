@@ -1033,14 +1033,34 @@ class TestEntrypoint:
                 {"OPENAI_API_KEY": "x"}, module_loader=_loader
             )
 
-        # qdrant backend builds without any Pinecone creds.
+        # qdrant backend builds without any Pinecone creds (but with its own QDRANT_URL).
         deps = entrypoint.build_vector_repair_outbox_production_dependencies(
-            {"VECTOR_STORE_BACKEND": "qdrant", "OPENAI_API_KEY": "x"},
+            {"VECTOR_STORE_BACKEND": "qdrant", "QDRANT_URL": "http://qdrant:6333", "OPENAI_API_KEY": "x"},
             module_loader=_loader,
         )
         assert deps.vector_deleter is not None
         assert deps.vector_repairer is not None
         assert deps.authoritative_item_loader is not None
+
+        # qdrant without QDRANT_URL fails fast here, before any record is leased (not lazily in the
+        # adapter after leasing).
+        with pytest.raises(ValueError, match="QDRANT_URL is required"):
+            entrypoint.build_vector_repair_outbox_production_dependencies(
+                {"VECTOR_STORE_BACKEND": "qdrant", "OPENAI_API_KEY": "x"},
+                module_loader=_loader,
+            )
+
+        # On-prem embeddings endpoint configured (OMI_EMBEDDINGS_BASE_URL): the cloud OPENAI_API_KEY
+        # is NOT required — the documented Qdrant + OpenAI-compatible embeddings path must start.
+        deps = entrypoint.build_vector_repair_outbox_production_dependencies(
+            {
+                "VECTOR_STORE_BACKEND": "qdrant",
+                "QDRANT_URL": "http://qdrant:6333",
+                "OMI_EMBEDDINGS_BASE_URL": "http://tei:8080/v1",
+            },
+            module_loader=_loader,
+        )
+        assert deps.vector_repairer is not None
 
     def test_http_shim_disabled_post_fails_closed_without_dependency_initialization(self):
         calls = []
