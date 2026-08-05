@@ -84,6 +84,18 @@ def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatc
     assert graph_calls[0]["confirm_uid"] == CANONICAL_A
     assert graph_calls[0]["limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
     assert graph_calls[0]["apply_limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
+    assert graph_calls[0]["scan_limit"] == cron.DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
+
+
+def test_graph_backfill_scan_size_is_independently_bounded(monkeypatch):
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, "0")
+    assert cron.canonical_graph_backfill_scan_size() == 1
+
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, "not-an-integer")
+    assert cron.canonical_graph_backfill_scan_size() == cron.DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
+
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, "999999")
+    assert cron.canonical_graph_backfill_scan_size() == cron.MAX_STRUCTURED_SCAN_SIZE
 
 
 def test_cohort_summary_uses_consolidation_routes_and_promotions(monkeypatch):
