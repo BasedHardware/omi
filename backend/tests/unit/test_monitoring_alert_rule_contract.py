@@ -227,6 +227,18 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     assert "kube_endpoint_address_available" in endpoint_rule["data"][0]["model"]["expr"]
 
 
+def test_llm_gateway_fallback_ticket_counts_only_successful_actual_failover():
+    for rules in _all_rule_exports().values():
+        expression = rules["bfobs1llmgfb01"]["data"][0]["model"]["expr"]
+        assert 'llm_gateway_requests_total' in expression
+        assert 'route_serving_class="actual_fallback"' in expression
+        assert 'fallback_used="true"' in expression
+        assert 'fallback_reason!="none"' in expression
+        assert 'outcome="success"' in expression
+        assert 'used_lkg' not in expression
+        assert 'llm_gateway_chat_extraction_requests_total' not in expression
+
+
 def test_live_transcription_alert_is_traffic_gated_and_ignores_idle_no_data():
     """The real-traffic alert must not page before any live sessions exist."""
     for rules in _all_rule_exports().values():

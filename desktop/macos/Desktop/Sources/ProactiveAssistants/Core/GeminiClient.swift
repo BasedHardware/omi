@@ -210,11 +210,11 @@ actor GeminiClient {
     case missingAPIKey
     case networkError(Error)
     case invalidResponse
-    case apiError(String)
+    case apiError(String, retryable: Bool? = nil)
 
     /// The raw API message for internal logging (not shown to user).
     var internalMessage: String? {
-      if case .apiError(let msg) = self { return msg }
+      if case .apiError(let msg, _) = self { return msg }
       return nil
     }
 
@@ -223,7 +223,7 @@ actor GeminiClient {
     /// decisions and Sentry noise suppression (these flood without being actionable).
     var isTransient: Bool {
       switch self {
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         return Self.isTimeoutLike(lower)
           || lower.contains("service unavailable")
@@ -246,12 +246,12 @@ actor GeminiClient {
     /// the user waiting through several multi-minute attempts.
     var shouldAutoRetry: Bool {
       switch self {
-      case .apiError(let message):
-        let lower = message.lowercased()
-        return isTransient && !Self.isTimeoutLike(lower)
-      case .networkError(let error):
-        let nsError = error as NSError
-        return !(nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut)
+      case .apiError(_, let retryable):
+        return retryable == true
+      case .networkError:
+        // A transport error after dispatch is ambiguous. Only a typed backend
+        // response may authorize replay.
+        return false
       case .invalidResponse, .missingAPIKey:
         return false
       }
@@ -261,7 +261,7 @@ actor GeminiClient {
     /// local logs/breadcrumbs but represent paywall/BYOK state, not client bugs.
     var isExpectedProductState: Bool {
       switch self {
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         return lower.contains("trial_expired")
           || lower.contains("trial expired")
@@ -286,7 +286,7 @@ actor GeminiClient {
         return "Could not reach AI service. Check your internet connection and try again."
       case .invalidResponse:
         return "AI service returned an unexpected response. Please try again."
-      case .apiError(let message):
+      case .apiError(let message, _):
         return Self.userFacingMessage(for: message)
       }
     }
@@ -393,26 +393,40 @@ actor GeminiClient {
     throw GeminiClientError.invalidResponse
   }
 
-  /// Check HTTP status code before attempting JSON decode.
-  /// Throws GeminiClientError.apiError for non-2xx responses so the error flows
-  /// through isTransientError() and userFacingMessage() instead of crashing JSONDecoder.
-  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
-    guard let httpResponse = response as? HTTPURLResponse else { return }
+  /// Convert a non-2xx response into a typed error while preserving the backend's
+  /// replay authorization. Missing or malformed retryability remains fail-closed.
+  static func httpError(response: URLResponse, data: Data) -> GeminiClientError? {
+    guard let httpResponse = response as? HTTPURLResponse else { return nil }
     let status = httpResponse.statusCode
-    guard (200..<300).contains(status) else {
-      let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
-      throw GeminiClientError.apiError("HTTP \(status): \(body)")
+    guard !(200..<300).contains(status) else { return nil }
+
+    let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+    let retryable: Bool?
+    switch httpResponse.value(forHTTPHeaderField: "X-Omi-Retryable")?.lowercased() {
+    case "true":
+      retryable = true
+    case "false":
+      retryable = false
+    default:
+      retryable = nil
+    }
+    return .apiError("HTTP \(status): \(body)", retryable: retryable)
+  }
+
+  /// Check HTTP status code before attempting JSON decode.
+  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
+    if let error = Self.httpError(response: response, data: data) {
+      throw error
     }
   }
 
-  /// Check if an error is transient and worth retrying
-  private func isTransientError(_ error: Error) -> Bool {
+  /// Replay only outcomes whose typed backend contract says they are safe.
+  static func shouldAutoRetry(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
       return geminiError.shouldAutoRetry
     }
-    // URLSession network errors are transient
-    let nsError = error as NSError
-    return nsError.domain == NSURLErrorDomain && nsError.code != NSURLErrorTimedOut
+    // Raw URLSession errors are ambiguous after dispatch and must not be replayed.
+    return false
   }
 
   /// Closed Gemini model tier for fallback telemetry (no free model ID strings).
@@ -433,7 +447,7 @@ actor GeminiClient {
           return "timeout"
         }
         return "other"
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         if lower.contains("upstream_timeout")
           || lower.contains("timed out")
@@ -476,12 +490,12 @@ actor GeminiClient {
   }
 
   /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
-  private func retryBackoff(attempt: Int, error: Error) async {
+  private func retryBackoff(attempt: Int, error: Error) async throws {
     let delaySec = [2, 8][min(attempt, 1)]
     log(
       "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
     )
-    try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+    try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
   }
 
   /// Send a request to the Gemini API with an image
@@ -560,12 +574,12 @@ actor GeminiClient {
         lastError = error
 
         // Don't retry non-transient errors (e.g. safety filter / invalidResponse)
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
 
         // Backoff: 1s after first failure, 2s after second
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -633,10 +647,10 @@ actor GeminiClient {
         return text
       } catch {
         lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -705,10 +719,10 @@ actor GeminiClient {
         return text
       } catch {
         lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -1031,10 +1045,10 @@ extension GeminiClient {
           )
         } catch {
           lastError = error
-          guard attempt < maxRetries && isTransientError(error) else {
+          guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
             // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
             // if the failure is transient and a fallback model remains.
-            if modelIndex < models.count - 1 && isTransientError(error) {
+            if modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
               DesktopDiagnosticsManager.shared.recordFallback(
                 area: "gemini_model",
                 from: Self.bucketGeminiModel(activeModel),
@@ -1047,7 +1061,7 @@ extension GeminiClient {
             }
             throw error
           }
-          await retryBackoff(attempt: attempt, error: error)
+          try await retryBackoff(attempt: attempt, error: error)
         }
       }
     }

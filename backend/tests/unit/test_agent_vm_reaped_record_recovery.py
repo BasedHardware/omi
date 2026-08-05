@@ -58,6 +58,10 @@ class _FakeUserDoc:
     def update(self, payload):
         self.updates.append(payload)
 
+    def get(self, transaction=None):
+        del transaction
+        return types.SimpleNamespace(exists=True, to_dict=lambda: {"agentVm": {**READY_VM, "authToken": ""}})
+
 
 def _stub_gce(agent_proxy, monkeypatch, instance_status_code: int, user_doc: _FakeUserDoc):
     """Point the module's GCE + Firestore seams at a fake instance and user document."""
@@ -90,8 +94,15 @@ def _stub_gce(agent_proxy, monkeypatch, instance_status_code: int, user_doc: _Fa
     async def direct_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
+    deletion_doc = MagicMock()
+    deletion_doc.get.return_value = types.SimpleNamespace(exists=False, to_dict=lambda: {})
+    transaction = MagicMock()
+    transaction.update.side_effect = lambda doc, payload: doc.update(payload)
     db = MagicMock()
-    db.collection.return_value.document.return_value = user_doc
+    db.transaction.return_value = transaction
+    db.collection.side_effect = lambda name: types.SimpleNamespace(
+        document=lambda _uid: deletion_doc if name == "account_deletions" else user_doc
+    )
 
     monkeypatch.setattr(agent_proxy, "_get_gce_access_token", lambda: "test-token")
     monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)

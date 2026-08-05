@@ -1,11 +1,15 @@
+import asyncio
+import io
 import json
 import os
 import re
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(BACKEND_DIR) not in sys.path:
@@ -14,6 +18,33 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 from routers import desktop_proxy
+
+
+def make_request(
+    body: bytes = b'{"contents":[{"parts":[{"text":"hello"}]}]}',
+    *,
+    query_string: bytes = b"",
+) -> Request:
+    sent = False
+    pending = asyncio.Event()
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        await pending.wait()
+
+    return Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/proxy/gemini/models/gemini-2.5-flash:generateContent",
+            "query_string": query_string,
+            "headers": [(b"x-omi-request-id", b"request-12345678")],
+        },
+        receive,
+    )
 
 
 def test_sanitize_caps_generation_and_normalizes_system_content():
@@ -137,3 +168,344 @@ async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypat
         )
         == "models/gemini-2.5-flash:generateContent"
     )
+
+
+@pytest.mark.asyncio
+async def test_vertex_credentials_fail_closed_without_studio_fallback(monkeypatch):
+    async def unavailable():
+        raise RuntimeError("credential detail must not escape")
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy._vertex_tokens, "get_access_token", unavailable)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "omi-test")
+    monkeypatch.setenv("GEMINI_API_KEY", "must-not-be-used")
+
+    with pytest.raises(desktop_proxy.RoutingFailure) as error:
+        await desktop_proxy._upstream(
+            "models/gemini-2.5-flash:generateContent",
+            "gemini-2.5-flash",
+            "generateContent",
+            {},
+        )
+
+    assert error.value.code == "routing_credentials_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_batch_embedding_uses_studio_and_rejects_credential_override(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "omi-test")
+    monkeypatch.setenv("GEMINI_API_KEY", "server-key")
+
+    route = await desktop_proxy._upstream(
+        "models/gemini-embedding-001:batchEmbedContents",
+        "gemini-embedding-001",
+        "batchEmbedContents",
+        {"alt": "json"},
+    )
+    assert route.provider == "ai_studio"
+    assert route.params == {"alt": "json", "key": "server-key"}
+    with pytest.raises(HTTPException, match="credential query"):
+        await desktop_proxy._upstream(
+            "models/gemini-2.5-flash:generateContent",
+            "gemini-2.5-flash",
+            "generateContent",
+            {"key": "attacker-key"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_vertex_single_embedding_uses_predict_wire_method(monkeypatch):
+    async def token():
+        return "adc-token"
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy._vertex_tokens, "get_access_token", token)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "omi-test")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+
+    route = await desktop_proxy._upstream(
+        "models/gemini-embedding-001:embedContent",
+        "gemini-embedding-001",
+        "embedContent",
+        {},
+    )
+
+    assert route.provider == "vertex_ai"
+    assert route.url.endswith("/gemini-embedding-001:predict")
+
+
+def test_payload_shape_bounds_complexity_without_recording_content():
+    body = json.dumps({"contents": [{"parts": [{"text": "private prompt"}]}] * 129}).encode()
+    with pytest.raises(HTTPException) as error:
+        desktop_proxy._payload_shape(body)
+    assert error.value.status_code == 413
+
+    shape = desktop_proxy._payload_shape(b'{"contents":[{"parts":[{"inlineData":{"data":"secret"}}]}]}')
+    assert shape.inline_media_bucket == "1"
+    assert "secret" not in repr(shape)
+
+
+def test_provider_timeout_has_typed_non_retryable_terminal_response(monkeypatch):
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+    telemetry = desktop_proxy.ProxyTelemetry(make_request(), streaming=False)
+    response = httpx.Response(504, request=httpx.Request("POST", "https://provider.invalid"))
+
+    result = desktop_proxy._provider_error(response, telemetry)
+
+    assert result.status_code == 504
+    assert result.headers["x-omi-error-class"] == "provider_timeout"
+    assert result.headers["x-omi-retryable"] == "false"
+    event = json.loads(output.getvalue())
+    assert event["outcome"] == "provider_timeout"
+    assert event["phase"] == "provider"
+    assert "private prompt" not in output.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_proxy_dispatches_once_and_classifies_read_timeout(monkeypatch):
+    calls = 0
+
+    class TimeoutClient:
+        async def post(self, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            raise httpx.ReadTimeout("private provider detail")
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: TimeoutClient())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+
+    assert calls == 1
+    assert response.status_code == 504
+    assert response.headers["x-omi-failure-phase"] == "read"
+    assert response.headers["x-omi-retryable"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_disconnect_cancels_in_flight_provider_call():
+    disconnected = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    class DisconnectingRequest:
+        async def is_disconnected(self):
+            return disconnected.is_set()
+
+    async def provider_call():
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    task = asyncio.create_task(desktop_proxy._cancel_on_disconnect(DisconnectingRequest(), provider_call()))
+    await asyncio.sleep(0)
+    disconnected.set()
+    with pytest.raises(desktop_proxy.ClientDisconnected):
+        await asyncio.wait_for(task, timeout=1)
+    assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+async def test_outer_cancellation_cleans_up_in_flight_provider_call():
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    class ConnectedRequest:
+        async def is_disconnected(self):
+            return False
+
+    async def provider_call():
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    task = asyncio.create_task(desktop_proxy._cancel_on_disconnect(ConnectedRequest(), provider_call()))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content_length", ["invalid", "-1"])
+async def test_request_body_rejects_malformed_content_length(content_length):
+    class RequestWithInvalidLength:
+        headers = {"content-length": content_length}
+
+        async def stream(self):
+            raise AssertionError("invalid Content-Length must be rejected before reading the body")
+            yield b""
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._read_request_body(RequestWithInvalidLength())
+
+    assert error.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_request_body_bounds_chunked_stream_without_calling_body(monkeypatch):
+    streamed_chunks = 0
+
+    class ChunkedRequest:
+        headers = {}
+
+        async def stream(self):
+            nonlocal streamed_chunks
+            for chunk in (b"123", b"456"):
+                streamed_chunks += 1
+                yield chunk
+
+        async def body(self):
+            raise AssertionError("request.body() would aggregate an unbounded chunked request")
+
+    monkeypatch.setattr(desktop_proxy, "_MAX_BODY_BYTES", 5)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._read_request_body(ChunkedRequest())
+
+    assert error.value.status_code == 413
+    assert streamed_chunks == 2
+
+
+@pytest.mark.asyncio
+async def test_post_routing_validation_emits_one_typed_terminal_outcome(monkeypatch):
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "byok-key")
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._proxy(
+            make_request(query_string=b"key=attacker-key"),
+            "models/gemini-2.5-flash:generateContent",
+            False,
+            "user",
+        )
+
+    assert error.value.status_code == 400
+    assert error.value.headers["X-Omi-Failure-Phase"] == "routing"
+    assert error.value.headers["X-Omi-Retryable"] == "false"
+    events = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert len(events) == 1
+    assert events[0]["outcome"] == "validation_rejected"
+
+
+@pytest.mark.asyncio
+async def test_vertex_embedding_validation_is_typed_at_proxy_boundary(monkeypatch):
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(_path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._proxy(
+            make_request(b'{"contents":[]}'),
+            "models/gemini-embedding-001:embedContent",
+            False,
+            "user",
+        )
+
+    assert error.value.status_code == 400
+    assert error.value.headers["X-Omi-Error-Class"] == "validation_rejected"
+
+
+@pytest.mark.asyncio
+async def test_proxy_bounds_concurrency_pool_wait_and_labels_phase(monkeypatch):
+    calls = 0
+
+    class Client:
+        async def post(self, *args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return httpx.Response(200, json={})
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(_path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    monkeypatch.setattr(desktop_proxy, "_POOL_WAIT_SECONDS", 0.001)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(0))
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+
+    assert calls == 0
+    assert response.status_code == 504
+    assert response.headers["X-Omi-Failure-Phase"] == "pool"
+
+
+@pytest.mark.asyncio
+async def test_streaming_defers_resource_acquisition_until_body_iteration(monkeypatch):
+    streams_opened = 0
+    streams_closed = 0
+    chunk = b'data: {"ok":true}\n\n'
+
+    class UpstreamResponse:
+        status_code = 200
+
+        async def aiter_bytes(self):
+            yield chunk
+
+    class StreamContext:
+        async def __aenter__(self):
+            return UpstreamResponse()
+
+        async def __aexit__(self, *_args):
+            nonlocal streams_closed
+            streams_closed += 1
+
+    class Client:
+        def stream(self, *args, **kwargs):
+            nonlocal streams_opened
+            streams_opened += 1
+            return StreamContext()
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(_path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    async def await_upstream(_request, awaitable):
+        return await awaitable
+
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:streamGenerateContent", True, "user")
+
+    assert response.status_code == 200
+    assert streams_opened == 0
+    chunks = [chunk async for chunk in response.body_iterator]
+    assert chunks == [chunk]
+    assert streams_opened == 1
+    assert streams_closed == 1

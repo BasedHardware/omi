@@ -292,8 +292,12 @@ def test_backend_service_deploys_remove_retired_canonical_promotion_env_vars():
         'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
     )
     workflow_root = Path(__file__).resolve().parents[3] / '.github/workflows'
+    deploy_action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
+    deploy_action_text = deploy_action.read_text(encoding='utf-8')
     for workflow_name in ('gcp_backend.yml', 'gcp_backend_auto_dev.yml'):
         text = (workflow_root / workflow_name).read_text(encoding='utf-8')
+        if './.github/actions/deploy-backend-stack' in text:
+            text += '\n' + deploy_action_text
         assert text.count(f'--remove-env-vars={retired}') == 1
         assert text.count(f'--remove-env-vars=HOSTED_PUSHER_API_URL,{retired}') == 2
 

@@ -20,6 +20,7 @@ from routers import (
     desktop_tts_updates,
 )
 from utils.env_loader import load_backend_env
+from utils.http_client import close_all_clients
 
 
 @asynccontextmanager
@@ -40,7 +41,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         firebase_admin.initialize_app(credentials)
     else:
         firebase_admin.initialize_app()
-    yield
+    try:
+        yield
+    finally:
+        await close_all_clients()
 
 
 app = FastAPI(lifespan=lifespan)

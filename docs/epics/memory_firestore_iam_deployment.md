@@ -60,11 +60,10 @@ Before enabling memory writes for any production user:
 2. Confirm the backend runs with the intended service account and has Firestore access no broader than required; record the IAM evidence in the rollout ticket or deployment change.
 3. Confirm client direct access remains denied by Firestore Security Rules. Until real validation is available, the static guard is `pytest tests/unit/test_memory_firestore_security_rules.py -q`.
 4. Confirm the backend write path still uses the atomic apply adapter and operation journal; do not introduce a direct product writer bypass.
-5. Keep rollout external mode explicit:
-   - `MEMORY_MODE=off`: legacy only.
-   - `MEMORY_MODE=shadow`: no product-visible memory writes.
-   - `MEMORY_MODE=write`: whitelisted server-side memory sidecar writes only after gates pass.
-   - `MEMORY_MODE=read`: superset of write; memory read service authoritative for whitelisted users only after read/vector gates pass.
+5. Keep the deployment-readiness declaration explicit: `MEMORY_MODE=off`
+   before proof and `MEMORY_MODE=read` after proof. Request routing does not
+   read this env; `CANONICAL_MEMORY_USERS` plus persisted control state own the
+   product decision. See `docs/runbooks/canonical-memory-rollout-flags.md`.
 6. Confirm account deletion/source tombstone generation fences and rollback compatibility projection are healthy before widening the allowlist.
 
 ## Emulator validation gate
@@ -298,9 +297,16 @@ Remaining deployment gates before enabling this contract in production:
 
 ## Rollback notes
 
-- `read → write` should be a config rollback using the reconciled memory-derived compatibility projection; it must not expose stale vectors or resurrect deleted memories.
-- `write → off` after persistent memory writes is not a blind flag flip. It requires decommission reconciliation so memory-created memories do not disappear from the user experience.
-- If IAM or Security Rules are found wrong, set `MEMORY_MODE=off` or remove affected users from the allowlist first, stop memory workers, then fix and redeploy rules/IAM before retrying writes.
+- A persisted read-to-write rollback must use the reconciled memory-derived
+  compatibility projection; it must not expose stale vectors or resurrect
+  deleted memories.
+- Returning to legacy after persistent canonical writes is not an env flag
+  flip. It requires decommission reconciliation so canonical-created memories
+  do not disappear from the user experience.
+- If IAM or Security Rules are wrong, remove affected users from
+  `CANONICAL_MEMORY_USERS` and disable persisted controls first, stop memory
+  workers, then fix and redeploy rules/IAM before retrying writes. Set the env
+  readiness declaration back to `MEMORY_MODE=off` as part of the same rollback.
 
 ## Verification currently available
 

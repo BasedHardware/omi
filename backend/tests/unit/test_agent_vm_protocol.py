@@ -55,10 +55,11 @@ def test_signed_update_manifest_requires_valid_signature_and_content_hash(tmp_pa
     }
 
 
-def test_health_is_unauthenticated_and_reports_database_state(tmp_path: Path) -> None:
+def test_health_requires_vm_token_and_reports_database_state(tmp_path: Path) -> None:
     app, _ = load_app(tmp_path)
     with TestClient(app) as client:
-        response = client.get("/health")
+        assert client.get("/health").status_code == 401
+        response = client.get("/health?token=test-token", headers={"Authorization": "Bearer test-token"})
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"

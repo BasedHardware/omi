@@ -3,23 +3,27 @@
 // when it INCREASED (a real update, not a fresh install) — surface the changes in
 // the shared acrylic toast window, then record the version so it never nags again.
 //
-// Changelog source: the fragment(s) under changelog/unreleased/ (same schema as
-// desktop/macos/changelog/unreleased/*.json). For this pass a single fragment is
-// imported directly; the fragment→per-version consolidation script + CI check
-// (desktop-changelog.py's Windows equivalent) is a deferred follow-up — see
-// changelog/README.md.
+// Changelog source: fragments under changelog/unreleased/ (same schema as
+// desktop/macos/changelog/unreleased/*.json). Until the Windows fragment
+// consolidation script lands, import the notes we intend to surface this build.
 import { app } from 'electron'
 import { getAppSettings, setAppSettings } from './appSettings'
-import fragment from '../../changelog/unreleased/2026-07-phase-8-windows-redesign.json'
+import phase8Fragment from '../../changelog/unreleased/2026-07-phase-8-windows-redesign.json'
+import chatRefreshFragment from '../../changelog/unreleased/2026-08-chat-panel-background-refresh.json'
 import type { WhatsNewPayload } from '../shared/types'
 
 // Fragment schema: { "changes": string[] } or { "change": string }.
-const raw = fragment as unknown as { changes?: string[]; change?: string }
-const CHANGES: string[] = Array.isArray(raw.changes)
-  ? raw.changes
-  : typeof raw.change === 'string'
-    ? [raw.change]
-    : []
+function changesFromFragment(fragment: unknown): string[] {
+  const raw = fragment as { changes?: string[]; change?: string }
+  if (Array.isArray(raw.changes)) return raw.changes
+  if (typeof raw.change === 'string') return [raw.change]
+  return []
+}
+
+const CHANGES: string[] = [
+  ...changesFromFragment(phase8Fragment),
+  ...changesFromFragment(chatRefreshFragment),
+]
 
 /** Decide whether to show the what's-new toast this launch, advancing the stored
  *  marker as a side effect so it fires at most once per version. Returns the

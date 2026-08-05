@@ -1384,13 +1384,16 @@ function buildMcpServers(
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
-    // Omit both variables in legacy mode.  This keeps the capability-off child
-    // environment (and therefore its tools/list bytes) exactly unchanged.
-    if (context?.chatFirstUi === true && context.surfaceKind === "main_chat") {
-      omiToolsEnv.push({ name: "OMI_CHAT_FIRST_UI", value: "true" });
-      omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: "main_chat" });
-      if (context.chatFirstControlGeneration !== undefined && context.chatFirstControlGeneration !== null) {
-        omiToolsEnv.push({ name: "OMI_CHAT_FIRST_CONTROL_GENERATION", value: String(context.chatFirstControlGeneration) });
+    // Keep the exact surface marker for every typed chat run. Legacy typed
+    // chat uses it to project coordinator-only writes (such as create_memory),
+    // while the optional chat-first flags remain main-chat rollout-gated below.
+    if (context?.surfaceKind === "main_chat" || context?.surfaceKind === "floating_chat") {
+      omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: context.surfaceKind });
+      if (context.surfaceKind === "main_chat" && context.chatFirstUi === true) {
+        omiToolsEnv.push({ name: "OMI_CHAT_FIRST_UI", value: "true" });
+        if (context.chatFirstControlGeneration !== undefined && context.chatFirstControlGeneration !== null) {
+          omiToolsEnv.push({ name: "OMI_CHAT_FIRST_CONTROL_GENERATION", value: String(context.chatFirstControlGeneration) });
+        }
       }
     }
     omiToolsEnv.push({

@@ -61,7 +61,14 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.memory.surface_routing import pin_memory_system
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_person,
+    clean_screen_activity_row,
+    end_of_day_utc,
+    parse_date_only_utc,
+)
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
@@ -78,6 +85,7 @@ from utils.mcp_memories import (
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.observability.api_keys import record_api_key_repairs
+from utils.other.endpoints import enforce_account_deletion_http_access
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -163,6 +171,7 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     user_data = auth_result.context
     if not user_data or not user_data.get("user_id"):
         return None
+    enforce_account_deletion_http_access(user_data["user_id"])
     return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
@@ -181,6 +190,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         user_data = auth_result.context
         if not user_data or not user_data.get("user_id"):
             return None
+        enforce_account_deletion_http_access(user_data["user_id"])
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
@@ -193,6 +203,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:
         return None
+    enforce_account_deletion_http_access(oauth_context["uid"])
     return MCPAuthContext(
         uid=oauth_context["uid"],
         auth_type="oauth",
@@ -767,11 +778,17 @@ def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
 
 
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
-    """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
+    """Parse a yyyy-mm-dd MCP argument into a UTC-anchored datetime, or None when absent.
+
+    Data stores (Firestore conversation ``created_at``/action-item ``due_at``, the vector
+    index, screen-activity timestamps) all operate in UTC. A naive parse would be
+    interpreted in the server's local timezone and shift the filter window by the UTC
+    offset, so anchor to UTC midnight (matching the integration-router convention).
+    """
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%d")
+        return parse_date_only_utc(value)
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
@@ -1008,20 +1025,11 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
 
         # Parse dates
-        start_dt = None
-        end_dt = None
-        if start_date:
-            try:
-                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        if end_dt is not None:
+            # Include the entire end day, matching the integration-router convention.
+            end_dt = end_of_day_utc(end_dt)
 
         # Validate categories
         valid_categories: List[str] = []
@@ -1145,21 +1153,14 @@ def execute_tool(
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
 
-        # Parse dates to epoch for vector search
-        starts_at = None
-        ends_at = None
-        if start_date:
-            try:
-                starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        # Parse dates to epoch for vector search (UTC-anchored so the filter matches the
+        # vector index's UTC epoch created_at; end bound includes the full end day).
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        starts_at = int(start_dt.timestamp()) if start_dt is not None else None
+        if end_dt is not None:
+            end_dt = end_of_day_utc(end_dt)
+        ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
         conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
         if not conversation_ids:
@@ -1238,6 +1239,9 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
         due_start = _parse_mcp_date(arguments.get("due_start_date"), "due_start_date")
         due_end = _parse_mcp_date(arguments.get("due_end_date"), "due_end_date")
+        if due_end is not None:
+            # Include the entire end day, matching the integration-router convention.
+            due_end = end_of_day_utc(due_end)
         items = action_items_db.get_action_items(
             user_id,
             completed=completed,
@@ -1338,6 +1342,12 @@ def execute_tool(
     elif tool_name == "get_screen_activity":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
         end = _parse_mcp_date(arguments.get("end_date"), "end_date")
+        if end is not None:
+            # Include the entire end day, matching the integration-router
+            # convention. The DB layer formats the bound via strftime, so the
+            # end-of-day increment must be applied here (the parsed midnight
+            # would otherwise match only up to 00:00:00.999 of the end day).
+            end = end_of_day_utc(end)
         app = arguments.get("app")
         try:
             summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
@@ -1606,7 +1616,7 @@ def mcp_authorize(
 
 
 @router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
-def mcp_authorize_consent(
+async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -1618,10 +1628,20 @@ def mcp_authorize_consent(
     code_challenge_method: Optional[str] = Form(None),
 ):
     try:
-        _, scopes = _validate_authorize_request(
-            response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
+        _, scopes = await run_blocking(
+            db_executor,
+            _validate_authorize_request,
+            response_type,
+            client_id,
+            redirect_uri,
+            resource,
+            scope,
+            code_challenge,
+            code_challenge_method,
         )
-        decoded_token: Dict[str, Any] = firebase_admin.auth.verify_id_token(firebase_id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        decoded_token: Dict[str, Any] = await run_blocking(
+            critical_executor, firebase_admin.auth.verify_id_token, firebase_id_token
+        )  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
         uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
@@ -1630,10 +1650,20 @@ def mcp_authorize_consent(
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
 
-    grant = mcp_oauth_db.create_or_update_grant(uid, client_id, resource, scopes)
-    code = mcp_oauth_db.issue_authorization_code(
-        uid, grant["id"], client_id, redirect_uri, resource, scopes, cast(str, code_challenge)
-    )
+    try:
+        _, code = await run_blocking(
+            db_executor,
+            mcp_oauth_db.create_grant_and_authorization_code_if_allowed,
+            uid,
+            client_id,
+            redirect_uri,
+            resource,
+            scopes,
+            cast(str, code_challenge),
+        )
+    except mcp_oauth_db.AccountDeletionAccessBlocked as exc:
+        detail = {"code": "account_deletion_in_progress", "status": str(exc), "retryable": False}
+        raise HTTPException(status_code=403, detail=detail) from exc
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 

@@ -15,6 +15,7 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from utils.memory.graph_enrichment import GraphEnrichmentStatus, prepare_graph_enrichment
 
 
 def _evidence():
@@ -396,6 +397,216 @@ def _short_term_existing(**overrides):
     )
     data.update(overrides)
     return MemoryItem(**data)
+
+
+def _long_term_graph_item(**overrides):
+    data = dict(
+        tier=MemoryTier.long_term,
+        expires_at=None,
+        ledger_commit_id="head0",
+        ledger_sequence=1,
+        source_commit_id="head0",
+        source_commit_sequence=1,
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+        graph_ready=False,
+        graph_assertion_id=None,
+        graph_plan_hash=None,
+        kg_extracted=False,
+    )
+    data.update(overrides)
+    return _short_term_existing(**data)
+
+
+def test_graph_enrichment_commits_one_fenced_assertion_without_changing_long_term_semantics():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item()
+    plan = PromotionGraphPlan(
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+    )
+
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=plan,
+        account_generation=1,
+        source_generation=2,
+        expected_item_revision=existing.item_revision,
+        expected_content_hash=existing.content_hash,
+        expected_evidence_ids=["ev1"],
+        observed_head_commit_id="head0",
+    )
+
+    assert planned.status == GraphEnrichmentStatus.ready
+    assert planned.operation is not None
+    patch_payload = {**planned.patch_payload, "evidence": existing.evidence}
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=planned.operation,
+        patch_payload=patch_payload,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].content == existing.content
+    assert result.memory_items[0].evidence == existing.evidence
+    assert result.memory_items[0].graph_ready is True
+    assert len(result.graph_assertions) == 1
+    assert result.graph_assertions[0].memory_id == existing.memory_id
+
+
+def test_graph_enrichment_can_fill_an_entirely_missing_historical_classification():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item(subject_entity_id=None, predicate=None, arguments={})
+    plan = PromotionGraphPlan(
+        subject_entity_id="user",
+        predicate="prefers_update_style",
+        arguments={"style": "concise"},
+    )
+
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=plan,
+        account_generation=1,
+        source_generation=2,
+        expected_item_revision=existing.item_revision,
+        expected_content_hash=existing.content_hash,
+        expected_evidence_ids=["ev1"],
+        observed_head_commit_id="head0",
+    )
+
+    assert planned.status == GraphEnrichmentStatus.ready
+    assert planned.operation is not None
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=planned.operation,
+        patch_payload={**planned.patch_payload, "evidence": existing.evidence},
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].content == existing.content
+    assert result.memory_items[0].evidence == existing.evidence
+    assert result.memory_items[0].subject_entity_id == "user"
+    assert result.memory_items[0].predicate == "prefers_update_style"
+    assert result.memory_items[0].arguments == {"style": "concise"}
+    assert result.memory_items[0].graph_ready is True
+
+
+def test_graph_enrichment_can_replan_only_a_prior_fenced_enrichment():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item(subject_entity_id=None, predicate=None, arguments={})
+    initial = prepare_graph_enrichment(
+        item=existing,
+        plan=PromotionGraphPlan(
+            subject_entity_id="user",
+            predicate="uses",
+            arguments={"object": {"entity_id": "ent_old", "label": "Old"}},
+        ),
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+        planner_version="canonical_historical_graph_enrichment.v1",
+    )
+    assert initial.operation is not None
+    first_apply = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=initial.operation,
+        patch_payload={**initial.patch_payload, "evidence": existing.evidence},
+    )
+    assert first_apply.status == ApplyStatus.committed
+    graph_ready = first_apply.memory_items[0]
+
+    replacement = prepare_graph_enrichment(
+        item=graph_ready,
+        plan=PromotionGraphPlan(
+            subject_entity_id="ent_project",
+            predicate="depends_on",
+            arguments={"object": {"entity_id": "ent_dependency", "label": "Dependency"}},
+        ),
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id=first_apply.control_state.head_commit_id,
+        allow_replan=True,
+        planner_version="canonical_historical_graph_enrichment.v2",
+    )
+    assert replacement.operation is not None
+    second_apply = apply_long_term_patch_transaction(
+        control_state=first_apply.control_state,
+        operation=replacement.operation,
+        patch_payload={**replacement.patch_payload, "evidence": graph_ready.evidence},
+    )
+
+    assert second_apply.status == ApplyStatus.committed
+    assert second_apply.memory_items[0].subject_entity_id == "ent_project"
+    assert second_apply.memory_items[0].graph_ready is True
+
+
+def test_graph_enrichment_fills_only_missing_fields_and_preserves_existing_subject():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item(predicate=None, arguments={})
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=PromotionGraphPlan(
+            subject_entity_id="user",
+            predicate="prefers_update_style",
+            arguments={"style": "concise"},
+        ),
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+
+    assert planned.status == GraphEnrichmentStatus.ready
+    assert planned.operation is not None
+    result = apply_long_term_patch_transaction(
+        control_state=control,
+        operation=planned.operation,
+        patch_payload={**planned.patch_payload, "evidence": existing.evidence},
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].subject_entity_id == existing.subject_entity_id
+    assert result.memory_items[0].predicate == "prefers_update_style"
+    assert result.memory_items[0].arguments == {"style": "concise"}
+
+
+def test_graph_enrichment_rejects_a_plan_that_changes_existing_long_term_semantics():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _long_term_graph_item()
+    planned = prepare_graph_enrichment(
+        item=existing,
+        plan=PromotionGraphPlan(
+            subject_entity_id="user",
+            predicate="prefers_update_style",
+            arguments={"style": "concise"},
+        ),
+        account_generation=1,
+        source_generation=2,
+        observed_head_commit_id="head0",
+    )
+    assert planned.operation is not None
+    tampered = dict(planned.patch_payload)
+    tampered["arguments"] = {"style": "verbose"}
+    tampered["mutation_metadata"] = build_patch_mutation_identity(tampered)
+    operation = MemoryOperation.new(
+        uid=planned.operation.uid,
+        operation_type=planned.operation.operation_type,
+        source_packet_id=planned.operation.source_packet_id,
+        target_memory_id=planned.operation.target_memory_id,
+        evidence_ids=planned.operation.evidence_ids,
+        logical_payload=planned.operation.logical_payload.model_copy(
+            update={"arguments": {"style": "verbose"}, "mutation_metadata": tampered["mutation_metadata"]}
+        ),
+        account_generation=planned.operation.account_generation,
+        source_generation=planned.operation.source_generation,
+        observed_head_commit_id=planned.operation.observed_head_commit_id,
+    )
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=tampered)
+
+    assert result.status == ApplyStatus.invalid_patch
+    assert result.graph_assertions == []
 
 
 def test_short_term_to_long_term_requires_synthesis_and_commits_structured_graph_assertion():
