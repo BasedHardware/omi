@@ -398,7 +398,12 @@ def run_enrichment(
         max_retryable_head_mismatches = apply_limit * 2
         last_examined: MemoryItem | None = None
         completed_page = True
-        for item in page.items:
+        # ``scan_limit`` lets the cursor skip a run of already-enriched rows,
+        # while ``limit`` remains the hard external-planner budget.  Without
+        # this slice a sparse eligible page can invoke the model for every row
+        # in the scan window while still seeking only ``apply_limit`` commits.
+        # That turns a 25-item bounded job into up to 1,250 model calls.
+        for item in page.items[:limit]:
             if applied >= apply_limit:
                 break
             control = _control(uid, db_client=db_client)
@@ -445,7 +450,7 @@ def run_enrichment(
                 report[f"apply_{result.status.value}"] += 1
                 completed_page = False
                 break
-        else:
+        if last_examined is None:
             # An all-filtered scan still needs to move past its stable prefix.
             last_examined = page.last_scanned
 
