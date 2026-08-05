@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from models.memory_apply import ApplyStatus, MemoryControlState, memory_content_hash
-from models.memory_promotion import PROMOTION_GRAPH_PLAN_V2_VERSION
+from models.memory_promotion import PROMOTION_GRAPH_PLAN_V2_VERSION, canonical_graph_entity_id
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentStatus
 from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment
@@ -151,11 +151,74 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
     graph_plan = planned.patch_payload["promotion_audit"]["graph_plan"]
     assert graph_plan["schema_version"] == PROMOTION_GRAPH_PLAN_V2_VERSION
     assert graph_plan["object"] == {
-        "entity_id": graph_plan["object"]["entity_id"],
+        "entity_id": canonical_graph_entity_id("concise updates"),
         "label": "concise updates",
         "node_type": "concept",
     }
     assert graph_plan["qualifiers"] == {"style": "concise"}
+
+
+@pytest.mark.parametrize(
+    ("content", "subject_label", "object_label"),
+    [
+        ("I prefer concise updates.", "I", "concise updates"),
+        ("I’m a concise communicator.", "I'm", "concise communicator"),
+        ("I’ve chosen concise updates.", "I've", "concise updates"),
+        ("I’d choose concise updates.", "I'd", "concise updates"),
+        ("I’ll choose concise updates.", "I'll", "concise updates"),
+        ("I prefer concise updates.", "user", "concise updates"),
+    ],
+)
+def test_historical_graph_planner_normalizes_direct_first_person_subjects_to_user(
+    content: str, subject_label: str, object_label: str
+):
+    planned = plan_historical_graph_enrichment(
+        item=_item(content=content),
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+        llm=_Planner(
+            {
+                "eligible": True,
+                "subject_label": subject_label,
+                "subject_node_type": "person",
+                "predicate": "prefers_update_style",
+                "object_label": object_label,
+                "object_node_type": "concept",
+            }
+        ),
+    )
+
+    assert planned.status == GraphEnrichmentStatus.ready
+    assert planned.patch_payload["subject_entity_id"] == "user"
+    graph_plan = planned.patch_payload["promotion_audit"]["graph_plan"]
+    assert graph_plan["subject"] == {"entity_id": "user", "label": "user", "node_type": "person"}
+
+
+@pytest.mark.parametrize(
+    ("content", "subject_label", "object_label"),
+    [
+        ("The superuser prefers concise updates.", "user", "concise updates"),
+        ("Iceland prefers concise updates.", "I", "concise updates"),
+        ("The user prefers inconcisely.", "user", "concise"),
+    ],
+)
+def test_historical_graph_planner_rejects_partial_evidence_tokens(content: str, subject_label: str, object_label: str):
+    planned = plan_historical_graph_enrichment(
+        item=_item(content=content),
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+        llm=_Planner(
+            {
+                "eligible": True,
+                "subject_label": subject_label,
+                "subject_node_type": "person",
+                "predicate": "prefers_update_style",
+                "object_label": object_label,
+                "object_node_type": "concept",
+            }
+        ),
+    )
+
+    assert planned.status == GraphEnrichmentStatus.blocked
+    assert planned.block_code == "not_source_grounded"
 
 
 def test_historical_graph_planner_blocks_an_endpoint_label_not_supported_by_the_memory_text():

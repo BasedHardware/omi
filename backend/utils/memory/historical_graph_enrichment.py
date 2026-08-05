@@ -9,6 +9,7 @@ item revision, content hash, and evidence identities.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -25,6 +26,8 @@ from models.product_memory import MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentResult, GraphEnrichmentStatus, prepare_graph_enrichment
 
 HISTORICAL_GRAPH_PLANNER_VERSION = "canonical_historical_graph_enrichment.v3"
+_FIRST_PERSON_SUBJECT_LABELS = frozenset({"i", "i'm", "i've", "i'd", "i'll"})
+_APOSTROPHE_TRANSLATION = str.maketrans({"’": "'", "‘": "'", "ʼ": "'", "＇": "'"})
 
 HISTORICAL_GRAPH_SYSTEM_PROMPT = """
 Create one conservative, typed knowledge-graph relation for a canonical memory.
@@ -34,7 +37,8 @@ multiple memories, or use prior knowledge. Return exactly two endpoint labels
 that appear in the memory text and have a direct factual relation. Prefer a
 relation between two non-user entities. Use subject_label="user" only for a
 direct fact explicitly about the primary user, and only when the memory text
-uses "user" or "I". Return a node type for both endpoints and a short
+uses "user" or first-person wording such as "I", "I'm", "I've", "I'd", or
+"I'll". Return a node type for both endpoints and a short
 lower-snake-case predicate. Qualifiers are literal context only: they are never
 entity identity or an endpoint. If the text cannot support both endpoints,
 return eligible=false; never invent a bridge or substitute a qualifier.
@@ -60,6 +64,24 @@ def _response_content(response: Any) -> str:
     if isinstance(content, list):
         return "\n".join(str(part) for part in content)
     return str(content or "")
+
+
+def _normalize_evidence_text(value: str) -> str:
+    return " ".join((value or "").translate(_APOSTROPHE_TRANSLATION).casefold().split())
+
+
+def _contains_evidence_phrase(text: str, phrase: str) -> bool:
+    """Match a complete token or contiguous phrase, not a substring."""
+    normalized_text = _normalize_evidence_text(text)
+    normalized_phrase = _normalize_evidence_text(phrase)
+    if not normalized_text or not normalized_phrase:
+        return False
+    escaped_phrase = r"\s+".join(re.escape(token) for token in normalized_phrase.split())
+    return re.search(rf"(?<![\w']){escaped_phrase}(?![\w'])", normalized_text) is not None
+
+
+def _contains_first_person_reference(text: str) -> bool:
+    return any(_contains_evidence_phrase(text, label) for label in _FIRST_PERSON_SUBJECT_LABELS)
 
 
 def invoke_historical_graph_planner(item: MemoryItem, llm: Any) -> PromotionGraphPlan | None:
@@ -98,15 +120,17 @@ def invoke_historical_graph_planner(item: MemoryItem, llm: Any) -> PromotionGrap
     object_node_type = planned.object_node_type
     if not subject_label or not object_label or not subject_node_type or not object_node_type:
         return None
-    normalized_text = " ".join((item.content or "").casefold().split())
-    normalized_subject = " ".join(subject_label.casefold().split())
-    normalized_object = " ".join(object_label.casefold().split())
-    user_is_explicit = normalized_subject == "user" and (
-        " user " in f" {normalized_text} " or " i " in f" {normalized_text} "
-    )
-    if not user_is_explicit and normalized_subject not in normalized_text:
+    normalized_subject = _normalize_evidence_text(subject_label)
+    if normalized_subject == "user" or normalized_subject in _FIRST_PERSON_SUBJECT_LABELS:
+        subject_label = "user"
+        subject_is_supported = _contains_evidence_phrase(item.content, "user") or _contains_first_person_reference(
+            item.content
+        )
+    else:
+        subject_is_supported = _contains_evidence_phrase(item.content, subject_label)
+    if not subject_is_supported:
         return None
-    if normalized_object not in normalized_text:
+    if not _contains_evidence_phrase(item.content, object_label):
         return None
     return PromotionGraphPlan(
         schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,

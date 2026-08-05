@@ -208,16 +208,22 @@ def _coerce_plan(plan: GraphEnrichmentPlan | PromotionGraphPlan | Dict[str, Any]
     if isinstance(plan, GraphEnrichmentPlan):
         return plan
     if isinstance(plan, PromotionGraphPlan):
-        return GraphEnrichmentPlan(
-            subject_entity_id=plan.subject_entity_id,
-            predicate=plan.predicate,
-            arguments=plan.arguments,
-            subject=plan.subject,
-            object=plan.object,
-            qualifiers=plan.qualifiers,
-        )
+        raw_plan = plan.model_dump(mode="python")
+    elif isinstance(plan, dict):
+        raw_plan = dict(plan)
+    else:
+        raw_plan = plan
     try:
-        return GraphEnrichmentPlan.model_validate(plan)
+        # Firestore stores PromotionGraphPlan directly, including its own
+        # discriminator.  GraphEnrichmentPlan has a different wrapper
+        # discriminator, so remove only the known source-plan version while
+        # retaining plan_hash for validation rather than silently rehashing it.
+        if isinstance(raw_plan, dict) and raw_plan.get("schema_version") in {
+            PROMOTION_GRAPH_PLAN_VERSION,
+            PROMOTION_GRAPH_PLAN_V2_VERSION,
+        }:
+            raw_plan.pop("schema_version")
+        return GraphEnrichmentPlan.model_validate(raw_plan)
     except Exception as exc:
         raise GraphEnrichmentError("graph_plan_invalid", "graph enrichment plan is malformed") from exc
 
@@ -261,6 +267,15 @@ def _assertion_matches_current_item(
             return assertion.get(key, default)
         return getattr(assertion, key, default)
 
+    def normalized_endpoint(value_: Any) -> Optional[Dict[str, Any]]:
+        try:
+            endpoint = (
+                value_ if isinstance(value_, GraphRelationEndpoint) else GraphRelationEndpoint.model_validate(value_)
+            )
+        except Exception:
+            return None
+        return endpoint.model_dump(mode="json")
+
     base_matches = (
         value("status", "active") == "active"
         and value("uid") == item.uid
@@ -280,8 +295,8 @@ def _assertion_matches_current_item(
         return False
     return (
         base_matches
-        and value("subject") == plan.subject.model_dump(mode="json")
-        and value("object") == plan.object.model_dump(mode="json")
+        and normalized_endpoint(value("subject")) == plan.subject.model_dump(mode="json")
+        and normalized_endpoint(value("object")) == plan.object.model_dump(mode="json")
         and value("qualifiers", {}) == plan.qualifiers
     )
 
@@ -388,6 +403,13 @@ def prepare_graph_enrichment(
             "graph_enrichment_planner_version": planner_version,
         }
     )
+    existing_item = item.model_dump(mode="python")
+    if item.graph_ready and allow_replan and checked_plan.subject is not None and checked_plan.object is not None:
+        # The apply contract treats an empty arguments dict as an omitted
+        # update.  For a v2 relation, qualifiers are the canonical replacement
+        # for legacy arguments, so make that replacement explicit in the
+        # authoritative snapshot used by the existing apply path.
+        existing_item["arguments"] = checked_plan.arguments
     patch_payload: Dict[str, Any] = {
         "patch_id": f"patch_{receipt.receipt_id}",
         "packet_id": f"graph_enrichment:{item.memory_id}:{item.item_revision}",
@@ -401,7 +423,7 @@ def prepare_graph_enrichment(
         "subject_entity_id": checked_plan.subject_entity_id,
         "predicate": checked_plan.predicate,
         "arguments": checked_plan.arguments,
-        "existing_item": item.model_dump(mode="python"),
+        "existing_item": existing_item,
         "expected_item_revision": item.item_revision,
         "expected_content_hash": item.content_hash,
         "promotion_audit": promotion,

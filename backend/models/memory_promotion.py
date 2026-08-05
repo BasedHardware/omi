@@ -229,6 +229,8 @@ class PromotionGraphPlan(BaseModel):
                 raise ValueError("v2 graph relation plans require typed subject and object endpoints")
             if self.subject.entity_id != self.subject_entity_id:
                 raise ValueError("v2 graph relation subject must match subject_entity_id")
+            if self.subject.entity_id == self.object.entity_id:
+                raise ValueError("v2 graph relation plans must not contain self-loops")
             if self.arguments and self.arguments != self.qualifiers:
                 raise ValueError("v2 graph relation arguments must match qualifiers")
             self.arguments = self.qualifiers
