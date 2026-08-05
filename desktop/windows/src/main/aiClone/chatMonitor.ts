@@ -29,12 +29,20 @@ export interface BeeperMessageLike {
 export interface NewInboundResult {
   /** New inbound (not-from-self, non-empty-text) messages, oldest first. */
   newMessages: BeeperMessageLike[]
-  /** Cursor to persist for next time — the newest message's id, across ALL
-   *  messages in the batch (including the user's own), so a poll never
-   *  re-considers a message once it's been seen. Undefined when the batch
-   *  was empty (nothing to advance the cursor to). */
-  latestMessageId: string | undefined
+  /** Cursor to persist for next time. `latestTimestamp` is the newest
+   *  timestamp seen across ALL messages in the batch (including the user's
+   *  own); `latestMessageIds` is every message id that shares that exact
+   *  timestamp — not just one of them. Two messages can genuinely arrive
+   *  with the same millisecond timestamp (simultaneous sends, or a bridge
+   *  that doesn't have sub-second resolution); tracking the full set at the
+   *  boundary, rather than a single id, is what lets the next poll tell
+   *  "a message I've already seen, at the same timestamp as last time" apart
+   *  from "a new message that happens to share that timestamp" — a single
+   *  `timestamp > lastSeenTimestamp` check can't make that distinction and
+   *  would silently drop the new one. Undefined/empty when the batch was
+   *  empty (nothing to advance the cursor to). */
   latestTimestamp: number | undefined
+  latestMessageIds: string[]
 }
 
 /**
@@ -42,16 +50,27 @@ export interface NewInboundResult {
  * messages worth drafting a reply to.
  *
  * @param messages     Recent messages for the chat (any order; sorted here).
- * @param lastSeenTimestamp  The persisted cursor from the previous poll, or
- *                     undefined on the very first poll for this chat.
+ * @param lastSeenTimestamp  The persisted cursor timestamp from the previous
+ *                     poll, or undefined on the very first poll for this chat.
+ * @param lastSeenMessageIds  The message ids that were AT lastSeenTimestamp
+ *                     as of the previous poll (empty/undefined if none, e.g.
+ *                     first poll). Used only to break ties at the exact
+ *                     boundary timestamp — messages strictly after it don't
+ *                     need this.
  */
 export function selectNewInboundMessages(
   messages: readonly BeeperMessageLike[],
-  lastSeenTimestamp: number | undefined
+  lastSeenTimestamp: number | undefined,
+  lastSeenMessageIds: readonly string[] = []
 ): NewInboundResult {
   const sorted = [...messages].sort((a, b) => a.timestamp - b.timestamp)
   const newest = sorted[sorted.length - 1]
-  const cursor = { latestMessageId: newest?.id, latestTimestamp: newest?.timestamp }
+  const latestTimestamp = newest?.timestamp
+  const latestMessageIds =
+    latestTimestamp === undefined
+      ? []
+      : sorted.filter((m) => m.timestamp === latestTimestamp).map((m) => m.id)
+  const cursor = { latestTimestamp, latestMessageIds }
 
   if (lastSeenTimestamp === undefined) {
     // First-ever poll for this chat: establish the cursor, draft nothing
@@ -59,12 +78,15 @@ export function selectNewInboundMessages(
     return { newMessages: [], ...cursor }
   }
 
+  const seenAtBoundary = new Set(lastSeenMessageIds)
+  const isPastCursor = (m: BeeperMessageLike): boolean => {
+    if (m.timestamp > lastSeenTimestamp) return true
+    if (m.timestamp === lastSeenTimestamp) return !seenAtBoundary.has(m.id)
+    return false
+  }
+
   const newMessages = sorted.filter(
-    (m) =>
-      m.timestamp > lastSeenTimestamp &&
-      !m.isSender &&
-      typeof m.text === 'string' &&
-      m.text.trim().length > 0
+    (m) => isPastCursor(m) && !m.isSender && typeof m.text === 'string' && m.text.trim().length > 0
   )
   return { newMessages, ...cursor }
 }

@@ -15,6 +15,11 @@ export interface ChatSetting {
   mode: ChatReplyMode
   /** chatMonitor.ts's cursor — undefined until the first poll has run. */
   lastSeenTimestamp?: number
+  /** Message ids at exactly lastSeenTimestamp — see chatMonitor.ts's
+   *  NewInboundResult for why a single timestamp isn't enough to avoid
+   *  either re-drafting or silently dropping a message that shares the
+   *  cursor's exact millisecond. */
+  lastSeenMessageIds?: string[]
 }
 
 type StoredFile = Record<string, ChatSetting>
@@ -66,19 +71,23 @@ export class ChatSettingsStore {
    *  cursor unless the caller explicitly clears it (e.g. re-opting back in
    *  after 'off' should NOT retroactively draft the gap — same first-poll
    *  behavior chatMonitor already gives an untouched chat). */
-  upsert(setting: Omit<ChatSetting, 'lastSeenTimestamp'>): void {
+  upsert(setting: Omit<ChatSetting, 'lastSeenTimestamp' | 'lastSeenMessageIds'>): void {
     const all = this.readFile()
     const existing = all[setting.chatID]
-    all[setting.chatID] = { ...setting, lastSeenTimestamp: existing?.lastSeenTimestamp }
+    all[setting.chatID] = {
+      ...setting,
+      lastSeenTimestamp: existing?.lastSeenTimestamp,
+      lastSeenMessageIds: existing?.lastSeenMessageIds
+    }
     this.writeFile(all)
   }
 
   /** Advance the read cursor after a poll (chatMonitor.ts's result). */
-  setCursor(chatID: string, lastSeenTimestamp: number): void {
+  setCursor(chatID: string, lastSeenTimestamp: number, lastSeenMessageIds: string[] = []): void {
     const all = this.readFile()
     const existing = all[chatID]
     if (!existing) return
-    all[chatID] = { ...existing, lastSeenTimestamp }
+    all[chatID] = { ...existing, lastSeenTimestamp, lastSeenMessageIds }
     this.writeFile(all)
   }
 
