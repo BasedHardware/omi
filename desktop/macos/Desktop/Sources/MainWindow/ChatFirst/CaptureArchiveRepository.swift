@@ -107,7 +107,8 @@ final class CaptureArchiveRepository: ObservableObject {
   private let remote: any CaptureArchiveRemoteDataSource
   private let local: any CaptureArchiveLocalDataSource
   private var hasLoaded = false
-  private var activeDetailRequestID: String?
+  private var activeDetailLoadToken = 0
+  private var activeListLoadToken = 0
 
   init(
     remote: any CaptureArchiveRemoteDataSource = LiveCaptureArchiveRemoteDataSource(),
@@ -125,6 +126,7 @@ final class CaptureArchiveRepository: ObservableObject {
   func loadInitial(force: Bool = false) async {
     guard force || !hasLoaded else { return }
     hasLoaded = true
+    let token = beginListLoad()
     isLoading = true
     errorMessage = nil
 
@@ -133,6 +135,7 @@ final class CaptureArchiveRepository: ObservableObject {
       async let cachedRows = local.list(query: query)
       async let cachedCount = local.count(query: query)
       let (unvalidatedRows, localCount) = try await (cachedRows, cachedCount)
+      guard token == activeListLoadToken else { return }
       captures = try validatedArchiveRows(unvalidatedRows)
       count = localCount
     } catch {
@@ -140,7 +143,9 @@ final class CaptureArchiveRepository: ObservableObject {
       // request. The subsequent failure still surfaces honestly below.
     }
 
-    await reloadFirstPage(query: query)
+    guard token == activeListLoadToken else { return }
+    await reloadFirstPage(query: query, token: token)
+    guard token == activeListLoadToken else { return }
     isLoading = false
   }
 
@@ -153,14 +158,17 @@ final class CaptureArchiveRepository: ObservableObject {
     isLoadingMore = true
     defer { isLoadingMore = false }
 
+    let token = activeListLoadToken
     let query = CaptureArchiveQuery(offset: captures.count)
     do {
       let page = try validatedArchiveRows(await remote.list(query: query))
+      guard token == activeListLoadToken else { return }
       for capture in page where !captures.contains(where: { $0.id == capture.id }) {
         captures.append(capture)
         try? await local.store(capture)
       }
     } catch {
+      guard token == activeListLoadToken else { return }
       // Do not retry without the source predicate. The user must choose Refresh.
       errorMessage = "Omi-device captures are unavailable. Refresh to try again."
     }
@@ -173,16 +181,17 @@ final class CaptureArchiveRepository: ObservableObject {
   /// Detail always revalidates from the source-scoped list's selected capture.
   /// It never falls back to a generic list request if the detail read fails.
   func loadDetail(id: String) async -> ServerConversation? {
-    activeDetailRequestID = id
+    let token = beginDetailLoad()
     if let cached = try? await local.detail(id: id), cached.isOmiCaptureArchiveRecord {
-      guard activeDetailRequestID == id else { return nil }
+      guard token == activeDetailLoadToken else { return nil }
       selectedCapture = cached
     }
 
     do {
       let detail = try await remote.detail(id: id)
-      guard activeDetailRequestID == id else { return nil }
+      guard token == activeDetailLoadToken else { return nil }
       guard detail.isOmiCaptureArchiveRecord else {
+        guard token == activeDetailLoadToken else { return nil }
         errorMessage = "This capture is no longer available."
         return nil
       }
@@ -195,17 +204,18 @@ final class CaptureArchiveRepository: ObservableObject {
       try? await local.store(detail)
       return detail
     } catch {
-      guard activeDetailRequestID == id else { return nil }
+      guard token == activeDetailLoadToken else { return nil }
       errorMessage = "This Omi-device capture is unavailable. Refresh to try again."
       return nil
     }
   }
 
-  private func reloadFirstPage(query: CaptureArchiveQuery) async {
+  private func reloadFirstPage(query: CaptureArchiveQuery, token: Int) async {
     do {
       async let remoteRows = remote.list(query: query)
       async let remoteCount = remote.count(query: query)
       let (unvalidatedRows, remoteTotal) = try await (remoteRows, remoteCount)
+      guard token == activeListLoadToken else { return }
       let rows = try validatedArchiveRows(unvalidatedRows)
       captures = rows
       if let selectedCapture {
@@ -219,10 +229,21 @@ final class CaptureArchiveRepository: ObservableObject {
         try? await local.store(capture)
       }
     } catch {
+      guard token == activeListLoadToken else { return }
       // Cache rows may remain visible, but the state is never silently healthy:
       // archive data is unavailable rather than silently replaced with a mixed list.
       errorMessage = "Omi-device captures are unavailable. Refresh to try again."
     }
+  }
+
+  private func beginDetailLoad() -> Int {
+    activeDetailLoadToken += 1
+    return activeDetailLoadToken
+  }
+
+  private func beginListLoad() -> Int {
+    activeListLoadToken += 1
+    return activeListLoadToken
   }
 
   private func validatedArchiveRows(_ rows: [ServerConversation]) throws -> [ServerConversation] {

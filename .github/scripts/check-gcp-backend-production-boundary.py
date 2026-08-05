@@ -3,9 +3,18 @@
 
 from __future__ import annotations
 
+import sys
+import re
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / ".github" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / ".github" / "scripts"))
+
+from workflow_composite_contract import backend_deploy_contract_text
+
 WORKFLOW = Path(".github/workflows/gcp_backend.yml")
+DEPLOY_BACKEND_STACK_ACTION = Path(".github/actions/deploy-backend-stack/action.yml")
 PROD_ALL_REJECTION = 'if [[ "$DEPLOY_ENVIRONMENT" == "prod" && "$DEPLOY_TARGETS" == "all" ]]; then'
 DEV_CANDIDATE_GATE = "if: ${{ github.event.inputs.environment == 'development' }}"
 PROD_SMOKE = "Smoke promoted production serving API"
@@ -20,15 +29,24 @@ PROD_FORBIDDEN = (
 
 def validate(root: Path) -> list[str]:
     path = root / WORKFLOW
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    workflow_text = path.read_text(encoding="utf-8") if path.exists() else ""
+    text = backend_deploy_contract_text(workflow_text, root, DEPLOY_BACKEND_STACK_ACTION)
     errors: list[str] = []
     if "default: 'cloud-run-only'" not in text:
         errors.append("gcp_backend.yml must default deploy_targets to cloud-run-only")
     if PROD_ALL_REJECTION not in text:
         errors.append("gcp_backend.yml must reject environment=prod, deploy_targets=all before side effects")
-    if text.count(DEV_CANDIDATE_GATE) < 2:
+    if (
+        text.count(DEV_CANDIDATE_GATE) < 1
+        and "inputs.environment == 'development'" not in text
+    ):
         errors.append("gcp_backend.yml must retain the development tagged-candidate gate")
-    if text.count("resolve_cloud_run_tagged_url.py") != 1:
+    resolver_step = re.search(
+        r"- name: Resolve transcription candidate URL(?P<body>.*?)(?=\n\s*- name:|\Z)", text, re.DOTALL
+    )
+    if resolver_step is None or "resolve_cloud_run_tagged_url.py" not in resolver_step.group('body') or (
+        "inputs.deploy_profile == 'manual' && inputs.environment == 'development'" not in resolver_step.group('body')
+    ):
         errors.append("gcp_backend.yml must use the tagged candidate resolver only for development")
     for forbidden in PROD_FORBIDDEN:
         if forbidden in text:

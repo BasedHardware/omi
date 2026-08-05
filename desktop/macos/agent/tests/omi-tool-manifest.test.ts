@@ -20,6 +20,37 @@ describe("omi tool manifest", () => {
     });
     expect(tool?.inputSchema.required).toEqual(["title", "desired_outcome"]);
   });
+
+  it("projects create_memory only to the coordinator's typed chat surfaces", () => {
+    const mainChat = toolsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat",
+      executionRole: "coordinator",
+    });
+    const tool = mainChat.find((entry) => entry.name === "create_memory");
+
+    expect(tool).toMatchObject({
+      surfaces: ["desktop_chat"],
+      executor: { kind: "swiftTool", executorName: "chatToolExecutor" },
+      annotations: { readOnlyHint: false, idempotentHint: false },
+    });
+    expect(tool?.inputSchema).toEqual({
+      type: "object",
+      properties: {
+        content: { type: "string", description: "The exact user-provided content to save as a short-term memory." },
+      },
+      required: ["content"],
+      additionalProperties: false,
+    });
+    expect(tool?.voice).toBeUndefined();
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "floating_chat", executionRole: "coordinator" }))
+      .toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "realtime_voice", executionRole: "coordinator" }))
+      .not.toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "task_chat", executionRole: "coordinator" }))
+      .not.toContain("create_memory");
+    expect(toolNamesForAdapter("omi-tools-stdio", { surfaceKind: "main_chat", executionRole: "leaf" }))
+      .not.toContain("create_memory");
+  });
   it("projects agent-management tools out of leaf worker contexts", () => {
     for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
       const names = toolNamesForAdapter(adapterId, { executionRole: "leaf", screenContext: true });

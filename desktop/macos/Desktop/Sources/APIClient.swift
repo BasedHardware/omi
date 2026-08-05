@@ -107,11 +107,13 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    allowsAuthRetry: Bool = true
   ) async throws -> T {
-    let authPolicy = try resolvedRequestAuthPolicy(
+    var authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
       authorizationSnapshot: authorizationSnapshot)
+    authPolicy.allowsAuthRetry = allowsAuthRetry
     let authOwnerId = authPolicy.expectedAuthOwnerId
     try validateExpectedOwner(authPolicy)
     let base = customBaseURL ?? baseURL
@@ -442,6 +444,9 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401 {
+      guard authPolicy.allowsAuthRetry else {
+        throw APIError.unauthorized
+      }
       if retriedAuth, authPolicy.returnsPersistent401Response {
         return (data, httpResponse)
       }

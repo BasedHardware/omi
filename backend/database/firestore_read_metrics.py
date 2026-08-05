@@ -12,6 +12,7 @@ from prometheus_client import Counter, Histogram
 class FirestoreReadFamily(StrEnum):
     ACTION_ITEMS_LIST = 'action_items_list'
     LISTEN_MONTHLY_USAGE = 'listen_monthly_usage'
+    ALL_TIME_USAGE = 'all_time_usage'
 
 
 class FirestoreReadMode(StrEnum):

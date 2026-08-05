@@ -339,6 +339,16 @@ def get_llm_gateway_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('llm_gateway', 24)
 
 
+def get_desktop_gemini_semaphore() -> asyncio.Semaphore:
+    """Bound concurrent desktop Gemini calls per event loop.
+
+    The proxy accepts large multimodal bodies, so an upstream stall must not be
+    allowed to turn every request into a new socket and an unbounded in-memory
+    body. The client pool uses the same limit below.
+    """
+    return _get_semaphore('desktop_gemini', 32)
+
+
 # ---------------------------------------------------------------------------
 # Shared httpx.AsyncClient instances
 # ---------------------------------------------------------------------------
@@ -490,6 +500,38 @@ def get_llm_gateway_client() -> httpx.AsyncClient:
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(20.0, connect=3.0),
             limits=httpx.Limits(max_connections=24, max_keepalive_connections=12),
+        ),
+    )
+
+
+def get_desktop_gemini_client() -> httpx.AsyncClient:
+    """Return the pooled client for non-streaming desktop Gemini requests.
+
+    ``read`` is the upstream idle/first-byte bound. The proxy owns a separate
+    absolute logical deadline so these per-phase limits cannot accumulate into
+    another multi-minute request.
+    """
+    return _get_client(
+        'desktop_gemini',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=70.0, write=15.0, pool=5.0),
+            limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
+        ),
+    )
+
+
+def get_desktop_gemini_stream_client() -> httpx.AsyncClient:
+    """Return the pooled client for streaming desktop Gemini requests.
+
+    A 30-second read timeout is an idle-gap bound, not a total stream duration.
+    Long healthy SSE responses remain valid while silent upstream sockets are
+    released promptly.
+    """
+    return _get_client(
+        'desktop_gemini_stream',
+        lambda: httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=10.0, read=30.0, write=15.0, pool=5.0),
+            limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
         ),
     )
 

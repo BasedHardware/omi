@@ -6,7 +6,7 @@ import SwiftUI
 /// legacy shell but owns no second chat state, task state, or navigation index.
 struct ChatFirstShell: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
-  @ObservedObject var appState: AppState
+  let appState: AppState
   let viewModelContainer: ViewModelContainer
   let capability: ChatFirstCapabilityProjection
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
@@ -63,7 +63,13 @@ struct ChatFirstShell: View {
             navigation.selectMore(.rewind)
           }
         )
+        // Route-specific identity guarantees every semantic navigation change
+        // mounts a fresh destination root and runs its visibility acknowledgement.
+        // Without it, SwiftUI can structurally reuse compatible branches (notably
+        // Home and More pages), leaving the automation contract stale even though
+        // the requested route is selected.
         destination
+          .id(navigation.route.stableName)
       }
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
     }
@@ -98,11 +104,12 @@ struct ChatFirstShell: View {
       else { return }
       promptMaterializationCoordinator.mainWindowDidBecomeForeground()
     }
-    .onExitCommand {
-      guard navigation.route != .chat else { return }
+    .onEscapeKey(priority: .navigation) {
+      guard navigation.route != .chat else { return false }
       OmiMotion.withGated(.easeOut(duration: 0.12)) {
-        navigation.selectPrimary(.chat)
+        _ = navigation.handleEscapeNavigation()
       }
+      return true
     }
   }
 
@@ -274,9 +281,9 @@ struct ChatFirstShell: View {
     case .insight:
       InsightPage()
     case .rewind:
-      RewindPage(appState: appState)
+      ChatFirstRewindHost(appState: appState)
     case .apps:
-      AppsPage(
+      ChatFirstAppsHost(
         appProvider: viewModelContainer.appProvider,
         appState: appState,
         connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore,
@@ -328,6 +335,56 @@ struct ChatFirstShell: View {
       case .settings: return .settings
       }
     }
+  }
+}
+
+/// Keeps the navigation response responsive while the marketplace's relatively
+/// expensive catalog grid is composed. The route mounts a small loading surface
+/// first, then yields one frame before constructing the existing AppsPage.
+private struct ChatFirstAppsHost: View {
+  @ObservedObject var appProvider: AppProvider
+  let appState: AppState
+  @ObservedObject var connectorStatusStore: ImportConnectorStatusStore
+  let handlesAutomationPresentations: Bool
+  @State private var hasPresentedCatalog = false
+
+  var body: some View {
+    Group {
+      if hasPresentedCatalog {
+        AppsPage(
+          appProvider: appProvider,
+          appState: appState,
+          connectorStatusStore: connectorStatusStore,
+          handlesAutomationPresentations: handlesAutomationPresentations
+        )
+      } else {
+        VStack(spacing: OmiSpacing.md) {
+          ProgressView().controlSize(.small)
+          Text("Loading apps…")
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundStyle(OmiColors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(OmiColors.backgroundPrimary)
+      }
+    }
+    .task {
+      // Give the loading surface one render pass before the catalog materializes.
+      try? await Task.sleep(nanoseconds: 100_000_000)
+      hasPresentedCatalog = true
+    }
+  }
+}
+
+/// Rewind still consumes live AppState values for permission, recording, and
+/// speaker projections. Keep that observation inside the mounted destination
+/// so the shell itself can remain isolated from unrelated AppState publishes.
+@MainActor
+private struct ChatFirstRewindHost: View {
+  @ObservedObject var appState: AppState
+
+  var body: some View {
+    RewindPage(appState: appState)
   }
 }
 

@@ -144,6 +144,36 @@ class _ProxyHTTPClient:
         return _Response()
 
 
+class _HealthyProxyHTTPClient(_ProxyHTTPClient):
+    async def post(self, _url, **_kwargs):
+        return _Response()
+
+
+class _IdleAgentWebSocket(_AgentWebSocket):
+    async def iter_text(self):
+        await asyncio.Event().wait()
+        if False:
+            yield ""
+
+
+class _IdleVMProtocol:
+    def __init__(self):
+        self.closed = False
+
+    async def send(self, _message):
+        return None
+
+    async def close(self):
+        self.closed = True
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await asyncio.Event().wait()
+        raise StopAsyncIteration
+
+
 @pytest.mark.asyncio
 async def test_gce_status_refreshes_credentials_off_the_event_loop(agent_proxy, monkeypatch):
     event_loop_thread = threading.get_ident()
@@ -206,6 +236,7 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
 
     monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
     monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
     monkeypatch.setattr(
         agent_proxy,
         "_get_user_context",
@@ -230,6 +261,237 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     assert _ProxyHTTPClient.post_calls == 2
     assert phone_ws.closed == [(1000, "Session ended")]
     assert any(args[1:3] == ("full answer tail", "ai") for args in saved_messages)
+
+
+@pytest.mark.asyncio
+async def test_session_admission_is_transactional_before_vm_lifecycle_mutation(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    ensure_running = MagicMock()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "stopped", "ip": None, "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: False)
+    monkeypatch.setattr(agent_proxy, "_ensure_vm_running", ensure_running)
+
+    await agent_proxy.agent_ws(websocket)
+
+    ensure_running.assert_not_called()
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+
+
+@pytest.mark.asyncio
+async def test_claimed_session_lease_is_released_when_setup_raises(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    released = []
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: True)
+    monkeypatch.setattr(agent_proxy, "release_session_lease", lambda uid, lease_id: released.append((uid, lease_id)))
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", MagicMock(side_effect=RuntimeError("setup failed")))
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _HealthyProxyHTTPClient)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert len(released) == 1
+    assert released[0][0] == "user-1"
+
+
+@pytest.mark.asyncio
+async def test_transient_lease_heartbeat_error_retries_then_confirmed_loss_drains_session(agent_proxy, monkeypatch):
+    websocket = _IdleAgentWebSocket()
+    vm_ws = _IdleVMProtocol()
+    heartbeat_results = iter([RuntimeError("firestore unavailable"), False])
+    heartbeat_calls = []
+    released = []
+    real_sleep = asyncio.sleep
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def connect(*_args, **_kwargs):
+        return vm_ws
+
+    async def task_controlled_sleep(_seconds):
+        task = asyncio.current_task()
+        if task is not None and task.get_name().endswith(":lease-heartbeat"):
+            await real_sleep(0)
+            return
+        await asyncio.Event().wait()
+
+    def heartbeat(uid, lease_id):
+        heartbeat_calls.append((uid, lease_id))
+        result = next(heartbeat_results)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: True)
+    monkeypatch.setattr(agent_proxy, "heartbeat_session_lease", heartbeat)
+    monkeypatch.setattr(agent_proxy, "release_session_lease", lambda uid, lease_id: released.append((uid, lease_id)))
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _HealthyProxyHTTPClient)
+    monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
+    monkeypatch.setattr(agent_proxy.asyncio, "sleep", task_controlled_sleep)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert len(heartbeat_calls) == 2
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+    assert vm_ws.closed is True
+    assert len(released) == 1
+
+
+@pytest.mark.asyncio
+async def test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires(agent_proxy, monkeypatch):
+    """If the heartbeat errors persistently beyond the lease TTL, the session
+    must close rather than keep the WebSocket open while the Firestore record
+    can expire invisibly to the reconciler."""
+    websocket = _IdleAgentWebSocket()
+    vm_ws = _IdleVMProtocol()
+    heartbeat_calls = []
+    released = []
+    real_sleep = asyncio.sleep
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def connect(*_args, **_kwargs):
+        return vm_ws
+
+    heartbeat_count = 0
+
+    async def task_controlled_sleep(seconds):
+        nonlocal heartbeat_count
+        task = asyncio.current_task()
+        if task is not None and task.get_name().endswith(":lease-heartbeat"):
+            heartbeat_count += 1
+            # Simulate elapsed time exceeding the TTL on the second heartbeat
+            # iteration so the fail-closed guard triggers.
+            if heartbeat_count >= 2:
+                monkeypatch.setattr(agent_proxy.time, "monotonic", lambda: float(heartbeat_count * 100))
+            await real_sleep(0)
+            return
+        await asyncio.Event().wait()
+
+    def heartbeat(uid, lease_id):
+        heartbeat_calls.append((uid, lease_id))
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: True)
+    monkeypatch.setattr(agent_proxy, "heartbeat_session_lease", heartbeat)
+    monkeypatch.setattr(agent_proxy, "release_session_lease", lambda uid, lease_id: released.append((uid, lease_id)))
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _HealthyProxyHTTPClient)
+    monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
+    monkeypatch.setattr(agent_proxy.asyncio, "sleep", task_controlled_sleep)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert len(heartbeat_calls) >= 2
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+    assert vm_ws.closed is True
+
+
+@pytest.mark.asyncio
+async def test_first_connect_without_vm_returns_typed_retryable_not_ready(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "fresh-firebase-uid"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(agent_proxy, "_get_user_context", lambda _uid: (None, "standard"))
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert websocket.accepted is True
+    assert [json.loads(event) for event in websocket.sent] == [
+        {
+            "type": "error",
+            "code": "agent_vm_not_ready",
+            "state": "not_provisioned",
+            "retryable": True,
+            "message": "Your agent is still being prepared. Please try again shortly.",
+        }
+    ]
+    assert websocket.closed == [(4002, "Agent VM not ready")]
+
+
+@pytest.mark.asyncio
+async def test_deletion_marker_blocks_proxy_before_vm_lookup(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    vm_lookup = MagicMock()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "deleted-uid"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: "pending")
+    monkeypatch.setattr(agent_proxy, "_get_user_context", vm_lookup)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert websocket.accepted is True
+    assert json.loads(websocket.sent[0])["code"] == "account_deletion_in_progress"
+    assert websocket.closed == [(4005, "Account deletion in progress")]
+    vm_lookup.assert_not_called()
 
 
 def test_firestore_client_is_initialized_lazily_and_cached(agent_proxy, monkeypatch):
@@ -390,9 +652,9 @@ def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
     assert bool(agent_proxy.UNRESOLVED_VM_IP)
 
     with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
+        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
     with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", None, "ready")
+        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", None, "ready")
 
 
 @pytest.mark.asyncio

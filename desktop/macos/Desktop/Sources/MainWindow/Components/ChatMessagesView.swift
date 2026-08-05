@@ -36,6 +36,11 @@ enum ChatMessageDeduplicator {
   }
 }
 
+/// Stable conversation identity sentinels for surfaces without a persisted session.
+enum ChatConversationIdentity {
+  static let mainChatDefault = "main-chat-default"
+}
+
 /// Pure decision for the conversation-switch scroll-state reset. Callers pass
 /// the stable conversation/session identity; message IDs are not identities
 /// because prepending history changes the first message in the same chat.
@@ -73,6 +78,11 @@ enum ChatInitialRestoreState: Equatable {
     state == .pending ? .waiting : state
   }
 
+  /// Every new transcript presentation begins at the live edge. A previously
+  /// completed placement belongs to the old mounted scroll view, not the new
+  /// one SwiftUI creates after a Home transition or route change.
+  static func atPresentationStart(previous _: Self) -> Self { .waiting }
+
   static func afterUserInteraction(_ state: Self) -> Self {
     switch state {
     case .waiting, .pending:
@@ -101,9 +111,62 @@ enum ChatTranscriptLayout {
 /// ordinary chat sessions progressively more expensive to scroll and update.
 enum ChatTranscriptWindow {
   static let maximumVisibleMessageCount = 500
+  static let compactHomeInitialMessageCount = 50
+
+  enum Presentation: Equatable {
+    case initial
+    case expanded
+  }
+
+  /// Controls how many locally available rows are mounted before the reader
+  /// explicitly asks for older context. The expanded limit stays bounded so
+  /// the eager stack retains stable rich-Markdown geometry.
+  struct Policy: Equatable {
+    let initialMessageCount: Int
+    let maximumMessageCount: Int
+
+    init(
+      initialMessageCount: Int,
+      maximumMessageCount: Int = ChatTranscriptWindow.maximumVisibleMessageCount
+    ) {
+      let boundedMaximum = min(
+        max(1, maximumMessageCount),
+        ChatTranscriptWindow.maximumVisibleMessageCount
+      )
+      self.maximumMessageCount = boundedMaximum
+      self.initialMessageCount = min(max(1, initialMessageCount), boundedMaximum)
+    }
+
+    static let standard = Self(initialMessageCount: ChatTranscriptWindow.maximumVisibleMessageCount)
+    static let compactHome = Self(initialMessageCount: ChatTranscriptWindow.compactHomeInitialMessageCount)
+  }
+
+  enum EarlierAction: Equatable {
+    case none
+    case revealLocallyLoadedRows
+    case loadMoreRows
+    case revealLocallyLoadedRowsAndLoadMore
+  }
 
   static func recentMessages(in messages: [ChatMessage]) -> [ChatMessage] {
-    Array(messages.suffix(maximumVisibleMessageCount))
+    visibleMessages(in: messages, policy: .standard, presentation: .expanded)
+  }
+
+  static func visibleMessages(
+    in messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation
+  ) -> [ChatMessage] {
+    let limit = presentation == .initial ? policy.initialMessageCount : policy.maximumMessageCount
+    return Array(messages.suffix(limit))
+  }
+
+  static func prependAnchorID(
+    in messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation
+  ) -> String? {
+    visibleMessages(in: messages, policy: policy, presentation: presentation).first?.id
   }
 
   /// Duplicate detection only needs to inspect rows this surface can render.
@@ -121,7 +184,46 @@ enum ChatTranscriptWindow {
   }
 
   static func allowsLoadingEarlier(for messages: [ChatMessage]) -> Bool {
-    messages.count < maximumVisibleMessageCount
+    allowsLoadingEarlier(for: messages, policy: .standard)
+  }
+
+  static func allowsLoadingEarlier(for messages: [ChatMessage], policy: Policy) -> Bool {
+    messages.count < policy.maximumMessageCount
+  }
+
+  static func canRevealLocallyLoadedRows(
+    in messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation
+  ) -> Bool {
+    presentation == .initial
+      && policy.initialMessageCount < policy.maximumMessageCount
+      && messages.count > policy.initialMessageCount
+  }
+
+  static func earlierAction(
+    for messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation,
+    hasMoreMessages: Bool
+  ) -> EarlierAction {
+    let canReveal = canRevealLocallyLoadedRows(
+      in: messages,
+      policy: policy,
+      presentation: presentation
+    )
+    let canLoadMore = hasMoreMessages && allowsLoadingEarlier(for: messages, policy: policy)
+
+    switch (canReveal, canLoadMore) {
+    case (false, false):
+      return .none
+    case (true, false):
+      return .revealLocallyLoadedRows
+    case (false, true):
+      return .loadMoreRows
+    case (true, true):
+      return .revealLocallyLoadedRowsAndLoadMore
+    }
   }
 }
 
@@ -163,6 +265,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Explicitly enables chat-first controls only in the cohort shell's main
   /// Chat route. Nil keeps shared transcript projections safe elsewhere.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// Optional transcript-window override for callers with a smaller initial
+  /// mount budget. When omitted, the existing 500-row default is preserved;
+  /// the existing Home-only rich-block capability selects the compact Home
+  /// policy automatically.
+  var transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
   /// Vertical transcript inset. Home uses a tighter value because its page
   /// shell already provides the breathing room beneath the floating top bar.
   var verticalContentPadding: CGFloat = OmiSpacing.xl
@@ -231,6 +338,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// does not observe the object; only the overlay subscribes, so scrolling does
   /// not re-evaluate every message row.
   @State private var transcriptGeometry = ChatTranscriptGeometry()
+  /// Starts compact on Home, and expands only after the reader asks for older
+  /// locally-loaded rows. Standard callers start at the existing 500-row cap.
+  @State private var transcriptWindowPresentation: ChatTranscriptWindow.Presentation = .initial
   var body: some View {
     ScrollViewReader { proxy in
       ZStack(alignment: .bottom) {
@@ -254,6 +364,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
   }
 
+  private var effectiveTranscriptWindowPolicy: ChatTranscriptWindow.Policy {
+    transcriptWindowPolicy
+      ?? (chatFirstRichBlockContext == nil ? .standard : .compactHome)
+  }
+
   /// A direct timeline choice leaves live-follow mode and places the selected
   /// prompt at the top of the viewport.
   private func jumpToPrompt(_ markID: String, proxy: ScrollViewProxy) {
@@ -267,7 +382,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   }
 
   private var visibleTranscriptMessages: [ChatMessage] {
-    ChatTranscriptWindow.recentMessages(in: messages)
+    ChatTranscriptWindow.visibleMessages(
+      in: messages,
+      policy: effectiveTranscriptWindowPolicy,
+      presentation: transcriptWindowPresentation
+    )
   }
 
   @ViewBuilder
@@ -363,11 +482,21 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     .onChange(of: isLoadingMoreMessages) { _, isLoading in
       if isLoading {
         // Capture the first message ID before the load begins
-        prependAnchorId = messages.first?.id
+        prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+          in: messages,
+          policy: effectiveTranscriptWindowPolicy,
+          presentation: transcriptWindowPresentation
+        )
       } else {
         // Load finished — restore prepend anchor if user hasn't scrolled
         restorePrependAnchor(proxy: proxy)
       }
+    }
+    // Expanding a compact mount adds rows above the reader's current context.
+    // Reuse the same anchor preservation as server-backed prepends.
+    .onChange(of: transcriptWindowPresentation) { _, presentation in
+      guard presentation == .expanded else { return }
+      restorePrependAnchor(proxy: proxy)
     }
     // MARK: - Reset session state on conversation switch
     .onChange(of: conversationIdentity) { _, newId in
@@ -380,10 +509,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         current: trackedConversationId, incoming: newId)
       trackedConversationId = transition.newTracked
       if transition.shouldReset {
-        for item in initialScrollWorkItems {
-          item.cancel()
-        }
-        initialScrollWorkItems.removeAll()
+        cancelAllPendingScrolls()
         initialRestoreState = .waiting
         lastSeenSendGeneration = localSendToken?.generation ?? 0
         prependAnchorId = nil
@@ -391,6 +517,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scrollMode = .followingBottom
         userIsScrolling = false
         transcriptGeometry.reset()
+        transcriptWindowPresentation = .initial
         transcriptGeometry.setMessages(visibleTranscriptMessages)
         if !isLoadingInitial, !messages.isEmpty {
           handleInitialRestore(proxy: proxy)
@@ -398,6 +525,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       }
     }
     .onAppear {
+      // Product invariant: a presented chat starts at its newest message.
+      // Never reuse a completed placement from a prior scroll-view instance;
+      // that instance may have been dismissed while the reader was at top.
+      cancelAllPendingScrolls()
+      initialRestoreState = ChatInitialRestoreState.atPresentationStart(previous: initialRestoreState)
+      scrollMode = .followingBottom
+      userIsScrolling = false
+      hasActivityBelow = false
       trackedConversationId = conversationIdentity
       transcriptGeometry.setMessages(visibleTranscriptMessages)
       if !isLoadingInitial, !messages.isEmpty {
@@ -406,6 +541,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
     .onDisappear {
       initialRestoreState = ChatInitialRestoreState.afterDisappear(initialRestoreState)
+      transcriptWindowPresentation = .initial
       cancelAllPendingScrolls()
     }
   }
@@ -466,6 +602,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     scrollMode = .followingBottom
     hasActivityBelow = false
     initialRestoreState = .pending
+
+    // The anchor already exists by the time this handler runs in the common
+    // case. Try immediately, then retain the settling passes below for rich
+    // Markdown that expands across later layout turns.
+    scrollToBottom(proxy: proxy)
 
     let delays = ChatScrollLiveEdge.initialRestoreSettlingDelays
     guard !delays.isEmpty else {
@@ -584,18 +725,40 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   @ViewBuilder
   private var loadMoreButton: some View {
-    if hasMoreMessages && ChatTranscriptWindow.allowsLoadingEarlier(for: messages) {
+    let action = ChatTranscriptWindow.earlierAction(
+      for: messages,
+      policy: effectiveTranscriptWindowPolicy,
+      presentation: transcriptWindowPresentation,
+      hasMoreMessages: hasMoreMessages
+    )
+    if action != .none {
       Button {
-        prependAnchorId = messages.first?.id
-        Task {
-          await onLoadMore()
+        if action == .revealLocallyLoadedRows || action == .revealLocallyLoadedRowsAndLoadMore {
+          prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+            in: messages,
+            policy: effectiveTranscriptWindowPolicy,
+            presentation: transcriptWindowPresentation
+          )
+          transcriptWindowPresentation = .expanded
+        }
+        if action == .loadMoreRows || action == .revealLocallyLoadedRowsAndLoadMore {
+          if prependAnchorId == nil {
+            prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+              in: messages,
+              policy: effectiveTranscriptWindowPolicy,
+              presentation: transcriptWindowPresentation
+            )
+          }
+          Task {
+            await onLoadMore()
+          }
         }
       } label: {
         if isLoadingMoreMessages {
           ProgressView()
             .scaleEffect(0.8)
         } else {
-          Text("Load earlier messages")
+          Text(action == .loadMoreRows ? "Load earlier messages" : "Show older messages")
             .font(.caption)
             .foregroundColor(.secondary)
         }

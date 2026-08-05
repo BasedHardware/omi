@@ -457,21 +457,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       guard authorizationStatus == .authorized else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
 
-        // If auth reverted to notDetermined (not explicitly denied), trigger repair.
-        // Debounce: at most once per 10 minutes to avoid hammering lsregister.
-        if authorizationStatus == .notDetermined {
-          let now = Date()
-          if self?.lastRepairAttempt == nil || now.timeIntervalSince(self?.lastRepairAttempt ?? .distantPast) > 600 {
-            self?.lastRepairAttempt = now
-            log("Notification auth is notDetermined at send time — triggering repair")
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "send_time_not_determined",
-              previousStatus: "unknown",
-              currentStatus: "notDetermined"
-            )
-            ProactiveAssistantsPlugin.repairNotificationRegistration()
-          }
-        }
+        // Sending an assistant notification is not consent to change TCC or
+        // LaunchServices state. A user can repair notification access from
+        // Settings; background delivery simply remains unavailable.
         return
       }
 

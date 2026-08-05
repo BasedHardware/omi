@@ -91,6 +91,20 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
+  func testEscapeReturnsToChatFromSecondaryRoutesAndRemainsUnhandledOnChat() throws {
+    let suiteName = "ChatFirstShellTests.escape-navigation.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.selectPrimary(.tasks)
+
+    XCTAssertTrue(navigation.handleEscapeNavigation())
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertFalse(navigation.handleEscapeNavigation())
+    XCTAssertEqual(navigation.route, .chat)
+  }
+
   func testMemoryFocusRequiresTheRequestedMemoryToBeVisibleBeforeAcknowledgement() {
     let focus = ChatFirstPendingFocus.memory(id: "memory-1")
 
@@ -121,6 +135,37 @@ final class ChatFirstShellTests: XCTestCase {
     navigation.open(focus: .task(id: "task-1"))
     XCTAssertEqual(navigation.route, .tasks)
     XCTAssertNil(navigation.visibleRoute)
+  }
+
+  func testReselectingMountedRouteKeepsItsVisibilityAcknowledgement() throws {
+    let suiteName = "ChatFirstShellTests.reselect-visible.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    navigation.markRouteVisible(.chat)
+    navigation.selectPrimary(.chat)
+    XCTAssertEqual(navigation.visibleRoute, .chat)
+
+    navigation.selectMore(.settings)
+    navigation.markRouteVisible(.more(.settings))
+    navigation.selectMore(.settings)
+    XCTAssertEqual(navigation.visibleRoute, .more(.settings))
+  }
+
+  func testReselectingMountedRouteInvalidatesGoalLinkResolution() throws {
+    let suiteName = "ChatFirstShellTests.reselect-goal-link.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+
+    navigation.markRouteVisible(.chat)
+    let resolution = navigation.beginGoalLinkResolution()
+    navigation.selectPrimary(.chat)
+
+    XCTAssertFalse(navigation.completeGoalLinkResolution(goalID: "goal-old", generation: resolution))
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertNil(navigation.pendingFocus)
   }
 
   func testDirectAndLegacyNavigationClearFocusAndMapToTypedRoutes() throws {

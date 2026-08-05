@@ -5580,6 +5580,15 @@
       },
       "CanonicalKnowledgeGraphResponse": {
         "properties": {
+          "catalog_nodes": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Catalog Nodes",
+            "type": "array"
+          },
           "edges": {
             "items": {
               "additionalProperties": true,
@@ -7349,6 +7358,8 @@
       "CreateCheckoutRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },
@@ -22063,6 +22074,8 @@
       "UpgradeSubscriptionRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },

@@ -20,6 +20,44 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(Double(anchor.y), 0.5, accuracy: 1e-9)
   }
 
+  func testCatalogNodesRemainInResponseStateButNeverEnterAtlasProjection() throws {
+    let assertionNodes = [
+      KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
+      KnowledgeGraphNode(id: "omi", label: "Omi", nodeType: .thing),
+    ]
+    let catalogNode = KnowledgeGraphNode(
+      id: "memory:unlinked",
+      label: "A durable memory that has no assertion",
+      nodeType: .concept)
+    let response = KnowledgeGraphResponse(
+      nodes: assertionNodes,
+      edges: [KnowledgeGraphEdge(id: "uses", sourceId: "david", targetId: "omi", label: "uses")],
+      catalogNodes: [catalogNode])
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
+
+    XCTAssertEqual(response.catalogNodes?.map(\.id), ["memory:unlinked"])
+    XCTAssertEqual(snapshot.nodes.map(\.id), ["david", "omi"])
+    XCTAssertNil(snapshot.nodeByID[catalogNode.id])
+    XCTAssertEqual(snapshot.edges.count, 1)
+  }
+
+  func testProjectionCarriesCatalogNodesWithoutProjectingThem() {
+    let catalogNode = KnowledgeGraphNode(
+      id: "memory:catalog",
+      label: "Catalog memory",
+      nodeType: .concept)
+    let response = KnowledgeGraphResponse(
+      nodes: [KnowledgeGraphNode(id: "entity", label: "Entity", nodeType: .concept)],
+      edges: [],
+      catalogNodes: [catalogNode])
+
+    let projection = MemoryAtlasProjection(graph: response, userName: nil)
+
+    XCTAssertEqual(projection.graph.catalogNodes?.map(\.id), [catalogNode.id])
+    XCTAssertEqual(projection.snapshot.nodes.map(\.id), ["entity"])
+  }
+
   /// Type still decides a node's colour and which constellation it counts
   /// toward. It no longer decides where the node goes — relatedness does — so
   /// the caption follows the entities instead of marking a fixed petal.

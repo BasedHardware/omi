@@ -48,6 +48,19 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     }
   }
 
+  func testGoogleProbeActionsPassExplicitUserIntentToTheirReaders() throws {
+    // omi-test-quality: source-inspection -- static contract: the bridge action
+    // must pass the user-consent boundary to the concrete reader; exercising it
+    // would require live browser cookies and Keychain state.
+    let source = try bridgeSource()
+    XCTAssertTrue(
+      try actionBody(named: "calendar_read_probe", in: source).contains("userInitiated: true")
+    )
+    XCTAssertTrue(
+      try actionBody(named: "gmail_read_probe", in: source).contains("userInitiated: true")
+    )
+  }
+
   func testConversationListSnapshotIncludesFolderFields() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "conversation_list_snapshot", in: source)
@@ -344,7 +357,8 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     let source = try bridgeSource()
     let body = try actionBody(named: "sign_out", in: source)
     XCTAssertTrue(body.contains("DesktopLocalProfile.isEnabled"))
-    XCTAssertTrue(body.contains("AuthService.shared.signOut()"))
+    XCTAssertTrue(body.contains("boolParam(params[\"accepted_account_deletion\"], default: false)"))
+    XCTAssertTrue(body.contains("AuthService.shared.signOut(acceptedAccountDeletion: acceptedAccountDeletion)"))
   }
 
   func testEditTestMemorySupportsMarkerParam() throws {
