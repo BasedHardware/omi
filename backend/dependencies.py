@@ -332,6 +332,7 @@ async def get_uid_with_conversations_read(auth: ApiKeyAuth = Depends(get_api_key
     return auth.uid
 
 
+
 async def get_uid_with_conversations_read_ask(
     auth: ApiKeyAuth = Depends(get_api_key_auth),
     request: Request = None,
