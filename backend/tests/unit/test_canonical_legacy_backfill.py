@@ -10,6 +10,7 @@ from utils.memory import canonical_legacy_backfill as backfill
 from utils.memory.bulk_legacy_backfill import MigrationCheckpoint, MigrationState
 from utils.memory.legacy_backfill import BackfillReport
 from utils.memory.legacy_backfill_bulk_support import LegacyBackfillInventoryReport
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
 @dataclass
@@ -86,6 +87,18 @@ def _seed_checkpoint(db: _Db, uid: str, state: MigrationState) -> None:
     ).to_payload()
 
 
+def _seed_rollout_control(db: _Db, uid: str, *, stage: str = "write", writes_blocked: bool | None = None) -> None:
+    payload = backfill.build_user_control_state(uid=uid, stage=stage, account_generation=1)
+    if writes_blocked is not None:
+        payload["writes_blocked"] = writes_blocked
+    db.documents[MemoryCollections(uid).memory_control_state] = payload
+
+
+@pytest.fixture(autouse=True)
+def _canonical_test_cohort(monkeypatch):
+    set_canonical_cohort(monkeypatch, "already-done", "cohort-a", "cohort-b")
+
+
 def test_config_rejects_unbounded_pages():
     with pytest.raises(ValueError, match="page_size"):
         backfill.CanonicalLegacyBackfillConfig(page_size=backfill.MAX_COHORT_PAGE_SIZE + 1)
@@ -114,12 +127,9 @@ def test_default_config_does_not_stage_or_write(monkeypatch):
 def test_enrollment_hook_rejects_non_cohort_uid():
     """A non-cohort uid must never reach terminal read_ready via this seam."""
     with pytest.raises(ValueError, match="non-cohort"):
-        backfill._cohort_enrollment_hook("intruder", canonical_uids=frozenset({"cohort-a"}))
-
-
-def test_enrollment_hook_accepts_cohort_uid():
-    """A whitelisted uid advances through the checkpoint normally."""
-    backfill._cohort_enrollment_hook("cohort-a", canonical_uids=frozenset({"cohort-a"}))
+        backfill._cohort_enrollment_hook(
+            "intruder", canonical_uids=frozenset({"cohort-a"}), db_client=_Db()
+        )
 
 
 def test_helper_does_not_import_terminal_graph_or_cron_owners():
@@ -133,6 +143,7 @@ def test_helper_does_not_import_terminal_graph_or_cron_owners():
 def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypatch):
     db = _Db()
     _seed_checkpoint(db, "already-done", MigrationState.read_ready)
+    _seed_rollout_control(db, "cohort-a")
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["already-done", "cohort-a", "cohort-b"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     calls: list[str] = []
@@ -160,6 +171,7 @@ def test_page_uses_only_whitelisted_users_and_skips_durable_completions(monkeypa
 
 def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
     db = _Db()
+    _seed_rollout_control(db, "cohort-a")
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     calls: list[str] = []
@@ -187,6 +199,7 @@ def test_second_page_call_resumes_and_is_idempotent(monkeypatch):
 
 def test_row_page_is_forwarded_and_only_durable_checkpoints_are_written(monkeypatch):
     db = _Db()
+    _seed_rollout_control(db, "cohort-a")
     monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
     monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
     stage_kwargs: list[dict] = []
@@ -231,3 +244,33 @@ def test_dry_run_inventories_page_without_durable_writes(monkeypatch):
     assert page.summary.dry_run is True
     assert page.summary.users[0].actions == ("would_enroll_write_only", "would_stage_all_for_admission")
     assert db.writes == []
+
+
+@pytest.mark.parametrize("control_state", ["missing", "off", "write_blocked"])
+def test_page_fails_closed_without_write_stage_enrollment_control(monkeypatch, control_state):
+    db = _Db()
+    if control_state == "off":
+        _seed_rollout_control(db, "cohort-a", stage="off")
+    elif control_state == "write_blocked":
+        _seed_rollout_control(db, "cohort-a", writes_blocked=True)
+    monkeypatch.setattr(backfill, "list_canonical_cohort_uids", lambda: ["cohort-a"])
+    monkeypatch.setattr(backfill, "inventory_legacy_user", lambda uid, **_: _inventory(uid))
+    calls: list[str] = []
+
+    def stage(uid: str, **kwargs):
+        calls.append(uid)
+        return _backfill_report(uid, **kwargs)
+
+    monkeypatch.setattr(backfill, "backfill_user", stage)
+
+    page = backfill.run_canonical_legacy_backfill_page(
+        config=backfill.CanonicalLegacyBackfillConfig(page_size=1),
+        db_client=db,
+    )
+
+    assert page.summary.read_ready_count == 0
+    assert page.summary.failed_user_count == 1
+    assert calls == []
+    assert page.remaining_user_count == 1
+    checkpoint_path = MemoryCollections("cohort-a").legacy_canonical_backfill_checkpoint
+    assert checkpoint_path not in db.documents

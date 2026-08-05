@@ -5,7 +5,8 @@ LIFECYCLE: permanent
 This is an orchestration seam for a future maintenance owner. It selects only
 users returned by ``list_canonical_cohort_uids()``, stages at most one bounded
 page of legacy rows per user, and resumes from the existing durable bulk
-checkpoint. It does not change rollout documents or read grants. Terminal
+checkpoint. It verifies the existing per-user write-stage enrollment control
+but does not change rollout documents, global gates, or read grants. Terminal
 processing and any later promotion remain owned by the canonical maintenance
 pipeline.
 """
@@ -18,6 +19,8 @@ from functools import partial
 from typing import Any, Optional
 
 from database._client import get_firestore_client
+from database.memory_collections import MemoryCollections
+from scripts.enroll_canonical_memory_user import build_user_control_state
 from utils.memory.bulk_legacy_backfill import (
     BulkMigrationConfig,
     BulkRunSummary,
@@ -26,6 +29,7 @@ from utils.memory.bulk_legacy_backfill import (
     read_global_pause,
     run_bulk_migration,
 )
+from utils.memory.canonical_activation import canonical_write_decision
 from utils.memory.legacy_backfill import BackfillReport, backfill_user
 from utils.memory.legacy_backfill_inventory import inventory_legacy_user
 from utils.memory.memory_system import list_canonical_cohort_uids
@@ -95,8 +99,9 @@ def _cohort_enrollment_hook(
     uid: str,
     *,
     canonical_uids: frozenset[str],
+    db_client: Any,
 ) -> None:
-    """Assert the uid is code-enrolled before advancing its checkpoint.
+    """Verify whitelist and existing write enrollment before staging.
 
     The bulk state machine treats ``enroll_fn`` as a side effect that makes a
     user write-ready; once it returns, the checkpoint advances through
@@ -111,6 +116,39 @@ def _cohort_enrollment_hook(
             f"refusing to advance checkpoint for non-cohort uid {uid!r}: "
             "canonical legacy backfill is not the enrollment owner"
         )
+    path = MemoryCollections(uid=uid).memory_control_state
+    snapshot = db_client.document(path).get()
+    if not getattr(snapshot, "exists", False):
+        raise RuntimeError("missing_write_stage_enrollment_control")
+    payload = snapshot.to_dict()
+    if not isinstance(payload, dict):
+        raise RuntimeError("malformed_write_stage_enrollment_control")
+
+    account_generation = payload.get("account_generation")
+    if isinstance(account_generation, bool) or not isinstance(account_generation, int) or account_generation < 0:
+        raise RuntimeError("malformed_write_stage_enrollment_control")
+
+    expected = build_user_control_state(
+        uid=uid,
+        stage="write",
+        account_generation=account_generation,
+    )
+    if payload.get("uid") != expected["uid"] or payload.get("schema_version") != expected["schema_version"]:
+        raise RuntimeError("malformed_write_stage_enrollment_control")
+    if payload.get("mode") not in {"write", "read"}:
+        raise RuntimeError("write_stage_enrollment_control_not_ready")
+    for field in ("persistent_memory_writes_started", "writes_blocked"):
+        if payload.get(field) != expected[field]:
+            raise RuntimeError("write_stage_enrollment_control_not_ready")
+    stage_gates = payload.get("stage_gates")
+    if not isinstance(stage_gates, dict) or any(
+        stage_gates.get(gate) != expected["stage_gates"][gate] for gate in ("shadow", "write")
+    ):
+        raise RuntimeError("write_stage_enrollment_control_not_ready")
+
+    decision = canonical_write_decision(uid, db_client=db_client)
+    if not decision.enabled:
+        raise RuntimeError(f"write_stage_enrollment_control_not_ready:{decision.reason}")
 
 
 def run_canonical_legacy_backfill_page(
@@ -139,12 +177,18 @@ def run_canonical_legacy_backfill_page(
         process_buckets=(),
     )
 
+    def inventory_fn(uid: str):
+        if not config.dry_run:
+            _cohort_enrollment_hook(uid, db_client=client)
+        return inventory_legacy_user(uid, db_client=client)
+
     def backfill_fn(
         uid: str,
         max_rows: int,
         resume: bool,
         stop_requested: Callable[[], bool],
     ) -> BackfillReport:
+        _cohort_enrollment_hook(uid, db_client=client)
         return backfill_user(
             uid,
             dry_run=False,
@@ -159,10 +203,12 @@ def run_canonical_legacy_backfill_page(
     summary = run_bulk_migration(
         selected_uids,
         config=bulk_config,
-        inventory_fn=lambda uid: inventory_legacy_user(uid, db_client=client),
+        inventory_fn=inventory_fn,
         pause_fn=lambda: read_global_pause(client),
         checkpoint_store=None if config.dry_run else checkpoint_store,
-        enroll_fn=None if config.dry_run else partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids)),
+        enroll_fn=None
+        if config.dry_run
+        else partial(_cohort_enrollment_hook, canonical_uids=frozenset(cohort_uids), db_client=client),
         backfill_fn=None if config.dry_run else backfill_fn,
     )
 
