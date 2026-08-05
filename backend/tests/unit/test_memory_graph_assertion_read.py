@@ -168,6 +168,52 @@ def test_get_knowledge_graph_merges_current_assertion_and_replaces_its_stale_leg
     assert edge["id"].startswith("edge_")
 
 
+def test_canonical_entity_ids_join_two_fenced_assertions_into_a_two_hop_path():
+    alpha = "ent_" + "a" * 20
+    beta = "ent_" + "b" * 20
+    gamma = "ent_" + "c" * 20
+    first_plan = PromotionGraphPlan(
+        subject_entity_id=alpha,
+        predicate="depends_on",
+        arguments={"object": {"entity_id": beta, "label": "Beta"}},
+    )
+    second_plan = PromotionGraphPlan(
+        subject_entity_id=beta,
+        predicate="depends_on",
+        arguments={"object": {"entity_id": gamma, "label": "Gamma"}},
+    )
+    first = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-alpha-beta",
+        item_revision=1,
+        content_hash="hash-alpha-beta",
+        evidence_ids=["ev-alpha-beta"],
+        graph_plan=first_plan,
+        commit_id="commit-alpha-beta",
+        commit_sequence=1,
+        created_at=NOW,
+    )
+    second = build_memory_graph_assertion(
+        uid=UID,
+        memory_id="mem-beta-gamma",
+        item_revision=1,
+        content_hash="hash-beta-gamma",
+        evidence_ids=["ev-beta-gamma"],
+        graph_plan=second_plan,
+        commit_id="commit-beta-gamma",
+        commit_sequence=2,
+        created_at=NOW,
+    )
+
+    graph = kg_db.merge_knowledge_graph_records({"nodes": [], "edges": []}, [first, second])
+
+    assert {node["id"] for node in graph["nodes"]} == {alpha, beta, gamma}
+    assert {(edge["source_id"], edge["target_id"]) for edge in graph["edges"]} == {
+        (alpha, beta),
+        (beta, gamma),
+    }
+
+
 @pytest.mark.parametrize(
     "item_override",
     [
@@ -365,7 +411,6 @@ def test_existing_graph_traversal_sees_atomic_assertion_without_an_llm_call(monk
 
 def test_load_fenced_assertions_preserves_caller_order_and_skips_missing(graph_store):
     first = _assertion("mem-first", commit_sequence=2)
-    second = _assertion("mem-second", commit_sequence=3)
     third = _assertion("mem-third", commit_sequence=4)
     graph_store.seed(
         {

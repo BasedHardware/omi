@@ -68,6 +68,7 @@ def test_migrate_owner_schedules_tracked_background_tasks(monkeypatch, caplog):
         lambda: _fake_provider({'uid': 'old-uid', 'firebase': {'sign_in_provider': 'anonymous'}}),
     )
     monkeypatch.setattr(apps_mod.auth, 'get_user', lambda _uid: SimpleNamespace(disabled=False, providers=[]))
+    monkeypatch.setattr(apps_mod.auth, 'enforce_account_deletion_http_access', lambda _uid: None)
 
     # Spy on asyncio.create_task (used directly by the buggy code, and internally by
     # start_background_task in the fixed code) so the test can await whatever tasks get

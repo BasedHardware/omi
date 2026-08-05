@@ -6,22 +6,13 @@ from dataclasses import dataclass
 from typing import Any, Dict, cast
 
 from database.store import get_document_store
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 
 def _store():
     return get_document_store()
 
 ACCOUNT_DELETION_COLLECTION = "account_deletions"
-ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES = frozenset(
-    {
-        "deleting_auth",
-        "pending",
-        "retrying",
-        "running",
-        "failed",
-        "completed",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -39,17 +30,15 @@ def read_account_deletion_projection_fence(uid: str) -> AccountDeletionProjectio
         return AccountDeletionProjectionFence(status=None, blocks_projection_writes=False)
     raw: object = snapshot.to_dict()
     payload = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-    raw_status = payload.get("wipe_status")
-    status = raw_status.strip() if isinstance(raw_status, str) and raw_status.strip() else None
+    status = normalize_account_deletion_status(marker_exists=True, raw_status=payload.get("wipe_status"))
     return AccountDeletionProjectionFence(
         status=status,
-        blocks_projection_writes=status in ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES,
+        blocks_projection_writes=account_deletion_blocks_access(status),
     )
 
 
 __all__ = [
     "ACCOUNT_DELETION_COLLECTION",
-    "ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES",
     "AccountDeletionProjectionFence",
     "read_account_deletion_projection_fence",
 ]

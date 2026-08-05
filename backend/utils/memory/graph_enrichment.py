@@ -258,6 +258,8 @@ def prepare_graph_enrichment(
     expected_evidence_ids: Optional[List[str]] = None,
     observed_head_commit_id: Optional[str] = None,
     existing_graph_assertion: Optional[MemoryGraphAssertion | Dict[str, Any]] = None,
+    allow_replan: bool = False,
+    planner_version: Optional[str] = None,
 ) -> GraphEnrichmentResult:
     """Validate a graph plan and build a canonical apply operation/payload.
 
@@ -307,7 +309,7 @@ def prepare_graph_enrichment(
         checked_plan = _coerce_plan(plan)
     except GraphEnrichmentError as exc:
         return _blocked(exc.code, exc.message)
-    if item.graph_ready:
+    if item.graph_ready and not allow_replan:
         try:
             current_plan = _coerce_plan((item.promotion or {}).get("graph_plan", {}))
         except GraphEnrichmentError:
@@ -317,8 +319,17 @@ def prepare_graph_enrichment(
         ):
             return _blocked("graph_assertion_invalid", "graph_ready item lacks an exact current graph assertion")
         return GraphEnrichmentResult(status=GraphEnrichmentStatus.already_enriched, plan=current_plan)
-    if not item.subject_entity_id or checked_plan.subject_entity_id != item.subject_entity_id:
-        return _blocked("subject_overwrite", "graph enrichment cannot overwrite or invent the existing subject")
+    if item.graph_ready and not (item.promotion or {}).get("graph_enrichment"):
+        return _blocked("graph_replan_not_permitted", "only a prior graph enrichment may be re-planned")
+    # Historical Long-term rows may predate graph classification entirely.  An
+    # enrichment may fill an absent classification, but it must never replace a
+    # field that the canonical item already established.
+    if not allow_replan and item.subject_entity_id and checked_plan.subject_entity_id != item.subject_entity_id:
+        return _blocked("subject_overwrite", "graph enrichment cannot overwrite the existing subject")
+    if not allow_replan and item.predicate and checked_plan.predicate != item.predicate:
+        return _blocked("predicate_overwrite", "graph enrichment cannot overwrite the existing predicate")
+    if not allow_replan and item.arguments and checked_plan.arguments != item.arguments:
+        return _blocked("arguments_overwrite", "graph enrichment cannot overwrite existing graph arguments")
     receipt = GraphEnrichmentReceipt(
         uid=item.uid,
         memory_id=item.memory_id,
@@ -335,6 +346,7 @@ def prepare_graph_enrichment(
             "graph_plan": checked_plan.promotion_plan().model_dump(mode="json"),
             "graph_enrichment_receipt": receipt.model_dump(mode="json"),
             "graph_enrichment": True,
+            "graph_enrichment_planner_version": planner_version,
         }
     )
     patch_payload: Dict[str, Any] = {

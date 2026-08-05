@@ -442,5 +442,7 @@ overlay:
             value: 'true'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'true'
+          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend-dev

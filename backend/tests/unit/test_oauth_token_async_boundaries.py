@@ -92,6 +92,10 @@ def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]
         safe_request_target=lambda url: (url, {'headers': {}, 'extensions': {}}),
         UnsafeWebhookURLError=_UnsafeWebhookURLError,
     )
+    endpoints = _module(
+        'utils.other.endpoints',
+        enforce_account_deletion_http_access=lambda _uid: None,
+    )
 
     with stub_modules(
         {
@@ -101,6 +105,7 @@ def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]
             'database.redis_db': redis_db,
             'utils.apps': apps,
             'utils.http_client': http_client,
+            'utils.other.endpoints': endpoints,
             'models.app': app_model,
         }
     ):
@@ -134,12 +139,18 @@ def test_oauth_token_routes_auth_and_app_reads_to_owned_executors() -> None:
             'state': 'opaque',
         }
         # Auth verification is offloaded to the critical executor — now the neutral port's verify_token
-        # (oauth.py goes through utils.auth, ADR-0034), not the raw firebase SDK function. Compare by
-        # function name so the assertion is identity-agnostic while still pinning each executor boundary.
-        assert [(executor, getattr(func, '__name__', '')) for executor, func, _args in calls] == [
-            (oauth.critical_executor, 'verify_token'),
-            (oauth.db_executor, apps_db.get_app_by_id_db.__name__),
-            (oauth.db_executor, oauth.is_user_app_enabled.__name__),
+        # (oauth.py goes through utils.auth, ADR-0034), not the raw firebase SDK function. Then account
+        # -deletion access enforcement (upstream) on the db executor. Compare by function name so the
+        # assertion is identity-agnostic while still pinning each executor boundary.
+        # verify_token: the port method's identity varies -> compare by name. enforce may be a stubbed
+        # lambda, and the app reads are module functions -> compare those by identity.
+        assert calls[0][0] is oauth.critical_executor
+        assert getattr(calls[0][1], '__name__', '') == 'verify_token'
+        assert [(executor, func) for executor, func, _args in calls[1:]] == [
+            (oauth.db_executor, oauth.enforce_account_deletion_http_access),
+            (oauth.db_executor, apps_db.get_app_by_id_db),
+            (oauth.db_executor, oauth.is_user_app_enabled),
+
         ]
 
 

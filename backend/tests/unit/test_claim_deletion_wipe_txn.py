@@ -40,6 +40,30 @@ def _run_billing(data, monkeypatch):
     return result, store.get(_PATH).to_dict()
 
 
+def _run_mark_completed(data):
+    """Run the ported transition helper ``(tx, path)`` against a FakeDocumentStore (neutral seam)."""
+    store = FakeDocumentStore()
+    store.set(_PATH, data)
+    result = users_db._mark_user_deletion_wipe_completed_txn(store, _PATH)
+    return result, store.get(_PATH).to_dict()
+
+
+def test_mark_completed_refuses_outstanding_late_vm_cleanup():
+    result, doc = _run_mark_completed(
+        {'wipe_status': 'running', 'late_agent_vm_cleanup': {'vmName': 'omi-agent-uid', 'zone': 'us-central1-a'}}
+    )
+
+    assert result is False
+    assert doc['wipe_status'] == 'failed'
+
+
+def test_mark_completed_commits_without_late_vm_cleanup():
+    result, doc = _run_mark_completed({'wipe_status': 'running'})
+
+    assert result is True
+    assert doc['wipe_status'] == 'completed'
+
+
 def test_mark_billing_failed_allows_pre_wipe_states(monkeypatch):
     result, doc = _run_billing({'uid': 'uid1', 'wipe_status': 'deleting_auth'}, monkeypatch)
     assert result is True

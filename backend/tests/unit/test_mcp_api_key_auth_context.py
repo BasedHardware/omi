@@ -208,6 +208,7 @@ def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
         ),
     )
     monkeypatch.setattr(dependencies, 'check_api_key_rate_limit', lambda **_kwargs: None)
+    monkeypatch.setattr(dependencies, 'enforce_account_deletion_http_access', lambda _uid: None)
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
     context = asyncio.run(get_mcp_memory_default_memory_read_context(auth))
@@ -231,6 +232,7 @@ def test_mcp_memory_dependency_fails_closed_without_persisted_memories_read_scop
             context={'user_id': 'u1', 'scopes': [], 'key_id': 'key-1', 'app_id': 'mcp-api'}
         ),
     )
+    monkeypatch.setattr(dependencies, 'enforce_account_deletion_http_access', lambda _uid: None)
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
     with pytest.raises(HTTPException) as exc:

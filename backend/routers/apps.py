@@ -1718,6 +1718,11 @@ async def migrate_app_owner(
     if source_principal.uid != old_id or not source_principal.is_anonymous or source_user.disabled or source_user.providers:
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
+    try:
+        await run_blocking(db_executor, auth.enforce_account_deletion_http_access, old_id)
+    except HTTPException:
+        raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
+
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
     # Tracked background tasks (not bare asyncio.create_task): keeps a live reference

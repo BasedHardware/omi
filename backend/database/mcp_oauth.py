@@ -16,6 +16,7 @@ from database.store import get_document_store
 def _store():
     return get_document_store()
 
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp/sse"
 # Omi Beta intentionally serves MCP data from dev while retaining the production
@@ -48,6 +49,10 @@ PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod", "omi-chatgpt-dev"}
 PRODUCTION_CROSS_PLANE_CLIENT_IDS = {"omi-chatgpt-prod", "omi-claude-prod"}
 CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
 CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
+
+
+class AccountDeletionAccessBlocked(RuntimeError):
+    """Raised when an OAuth write loses the deletion-admission race."""
 
 
 # --- OAuth token document contracts (Firestore write-path shapes) ------------
@@ -410,17 +415,14 @@ def validate_pkce_challenge(code_challenge: Optional[str], code_challenge_method
     return bool(code_challenge) and code_challenge_method == "S256" and bool(PKCE_ALLOWED_RE.fullmatch(code_challenge))
 
 
-def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
-    deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
-    now = _now()
-    grant_id = deterministic_grant_id
-    path = f"mcp_oauth_grants/{grant_id}"
-    doc = _store().get(path)
+def _grant_write(
+    uid: str, client_id: str, resource: str, scopes: List[str], *, grant_id: str, doc: Any, now: datetime
+) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
+    """Compute ``(grant_id, existing, data)`` for a grant upsert — pure; the caller writes via the
+    store port. A revoked grant is re-created under a fresh id."""
     existing: Dict[str, Any] = _typed_doc(doc) if doc.exists else {}
     if existing and (existing.get("revoked_at") or existing.get("status") == "revoked"):
-        grant_id = f"{deterministic_grant_id}:{uuid.uuid4()}"
-        path = f"mcp_oauth_grants/{grant_id}"
-        doc = _store().get(path)
+        grant_id = f"{grant_id}:{uuid.uuid4()}"
         existing = {}
     existing_scopes = set(existing.get("scopes") or [])
     merged_scopes = sorted(existing_scopes.union(scopes))
@@ -435,10 +437,46 @@ def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List
         "revoked_at": None,
         "status": "active",
     }
-    if not doc.exists:
+    if not existing:
         data["created_at"] = now
-    _store().set(path, data, merge=True)
+    return grant_id, existing, data
+
+
+def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
+    deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
+    now = _now()
+    doc = _store().get(f"mcp_oauth_grants/{deterministic_grant_id}")
+    grant_id, existing, data = _grant_write(
+        uid, client_id, resource, scopes, grant_id=deterministic_grant_id, doc=doc, now=now
+    )
+    _store().set(f"mcp_oauth_grants/{grant_id}", data, merge=True)
     return {**existing, **data}
+
+
+def _authorization_code_write(
+    uid: str,
+    grant_id: str,
+    client_id: str,
+    redirect_uri: str,
+    resource: str,
+    scopes: List[str],
+    code_challenge: str,
+    *,
+    now: datetime,
+) -> Dict[str, Any]:
+    return {
+        "uid": uid,
+        "grant_id": grant_id,
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "resource": resource,
+        "scopes": scopes,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "created_at": now,
+        "expires_at": now + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
+        "consumed_at": None,
+    }
 
 
 def issue_authorization_code(
@@ -454,21 +492,56 @@ def issue_authorization_code(
     now = _now()
     _store().set(
         f"mcp_oauth_authorization_codes/{hash_secret(raw_code)}",
-        {
-            "uid": uid,
-            "grant_id": grant_id,
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "resource": resource,
-            "scopes": scopes,
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-            "created_at": now,
-            "expires_at": now + timedelta(seconds=AUTH_CODE_TTL_SECONDS),
-            "consumed_at": None,
-        }
+        _authorization_code_write(uid, grant_id, client_id, redirect_uri, resource, scopes, code_challenge, now=now),
     )
     return raw_code
+
+
+def create_grant_and_authorization_code_if_allowed(
+    uid: str,
+    client_id: str,
+    redirect_uri: str,
+    resource: str,
+    scopes: List[str],
+    code_challenge: str,
+) -> Tuple[Dict[str, Any], str]:
+    """Atomically fence deletion admission with both OAuth consent writes."""
+    deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
+    deletion_path = f"account_deletions/{uid}"
+    grant_path = f"mcp_oauth_grants/{deterministic_grant_id}"
+    raw_code = "omi_code_" + secrets.token_urlsafe(32)
+    code_path = f"mcp_oauth_authorization_codes/{hash_secret(raw_code)}"
+
+    def _create(tx) -> Tuple[Dict[str, Any], str]:
+        deletion_doc = tx.get(deletion_path)
+        deletion_data = _typed_doc(deletion_doc) if deletion_doc.exists else {}
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=deletion_doc.exists,
+            raw_status=deletion_data.get("wipe_status"),
+        )
+        if account_deletion_blocks_access(deletion_status):
+            raise AccountDeletionAccessBlocked(deletion_status or "unknown")
+
+        now = _now()
+        grant_doc = tx.get(grant_path)
+        grant_id, existing, grant_data = _grant_write(
+            uid, client_id, resource, scopes, grant_id=deterministic_grant_id, doc=grant_doc, now=now
+        )
+        code_data = _authorization_code_write(
+            uid,
+            grant_id,
+            client_id,
+            redirect_uri,
+            resource,
+            scopes,
+            code_challenge,
+            now=now,
+        )
+        tx.set(f"mcp_oauth_grants/{grant_id}", grant_data, merge=True)
+        tx.set(code_path, code_data)
+        return {**existing, **grant_data}, raw_code
+
+    return _store().run_transaction(_create)
 
 
 def consume_authorization_code(
@@ -764,3 +837,18 @@ def revoke_user_grant(uid: str, grant_id: str) -> bool:
         return False
     revoke_grant(grant_id)
     return True
+
+
+def delete_user_oauth_credentials(uid: str) -> None:
+    """Revoke and remove every OAuth credential and authorization code for a user."""
+    grants = _store().query("mcp_oauth_grants", filters=[("uid", "==", uid)])
+    for grant in grants:
+        grant_id = grant.id
+        revoke_grant(grant_id)
+        for collection_name in ("mcp_oauth_access_tokens", "mcp_oauth_refresh_tokens"):
+            for token in _store().query(collection_name, filters=[("grant_id", "==", grant_id)]):
+                _store().delete(f"{collection_name}/{token.id}")
+        _store().delete(f"mcp_oauth_grants/{grant_id}")
+    codes = _store().query("mcp_oauth_authorization_codes", filters=[("uid", "==", uid)])
+    for code in codes:
+        _store().delete(f"mcp_oauth_authorization_codes/{code.id}")

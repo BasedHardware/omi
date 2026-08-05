@@ -658,7 +658,9 @@ class AgentSession:
 
 
 @app.get("/health")
-async def health() -> dict[str, Any]:
+async def health(request: Request) -> dict[str, Any]:
+    # Unauthenticated /health previously leaked databaseReady on public :8080.
+    runtime.require_auth(request)
     return {
         "status": "ok",
         "uptime": round(time.monotonic() - runtime.started_at),
