@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Sources/UsageLimitPopupView.swift
+  s_569f1df936cc22::t_e75002f33f0d07 8-9
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_569f1df936cc22::t_ba9ab686a36d2e 730-734
+  s_569f1df936cc22::t_7c1c9ffa29014f 462-466,470,472
+  s_569f1df936cc22::t_556a2b5c25caf9 521-523
+  s_569f1df936cc22::t_af596d437c7cc2 833,835-839,841
+  s_569f1df936cc22::t_437403306eb896 138-145,151-153
+  s_569f1df936cc22::t_32321f62beddfa 654
+  s_569f1df936cc22::t_b935b8aaf2bc82 642,652
+  s_569f1df936cc22::t_9f65d6c473fdbe 535-536,538
+  s_569f1df936cc22::t_f8481ab6ddfa40 852-865
+desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  s_569f1df936cc22::t_f09e45c5bcfd57 465
+  s_569f1df936cc22::t_cd3e4b7ebd6e09 443-447,451
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "465b3a005930bad2a9184cdc938b08d270da56b8",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
