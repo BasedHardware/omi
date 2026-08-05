@@ -239,7 +239,7 @@ def main() -> int:
     counts = collect_counts(root)
 
     if args.print_counts:
-        print(json.dumps(baseline_document(counts), indent=2) + "\n")
+        print(json.dumps(baseline_document(counts), indent=2))
         return 0
 
     if args.write_baseline:
