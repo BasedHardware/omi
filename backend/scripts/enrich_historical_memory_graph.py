@@ -37,6 +37,7 @@ from utils.memory.historical_graph_enrichment import (  # noqa: E402
 
 MAX_PAGE_SIZE = 25
 MAX_STRUCTURED_SCAN_SIZE = 1250
+HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS = 20.0
 
 
 def _arguments() -> argparse.Namespace:
@@ -172,7 +173,10 @@ def run_enrichment(
 
     db_client = db_client or _firestore_client(project=firestore_project)
     if llm is None and not structured_only:
-        llm = get_llm("memory_l2")
+        # A page applies serially and may retry individual records. Keep the
+        # per-item transport deadline below the Cloud Run task budget so one
+        # silent upstream request cannot monopolize the full backfill page.
+        llm = get_llm("memory_l2", request_timeout=HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS)
     report: Counter[str] = Counter()
     applied = 0
     if not apply:
