@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable, Optional
 
-from utils.request_validation import maximum_future_skew_seconds, parse_sync_filename_timestamp
+from utils.request_validation import parse_sync_filename_timestamp
+from utils.sync.capture_skew import maximum_future_skew_seconds
 
 
 class SyncLane(str, Enum):

@@ -94,6 +94,11 @@ finally:
     for n in list(sys.modules):
         if _is_stubbed(n) and n not in _saved:
             sys.modules.pop(n, None)
+        # Drop real utils.sync.* loaded under AutoMock request_validation so later
+        # suites (e.g. cloud_tasks) do not inherit a lanes module whose
+        # parse_sync_filename_timestamp is a MagicMock.
+        if n == 'utils.sync' or n.startswith('utils.sync.'):
+            sys.modules.pop(n, None)
     sys.modules.update(_saved)
 
 from fastapi import HTTPException  # noqa: E402  (import after the finder block)

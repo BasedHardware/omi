@@ -98,7 +98,6 @@ from utils.other.storage import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
-from utils.request_validation import maximum_future_skew_seconds
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
@@ -114,6 +113,7 @@ from utils.stt.speaker_embedding import (
     extract_embedding_from_bytes,
 )
 from utils.stt.vad import vad_is_empty
+from utils.sync.capture_skew import maximum_future_skew_seconds
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id

@@ -20,17 +20,14 @@ from typing import Annotated, Any, TypeVar, cast
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
 
+from utils.sync.capture_skew import maximum_future_skew_seconds
+
 PositiveLimit = Annotated[int, Query(ge=1, le=1000)]
 CalendarMeetingsLimit = Annotated[int, Query(ge=1, le=100)]
 NonNegativeOffset = Annotated[int, Query(ge=0)]
 HistoryDays = Annotated[int, Query(ge=1, le=365)]
 
 ModelT = TypeVar('ModelT', bound=BaseModel)
-
-
-def maximum_future_skew_seconds() -> int:
-    """Mild client clock skew allowed on sync capture timestamps (default 300s)."""
-    return max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
 
 
 def parse_form_json(
