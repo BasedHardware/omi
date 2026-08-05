@@ -124,13 +124,15 @@
         "backend/utils/memory/legacy_backfill_bulk_support.py",
         "backend/utils/memory/legacy_backfill_inventory.py",
         "backend/utils/memory/bulk_legacy_backfill.py",
+        "backend/utils/memory/canonical_legacy_backfill.py",
         "backend/scripts/backfill_legacy_memories.py",
         "backend/scripts/bulk_backfill_legacy_memories.py"
       ],
       "tests": [
         "tests/unit/test_ws_c_backfill.py",
         "tests/unit/test_bulk_legacy_backfill.py",
-        "tests/unit/test_bulk_backfill_legacy_memories_cli.py"
+        "tests/unit/test_bulk_backfill_legacy_memories_cli.py",
+        "tests/unit/test_canonical_legacy_backfill.py"
       ],
       "checks": ["no_large_tuple_results"],
       "invariants": [
