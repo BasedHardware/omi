@@ -9,7 +9,7 @@ item revision, content hash, and evidence identities.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,10 +48,10 @@ class HistoricalGraphPlannerOutput(BaseModel):
 
     eligible: bool = False
     subject_label: str = ""
-    subject_node_type: CanonicalGraphNodeType | str = ""
+    subject_node_type: CanonicalGraphNodeType | Literal[""] = ""
     predicate: str = ""
     object_label: str = ""
-    object_node_type: CanonicalGraphNodeType | str = ""
+    object_node_type: CanonicalGraphNodeType | Literal[""] = ""
     qualifiers: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -94,12 +94,9 @@ def invoke_historical_graph_planner(item: MemoryItem, llm: Any) -> PromotionGrap
         return None
     subject_label = planned.subject_label.strip()
     object_label = planned.object_label.strip()
-    if (
-        not subject_label
-        or not object_label
-        or not planned.subject_node_type.strip()
-        or not planned.object_node_type.strip()
-    ):
+    subject_node_type = planned.subject_node_type
+    object_node_type = planned.object_node_type
+    if not subject_label or not object_label or not subject_node_type or not object_node_type:
         return None
     normalized_text = " ".join((item.content or "").casefold().split())
     normalized_subject = " ".join(subject_label.casefold().split())
@@ -113,10 +110,10 @@ def invoke_historical_graph_planner(item: MemoryItem, llm: Any) -> PromotionGrap
         return None
     return PromotionGraphPlan(
         schema_version=PROMOTION_GRAPH_PLAN_V2_VERSION,
-        subject_entity_id=GraphRelationEndpoint(label=subject_label, node_type=planned.subject_node_type).entity_id,
+        subject_entity_id=GraphRelationEndpoint(label=subject_label, node_type=subject_node_type).entity_id,
         predicate=planned.predicate,
-        subject=GraphRelationEndpoint(label=subject_label, node_type=planned.subject_node_type),
-        object=GraphRelationEndpoint(label=object_label, node_type=planned.object_node_type),
+        subject=GraphRelationEndpoint(label=subject_label, node_type=subject_node_type),
+        object=GraphRelationEndpoint(label=object_label, node_type=object_node_type),
         qualifiers=planned.qualifiers,
     )
 
