@@ -140,7 +140,7 @@ export function HomePage() {
             edges.atBottom ? 'opacity-0' : 'opacity-100',
           )}
         />
-        <div ref={scrollRef} className="h-full overflow-y-auto">
+        <div ref={scrollRef} className="no-scrollbar h-full overflow-y-auto">
           {inChat ? (
             <div className="mx-auto max-w-3xl px-6 py-6">
               <ChatTranscript
