@@ -89,6 +89,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _discoveryTimer;
+  // Tracks the moment we first observed a BLE disconnect. This is independent
+  // from `isConnected` which is only flipped to false inside
+  // `onDeviceDisconnected()` (so using `isConnected` inside the debouncer
+  // callback creates a circular dependency).
+  DateTime? _disconnectStartedAt;
   // Must exceed native auto-reconnect windows (Android 3s / iOS ~200ms) so
   // short RF blips do not tear down live capture and spawn conversation shards
   // (#6678). Reconnect cancels this debouncer before side-effects run.
@@ -462,6 +467,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     isConnected = value;
     if (isConnected) {
       _discoveryTimer?.cancel();
+      // Reconnect cancels the disconnect grace path. We clear the disconnect
+      // marker before cancelling so any in-flight timer callback becomes a
+      // no-op even if it wins a narrow cancel race.
+      _disconnectStartedAt = null;
+      _disconnectDebouncer.cancel();
     }
     notifyListeners();
   }
@@ -974,6 +984,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
+        _disconnectStartedAt = null;
         _disconnectDebouncer.cancel();
         _connectDebouncer.run(() => _handleDeviceConnected(deviceId));
         break;
@@ -987,10 +998,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           // Grace delay exceeds native auto-reconnect. Reconnect cancels the
           // debouncer; stillDisconnected guards the residual fire/cancel race
           // so we do not tear down capture after a successful reconnect (#6678).
+          _disconnectStartedAt = DateTime.now();
           _disconnectDebouncer.run(() {
-            if (!shouldApplyDisconnectCaptureSideEffects(stillDisconnected: !isConnected)) {
+            final stillDisconnected = _disconnectStartedAt != null;
+            if (!shouldApplyDisconnectCaptureSideEffects(stillDisconnected: stillDisconnected)) {
               return;
             }
+            _disconnectStartedAt = null;
             onDeviceDisconnected();
           });
         }

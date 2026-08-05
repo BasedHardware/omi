@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,9 +9,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/ble_disconnect_grace.dart';
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -351,6 +356,79 @@ void main() {
       expect(flag2, true, reason: 'Exactly 20% should not reset flag (needs > 20)');
     });
   });
+
+  group('ble disconnect capture grace (#6678)', () {
+    test('real disconnect runs teardown even while isConnected stays true until teardown', () {
+      fakeAsync((async) {
+        final device = BtDevice(
+          id: 'AA:AA:AA:AA:AA:99',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -50,
+          firmwareRevision: '3.0.20',
+        );
+
+        final provider = _TestDeviceProvider();
+        addTearDown(provider.dispose);
+
+        provider.connectedDevice = device;
+        provider.pairedDevice = device;
+        provider.setIsConnected(true);
+
+        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+
+        final grace = bleDisconnectCaptureGrace(isAndroid: Platform.isAndroid);
+        async.elapse(grace + const Duration(milliseconds: 1));
+
+        expect(provider.disconnectCallCount, 1);
+        expect(provider.isConnected, isFalse);
+      });
+    });
+
+    test('reconnect cancels scheduled teardown before grace elapses', () {
+      fakeAsync((async) {
+        final device = BtDevice(
+          id: 'AA:AA:AA:AA:AA:98',
+          name: 'Omi',
+          type: DeviceType.omi,
+          rssi: -50,
+          firmwareRevision: '3.0.20',
+        );
+
+        final provider = _TestDeviceProvider();
+        addTearDown(provider.dispose);
+
+        provider.connectedDevice = device;
+        provider.pairedDevice = device;
+        provider.setIsConnected(true);
+
+        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+
+        final grace = bleDisconnectCaptureGrace(isAndroid: Platform.isAndroid);
+        async.elapse(grace - const Duration(milliseconds: 10));
+
+        // Simulate reconnect just before the grace window ends. We should cancel
+        // the disconnect debouncer and not invoke capture teardown.
+        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.connected);
+
+        async.elapse(const Duration(milliseconds: 20)); // total crosses the grace boundary
+        expect(provider.disconnectCallCount, 0);
+      });
+    });
+  });
+}
+
+class _TestDeviceProvider extends DeviceProvider {
+  int disconnectCallCount = 0;
+
+  _TestDeviceProvider();
+
+  @override
+  void onDeviceDisconnected() async {
+    disconnectCallCount++;
+    // Keep the flag update behavior simple for this unit test.
+    setIsConnected(false);
+  }
 }
 
 class _TestAnalyticsAdapter implements AnalyticsAdapter {
