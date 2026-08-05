@@ -8,13 +8,13 @@ page, moving a surface between pages, or debugging an animation that looks stuck
 | Route | Holds |
 |---|---|
 | `/home` | The hub **and** the chat. Chat is not a separate page: Home rests on the hub for an empty account and opens straight into the transcript once there is history — `web/app/src/lib/homeStage.ts`, ported from desktop's `HomeStagePresentation.restingMode`. Live capture also starts here, from the composer. |
-| `/timeline` | Conversations and daily recaps in one day-grouped gallery. A recap is the summary of a day, so it leads that day rather than living in a list of its own. |
+| `/conversations` | Conversations and daily recaps in one day-grouped gallery. A recap is the summary of a day, so it leads that day rather than living in a list of its own. |
 | `/memories`, `/tasks` | As named. |
 | `/connectors` | Installed apps **and** external services — the former Settings → Integrations. |
 | `/settings` | Account (profile and plan merged), Privacy, Developer. |
 
 Removed rather than redirected, so do not re-add aliases for them:
-`/chat`, `/conversations`, `/recaps`, `/my-apps`, `/persona`.
+`/chat`, `/recaps`, `/my-apps`, `/persona`.
 
 The macOS app is the reference for this shape: chat has no rail row there
 either, and Home shows no stat counters. See `desktop/macos/Desktop/Sources/MainWindow/`.

@@ -30,9 +30,9 @@ moonshine smoke test imports `bun:test`.
 
 ## Destinations
 
-`/home` is the hub *and* the chat, `/timeline` is conversations plus recaps,
-`/connectors` is apps plus services. `/chat`, `/conversations`, `/recaps`,
-`/my-apps` and `/persona` were removed, not redirected — do not re-add aliases.
+`/home` is the hub *and* the chat, `/conversations` is conversations plus
+recaps, `/connectors` is apps plus services. `/chat`, `/recaps`, `/my-apps` and
+`/persona` were removed, not redirected — do not re-add aliases.
 Route map, shared page chrome, shadcn, the moonshine >= 0.3.7 floor, and this
 runtime's two motion traps:
 [`docs/agents/web-app-destinations.md`](../../docs/agents/web-app-destinations.md).
