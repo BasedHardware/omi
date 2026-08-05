@@ -173,4 +173,31 @@ void main() {
       expect(parsed.length, equals(0));
     });
   });
+
+  group('platform audio session ordering', () {
+    test('activates the platform route before starting recovered-audio playback', () async {
+      final calls = <String>[];
+
+      await startPlaybackAfterActivatingSession(
+        activateSession: () async => calls.add('activate'),
+        startPlayer: () async => calls.add('start'),
+      );
+
+      expect(calls, ['activate', 'start']);
+    });
+
+    test('does not advance an inaudible player when route activation fails', () async {
+      var playerStarted = false;
+
+      await expectLater(
+        startPlaybackAfterActivatingSession(
+          activateSession: () async => throw StateError('route unavailable'),
+          startPlayer: () async => playerStarted = true,
+        ),
+        throwsStateError,
+      );
+
+      expect(playerStarted, isFalse);
+    });
+  });
 }
