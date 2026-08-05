@@ -104,42 +104,31 @@ struct DesktopHomeView: View {
       || !hasCompletedOnboardingAtAuthorityRead
   }
 
-  private var authEntryShell: AnyView {
+  @ViewBuilder
+  private var authEntryShell: some View {
     if authState.isRestoringAuth {
-      return AnyView(
-        Color.clear
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          // No ground of its own: the shell's glass is already under this.
-          .onAppear {
-            log("DesktopHomeView: Showing auth loading splash")
-          }
-      )
-    }
-    if authState.sessionPhase == .recoveryRequired {
-      return AnyView(
-        SessionRecoveryView()
-          .onAppear {
-            log("DesktopHomeView: Showing recoverable auth state")
-          }
-      )
-    }
-    if !authState.isSignedIn {
-      return AnyView(
-        SignInView(authState: authState)
-          .onAppear {
-            log("DesktopHomeView: Showing SignInView (not signed in)")
-          }
-      )
-    }
-    if shouldSkipOnboarding() {
-      return AnyView(
-        Color.clear.onAppear {
-          log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
-          appState.hasCompletedOnboarding = true
+      Color.clear
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // No ground of its own: the shell's glass is already under this.
+        .onAppear {
+          log("DesktopHomeView: Showing auth loading splash")
         }
-      )
-    }
-    return AnyView(
+    } else if authState.sessionPhase == .recoveryRequired {
+      SessionRecoveryView()
+        .onAppear {
+          log("DesktopHomeView: Showing recoverable auth state")
+        }
+    } else if !authState.isSignedIn {
+      SignInView(authState: authState)
+        .onAppear {
+          log("DesktopHomeView: Showing SignInView (not signed in)")
+        }
+    } else if shouldSkipOnboarding() {
+      Color.clear.onAppear {
+        log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
+        appState.hasCompletedOnboarding = true
+      }
+    } else {
       SBOnboardingView(
         appState: appState,
         chatProvider: viewModelContainer.chatProvider,
@@ -149,237 +138,231 @@ struct DesktopHomeView: View {
       .onAppear {
         log("DesktopHomeView: Showing SBOnboardingView (signed in, not onboarded)")
       }
-    )
+    }
   }
 
   // State 3: Signed in and onboarded.
-  private var mainContentPresentation: AnyView {
-    AnyView(
-      mainContent
-        .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
-        .overlay {
-          if appState.showUsageLimitPopup {
-            UsageLimitPopupView(
-              reason: appState.usageLimitReason,
-              onUpgrade: {
-                appState.showUsageLimitPopup = false
-                selectedSettingsSection = .planUsage
-                // Plan and Usage now lives below Account on the merged
-                // "Account & Plan" page — scroll straight to the plan card.
-                highlightedSettingId = "planusage.current"
-                OmiMotion.withGated(Self.pageNavigationAnimation) {
-                  navigateToLegacyDestination(.settings)
-                }
-              },
-              onDismiss: {
-                appState.showUsageLimitPopup = false
-              },
-              onBringYourOwnKeys: {
-                appState.showUsageLimitPopup = false
-                selectedSettingsSection = .advanced
-                OmiMotion.withGated(Self.pageNavigationAnimation) {
-                  navigateToLegacyDestination(.settings)
-                }
+  private var mainContentPresentation: some View {
+    mainContent
+      .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
+      .overlay {
+        if appState.showUsageLimitPopup {
+          UsageLimitPopupView(
+            reason: appState.usageLimitReason,
+            onUpgrade: {
+              appState.showUsageLimitPopup = false
+              selectedSettingsSection = .planUsage
+              // Plan and Usage now lives below Account on the merged
+              // "Account & Plan" page — scroll straight to the plan card.
+              highlightedSettingId = "planusage.current"
+              OmiMotion.withGated(Self.pageNavigationAnimation) {
+                navigateToLegacyDestination(.settings)
               }
-            )
-          }
+            },
+            onDismiss: {
+              appState.showUsageLimitPopup = false
+            },
+            onBringYourOwnKeys: {
+              appState.showUsageLimitPopup = false
+              selectedSettingsSection = .advanced
+              OmiMotion.withGated(Self.pageNavigationAnimation) {
+                navigateToLegacyDestination(.settings)
+              }
+            }
+          )
         }
-        .overlay(alignment: .top) {
-          if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
-            DesktopUpdatePolicyBanner(
-              policy: policy,
-              onDownload: { updatePolicyManager.openDownload(policy) },
-              onDismiss: { updatePolicyManager.dismiss(policy) }
-            )
-            .padding(.top, OmiSpacing.md)
-            .padding(.horizontal, OmiSpacing.xl)
-            .transition(.move(edge: .top).combined(with: .opacity))
-          }
+      }
+      .overlay(alignment: .top) {
+        if let policy = updatePolicyManager.visiblePolicy, !policy.isRequired {
+          DesktopUpdatePolicyBanner(
+            policy: policy,
+            onDownload: { updatePolicyManager.openDownload(policy) },
+            onDismiss: { updatePolicyManager.dismiss(policy) }
+          )
+          .padding(.top, OmiSpacing.md)
+          .padding(.horizontal, OmiSpacing.xl)
+          .transition(.move(edge: .top).combined(with: .opacity))
         }
-    )
+      }
   }
 
-  private var mainContentStartupLifecycle: AnyView {
-    AnyView(
-      mainContentPresentation
-        .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
-          let reason = notification.userInfo?["reason"] as? String ?? ""
-          appState.triggerUsageLimitPopup(reason: reason)
+  private var mainContentStartupLifecycle: some View {
+    mainContentPresentation
+      .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
+        let reason = notification.userInfo?["reason"] as? String ?? ""
+        appState.triggerUsageLimitPopup(reason: reason)
+      }
+      .onAppear {
+        log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
+        updatePolicyManager.refresh(force: true)
+        // Check all permissions on launch
+        appState.checkAllPermissions()
+
+        // For existing users who haven't indexed files yet, run a background scan
+        if !AppBuild.usesLazyDevPermissions
+          && !UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing)
+        {
+          scheduleInitialFileIndexing()
         }
-        .onAppear {
-          log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
-          updatePolicyManager.refresh(force: true)
-          // Check all permissions on launch
-          appState.checkAllPermissions()
 
-          // For existing users who haven't indexed files yet, run a background scan
-          if !AppBuild.usesLazyDevPermissions
-            && !UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing)
-          {
-            scheduleInitialFileIndexing()
-          }
-
-          // Migration: one-time reset for users whose screenAnalysisEnabled
-          // was incorrectly set to false by a bug in syncMonitoringState() that
-          // persisted false whenever monitoring stopped for any reason.
-          // v2: re-run because the root cause (syncMonitoringState disabling the
-          // setting) was only fixed in this release, so v1 users got re-broken.
-          if !UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV2) {
-            UserDefaults.standard.set(true, forKey: .screenAnalysisEnabled)
-            AssistantSettings.shared.screenAnalysisEnabled = true
-            UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV2)
-            log(
-              "DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled"
-            )
-            // Push true to server so syncFromServer() doesn't revert it
-            Task { await SettingsSyncManager.shared.syncToServer() }
-          }
-
-          // Named development bundles used to seed screen analysis off to
-          // avoid permission prompts. Screen capture no longer requests
-          // TCC during startup, so restore the default once: a granted
-          // named-bundle permission must actually begin storing frames.
-          if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
-            usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
-            migrationApplied: UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV3)
-          ) {
-            AssistantSettings.shared.screenAnalysisEnabled = true
-            UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV3)
-            log("DesktopHomeView: Restored screen capture default for quiet named bundle")
-          }
-
-          restorePersistedCaptureServices(reason: "launch")
-
-          // Start Crisp chat in background for notifications, scoped to the signed-in user
-          CrispManager.shared.start(
-            initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
-            sessionUserId: UserDefaults.standard.string(forKey: .authUserId)
+        // Migration: one-time reset for users whose screenAnalysisEnabled
+        // was incorrectly set to false by a bug in syncMonitoringState() that
+        // persisted false whenever monitoring stopped for any reason.
+        // v2: re-run because the root cause (syncMonitoringState disabling the
+        // setting) was only fixed in this release, so v1 users got re-broken.
+        if !UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV2) {
+          UserDefaults.standard.set(true, forKey: .screenAnalysisEnabled)
+          AssistantSettings.shared.screenAnalysisEnabled = true
+          UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV2)
+          log(
+            "DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled"
           )
+          // Push true to server so syncFromServer() doesn't revert it
+          Task { await SettingsSyncManager.shared.syncToServer() }
+        }
 
-          // Set up floating control bar. Product invariant: normal signed-in
-          // launches must show the enabled bar immediately; hide-until-PTT is
-          // only for explicit onboarding/demo/minimal-mode contexts.
-          FloatingControlBarManager.shared.setup(
-            appState: appState, chatProvider: viewModelContainer.chatProvider)
-          FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
+        // Named development bundles used to seed screen analysis off to
+        // avoid permission prompts. Screen capture no longer requests
+        // TCC during startup, so restore the default once: a granted
+        // named-bundle permission must actually begin storing frames.
+        if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
+          usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
+          migrationApplied: UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV3)
+        ) {
+          AssistantSettings.shared.screenAnalysisEnabled = true
+          UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV3)
+          log("DesktopHomeView: Restored screen capture default for quiet named bundle")
+        }
 
-          // Set up push-to-talk voice input
-          if let barState = FloatingControlBarManager.shared.barState {
-            PushToTalkManager.shared.setup(barState: barState)
-          }
+        restorePersistedCaptureServices(reason: "launch")
+
+        // Start Crisp chat in background for notifications, scoped to the signed-in user
+        CrispManager.shared.start(
+          initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
+          sessionUserId: UserDefaults.standard.string(forKey: .authUserId)
+        )
+
+        // Set up floating control bar. Product invariant: normal signed-in
+        // launches must show the enabled bar immediately; hide-until-PTT is
+        // only for explicit onboarding/demo/minimal-mode contexts.
+        FloatingControlBarManager.shared.setup(
+          appState: appState, chatProvider: viewModelContainer.chatProvider)
+        FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
+
+        // Set up push-to-talk voice input
+        if let barState = FloatingControlBarManager.shared.barState {
+          PushToTalkManager.shared.setup(barState: barState)
         }
-        .task {
-          // Trigger eager data loading when main content appears
-          await viewModelContainer.loadAllData()
-          scheduleConversationWarmup()
-          scheduleAgentVMProvisioning()
-        }
-        // Refresh conversations when app becomes active (e.g. switching back from another app)
-        .onReceive(
-          NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) { _ in
-          // Cooldown: only refresh conversations if last activation was 60+ seconds ago
-          let now = Date()
-          if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
-            lastActivationRefresh = now
-            Task { await appState.refreshConversations() }
-          }
-          updatePolicyManager.refresh()
-          // Reconcile persisted intent after returning from System Settings or
-          // after a runtime service stopped while the app was inactive.
-          restorePersistedCaptureServices(reason: "app active")
-        }
-        .onChange(of: apiKeyService.isLoaded) { _, loaded in
-          guard loaded else { return }
-          log("DesktopHomeView: API keys loaded — retrying deferred services")
-          restorePersistedCaptureServices(reason: "key load")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
-          reconcileCaptureServicesAfterSettingsSync()
-        }
-        // Cmd+R: refresh all data (conversations, chat, tasks, memories)
-        .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
+      }
+      .task {
+        // Trigger eager data loading when main content appears
+        await viewModelContainer.loadAllData()
+        scheduleConversationWarmup()
+        scheduleAgentVMProvisioning()
+      }
+      // Refresh conversations when app becomes active (e.g. switching back from another app)
+      .onReceive(
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+      ) { _ in
+        // Cooldown: only refresh conversations if last activation was 60+ seconds ago
+        let now = Date()
+        if PollingConfig.shouldAllowActivationRefresh(now: now, lastRefresh: lastActivationRefresh) {
+          lastActivationRefresh = now
           Task { await appState.refreshConversations() }
         }
-    )
+        updatePolicyManager.refresh()
+        // Reconcile persisted intent after returning from System Settings or
+        // after a runtime service stopped while the app was inactive.
+        restorePersistedCaptureServices(reason: "app active")
+      }
+      .onChange(of: apiKeyService.isLoaded) { _, loaded in
+        guard loaded else { return }
+        log("DesktopHomeView: API keys loaded — retrying deferred services")
+        restorePersistedCaptureServices(reason: "key load")
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+        reconcileCaptureServicesAfterSettingsSync()
+      }
+      // Cmd+R: refresh all data (conversations, chat, tasks, memories)
+      .onReceive(NotificationCenter.default.publisher(for: .refreshAllData)) { _ in
+        Task { await appState.refreshConversations() }
+      }
   }
 
-  private var mainContentWithLifecycle: AnyView {
-    AnyView(
-      mainContentStartupLifecycle
-        // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
-        // hasCompletedOnboarding must be set here (in a View) because @AppStorage
-        // on ObservableObject caches internally and ignores UserDefaults.removeObject().
-        // Stopping transcription here prevents FOREIGN KEY errors from an old
-        // transcription session writing to a new user's database.
-        .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
+  private var mainContentWithLifecycle: some View {
+    mainContentStartupLifecycle
+      // On sign-out: reset @AppStorage-backed onboarding flag and stop transcription.
+      // hasCompletedOnboarding must be set here (in a View) because @AppStorage
+      // on ObservableObject caches internally and ignores UserDefaults.removeObject().
+      // Stopping transcription here prevents FOREIGN KEY errors from an old
+      // transcription session writing to a new user's database.
+      .onReceive(NotificationCenter.default.publisher(for: .userDidSignOut)) { _ in
+        log(
+          "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
+        )
+        chatFirstCapabilitySample.ownerDidChange(to: nil)
+        resetSessionScopedStartupWarmups(preserveCrispReadState: false)
+        appState.conversationRepository.reset()
+        appState.folders = []
+        appState.selectedFolderId = nil
+        appState.selectedDateFilter = nil
+        appState.showStarredOnly = false
+        appState.totalConversationsCount = nil
+        appState.conversationsError = nil
+        appState.isLoadingConversations = false
+        appState.isLoadingFolders = false
+        appState.hasCompletedOnboarding = false
+        appState.stopTranscription()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
+        log(
+          "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
+        )
+        resetSessionScopedStartupWarmups(preserveCrispReadState: false)
+        appState.hasCompletedOnboarding = false
+        onboardingStep = 0
+        onboardingFurthestStep = 0
+        onboardingJustCompleted = false
+        appState.stopTranscription()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+        log("DesktopHomeView: app terminating — cancelling startup warmups")
+        resetSessionScopedStartupWarmups(preserveCrispReadState: true)
+      }
+      // Handle transcription toggle from menu bar
+      .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
+        notification in
+        if let enabled = notification.userInfo?["enabled"] as? Bool {
+          log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
+          if enabled {
+            appState.startTranscription()
+          } else {
+            appState.stopTranscription()
+          }
+        }
+      }
+      // Periodic file re-scan (every 3 hours)
+      .task {
+        while !Task.isCancelled {
+          try? await Task.sleep(for: .seconds(3 * 60 * 60))
+          guard !Task.isCancelled else { break }
+          guard !AppBuild.usesLazyDevPermissions else { continue }
+          guard UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing) else {
+            continue
+          }
+          log("DesktopHomeView: Triggering background file rescan")
+          await FileIndexerService.shared.backgroundRescan()
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
+        // Background rescan — no loading screen needed
+        Task {
           log(
-            "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
+            "DesktopHomeView: File indexing triggered from settings, running background rescan"
           )
-          chatFirstCapabilitySample.ownerDidChange(to: nil)
-          resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-          appState.conversationRepository.reset()
-          appState.folders = []
-          appState.selectedFolderId = nil
-          appState.selectedDateFilter = nil
-          appState.showStarredOnly = false
-          appState.totalConversationsCount = nil
-          appState.conversationsError = nil
-          appState.isLoadingConversations = false
-          appState.isLoadingFolders = false
-          appState.hasCompletedOnboarding = false
-          appState.stopTranscription()
+          await FileIndexerService.shared.backgroundRescan()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .resetOnboardingRequested)) { _ in
-          log(
-            "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
-          )
-          resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-          appState.hasCompletedOnboarding = false
-          onboardingStep = 0
-          onboardingFurthestStep = 0
-          onboardingJustCompleted = false
-          appState.stopTranscription()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-          log("DesktopHomeView: app terminating — cancelling startup warmups")
-          resetSessionScopedStartupWarmups(preserveCrispReadState: true)
-        }
-        // Handle transcription toggle from menu bar
-        .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
-          notification in
-          if let enabled = notification.userInfo?["enabled"] as? Bool {
-            log("DesktopHomeView: Menu bar toggled transcription: \(enabled)")
-            if enabled {
-              appState.startTranscription()
-            } else {
-              appState.stopTranscription()
-            }
-          }
-        }
-        // Periodic file re-scan (every 3 hours)
-        .task {
-          while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(3 * 60 * 60))
-            guard !Task.isCancelled else { break }
-            guard !AppBuild.usesLazyDevPermissions else { continue }
-            guard UserDefaults.standard.bool(forKey: .hasCompletedFileIndexing) else {
-              continue
-            }
-            log("DesktopHomeView: Triggering background file rescan")
-            await FileIndexerService.shared.backgroundRescan()
-          }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
-          // Background rescan — no loading screen needed
-          Task {
-            log(
-              "DesktopHomeView: File indexing triggered from settings, running background rescan"
-            )
-            await FileIndexerService.shared.backgroundRescan()
-          }
-        }
-    )
+      }
   }
 
   var body: some View {
@@ -388,12 +371,10 @@ struct DesktopHomeView: View {
         authEntryShell
       } else if case .unresolved = chatFirstCapabilitySample.variant {
         // Hold the legacy shell until the server-authoritative cohort settles.
-        AnyView(
-          ChatFirstCapabilityLoadingView()
-            .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
-              await resolveChatFirstCapabilityIfNeeded()
-            }
-        )
+        ChatFirstCapabilityLoadingView()
+          .task(id: RuntimeOwnerIdentity.currentOwnerId() ?? "missing-owner") {
+            await resolveChatFirstCapabilityIfNeeded()
+          }
       } else {
         ZStack {
           // After onboarding completes, navigate to Tasks page
@@ -1334,20 +1315,20 @@ struct DesktopHomeView: View {
   /// Keep the legacy HStack out of the chat-first branch's SwiftUI generic
   /// expression. The runtime choice is already immutable for this app session;
   /// this is only an erased rendering boundary, not a second state owner.
-  private var shellContent: AnyView {
+  @ViewBuilder
+  private var shellContent: some View {
     if case (true, .chatFirst(let capability)) = (usesChatFirstShell, chatFirstCapabilitySample.variant) {
-      return AnyView(
-        ChatFirstShell(
-          navigation: chatFirstNavigation,
-          appState: appState,
-          viewModelContainer: viewModelContainer,
-          capability: capability,
-          selectedSettingsSection: $selectedSettingsSection,
-          highlightedSettingID: $highlightedSettingId
-        )
+      ChatFirstShell(
+        navigation: chatFirstNavigation,
+        appState: appState,
+        viewModelContainer: viewModelContainer,
+        capability: capability,
+        selectedSettingsSection: $selectedSettingsSection,
+        highlightedSettingID: $highlightedSettingId
       )
+    } else {
+      legacyMainContent
     }
-    return AnyView(legacyMainContent)
   }
 
   private var legacyMainContent: some View {
