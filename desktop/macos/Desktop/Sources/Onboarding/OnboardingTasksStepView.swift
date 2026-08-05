@@ -60,8 +60,7 @@ struct OnboardingTasksStepView: View {
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.vertical, OmiSpacing.lg)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       OnboardingProgressBar(stepIndex: stepIndex, totalSteps: totalSteps)
         .frame(maxWidth: .infinity, alignment: .center)
@@ -72,8 +71,10 @@ struct OnboardingTasksStepView: View {
       VStack(spacing: OmiSpacing.xxl) {
         // Icon with glow
         ZStack {
+          // A wash rather than a white bloom: on a light panel a white glow is invisible, and the
+          // halo has to darken the ground for the pulse to read at all.
           Circle()
-            .fill(Color.white.opacity(0.15))
+            .fill(Ink.rowFillHover)
             .frame(width: 100, height: 100)
             .blur(radius: 20)
             .scaleEffect(pulseAnimation ? 1.2 : 1.0)
@@ -81,28 +82,22 @@ struct OnboardingTasksStepView: View {
 
           Image(systemName: "checklist")
             .font(.system(size: 44))
-            .foregroundStyle(
-              LinearGradient(
-                colors: [Color.white, Color.gray],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              )
-            )
+            .foregroundStyle(Ink.primary)
         }
         .onAppear { pulseAnimation = true }
 
         VStack(spacing: OmiSpacing.sm) {
           Text("Auto-created Tasks")
-            .font(.system(size: 24, weight: .bold))
-            .foregroundColor(OmiColors.textPrimary)
+            .inkStyle(InkType.stepHeadline, color: Ink.primary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
 
           Text(
             "omi listens to your conversations and automatically\ncreates tasks, action items, and follow-ups for you."
           )
-          .font(.system(size: 14))
-          .foregroundColor(OmiColors.textSecondary)
+          .inkStyle(InkType.prose, color: Ink.secondary)
           .multilineTextAlignment(.center)
-          .lineSpacing(4)
+          .fixedSize(horizontal: false, vertical: true)
         }
 
         // Task cards — real onboarding tasks, or the placeholder when none exist yet
@@ -129,20 +124,13 @@ struct OnboardingTasksStepView: View {
 
         Button(action: onComplete) {
           Text("Take me to Omi")
-            .font(.system(size: 15, weight: .semibold))
-            .foregroundColor(.black)
-            .frame(maxWidth: 280)
-            .padding(.vertical, OmiSpacing.md)
-            .background(Color.white)
-            .cornerRadius(OmiChrome.smallControlRadius)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(InkButtonStyle(kind: .primary))
         .keyboardShortcut(.defaultAction)
       }
       .padding(.bottom, OmiSpacing.section)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
     .onAppear {
       // Stagger task card appearance
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -164,31 +152,25 @@ struct OnboardingTasksStepView: View {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: checked ? "checkmark.circle.fill" : "circle")
         .font(.system(size: 18))
-        .foregroundColor(checked ? .green : OmiColors.textTertiary)
+        .foregroundColor(checked ? Ink.listeningGreen : Ink.secondary)
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        // The row wraps and never truncates: a task description given less height than it needs
+        // ends in an ellipsis, which is copy quietly disappearing rather than a layout that fails.
         Text(title)
-          .font(.system(size: 13))
-          .foregroundColor(checked ? OmiColors.textTertiary : OmiColors.textPrimary)
+          .inkStyle(InkType.rowCopy, color: checked ? Ink.secondary : Ink.primary)
           .strikethrough(checked)
-          .lineLimit(1)
+          .fixedSize(horizontal: false, vertical: true)
 
         Text(subtitle)
-          .font(.system(size: 11))
-          .foregroundColor(OmiColors.textTertiary)
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Spacer()
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-            .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
-        )
-    )
+    .glassCard(cornerRadius: PageGlass.rowRadius)
   }
 }

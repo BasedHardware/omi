@@ -58,7 +58,7 @@ struct FileIndexingView: View {
       // Title
       Text(statusText)
         .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .multilineTextAlignment(.center)
         .padding(.bottom, OmiSpacing.xs)
 
@@ -69,18 +69,18 @@ struct FileIndexingView: View {
             + (totalFilesScanned > 0 ? " · \(totalFilesScanned.formatted()) files found" : "")
         )
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
         .omiAnimation(.easeInOut(duration: 0.2), value: scanningFolder)
       } else if totalFilesScanned > 0 {
         Text("\(totalFilesScanned.formatted()) files indexed")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
       } else {
         Text("All data is secure and belongs to you. Open-source verified.")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
       }
 
@@ -88,12 +88,12 @@ struct FileIndexingView: View {
       VStack(spacing: OmiSpacing.xs) {
         GeometryReader { geo in
           ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-              .fill(OmiColors.backgroundTertiary)
+            RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+              .fill(Ink.rowFill)
               .frame(height: 6)
 
-            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-              .fill(OmiColors.accent)
+            RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+              .fill(Ink.primary)
               .frame(width: max(0, geo.size.width * progress), height: 6)
               .omiAnimation(.easeOut(duration: 0.3), value: progress)
           }
@@ -102,7 +102,7 @@ struct FileIndexingView: View {
 
         Text("\(Int(progress * 100))%")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .monospacedDigit()
       }
       .padding(.horizontal, OmiSpacing.page)
@@ -112,7 +112,7 @@ struct FileIndexingView: View {
       Button(action: skip) {
         Text("Skip")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(.secondary)
+          .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
       .padding(.top, OmiSpacing.lg)
@@ -128,7 +128,7 @@ struct FileIndexingView: View {
       HStack {
         Text("Behind the scenes")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
       }
 
@@ -136,17 +136,17 @@ struct FileIndexingView: View {
         HStack(spacing: OmiSpacing.xs) {
           Image(systemName: "folder")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.secondary)
           Text("Scanning ~/\(scanningFolder)")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
       if totalFilesScanned > 0 {
         Text("\(totalFilesScanned.formatted()) files indexed")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
 
       // Live chat messages from the AI exploration
@@ -159,7 +159,7 @@ struct FileIndexingView: View {
             ForEach(Array(aiMessages.enumerated()), id: \.offset) { _, msg in
               Text(msg.text)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineSpacing(3)
                 .textSelection(.enabled)
             }
@@ -197,7 +197,7 @@ struct FileIndexingView: View {
       VStack {
         Text("Here's what I know about you")
           .font(.system(size: 22, weight: .bold))
-          .foregroundColor(.white)
+          .foregroundColor(Ink.glow)
           .shadow(color: .black.opacity(0.7), radius: 12, x: 0, y: 2)
           .shadow(color: .black.opacity(0.4), radius: 24, x: 0, y: 4)
           .padding(.top, OmiSpacing.page)
@@ -207,12 +207,12 @@ struct FileIndexingView: View {
         Button(action: { onComplete(totalFilesScanned) }) {
           Text("Continue")
             .font(.system(size: 15, weight: .semibold))
-            .foregroundColor(OmiColors.backgroundPrimary)
+            .foregroundColor(Ink.surface)
             .frame(maxWidth: 220)
             .padding(.vertical, OmiSpacing.md)
-            .background(OmiColors.accent)
-            .cornerRadius(OmiChrome.smallControlRadius)
-            .shadow(color: OmiColors.accent.opacity(0.4), radius: 16, x: 0, y: 4)
+            .background(Ink.primary)
+            .cornerRadius(SettingsGlassMetrics.cardRadius)
+            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 3)
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.defaultAction)
@@ -244,7 +244,7 @@ struct FileIndexingView: View {
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
         .fill(.black.opacity(0.45))
     )
   }

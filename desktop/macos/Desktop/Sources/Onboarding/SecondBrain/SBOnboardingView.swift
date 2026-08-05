@@ -21,20 +21,25 @@ enum SBOnboardingPanelLayout {
 
 /// The Second Brain conversational onboarding — a chat with Omi that streams
 /// word-by-word and performs real side-effects. Replaces the legacy wizard.
+///
+/// **It paints no ground.** A full-bleed dune photograph under a black gradient used to sit behind
+/// this card, which meant the window's glass (`DesktopHomeView.glassShellGround` — "the one ground in
+/// this window") was covered by the very first screen a new user reaches, and every label on it had
+/// to be white to survive. On the light-pinned panel that art is gone and the type is near-black:
+/// blurred desktop, one wash-and-hairline card, two rungs of ink.
+///
+/// The card itself was `Color.white.opacity(0.05)` over `.ultraThinMaterial`. That is *within-window*
+/// vibrancy — it frosts the app's own content rather than the desktop — so it was never the same
+/// material as the panel around it, and stacked a second scrim on a ground already tuned to the
+/// contrast floor. It is `onboardingCard()` now, which is the shared wash the rest of the app's cards
+/// are.
 struct SBOnboardingView: View {
-  @Environment(\.sbTheme) private var sb
   @StateObject private var model: SBOnboardingModel
   @ObservedObject private var importConnectorStatusStore: ImportConnectorStatusStore
   @State private var selectedImportConnector: ImportConnector?
   /// Language step: false shows the detected default + Continue; true reveals the picker.
   @State private var languageChanging = false
   @State private var showAIAssistants = false
-
-  /// Same dune background as sign-in, for a continuous entry experience.
-  private static let backgroundImage: NSImage? = {
-    guard let url = Bundle.resourceBundle.url(forResource: "signin_bg", withExtension: "png") else { return nil }
-    return NSImage(contentsOf: url)
-  }()
 
   init(
     appState: AppState,
@@ -53,29 +58,15 @@ struct SBOnboardingView: View {
   }
 
   var body: some View {
-    ZStack {
-      if let bg = Self.backgroundImage {
-        Image(nsImage: bg)
-          .resizable()
-          .scaledToFill()
-          .overlay(
-            LinearGradient(
-              colors: [.black.opacity(0.4), .black.opacity(0.5), .black.opacity(0.72)],
-              startPoint: .top, endPoint: .bottom)
-          )
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .clipped()
-          .ignoresSafeArea()
-      } else {
-        SBWallpaper()
-      }
-      GeometryReader { geometry in
-        let panelSize = SBOnboardingPanelLayout.size(in: geometry.size)
-        panel
-          .frame(width: panelSize.width, height: panelSize.height)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-      }
+    GeometryReader { geometry in
+      let panelSize = SBOnboardingPanelLayout.size(in: geometry.size)
+      panel
+        .frame(width: panelSize.width, height: panelSize.height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+    // Pins the panel's light appearance so `Ink`'s dynamic colours resolve dark here even on a
+    // machine in Dark Mode. Without it this card is near-white type on a near-white ground.
+    .glassContent()
     .overlay(alignment: .topTrailing) {
       ViewThatFits(in: .horizontal) {
         HStack(spacing: 8) {
@@ -92,6 +83,10 @@ struct SBOnboardingView: View {
     .onAppear { model.begin() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       if model.step == .context { refreshContextStates() }
+      // Granting a permission means leaving Omi for System Settings and coming
+      // back, so this return is the signal a grant may have landed — not a 20s
+      // poll that Full Disk Access and Accessibility routinely outlive.
+      model.recheckActivePermission()
     }
     .onChange(of: model.step) { _, step in
       if step == .context { refreshContextStates() }
@@ -129,7 +124,7 @@ struct SBOnboardingView: View {
             if model.typing {
               HStack(spacing: 10) {
                 SBLogo(size: 16, spinning: true)
-                Text("omi is typing…").geist(size: 12.5).foregroundStyle(sb.ink(.w4))
+                Text("omi is typing…").inkStyle(InkType.statusLabel, color: Ink.secondary)
               }
             }
             if model.showWidget {
@@ -146,29 +141,23 @@ struct SBOnboardingView: View {
         .onChange(of: model.shortcutPicked) { _, _ in scrollDown(proxy) }
         .onChange(of: model.shortcutPressed) { _, _ in scrollDown(proxy) }
       }
-      // No progress dots — the user shouldn't count steps or feel a finish line.
+      // No progress dots — the user shouldn't count steps or feel a finish line. The strip is still
+      // reserved rather than drawn over, which is the part that matters: a foot the column cannot
+      // grow into (see `OnboardingProgressBand`).
       Color.clear.frame(height: 14)
     }
-    .background(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .fill(Color.white.opacity(0.05))
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-    )
-    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
-    .shadow(color: .black.opacity(0.5), radius: 60, y: 30)
+    // No shadow of its own. The window's panel already carries the one ambient shadow in this system,
+    // and the 60 pt black drop this had inside it read as depth on the dark art and as dirt on glass.
+    .onboardingCard()
   }
 
   @ViewBuilder private var backButton: some View {
     if model.canGoBack {
       Button(action: { model.goBack() }) {
         Text("← Back")
-          .geist(size: 13).foregroundStyle(sb.ink(.w75))
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .padding(.horizontal, 14).padding(.vertical, 7)
-          .background(
-            Capsule().fill(Color.white.opacity(0.06))
-              .background(.ultraThinMaterial, in: Capsule())
-          )
-          .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+          .glassChip()
       }
       .buttonStyle(.plain)
       .help("Go back and change an earlier answer")
@@ -179,13 +168,9 @@ struct SBOnboardingView: View {
   private var skipButton: some View {
     Button(action: { model.skip() }) {
       Text("Skip")
-        .geist(size: 13).foregroundStyle(sb.ink(.w45))
+        .inkStyle(InkType.statusLabel, color: Ink.secondary)
         .padding(.horizontal, 14).padding(.vertical, 7)
-        .background(
-          Capsule().fill(Color.white.opacity(0.06))
-            .background(.ultraThinMaterial, in: Capsule())
-        )
-        .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+        .glassChip()
     }
     .buttonStyle(.plain)
     .help("Skip onboarding and go to your second brain")
@@ -199,22 +184,27 @@ struct SBOnboardingView: View {
     if msg.isOmi { omiRow(msg.text) } else { meRow(msg.text) }
   }
 
+  /// Omi's turn. `prose` is the one role that carries paragraphs, and it is the reading rung — this
+  /// is a sentence someone reads, not a label they glance at.
   private func omiRow(_ text: String) -> some View {
     HStack(alignment: .top, spacing: 10) {
       SBLogo(size: 16, opacity: 0.9)
-      Text(text).geist(size: 15.5).foregroundStyle(sb.ink(.w88)).lineSpacing(3)
+      Text(text).inkStyle(InkType.prose, color: Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: 380, alignment: .leading)
       Spacer(minLength: 0)
     }
   }
 
+  /// The user's own turn, which is why it is `primary` against Omi's `secondary`: on this card the
+  /// thing you said is the thing you look back for.
   private func meRow(_ text: String) -> some View {
     HStack {
       Spacer(minLength: 40)
-      Text(text).geist(size: 15).foregroundStyle(sb.ink)
+      Text(text).inkStyle(InkType.rowCopy, color: Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 13).padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(sb.ink(.w1)))
-        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(sb.ink(.w14), lineWidth: 1))
+        .glassRow(.selected)
     }
   }
 
@@ -263,21 +253,26 @@ struct SBOnboardingView: View {
             Text(".")
           }
         }
-        Divider().overlay(sb.ink(.w08))
-        trustRow("PRIVATE") { Text("Your data is encrypted, and only yours.").lineLimit(1) }
-        Divider().overlay(sb.ink(.w08))
+        // `GlassSeparator`, not `Divider()`: a `Divider` inherits the host window's appearance rather
+        // than the panel's pinned one, so on a Dark machine it draws a light rule on a light card.
+        GlassSeparator()
+        trustRow("PRIVATE") { Text("Your data is encrypted, and only yours.") }
+        GlassSeparator()
         trustRow("YOURS") { Text("Pause me anytime. Delete anything, forever.") }
       }
-      .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
+      .glassCard(cornerRadius: PageGlass.rowRadius)
       SBInkButton(title: "Set up Omi →", isDefaultAction: true) { model.answerPromise() }
     }
   }
 
   private func trustRow<Content: View>(_ tag: String, @ViewBuilder content: () -> Content) -> some View {
     HStack(alignment: .top, spacing: 12) {
-      Text(tag).geistMono(size: 11.5, weight: .medium).foregroundStyle(sb.ink(.w4)).frame(
+      Text(tag).inkFont(InkType.statusLabel).foregroundStyle(Ink.secondary).frame(
         width: 52, alignment: .leading)
-      content().geist(size: 14).foregroundStyle(sb.ink(.w85))
+      // The promise is the copy this whole step exists for, so it never truncates — `PRIVATE` used to
+      // carry `.lineLimit(1)` and lost its second half at any narrow width.
+      content().inkStyle(InkType.rowCopy, color: Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 0)
     }
     .padding(.horizontal, 14).padding(.vertical, 12)
@@ -286,10 +281,9 @@ struct SBOnboardingView: View {
   private var nameWidget: some View {
     HStack(spacing: 8) {
       TextField("your name", text: $model.nameDraft)
-        .textFieldStyle(.plain).geist(size: 15, weight: .medium).foregroundStyle(sb.ink)
+        .textFieldStyle(.plain).inkStyle(InkType.rowCopy, color: Ink.primary)
         .padding(.horizontal, 13).padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 10).fill(sb.ink(.w06)))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
+        .glassField()
         .onSubmit { model.answerName() }
       SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerName() }
     }
@@ -309,11 +303,11 @@ struct SBOnboardingView: View {
       if !languageChanging, !draft.isEmpty {
         // Auto-detected default: accept with one tap, or reveal the picker.
         HStack(spacing: 8) {
-          Text(draft).geist(size: 17, weight: .medium).foregroundStyle(sb.ink)
+          Text(draft).inkStyle(InkType.prose, color: Ink.primary)
           if model.languageIsDetectedFromMac {
             Text(SBOnboardingLanguageCopy.detectedLanguageDetail)
-              .geist(size: 12.5)
-              .foregroundStyle(sb.ink(.w4))
+              .inkStyle(InkType.statusLabel, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
         SBInkButton(title: SBOnboardingLanguageCopy.continueAction(for: draft), isDefaultAction: true) {
@@ -327,8 +321,7 @@ struct SBOnboardingView: View {
           languageChanging = true
         } label: {
           Text(SBOnboardingLanguageCopy.changeSpokenLanguageAction)
-            .geist(size: 13)
-            .foregroundStyle(sb.ink(.w45))
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
         .buttonStyle(.plain)
       } else {
@@ -339,10 +332,9 @@ struct SBOnboardingView: View {
           : Array(
             all.filter { $0.name.lowercased().contains(filter) || $0.code.lowercased().hasPrefix(filter) }.prefix(6))
         TextField("Type a language…", text: $model.languageDraft)
-          .textFieldStyle(.plain).geist(size: 15).foregroundStyle(sb.ink)
+          .textFieldStyle(.plain).inkStyle(InkType.rowCopy, color: Ink.primary)
           .padding(.horizontal, 13).padding(.vertical, 10)
-          .background(RoundedRectangle(cornerRadius: 10).fill(sb.ink(.w06)))
-          .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
+          .glassField()
           .onSubmit { if let first = matches.first { model.pickLanguage(code: first.code, name: first.name) } }
         if !matches.isEmpty {
           VStack(spacing: 0) {
@@ -351,19 +343,19 @@ struct SBOnboardingView: View {
                 model.pickLanguage(code: lang.code, name: lang.name)
               } label: {
                 HStack {
-                  Text(lang.name).geist(size: 14).foregroundStyle(sb.ink(.w85))
+                  Text(lang.name).inkStyle(InkType.rowCopy, color: Ink.primary)
                   Spacer()
-                  Text(lang.code).geistMono(size: 11).foregroundStyle(sb.ink(.w35))
+                  Text(lang.code).inkStyle(InkType.statusLabel, color: Ink.secondary)
                 }
                 .padding(.horizontal, 13).padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
               }
               .buttonStyle(.plain)
-              if lang.code != matches.last?.code { Divider().overlay(sb.ink(.w06)) }
+              if lang.code != matches.last?.code { GlassSeparator() }
             }
           }
-          .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w1), lineWidth: 1))
+          .glassCard(cornerRadius: PageGlass.chipRadius)
         }
       }
     }
@@ -380,10 +372,9 @@ struct SBOnboardingView: View {
       }
       HStack(spacing: 8) {
         TextField("or just say it in your own words…", text: $model.roleDraft)
-          .textFieldStyle(.plain).geist(size: 14).foregroundStyle(sb.ink)
+          .textFieldStyle(.plain).inkStyle(InkType.rowCopy, color: Ink.primary)
           .padding(.horizontal, 13).padding(.vertical, 9)
-          .background(RoundedRectangle(cornerRadius: 10).fill(sb.ink(.w06)))
-          .overlay(RoundedRectangle(cornerRadius: 10).stroke(sb.ink(.w12), lineWidth: 1))
+          .glassField()
           .onSubmit { model.answerRoleText() }
         SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerRoleText() }
       }
@@ -393,48 +384,74 @@ struct SBOnboardingView: View {
 
   // MARK: permissions (one at a time)
 
+  /// Every branch here is chosen by `model.permissionPrimaryAction`, so what the
+  /// row can do is a property of the permission state rather than of a layout —
+  /// and every branch keeps an explicit way forward, with the consequence spelled out.
   private func permStepWidget(
     _ key: String, _ name: String, _ why: String, onContinue: @escaping () -> Void
   ) -> some View {
-    let state = model.permState(key)
+    let action = model.permissionPrimaryAction(key)
     return VStack(alignment: .leading, spacing: 10) {
       VStack(alignment: .leading, spacing: 3) {
-        Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
-        Text(why).geist(size: 12.5).foregroundStyle(sb.ink(.w45))
+        Text(name).inkStyle(InkType.rowCopy, color: Ink.primary)
+        // Every sentence on this card wraps and none of them truncate. Three of four shipped cut off
+        // mid-word in the source app before this modifier went on, and a permission whose reason is
+        // half-visible is a permission people deny.
+        Text(why).inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
-      if state == .on {
+      if action == .reopen {
+        Text("\(name) is on, but macOS only hands it to a fresh launch. Reopen me and I'll pick up right here.")
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+        Button {
+          model.acceptPermissionRelaunch(key)
+        } label: {
+          Text("Reopen Omi").frame(maxWidth: .infinity)
+        }
+        .buttonStyle(InkButtonStyle(kind: .primary))
+        // The escape, with the consequence spelled out — never gate a step on something macOS cannot
+        // grant from a dialog. `secondary`, because on glass there is no fainter rung to hide it in,
+        // and an escape nobody can read is an escape nobody takes.
+        Button {
+          onContinue()
+        } label: {
+          Text("Later — \(name) stays off until you reopen")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .buttonStyle(.plain)
+      } else if action == .proceed {
         Button {
           onContinue()
         } label: {
           HStack(spacing: 6) {
-            Text("✓  \(name) on").geist(size: 14, weight: .semibold)
+            Text("✓  \(name) on")
             Spacer()
-            Text("Continue →").geist(size: 14, weight: .semibold)
+            Text("Continue →")
           }
-          .foregroundStyle(sb.inkInverted)
-          .padding(.horizontal, 14).padding(.vertical, 11)
           .frame(maxWidth: .infinity)
-          .background(RoundedRectangle(cornerRadius: 11).fill(sb.ink))
-          .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(InkButtonStyle(kind: .primary))
         .keyboardShortcut(.defaultAction)
       } else {
+        // Never `.disabled`: while macOS is being waited on, the button becomes
+        // a re-check. A grant that lands after the poll gave up used to leave
+        // the user staring at a dead "Waiting for macOS…" with nothing to press.
+        //
+        // Waiting reads as a *secondary* capsule rather than a dimmed primary one: a filled pill at
+        // 40% ink is the shape of a disabled control, and this one is the opposite of disabled.
         Button {
-          if state == .ask { model.requestPerm(key) }
+          if action == .recheck { model.recheckPermission(key) } else { model.requestPerm(key) }
         } label: {
-          Text(state == .waiting ? "Waiting for macOS…" : "Allow \(name)")
-            .geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
-            .frame(maxWidth: .infinity).padding(.vertical, 11)
-            .background(RoundedRectangle(cornerRadius: 11).fill(state == .waiting ? sb.ink(.w4) : sb.ink))
-            .contentShape(Rectangle())
+          Text(action == .recheck ? "Waiting for macOS… check again" : "Allow \(name)")
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
-        .disabled(state == .waiting)
+        .buttonStyle(InkButtonStyle(kind: action == .recheck ? .secondary : .primary))
         Button {
           onContinue()
         } label: {
-          Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
+          Text("Skip for now").inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -450,44 +467,57 @@ struct SBOnboardingView: View {
       }
     case .scanning:
       VStack(alignment: .leading, spacing: 10) {
-        Text("Building your local profile").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        Text("Building your local profile").inkStyle(InkType.rowCopy, color: Ink.primary)
         HStack(spacing: 8) {
           ProgressView().controlSize(.small)
-          Text("Scanning your projects and recent files…").geist(size: 13).foregroundStyle(sb.ink(.w45))
+          Text("Scanning your projects and recent files…")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
       .frame(maxWidth: 380, alignment: .leading)
     case .complete(let fileCount, let memoryCount, let deniedFolders):
       VStack(alignment: .leading, spacing: 10) {
-        Text("Your local profile is ready").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+        Text("Your local profile is ready").inkStyle(InkType.rowCopy, color: Ink.primary)
         Text("\(fileCount.formatted()) files indexed · \(memoryCount) profile memories saved")
-          .geist(size: 13).foregroundStyle(sb.ink(.w45))
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
         if !deniedFolders.isEmpty {
           Text("Some folders need access later: \(deniedFolders.joined(separator: ", "))")
-            .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         if model.fdaState != .on {
-          Button(model.fdaState == .waiting ? "Waiting for Full Disk Access…" : "Allow Full Disk Access") {
-            if model.fdaState == .ask { model.requestPerm("full_disk_access") }
+          // Same contract as `permStepWidget`: waiting turns the button into a
+          // re-check rather than disabling it, so a grant that lands after the
+          // poll gave up is never unreachable.
+          let fdaAction = model.permissionPrimaryAction("full_disk_access")
+          Button(
+            fdaAction == .recheck
+              ? "Waiting for Full Disk Access… check again" : "Allow Full Disk Access"
+          ) {
+            if fdaAction == .recheck {
+              model.recheckPermission("full_disk_access")
+            } else {
+              model.requestPerm("full_disk_access")
+            }
           }
           .buttonStyle(.plain)
-          .disabled(model.fdaState == .waiting)
-          .geist(size: 13, weight: .medium)
-          .foregroundStyle(sb.ink(.w6))
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
         SBInkButton(title: "Continue", isDefaultAction: true) { model.finishFilesStep() }
       }
       .frame(maxWidth: 380, alignment: .leading)
     case .failed(let message):
       VStack(alignment: .leading, spacing: 10) {
-        Text("I couldn't finish scanning your files").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
-        Text(message).geist(size: 13).foregroundStyle(sb.ink(.w45))
+        Text("I couldn't finish scanning your files").inkStyle(InkType.rowCopy, color: Ink.primary)
+        Text(message).inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
         HStack(spacing: 10) {
           SBInkButton(title: "Retry") { model.retryLocalFileScan() }
           Button("Continue without a scan") { model.finishFilesStep() }
             .buttonStyle(.plain)
-            .geist(size: 13, weight: .medium)
-            .foregroundStyle(sb.ink(.w6))
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
         }
       }
       .frame(maxWidth: 380, alignment: .leading)
@@ -514,18 +544,27 @@ struct SBOnboardingView: View {
         Text(text).font(.system(size: 15, weight: .semibold))
       }
     }
-    .foregroundStyle(active ? sb.inkInverted : sb.ink(.w9))
+    // A keycap is a control, so its outline is `Ink.hairline` rather than a card's `separator`, and
+    // it inverts when struck — `Ink.primary` fill with an `Ink.surface` glyph, the same inversion the
+    // primary button and the granted checkbox use. The 1 pt black drop under it is gone: on glass a
+    // tight dark shadow reads as dirt, and the panel already carries the one ambient shadow.
+    .foregroundStyle(active ? Ink.surface : Ink.primary)
     .frame(minWidth: 34, minHeight: 34)
     .padding(.horizontal, 7).padding(.vertical, 5)
-    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(active ? sb.ink : sb.ink(.w06)))
+    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(active ? Ink.primary : Ink.rowFill))
     .overlay(
-      RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(active ? sb.ink : sb.ink(.w18), lineWidth: 1.5)
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .strokeBorder(active ? Color.clear : Ink.hairline, lineWidth: 1.5)
     )
-    .shadow(color: .black.opacity(0.28), radius: 1, y: 1)
+    .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.checkbox)), value: active)
     .fixedSize()
   }
 
   // MARK: summon shortcut
+
+  private var shortcutOptionShape: RoundedRectangle {
+    RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+  }
 
   private func shortcutWidget(isTalk: Bool) -> some View {
     let options = isTalk ? model.talkShortcutOptions : model.openShortcutOptions
@@ -538,40 +577,46 @@ struct SBOnboardingView: View {
             HStack(spacing: 5) {
               ForEach(opt.shortcut.displayTokens, id: \.self) { tok in keycap(tok) }
             }
-            Text(opt.sub).geist(size: 13).foregroundStyle(sb.ink(.w45))
+            Text(opt.sub).inkStyle(InkType.statusLabel, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
             Spacer()
             if model.shortcutRecording {
-              Text("Press a key").geist(size: 12).foregroundStyle(sb.ink(.w45))
+              Text("Press a key").inkStyle(InkType.statusLabel, color: Ink.secondary)
             } else if model.chosenShortcut == opt.shortcut {
-              Text("✓").geist(size: 14).foregroundStyle(sb.ink(.w7))
+              Text("✓").inkStyle(InkType.statusLabel, color: Ink.primary)
             }
           }
           .padding(.horizontal, 14).padding(.vertical, 11)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-          .overlay(
-            RoundedRectangle(cornerRadius: 11)
-              .stroke(model.chosenShortcut == opt.shortcut ? sb.ink(.w3) : sb.ink(.w14), lineWidth: 1))
+          // A pressable option, so it keeps an outline at rest (`Ink.hairline`, a control's edge)
+          // rather than the list-row treatment, where rest is genuinely nothing. The selection is
+          // carried by the fill — a row of outlined boxes with one heavier outline is not a choice
+          // anyone can see at a glance.
+          .background(shortcutOptionShape.fill(model.chosenShortcut == opt.shortcut ? Ink.rowFillHover : .clear))
+          .overlay(shortcutOptionShape.strokeBorder(Ink.hairline, lineWidth: 1))
+          .contentShape(shortcutOptionShape)
         }
         .buttonStyle(.plain)
       }
       if model.shortcutRecording {
         Text("Press the shortcut you want to use.")
-          .geist(size: 15, weight: .medium)
-          .foregroundStyle(sb.ink(.w6))
+          .inkStyle(InkType.rowCopy, color: Ink.primary)
+          .fixedSize(horizontal: false, vertical: true)
           .padding(.top, 6)
       } else if model.shortcutPicked {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 6) {
             ForEach(model.shortcutTokens, id: \.self) { tok in keycap(tok, active: model.shortcutPressed) }
           }
+          // Confirmation is the one line here that gets the ink: "that works" is the answer the user
+          // pressed the key to find out, and it has to outrank the instruction it replaces.
           Text(
             model.shortcutPressed
               ? "Perfect, that works."
               : "Now press it to test."
           )
-          .geist(size: 15, weight: .medium)
-          .foregroundStyle(model.shortcutPressed ? sb.ink(.w85) : sb.ink(.w6))
+          .inkStyle(InkType.rowCopy, color: model.shortcutPressed ? Ink.primary : Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 6)
       }
@@ -586,7 +631,7 @@ struct SBOnboardingView: View {
           Button {
             isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
           } label: {
-            Text("Skip for now").geist(size: 13).foregroundStyle(sb.ink(.w35))
+            Text("Skip for now").inkStyle(InkType.statusLabel, color: Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -603,31 +648,30 @@ struct SBOnboardingView: View {
       if model.screenDemoPTTReady {
         VStack(alignment: .leading, spacing: 6) {
           HStack(spacing: 5) {
-            Text("Hold").geist(size: 14).foregroundStyle(sb.ink(.w85))
+            Text("Hold").inkStyle(InkType.rowCopy, color: Ink.primary)
             ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
-            Text("and ask me about it, out loud.").geist(size: 14).foregroundStyle(sb.ink(.w85))
+            Text("and ask me about it, out loud.").inkStyle(InkType.rowCopy, color: Ink.primary)
           }
           Text(
             "Ask me what’s on your screen in \(model.selectedResponseLanguageName). I can see it, and I answer at the top of your screen."
           )
-          .geist(size: 12.5).foregroundStyle(sb.ink(.w45))
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
         }
       } else if model.screenDemoPTTUnavailable {
         VStack(alignment: .leading, spacing: 8) {
           Text("Voice setup isn't available yet. You can retry, or skip for now.")
-            .geist(size: 14).foregroundStyle(sb.ink(.w6))
+            .inkStyle(InkType.rowCopy, color: Ink.primary)
+            .fixedSize(horizontal: false, vertical: true)
           Button("Try again") {
             model.startScreenDemo()
           }
-          .buttonStyle(.plain)
-          .geist(size: 14, weight: .medium)
-          .foregroundStyle(sb.ink(.w85))
+          .buttonStyle(InkButtonStyle(kind: .secondary))
         }
       } else {
         HStack(spacing: 8) {
           ProgressView().controlSize(.small)
-          Text("Preparing voice…").geist(size: 14).foregroundStyle(sb.ink(.w6))
+          Text("Preparing voice…").inkStyle(InkType.rowCopy, color: Ink.secondary)
         }
       }
       // Continue appears once Omi has actually answered — before that, an always-
@@ -640,12 +684,9 @@ struct SBOnboardingView: View {
           Button {
             model.answerScreenDemo()
           } label: {
-            Text("Skip for now").geist(size: 14, weight: .medium).foregroundStyle(sb.ink(.w85))
-              .frame(maxWidth: .infinity).padding(.vertical, 11)
-              .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w18), lineWidth: 1))
-              .contentShape(Rectangle())
+            Text("Skip for now").frame(maxWidth: .infinity)
           }
-          .buttonStyle(.plain)
+          .buttonStyle(InkButtonStyle(kind: .secondary))
         }
       }
       .padding(.top, 6)
@@ -662,27 +703,27 @@ struct SBOnboardingView: View {
           showAIAssistants.toggle()
         } label: {
           HStack {
-            Text("AI assistants").geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
+            Text("AI assistants").inkStyle(InkType.rowCopy, color: Ink.primary)
             Spacer()
             Image(systemName: showAIAssistants ? "chevron.up" : "chevron.down")
               .font(.system(size: 11, weight: .semibold))
-              .foregroundStyle(sb.ink(.w45))
+              .foregroundStyle(Ink.secondary)
           }
         }
         .buttonStyle(.plain)
         .padding(.vertical, 12)
         if showAIAssistants {
-          Divider().overlay(sb.ink(.w08))
+          GlassSeparator()
           ForEach(Array(model.agentRows.enumerated()), id: \.element.id) { i, row in
             connectRow(id: row.id, row.name, row.detail, state: model.agentStates[row.id] ?? "idle") {
               model.connectAgent(row.id)
             }
-            if i < model.agentRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
+            if i < model.agentRows.count - 1 { GlassSeparator() }
           }
         }
       }
       .padding(.horizontal, 14)
-      .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
+      .glassCard(cornerRadius: PageGlass.rowRadius)
       SBInkButton(title: "Continue", isDefaultAction: true) { model.answerAgents() }
     }
     .frame(maxWidth: 380, alignment: .leading)
@@ -700,11 +741,11 @@ struct SBOnboardingView: View {
           ) {
             connectContext(row.id)
           }
-          if i < model.contextRows.count - 1 { Divider().overlay(sb.ink(.w08)) }
+          if i < model.contextRows.count - 1 { GlassSeparator() }
         }
       }
       .padding(.horizontal, 14)
-      .overlay(RoundedRectangle(cornerRadius: 13).stroke(sb.ink(.w1), lineWidth: 1))
+      .glassCard(cornerRadius: PageGlass.rowRadius)
       SBInkButton(title: "Continue", isDefaultAction: true) { model.answerContext() }
     }
     .frame(maxWidth: 380, alignment: .leading)
@@ -738,8 +779,9 @@ struct SBOnboardingView: View {
       HStack(spacing: 12) {
         ConnectorBrandIcon(brand: model.connectorBrand(id), size: 26, cornerRadius: 7)
         VStack(alignment: .leading, spacing: 1) {
-          Text(name).geist(size: 14, weight: .medium).foregroundStyle(sb.ink)
-          Text(detail).geist(size: 12).foregroundStyle(sb.ink(.w4))
+          Text(name).inkStyle(InkType.rowCopy, color: Ink.primary)
+          Text(detail).inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         Spacer(minLength: 8)
         connectTrailing(state, action: action)
@@ -755,27 +797,20 @@ struct SBOnboardingView: View {
 
   @ViewBuilder
   private func connectTrailing(_ state: String, action: @escaping () -> Void) -> some View {
+    // Every readout here is `secondary` — glass carries two rungs, so "checking…" and "not installed"
+    // cannot sit a step below "✓ on"; they all read as subordinate to the connector's name, which is
+    // `primary`. The actions are stadium capsules from the one button style, not 7 pt rounded rects.
     switch state {
-    case "on": Text("✓ on").geistMono(size: 12).foregroundStyle(sb.ink(.w6))
-    case "connecting": Text("…").geistMono(size: 13).foregroundStyle(sb.ink(.w4))
-    case "checking": Text("checking…").geist(size: 12).foregroundStyle(sb.ink(.w35))
-    case "unavailable": Text("not installed").geist(size: 12).foregroundStyle(sb.ink(.w35))
+    case "on": Text("✓ on").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
+    case "connecting": Text("…").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
+    case "checking": Text("checking…").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
+    case "unavailable": Text("not installed").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
     case "error":
-      Button(action: action) {
-        Text("Retry").geist(size: 13, weight: .semibold).foregroundStyle(sb.inkInverted)
-          .padding(.horizontal, 12).padding(.vertical, 4)
-          .background(RoundedRectangle(cornerRadius: 7).fill(sb.ink))
-      }
-      .buttonStyle(.plain)
+      Button("Retry", action: action)
+        .buttonStyle(InkButtonStyle(kind: .primary))
     default:
-      Button(action: action) {
-        Text(state == "needsSignIn" ? "Retry" : "Connect").geist(size: 13, weight: .semibold).foregroundStyle(
-          sb.inkInverted
-        )
-        .padding(.horizontal, 12).padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 7).fill(sb.ink))
-      }
-      .buttonStyle(.plain)
+      Button(state == "needsSignIn" ? "Retry" : "Connect", action: action)
+        .buttonStyle(InkButtonStyle(kind: .primary))
     }
   }
 
@@ -787,22 +822,22 @@ struct SBOnboardingView: View {
         model.capture(SBOnboardingModel.defaultCaptureSelection)
       } label: {
         HStack(spacing: 4) {
-          Text("● Only during meetings").geist(size: 14, weight: .semibold).foregroundStyle(sb.inkInverted)
-          Text("· from my calendar").geist(size: 12).foregroundStyle(sb.inkInverted.opacity(0.7))
+          Text("● Only during meetings")
+          // The qualifier is on the filled capsule, so it steps down in *alpha* on the label colour
+          // rather than moving to another rung — the ladder is for type on the panel, and there is no
+          // second ink inside a primary button.
+          Text("· from my calendar").opacity(0.75)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 11)
-        .background(RoundedRectangle(cornerRadius: 11).fill(sb.ink))
+        .frame(maxWidth: .infinity)
       }
-      .buttonStyle(.plain)
+      .buttonStyle(InkButtonStyle(kind: .primary))
       .keyboardShortcut(.defaultAction)
       Button {
         model.capture(.continuous)
       } label: {
-        Text("Start listening — continuously").geist(size: 14).foregroundStyle(sb.ink(.w85))
-          .frame(maxWidth: .infinity).padding(.vertical, 11)
-          .overlay(RoundedRectangle(cornerRadius: 11).stroke(sb.ink(.w18), lineWidth: 1))
+        Text("Start listening — continuously").frame(maxWidth: .infinity)
       }
-      .buttonStyle(.plain)
+      .buttonStyle(InkButtonStyle(kind: .secondary))
     }
     .frame(maxWidth: 340, alignment: .leading)
   }
@@ -811,7 +846,6 @@ struct SBOnboardingView: View {
 /// Wrapping chip row where each chip hugs its content (no wide grid cells that
 /// push short chips far apart).
 private struct FlowChips: View {
-  @Environment(\.sbTheme) private var sb
   let items: [String]
   var selectedItem: String? = nil
   let onPick: (String) -> Void
@@ -822,13 +856,16 @@ private struct FlowChips: View {
         Button {
           onPick(item)
         } label: {
-          Text(item).geist(size: 14).foregroundStyle(isSelected ? sb.inkInverted : sb.ink(.w85))
+          // Selected inverts the ladder the same way the primary button does — `Ink.primary` fill,
+          // `Ink.surface` label — so a chosen chip and a chosen anything else are the same object.
+          Text(item).inkStyle(InkType.rowCopy, color: isSelected ? Ink.surface : Ink.primary)
             .padding(.horizontal, 15).padding(.vertical, 8)
-            .background(Capsule().fill(isSelected ? sb.ink : Color.clear))
-            .overlay(Capsule().stroke(isSelected ? sb.ink : sb.ink(.w14), lineWidth: 1))
-            .contentShape(Capsule())
+            .background(Capsule(style: .continuous).fill(isSelected ? Ink.primary : .clear))
+            .overlay(Capsule(style: .continuous).strokeBorder(isSelected ? .clear : Ink.hairline, lineWidth: 1))
+            .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
+        .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isSelected)
       }
     }
     .frame(maxWidth: 380, alignment: .leading)

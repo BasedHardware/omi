@@ -6,10 +6,17 @@ import Foundation
 // MARK: - Permissions (one at a time)
 
 extension SBOnboardingModel {
+  /// Nothing is asked of macOS until the user clicks. The probes this has to do
+  /// first are cross-process, so the click dispatches onto the model's actor
+  /// rather than blocking the button.
   func requestPerm(_ key: String) {
+    Task { [weak self] in await self?.performPermissionRequest(key) }
+  }
+
+  func performPermissionRequest(_ key: String) async {
     // The user may have changed a grant in System Settings while this step was
     // onscreen. Re-check it before opening another pane or asking macOS again.
-    refreshPermCheck(key)
+    await refreshPermCheckOffMain(key)
     if isGranted(key) {
       setPermOn(key)
       autoAdvanceIfCurrent(key)
@@ -28,6 +35,11 @@ extension SBOnboardingModel {
       sysState = .waiting
       if !appState.hasScreenRecordingPermission {
         ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
+      } else if appState.systemAudioPermissionStatus == .denied {
+        // Screen Recording is already granted and a real tap has already been
+        // refused, so nothing here can raise a prompt again. Open the pane
+        // instead of silently re-running the same failing attempt.
+        appState.openScreenRecordingPreferences()
       }
       pollPermission(key)
     case "screen_recording":
@@ -47,7 +59,7 @@ extension SBOnboardingModel {
       appState.triggerAccessibilityPermission()
       pollPermission(key)
     case "automation":
-      requestAutomation()
+      beginAutomationRequest()
     default: break
     }
   }
@@ -65,27 +77,6 @@ extension SBOnboardingModel {
     pollPermission("full_disk_access")
   }
 
-  /// Fire the Automation (Apple Events) TCC prompt by touching System Events,
-  /// then poll for the grant. Mirrors the legacy request_permission=automation path.
-  func requestAutomation() {
-    autoState = .waiting
-    // NSAppleScript is main-thread-only; running it off-main (the old bug) meant
-    // the TCC prompt never fired. Launch System Events, then send a REAL Apple
-    // Event (that send is what surfaces the Automation prompt), then detect
-    // without re-prompting via checkAutomationPermission().
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      NSAppleScript(source: "launch application \"System Events\"")?.executeAndReturnError(nil)
-      try? await Task.sleep(nanoseconds: 1_000_000_000)
-      var err: NSDictionary?
-      NSAppleScript(
-        source: "tell application \"System Events\" to return name of first process whose frontmost is true"
-      )?.executeAndReturnError(&err)
-      self.appState.checkAutomationPermission()
-      self.pollPermission("automation")
-    }
-  }
-
   func pollPermission(_ key: String) {
     // Cancel only this key's prior poll — never a sibling permission's, so the
     // "both" mic+system-audio step can poll two grants at once.
@@ -100,7 +91,8 @@ extension SBOnboardingModel {
       for _ in 0..<40 {  // ~20s
         try? await Task.sleep(nanoseconds: 500_000_000)
         guard let self, !Task.isCancelled else { return }
-        self.refreshPermCheck(key)
+        await self.refreshPermCheckOffMain(key)
+        guard !Task.isCancelled else { return }
         if self.isGranted(key) {
           self.setPermOn(key)
           // Auto-advance once the grant lands — the user shouldn't have to click
@@ -113,9 +105,11 @@ extension SBOnboardingModel {
           return
         }
       }
-      // Timed out without a grant. FDA/Accessibility routinely exceed 20s (open
-      // System Settings → authenticate → toggle), so re-arm the Allow button
-      // instead of stranding the row on "macOS…" forever.
+      // Timed out without a grant. This is a backstop, not the mechanism:
+      // FDA/Accessibility routinely exceed 20s (open System Settings →
+      // authenticate → toggle), and a grant made in that window is picked up by
+      // `recheckActivePermission()` when the user switches back to Omi. Re-arm
+      // the Allow button so the row is never stranded on "macOS…".
       guard let self, !Task.isCancelled else { return }
       self.resetPermToAsk(key)
     }
@@ -142,6 +136,12 @@ extension SBOnboardingModel {
           let granted = await self.appState.primeSystemAudioPermission()
           guard !Task.isCancelled else { return }
           guard granted else {
+            // A refused tap re-arms Allow. That is only an escape when a retry
+            // could plausibly succeed: `primeSystemAudioPermission` recorded
+            // `.denied`, so once the Screen Recording prerequisite only landed
+            // after launch the step now renders the relaunch offer instead of
+            // an Allow button that would fail identically forever
+            // (`SBPermissionRelaunchGate`).
             self.resetPermToAsk("system_audio")
             return
           }
@@ -162,7 +162,9 @@ extension SBOnboardingModel {
   }
 
   /// Re-probe a single permission (each check writes the matching AppState flag).
-  private func refreshPermCheck(_ key: String) {
+  /// Prefer `refreshPermCheckOffMain` anywhere the probe can repeat — the
+  /// Accessibility/FDA/Automation probes are cross-process and expensive.
+  func refreshPermCheck(_ key: String) {
     switch key {
     case "microphone": appState.checkMicrophonePermission()
     case "system_audio":
@@ -177,9 +179,19 @@ extension SBOnboardingModel {
   }
 
   /// When a permission step appears, reflect a grant the user already has so it
-  /// shows ✓ instead of an Allow button they'd tap for nothing.
+  /// shows ✓ instead of an Allow button they'd tap for nothing. Pre-existing
+  /// grants are folded in live rather than from a snapshot, so a reinstall
+  /// cannot leave a "Granted" row above a step that still wants an answer.
   func precheckPerm(_ key: String) {
-    refreshPermCheck(key)
+    Task { [weak self] in await self?.precheckPermOffMain(key) }
+  }
+
+  func precheckPermOffMain(_ key: String) async {
+    await refreshPermCheckOffMain(key)
+    // The probe can outlive the step that started it (Automation's Apple Event
+    // lookup takes a round trip). Writing a permission row for a page the user
+    // already left is how a late answer used to land on the wrong step.
+    guard permissionKey(for: step) == key else { return }
     if isGranted(key) {
       setPermOn(key)
     } else if key == "system_audio", appState.hasScreenRecordingPermission,
@@ -330,7 +342,17 @@ extension SBOnboardingModel {
   /// when the user is still ON that step, so a late poll never skips a step they've
   /// already moved past.
   func autoAdvanceIfCurrent(_ key: String) {
+    autoAdvanceIfCurrent(key, needsRelaunch: permissionNeedsRelaunch(key))
+  }
+
+  func autoAdvanceIfCurrent(_ key: String, needsRelaunch: Bool) {
     guard permissionKey(for: step) == key, permState(key) == .on else { return }
+    // A grant this process cannot act on must not move the flow on. Screen
+    // Recording granted while running is on in System Settings and dead here
+    // until relaunch; advancing would hand the user a live screen demo over a
+    // capture path that cannot produce a frame. The step offers the reopen
+    // instead (`SBPermissionRelaunchGate`).
+    guard !needsRelaunch else { return }
     switch step {
     case .mic: answerMic()
     case .systemAudio: answerSystemAudio()

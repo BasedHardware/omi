@@ -346,7 +346,29 @@ final class SBOnboardingModel: ObservableObject {
       streamMessage(for: target)
       return
     }
-    streamMessage(for: .promise)
+    guard
+      SBOnboardingIntroGate.shouldPlay(resumeStepRaw: savedRaw, promiseStepRaw: Step.promise.rawValue)
+    else {
+      startAmbientOnboardingMusic()
+      streamMessage(for: .promise)
+      return
+    }
+    // Marked before playing: a quit or crash mid-intro still counts as seen, so the
+    // intro can never re-arm itself into a loop.
+    SBOnboardingIntroGate.markPlayed()
+    OmiOnboardingCinematic.present { [weak self] _ in
+      guard let self else { return }
+      // The bed carries over from the intro into the chat onboarding, so the music
+      // does not stop and restart across the hand-off.
+      self.startAmbientOnboardingMusic()
+      self.streamMessage(for: .promise)
+    }
+  }
+
+  /// The ambient bed under the chat-style onboarding. Honours the user's persisted
+  /// mute, so a muted intro stays muted here.
+  private func startAmbientOnboardingMusic() {
+    OmiOnboardingCinematic.startAmbientMusic()
   }
 
   /// Detection only: the existing completion flag remains the UI gate. These
@@ -592,15 +614,29 @@ final class SBOnboardingModel: ObservableObject {
     complete(startListening: selection.startsListeningImmediately)
   }
 
-  /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
-  /// tab (with the personalized opener), without force-enabling capture or screen
-  /// analysis the user chose to bypass. They can turn those on later.
-  func skip() {
+  /// The one handoff both exit paths run when onboarding ends.
+  ///
+  /// `skip()` and `complete(startListening:)` used to carry byte-identical
+  /// copies of this sequence, which is how the post-onboarding guidance came to
+  /// be produced by neither: there was no single place that owned "onboarding is
+  /// over, hand the user to the app". There is now, so a step added here can
+  /// never reach one door and not the other.
+  ///
+  /// `clearOnboardingChatFlag` is the only real difference between the two
+  /// paths, and it is ordered exactly where each path had it.
+  func finishOnboardingHandoff(clearOnboardingChatFlag: Bool) {
     teardownAll()
+    // Fades rather than cuts: onboarding's last beat should not end on a click.
+    OmiOnboardingCinematic.stopAmbientMusic()
     AnalyticsManager.shared.onboardingCompleted()
     chatProvider.stopAgent(owner: .mainChat)
     UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
     UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
+    if clearOnboardingChatFlag { chatProvider.isOnboarding = false }
+    // Answer "what do I do now" before anything renders it. Must precede
+    // `presentOnboardingOpener()`, which reads these saved suggestions to build
+    // the Chat tab's starter chips.
+    savePostOnboardingGuidance()
     // Greet the user in the Home chat with the personalized opener + starters.
     chatProvider.presentOnboardingOpener()
     ChatToolExecutor.onboardingAppState = nil
@@ -615,13 +651,15 @@ final class SBOnboardingModel: ObservableObject {
     }
   }
 
+  /// Skip the rest of onboarding: mark it complete and drop straight to the Chat
+  /// tab (with the personalized opener), without force-enabling capture or screen
+  /// analysis the user chose to bypass. They can turn those on later.
+  func skip() {
+    finishOnboardingHandoff(clearOnboardingChatFlag: false)
+  }
+
   /// Replicates the essential real side-effects of the legacy handleOnboardingComplete().
   private func complete(startListening: Bool) {
-    teardownAll()
-    AnalyticsManager.shared.onboardingCompleted()
-    chatProvider.stopAgent(owner: .mainChat)
-    UserDefaults.standard.set(true, forKey: DefaultsKey.onboardingJustCompleted)
-    UserDefaults.standard.removeObject(forKey: Self.resumeStepKey)
     // Do NOT mark file indexing complete here. Onboarding never actually scans, so
     // setting this flag "faked" the Files connector as connected while indexing
     // nothing — and, worse, permanently suppressed the Home view's automatic
@@ -629,20 +667,7 @@ final class SBOnboardingModel: ObservableObject {
     // false) and every later rescan. Leaving it false lets that existing silent
     // backfill actually index the standard folders once the app is up, so the
     // Files connector becomes truly connected with real content.
-    chatProvider.isOnboarding = false
-    // Greet the user in the Home chat with the personalized opener + starters.
-    chatProvider.presentOnboardingOpener()
-    ChatToolExecutor.onboardingAppState = nil
-    OnboardingChatPersistence.clear()
-    ChatDraftStore.shared.clear(.onboardingMain)
-    ChatDraftStore.shared.clear(.onboardingFloating)
-
-    onComplete?()
-    Task { [weak self] in
-      guard let self else { return }
-      await self.chatProvider.finishOnboardingJournal()
-      self.appState.hasCompletedOnboarding = true
-    }
+    finishOnboardingHandoff(clearOnboardingChatFlag: true)
 
     Task {
       await AgentVMService.shared.startPipeline()
