@@ -1,8 +1,21 @@
 """PAPER — the daily edition built from ambient context.
 
-An edition is finite by construction: five optional blocks, each capped. Blocks with
-nothing worth printing are omitted rather than padded, so a quiet day yields a short
-paper. See docs/product/paper/SPEC.md.
+The edition has five sections and every one of them is fed by a live source:
+what you did yesterday, what is on you today, your newsletters deduped to one
+line per story, external material ranked against interests we learned from your
+own record, and one image of a real moment.
+
+Two rules shape every model here.
+
+**No source, no print.** Anything asserted about the outside world carries the
+place it came from (:class:`Claim`). A claim with no source is not printable,
+which is enforced rather than asked for.
+
+**Silent degradation is the failure mode.** A source that quietly returns
+nothing looks exactly like a quiet day. Every run reports per-source health, so
+an edition that has had no Gmail for two weeks says so on its face.
+
+See docs/product/paper/SPEC.md.
 """
 
 from enum import Enum
@@ -11,84 +24,10 @@ from pydantic import BaseModel, Field
 
 
 class EditionTier(str, Enum):
-    """Paywall gate. Free prints the lede only; paid prints the personalized blocks."""
+    """Paywall gate. Free prints yesterday only; paid prints the whole edition."""
 
     BRIEF = 'brief'
     EDITION = 'edition'
-
-
-class Lede(BaseModel):
-    """The one thing that actually mattered."""
-
-    headline: str
-    body: str = ''
-    source_date: str = ''
-
-
-class OpenLoop(BaseModel):
-    """A question raised and never resolved, carried forward until it closes."""
-
-    question: str
-    first_raised: str
-    days_open: int = 0
-
-
-class Counterpoint(BaseModel):
-    """The strongest argument against a position asserted one-sidedly."""
-
-    position: str
-    argument: str
-    days_asserted: int = 0
-    first_asserted: str = ''
-
-
-class DeskItem(BaseModel):
-    """Someone mentioned, then dropped."""
-
-    name: str
-    context: str = ''
-    last_mentioned: str = ''
-    days_since: int = 0
-
-
-class MarginNote(BaseModel):
-    """One thing learned, printed back as fact."""
-
-    insight: str
-    source_date: str = ''
-
-
-class Edition(BaseModel):
-    """One day's paper.
-
-    ``issue_number`` doubles as the streak counter — it is the count of editions
-    published to date, which is also just what a masthead prints.
-    """
-
-    date: str
-    issue_number: int = 1
-    tier: EditionTier = EditionTier.EDITION
-
-    lede: Lede | None = None
-    open_loops: list[OpenLoop] = Field(default_factory=list)
-    counterpoint: Counterpoint | None = None
-    desk: list[DeskItem] = Field(default_factory=list)
-    margin: MarginNote | None = None
-
-    @property
-    def is_empty(self) -> bool:
-        """True when there was not enough signal to print anything at all."""
-        return not any([self.lede, self.open_loops, self.counterpoint, self.desk, self.margin])
-
-
-# ---------------------------------------------------------------------------
-# The brief — external world, read through the reader's own context.
-#
-# Everything below carries its source. A claim with no source does not get
-# printed, and a number we computed ourselves is never presented as one the
-# source published. That distinction is the whole product: a briefing people
-# act on has to be auditable line by line.
-# ---------------------------------------------------------------------------
 
 
 class Provenance(str, Enum):
@@ -115,23 +54,132 @@ class Claim(BaseModel):
 
     @property
     def is_printable(self) -> bool:
-        """No source, no print — the one rule the whole briefing rests on."""
+        """No source, no print — the one rule the whole edition rests on."""
         return bool(self.text.strip()) and bool(self.sources)
 
 
-class Figure(BaseModel):
-    """A chart, with the caption that makes it honest.
+# ---------------------------------------------------------------------------
+# What we learned about the reader. This is the ranking rubric for everything
+# external, derived from their own record rather than a topic list they typed.
+# ---------------------------------------------------------------------------
 
-    ``caption`` must state what was measured and where each number came from;
-    ``comparable`` false renders the explicit warning that bars on one axis are
-    not a ranking.
+
+class Interest(BaseModel):
+    """One thing the reader demonstrably cares about, and the proof."""
+
+    topic: str
+    evidence: str = ''  # what in their record shows it — never invented
+    weight: float = 1.0
+
+
+class InterestProfile(BaseModel):
+    """The learned analogue of a hand-written thesis.
+
+    ``thesis`` is the one-line through-line. ``interests`` is the scoring rubric
+    external candidates are ranked against. ``exclusions`` is what to drop even
+    when it scores well, which is what stops the edition drifting generic.
     """
 
+    generated_at: str = ''
+    covers_days: int = 0
+    thesis: str = ''
+    interests: list[Interest] = Field(default_factory=list)
+    exclusions: list[str] = Field(default_factory=list)
+    people: list[str] = Field(default_factory=list)
+
+    @property
+    def is_usable(self) -> bool:
+        """A profile with no interests ranks nothing — the caller must not pretend it does."""
+        return bool(self.interests)
+
+
+# ---------------------------------------------------------------------------
+# Section 1 — Yesterday. The day wrapped, from conversations and screen.
+# ---------------------------------------------------------------------------
+
+
+class FocusBlock(BaseModel):
+    """Where a stretch of yesterday actually went."""
+
+    label: str
+    minutes: int = 0
+    detail: str = ''
+
+
+class Yesterday(BaseModel):
+    """What the reader did and thought, in their own day's terms."""
+
+    headline: str = ''
+    story: str = ''  # 3-5 plain sentences
+    focus: list[FocusBlock] = Field(default_factory=list)
+    decisions: list[str] = Field(default_factory=list)
+    unacted: str = ''  # an idea raised and not taken up — the highest-value line
+    source_date: str = ''
+
+    @property
+    def tracked_minutes(self) -> int:
+        return sum(block.minutes for block in self.focus)
+
+
+# ---------------------------------------------------------------------------
+# Section 2 — Today. What is actually on them.
+# ---------------------------------------------------------------------------
+
+
+class CalendarEntry(BaseModel):
     title: str
-    subtitle: str = ''
-    bars: list[tuple[str, float]] = Field(default_factory=list)
-    caption: str = ''
-    comparable: bool = True
+    start: str = ''
+    end: str = ''
+    attendees: list[str] = Field(default_factory=list)
+    location: str = ''
+
+
+class Commitment(BaseModel):
+    """Something the reader said they would do.
+
+    ``source`` names where it was found so an item can be traced back rather
+    than looking like the paper invented a task.
+    """
+
+    text: str
+    due: str = ''
+    source: str = ''  # action_item | conversation
+
+
+class Today(BaseModel):
+    events: list[CalendarEntry] = Field(default_factory=list)
+    commitments: list[Commitment] = Field(default_factory=list)
+    note: str = ''  # one line on the shape of the day
+
+    @property
+    def is_clear(self) -> bool:
+        return not self.events and not self.commitments
+
+
+# ---------------------------------------------------------------------------
+# Section 3 — Newsletters. Many publications, one line per story.
+# ---------------------------------------------------------------------------
+
+
+class NewsletterStory(BaseModel):
+    """One story, however many newsletters covered it.
+
+    ``sources`` carries every publication that ran it, which is also the signal
+    for how big the story is.
+    """
+
+    summary: str
+    sources: list[SourceRef] = Field(default_factory=list)
+    why: str = ''  # the tie to this reader, when there is one
+
+    @property
+    def is_printable(self) -> bool:
+        return bool(self.summary.strip()) and bool(self.sources)
+
+
+# ---------------------------------------------------------------------------
+# Section 4 — For you. External material, ranked against the profile.
+# ---------------------------------------------------------------------------
 
 
 class PaperItem(BaseModel):
@@ -143,7 +191,6 @@ class PaperItem(BaseModel):
     what_it_says: str = ''
     why_it_matters: str = ''  # the bridge to the reader's own work
     experiment: str = ''  # one thing they could run tomorrow
-    figure: Figure | None = None
 
 
 class ToolItem(BaseModel):
@@ -158,6 +205,44 @@ class NewsLine(BaseModel):
     claim: Claim
 
 
+class ForYou(BaseModel):
+    papers: list[PaperItem] = Field(default_factory=list)
+    tools: list[ToolItem] = Field(default_factory=list)
+    news: list[NewsLine] = Field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        return not any([self.papers, self.tools, self.news])
+
+
+# ---------------------------------------------------------------------------
+# Section 5 — The photo. One real moment, drawn.
+# ---------------------------------------------------------------------------
+
+
+class Photo(BaseModel):
+    """An illustration of something that actually happened yesterday.
+
+    ``moment`` is the line from the record it depicts. It is required for the
+    photo to print: an image with no moment behind it is decoration, and
+    decoration presented as memory is a fabrication.
+    """
+
+    moment: str = ''
+    caption: str = ''
+    prompt: str = ''
+    image_b64: str = ''
+
+    @property
+    def is_printable(self) -> bool:
+        return bool(self.image_b64) and bool(self.moment.strip())
+
+
+# ---------------------------------------------------------------------------
+# Housekeeping — what we cut, and whether each source worked.
+# ---------------------------------------------------------------------------
+
+
 class HeldBack(BaseModel):
     """Something deliberately cut, and why.
 
@@ -168,19 +253,8 @@ class HeldBack(BaseModel):
     reason: str
 
 
-class Draft(BaseModel):
-    kind: str = 'post'
-    body: str = ''
-    basis: str = ''  # which paper or which of the reader's own threads it came from
-
-
 class SourceHealth(BaseModel):
-    """Per-source result for this run.
-
-    Silent degradation is the real failure mode — a source that quietly returns
-    nothing looks identical to a quiet day. Every source reports whether it
-    worked, not only what it returned.
-    """
+    """Per-source result for this run."""
 
     source: str
     ok: bool = True
@@ -195,12 +269,11 @@ class Cover(BaseModel):
     standfirst: str = ''
 
 
-class Brief(BaseModel):
-    """One morning's briefing.
+class Edition(BaseModel):
+    """One day's paper.
 
-    ``your_day`` is the reader's own context — the same Edition the personal
-    paper produces. The external sections are read through it, which is why the
-    bridge field on a paper is ``why_it_matters`` rather than an abstract.
+    ``issue_number`` doubles as the streak counter — it is the count of editions
+    published through this date, which is also just what a masthead prints.
     """
 
     date: str
@@ -208,20 +281,29 @@ class Brief(BaseModel):
     tier: EditionTier = EditionTier.EDITION
 
     cover: Cover = Field(default_factory=Cover)
-    papers: list[PaperItem] = Field(default_factory=list)
-    skim: list[Claim] = Field(default_factory=list)
-    tools: list[ToolItem] = Field(default_factory=list)
-    news: list[NewsLine] = Field(default_factory=list)
-    your_day: Edition | None = None
+    photo: Photo | None = None
+    yesterday: Yesterday | None = None
+    today: Today | None = None
+    newsletters: list[NewsletterStory] = Field(default_factory=list)
+    for_you: ForYou = Field(default_factory=ForYou)
+
     held_back: list[HeldBack] = Field(default_factory=list)
-    drafts: list[Draft] = Field(default_factory=list)
     source_health: list[SourceHealth] = Field(default_factory=list)
 
     @property
-    def counts(self) -> str:
-        """The masthead tally: `3 PAPERS · 9 TOOLS · 17 NEWS LINES`."""
-        parts = []
-        for n, singular in ((len(self.papers), 'PAPER'), (len(self.tools), 'TOOL'), (len(self.news), 'NEWS LINE')):
-            if n:
-                parts.append(f"{n} {singular}{'' if n == 1 else 'S'}")
-        return ' · '.join(parts)
+    def is_empty(self) -> bool:
+        """True when there was not enough signal to print anything at all."""
+        return not any(
+            [
+                self.yesterday,
+                self.today,
+                self.newsletters,
+                not self.for_you.is_empty,
+                self.photo,
+            ]
+        )
+
+    @property
+    def degraded_sources(self) -> list[SourceHealth]:
+        """Sources that failed this run. Printed, never swallowed."""
+        return [health for health in self.source_health if not health.ok]

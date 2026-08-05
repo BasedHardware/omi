@@ -1,0 +1,267 @@
+"""Everything the reader actually did on a given day, gathered from live sources.
+
+This is the layer the whole edition rests on. It reads what Omi already
+captured — conversations, screen activity, the stored daily summary, open
+action items — and returns it as one structure. Nothing here calls a model and
+nothing here invents: a source that fails is recorded as failed and returns
+empty, because a section that silently disappears is indistinguishable from a
+quiet day.
+"""
+
+import logging
+from datetime import date, datetime, time, timedelta, timezone
+from typing import Any
+
+import database.action_items as action_items_db
+import database.conversations as conversations_db
+import database.daily_summaries as daily_summaries_db
+import database.screen_activity as screen_activity_db
+from models.paper import FocusBlock, SourceHealth
+from utils.log_sanitizer import sanitize
+
+logger = logging.getLogger(__name__)
+
+# Screen samples this far apart belong to different sittings. The capture
+# interval is a client setting we do not control, so focus time is measured
+# from real gaps between samples rather than assumed to be a fixed cadence.
+MAX_SAMPLE_GAP_MINUTES = 5
+
+# A stretch shorter than this is noise — an app that flashed past, not focus.
+MIN_BLOCK_MINUTES = 5
+
+# How many apps reach the page. Beyond this it stops being a summary.
+MAX_FOCUS_BLOCKS = 6
+
+CONVERSATION_LIMIT = 60
+ACTION_ITEM_LIMIT = 50
+
+
+class DayContext:
+    """One day of the reader's own record, plus the health of each read.
+
+    Attributes are plain containers so callers can be written against real
+    shapes. ``health`` accumulates one entry per source touched.
+    """
+
+    def __init__(self, day: date) -> None:
+        self.day = day
+        self.summary: dict[str, Any] | None = None
+        self.conversations: list[dict[str, Any]] = []
+        self.focus: list[FocusBlock] = []
+        self.screen_titles: list[str] = []
+        self.commitments: list[dict[str, Any]] = []
+        self.health: list[SourceHealth] = []
+
+    @property
+    def is_empty(self) -> bool:
+        return not any([self.summary, self.conversations, self.focus, self.commitments])
+
+
+def _day_bounds(day: date) -> tuple[datetime, datetime]:
+    """UTC start and end of ``day``.
+
+    Stored timestamps are UTC, so the window is built in UTC. Per-user timezone
+    shifting belongs at the display layer, not here.
+    """
+    start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    return start, start + timedelta(days=1) - timedelta(microseconds=1)
+
+
+def _parse_screen_ts(raw: object) -> datetime | None:
+    """Screen timestamps are stored as 'YYYY-MM-DD HH:MM:SS.mmm' strings."""
+    text = str(raw or '').strip()
+    if not text:
+        return None
+    for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S'):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+
+
+def focus_blocks(rows: list[dict[str, Any]]) -> list[FocusBlock]:
+    """Collapse screen samples into per-app focus time.
+
+    Time is accumulated from the real gap between consecutive samples, capped at
+    ``MAX_SAMPLE_GAP_MINUTES`` so an overnight gap does not read as ten hours in
+    one app. This is why the number can be trusted: it is measured, not a
+    sample count multiplied by an assumed interval.
+    """
+    stamped: list[tuple[datetime, str, str]] = []
+    for row in rows:
+        when = _parse_screen_ts(row.get('timestamp'))
+        if when is None:
+            continue
+        stamped.append((when, str(row.get('appName') or 'Unknown'), str(row.get('windowTitle') or '')))
+    if not stamped:
+        return []
+
+    stamped.sort(key=lambda entry: entry[0])
+
+    minutes: dict[str, float] = {}
+    titles: dict[str, list[str]] = {}
+    for index, (when, app, title) in enumerate(stamped):
+        if title:
+            seen = titles.setdefault(app, [])
+            if title not in seen and len(seen) < 4:
+                seen.append(title)
+        if index + 1 >= len(stamped):
+            continue
+        gap = (stamped[index + 1][0] - when).total_seconds() / 60.0
+        minutes[app] = minutes.get(app, 0.0) + min(max(gap, 0.0), MAX_SAMPLE_GAP_MINUTES)
+
+    blocks = [
+        FocusBlock(label=app, minutes=int(round(total)), detail=', '.join(titles.get(app, [])[:3]))
+        for app, total in minutes.items()
+        if round(total) >= MIN_BLOCK_MINUTES
+    ]
+    blocks.sort(key=lambda block: -block.minutes)
+    return blocks[:MAX_FOCUS_BLOCKS]
+
+
+def _read_summary(uid: str, day: date, context: DayContext) -> None:
+    try:
+        context.summary = daily_summaries_db.get_daily_summary_by_date(uid, day.isoformat())
+        context.health.append(
+            SourceHealth(
+                source='daily summary',
+                ok=True,
+                fetched=1 if context.summary else 0,
+                kept=1 if context.summary else 0,
+                note='' if context.summary else 'no summary stored for this day',
+            )
+        )
+    except Exception as e:  # noqa: BLE001 — one failed source must not lose the edition.
+        logger.warning('paper: daily summary read failed: %s', sanitize(str(e)))
+        context.health.append(SourceHealth(source='daily summary', ok=False, note=sanitize(str(e))[:200]))
+
+
+def _read_conversations(uid: str, day: date, context: DayContext) -> None:
+    start, end = _day_bounds(day)
+    try:
+        rows = conversations_db.get_conversations(
+            uid,
+            limit=CONVERSATION_LIMIT,
+            start_date=start,
+            end_date=end,
+        )
+        context.conversations = rows or []
+        context.health.append(
+            SourceHealth(
+                source='conversations',
+                ok=True,
+                fetched=len(context.conversations),
+                kept=len(context.conversations),
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning('paper: conversation read failed: %s', sanitize(str(e)))
+        context.health.append(SourceHealth(source='conversations', ok=False, note=sanitize(str(e))[:200]))
+
+
+def _read_screen(uid: str, day: date, context: DayContext) -> None:
+    start, end = _day_bounds(day)
+    try:
+        rows = screen_activity_db.get_screen_activity(uid, start_date=start, end_date=end, limit=5000)
+        context.focus = focus_blocks(rows or [])
+        context.screen_titles = [
+            str(row.get('windowTitle') or '') for row in (rows or []) if str(row.get('windowTitle') or '').strip()
+        ][:200]
+        context.health.append(
+            SourceHealth(
+                source='screen',
+                ok=True,
+                fetched=len(rows or []),
+                kept=len(context.focus),
+                note='' if rows else 'no screen activity captured for this day',
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning('paper: screen activity read failed: %s', sanitize(str(e)))
+        context.health.append(SourceHealth(source='screen', ok=False, note=sanitize(str(e))[:200]))
+
+
+def _read_commitments(uid: str, context: DayContext) -> None:
+    """Open action items — what the reader said they would do and has not closed."""
+    try:
+        rows = action_items_db.get_action_items(uid, limit=ACTION_ITEM_LIMIT, completed=False)
+        context.commitments = list(rows or [])
+        context.health.append(
+            SourceHealth(
+                source='action items',
+                ok=True,
+                fetched=len(context.commitments),
+                kept=len(context.commitments),
+            )
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning('paper: action item read failed: %s', sanitize(str(e)))
+        context.health.append(SourceHealth(source='action items', ok=False, note=sanitize(str(e))[:200]))
+
+
+def gather(uid: str, day: date) -> DayContext:
+    """Read one day of the reader's own record.
+
+    Every source is attempted independently. A failure is recorded in
+    ``health`` and leaves its field empty rather than raising, so one dead
+    integration costs one section instead of the paper.
+    """
+    context = DayContext(day)
+    _read_summary(uid, day, context)
+    _read_conversations(uid, day, context)
+    _read_screen(uid, day, context)
+    _read_commitments(uid, context)
+    return context
+
+
+def record_lines(context: DayContext, limit: int = 40) -> list[str]:
+    """Flatten the day into grounding lines a prompt may draw on.
+
+    This is the only text the editorial prompts are allowed to use. Keeping the
+    flattening here means there is one definition of what the model can see.
+    """
+    lines: list[str] = []
+    summary = context.summary or {}
+
+    if summary.get('headline'):
+        lines.append(f"Day headline: {summary['headline']}")
+    if summary.get('overview'):
+        lines.append(f"Overview: {summary['overview']}")
+
+    for highlight in (summary.get('highlights') or [])[:8]:
+        topic = (highlight or {}).get('topic') or ''
+        detail = (highlight or {}).get('summary') or ''
+        if topic or detail:
+            lines.append(f"- {topic}: {detail}".strip(' -:'))
+
+    for decision in (summary.get('decisions_made') or [])[:6]:
+        text = (decision or {}).get('decision')
+        if text:
+            lines.append(f"- Decided: {text}")
+
+    for question in (summary.get('unresolved_questions') or [])[:6]:
+        text = (question or {}).get('question')
+        if text:
+            lines.append(f"- Open question: {text}")
+
+    for nugget in (summary.get('knowledge_nuggets') or [])[:6]:
+        text = (nugget or {}).get('insight')
+        if text:
+            lines.append(f"- Learned: {text}")
+
+    for conversation in context.conversations[:12]:
+        structured = conversation.get('structured') or {}
+        title = structured.get('title') or ''
+        overview = structured.get('overview') or ''
+        if title or overview:
+            lines.append(f"- Talked about {title}: {overview}".strip())
+
+    for block in context.focus:
+        detail = f" ({block.detail})" if block.detail else ''
+        lines.append(f"- Screen: {block.label} for {block.minutes} min{detail}")
+
+    return lines[:limit]
