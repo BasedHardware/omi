@@ -9,6 +9,8 @@ private actor AgentSyncDelayedTokenGate {
   private var firstFetchStarted = false
   private var firstFetchWaiters: [CheckedContinuation<Void, Never>] = []
   private var firstFetchContinuation: CheckedContinuation<Void, Never>?
+  private var firstFetchCancelled = false
+  private var firstFetchCancelWaiters: [CheckedContinuation<Void, Never>] = []
   private var requests: [URLRequest] = []
   private var requestWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -37,6 +39,26 @@ private actor AgentSyncDelayedTokenGate {
   func releaseFirstFetch() {
     firstFetchContinuation?.resume()
     firstFetchContinuation = nil
+  }
+
+  /// `stop()` bumps the sync generation and only then cancels the sync task, so
+  /// the cancellation of the task that owns the first fetch is the observable
+  /// proof that the owner boundary has already moved. Waiting on it before
+  /// releasing the delayed token is what makes "the token resumes *after* the
+  /// handoff" a fact rather than a scheduling coincidence.
+  func noteFirstFetchCancelled() {
+    guard !firstFetchCancelled else { return }
+    firstFetchCancelled = true
+    let waiters = firstFetchCancelWaiters
+    firstFetchCancelWaiters.removeAll()
+    waiters.forEach { $0.resume() }
+  }
+
+  func waitUntilFirstFetchCancelled() async {
+    guard !firstFetchCancelled else { return }
+    await withCheckedContinuation { continuation in
+      firstFetchCancelWaiters.append(continuation)
+    }
   }
 
   func respond(to request: URLRequest) -> (Data, URLResponse) {
@@ -339,7 +361,13 @@ final class AgentSyncBatchQueryTests: XCTestCase {
     let gate = AgentSyncDelayedTokenGate()
     let service = AgentSyncService(
       networkHooks: AgentSyncService.NetworkHooks(
-        fetchIDToken: { await gate.fetchToken() },
+        fetchIDToken: {
+          await withTaskCancellationHandler {
+            await gate.fetchToken()
+          } onCancel: {
+            Task { await gate.noteFirstFetchCancelled() }
+          }
+        },
         dataForRequest: { request in await gate.respond(to: request) },
         reuploadDatabase: { _, _ in true },
         now: Date.init,
@@ -348,12 +376,12 @@ final class AgentSyncBatchQueryTests: XCTestCase {
     await service.start(vmIP: "owner-a-vm", authToken: "owner-a-auth")
     await gate.waitUntilFirstFetchStarts()
     let stopOwnerA = Task { await service.stop(flushPendingChanges: false) }
+    await gate.waitUntilFirstFetchCancelled()
     await gate.releaseFirstFetch()
     await stopOwnerA.value
     await service.start(vmIP: "owner-b-vm", authToken: "owner-b-auth")
 
     await gate.waitForRequest()
-    await Task.yield()
     await service.stop(flushPendingChanges: false)
 
     let requestURLs = await gate.requestURLs()
