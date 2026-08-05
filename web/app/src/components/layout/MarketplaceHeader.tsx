@@ -30,7 +30,7 @@ export function MarketplaceHeader() {
             ) : user ? (
               <>
                 <Link
-                  href="/timeline"
+                  href="/conversations"
                   className={cn(
                     'px-4 py-1.5 rounded-full text-sm font-medium',
                     'bg-text-primary text-bg-primary',

@@ -5,11 +5,11 @@ import { motion } from 'framer-motion';
 import { Star, Check, CheckSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
-import { conversationSignals } from '@/lib/timeline';
+import { conversationSignals } from '@/lib/conversationTimeline';
 import type { Conversation } from '@/types/conversation';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
-interface TimelineConversationTileProps {
+interface ConversationTileProps {
   conversation: Conversation;
   onClick?: () => void;
   onStarToggle?: (id: string, starred: boolean) => void;
@@ -23,7 +23,7 @@ interface TimelineConversationTileProps {
   onEnterSelectionMode?: (id: string) => void;
 }
 
-export const TimelineConversationTile = memo(function TimelineConversationTile({
+export const ConversationTile = memo(function ConversationTile({
   conversation,
   onClick,
   onStarToggle,
@@ -33,7 +33,7 @@ export const TimelineConversationTile = memo(function TimelineConversationTile({
   onSelect,
   isMerging = false,
   onEnterSelectionMode,
-}: TimelineConversationTileProps) {
+}: ConversationTileProps) {
   const [isStarred, setIsStarred] = useState(conversation.starred);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -201,7 +201,7 @@ export const TimelineConversationTile = memo(function TimelineConversationTile({
 });
 
 // Skeleton loader for timeline tiles - matches the gallery tile layout
-export function TimelineTileSkeleton() {
+export function ConversationTileSkeleton() {
   return (
     <div className="rounded-card border border-stroke bg-bg-secondary p-4 animate-pulse">
       <div className="h-3 w-16 rounded bg-bg-tertiary mb-3" />

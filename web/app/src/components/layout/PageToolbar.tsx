@@ -26,7 +26,7 @@ export interface PageToolbarProps {
 
 /**
  * The single top row every page uses. It deliberately renders no title: the
- * sidebar is the only place that names the current page, so Timeline, Memories,
+ * sidebar is the only place that names the current page, so Conversations, Memories,
  * Tasks and Connectors line up by construction instead of by coincidence.
  */
 export function PageToolbar({

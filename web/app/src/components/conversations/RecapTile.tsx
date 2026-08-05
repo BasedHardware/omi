@@ -6,7 +6,7 @@ import { CalendarDays, CheckSquare, Clock, MapPin, MessageSquare } from 'lucide-
 import { cn } from '@/lib/utils';
 import type { DailySummary } from '@/types/recap';
 
-interface TimelineRecapTileProps {
+interface RecapTileProps {
   recap: DailySummary;
   onClick?: () => void;
   isSelected?: boolean;
@@ -26,11 +26,11 @@ function formatDuration(minutes: number): string {
  * A day's recap, rendered as a wider, raised tile so it reads as the day's
  * summary rather than one more conversation in the same grid.
  */
-export const TimelineRecapTile = memo(function TimelineRecapTile({
+export const RecapTile = memo(function RecapTile({
   recap,
   onClick,
   isSelected = false,
-}: TimelineRecapTileProps) {
+}: RecapTileProps) {
   return (
     <motion.div
       whileHover={{ y: -2 }}

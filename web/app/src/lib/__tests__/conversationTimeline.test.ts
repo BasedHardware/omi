@@ -7,7 +7,7 @@ import {
   dayLabel,
   flattenTimelineItems,
   parseLocalDay,
-} from '@/lib/timeline';
+} from '@/lib/conversationTimeline';
 import type { Conversation } from '@/types/conversation';
 import type { DailySummary } from '@/types/recap';
 

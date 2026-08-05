@@ -1,16 +1,16 @@
 'use client';
 
 import { GanttChartSquare } from 'lucide-react';
-import { TimelineGallerySkeleton } from '@/components/timeline/TimelineGallery';
+import { ConversationGallerySkeleton } from '@/components/conversations/ConversationGallery';
 import { FolderTabsSkeleton } from '@/components/conversations/FolderTabs';
 
-export default function TimelineLoading() {
+export default function ConversationsLoading() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Page Header */}
       <div className="flex items-center gap-3 px-6 py-4 border-b border-stroke bg-bg-secondary">
         <GanttChartSquare className="w-6 h-6 text-text-secondary" />
-        <h1 className="text-2xl font-bold text-text-primary">Timeline</h1>
+        <h1 className="text-2xl font-bold text-text-primary">Conversations</h1>
       </div>
 
       {/* Toolbar */}
@@ -29,7 +29,7 @@ export default function TimelineLoading() {
 
       {/* Gallery skeleton */}
       <div className="flex-1 overflow-hidden bg-bg-primary pt-4">
-        <TimelineGallerySkeleton />
+        <ConversationGallerySkeleton />
       </div>
     </div>
   );
