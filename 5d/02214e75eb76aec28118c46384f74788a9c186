@@ -1,0 +1,83 @@
+desktop/macos/Desktop/Tests/GlassContentChromeTests.swift
+  s_569f1df936cc22::t_ba44db54c4c5ba 55-67
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_569f1df936cc22::t_93d49418bce85a 3-4,6-7,10
+desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
+  s_569f1df936cc22::t_32dbf9ada6b713 231
+desktop/macos/Desktop/Sources/MainWindow/Components/DailyTaskCreationSheet.swift
+  s_569f1df936cc22::t_74f82f4b7d6f17 20,117,139
+desktop/macos/Desktop/Sources/MainWindow/Components/FocusSummaryWidget.swift
+  s_569f1df936cc22::t_25696edabe08e4 80,88
+desktop/macos/Desktop/Sources/MainWindow/Components/FolderManagementViews.swift
+  s_569f1df936cc22::t_4a21859db8e405 135
+desktop/macos/Desktop/Sources/MainWindow/Components/GlassContentChrome.swift
+  s_569f1df936cc22::t_0af4ada056ae90 112-122,124,127-128
+desktop/macos/Desktop/Sources/MainWindow/Components/GoalsWidget.swift
+  s_569f1df936cc22::t_c21b67769f4a42 58,700,790,867
+desktop/macos/Desktop/Sources/MainWindow/Components/LiveNameSpeakerSheet.swift
+  s_569f1df936cc22::t_2923790b70e889 264,274
+desktop/macos/Desktop/Sources/MainWindow/Components/LiveNotesView.swift
+  s_569f1df936cc22::t_f0e2135416a9dc 68,150,228
+desktop/macos/Desktop/Sources/MainWindow/Components/LiveTranscriptView.swift
+  s_569f1df936cc22::t_6a80e1a550269a 133,326,356,423,428
+desktop/macos/Desktop/Sources/MainWindow/Components/NameSpeakerSheet.swift
+  s_569f1df936cc22::t_9dcc713928bda9 333,343
+desktop/macos/Desktop/Sources/MainWindow/Components/RecentConversationsWidget.swift
+  s_569f1df936cc22::t_8462f732b08536 24
+desktop/macos/Desktop/Sources/MainWindow/Components/SpeakerBubbleView.swift
+  s_569f1df936cc22::t_1affe0738d4c41 63,128
+desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
+  s_569f1df936cc22::t_51d79c9ecdffbc 173,190,213,396
+desktop/macos/Desktop/Sources/MainWindow/Components/TodaysTasksWidget.swift
+  s_569f1df936cc22::t_c0a1383119499f 137,144,149
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  s_569f1df936cc22::t_aafb1ddcc51e1d 305-307,311,313,315-318,404-405,408,476,483-486,589-591,643,648,713,725,850,857-861,945,1053,1058,1174,1176,1178,1180,1394
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  s_569f1df936cc22::t_547cd2bb6db15a 316,320-326,328-329,497,644,647,754,764-765
+desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
+  s_569f1df936cc22::t_d122663e9570f3 247
+desktop/macos/Desktop/Sources/MainWindow/Pages/GoalsHistoryPage.swift
+  s_569f1df936cc22::t_c53b1a28dd0712 66,72,167,172,189,199,203
+desktop/macos/Desktop/Sources/MainWindow/Pages/InsightPage.swift
+  s_569f1df936cc22::t_2c5b89562fb310 189,270,275,540
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  s_569f1df936cc22::t_433eb080a109c1 2163,2626,2700,2874,3190
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
+  s_569f1df936cc22::t_e3f884ea3a481e 174
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift
+  s_569f1df936cc22::t_e0cf8d1a6dc1c7 2447,2505-2507,2512-2514,2519-2522
+desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
+  s_569f1df936cc22::t_7605433dc9951c 163,179,184,212,241,252,259,338,396,416,419,442,664,683,723,741,778
+desktop/macos/Desktop/Sources/MainWindow/Pages/TaskDetailViews.swift
+  s_569f1df936cc22::t_5c670d5685882c 24
+desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  s_569f1df936cc22::t_0d22e02d813448 3763-3764,3794,3893,3915,3918,4394-4397,4609,4751,4957,4995-4996,5015,5613,5731,5733,5737,5742,6059,6070,6146,6206,6242,6245,6497,6525,6548,6552,6556,6596-6597
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
+  s_569f1df936cc22::t_e5a3cf7ddc5be1 8-10,13
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_569f1df936cc22::t_abce14fd5bbd50 440-442,555,602,997,1002,1297,1304,1370,1451,1508,1512,1600,1630,1633,1673,1677,1794,1803,1807
+desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
+  s_569f1df936cc22::t_d3cd72aa56b698 21,63
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelineView.swift
+  s_569f1df936cc22::t_8532d04055cb65 451,454,635-636
+desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift
+  s_569f1df936cc22::t_e3ecd71ea02335 235
+desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
+  s_569f1df936cc22::t_9c59430163d214 309,320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5d02214e75eb76aec28118c46384f74788a9c186",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
