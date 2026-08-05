@@ -29,6 +29,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBWallpaper.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/InsightPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ShellGlassGround.swift
 preconditions:
   - automation_bridge_ready
 
