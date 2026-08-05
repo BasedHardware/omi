@@ -984,7 +984,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
         if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
-          _disconnectDebouncer.run(onDeviceDisconnected);
+          // Grace delay exceeds native auto-reconnect. Reconnect cancels the
+          // debouncer; stillDisconnected guards the residual fire/cancel race
+          // so we do not tear down capture after a successful reconnect (#6678).
+          _disconnectDebouncer.run(() {
+            if (!shouldApplyDisconnectCaptureSideEffects(stillDisconnected: !isConnected)) {
+              return;
+            }
+            onDeviceDisconnected();
+          });
         }
         break;
     }

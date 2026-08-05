@@ -1,6 +1,8 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/utils/ble_disconnect_grace.dart';
+import 'package:omi/utils/other/debouncer.dart';
 
 void main() {
   group('bleDisconnectCaptureGrace (#6678)', () {
@@ -17,48 +19,66 @@ void main() {
   });
 
   group('shouldApplyDisconnectCaptureSideEffects (#6678)', () {
-    test('defers capture teardown while inside the grace window', () {
-      expect(
-        shouldApplyDisconnectCaptureSideEffects(
-          disconnectedFor: const Duration(milliseconds: 500),
-          grace: kAndroidBleReconnectGrace,
-        ),
-        isFalse,
-      );
-      expect(
-        shouldApplyDisconnectCaptureSideEffects(
-          disconnectedFor: const Duration(milliseconds: 3499),
-          grace: kAndroidBleReconnectGrace,
-        ),
-        isFalse,
-      );
+    test('applies only while still disconnected after grace', () {
+      expect(shouldApplyDisconnectCaptureSideEffects(stillDisconnected: true), isTrue);
+      expect(shouldApplyDisconnectCaptureSideEffects(stillDisconnected: false), isFalse);
+    });
+  });
+
+  group('disconnect grace debouncer reconnect cancel (#6678)', () {
+    test('disconnected then connected does not invoke capture teardown', () {
+      fakeAsync((async) {
+        var teardownCount = 0;
+        final debouncer = Debouncer(delay: kAndroidBleReconnectGrace);
+
+        // disconnect schedules teardown after grace
+        debouncer.run(() {
+          if (!shouldApplyDisconnectCaptureSideEffects(stillDisconnected: true)) return;
+          teardownCount++;
+        });
+
+        // reconnect before grace elapses — cancels pending teardown
+        async.elapse(const Duration(milliseconds: 1000));
+        debouncer.cancel();
+
+        async.elapse(kAndroidBleReconnectGrace);
+        expect(teardownCount, 0);
+      });
     });
 
-    test('applies capture teardown once grace has elapsed', () {
-      expect(
-        shouldApplyDisconnectCaptureSideEffects(
-          disconnectedFor: kAndroidBleReconnectGrace,
-          grace: kAndroidBleReconnectGrace,
-        ),
-        isTrue,
-      );
-      expect(
-        shouldApplyDisconnectCaptureSideEffects(
-          disconnectedFor: const Duration(milliseconds: 4000),
-          grace: kAndroidBleReconnectGrace,
-        ),
-        isTrue,
-      );
+    test('teardown runs when grace elapses without reconnect', () {
+      fakeAsync((async) {
+        var teardownCount = 0;
+        var stillDisconnected = true;
+        final debouncer = Debouncer(delay: kAndroidBleReconnectGrace);
+
+        debouncer.run(() {
+          if (!shouldApplyDisconnectCaptureSideEffects(stillDisconnected: stillDisconnected)) return;
+          teardownCount++;
+        });
+
+        async.elapse(kAndroidBleReconnectGrace);
+        expect(teardownCount, 1);
+      });
     });
 
-    test('never applies for negative elapsed time', () {
-      expect(
-        shouldApplyDisconnectCaptureSideEffects(
-          disconnectedFor: const Duration(milliseconds: -1),
-          grace: kIosBleReconnectGrace,
-        ),
-        isFalse,
-      );
+    test('residual race: callback no-ops if reconnect flipped stillDisconnected', () {
+      fakeAsync((async) {
+        var teardownCount = 0;
+        var stillDisconnected = true;
+        final debouncer = Debouncer(delay: kAndroidBleReconnectGrace);
+
+        debouncer.run(() {
+          if (!shouldApplyDisconnectCaptureSideEffects(stillDisconnected: stillDisconnected)) return;
+          teardownCount++;
+        });
+
+        // Simulate cancel losing the race: timer fires but reconnect already set connected.
+        async.elapse(kAndroidBleReconnectGrace - const Duration(milliseconds: 1));
+        stillDisconnected = false;
+        async.elapse(const Duration(milliseconds: 1));
+        expect(teardownCount, 0);
+      });
     });
   });
 }
