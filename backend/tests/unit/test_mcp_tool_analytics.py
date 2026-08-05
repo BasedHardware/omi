@@ -228,7 +228,12 @@ def test_not_found_and_paid_plan_errors_are_validation_not_internal(monkeypatch)
     for i, code in enumerate((-32001, -32002)):
         with patch.object(mcp_sse, "execute_tool", side_effect=mcp_sse.ToolExecutionError("expected", code=code)):
             mcp_sse.handle_mcp_message(
-                _auth(), {"id": 10 + i, "method": "tools/call", "params": {"name": "get_conversation_by_id", "arguments": {}}}
+                _auth(),
+                {
+                    "id": 10 + i,
+                    "method": "tools/call",
+                    "params": {"name": "get_conversation_by_id", "arguments": {}},
+                },
             )
 
     assert [event["error_category"] for event in events] == ["validation", "validation"]
