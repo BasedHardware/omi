@@ -52,6 +52,77 @@ def test_disabled_cohort_runner_returns_empty_summary_without_running_maintenanc
     run_maintenance.assert_not_called()
 
 
+def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "true")
+    client = object()
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_short_term_maintenance",
+        lambda uid, **_kwargs: MaintenanceReport(uid=uid),
+    )
+    graph_calls: list[dict[str, object]] = []
+
+    def run_graph_enrichment(**kwargs: object) -> dict[str, object]:
+        graph_calls.append(kwargs)
+        return {"outcomes": {"committed": 3}}
+
+    monkeypatch.setattr(cron, "run_enrichment", run_graph_enrichment)
+
+    summary = cron.run_canonical_short_term_maintenance_for_cohort(
+        db_client=client,
+        now=NOW,
+        run_id="cron-graph-backfill",
+    )
+
+    assert summary.graph_enriched_total == 3
+    assert summary.graph_enrichment_blocked_total == 0
+    assert len(graph_calls) == 1
+    assert graph_calls[0]["uid"] == CANONICAL_A
+    assert graph_calls[0]["db_client"] is client
+    assert graph_calls[0]["apply"] is True
+    assert graph_calls[0]["confirm_uid"] == CANONICAL_A
+    assert graph_calls[0]["limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
+    assert graph_calls[0]["apply_limit"] == cron.DEFAULT_GRAPH_BACKFILL_PAGE_SIZE
+    assert graph_calls[0]["scan_limit"] == cron.DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
+
+
+def test_graph_backfill_scan_size_is_bounded_to_the_current_page_multiple(monkeypatch):
+    assert cron.DEFAULT_GRAPH_BACKFILL_SCAN_SIZE == 25
+    assert cron.canonical_graph_backfill_scan_size(page_size=5) == 25
+
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, "0")
+    assert cron.canonical_graph_backfill_scan_size(page_size=5) == 5
+
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, "not-an-integer")
+    assert cron.canonical_graph_backfill_scan_size(page_size=5) == cron.DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
+
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, "999999")
+    assert cron.canonical_graph_backfill_scan_size(page_size=5) == 25
+    assert cron.canonical_graph_backfill_scan_size(page_size=cron.MAX_PAGE_SIZE) == 125
+    assert cron.canonical_graph_backfill_scan_size(page_size=cron.MAX_PAGE_SIZE) <= cron.MAX_STRUCTURED_SCAN_SIZE
+
+
+def test_graph_backfill_uses_one_page_budget_for_apply_and_safe_scan(monkeypatch):
+    _enable_for(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "true")
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV, "10")
+    monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, "999999")
+    monkeypatch.setattr(
+        cron,
+        "run_canonical_short_term_maintenance",
+        lambda uid, **_kwargs: MaintenanceReport(uid=uid),
+    )
+    graph_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(cron, "run_enrichment", lambda **kwargs: graph_calls.append(kwargs) or {"outcomes": {}})
+
+    cron.run_canonical_short_term_maintenance_for_cohort(db_client=object(), now=NOW, run_id="cron-page-budget")
+
+    assert graph_calls[0]["limit"] == 10
+    assert graph_calls[0]["apply_limit"] == 10
+    assert graph_calls[0]["scan_limit"] == 50
+
+
 def test_cohort_summary_uses_consolidation_routes_and_promotions(monkeypatch):
     _enable_for(monkeypatch, CANONICAL_A, CANONICAL_B)
     client = object()

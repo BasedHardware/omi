@@ -36,6 +36,10 @@ _REASON_CLASSES = frozenset(
         'other',
     }
 )
+_LIFECYCLE_BOUNDARIES = frozenset({'enabled', 'admitted', 'bootstrap', 'observe', 'persist', 'export'})
+_LIFECYCLE_RESULTS = frozenset(
+    {'enabled', 'disabled', 'allowed', 'rejected', 'attempted', 'succeeded', 'failed', 'skipped'}
+)
 
 # Export the complete expected lifecycle even before dev traffic arrives. This
 # distinguishes a healthy, idle listen scrape target from an absent family.
@@ -95,4 +99,39 @@ def record_parity_capture_event(
         )
     except Exception:
         # Observability must never affect a listen session or cassette export.
+        pass
+
+
+def record_parity_capture_lifecycle(
+    boundary: str,
+    result: str,
+    *,
+    error_type: str = 'none',
+    environ: Mapping[str, str] | None = None,
+) -> None:
+    """Log one bounded capture lifecycle marker independently of Prometheus.
+
+    The configured-capture gate intentionally does not require a valid dev
+    stage. Otherwise the diagnostic intended to expose a stage rejection would
+    be suppressed by that same rejection. No request or capture identity is
+    accepted by this interface.
+    """
+    env = os.environ if environ is None else environ
+    if env.get('OMI_PARITY_PACK_CAPTURE', '').strip().lower() not in {'1', 'true', 'yes'}:
+        return
+
+    safe_boundary = boundary if boundary in _LIFECYCLE_BOUNDARIES else 'bootstrap'
+    safe_result = result if result in _LIFECYCLE_RESULTS else 'failed'
+    safe_error_type = error_type or 'none'
+    if len(safe_error_type) > 64 or not safe_error_type.isascii() or not safe_error_type.replace('_', '').isalnum():
+        safe_error_type = 'other'
+    try:
+        logger.info(
+            'listen_parity_capture_lifecycle boundary=%s result=%s error_type=%s',
+            safe_boundary,
+            safe_result,
+            safe_error_type,
+        )
+    except Exception:
+        # Diagnostics must never affect a listen session or cassette export.
         pass

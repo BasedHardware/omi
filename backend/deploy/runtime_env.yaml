@@ -904,6 +904,9 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
+            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
+              category: memory_rollout
+              value: 'true'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -1776,6 +1779,9 @@ environments:
               category: memory_rollout
               value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              category: memory_rollout
+              value: 'false'
+            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
               value: 'false'
             OMI_ENV_STAGE:
