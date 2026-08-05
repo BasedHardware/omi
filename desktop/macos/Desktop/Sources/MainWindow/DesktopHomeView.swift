@@ -431,7 +431,6 @@ struct DesktopHomeView: View {
                 .tint(Ink.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .glassShellGround()  // Covers the shell while it loads; same glass, not a second ground.
             .transition(.opacity.animation(OmiMotion.gated(.easeOut(duration: 0.3))))
           }
 
@@ -448,7 +447,7 @@ struct DesktopHomeView: View {
         }
       }
     }
-    .glassShellGround()  // The one ground in this window. Nothing above it paints a background.
+    .environment(\.colorScheme, .light)  // The window owns the ground (`ShellGlassGround`); this is its light pin.
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)

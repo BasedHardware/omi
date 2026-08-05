@@ -6,9 +6,10 @@
 //  - `Components/GlassContentChrome.swift` owns what a **page hosted inside the panel** may draw on
 //    it: the card, the row, the chip, the field, the scroll fade. Every one of those is a wash on the
 //    ground rather than a surface of its own.
-//  - **This file owns the ground itself**, plus the two controls only the shell has: the window's
-//    glass, the clearance the hidden title bar demands, and the nav pill / icon button the top bar
-//    and the sidebar are built out of.
+//  - **This file owns the ground's terms** — the style it wears and the clearance the hidden title bar
+//    demands — plus the nav pill / icon button the top bar and the sidebar are built out of. The
+//    ground itself is `ShellGlassGround`, and it is AppKit's: a SwiftUI background is laid out inside
+//    the hosting view's safe area and so cannot reach the title bar band. See that file.
 //
 //  Nothing here restates a number from `InkGlass` — the material, the scrim, the 22 pt corner and the
 //  ambient shadow live there and are reached through `inkGlassPanel`. What is here is the handful of
@@ -85,24 +86,6 @@ enum GlassShell {
   /// Two rungs, because this is glass — see `Ink.tertiary`.
   static func controlLabel(isProminent: Bool) -> Color {
     isProminent ? Ink.primary : Ink.secondary
-  }
-}
-
-// MARK: - The ground
-
-extension View {
-  /// The window's whole ground: material, scrim and the light pin, edge to edge.
-  ///
-  /// **Apply this once**, at the root of a window's content. A second one stacks a second scrim and
-  /// halves the passthrough the first was tuned for, which is what makes a translucent surface read
-  /// as muddy over one desktop and opaque over another.
-  ///
-  /// It is the AppKit `.hudWindow` material blending `.behindWindow`, never SwiftUI's `Material` —
-  /// that is within-window vibrancy and would frost the app's own content instead of the desktop.
-  func glassShellGround() -> some View {
-    inkGlassPanel(
-      cornerRadius: GlassShell.groundStyle.cornerRadius,
-      shadow: GlassShell.groundStyle.shadow)
   }
 }
 
