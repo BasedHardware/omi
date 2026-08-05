@@ -133,21 +133,18 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
     gcloud auth application-default login --project <project-id>
     ```
 
-    This generates credentials at `~/.config/gcloud/application_default_credentials.json`.
-  </Step>
-  <Step title="Copy Credentials to Backend" icon="copy">
-    <Tabs>
-      <Tab title="macOS/Linux">
-        ```bash
-        cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
-        ```
-      </Tab>
-      <Tab title="Windows">
-        ```powershell
-        Copy-Item "$env:APPDATA\gcloud\application_default_credentials.json" .\google-credentials.json
-        ```
-      </Tab>
-    </Tabs>
+    This installs **Application Default Credentials** (ADC) for the Google client
+    libraries. Do **not** copy a service-account JSON key into the repo — long-lived
+    keys are the #6800 anti-pattern. Prefer user ADC for local work, or impersonate a
+    lower-privilege SA when you need production-adjacent roles:
+
+    ```bash
+    gcloud auth application-default login \
+      --impersonate-service-account=dev-readonly@<project-id>.iam.gserviceaccount.com
+    ```
+
+    Firebase Admin and Firestore discover ADC automatically when
+    `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are unset.
   </Step>
 </Steps>
 
@@ -332,7 +329,9 @@ OAuth is required for user authentication. You need to configure both Google and
     cp .env.template .env
     ```
 
-    Edit the `.env` file and set `SERVICE_ACCOUNT_JSON` to your Google credentials string.
+    Prefer ADC from `gcloud auth application-default login` (leave
+    `SERVICE_ACCOUNT_JSON` unset). Only use a scoped secret for Modal/CI
+    compatibility paths that have not yet moved to Workload Identity (#6800).
 
     Start the service:
     ```bash
@@ -470,7 +469,7 @@ Complete reference for all `.env` variables:
     | `REDIS_DB_PASSWORD` | Redis password (blank if none) |
     | `PINECONE_API_KEY` | Pinecone API key for vector database |
     | `PINECONE_INDEX_NAME` | Name of your Pinecone index |
-    | `GOOGLE_APPLICATION_CREDENTIALS` | Path to `google-credentials.json` |
+    | `GOOGLE_APPLICATION_CREDENTIALS` | Optional. Leave unset to use ADC from `gcloud auth application-default login`. Do not point this at a long-lived service-account JSON key (#6800). |
     | `ADMIN_KEY` | Temporary key for local dev (e.g., `123`) |
     | `ENCRYPTION_SECRET` | At least 32 bytes for encrypting user data |
   </Tab>

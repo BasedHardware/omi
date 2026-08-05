@@ -195,6 +195,16 @@ checks:
     triggers: [".github/scripts/check_failure_class_guard_ratchet.py", ".github/scripts/test_check_failure_class_guard_ratchet.py", ".github/scripts/failure_class_guard_ratchet_allowlist.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the guard-artifact ratchet's counting window, threshold, allowlist shrink rule, and shallow-history skip must stay behaviorally covered"
+  - id: gcp-sa-key-ratchet
+    command: ["python3", ".github/scripts/check_gcp_sa_key_ratchet.py"]
+    triggers: ["backend/charts/**", "backend/deploy/**", "backend/modal/**", "backend/main.py", "backend/desktop_backend.py", "backend/database/google_credentials.py", "backend/database/_client.py", "backend/pusher/main.py", "backend/agent-proxy/main.py", "backend/utils/other/storage.py", "backend/routers/listen/parity_pack_export.py", "backend/Dockerfile", "backend/pusher/Dockerfile", "backend/agent-proxy/Dockerfile", ".github/workflows/**", ".github/actions/**", ".github/scripts/check_gcp_sa_key_ratchet.py", ".github/scripts/gcp_sa_key_ratchet_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#6800 phase-1: production surfaces must not grow new long-lived GCP service-account JSON / credentials_json bindings while Workload Identity cutover proceeds"
+  - id: gcp-sa-key-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_gcp_sa_key_ratchet.py"]
+    triggers: [".github/scripts/check_gcp_sa_key_ratchet.py", ".github/scripts/test_check_gcp_sa_key_ratchet.py", ".github/scripts/gcp_sa_key_ratchet_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the GCP SA key ratchet must reject new prod key paths, require baseline shrink on removal, and refuse --write-baseline raises"
   - id: failure-class-cli-tests
     command: ["python3", "scripts/test_failure_class.py"]
     triggers: ["scripts/failure-class", "scripts/test_failure_class.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
