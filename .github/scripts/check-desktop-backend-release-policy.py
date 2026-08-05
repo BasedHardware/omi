@@ -200,7 +200,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-            "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json",
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
@@ -214,13 +214,15 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
-        if any(
-            "--remove-env-vars" in line and "GOOGLE_APPLICATION_CREDENTIALS" in line
-            for line in text.splitlines()
-        ):
-            errors.append(
-                f"{workflow}: mounted Firestore credentials must not be removed from the candidate environment"
-            )
+        desktop_block = _step_block(text, "Deploy desktop-backend to Cloud Run")
+        if desktop_block is not None:
+            for credential_env in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+                if any(line.strip().startswith(f"{credential_env}=") for line in desktop_block.splitlines()):
+                    errors.append(f"{workflow}: candidate must not set {credential_env} while using dev ADC")
+                if not any(
+                    "--remove-env-vars" in line and credential_env in line for line in desktop_block.splitlines()
+                ):
+                    errors.append(f"{workflow}: candidate must remove inherited {credential_env} for dev ADC")
         if "GCP_SERVICE_ACCOUNT:latest" in text or "GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT" in text:
             errors.append(
                 f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
@@ -248,6 +250,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 # required runtime project binding.
                 if not any(line.strip() == env_var for line in block.splitlines()):
                     errors.append(f"{workflow}: {step} missing isolated development runtime env {env_var!r}")
+        if desktop_block is not None and not any(
+            line.strip() == "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json"
+            for line in desktop_block.splitlines()
+        ):
+            errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
     return errors
 
 

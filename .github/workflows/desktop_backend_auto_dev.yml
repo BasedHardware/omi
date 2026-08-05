@@ -262,12 +262,12 @@ jobs:
             --allow-unauthenticated
             --revision-suffix=${{ steps.candidate-identity.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --remove-env-vars=OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
           env_vars: |
             FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
-            GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json
+            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development

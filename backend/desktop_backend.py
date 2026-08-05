@@ -33,12 +33,15 @@ def _initialize_firebase_admin() -> None:
     """
     auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
     if auth_emulator_host:
-        for adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+        for adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH"):
             os.environ.pop(adc_key, None)
         firebase_project_id = (
             os.environ.get("FIREBASE_AUTH_PROJECT_ID") or os.environ.get("FIREBASE_PROJECT_ID") or "demo-omi-local"
         )
         firebase_admin.initialize_app(options={"projectId": firebase_project_id})
+    elif firebase_auth_credentials_path := os.environ.get("FIREBASE_AUTH_CREDENTIALS_PATH", "").strip():
+        credentials = firebase_admin.credentials.Certificate(firebase_auth_credentials_path)
+        firebase_admin.initialize_app(credentials, options=firebase_admin_options())
     elif service_account_json := os.environ.get("SERVICE_ACCOUNT_JSON"):
         service_account_info = json.loads(service_account_json)
         credentials = firebase_admin.credentials.Certificate(service_account_info)
