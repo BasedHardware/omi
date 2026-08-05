@@ -27,6 +27,21 @@ struct FloatingBackgroundModifier: ViewModifier {
 }
 
 extension View {
+  /// Wears the pill's glass.
+  ///
+  /// **Apply it to the surface, never to the card that happens to be on it**, and that is not style
+  /// advice — it is the difference between a legible card and an invisible one. The floating bar has
+  /// two presentations, and only one of them brings its own ground: docked to the notch, every card
+  /// sits on `unifiedFloatingSurface`'s black dock shape, so a card needs nothing. Undocked, a
+  /// notification is a bare sibling of the pill in a `VStack` with no shared ground at all — whatever
+  /// it does not paint itself, the desktop paints.
+  ///
+  /// A card that grounds *itself* therefore only looks right until someone adds a second kind of
+  /// card. That is exactly what happened: of the five branches `barNotification` dispatches to, one
+  /// carried this modifier and four did not, so the receipt, the reach error, the end card and the
+  /// suggestion each rendered white-on-white over the desktop in pill mode — measured at 205 on 192,
+  /// a contrast ratio of about 1.1:1. The ground now goes on at the one call site that knows which
+  /// presentation is on screen, so a sixth card cannot be born without one.
   func floatingBackground(cornerRadius: CGFloat = OmiChrome.sectionRadius) -> some View {
     modifier(FloatingBackgroundModifier(cornerRadius: cornerRadius))
   }
