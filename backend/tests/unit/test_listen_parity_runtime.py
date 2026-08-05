@@ -193,7 +193,7 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     monkeypatch.setenv('OMI_PARITY_PACK_GCS_URI', _GCS_URI)
     monkeypatch.setenv('SERVICE_ACCOUNT_JSON', _CREDENTIAL)
 
-    exported = []
+    uploaded = []
     reconcile_calls = []
     persist_calls = []
     original_persist = ListenParityCapture.persist
@@ -203,13 +203,28 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
         persist_calls.append(capture)
         return original_persist(capture)
 
-    def fake_export(path, *, environ=None):
-        exported.append((path, export_module.resolve_export_target(environ)))
-        return True
+    class FakeBlob:
+        def __init__(self, bucket, object_name):
+            self.bucket = bucket
+            self.object_name = object_name
+
+        def upload_from_filename(self, filename, content_type=None):
+            uploaded.append((self.bucket, self.object_name, filename, content_type))
+
+    class FakeBucket:
+        def __init__(self, name):
+            self.name = name
+
+        def blob(self, object_name):
+            return FakeBlob(self.name, object_name)
+
+    class FakeClient:
+        def bucket(self, name):
+            return FakeBucket(name)
 
     monkeypatch.setattr(ListenParityCapture, 'persist', persist_once)
     monkeypatch.setattr(export_module, 'ensure_reconcile_loop', lambda *, environ=None: reconcile_calls.append(environ))
-    monkeypatch.setattr(export_module, 'export_cassette_file', fake_export)
+    monkeypatch.setattr(export_module, '_storage_client', lambda: FakeClient())
 
     websocket = _FakeWebSocket(audio=_AUDIO)
     runtime = ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
@@ -245,10 +260,33 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     assert Counter(event['direction'] for event in cassette['events']) == Counter(
         {'client': 1, 'inbound': 1, 'outbound': 1}
     )
-    assert len(exported) == 1
-    assert exported[0][0] == cassette_files[0]
-    assert exported[0][1] == ('runtime-capture-bucket', 'parity-pack/v0')
+    assert uploaded == [
+        (
+            'runtime-capture-bucket',
+            f'parity-pack/v0/cassettes/{cassette_files[0].name}',
+            str(cassette_files[0]),
+            'application/json',
+        )
+    ]
     assert reconcile_calls == [None]
+
+    lifecycle_messages = Counter(
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith('listen_parity_capture_lifecycle ')
+    )
+    assert lifecycle_messages == Counter(
+        {
+            'listen_parity_capture_lifecycle boundary=enabled result=enabled error_type=none': 1,
+            'listen_parity_capture_lifecycle boundary=admitted result=allowed error_type=none': 1,
+            'listen_parity_capture_lifecycle boundary=bootstrap result=succeeded error_type=none': 1,
+            'listen_parity_capture_lifecycle boundary=observe result=succeeded error_type=none': 3,
+            'listen_parity_capture_lifecycle boundary=persist result=attempted error_type=none': 1,
+            'listen_parity_capture_lifecycle boundary=persist result=succeeded error_type=none': 1,
+            'listen_parity_capture_lifecycle boundary=export result=attempted error_type=none': 1,
+            'listen_parity_capture_lifecycle boundary=export result=succeeded error_type=none': 1,
+        }
+    )
 
     for sensitive in (
         _PRINCIPAL,
