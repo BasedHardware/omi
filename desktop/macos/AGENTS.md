@@ -126,6 +126,13 @@ enforces this via `scripts/check-sources-root-layout.py`.
 When carving out additional leaf modules, prefer bottom-up order (models and
 storage before UI) and wire `import` + `public` on the extracted target's API.
 
+### Bundled resources
+
+`.process("Resources")` caches its manifest: after adding a file under
+`Sources/Resources/`, touch `Desktop/Package.swift` or the build silently omits it.
+It may flatten subdirectories — search both roots (`OmiSoundAssetLocator`), never
+`Bundle.module`. Cinematic audio is generated: `scripts/make-onboarding-sounds.py`.
+
 ### Swift Formatting
 
 Swift formatting uses a pinned `swift-format` binary (release 602.0.0 at commit

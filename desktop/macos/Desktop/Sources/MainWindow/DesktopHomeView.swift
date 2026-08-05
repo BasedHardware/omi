@@ -109,7 +109,7 @@ struct DesktopHomeView: View {
       return AnyView(
         Color.clear
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .background(OmiColors.backgroundPrimary)
+          // No ground of its own: the shell's glass is already under this.
           .onAppear {
             log("DesktopHomeView: Showing auth loading splash")
           }
@@ -424,15 +424,14 @@ struct DesktopHomeView: View {
               }
 
               Text(viewModelContainer.initStatusMessage)
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .inkStyle(.prose, color: Ink.secondary)
 
               ProgressView()
                 .scaleEffect(0.8)
-                .tint(OmiColors.accent.opacity(0.6))
+                .tint(Ink.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OmiColors.backgroundPrimary)
+            .glassShellGround()  // Covers the shell while it loads; same glass, not a second ground.
             .transition(.opacity.animation(OmiMotion.gated(.easeOut(duration: 0.3))))
           }
 
@@ -449,10 +448,10 @@ struct DesktopHomeView: View {
         }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .glassShellGround()  // The one ground in this window. Nothing above it paints a background.
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
-    .preferredColorScheme(.dark)
-    .tint(OmiColors.accent)
+    .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
+    .tint(Ink.accent)
     .onAppear {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
@@ -564,8 +563,8 @@ struct DesktopHomeView: View {
   private func enforceMainWindowMinimumSize() {
     let minimumContentSize = DesktopWindowLayoutPolicy.minimumContentSize
     DispatchQueue.main.async {
+      // Appearance belongs to `WindowGlass.wear(_:as:)`; stamping one here unpinned the glass.
       for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
-        window.appearance = NSAppearance(named: .darkAqua)
         window.contentMinSize = minimumContentSize
         window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: minimumContentSize)).size
 
@@ -1415,57 +1414,47 @@ struct DesktopHomeView: View {
     }
   }
 
-  // Main content area with rounded container. Extracted from `mainContent`
-  // for the same type-checker-budget reason as `sidebarSlot`.
+  // Main content area. It paints **no background**: the window's glass is the
+  // one ground (see `glassShellGround`), and a second one would slip an opaque
+  // sheet between the desktop and the `.behindWindow` blur.
   private var mainContentContainer: some View {
-    ZStack {
-      // Content container background — clean flat neutral dark (no gradient).
-      RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-        .fill(Color(red: 0.050, green: 0.052, blue: 0.059))
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-            .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 14)
-
-      // Page content - switch recreates views on tab change
-      // Extracted into a separate struct so that pages like TasksPage
-      // are not re-rendered when AppState publishes unrelated changes.
-      VStack(spacing: 0) {
-        // Constant floating top bar — primary nav, new-item counts, and the
-        // Capture/Listening controls. Replaces the old left nav rail. Hidden
-        // for the Memory atlas (see showsTopBar), which has its own chrome.
-        if showsTopBar {
-          DesktopTopBar(
-            selectedIndex: $selectedIndex,
-            memoryDestinationRawValue: $memoryDestinationRawValue,
-            appState: appState,
-            memoriesViewModel: viewModelContainer.memoriesViewModel,
-            tasksStore: viewModelContainer.tasksStore,
-            sinceDate: topBarSinceDate,
-            onRewind: {
-              OmiMotion.withGated(Self.pageNavigationAnimation) {
-                selectedIndex = SidebarNavItem.rewind.rawValue
-              }
-            }
-          )
-          .zIndex(1)
-        }
-
-        PageContentView(
-          selectedIndex: selectedIndex,
-          appState: appState,
-          viewModelContainer: viewModelContainer,
+    // Page content - switch recreates views on tab change
+    // Extracted into a separate struct so that pages like TasksPage
+    // are not re-rendered when AppState publishes unrelated changes.
+    VStack(spacing: 0) {
+      // Constant floating top bar — primary nav, new-item counts, and the
+      // Capture/Listening controls. Replaces the old left nav rail. Hidden
+      // for the Memory atlas (see showsTopBar), which has its own chrome.
+      if showsTopBar {
+        DesktopTopBar(
+          selectedIndex: $selectedIndex,
           memoryDestinationRawValue: $memoryDestinationRawValue,
-          selectedSettingsSection: $selectedSettingsSection,
-          highlightedSettingId: $highlightedSettingId,
-          selectedTabIndex: $selectedIndex
+          appState: appState,
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
+          tasksStore: viewModelContainer.tasksStore,
+          sinceDate: topBarSinceDate,
+          onRewind: {
+            OmiMotion.withGated(Self.pageNavigationAnimation) {
+              selectedIndex = SidebarNavItem.rewind.rawValue
+            }
+          }
         )
+        .zIndex(1)
       }
-      .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
+
+      PageContentView(
+        selectedIndex: selectedIndex,
+        appState: appState,
+        viewModelContainer: viewModelContainer,
+        memoryDestinationRawValue: $memoryDestinationRawValue,
+        selectedSettingsSection: $selectedSettingsSection,
+        highlightedSettingId: $highlightedSettingId,
+        selectedTabIndex: $selectedIndex
+      )
     }
-    .padding(OmiSpacing.md)
+    .onEscapeKey(priority: .navigation) { navigateHomeOnEscapeIfNeeded() }
+    // The hidden title bar puts the traffic lights over the content view.
+    .padding(.top, GlassShell.titlebarClearance)
   }
 
   private func navigateHomeOnEscapeIfNeeded() -> Bool {
@@ -1494,12 +1483,12 @@ private struct ChatFirstCapabilityLoadingView: View {
     VStack(spacing: OmiSpacing.md) {
       ProgressView()
         .controlSize(.small)
+        .tint(Ink.secondary)
       Text("Preparing Omi…")
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textSecondary)
+        .inkStyle(.prose, color: Ink.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
+    // No ground: this renders inside the shell's glass while the cohort settles.
     .accessibilityElement(children: .combine)
     .accessibilityLabel("Preparing Omi")
   }
@@ -1531,16 +1520,15 @@ private struct PageChromeButton: View {
         Text(title)
           .scaledFont(size: OmiType.caption, weight: .semibold)
       }
-      .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundStyle(isHovering ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.xs)
-      .background(
-        Capsule(style: .continuous)
-          .fill(.ultraThinMaterial)
-      )
+      // Never `Material`: that is within-window vibrancy and would frost the
+      // page under this pill instead of the desktop. A wash is the shape here.
+      .background(GlassPillBackground(isSelected: false, isHovering: isHovering))
       .overlay(
         Capsule(style: .continuous)
-          .stroke(isHovering ? OmiColors.success.opacity(0.34) : OmiColors.border.opacity(0.4), lineWidth: 1)
+          .strokeBorder(Ink.hairline, lineWidth: 1)
       )
       .contentShape(Capsule())
     }
@@ -1557,7 +1545,6 @@ private struct PageChromeButton: View {
 /// A minimal SB-styled segmented toggle used to fold two related surfaces into
 /// one tab (Conversations/Memories, Focus/Insights).
 private struct HubSegmentedControl: View {
-  @Environment(\.sbTheme) private var sb
   let segments: [String]
   @Binding var selection: Int
 
@@ -1565,24 +1552,21 @@ private struct HubSegmentedControl: View {
     HStack(spacing: 4) {
       ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
         Button {
-          withAnimation(.easeOut(duration: 0.15)) { selection = index }
+          OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) { selection = index }
         } label: {
           Text(segment)
-            .geist(size: 13, weight: selection == index ? .semibold : .medium)
-            .foregroundStyle(selection == index ? sb.ink : sb.ink(.w45))
+            .inkStyle(.rowCopy, color: selection == index ? Ink.primary : Ink.secondary)
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
-            .background(
-              RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(selection == index ? sb.ink(.w1) : Color.clear)
-            )
+            // A capsule, like every other selectable chip in this system.
+            .background(GlassPillBackground(isSelected: selection == index, isHovering: false))
         }
         .buttonStyle(.plain)
       }
     }
     .padding(4)
     .background(
-      RoundedRectangle(cornerRadius: 10, style: .continuous).fill(sb.ink(.w04))
+      Capsule(style: .continuous).fill(Ink.rowFill)
     )
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -1655,8 +1639,8 @@ struct MemoryHubPage: View {
       // an empty-graph rebuild bootstrap, so a one-frame appearance left the
       // atlas permanently blank and fired a destructive rebuild.
       ZStack {
-        OmiColors.backgroundPrimary
-        ProgressView().tint(OmiColors.textTertiary)
+        Color.clear  // The shell's glass is the ground.
+        ProgressView().tint(Ink.secondary)
       }
       .accessibilityIdentifier("brain_map_resolving_cohort")
     }

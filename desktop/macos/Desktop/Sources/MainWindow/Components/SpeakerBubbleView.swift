@@ -11,10 +11,10 @@ struct SpeakerBubbleView: View {
   /// Get speaker color based on speaker ID
   private var bubbleColor: Color {
     if isUser {
-      return OmiColors.userBubble
+      return Ink.rowFillHover
     }
-    let colorIndex = segment.speakerId % OmiColors.speakerColors.count
-    return OmiColors.speakerColors[colorIndex]
+    let colorIndex = segment.speakerId % PageGlass.speakerTints.count
+    return PageGlass.speakerTints[colorIndex]
   }
 
   /// Format timestamp as MM:SS
@@ -60,7 +60,7 @@ struct SpeakerBubbleView: View {
             }
             .padding(.vertical, OmiSpacing.hairline)
             .contentShape(Rectangle())
-            .foregroundColor(personName != nil ? OmiColors.accent : OmiColors.textTertiary)
+            .foregroundColor(personName != nil ? Ink.accent : Ink.secondary)
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("transcript_speaker_button_\(segment.id)")
@@ -75,7 +75,7 @@ struct SpeakerBubbleView: View {
         } else {
           Text(speakerLabel)
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         // Message bubble
@@ -85,7 +85,7 @@ struct SpeakerBubbleView: View {
         // Users can still copy the full transcript via the "Copy" button in the header.
         Text(segment.text)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
           .background(
@@ -98,7 +98,7 @@ struct SpeakerBubbleView: View {
           ForEach(segment.translations, id: \.lang) { translation in
             Text(translation.text)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .italic()
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
@@ -112,7 +112,7 @@ struct SpeakerBubbleView: View {
         // Timestamp
         Text(formatTime(segment.start))
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
       }
 
       if isUser {
@@ -126,13 +126,13 @@ struct SpeakerBubbleView: View {
   private var avatar: some View {
     Circle()
       .fill(
-        isUser ? OmiColors.accent : (personName != nil ? OmiColors.accent.opacity(0.3) : OmiColors.backgroundQuaternary)
+        isUser ? Ink.accent : (personName != nil ? Ink.accent.opacity(0.3) : Ink.rowFillHover)
       )
       .frame(width: 32, height: 32)
       .overlay(
         Text(avatarInitial)
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(isUser ? Ink.surface : Ink.primary)
       )
   }
 }
@@ -141,9 +141,9 @@ struct SpeakerBubbleView: View {
   #Preview {
     VStack(spacing: OmiSpacing.lg) {
       Text("SpeakerBubbleView Preview")
-        .foregroundColor(.white)
+        .foregroundColor(Ink.primary)
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

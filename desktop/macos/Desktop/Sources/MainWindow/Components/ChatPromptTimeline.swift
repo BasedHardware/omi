@@ -102,8 +102,10 @@ enum ChatPromptTimelineMetrics {
     return restOpacity + (proximityOpacity - restOpacity) * Double(min(max(proximity, 0), 1))
   }
 
+  /// The rail's ink. `Ink.primary` and not white: on a light-pinned panel a white
+  /// rail is invisible, and this is a mark on the surface rather than a light on it.
   static func markColor(isActive _: Bool) -> Color {
-    .white
+    Ink.primary
   }
 
   /// The mark the cursor is on, or nil in the gaps between them.
@@ -336,12 +338,14 @@ struct ChatPromptTimelineOverlay: View {
 
 /// What a mark is: the question, and how omi started answering it.
 ///
-/// Built as a floating panel rather than a filled rectangle. A solid dark fill
-/// on this canvas *is* the canvas — the first version was a near-black card on a
-/// near-black surface and read as a hole rather than as something on top. The
-/// blur plus a hairline edge and a real shadow is what macOS itself uses to say
-/// "this is in front", and it stays legible over a bubble as well as over bare
-/// background.
+/// Built as a floating panel rather than a filled rectangle. A fill the colour of
+/// the canvas *is* the canvas — the first version was a near-black card on a
+/// near-black surface and read as a hole rather than as something on top.
+///
+/// On glass it is the app's one real floating surface (`glassFloatingBar`): the
+/// `.hudWindow` material blurring the *desktop*, the ambient shadow, the faint
+/// edge. Deliberately **not** SwiftUI's `.ultraThinMaterial`, which is
+/// within-window vibrancy and would frost the transcript underneath instead.
 private struct ChatPromptPreviewCard: View {
   let mark: ChatPromptMark
 
@@ -353,13 +357,13 @@ private struct ChatPromptPreviewCard: View {
     VStack(alignment: .leading, spacing: 3) {
       Text(mark.prompt)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .lineLimit(1)
 
       if !mark.reply.isEmpty {
         Text(mark.reply)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(2)
           .lineSpacing(1)
       }
@@ -368,12 +372,7 @@ private struct ChatPromptPreviewCard: View {
     .padding(.horizontal, 11)
     .padding(.vertical, 9)
     .frame(width: ChatPromptTimelineMetrics.previewWidth, alignment: .leading)
-    .background(shape.fill(.ultraThinMaterial))
-    // The material alone samples too dark over a black canvas; the wash lifts it
-    // clear of whatever it happens to be covering.
-    .background(shape.fill(Color.white.opacity(0.07)))
-    .overlay(shape.stroke(Color.white.opacity(0.13), lineWidth: 1))
-    .shadow(color: .black.opacity(0.55), radius: 16, y: 6)
+    .glassFloatingBar(cornerRadius: 10)
     .fixedSize(horizontal: false, vertical: true)
   }
 }

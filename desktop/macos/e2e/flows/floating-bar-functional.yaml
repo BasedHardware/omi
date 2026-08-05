@@ -47,6 +47,8 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchCardVoiceDelivery.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/SystemCaptureControls.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/NotchGlassChrome.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowOverlayWindow.swift
 preconditions:
   - automation_bridge_ready
 

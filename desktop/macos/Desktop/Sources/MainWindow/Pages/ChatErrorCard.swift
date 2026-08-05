@@ -26,10 +26,10 @@ struct ChatErrorCard: View {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(headline)
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
           Text(detail)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
 
@@ -39,7 +39,7 @@ struct ChatErrorCard: View {
           Button(action: onDismiss) {
             Image(systemName: "xmark")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
           .help("Dismiss")
@@ -50,11 +50,12 @@ struct ChatErrorCard: View {
         Button(action: onRecover) {
           Text(primaryCTATitle)
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(.white)
+            // The label ladder inverted on the filled pill, and a full stadium.
+            .foregroundColor(Ink.surface)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xxs)
-            .background(accentColor.opacity(0.9))
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius))
+            .background(accentColor)
+            .clipShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
 
@@ -66,7 +67,7 @@ struct ChatErrorCard: View {
               Image(systemName: showDetails ? "chevron.up" : "chevron.down")
                 .scaledFont(size: OmiType.micro)
             }
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -77,19 +78,21 @@ struct ChatErrorCard: View {
       if showDetails, !detailsBody.isEmpty {
         Text(detailsBody)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, OmiSpacing.hairline)
       }
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
-    .background(accentColor.opacity(0.08))
+    // A wash on the panel, tinted only enough to name the state. A saturated fill
+    // here is a second ground, and on glass it is the loudest thing on screen.
+    .background(Ink.rowFill)
     .overlay(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
         .strokeBorder(accentColor.opacity(0.35), lineWidth: 1)
     )
-    .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
   }
 
   // MARK: - State-specific copy
@@ -109,16 +112,19 @@ struct ChatErrorCard: View {
     }
   }
 
+  /// The state's voice. Named system colours off the shared palette: `Ink.accent` for the one thing
+  /// that is actionable and is not already a button, `PageGlass.warning` for a state with something
+  /// to do about it, and `Ink.errorRed` — the only place this app raises its voice — for a failure.
   private var accentColor: Color {
     switch state {
     case .authRequired:
-      return .blue
+      return Ink.accent
     case .timeout, .interrupted:
-      return .orange
+      return PageGlass.warning
     case .bridgeUnavailable:
-      return .red
+      return Ink.errorRed
     case .noDataFound:
-      return OmiColors.textTertiary
+      return Ink.secondary
     }
   }
 

@@ -90,7 +90,6 @@ class FocusViewModel: ObservableObject {
 // MARK: - Focus Page
 
 struct FocusPage: View {
-  @Environment(\.sbTheme) private var sb
   @StateObject private var viewModel = FocusViewModel()
   @ObservedObject private var storage = FocusStorage.shared
   @State private var showClearConfirmation = false
@@ -116,10 +115,10 @@ struct FocusPage: View {
       VStack(spacing: 14) {
         ProgressView()
           .scaleEffect(1.1)
-          .tint(sb.ink(.w55))
+          .tint(Ink.secondary)
         Text("Loading focus data…")
           .geist(size: 14)
-          .foregroundStyle(sb.ink(.w45))
+          .foregroundStyle(Ink.secondary)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -152,7 +151,8 @@ struct FocusPage: View {
       .padding(.horizontal, 28)
       .padding(.bottom, 40)
     }
-    .background(Color.clear)
+    .glassScrollFade()
+    .glassContent()
     .confirmationDialog(
       "Clear All History",
       isPresented: $showClearConfirmation,
@@ -183,24 +183,24 @@ struct FocusPage: View {
       VStack(alignment: .leading, spacing: 6) {
         Text("Focus")
           .geist(size: 28, weight: .semibold, tracking: 28 * -0.02)
-          .foregroundStyle(sb.ink)
+          .foregroundStyle(Ink.primary)
 
         HStack(spacing: 8) {
           Circle()
-            .fill(viewModel.isMonitoring ? Color.green.opacity(0.9) : sb.ink(.w25))
+            .fill(viewModel.isMonitoring ? Ink.listeningGreen.opacity(0.9) : Ink.rowFillHover)
             .frame(width: 7, height: 7)
 
           Text(viewModel.isMonitoring ? "Monitoring" : "Not monitoring")
             .geist(size: 13)
-            .foregroundStyle(sb.ink(.w45))
+            .foregroundStyle(Ink.secondary)
 
           Text("·")
             .geist(size: 13)
-            .foregroundStyle(sb.ink(.w25))
+            .foregroundStyle(Ink.secondary)
 
           Text("\(viewModel.todayCount) session\(viewModel.todayCount == 1 ? "" : "s") today")
             .geist(size: 13)
-            .foregroundStyle(sb.ink(.w45))
+            .foregroundStyle(Ink.secondary)
         }
       }
 
@@ -211,7 +211,7 @@ struct FocusPage: View {
         HStack(spacing: 8) {
           Text("Show all")
             .geist(size: 13)
-            .foregroundStyle(sb.ink(.w55))
+            .foregroundStyle(Ink.secondary)
           SBToggleSwitch(isOn: $viewModel.showHistorical)
         }
 
@@ -233,15 +233,15 @@ struct FocusPage: View {
         } label: {
           Image(systemName: "ellipsis")
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(sb.ink(.w55))
+            .foregroundStyle(Ink.secondary)
             .frame(width: 30, height: 26)
             .background(
               RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(sb.ink(.w04))
+                .fill(Ink.rowFill)
             )
             .overlay(
               RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(sb.ink(.w09), lineWidth: 1)
+                .stroke(Ink.separator, lineWidth: 1)
             )
         }
         .menuStyle(.borderlessButton)
@@ -303,12 +303,12 @@ struct FocusPage: View {
             .frame(width: 7, height: 7)
           Text(headline)
             .geist(size: 17, weight: .semibold)
-            .foregroundStyle(sb.ink)
+            .foregroundStyle(Ink.primary)
         }
         if let subtext {
           Text(subtext)
             .geist(size: 13)
-            .foregroundStyle(sb.ink(.w45))
+            .foregroundStyle(Ink.secondary)
             .lineLimit(1)
         }
       }
@@ -328,7 +328,7 @@ struct FocusPage: View {
     let app = storage.detectedAppName
 
     return statusCard(
-      dot: sb.ink(.w45),
+      dot: Ink.secondary,
       headline: "Waiting to analyze",
       subtext: {
         if let app { return "\(app)  ·  analyzing in \(seconds)s" }
@@ -338,10 +338,10 @@ struct FocusPage: View {
       VStack(alignment: .leading, spacing: 0) {
         Text("\(seconds)")
           .geistMono(size: 40, weight: .semibold)
-          .foregroundStyle(sb.ink(.w85))
+          .foregroundStyle(Ink.primary)
         Text("SEC")
           .geistMono(size: 10, weight: .medium, tracking: 10 * 0.1)
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
       }
     } trailing: {
       EmptyView()
@@ -357,7 +357,7 @@ struct FocusPage: View {
     let app = storage.detectedAppName ?? viewModel.currentApp
 
     return statusCard(
-      dot: Color.orange.opacity(0.9),
+      dot: PageGlass.warning.opacity(0.9),
       headline: "Cooldown active",
       subtext: {
         if let app { return "\(app)  ·  next check soon" }
@@ -367,10 +367,10 @@ struct FocusPage: View {
       VStack(alignment: .leading, spacing: 0) {
         Text("\(minutes):\(String(format: "%02d", seconds))")
           .geistMono(size: 34, weight: .semibold)
-          .foregroundStyle(sb.ink(.w85))
+          .foregroundStyle(Ink.primary)
         Text("REMAINING")
           .geistMono(size: 10, weight: .medium, tracking: 10 * 0.1)
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
       }
     } trailing: {
       EmptyView()
@@ -381,13 +381,13 @@ struct FocusPage: View {
 
   private func pendingStatusBanner(appName: String) -> some View {
     statusCard(
-      dot: sb.ink(.w35),
+      dot: Ink.secondary,
       headline: "Analyzing…",
       subtext: appName
     ) {
       ProgressView()
         .scaleEffect(0.8)
-        .tint(sb.ink(.w45))
+        .tint(Ink.secondary)
         .frame(width: 44, height: 44)
     } trailing: {
       EmptyView()
@@ -402,17 +402,17 @@ struct FocusPage: View {
     let focused = status == .focused
 
     return statusCard(
-      dot: focused ? Color.green.opacity(0.9) : Color.orange.opacity(0.9),
+      dot: focused ? Ink.listeningGreen.opacity(0.9) : PageGlass.warning.opacity(0.9),
       headline: focused ? "Focused" : "Distracted",
       subtext: appName
     ) {
       VStack(alignment: .leading, spacing: 0) {
         Text(String(format: "%.0f", viewModel.stats.focusRate))
           .geist(size: 40, weight: .semibold)
-          .foregroundStyle(sb.ink(.w85))
+          .foregroundStyle(Ink.primary)
         Text("FOCUS RATE")
           .geistMono(size: 10, weight: .medium, tracking: 10 * 0.1)
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
       }
     } trailing: {
       EmptyView()
@@ -430,13 +430,13 @@ struct FocusPage: View {
           value: "\(viewModel.stats.focusedMinutes)",
           unit: "min",
           label: "Focus time",
-          dot: Color.green.opacity(0.9)
+          dot: Ink.listeningGreen.opacity(0.9)
         )
         SBStatTile(
           value: "\(viewModel.stats.distractedMinutes)",
           unit: "min",
           label: "Distracted",
-          dot: Color.orange.opacity(0.9)
+          dot: PageGlass.warning.opacity(0.9)
         )
         SBStatTile(
           value: String(format: "%.0f", viewModel.stats.focusRate),
@@ -464,23 +464,23 @@ struct FocusPage: View {
         ForEach(viewModel.stats.topDistractions.prefix(5), id: \.appOrSite) { entry in
           FocusHairlineRow {
             Circle()
-              .fill(Color.orange.opacity(0.9))
+              .fill(PageGlass.warning.opacity(0.9))
               .frame(width: 6, height: 6)
 
             Text(entry.appOrSite)
               .geist(size: 15)
-              .foregroundStyle(sb.ink(.w85))
+              .foregroundStyle(Ink.primary)
               .lineLimit(1)
 
             Spacer(minLength: 12)
 
             Text("\(entry.count)×")
               .geistMono(size: 12, tracking: 0)
-              .foregroundStyle(sb.ink(.w35))
+              .foregroundStyle(Ink.secondary)
 
             Text(formatDuration(entry.totalSeconds))
               .geistMono(size: 13, weight: .medium, tracking: 0)
-              .foregroundStyle(sb.ink(.w7))
+              .foregroundStyle(Ink.secondary)
               .frame(width: 56, alignment: .trailing)
           }
         }
@@ -501,12 +501,12 @@ struct FocusPage: View {
         HStack(spacing: 7) {
           Image(systemName: "magnifyingglass")
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(sb.ink(.w35))
+            .foregroundStyle(Ink.secondary)
 
           TextField("Search…", text: $viewModel.searchText)
             .textFieldStyle(.plain)
             .geist(size: 13)
-            .foregroundStyle(sb.ink)
+            .foregroundStyle(Ink.primary)
 
           if !viewModel.searchText.isEmpty {
             Button {
@@ -514,7 +514,7 @@ struct FocusPage: View {
             } label: {
               Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 12))
-                .foregroundStyle(sb.ink(.w35))
+                .foregroundStyle(Ink.secondary)
             }
             .buttonStyle(.plain)
           }
@@ -524,11 +524,11 @@ struct FocusPage: View {
         .frame(width: 190)
         .background(
           RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(sb.ink(.w06))
+            .fill(Ink.rowFill)
         )
         .overlay(
           RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .stroke(sb.ink(.w12), lineWidth: 1)
+            .stroke(Ink.separator, lineWidth: 1)
         )
       }
       .padding(.bottom, 4)
@@ -554,11 +554,11 @@ struct FocusPage: View {
 
       Text("No sessions yet")
         .geist(size: 17, weight: .semibold)
-        .foregroundStyle(sb.ink(.w85))
+        .foregroundStyle(Ink.primary)
 
       Text("Focus sessions appear here as you work.\nEnable Focus monitoring in Settings to begin.")
         .geist(size: 13.5)
-        .foregroundStyle(sb.ink(.w45))
+        .foregroundStyle(Ink.secondary)
         .multilineTextAlignment(.center)
         .lineSpacing(2)
 
@@ -587,7 +587,6 @@ struct FocusPage: View {
 // MARK: - SB Stat Tile
 
 private struct SBStatTile: View {
-  @Environment(\.sbTheme) private var sb
   let value: String
   let unit: String
   let label: String
@@ -598,11 +597,11 @@ private struct SBStatTile: View {
       HStack(alignment: .firstTextBaseline, spacing: 4) {
         Text(value)
           .geist(size: 34, weight: .semibold, tracking: 34 * -0.02)
-          .foregroundStyle(sb.ink)
+          .foregroundStyle(Ink.primary)
         if !unit.isEmpty {
           Text(unit)
             .geist(size: 14, weight: .medium)
-            .foregroundStyle(sb.ink(.w38))
+            .foregroundStyle(Ink.secondary)
         }
       }
 
@@ -614,7 +613,7 @@ private struct SBStatTile: View {
         }
         Text(label.uppercased())
           .geistMono(size: 11, weight: .medium, tracking: 11 * 0.08)
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -629,7 +628,6 @@ private struct SBStatTile: View {
 /// A hover-highlighting list row with a hairline separator underneath. Used by
 /// the Top Distractions list and (via `FocusSessionRow`) the session history.
 private struct FocusHairlineRow<Content: View>: View {
-  @Environment(\.sbTheme) private var sb
   var onHover: ((Bool) -> Void)? = nil
   @ViewBuilder var content: () -> Content
 
@@ -644,7 +642,7 @@ private struct FocusHairlineRow<Content: View>: View {
       .padding(.vertical, 12)
       .background(
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(isHovering ? sb.ink(.w04) : Color.clear)
+          .fill(isHovering ? Ink.rowFill : Color.clear)
       )
       .contentShape(Rectangle())
       .onHover { hovering in
@@ -653,7 +651,7 @@ private struct FocusHairlineRow<Content: View>: View {
       }
 
       Rectangle()
-        .fill(sb.ink(.w07))
+        .fill(Ink.rowFillHover)
         .frame(height: 1)
         .padding(.horizontal, 10)
     }
@@ -663,7 +661,6 @@ private struct FocusHairlineRow<Content: View>: View {
 // MARK: - Focus Session Row
 
 struct FocusSessionRow: View {
-  @Environment(\.sbTheme) private var sb
   let session: StoredFocusSession
   let onDelete: () -> Void
 
@@ -674,20 +671,20 @@ struct FocusSessionRow: View {
     FocusHairlineRow(onHover: { isHovering = $0 }) {
       // Status indicator
       Circle()
-        .fill(session.status == .focused ? Color.green.opacity(0.9) : Color.orange.opacity(0.9))
+        .fill(session.status == .focused ? Ink.listeningGreen.opacity(0.9) : PageGlass.warning.opacity(0.9))
         .frame(width: 7, height: 7)
 
       // App/site + description
       VStack(alignment: .leading, spacing: 2) {
         Text(session.appOrSite)
           .geist(size: 15)
-          .foregroundStyle(sb.ink(.w9))
+          .foregroundStyle(Ink.primary)
           .lineLimit(1)
 
         if !session.description.isEmpty {
           Text(session.description)
             .geist(size: 12.5)
-            .foregroundStyle(sb.ink(.w38))
+            .foregroundStyle(Ink.secondary)
             .lineLimit(1)
         }
       }
@@ -698,7 +695,7 @@ struct FocusSessionRow: View {
       if let message = session.message, !message.isEmpty {
         Text(message)
           .geist(size: 12.5)
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
           .lineLimit(1)
           .frame(maxWidth: 160, alignment: .trailing)
       }
@@ -707,14 +704,14 @@ struct FocusSessionRow: View {
       if !session.isSynced {
         Image(systemName: "arrow.triangle.2.circlepath")
           .font(.system(size: 11))
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
           .help("Pending sync")
       }
 
       // Time
       Text(formatTime(session.createdAt))
         .geistMono(size: 12, tracking: 0)
-        .foregroundStyle(sb.ink(.w35))
+        .foregroundStyle(Ink.secondary)
         .frame(width: 66, alignment: .trailing)
 
       // Delete button (on hover)
@@ -724,7 +721,7 @@ struct FocusSessionRow: View {
         } label: {
           Image(systemName: "trash")
             .font(.system(size: 12))
-            .foregroundStyle(sb.ink(.w45))
+            .foregroundStyle(Ink.secondary)
         }
         .buttonStyle(.plain)
         .help("Delete")
@@ -769,6 +766,6 @@ struct FocusSessionRow: View {
   #Preview {
     FocusPage()
       .frame(width: 800, height: 600)
-      .background(Color.black)
+      .background(Ink.surface)
   }
 #endif

@@ -24,13 +24,13 @@ struct GoalsWidget: View {
       HStack {
         Text("Goals")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         // Add goal button (only if less than 3 goals)
         if goals.count < 4 {
-          GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: OmiColors.textTertiary) {
+          GoalHeaderButton(icon: "plus", tooltip: "Add goal", color: Ink.secondary) {
             showingCreateSheet = true
           }
         }
@@ -55,10 +55,10 @@ struct GoalsWidget: View {
               Text(isGeneratingGoal ? "Generating..." : "Generate AI Goal")
                 .scaledFont(size: OmiType.body, weight: .medium)
             }
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
-            .omiControlSurface(fill: OmiColors.accent.opacity(0.12), radius: OmiChrome.chipRadius)
+            .glassChip(isActive: true)
           }
           .buttonStyle(.plain)
           .disabled(isGeneratingGoal)
@@ -95,7 +95,7 @@ struct GoalsWidget: View {
     }
     .padding(OmiSpacing.xl)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    .omiPanel(fill: OmiColors.backgroundSecondary)
+    .glassCard()
     .sheet(isPresented: $showingCreateSheet) {
       GoalEditSheet(
         goal: nil,
@@ -175,7 +175,7 @@ struct GoalRowView: View {
     } else if progress >= 0.2 {
       return Color(red: 0.976, green: 0.451, blue: 0.086)  // #F97316 Orange
     } else {
-      return OmiColors.textTertiary
+      return Ink.secondary
     }
   }
 
@@ -195,7 +195,7 @@ struct GoalRowView: View {
       // Emoji icon - tapping opens edit sheet
       ZStack {
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundRaised.opacity(0.9))
+          .fill(Ink.rowFill.opacity(0.9))
           .frame(width: 36, height: 36)
         Text(goalEmoji)
           .scaledFont(size: OmiType.subheading)
@@ -207,7 +207,7 @@ struct GoalRowView: View {
         HStack {
           Text(goal.title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
             .onTapGesture { onTap() }
 
@@ -222,7 +222,7 @@ struct GoalRowView: View {
             }) {
               Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .scaledFont(size: OmiType.micro, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
             .buttonStyle(.plain)
           }
@@ -241,7 +241,7 @@ struct GoalRowView: View {
           // Progress value (current/target)
           Text(dragProgressText)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(isDragging ? OmiColors.textPrimary : OmiColors.textTertiary)
+            .foregroundColor(isDragging ? Ink.primary : Ink.secondary)
             .omiAnimation(.easeInOut(duration: 0.15), value: isDragging)
         }
 
@@ -250,7 +250,7 @@ struct GoalRowView: View {
           ZStack(alignment: .leading) {
             // Background track - visible light gray
             RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-              .fill(Color.white.opacity(0.12))
+              .fill(Ink.rowFill)
               .frame(height: isDragging ? 8 : 6)
 
             // Progress fill
@@ -263,9 +263,9 @@ struct GoalRowView: View {
 
             // Drag thumb - always visible
             Circle()
-              .fill(.white)
+              .fill(Ink.primary)
               .frame(width: 14, height: 14)
-              .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+              .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
               .offset(x: max(0, min(geometry.size.width * displayProgress - 7, geometry.size.width - 14)))
           }
           .frame(maxHeight: .infinity)
@@ -299,7 +299,7 @@ struct GoalRowView: View {
             if let desc = goal.description, !desc.isEmpty {
               Text(desc)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(3)
             }
 
@@ -308,7 +308,7 @@ struct GoalRowView: View {
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("Linked Tasks")
                   .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .textCase(.uppercase)
 
                 ForEach(linkedTasks) { task in
@@ -316,11 +316,11 @@ struct GoalRowView: View {
                     Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
                       .scaledFont(size: OmiType.caption)
                       .foregroundColor(
-                        task.completed ? Color(red: 0.133, green: 0.773, blue: 0.369) : OmiColors.textTertiary)
+                        task.completed ? Color(red: 0.133, green: 0.773, blue: 0.369) : Ink.secondary)
 
                     Text(task.description)
                       .scaledFont(size: OmiType.caption)
-                      .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+                      .foregroundColor(task.completed ? Ink.secondary : Ink.primary)
                       .strikethrough(task.completed)
                       .lineLimit(1)
                   }
@@ -337,7 +337,7 @@ struct GoalRowView: View {
     .padding(.horizontal, OmiSpacing.md)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous)
-        .fill(OmiColors.backgroundTertiary.opacity(isHovering ? 0.9 : 0.72))
+        .fill(Ink.rowFillHover.opacity(isHovering ? 0.9 : 0.72))
     )
     .onHover { hovering in
       OmiMotion.withGated(.easeInOut(duration: 0.15)) {
@@ -573,16 +573,16 @@ struct GoalEditSheet: View {
       HStack {
         Text(isNewGoal ? "Add Goal" : "Edit Goal")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         Button(action: onDismiss) {
           Image(systemName: "xmark")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 28, height: 28)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(Ink.rowFillHover.opacity(0.5))
             .clipShape(Circle())
         }
         .buttonStyle(.plain)
@@ -592,7 +592,7 @@ struct GoalEditSheet: View {
       .padding(.bottom, OmiSpacing.lg)
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xl) {
@@ -601,17 +601,17 @@ struct GoalEditSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.sm) {
             Text("Goal Title")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
 
             TextField("Enter goal title", text: $title)
               .textFieldStyle(.plain)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.md)
               .background(
                 RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                  .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                  .fill(Ink.rowFillHover.opacity(0.5))
               )
           }
 
@@ -620,34 +620,34 @@ struct GoalEditSheet: View {
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Text("Current")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
 
               TextField("0", text: $currentValue)
                 .textFieldStyle(.plain)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.md)
                 .background(
                   RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    .fill(Ink.rowFillHover.opacity(0.5))
                 )
             }
 
             VStack(alignment: .leading, spacing: OmiSpacing.sm) {
               Text("Target")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
 
               TextField("100", text: $targetValue)
                 .textFieldStyle(.plain)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.md)
                 .background(
                   RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                    .fill(OmiColors.backgroundTertiary.opacity(0.5))
+                    .fill(Ink.rowFillHover.opacity(0.5))
                 )
             }
           }
@@ -656,7 +656,7 @@ struct GoalEditSheet: View {
       }
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
 
       // Actions
       HStack(spacing: OmiSpacing.md) {
@@ -668,7 +668,7 @@ struct GoalEditSheet: View {
           }) {
             Text("Delete")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.red)
+              .foregroundColor(Ink.errorRed)
           }
           .buttonStyle(.plain)
         }
@@ -679,7 +679,7 @@ struct GoalEditSheet: View {
         Button(action: onDismiss) {
           Text("Cancel")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
 
@@ -692,12 +692,12 @@ struct GoalEditSheet: View {
         }) {
           Text(isNewGoal ? "Add Goal" : "Save")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.backgroundPrimary)
+            .foregroundColor(Ink.surface)
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .fill(OmiColors.accent)
+                .fill(Ink.accent)
             )
         }
         .buttonStyle(.plain)
@@ -707,7 +707,7 @@ struct GoalEditSheet: View {
       .padding(OmiSpacing.xl)
     }
     .frame(width: 400, height: isNewGoal ? 320 : 420)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
     .onAppear {
       if let goal = goal {
         title = goal.title
@@ -744,7 +744,7 @@ struct GoalInsightSheet: View {
             .foregroundColor(.yellow)
           Text("Goal Insight")
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
         }
 
         Spacer()
@@ -752,9 +752,9 @@ struct GoalInsightSheet: View {
         Button(action: onDismiss) {
           Image(systemName: "xmark")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 28, height: 28)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
+            .background(Ink.rowFillHover.opacity(0.5))
             .clipShape(Circle())
         }
         .buttonStyle(.plain)
@@ -764,19 +764,19 @@ struct GoalInsightSheet: View {
       .padding(.bottom, OmiSpacing.lg)
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
 
       // Goal info
       HStack(spacing: OmiSpacing.md) {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(goal.title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           Text("\(Int(goal.currentValue))/\(Int(goal.targetValue)) (\(Int(goal.progress))%)")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         Spacer()
@@ -784,17 +784,17 @@ struct GoalInsightSheet: View {
         // Progress indicator
         ZStack {
           Circle()
-            .stroke(OmiColors.backgroundTertiary, lineWidth: 3)
+            .stroke(Ink.rowFillHover, lineWidth: 3)
           Circle()
             .trim(from: 0, to: min(goal.progress / 100, 1.0))
-            .stroke(OmiColors.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .stroke(Ink.accent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
             .rotationEffect(.degrees(-90))
         }
         .frame(width: 36, height: 36)
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.vertical, OmiSpacing.md)
-      .background(OmiColors.backgroundTertiary.opacity(0.3))
+      .background(Ink.rowFillHover.opacity(0.3))
 
       // Content
       VStack(spacing: OmiSpacing.lg) {
@@ -804,17 +804,17 @@ struct GoalInsightSheet: View {
               .scaleEffect(1.2)
             Text("Getting personalized insight...")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let error = errorMessage {
           VStack(spacing: OmiSpacing.md) {
             Image(systemName: "exclamationmark.triangle")
               .scaledFont(size: 32)
-              .foregroundColor(.orange)
+              .foregroundColor(PageGlass.warning)
             Text(error)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .multilineTextAlignment(.center)
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -822,11 +822,11 @@ struct GoalInsightSheet: View {
           VStack(alignment: .leading, spacing: OmiSpacing.md) {
             Text("This week's action:")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
 
             Text(insightText)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .fixedSize(horizontal: false, vertical: true)
           }
           .padding(OmiSpacing.xl)
@@ -836,7 +836,7 @@ struct GoalInsightSheet: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
       Divider()
-        .background(OmiColors.backgroundTertiary)
+        .background(Ink.rowFillHover)
 
       // Actions
       HStack(spacing: OmiSpacing.md) {
@@ -848,7 +848,7 @@ struct GoalInsightSheet: View {
             Text("Refresh")
           }
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
         .disabled(isLoading)
@@ -859,12 +859,12 @@ struct GoalInsightSheet: View {
         Button(action: onDismiss) {
           Text("Done")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.backgroundPrimary)
+            .foregroundColor(Ink.surface)
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                .fill(OmiColors.accent)
+                .fill(Ink.accent)
             )
         }
         .buttonStyle(.plain)
@@ -872,7 +872,7 @@ struct GoalInsightSheet: View {
       .padding(OmiSpacing.xl)
     }
     .frame(width: 400, height: 380)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
     .onAppear {
       loadInsight()
     }
@@ -928,13 +928,13 @@ private struct GoalHeaderButton: View {
       if isHovered {
         Text(tooltip)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xxs)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-              .fill(OmiColors.backgroundTertiary)
-              .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+              .fill(Ink.rowFillHover)
+              .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
           )
           .fixedSize()
           .offset(y: 24)
@@ -960,6 +960,6 @@ private struct GoalHeaderButton: View {
     )
     .frame(width: 350)
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

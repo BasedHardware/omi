@@ -80,7 +80,6 @@ struct InsightPage: View {
   @ObservedObject private var storage = InsightStorage.shared
   @State private var selectedInsight: StoredInsight? = nil
   @State private var showClearConfirmation = false
-  @Environment(\.sbTheme) private var sb
 
   private let contentMaxWidth: CGFloat = 820
 
@@ -106,7 +105,7 @@ struct InsightPage: View {
         insightList
       }
     }
-    .background(Color.clear)
+    .glassContent()
     .dismissableSheet(item: $selectedInsight) { item in
       insightDetailSheet(item)
         .frame(width: 450, height: 500)
@@ -136,21 +135,21 @@ struct InsightPage: View {
       VStack(alignment: .leading, spacing: 6) {
         Text("Insights")
           .geist(size: 28, weight: .semibold, tracking: 28 * -0.02)
-          .foregroundStyle(sb.ink)
+          .foregroundStyle(Ink.primary)
 
         HStack(spacing: 8) {
           Text("\(viewModel.totalCount.formatted()) insights")
             .geistMono(size: 12.5, tracking: 0)
-            .foregroundStyle(sb.ink(.w35))
+            .foregroundStyle(Ink.secondary)
 
           if viewModel.unreadCount > 0 {
             Text("\(viewModel.unreadCount) new")
               .geistMono(size: 11.5, weight: .medium, tracking: 0)
-              .foregroundStyle(sb.ink)
+              .foregroundStyle(Ink.primary)
               .padding(.horizontal, 8)
               .padding(.vertical, 2)
               .background(
-                Capsule().fill(sb.ink(.w12))
+                Capsule().fill(Ink.rowFillHover)
               )
           }
         }
@@ -180,11 +179,11 @@ struct InsightPage: View {
         } label: {
           Image(systemName: "ellipsis")
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(sb.ink(.w55))
+            .foregroundStyle(Ink.secondary)
             .frame(width: 34, height: 34)
             .background(
               RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(sb.ink(.w12), lineWidth: 1)
+                .stroke(Ink.separator, lineWidth: 1)
             )
         }
         .menuStyle(.borderlessButton)
@@ -202,18 +201,18 @@ struct InsightPage: View {
       HStack(spacing: 10) {
         Image(systemName: "magnifyingglass")
           .font(.system(size: 13, weight: .medium))
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
 
         ZStack(alignment: .leading) {
           if viewModel.searchText.isEmpty {
             Text("Search insights…")
               .geist(size: 14)
-              .foregroundStyle(sb.ink(.w35))
+              .foregroundStyle(Ink.secondary)
           }
           TextField("", text: $viewModel.searchText)
             .textFieldStyle(.plain)
             .geist(size: 14)
-            .foregroundStyle(sb.ink)
+            .foregroundStyle(Ink.primary)
         }
 
         if !viewModel.searchText.isEmpty {
@@ -222,7 +221,7 @@ struct InsightPage: View {
           } label: {
             Image(systemName: "xmark.circle.fill")
               .font(.system(size: 13))
-              .foregroundStyle(sb.ink(.w35))
+              .foregroundStyle(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -231,11 +230,11 @@ struct InsightPage: View {
       .padding(.vertical, 10)
       .background(
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(sb.ink(.w06))
+          .fill(Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .stroke(sb.ink(.w12), lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
 
       // Category chips
@@ -262,19 +261,19 @@ struct InsightPage: View {
       HStack(spacing: 7) {
         Text(title)
           .geist(size: 13, weight: isSelected ? .medium : .regular)
-          .foregroundStyle(isSelected ? sb.ink : sb.ink(.w55))
+          .foregroundStyle(isSelected ? Ink.primary : Ink.secondary)
 
         if count > 0 {
           Text("\(count)")
             .geistMono(size: 11, tracking: 0)
-            .foregroundStyle(isSelected ? sb.ink(.w7) : sb.ink(.w35))
+            .foregroundStyle(isSelected ? Ink.secondary : Ink.secondary)
         }
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 7)
       .background(
         RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .fill(isSelected ? sb.ink(.w12) : sb.ink(.w06))
+          .fill(isSelected ? Ink.rowFillHover : Ink.rowFill)
       )
     }
     .buttonStyle(.plain)
@@ -310,6 +309,7 @@ struct InsightPage: View {
       .padding(.top, 8)
       .padding(.bottom, 32)
     }
+    .glassScrollFade()
   }
 
   // MARK: - Empty States
@@ -318,17 +318,17 @@ struct InsightPage: View {
     VStack(spacing: 16) {
       Image(systemName: "lightbulb")
         .font(.system(size: 40, weight: .light))
-        .foregroundStyle(sb.ink(.w25))
+        .foregroundStyle(Ink.secondary)
 
       Text("No insights yet")
         .geist(size: 17, weight: .semibold)
-        .foregroundStyle(sb.ink(.w85))
+        .foregroundStyle(Ink.primary)
 
       Text(
         "Proactive insights from Omi will appear here as you work.\nEnable the Insight Assistant to start seeing them."
       )
       .geist(size: 13.5)
-      .foregroundStyle(sb.ink(.w45))
+      .foregroundStyle(Ink.secondary)
       .multilineTextAlignment(.center)
       .lineSpacing(2)
 
@@ -338,7 +338,7 @@ struct InsightPage: View {
         Text("Settings → Proactive Assistants")
           .geist(size: 12.5)
       }
-      .foregroundStyle(sb.ink(.w35))
+      .foregroundStyle(Ink.secondary)
       .padding(.top, 4)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -349,15 +349,15 @@ struct InsightPage: View {
     VStack(spacing: 14) {
       Image(systemName: "magnifyingglass")
         .font(.system(size: 32, weight: .light))
-        .foregroundStyle(sb.ink(.w25))
+        .foregroundStyle(Ink.secondary)
 
       Text("No results")
         .geist(size: 16, weight: .semibold)
-        .foregroundStyle(sb.ink(.w85))
+        .foregroundStyle(Ink.primary)
 
       Text("Try a different search or filter.")
         .geist(size: 13.5)
-        .foregroundStyle(sb.ink(.w45))
+        .foregroundStyle(Ink.secondary)
 
       if viewModel.selectedCategory != nil || !viewModel.searchText.isEmpty {
         SBOutlineButton(title: "Clear filters", size: 13) {
@@ -382,12 +382,12 @@ struct InsightPage: View {
           Text(insight.insight.category.displayName)
             .geist(size: 12.5, weight: .medium)
         }
-        .foregroundStyle(sb.ink(.w7))
+        .foregroundStyle(Ink.secondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
           RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(sb.ink(.w06))
+            .fill(Ink.rowFill)
         )
 
         Spacer()
@@ -397,7 +397,7 @@ struct InsightPage: View {
         } label: {
           Image(systemName: "xmark.circle.fill")
             .font(.system(size: 18))
-            .foregroundStyle(sb.ink(.w35))
+            .foregroundStyle(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -405,7 +405,7 @@ struct InsightPage: View {
       // Main advice
       Text(insight.insight.insight)
         .geist(size: 16, weight: .medium)
-        .foregroundStyle(sb.ink(.w9))
+        .foregroundStyle(Ink.primary)
         .lineSpacing(3)
         .textSelection(.enabled)
         .fixedSize(horizontal: false, vertical: true)
@@ -417,7 +417,7 @@ struct InsightPage: View {
 
           Text(reasoning)
             .geist(size: 13.5)
-            .foregroundStyle(sb.ink(.w7))
+            .foregroundStyle(Ink.secondary)
             .lineSpacing(2)
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
@@ -449,30 +449,30 @@ struct InsightPage: View {
           Text("\(Int(insight.insight.confidence * 100))% confidence")
             .geistMono(size: 11.5, tracking: 0)
         }
-        .foregroundStyle(sb.ink(.w35))
+        .foregroundStyle(Ink.secondary)
 
         Spacer()
 
         Text(formatDate(insight.createdAt))
           .geistMono(size: 11.5, tracking: 0)
-          .foregroundStyle(sb.ink(.w35))
+          .foregroundStyle(Ink.secondary)
       }
     }
     .padding(24)
     .frame(width: 450)
-    .background(sb.background)
+    .background(Color.clear)
   }
 
   private func contextRow(_ icon: String, _ text: String) -> some View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: icon)
         .font(.system(size: 12))
-        .foregroundStyle(sb.ink(.w35))
+        .foregroundStyle(Ink.secondary)
         .frame(width: 16)
 
       Text(text)
         .geist(size: 13.5)
-        .foregroundStyle(sb.ink(.w7))
+        .foregroundStyle(Ink.secondary)
         .textSelection(.enabled)
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -502,7 +502,6 @@ struct InsightTimelineRow: View {
 
   @State private var isHovering = false
   @State private var showDeleteConfirmation = false
-  @Environment(\.sbTheme) private var sb
 
   var body: some View {
     Button(action: onTap) {
@@ -518,13 +517,13 @@ struct InsightTimelineRow: View {
               Text(insight.insight.category.displayName.uppercased())
                 .geistMono(size: 11, tracking: 0.6)
             }
-            .foregroundStyle(sb.ink(.w45))
+            .foregroundStyle(Ink.secondary)
 
-            Text("·").geistMono(size: 11).foregroundStyle(sb.ink(.w18))
+            Text("·").geistMono(size: 11).foregroundStyle(Ink.secondary)
 
             Text(formatDate(insight.createdAt))
               .geistMono(size: 11, tracking: 0)
-              .foregroundStyle(sb.ink(.w35))
+              .foregroundStyle(Ink.secondary)
 
             Spacer(minLength: 8)
 
@@ -540,7 +539,7 @@ struct InsightTimelineRow: View {
           // The realization itself, quoted.
           Text(insight.insight.insight)
             .geist(size: 16, weight: insight.isRead ? .regular : .medium)
-            .foregroundStyle(insight.isRead ? sb.ink(.w8) : sb.ink)
+            .foregroundStyle(insight.isRead ? Ink.primary : Ink.primary)
             .lineSpacing(3)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
@@ -549,12 +548,12 @@ struct InsightTimelineRow: View {
           HStack(spacing: 6) {
             Text("\(Int(insight.insight.confidence * 100))% sure")
               .geistMono(size: 11)
-              .foregroundStyle(sb.ink(.w3))
+              .foregroundStyle(Ink.secondary)
             if !insight.insight.sourceApp.isEmpty {
-              Text("·").geistMono(size: 11).foregroundStyle(sb.ink(.w18))
+              Text("·").geistMono(size: 11).foregroundStyle(Ink.secondary)
               Text(insight.insight.sourceApp)
                 .geistMono(size: 11)
-                .foregroundStyle(sb.ink(.w3))
+                .foregroundStyle(Ink.secondary)
             }
           }
         }
@@ -587,18 +586,18 @@ struct InsightTimelineRow: View {
   private var rail: some View {
     VStack(spacing: 0) {
       Rectangle()
-        .fill(isFirst ? Color.clear : sb.ink(.w12))
+        .fill(isFirst ? Color.clear : Ink.rowFillHover)
         .frame(width: 1.5, height: 9)
       Circle()
-        .fill(insight.isRead ? sb.ink(.w25) : sb.ink)
+        .fill(insight.isRead ? Ink.rowFillHover : Ink.primary)
         .frame(width: 9, height: 9)
         .overlay(
           Circle()
-            .stroke(sb.ink(.w25), lineWidth: insight.isRead ? 0 : 4)
+            .stroke(Ink.hairline, lineWidth: insight.isRead ? 0 : 4)
             .opacity(insight.isRead ? 0 : 0.35)
         )
       Rectangle()
-        .fill(isLast ? Color.clear : sb.ink(.w12))
+        .fill(isLast ? Color.clear : Ink.rowFillHover)
         .frame(width: 1.5)
         .frame(maxHeight: .infinity)
     }
@@ -609,9 +608,9 @@ struct InsightTimelineRow: View {
     Button(action: action) {
       Image(systemName: icon)
         .font(.system(size: 12))
-        .foregroundStyle(sb.ink(.w45))
+        .foregroundStyle(Ink.secondary)
         .frame(width: 24, height: 24)
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(sb.ink(.w06)))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Ink.rowFill))
     }
     .buttonStyle(.plain)
     .help(help)
@@ -632,7 +631,6 @@ struct InsightCard: View {
 
   @State private var isHovering = false
   @State private var showDeleteConfirmation = false
-  @Environment(\.sbTheme) private var sb
 
   var body: some View {
     Button(action: onTap) {
@@ -640,12 +638,12 @@ struct InsightCard: View {
         // Category icon tile
         ZStack {
           RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(sb.ink(.w06))
+            .fill(Ink.rowFill)
             .frame(width: 36, height: 36)
 
           Image(systemName: insight.insight.category.icon)
             .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(sb.ink(.w45))
+            .foregroundStyle(Ink.secondary)
         }
 
         // Content
@@ -653,14 +651,14 @@ struct InsightCard: View {
           HStack(alignment: .top, spacing: 8) {
             if !insight.isRead {
               Circle()
-                .fill(sb.ink)
+                .fill(Ink.primary)
                 .frame(width: 7, height: 7)
                 .padding(.top, 6)
             }
 
             Text(insight.insight.insight)
               .geist(size: 15, weight: insight.isRead ? .regular : .medium)
-              .foregroundStyle(sb.ink(.w9))
+              .foregroundStyle(Ink.primary)
               .lineSpacing(2)
               .lineLimit(2)
               .multilineTextAlignment(.leading)
@@ -673,7 +671,7 @@ struct InsightCard: View {
 
             Text("·")
               .geistMono(size: 12, tracking: 0)
-              .foregroundStyle(sb.ink(.w25))
+              .foregroundStyle(Ink.secondary)
 
             metaLabel("chart.bar", "\(Int(insight.insight.confidence * 100))%")
 
@@ -681,7 +679,7 @@ struct InsightCard: View {
 
             Text(formatDate(insight.createdAt))
               .geistMono(size: 12, tracking: 0)
-              .foregroundStyle(sb.ink(.w35))
+              .foregroundStyle(Ink.secondary)
           }
         }
 
@@ -730,18 +728,18 @@ struct InsightCard: View {
       Text(text)
         .geistMono(size: 12, tracking: 0)
     }
-    .foregroundStyle(sb.ink(.w35))
+    .foregroundStyle(Ink.secondary)
   }
 
   private func hoverAction(_ icon: String, help: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Image(systemName: icon)
         .font(.system(size: 13))
-        .foregroundStyle(sb.ink(.w45))
+        .foregroundStyle(Ink.secondary)
         .frame(width: 26, height: 26)
         .background(
           RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(sb.ink(.w06))
+            .fill(Ink.rowFill)
         )
     }
     .buttonStyle(.plain)
@@ -759,6 +757,6 @@ struct InsightCard: View {
   #Preview {
     InsightPage()
       .frame(width: 800, height: 600)
-      .background(OmiColors.backgroundPrimary)
+      .background(Ink.surface)
   }
 #endif

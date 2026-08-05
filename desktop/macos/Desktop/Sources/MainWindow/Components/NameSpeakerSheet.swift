@@ -52,7 +52,7 @@ struct NameSpeakerSheet: View {
       HStack {
         Text("Name Speaker")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
         DismissButton(action: onDismiss)
       }
@@ -61,7 +61,7 @@ struct NameSpeakerSheet: View {
       .padding(.bottom, OmiSpacing.md)
 
       Divider()
-        .background(OmiColors.border)
+        .background(Ink.separator)
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xl) {
@@ -80,12 +80,12 @@ struct NameSpeakerSheet: View {
       }
 
       Divider()
-        .background(OmiColors.border)
+        .background(Ink.separator)
 
       if let saveError {
         Text(saveError)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.error)
+          .foregroundColor(Ink.errorRed)
           .padding(.horizontal, OmiSpacing.xl)
           .padding(.bottom, OmiSpacing.sm)
       }
@@ -97,7 +97,7 @@ struct NameSpeakerSheet: View {
           onDismiss()
         }
         .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
 
@@ -113,12 +113,12 @@ struct NameSpeakerSheet: View {
           }
         }
         .buttonStyle(.plain)
-        .foregroundColor(canSave ? .black : OmiColors.textTertiary)
+        .foregroundColor(canSave ? Ink.surface : Ink.secondary)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
-            .fill(canSave ? Color.white : OmiColors.backgroundTertiary)
+            .fill(canSave ? Ink.primary : Ink.rowFillHover)
         )
         .disabled(!canSave || isSaving)
       }
@@ -126,7 +126,8 @@ struct NameSpeakerSheet: View {
       .padding(.vertical, OmiSpacing.md)
     }
     .frame(width: 400, height: 450)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
+    .glassContent()
   }
 
   // MARK: - Speaker Info
@@ -135,21 +136,21 @@ struct NameSpeakerSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.sm) {
         Circle()
-          .fill(OmiColors.backgroundQuaternary)
+          .fill(Ink.rowFillHover)
           .frame(width: 28, height: 28)
           .overlay(
             Text(String(segment.speakerId))
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
           )
         Text("Speaker \(segment.speakerId)")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
       }
 
       Text("\"\(previewText)\"")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .italic()
         .lineLimit(3)
     }
@@ -157,7 +158,7 @@ struct NameSpeakerSheet: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundSecondary)
+        .fill(Ink.rowFill)
     )
   }
 
@@ -167,7 +168,7 @@ struct NameSpeakerSheet: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text("Who is this?")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       FlowLayout(spacing: OmiSpacing.sm) {
         // "You" chip
@@ -208,16 +209,16 @@ struct NameSpeakerSheet: View {
             TextField("Person name", text: $newPersonName)
               .textFieldStyle(.plain)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.vertical, OmiSpacing.sm)
               .background(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .fill(OmiColors.backgroundSecondary)
+                  .fill(Ink.rowFill)
               )
               .overlay(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .stroke(duplicateWarning != nil ? OmiColors.error : OmiColors.border, lineWidth: 1)
+                  .stroke(duplicateWarning != nil ? Ink.errorRed : Ink.separator, lineWidth: 1)
               )
               .onChange(of: newPersonName) { _, newValue in
                 validateName(newValue)
@@ -241,12 +242,12 @@ struct NameSpeakerSheet: View {
               }
             }
             .buttonStyle(.plain)
-            .foregroundColor(canCreate ? .black : OmiColors.textTertiary)
+            .foregroundColor(canCreate ? Ink.surface : Ink.secondary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xs)
             .background(
               Capsule()
-                .fill(canCreate ? Color.white : OmiColors.backgroundTertiary)
+                .fill(canCreate ? Ink.primary : Ink.rowFillHover)
             )
             .disabled(!canCreate || isCreating)
           }
@@ -254,7 +255,7 @@ struct NameSpeakerSheet: View {
           if let warning = duplicateWarning {
             Text(warning)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.error)
+              .foregroundColor(Ink.errorRed)
           }
         }
       }
@@ -269,7 +270,7 @@ struct NameSpeakerSheet: View {
         "Also tag \(sameSpeakerSegments.count - 1) other segment\(sameSpeakerSegments.count - 1 == 1 ? "" : "s") from this speaker"
       )
       .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
     }
     .toggleStyle(.checkbox)
   }
@@ -329,17 +330,17 @@ struct NameSpeakerSheet: View {
     Button(action: action) {
       Text(label)
         .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
-        .foregroundColor(isSelected ? .black : (isAction ? OmiColors.accent : OmiColors.textPrimary))
+        .foregroundColor(isSelected ? Ink.surface : (isAction ? Ink.accent : Ink.primary))
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .background(
           Capsule()
-            .fill(isSelected ? Color.white : OmiColors.backgroundTertiary)
+            .fill(isSelected ? Ink.primary : Ink.rowFillHover)
         )
         .overlay(
           Capsule()
             .stroke(
-              isSelected ? OmiColors.border : (isAction ? OmiColors.accent.opacity(0.3) : Color.clear), lineWidth: 1)
+              isSelected ? Ink.separator : (isAction ? Ink.accent.opacity(0.3) : Color.clear), lineWidth: 1)
         )
     }
     .buttonStyle(.plain)

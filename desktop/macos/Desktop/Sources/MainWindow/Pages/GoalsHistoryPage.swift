@@ -19,7 +19,7 @@ struct GoalsHistoryPage: View {
             Text("Back")
               .scaledFont(size: OmiType.body, weight: .medium)
           }
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
 
@@ -27,7 +27,7 @@ struct GoalsHistoryPage: View {
 
         Text("Goals History")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -38,8 +38,7 @@ struct GoalsHistoryPage: View {
       .padding(.top, OmiSpacing.xl)
       .padding(.bottom, OmiSpacing.lg)
 
-      Divider()
-        .background(OmiColors.backgroundTertiary)
+      GlassSeparator()
 
       if isLoading {
         VStack(spacing: OmiSpacing.md) {
@@ -47,30 +46,30 @@ struct GoalsHistoryPage: View {
             .scaleEffect(1.0)
           Text("Loading history...")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if let error = error {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 32)
-            .foregroundColor(.orange)
+            .foregroundColor(PageGlass.warning)
           Text(error)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else if completedGoals.isEmpty {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "trophy")
             .scaledFont(size: OmiType.hero)
-            .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+            .foregroundColor(Ink.secondary.opacity(0.5))
           Text("No goals history yet")
             .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Text("Completed and removed goals will appear here")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+            .foregroundColor(Ink.secondary.opacity(0.7))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
@@ -84,7 +83,7 @@ struct GoalsHistoryPage: View {
         }
       }
     }
-    .background(OmiColors.backgroundSecondary)
+    .glassContent()
     .task {
       await loadCompletedGoals()
     }
@@ -148,7 +147,7 @@ struct CompletedGoalRow: View {
       // Emoji
       ZStack {
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundTertiary.opacity(0.6))
+          .fill(Ink.rowFillHover.opacity(0.6))
           .frame(width: 36, height: 36)
         Text(goalEmoji)
           .scaledFont(size: 18)
@@ -158,25 +157,25 @@ struct CompletedGoalRow: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text(goal.title)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
 
         HStack(spacing: OmiSpacing.sm) {
           // Type badge
           Text(typeBadgeText)
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
             .padding(.horizontal, OmiSpacing.xs)
             .padding(.vertical, OmiSpacing.hairline)
             .background(
               Capsule()
-                .fill(OmiColors.accent.opacity(0.15))
+                .fill(Ink.accent.opacity(0.15))
             )
 
           // Final value
           Text("\(Int(goal.currentValue))/\(Int(goal.targetValue))\(goal.unit.map { " \($0)" } ?? "")")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -192,16 +191,16 @@ struct CompletedGoalRow: View {
           if !completionDateText.isEmpty {
             Text(completionDateText)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         } else {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+            .foregroundColor(Ink.secondary.opacity(0.5))
 
           Text("Removed")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+            .foregroundColor(Ink.secondary.opacity(0.7))
         }
       }
     }
@@ -209,7 +208,7 @@ struct CompletedGoalRow: View {
     .padding(.horizontal, OmiSpacing.md)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundTertiary.opacity(0.3))
+        .fill(Ink.rowFillHover.opacity(0.3))
     )
   }
 }

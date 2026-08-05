@@ -114,12 +114,8 @@ struct DesktopTopBar: View {
     } label: {
       Image(systemName: "gearshape")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(isActive ? OmiColors.textPrimary : OmiColors.textTertiary)
-        .frame(width: 32, height: 32)
-        .background(Circle().fill(isActive ? OmiColors.textPrimary.opacity(0.08) : Color.clear))
-        .contentShape(Circle())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(GlassIconButtonStyle(isActive: isActive))
     .help("Settings")
   }
 
@@ -181,17 +177,12 @@ struct DesktopTopBar: View {
       }
       .foregroundStyle(
         isSelected || isMemoryButtonHovered
-          ? OmiColors.textPrimary : OmiColors.textSecondary
+          ? Ink.primary : Ink.secondary
       )
       .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
       .frame(width: pillWidth, height: TopNavigationPillMetrics.height)
       .background(
-        Capsule(style: .continuous)
-          .fill(
-            isSelected
-              ? OmiColors.textPrimary.opacity(0.10)
-              : isMemoryButtonHovered ? OmiColors.textPrimary.opacity(0.06) : Color.clear
-          )
+        GlassPillBackground(isSelected: isSelected, isHovering: isMemoryButtonHovered)
       )
       .contentShape(Capsule())
     }
@@ -225,7 +216,9 @@ struct DesktopTopBar: View {
         )
       }
     }
-    .frame(width: width)
+    .padding(5)
+    .frame(width: width + 10)
+    .glassFloatingBar(cornerRadius: PageGlass.cardRadius)
     .onHover { isHovering in
       memoryDropdownHoverChanged(isHovering, in: .dropdown)
     }
@@ -259,10 +252,10 @@ struct DesktopTopBar: View {
     if count > 0 {
       Text("+\(count)")
         .scaledFont(size: OmiType.micro, weight: .bold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.horizontal, 5)
         .padding(.vertical, 1)
-        .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
+        .background(Capsule(style: .continuous).fill(Ink.rowFillHover))
     }
   }
 
@@ -477,23 +470,16 @@ private struct TopNavigationPill: View {
       if badgeCount > 0 {
         Text("+\(badgeCount)")
           .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .padding(.horizontal, 5)
           .padding(.vertical, 1)
-          .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
+          .background(Capsule(style: .continuous).fill(Ink.rowFillHover))
       }
     }
-    .foregroundStyle(isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textTertiary)
+    .foregroundStyle(isSelected || isHovering ? Ink.primary : Ink.secondary)
     .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
     .frame(width: width, height: TopNavigationPillMetrics.height)
-    .background(
-      Capsule(style: .continuous)
-        .fill(
-          isSelected
-            ? OmiColors.textPrimary.opacity(0.10)
-            : isHovering ? OmiColors.textPrimary.opacity(0.06) : Color.clear
-        )
-    )
+    .background(GlassPillBackground(isSelected: isSelected, isHovering: isHovering))
     .contentShape(Capsule())
     .onHover { isHovering = $0 }
   }
@@ -516,23 +502,11 @@ private struct MemoryDropdownRow: View {
           .scaledFont(size: OmiType.caption, weight: .semibold)
       }
       .foregroundStyle(
-        isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textSecondary
+        isSelected || isHovering ? Ink.primary : Ink.secondary
       )
       .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
       .frame(width: width, height: TopNavigationPillMetrics.height)
-      .background(
-        Capsule(style: .continuous)
-          .fill(
-            isSelected
-              ? OmiColors.backgroundTertiary
-              : isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary
-          )
-      )
-      .overlay(
-        Capsule(style: .continuous)
-          .stroke(OmiColors.border.opacity(0.55), lineWidth: 1)
-      )
-      .shadow(color: Color.black.opacity(0.24), radius: 8, y: 3)
+      .background(GlassPillBackground(isSelected: isSelected, isHovering: isHovering))
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)

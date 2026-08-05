@@ -144,7 +144,7 @@ extension SettingsContentView {
   func planAccentColor(for planId: String) -> Color {
     // Architect is the premium white-accent tier; Operator + legacy Unlimited
     // are the mass-market green tier.
-    planId == "architect" ? OmiColors.accent : OmiColors.success
+    planId == "architect" ? Ink.accent : Ink.listeningGreen
   }
 
   func planSummaryText(for plan: SubscriptionPlanOption) -> String {
@@ -334,12 +334,12 @@ extension SettingsContentView {
 
           Text(plan.title)
             .scaledFont(size: OmiType.heading, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
             Text(subtitle)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
 
@@ -348,20 +348,20 @@ extension SettingsContentView {
         VStack(alignment: .trailing, spacing: OmiSpacing.hairline) {
           Text(planSummaryText(for: plan))
             .scaledFont(size: OmiType.subheading, weight: .bold)
-            .foregroundColor(isSelected ? accent : OmiColors.textPrimary)
+            .foregroundColor(isSelected ? accent : Ink.primary)
             .lineLimit(1)
             .minimumScaleFactor(0.72)
 
           Text("starting price")
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(isSelected ? accent.opacity(0.8) : OmiColors.textTertiary)
+            .foregroundColor(isSelected ? accent.opacity(0.8) : Ink.secondary)
         }
         .fixedSize(horizontal: true, vertical: false)
       }
 
       Text(plan.description ?? planDescription(for: plan.id))
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         ForEach(plan.features.prefix(4), id: \.self) { feature in
@@ -376,14 +376,14 @@ extension SettingsContentView {
             }
             Text(feature)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
 
       if isSelected && canPurchase {
         Divider()
-          .overlay(OmiColors.backgroundQuaternary)
+          .overlay(Ink.hairline)
 
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
@@ -400,7 +400,7 @@ extension SettingsContentView {
                 Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
                   .scaledFont(size: OmiType.micro)
               }
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             }
             .buttonStyle(.plain)
 
@@ -420,7 +420,7 @@ extension SettingsContentView {
                     Text(error)
                       .scaledFont(size: OmiType.caption)
                   }
-                  .foregroundColor(OmiColors.warning)
+                  .foregroundColor(SettingsInk.notice)
                 }
               }
               .transition(.opacity.combined(with: .move(edge: .top)))
@@ -429,7 +429,7 @@ extension SettingsContentView {
 
           Text("Choose billing")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           HStack(spacing: OmiSpacing.sm) {
             ForEach(sortedPrices(for: plan)) { price in
@@ -447,7 +447,7 @@ extension SettingsContentView {
                         .scaledFont(size: OmiType.caption, weight: .bold)
                       Text(price.priceString)
                         .scaledFont(size: OmiType.caption)
-                        .foregroundColor(OmiColors.textSecondary)
+                        .foregroundColor(Ink.secondary)
                     }
                     .frame(maxWidth: .infinity)
                   }
@@ -487,16 +487,16 @@ extension SettingsContentView {
     .padding(OmiSpacing.xxl)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-        .fill(isSelected ? accent.opacity(0.12) : OmiColors.backgroundPrimary.opacity(0.68))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(isSelected ? accent.opacity(0.12) : Ink.wash)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
             .stroke(
-              isSelected ? accent.opacity(0.85) : OmiColors.backgroundQuaternary,
+              isSelected ? accent.opacity(0.85) : Ink.hairline,
               lineWidth: isSelected ? 1.5 : 1)
         )
     )
-    .contentShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
+    .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous))
     .onTapGesture {
       guard canPurchase else { return }
       selectedPlanIdForCheckout = plan.id

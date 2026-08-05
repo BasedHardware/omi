@@ -77,7 +77,7 @@ struct PromptEditorView: View {
     }
     .padding(OmiSpacing.xl)
     .frame(width: 600, height: 500)
-    .background(Color(nsColor: .windowBackgroundColor))
+    .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
   private func resetToDefault() {
@@ -115,13 +115,17 @@ class PromptEditorWindow: NSWindow {
 
     super.init(
       contentRect: contentRect,
-      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
 
     self.title = "Edit Analysis Prompt"
     self.isReleasedWhenClosed = false
+    // The inside of a titled window is glass: transparent, light-pinned, and shadowed by its own
+    // frame (`WindowGlass.Kind.titled`). Without the pin the title bar and the traffic lights stay in
+    // the machine's appearance — a dark title bar on a white sheet on a Dark Mac.
+    WindowGlass.wear(self, as: .titled)
     self.delegate = self
     self.minSize = NSSize(width: 500, height: 400)
 

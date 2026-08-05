@@ -27,11 +27,11 @@ struct SearchResultsFilmstrip: View {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "magnifyingglass")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.accent)
 
             Text("\(screenshots.count) results for \"\(query)\"")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.white)
+              .foregroundColor(Ink.primary)
           }
         }
 
@@ -40,7 +40,7 @@ struct SearchResultsFilmstrip: View {
         // Navigation hint
         Text("← scroll or use arrow keys →")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(.white.opacity(0.4))
+          .foregroundColor(Ink.secondary)
 
         // Keyboard shortcuts
         HStack(spacing: OmiSpacing.sm) {
@@ -87,12 +87,12 @@ struct SearchResultsFilmstrip: View {
         ZStack(alignment: .leading) {
           // Track
           Capsule()
-            .fill(Color.white.opacity(0.1))
+            .fill(Ink.rowFill)
             .frame(height: 4)
 
           // Progress
           Capsule()
-            .fill(OmiColors.accent)
+            .fill(Ink.accent)
             .frame(
               width: max(20, geometry.size.width * progressWidth),
               height: 4
@@ -104,7 +104,7 @@ struct SearchResultsFilmstrip: View {
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.bottom, OmiSpacing.md)
     }
-    .background(Color.black.opacity(0.9))
+    .background(Color.clear)
     .task {
       await loadVisibleThumbnails()
     }
@@ -129,15 +129,15 @@ struct SearchResultsFilmstrip: View {
     HStack(spacing: OmiSpacing.hairline) {
       Text(key)
         .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
-        .foregroundColor(.white.opacity(0.7))
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.xxs)
         .padding(.vertical, OmiSpacing.hairline)
-        .background(Color.white.opacity(0.15))
+        .background(Ink.rowFillHover)
         .cornerRadius(OmiChrome.stripRadius)
 
       Text(action)
         .scaledFont(size: OmiType.micro)
-        .foregroundColor(.white.opacity(0.4))
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -244,20 +244,20 @@ struct FilmstripThumbnail: View {
                 .aspectRatio(contentMode: .fill)
             } else if isLoading {
               Rectangle()
-                .fill(Color.white.opacity(0.05))
+                .fill(Ink.rowFill)
                 .overlay(
                   ProgressView()
                     .progressViewStyle(.circular)
                     .scaleEffect(0.6)
-                    .tint(.white.opacity(0.5))
+                    .tint(Ink.secondary)
                 )
             } else {
               Rectangle()
-                .fill(Color.white.opacity(0.05))
+                .fill(Ink.rowFill)
                 .overlay(
                   Image(systemName: "photo")
                     .scaledFont(size: OmiType.heading)
-                    .foregroundColor(.white.opacity(0.2))
+                    .foregroundColor(Ink.secondary)
                 )
             }
           }
@@ -274,12 +274,12 @@ struct FilmstripThumbnail: View {
                 Spacer()
                 Text("\(matchCount)")
                   .scaledFont(size: OmiType.micro, weight: .bold)
-                  .foregroundColor(.black)
+                  .foregroundColor(Ink.surface)
                   .padding(.horizontal, OmiSpacing.xs)
                   .padding(.vertical, OmiSpacing.hairline)
-                  .background(Color.yellow)
+                  .background(PageGlass.warning)
                   .cornerRadius(OmiChrome.stripRadius)
-                  .shadow(color: Color.yellow.opacity(0.5), radius: 4)
+                  .shadow(color: PageGlass.warning.opacity(0.5), radius: 4)
                   .padding(OmiSpacing.xs)
               }
               Spacer()
@@ -306,18 +306,18 @@ struct FilmstripThumbnail: View {
         .overlay(
           RoundedRectangle(cornerRadius: isHovered ? 12 : 8)
             .stroke(
-              isSelected ? OmiColors.accent : (isHovered ? Color.white.opacity(0.6) : Color.white.opacity(0.15)),
+              isSelected ? Ink.accent : (isHovered ? Ink.secondary : Ink.secondary),
               lineWidth: isSelected ? 3 : (isHovered ? 2 : 1)
             )
         )
         // Selected glow
         .shadow(
-          color: isSelected ? OmiColors.accent.opacity(0.5) : .clear,
+          color: isSelected ? Ink.accent.opacity(0.5) : .clear,
           radius: isSelected ? 12 : 0
         )
         // Hover glow
         .shadow(
-          color: isHovered && !isSelected ? Color.white.opacity(0.15) : .clear,
+          color: isHovered && !isSelected ? Ink.secondary : .clear,
           radius: isHovered ? 8 : 0
         )
         // Screenpipe-style scale and lift
@@ -328,14 +328,14 @@ struct FilmstripThumbnail: View {
         // Time label
         Text(screenshot.formattedTime)
           .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular, design: .monospaced)
-          .foregroundColor(isSelected ? OmiColors.accent : .white.opacity(0.7))
+          .foregroundColor(isSelected ? Ink.accent : Ink.secondary)
           .offset(y: liftOffset / 2)
 
         // App name (shows on hover or selection)
         if isSelected || isHovered {
           Text(screenshot.appName)
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(.white.opacity(0.6))
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
             .offset(y: liftOffset / 2)
             .transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -386,6 +386,6 @@ extension Screenshot {
       onSelect: { _ in }
     )
     .frame(width: 800, height: 200)
-    .background(Color.black)
+    .background(Ink.surface)
   }
 #endif

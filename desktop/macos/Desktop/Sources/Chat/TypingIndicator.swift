@@ -7,8 +7,11 @@ struct OmiThinkingMark: View {
   private static let dotCount = 8
   private static let dotDiameterRatio: CGFloat = 0.18
   private static let ringRadiusRatio: CGFloat = 0.33
+  /// The comet's tail, in the ink itself: on a light-pinned panel a trail of white
+  /// dots is a trail of nothing. The head is `Ink.primary` and the tail fades out
+  /// behind it, which is the same read in either appearance.
   private static let trail: [Color] = (0..<dotCount).map { index in
-    Color.white.opacity(1.0 - Double(index) * 0.1)
+    Ink.primary.opacity(1.0 - Double(index) * 0.1)
   }
 
   var body: some View {
@@ -38,7 +41,7 @@ struct OmiThinkingMark: View {
         ForEach(0..<Self.dotCount, id: \.self) { index in
           let angle = Double(index) / Double(Self.dotCount) * Double.pi * 2 - Double.pi
           Circle()
-            .fill(dotColors.indices.contains(index) ? dotColors[index] : Color.white.opacity(0.96))
+            .fill(dotColors.indices.contains(index) ? dotColors[index] : Ink.primary.opacity(0.96))
             .frame(width: dotDiameter, height: dotDiameter)
             .position(
               x: center.x + CGFloat(cos(angle)) * ringRadius,
@@ -58,8 +61,8 @@ struct TypingIndicator: View {
       .frame(width: 24, height: 24)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundTertiary)
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
+      // A stadium, like every other pill in this system.
+      .background(Capsule(style: .continuous).fill(Ink.rowFill))
   }
 }
 

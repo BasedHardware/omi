@@ -66,7 +66,7 @@ extension SettingsContentView {
             Button(action: clearAllBYOKKeys) {
               Text("Clear All Custom Keys")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(.red)
+                .foregroundColor(Ink.errorRed)
             }
             .buttonStyle(.plain)
             Spacer()
@@ -88,10 +88,10 @@ extension SettingsContentView {
     settingsCard(settingId: settingId) {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "exclamationmark.triangle.fill")
-          .foregroundColor(OmiColors.warning)
+          .foregroundColor(SettingsInk.notice)
         Text(text)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.warning)
+          .foregroundColor(SettingsInk.notice)
       }
     }
   }
@@ -111,18 +111,18 @@ extension SettingsContentView {
     settingsCard(settingId: "advanced.devkeys.info") {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
-          .foregroundColor(hasAllBYOKKeys ? OmiColors.success : OmiColors.textTertiary)
+          .foregroundColor(hasAllBYOKKeys ? Ink.listeningGreen : Ink.secondary)
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
           Text(
             hasAllBYOKKeys
               ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
               : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
           )
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         }
         Spacer()
       }
@@ -201,7 +201,7 @@ extension SettingsContentView {
         HStack {
           Text(title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
           Spacer()
           if let provider, let status = byokKeyStatuses[provider] {
             byokStatusBadge(status)
@@ -209,14 +209,14 @@ extension SettingsContentView {
         }
         Text(subtitle)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         SecureField("Leave blank for default", text: value)
           .textFieldStyle(.roundedBorder)
           .scaledFont(size: OmiType.body)
         if let provider, case .failed(let msg) = byokKeyStatuses[provider] ?? .notChecked {
           Text(msg)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(SettingsInk.notice)
         }
       }
     }
@@ -230,12 +230,12 @@ extension SettingsContentView {
     case .checking:
       HStack(spacing: OmiSpacing.xxs) {
         ProgressView().controlSize(.mini)
-        Text("Checking…").scaledFont(size: OmiType.caption).foregroundColor(OmiColors.textTertiary)
+        Text("Checking…").scaledFont(size: OmiType.caption).foregroundColor(Ink.secondary)
       }
     case .ok:
-      Text("Valid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(OmiColors.success)
+      Text("Valid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(Ink.listeningGreen)
     case .failed:
-      Text("Invalid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(OmiColors.warning)
+      Text("Invalid").scaledFont(size: OmiType.caption, weight: .semibold).foregroundColor(SettingsInk.notice)
     }
   }
 

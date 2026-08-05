@@ -62,17 +62,17 @@ struct RewindPage: View {
   }
 
   private var finishButtonForeground: Color {
-    if showSavedSuccess { return .white }
-    if showDiscarded { return .white }
-    if showError { return .white }
-    return .black
+    if showSavedSuccess { return Ink.surface }
+    if showDiscarded { return Ink.surface }
+    if showError { return Ink.surface }
+    return Ink.surface
   }
 
   private var finishButtonBackground: Color {
-    if showSavedSuccess { return OmiColors.success }
-    if showDiscarded { return OmiColors.warning }
-    if showError { return OmiColors.error }
-    return .white
+    if showSavedSuccess { return Ink.listeningGreen }
+    if showDiscarded { return PageGlass.warning }
+    if showError { return Ink.errorRed }
+    return Ink.primary
   }
 
   /// Compute speaker names from the live speaker-person map
@@ -90,7 +90,7 @@ struct RewindPage: View {
   var body: some View {
     ZStack {
       // Background
-      Color.black.ignoresSafeArea()
+      Color.clear.ignoresSafeArea()
 
       if viewModel.isLoading && viewModel.screenshots.isEmpty && viewModel.activeSearchQuery == nil {
         loadingView
@@ -130,8 +130,8 @@ struct RewindPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
       }
-
     }
+    .glassContent()
     .focusable()
     .focused($isPageFocused)
     .task {
@@ -300,20 +300,20 @@ struct RewindPage: View {
 
       Image(systemName: "magnifyingglass")
         .scaledFont(size: 48)
-        .foregroundColor(.white.opacity(0.3))
+        .foregroundColor(Ink.secondary)
 
       if viewModel.isSearching {
         Text("Searching...")
           .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
       } else {
         Text("No results found")
           .scaledFont(size: OmiType.subheading, weight: .medium)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
 
         Text("Try a different search term")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(.white.opacity(0.4))
+          .foregroundColor(Ink.secondary)
       }
 
       Spacer()
@@ -331,9 +331,9 @@ struct RewindPage: View {
         } label: {
           Image(systemName: "chevron.left")
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(Ink.secondary)
             .frame(width: 28, height: 28)
-            .background(Color.white.opacity(0.1))
+            .background(Ink.rowFill)
             .clipShape(Circle())
         }
         .buttonStyle(.plain)
@@ -343,7 +343,7 @@ struct RewindPage: View {
         HStack(spacing: OmiSpacing.sm) {
           Text("Rewind")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.primary)
 
           // Global hotkey hint
           HStack(spacing: OmiSpacing.hairline) {
@@ -352,10 +352,10 @@ struct RewindPage: View {
             Text("R")
           }
           .scaledFont(size: OmiType.micro, weight: .medium, design: .rounded)
-          .foregroundColor(.white.opacity(0.4))
+          .foregroundColor(Ink.secondary)
           .padding(.horizontal, OmiSpacing.xs)
           .padding(.vertical, OmiSpacing.hairline)
-          .background(Color.white.opacity(0.1))
+          .background(Ink.rowFill)
           .cornerRadius(OmiChrome.stripRadius)
           .help("Press ⌘⌥R from anywhere to open Rewind")
         }
@@ -378,9 +378,9 @@ struct RewindPage: View {
           } label: {
             Image(systemName: "list.bullet")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(searchViewMode == .results ? .black : .white.opacity(0.5))
+              .foregroundColor(searchViewMode == .results ? Ink.surface : Ink.secondary)
               .frame(width: 28, height: 24)
-              .background(searchViewMode == .results ? Color.white : Color.clear)
+              .background(searchViewMode == .results ? Ink.primary : Color.clear)
               .cornerRadius(OmiChrome.stripRadius)
           }
           .buttonStyle(.plain)
@@ -395,16 +395,16 @@ struct RewindPage: View {
           } label: {
             Image(systemName: "timeline.selection")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(searchViewMode == .timeline ? .black : .white.opacity(0.5))
+              .foregroundColor(searchViewMode == .timeline ? Ink.surface : Ink.secondary)
               .frame(width: 28, height: 24)
-              .background(searchViewMode == .timeline ? Color.white : Color.clear)
+              .background(searchViewMode == .timeline ? Ink.primary : Color.clear)
               .cornerRadius(OmiChrome.stripRadius)
           }
           .buttonStyle(.plain)
           .help("Timeline view")
         }
         .padding(OmiSpacing.hairline)
-        .background(Color.white.opacity(0.1))
+        .background(Ink.rowFill)
         .cornerRadius(OmiChrome.badgeRadius)
       }
 
@@ -419,7 +419,7 @@ struct RewindPage: View {
       } label: {
         Image(systemName: "gearshape")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
       .help("Rewind Settings")
@@ -428,10 +428,10 @@ struct RewindPage: View {
       if let badgeText = screenCaptureHealth.rewindBadgeText {
         Text(badgeText)
           .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(OmiColors.warning)
+          .foregroundColor(PageGlass.warning)
           .padding(.horizontal, OmiSpacing.xs)
           .padding(.vertical, OmiSpacing.hairline)
-          .background(OmiColors.warning.opacity(0.15))
+          .background(PageGlass.warning.opacity(0.15))
           .cornerRadius(OmiChrome.stripRadius)
           .help(screenCaptureHealth.statusText)
       }
@@ -439,7 +439,7 @@ struct RewindPage: View {
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
-    .background(OmiColors.backgroundTertiary.opacity(0.8))
+    .background(Ink.rowFillHover.opacity(0.8))
   }
 
   // MARK: - Timeline Content Body (without top bar)
@@ -552,30 +552,30 @@ struct RewindPage: View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(isSearchFocused ? OmiColors.accent : .white.opacity(0.5))
+        .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
 
       TextField("Search your screen history...", text: $viewModel.searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(.white)
+        .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
 
       if viewModel.isSearching {
         ProgressView()
           .progressViewStyle(.circular)
           .scaleEffect(0.6)
-          .tint(.white)
+          .tint(Ink.surface)
       } else if showResultsCount && !viewModel.searchQuery.isEmpty && viewModel.activeSearchQuery != nil {
         let groups = viewModel.groupedSearchResults
         let total = viewModel.totalScreenshotCount
         if groups.count == total {
           Text("\(total) results")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(Ink.secondary)
         } else {
           Text("\(groups.count) groups (\(total) total)")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -586,7 +586,7 @@ struct RewindPage: View {
         } label: {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -596,10 +596,10 @@ struct RewindPage: View {
     .frame(maxWidth: 400)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(Color.white.opacity(0.1))
+        .fill(Ink.rowFill)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+            .stroke(isSearchFocused ? Ink.accent.opacity(0.5) : Color.clear, lineWidth: 1)
         )
     )
   }
@@ -613,14 +613,14 @@ struct RewindPage: View {
       HStack(spacing: OmiSpacing.xs) {
         Text(viewModel.selectedDate.formatted(.dateTime.month().day().year()))
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
         Image(systemName: "chevron.up.chevron.down")
           .scaledFont(size: 8, weight: .semibold)
-          .foregroundColor(.white.opacity(0.5))
+          .foregroundColor(Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xs)
-      .background(Color.white.opacity(0.15))
+      .background(Ink.rowFillHover)
       .cornerRadius(OmiChrome.badgeRadius)
     }
     .buttonStyle(.plain)
@@ -652,7 +652,7 @@ struct RewindPage: View {
         ProgressView()
           .progressViewStyle(.circular)
           .scaleEffect(1.2)
-          .tint(.white)
+          .tint(Ink.surface)
           .frame(width: geometry.size.width, height: geometry.size.height)
       } else if let image = currentImage, image.size.height > 0, image.size.width > 0, geometry.size.height > 0,
         geometry.size.width > 0
@@ -680,7 +680,7 @@ struct RewindPage: View {
             .resizable()
             .frame(width: displaySize.width, height: displaySize.height)
             .cornerRadius(OmiChrome.stripRadius)
-            .shadow(color: .black.opacity(0.3), radius: 8)
+            .shadow(color: .black.opacity(0.08), radius: 8)
 
           // Search highlight overlays with explicit frame
           if let query = viewModel.activeSearchQuery,
@@ -708,10 +708,10 @@ struct RewindPage: View {
         VStack(spacing: OmiSpacing.xs) {
           Image(systemName: "photo")
             .scaledFont(size: 24)
-            .foregroundColor(.white.opacity(0.3))
+            .foregroundColor(Ink.secondary)
           Text("No frame")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.4))
+            .foregroundColor(Ink.secondary)
         }
         .frame(width: geometry.size.width, height: geometry.size.height)
       }
@@ -742,11 +742,11 @@ struct RewindPage: View {
         if viewModel.activeSearchQuery != nil && !searchResultIndices.isEmpty {
           HStack(spacing: OmiSpacing.xxs) {
             RoundedRectangle(cornerRadius: 1)
-              .fill(Color.yellow.opacity(0.8))
+              .fill(PageGlass.warning.opacity(0.8))
               .frame(width: 8, height: 8)
             Text("match")
               .scaledFont(size: 9)
-              .foregroundColor(.white.opacity(0.4))
+              .foregroundColor(Ink.secondary)
           }
         }
 
@@ -758,17 +758,17 @@ struct RewindPage: View {
           HStack(spacing: OmiSpacing.sm) {
             Text("\(currentIndex + 1)/\(screenshots.count)")
               .scaledFont(size: OmiType.micro, design: .monospaced)
-              .foregroundColor(.white.opacity(0.5))
+              .foregroundColor(Ink.secondary)
             Text(screenshot.formattedDateCompact)
               .scaledFont(size: OmiType.micro, design: .monospaced)
-              .foregroundColor(.white.opacity(0.7))
+              .foregroundColor(Ink.secondary)
           }
         }
 
         // Navigation hint
         Text("scroll or drag to navigate")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(.white.opacity(0.3))
+          .foregroundColor(Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.sm)
@@ -776,7 +776,7 @@ struct RewindPage: View {
     .padding(.bottom, OmiSpacing.md)
     .background(
       LinearGradient(
-        colors: [.clear, .black.opacity(0.7)],
+        colors: [.clear, Ink.primary.opacity(0.12)],
         startPoint: .top,
         endPoint: .bottom
       )
@@ -919,23 +919,23 @@ struct RewindPage: View {
       if isScreenCaptureKitBroken {
         ZStack {
           Circle()
-            .fill(Color.red.opacity(0.1))
+            .fill(Ink.errorRed.opacity(0.1))
             .frame(width: 80, height: 80)
 
           Image(systemName: "rectangle.on.rectangle.slash")
             .scaledFont(size: 36)
-            .foregroundColor(.red.opacity(0.7))
+            .foregroundColor(Ink.errorRed)
         }
 
         Text("Screen Recording Needs Reset")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
 
         Text(
           "macOS granted permission but ScreenCaptureKit is stuck.\nResetting fixes this — the app will restart automatically."
         )
         .scaledFont(size: OmiType.body)
-        .foregroundColor(.white.opacity(0.6))
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
 
         Button {
@@ -947,10 +947,10 @@ struct RewindPage: View {
         } label: {
           Text("Reset & Restart")
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.surface)
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
-            .background(Color.red.opacity(0.8))
+            .background(Ink.errorRed.opacity(0.8))
             .cornerRadius(OmiChrome.elementRadius)
         }
         .buttonStyle(.plain)
@@ -958,21 +958,21 @@ struct RewindPage: View {
       } else if hasNoPermission {
         ZStack {
           Circle()
-            .fill(Color.orange.opacity(0.1))
+            .fill(PageGlass.warning.opacity(0.1))
             .frame(width: 80, height: 80)
 
           Image(systemName: "lock.rectangle")
             .scaledFont(size: 36)
-            .foregroundColor(.orange.opacity(0.7))
+            .foregroundColor(PageGlass.warning)
         }
 
         Text("Screen Recording Permission Required")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
 
         Text("Rewind needs Screen Recording permission to capture your screen.")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
 
         Button {
@@ -983,10 +983,10 @@ struct RewindPage: View {
         } label: {
           Text("Grant Permission")
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.surface)
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
-            .background(Color.orange.opacity(0.8))
+            .background(PageGlass.warning.opacity(0.8))
             .cornerRadius(OmiChrome.elementRadius)
         }
         .buttonStyle(.plain)
@@ -994,33 +994,33 @@ struct RewindPage: View {
       } else {
         ZStack {
           Circle()
-            .fill(OmiColors.accent.opacity(0.1))
+            .fill(Ink.accent.opacity(0.1))
             .frame(width: 80, height: 80)
 
           Image(systemName: "clock.arrow.circlepath")
             .scaledFont(size: 36)
-            .foregroundColor(OmiColors.accent.opacity(0.6))
+            .foregroundColor(Ink.accent.opacity(0.6))
         }
 
         Text("No Screenshots Yet")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
 
         Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
 
         HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "lightbulb.fill")
-            .foregroundColor(.yellow)
+            .foregroundColor(PageGlass.warning)
           Text("Tip: Use search to find anything you've seen on screen")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(Ink.secondary)
         }
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Color.white.opacity(0.1))
+        .background(Ink.rowFill)
         .cornerRadius(OmiChrome.elementRadius)
         .padding(.top, OmiSpacing.sm)
       }
@@ -1032,22 +1032,22 @@ struct RewindPage: View {
   private var recoveryBanner: some View {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: "exclamationmark.triangle.fill")
-        .foregroundColor(.orange)
+        .foregroundColor(PageGlass.warning)
         .scaledFont(size: OmiType.subheading)
 
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text("Database Recovered")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
 
         if viewModel.recoveredRecordCount > 0 {
           Text("\(viewModel.recoveredRecordCount) screenshots recovered from corrupted database")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(Ink.secondary)
         } else {
           Text("Database was corrupted and has been reset. Your video files are intact.")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -1059,10 +1059,10 @@ struct RewindPage: View {
         } label: {
           Text("Rebuild Index")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xxs)
-            .background(Color.white)
+            .background(Ink.primary)
             .cornerRadius(OmiChrome.stripRadius)
         }
         .buttonStyle(.plain)
@@ -1076,16 +1076,16 @@ struct RewindPage: View {
       } label: {
         Image(systemName: "xmark")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
       }
       .buttonStyle(.plain)
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
-    .background(Color.orange.opacity(0.15))
+    .background(PageGlass.warning.opacity(0.15))
     .overlay(
       Rectangle()
-        .fill(Color.orange)
+        .fill(PageGlass.warning)
         .frame(height: 2),
       alignment: .top
     )
@@ -1116,11 +1116,11 @@ struct RewindPage: View {
       ProgressView()
         .progressViewStyle(.circular)
         .scaleEffect(1.2)
-        .tint(.white)
+        .tint(Ink.surface)
 
       Text("Loading screenshots...")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(.white.opacity(0.6))
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -1128,21 +1128,21 @@ struct RewindPage: View {
     VStack(spacing: OmiSpacing.lg) {
       ZStack {
         Circle()
-          .fill(OmiColors.error.opacity(0.1))
+          .fill(Ink.errorRed.opacity(0.1))
           .frame(width: 80, height: 80)
 
         Image(systemName: "exclamationmark.triangle")
           .scaledFont(size: 36)
-          .foregroundColor(OmiColors.error)
+          .foregroundColor(Ink.errorRed)
       }
 
       Text("Failed to Load Screenshots")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(.white)
+        .foregroundColor(Ink.primary)
 
       Text("Try again. If this continues, restart Omi.")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(.white.opacity(0.6))
+        .foregroundColor(Ink.secondary)
 
       Button {
         Task { await viewModel.loadInitialData() }
@@ -1152,10 +1152,10 @@ struct RewindPage: View {
           Text("Retry")
         }
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
-        .background(Color.white)
+        .background(Ink.primary)
         .cornerRadius(OmiChrome.elementRadius)
       }
       .buttonStyle(.plain)
@@ -1184,10 +1184,10 @@ struct RewindPage: View {
               Text("Back to Rewind")
                 .scaledFont(size: OmiType.body, weight: .medium)
             }
-            .foregroundColor(.white.opacity(0.7))
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xs)
-            .background(Color.white.opacity(0.1))
+            .background(Ink.rowFill)
             .cornerRadius(OmiChrome.badgeRadius)
           }
           .buttonStyle(.plain)
@@ -1196,7 +1196,7 @@ struct RewindPage: View {
         }
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundTertiary.opacity(0.8))
+        .background(Ink.rowFillHover.opacity(0.8))
       }
 
       // Split panel: transcript (left) + notes (right)
@@ -1216,11 +1216,11 @@ struct RewindPage: View {
             )
           }
           .frame(width: transcriptWidth)
-          .background(OmiColors.backgroundPrimary)
+          .background(Color.clear)
 
           // Divider
           Rectangle()
-            .fill(OmiColors.border)
+            .fill(Ink.separator)
             .frame(width: 1)
 
           // Right: Notes
@@ -1229,7 +1229,7 @@ struct RewindPage: View {
         }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
     .task {
       await appState?.fetchPeople()
     }
@@ -1274,13 +1274,13 @@ struct RewindPage: View {
             RecordingBarTranscriptText()
             Image(systemName: isTranscriptExpanded ? "chevron.up" : "chevron.down")
               .scaledFont(size: OmiType.micro, weight: .semibold)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xxs)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-              .fill(OmiColors.backgroundTertiary.opacity(0.5))
+              .fill(Ink.rowFillHover.opacity(0.5))
           )
         }
         .buttonStyle(.plain)
@@ -1294,14 +1294,14 @@ struct RewindPage: View {
         // Saving indicator
         ZStack {
           Circle()
-            .fill(OmiColors.accent.opacity(0.3))
+            .fill(Ink.accent.opacity(0.3))
             .frame(width: 24, height: 24)
             .scaleEffect(isSavingPulsing ? 1.5 : 1.0)
             .opacity(isSavingPulsing ? 0.0 : 0.6)
 
           Image(systemName: "arrow.up.circle.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
             .scaleEffect(isSavingPulsing ? 1.1 : 1.0)
         }
         .omiAnimation(
@@ -1314,7 +1314,7 @@ struct RewindPage: View {
 
         Text("Saving conversation...")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         ProgressView()
           .scaleEffect(0.7)
@@ -1349,7 +1349,7 @@ struct RewindPage: View {
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.xs)
           .background(Capsule().fill(finishButtonBackground))
-          .overlay(Capsule().stroke(OmiColors.border, lineWidth: 1))
+          .overlay(Capsule().stroke(Ink.separator, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(isFinishing || showSavedSuccess || showDiscarded || showError)
@@ -1359,7 +1359,7 @@ struct RewindPage: View {
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
-    .background(OmiColors.backgroundTertiary.opacity(0.8))
+    .background(Ink.rowFillHover.opacity(0.8))
   }
 
   // MARK: - Audio Toggle
@@ -1367,13 +1367,13 @@ struct RewindPage: View {
   private func audioToggle(appState: AppState) -> some View {
     ZStack {
       Capsule()
-        .fill(appState.isTranscribing ? OmiColors.accent : Color.red)
+        .fill(appState.isTranscribing ? Ink.accent : Ink.errorRed)
         .frame(width: 36, height: 20)
 
       Circle()
-        .fill(appState.isTranscribing ? OmiColors.backgroundPrimary : Color.white)
+        .fill(Ink.surface)
         .frame(width: 16, height: 16)
-        .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.08), radius: 1, x: 0, y: 1)
         .offset(x: appState.isTranscribing ? 8 : -8)
         .omiAnimation(.easeInOut(duration: 0.15), value: appState.isTranscribing)
     }
@@ -1448,13 +1448,13 @@ struct SearchResultListItem: View {
             AppIconView(appName: screenshot.appName, size: 16)
             Text(screenshot.appName)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.accent)
             if let windowTitle = screenshot.windowTitle, !windowTitle.isEmpty {
               Text("›")
-                .foregroundColor(.white.opacity(0.3))
+                .foregroundColor(Ink.secondary)
               Text(windowTitle)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
             }
           }
@@ -1462,7 +1462,7 @@ struct SearchResultListItem: View {
           // Timestamp (like page title in Google)
           Text(screenshot.formattedDate)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.primary)
 
           // Context snippet with highlighted search term
           if let snippet = screenshot.contextSnippet(for: searchQuery) {
@@ -1472,7 +1472,7 @@ struct SearchResultListItem: View {
           // Result number
           Text("Result \(index + 1) of \(totalCount)")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(.white.opacity(0.3))
+            .foregroundColor(Ink.secondary)
             .padding(.top, OmiSpacing.hairline)
         }
 
@@ -1489,14 +1489,14 @@ struct SearchResultListItem: View {
               .clipped()
           } else {
             Rectangle()
-              .fill(Color.white.opacity(0.1))
+              .fill(Ink.rowFill)
               .frame(width: 120, height: 80)
               .cornerRadius(OmiChrome.badgeRadius)
               .overlay(
                 ProgressView()
                   .progressViewStyle(.circular)
                   .scaleEffect(0.6)
-                  .tint(.white.opacity(0.5))
+                  .tint(Ink.secondary)
               )
           }
         }
@@ -1505,11 +1505,11 @@ struct SearchResultListItem: View {
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isSelected ? OmiColors.accent.opacity(0.15) : (isHovered ? Color.white.opacity(0.05) : Color.clear))
+          .fill(isSelected ? Ink.accent.opacity(0.15) : (isHovered ? Ink.rowFill : Color.clear))
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isSelected ? OmiColors.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+          .stroke(isSelected ? Ink.accent.opacity(0.4) : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -1540,20 +1540,20 @@ struct SearchResultListItem: View {
               snippet.startIndex, offsetBy: beforeIndex)..<snippet.index(snippet.startIndex, offsetBy: afterIndex)])
         let after = String(snippet.suffix(from: snippet.index(snippet.startIndex, offsetBy: afterIndex)))
 
-        (Text(before).foregroundColor(.white.opacity(0.6)) + Text(match).foregroundColor(.white).bold()
-          + Text(after).foregroundColor(.white.opacity(0.6)))
+        (Text(before).foregroundColor(Ink.secondary) + Text(match).foregroundColor(Ink.primary).bold()
+          + Text(after).foregroundColor(Ink.secondary))
           .scaledFont(size: OmiType.caption)
           .lineLimit(3)
       } else {
         Text(snippet)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
           .lineLimit(3)
       }
     } else {
       Text(snippet)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(.white.opacity(0.6))
+        .foregroundColor(Ink.secondary)
         .lineLimit(3)
     }
   }
@@ -1597,13 +1597,13 @@ struct SearchResultGroupItem: View {
             AppIconView(appName: group.appName, size: 16)
             Text(group.appName)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.accent)
             if let windowTitle = group.windowTitle, !windowTitle.isEmpty {
               Text("›")
-                .foregroundColor(.white.opacity(0.3))
+                .foregroundColor(Ink.secondary)
               Text(windowTitle)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(.white.opacity(0.5))
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
             }
           }
@@ -1611,7 +1611,7 @@ struct SearchResultGroupItem: View {
           // Time range
           Text(group.formattedTimeRange)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(.white)
+            .foregroundColor(Ink.primary)
 
           // Context snippet from representative screenshot
           if let snippet = group.representativeScreenshot.contextSnippet(for: searchQuery) {
@@ -1627,16 +1627,16 @@ struct SearchResultGroupItem: View {
                 Text("\(group.count) screenshots")
               }
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.accent.opacity(0.8))
+              .foregroundColor(Ink.accent.opacity(0.8))
               .padding(.horizontal, OmiSpacing.xs)
               .padding(.vertical, OmiSpacing.hairline)
-              .background(OmiColors.accent.opacity(0.15))
+              .background(Ink.accent.opacity(0.15))
               .cornerRadius(OmiChrome.stripRadius)
             }
 
             Text("Group \(index + 1) of \(totalGroups)")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(.white.opacity(0.3))
+              .foregroundColor(Ink.secondary)
           }
           .padding(.top, OmiSpacing.hairline)
         }
@@ -1654,14 +1654,14 @@ struct SearchResultGroupItem: View {
               .clipped()
           } else {
             Rectangle()
-              .fill(Color.white.opacity(0.1))
+              .fill(Ink.rowFill)
               .frame(width: 120, height: 80)
               .cornerRadius(OmiChrome.badgeRadius)
               .overlay(
                 ProgressView()
                   .progressViewStyle(.circular)
                   .scaleEffect(0.6)
-                  .tint(.white.opacity(0.5))
+                  .tint(Ink.secondary)
               )
           }
         }
@@ -1670,11 +1670,11 @@ struct SearchResultGroupItem: View {
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isSelected ? OmiColors.accent.opacity(0.15) : (isHovered ? Color.white.opacity(0.05) : Color.clear))
+          .fill(isSelected ? Ink.accent.opacity(0.15) : (isHovered ? Ink.rowFill : Color.clear))
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isSelected ? OmiColors.accent.opacity(0.4) : Color.clear, lineWidth: 1)
+          .stroke(isSelected ? Ink.accent.opacity(0.4) : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -1705,20 +1705,20 @@ struct SearchResultGroupItem: View {
               snippet.startIndex, offsetBy: beforeIndex)..<snippet.index(snippet.startIndex, offsetBy: afterIndex)])
         let after = String(snippet.suffix(from: snippet.index(snippet.startIndex, offsetBy: afterIndex)))
 
-        (Text(before).foregroundColor(.white.opacity(0.6)) + Text(match).foregroundColor(.white).bold()
-          + Text(after).foregroundColor(.white.opacity(0.6)))
+        (Text(before).foregroundColor(Ink.secondary) + Text(match).foregroundColor(Ink.primary).bold()
+          + Text(after).foregroundColor(Ink.secondary))
           .scaledFont(size: OmiType.caption)
           .lineLimit(3)
       } else {
         Text(snippet)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(.white.opacity(0.6))
+          .foregroundColor(Ink.secondary)
           .lineLimit(3)
       }
     } else {
       Text(snippet)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(.white.opacity(0.6))
+        .foregroundColor(Ink.secondary)
         .lineLimit(3)
     }
   }
@@ -1759,12 +1759,12 @@ struct SearchResultRow: View {
           HStack {
             Text(screenshot.appName)
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.white)
+              .foregroundColor(Ink.primary)
 
             if let windowTitle = screenshot.windowTitle, !windowTitle.isEmpty {
               Text("— \(windowTitle)")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
             }
           }
@@ -1775,7 +1775,7 @@ struct SearchResultRow: View {
           {
             Text(snippet)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(.white.opacity(0.7))
+              .foregroundColor(Ink.secondary)
               .lineLimit(2)
           }
         }
@@ -1785,13 +1785,13 @@ struct SearchResultRow: View {
         // Timestamp
         Text(screenshot.formattedDate)
           .scaledFont(size: OmiType.caption, design: .monospaced)
-          .foregroundColor(.white.opacity(0.5))
+          .foregroundColor(Ink.secondary)
 
         // Selection indicator
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
         }
       }
       .padding(.horizontal, OmiSpacing.md)
@@ -1800,11 +1800,11 @@ struct SearchResultRow: View {
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
           .fill(
             isSelected
-              ? OmiColors.accent.opacity(0.2) : (isHovered ? Color.white.opacity(0.1) : Color.white.opacity(0.05)))
+              ? Ink.accent.opacity(0.2) : (isHovered ? Ink.secondary : Ink.secondary))
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(isSelected ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+          .stroke(isSelected ? Ink.accent.opacity(0.5) : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)

@@ -24,7 +24,7 @@ struct BillingWebFlowSheet: View {
       HStack(spacing: OmiSpacing.md) {
         Text(flow.title)
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -35,14 +35,14 @@ struct BillingWebFlowSheet: View {
       }
       .padding(.horizontal, OmiSpacing.xl)
       .padding(.vertical, OmiSpacing.lg)
-      .background(OmiColors.backgroundTertiary)
+      .background(Ink.rowFill)
 
       Divider()
 
       BillingWebView(flow: flow, onComplete: onComplete)
         .frame(minWidth: 860, minHeight: 680)
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 }
 

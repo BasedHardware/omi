@@ -43,38 +43,30 @@ struct ChatFirstShell: View {
   }
 
   var body: some View {
-    ZStack {
-      RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-        .fill(OmiColors.backgroundPrimary)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-            .stroke(OmiColors.border.opacity(0.3), lineWidth: 1)
-        )
-
-      VStack(spacing: 0) {
-        DesktopTopBar(
-          selectedIndex: modernTopBarSelection,
-          memoryDestinationRawValue: $memoryDestinationRawValue,
-          appState: appState,
-          memoriesViewModel: viewModelContainer.memoriesViewModel,
-          tasksStore: viewModelContainer.tasksStore,
-          sinceDate: topBarSinceDate,
-          onRewind: {
-            navigation.selectMore(.rewind)
-          }
-        )
-        // Route-specific identity guarantees every semantic navigation change
-        // mounts a fresh destination root and runs its visibility acknowledgement.
-        // Without it, SwiftUI can structurally reuse compatible branches (notably
-        // Home and More pages), leaving the automation contract stale even though
-        // the requested route is selected.
-        destination
-          .id(navigation.route.stableName)
-      }
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
+    // No ground of its own — the window's glass (`glassShellGround`) is already
+    // under this, and a second scrim would spend the passthrough budget twice.
+    VStack(spacing: 0) {
+      DesktopTopBar(
+        selectedIndex: modernTopBarSelection,
+        memoryDestinationRawValue: $memoryDestinationRawValue,
+        appState: appState,
+        memoriesViewModel: viewModelContainer.memoriesViewModel,
+        tasksStore: viewModelContainer.tasksStore,
+        sinceDate: topBarSinceDate,
+        onRewind: {
+          navigation.selectMore(.rewind)
+        }
+      )
+      // Route-specific identity guarantees every semantic navigation change
+      // mounts a fresh destination root and runs its visibility acknowledgement.
+      // Without it, SwiftUI can structurally reuse compatible branches (notably
+      // Home and More pages), leaving the automation contract stale even though
+      // the requested route is selected.
+      destination
+        .id(navigation.route.stableName)
     }
-    .padding(OmiSpacing.md)
-    .background(OmiColors.backgroundPrimary)
+    // The hidden title bar puts the traffic lights over the content view.
+    .padding(.top, GlassShell.titlebarClearance)
     .environmentObject(navigation)
     .onAppear {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
@@ -362,10 +354,9 @@ private struct ChatFirstAppsHost: View {
           ProgressView().controlSize(.small)
           Text("Loading apps…")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundStyle(OmiColors.textSecondary)
+            .foregroundStyle(Ink.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(OmiColors.backgroundPrimary)
       }
     }
     .task {
@@ -611,15 +602,14 @@ private struct ChatFirstDeferredDestination: View {
     VStack(spacing: OmiSpacing.md) {
       Image(systemName: "target")
         .scaledFont(size: 36, weight: .medium)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
       Text(title)
         .scaledFont(size: OmiType.title, weight: .bold)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
       Text(message)
         .scaledFont(size: OmiType.body)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(OmiColors.backgroundPrimary)
   }
 }

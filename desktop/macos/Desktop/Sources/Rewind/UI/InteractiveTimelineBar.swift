@@ -656,7 +656,7 @@ class TimeBasedTimelineNSView: NSView {
         width: markerWidth,
         height: rect.height + 4
       )
-      NSColor.yellow.withAlphaComponent(0.8).setFill()
+      NSColor.orange.withAlphaComponent(0.8).setFill()
       NSBezierPath(roundedRect: markerRect, xRadius: 1, yRadius: 1).fill()
     }
   }
@@ -675,11 +675,11 @@ class TimeBasedTimelineNSView: NSView {
 
     // Glow effect
     let glowRect = playheadRect.insetBy(dx: -2, dy: -2)
-    NSColor.white.withAlphaComponent(0.3).setFill()
+    NSColor.labelColor.withAlphaComponent(0.24).setFill()
     NSBezierPath(roundedRect: glowRect, xRadius: 4, yRadius: 4).fill()
 
     // Main playhead
-    NSColor.white.setFill()
+    NSColor.labelColor.setFill()
     NSBezierPath(roundedRect: playheadRect, xRadius: 2, yRadius: 2).fill()
 
     // Top triangle indicator
@@ -689,7 +689,7 @@ class TimeBasedTimelineNSView: NSView {
     triangle.line(to: NSPoint(x: x - triangleSize / 2, y: rect.minY - 6 - triangleSize))
     triangle.line(to: NSPoint(x: x + triangleSize / 2, y: rect.minY - 6 - triangleSize))
     triangle.close()
-    NSColor.white.setFill()
+    NSColor.labelColor.setFill()
     triangle.fill()
   }
 
@@ -703,7 +703,7 @@ class TimeBasedTimelineNSView: NSView {
       width: indicatorWidth,
       height: rect.height
     )
-    NSColor.white.withAlphaComponent(0.5).setFill()
+    NSColor.labelColor.withAlphaComponent(0.5).setFill()
     NSBezierPath(roundedRect: indicatorRect, xRadius: 1, yRadius: 1).fill()
   }
 
@@ -724,20 +724,20 @@ struct TooltipView: View {
       AppIconView(appName: screenshot.appName, size: 14)
       Text(screenshot.appName)
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(.white)
+        .foregroundColor(Ink.primary)
         .lineLimit(1)
       Text(screenshot.formattedTime)
         .scaledFont(size: OmiType.micro, design: .monospaced)
-        .foregroundColor(.white.opacity(0.7))
+        .foregroundColor(Ink.secondary)
     }
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.xxs)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-        .fill(Color.black.opacity(0.95))
+        .fill(Ink.surface)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-            .stroke(Color.white.opacity(0.2), lineWidth: 0.5)
+            .stroke(Ink.rowFillHover, lineWidth: 0.5)
         )
     )
   }
@@ -750,19 +750,19 @@ struct GapTooltipView: View {
     VStack(spacing: OmiSpacing.hairline) {
       Text("No capture")
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(.white.opacity(0.6))
+        .foregroundColor(Ink.secondary)
       Text(formatDuration(duration))
         .scaledFont(size: OmiType.caption, weight: .semibold, design: .monospaced)
-        .foregroundColor(.white)
+        .foregroundColor(Ink.primary)
     }
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.xs)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-        .fill(Color.black.opacity(0.95))
+        .fill(Ink.surface)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-            .stroke(Color.orange.opacity(0.4), lineWidth: 0.5)
+            .stroke(PageGlass.warning.opacity(0.4), lineWidth: 0.5)
         )
     )
   }
@@ -795,6 +795,6 @@ struct GapTooltipView: View {
       onSelect: { _ in }
     )
     .frame(width: 800, height: 100)
-    .background(Color.black)
+    .background(Ink.surface)
   }
 #endif

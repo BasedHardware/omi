@@ -22,7 +22,7 @@ struct FocusSummaryWidget: View {
       HStack {
         Text("Focus")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -36,12 +36,12 @@ struct FocusSummaryWidget: View {
             }) {
               Text(tab.rawValue)
                 .scaledFont(size: OmiType.caption, weight: selectedTab == tab ? .semibold : .regular)
-                .foregroundColor(selectedTab == tab ? OmiColors.textPrimary : OmiColors.textTertiary)
+                .foregroundColor(selectedTab == tab ? Ink.primary : Ink.secondary)
                 .padding(.horizontal, OmiSpacing.sm)
                 .padding(.vertical, OmiSpacing.xxs)
                 .background(
                   RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                    .fill(selectedTab == tab ? OmiColors.backgroundQuaternary.opacity(0.6) : Color.clear)
+                    .fill(selectedTab == tab ? Ink.rowFillHover.opacity(0.6) : Color.clear)
                 )
             }
             .buttonStyle(.plain)
@@ -50,7 +50,7 @@ struct FocusSummaryWidget: View {
         .padding(OmiSpacing.hairline)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundTertiary.opacity(0.5))
+            .fill(Ink.rowFillHover.opacity(0.5))
         )
       }
 
@@ -61,7 +61,7 @@ struct FocusSummaryWidget: View {
           value: "\(stats.focusedMinutes)",
           unit: "min",
           icon: "eye.fill",
-          color: Color.green
+          color: Ink.listeningGreen
         )
 
         FocusStatCard(
@@ -69,7 +69,7 @@ struct FocusSummaryWidget: View {
           value: "\(stats.distractedMinutes)",
           unit: "min",
           icon: "eye.slash.fill",
-          color: Color.orange
+          color: PageGlass.warning
         )
 
         FocusStatCard(
@@ -77,7 +77,7 @@ struct FocusSummaryWidget: View {
           value: String(format: "%.0f", stats.focusRate),
           unit: "%",
           icon: "chart.pie.fill",
-          color: OmiColors.info
+          color: Ink.accent
         )
 
         FocusStatCard(
@@ -85,7 +85,7 @@ struct FocusSummaryWidget: View {
           value: "\(stats.sessionCount)",
           unit: "",
           icon: "clock.fill",
-          color: OmiColors.info
+          color: Ink.accent
         )
       }
     }
@@ -93,10 +93,10 @@ struct FocusSummaryWidget: View {
     .frame(maxHeight: .infinity, alignment: .topLeading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        .fill(Ink.rowFillHover.opacity(0.5))
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+            .stroke(Ink.rowFillHover.opacity(0.5), lineWidth: 1)
         )
     )
   }
@@ -116,17 +116,17 @@ struct FocusStatCard: View {
       HStack(alignment: .center, spacing: OmiSpacing.xxs) {
         Image(systemName: icon)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         HStack(alignment: .lastTextBaseline, spacing: OmiSpacing.hairline) {
           Text(value)
             .scaledFont(size: OmiType.heading, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           if !unit.isEmpty {
             Text(unit)
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
@@ -135,14 +135,14 @@ struct FocusStatCard: View {
 
       Text(title)
         .scaledFont(size: OmiType.micro)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, OmiSpacing.sm)
     .padding(.horizontal, OmiSpacing.sm)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundTertiary.opacity(0.6))
+        .fill(Ink.rowFillHover.opacity(0.6))
     )
   }
 }
@@ -170,6 +170,6 @@ struct FocusStatCard: View {
       )
     )
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

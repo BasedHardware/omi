@@ -28,7 +28,7 @@ struct ScreenshotThumbnailView: View {
               .clipped()
           } else if isLoading {
             Rectangle()
-              .fill(OmiColors.backgroundTertiary)
+              .fill(Ink.rowFillHover)
               .frame(height: 120)
               .overlay {
                 ProgressView()
@@ -37,12 +37,12 @@ struct ScreenshotThumbnailView: View {
               }
           } else {
             Rectangle()
-              .fill(OmiColors.backgroundTertiary)
+              .fill(Ink.rowFillHover)
               .frame(height: 120)
               .overlay {
                 Image(systemName: "photo")
                   .scaledFont(size: 24)
-                  .foregroundColor(OmiColors.textQuaternary)
+                  .foregroundColor(Ink.secondary)
               }
           }
 
@@ -65,9 +65,9 @@ struct ScreenshotThumbnailView: View {
                 } label: {
                   Image(systemName: "trash")
                     .scaledFont(size: OmiType.caption)
-                    .foregroundColor(.white)
+                    .foregroundColor(Ink.surface)
                     .padding(OmiSpacing.xs)
-                    .background(Color.red.opacity(0.8))
+                    .background(Ink.errorRed.opacity(0.8))
                     .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -79,7 +79,7 @@ struct ScreenshotThumbnailView: View {
                 Spacer()
                 Text(screenshot.formattedTime)
                   .scaledFont(size: OmiType.caption, weight: .medium, design: .monospaced)
-                  .foregroundColor(.white)
+                  .foregroundColor(Ink.surface)
                   .padding(.horizontal, OmiSpacing.sm)
                   .padding(.vertical, OmiSpacing.xxs)
                   .background(Color.black.opacity(0.6))
@@ -96,9 +96,9 @@ struct ScreenshotThumbnailView: View {
                 Spacer()
                 Image(systemName: "text.magnifyingglass")
                   .scaledFont(size: OmiType.micro)
-                  .foregroundColor(OmiColors.backgroundPrimary)
+                  .foregroundColor(Ink.surface)
                   .padding(OmiSpacing.xxs)
-                  .background(OmiColors.accent)
+                  .background(Ink.accent)
                   .clipShape(Circle())
               }
               Spacer()
@@ -110,7 +110,7 @@ struct ScreenshotThumbnailView: View {
         .cornerRadius(OmiChrome.elementRadius)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(isSelected ? OmiColors.accent : Color.clear, lineWidth: 2)
+            .stroke(isSelected ? Ink.accent : Color.clear, lineWidth: 2)
         )
 
         // Info section
@@ -122,13 +122,13 @@ struct ScreenshotThumbnailView: View {
             // App name
             Text(screenshot.appName)
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
 
             // Time
             Text(screenshot.formattedTime)
               .scaledFont(size: OmiType.micro, design: .monospaced)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Spacer()
@@ -137,7 +137,7 @@ struct ScreenshotThumbnailView: View {
           if screenshot.isIndexed && screenshot.ocrText != nil && !screenshot.ocrText!.isEmpty {
             Image(systemName: "doc.text.fill")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.accent.opacity(0.6))
+              .foregroundColor(Ink.accent.opacity(0.6))
               .help("Text extracted")
           }
         }
@@ -153,16 +153,16 @@ struct ScreenshotThumbnailView: View {
         else if let title = screenshot.windowTitle, !title.isEmpty {
           Text(title)
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textQuaternary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
         }
       }
       .padding(OmiSpacing.sm)
-      .background(isSelected ? OmiColors.accent.opacity(0.1) : OmiColors.backgroundTertiary.opacity(0.5))
+      .background(isSelected ? Ink.accent.opacity(0.1) : Ink.rowFillHover.opacity(0.5))
       .cornerRadius(OmiChrome.smallControlRadius)
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .stroke(isSelected ? OmiColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+          .stroke(isSelected ? Ink.accent.opacity(0.3) : Color.clear, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -217,13 +217,13 @@ struct SearchContextSnippet: View {
       .lineLimit(2)
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.xxs)
-      .background(OmiColors.accent.opacity(0.1))
+      .background(Ink.accent.opacity(0.1))
       .cornerRadius(OmiChrome.stripRadius)
   }
 
   private var attributedSnippet: AttributedString {
     var result = AttributedString(snippet)
-    result.foregroundColor = OmiColors.textTertiary
+    result.foregroundColor = Ink.secondary
 
     // Highlight the search query
     let lowercasedSnippet = snippet.lowercased()
@@ -232,7 +232,7 @@ struct SearchContextSnippet: View {
     var searchStart = lowercasedSnippet.startIndex
     while let range = lowercasedSnippet.range(of: lowercasedQuery, range: searchStart..<lowercasedSnippet.endIndex) {
       if let attrRange = Range(range, in: result) {
-        result[attrRange].foregroundColor = OmiColors.accent
+        result[attrRange].foregroundColor = Ink.accent
         result[attrRange].font = .system(size: 10, weight: .semibold)
       }
       searchStart = range.upperBound
@@ -262,12 +262,12 @@ struct ScreenshotGridView: View {
       HStack {
         Text("\(screenshots.count) screenshots")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         if let query = searchQuery {
           Text("matching \"\(query)\"")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
         }
 
         Spacer()
@@ -279,7 +279,7 @@ struct ScreenshotGridView: View {
             Text("Group by app")
           }
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         }
         .toggleStyle(.button)
         .buttonStyle(.plain)
@@ -327,11 +327,11 @@ struct ScreenshotGridView: View {
 
             Text(appName)
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text("(\(grouped[appName]?.count ?? 0))")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
 
             Spacer()
           }
@@ -367,6 +367,6 @@ struct ScreenshotGridView: View {
       onDelete: { _ in }
     )
     .frame(width: 800, height: 600)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

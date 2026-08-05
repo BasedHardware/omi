@@ -128,7 +128,7 @@ struct ChatBubble: View {
                   .aspectRatio(contentMode: .fill)
               default:
                 Circle()
-                  .fill(OmiColors.backgroundTertiary)
+                  .fill(Ink.rowFillHover)
               }
             }
             .frame(width: 32, height: 32)
@@ -214,11 +214,11 @@ struct ChatBubble: View {
           Image(systemName: "chevron.down")
             .scaledFont(size: OmiType.micro)
         }
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.backgroundTertiary.opacity(0.72))
-        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
+        .background(Ink.rowFill)
+        .clipShape(Capsule(style: .continuous))
       }
       .buttonStyle(.plain)
     } else {
@@ -290,7 +290,7 @@ struct ChatBubble: View {
     if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed {
       Text("Couldn't save this reply")
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(.orange.opacity(0.9))
+        .foregroundColor(PageGlass.warning)
     }
 
     if message.sender == .ai && !message.isStreaming && message.isSynced {
@@ -309,13 +309,13 @@ struct ChatBubble: View {
       .padding(.vertical, OmiSpacing.sm)
       .background(
         message.sender == .user
-          ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.42)
+          ? Ink.rowFillHover : Color.clear
       )
-      .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-          .stroke(
-            message.sender == .user ? Color.clear : OmiColors.border.opacity(0.4),
+        RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous)
+          .strokeBorder(
+            message.sender == .user ? Color.clear : Color.clear,
             lineWidth: 1
           )
       )
@@ -326,7 +326,7 @@ struct ChatBubble: View {
     Button(action: { isExpanded = true }) {
       Text("Show more")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(.white)
+        .foregroundColor(Ink.accent)
     }
     .buttonStyle(.plain)
     .accessibilityHint("Expand the full message")
@@ -347,11 +347,12 @@ struct ChatBubble: View {
         OmiMarkdown(text: text, sender: .ai)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary.opacity(0.42))
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+          // An assistant block reads directly on the panel: the glass is the ground.
+          .background(Color.clear)
+          .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
           .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous)
-              .stroke(OmiColors.border.opacity(0.4), lineWidth: 1)
+            RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous)
+              .strokeBorder(Color.clear, lineWidth: 1)
           )
           .padding(.top, OmiSpacing.hairline)
       )
@@ -520,7 +521,7 @@ struct ChatBubble: View {
       }) {
         Image(systemName: message.rating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(message.rating == 1 ? OmiColors.accent : OmiColors.textTertiary)
+          .foregroundColor(message.rating == 1 ? Ink.primary : Ink.secondary)
       }
       .buttonStyle(.plain)
       .focused($isMetadataControlFocused)
@@ -536,7 +537,7 @@ struct ChatBubble: View {
       }) {
         Image(systemName: message.rating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(message.rating == -1 ? .red : OmiColors.textTertiary)
+          .foregroundColor(message.rating == -1 ? Ink.errorRed : Ink.secondary)
       }
       .buttonStyle(.plain)
       .focused($isMetadataControlFocused)
@@ -545,7 +546,7 @@ struct ChatBubble: View {
       if showRatingFeedback {
         Text("Thank you")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .transition(.opacity)
       }
     }
@@ -579,7 +580,7 @@ struct ChatBubble: View {
     }) {
       Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(showCopied ? .green : OmiColors.textTertiary)
+        .foregroundColor(showCopied ? Ink.listeningGreen : Ink.secondary)
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)
@@ -594,7 +595,7 @@ struct ChatBubble: View {
     Button(action: { showInfoPopover.toggle() }) {
       Image(systemName: "info.circle")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(showInfoPopover ? OmiColors.textPrimary : OmiColors.textTertiary)
+        .foregroundColor(showInfoPopover ? Ink.primary : Ink.secondary)
     }
     .buttonStyle(.plain)
     .focused($isMetadataControlFocused)
@@ -629,19 +630,19 @@ private struct BackgroundAgentSummaryCard: View {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(.green)
+              .foregroundColor(Ink.listeningGreen)
             Text("Background agent")
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             Text(ChatContinuityInvariants.agentPreviewText(prompt: summary.prompt, output: summary.output))
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
               .truncationMode(.tail)
             Spacer(minLength: 4)
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .padding(.leading, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
@@ -654,7 +655,7 @@ private struct BackgroundAgentSummaryCard: View {
           Button(action: openAgent) {
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .padding(.trailing, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
               .contentShape(Rectangle())
@@ -675,14 +676,14 @@ private struct BackgroundAgentSummaryCard: View {
         VStack(alignment: .leading, spacing: OmiSpacing.sm) {
           Text(summary.prompt)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(3)
             .textSelection(.disabled)
           OmiMarkdown(text: summary.output, sender: .ai)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .textSelection(.disabled)
           }
           if isExpanded {
@@ -694,7 +695,7 @@ private struct BackgroundAgentSummaryCard: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+    .glassCard(cornerRadius: 16)
     .onChange(of: showUnavailable) { _, unavailable in
       guard unavailable else { return }
       OmiMotion.withGated(.easeInOut(duration: 0.18)) {
@@ -712,7 +713,7 @@ private struct BackgroundAgentSummaryCard: View {
         Image(systemName: "chevron.up")
           .scaledFont(size: OmiType.micro)
       }
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
       .padding(.top, OmiSpacing.hairline)
       .contentShape(Rectangle())
     }
@@ -759,20 +760,20 @@ struct AgentSpawnCard: View {
           if provider.rendersProviderMark {
             AgentProviderLogoMark(
               provider: provider,
-              statusColor: OmiColors.textSecondary,
+              statusColor: Ink.secondary,
               size: 14
             )
           } else {
             Image(systemName: "arrow.triangle.branch")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
           Text(title.isEmpty ? "Background agent" : title)
             .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
           Text(objective)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
             .truncationMode(.tail)
           Spacer(minLength: 4)
@@ -785,7 +786,7 @@ struct AgentSpawnCard: View {
           Button(action: openAgent) {
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .padding(.trailing, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
               .contentShape(Rectangle())
@@ -803,13 +804,13 @@ struct AgentSpawnCard: View {
           .padding(.horizontal, OmiSpacing.sm)
         Text("Agent unavailable — it may have been dismissed.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+    .glassCard(cornerRadius: 16)
   }
 
   private func openAgent() {
@@ -851,16 +852,16 @@ struct AgentCompletionCard: View {
               .foregroundColor(statusColor)
             Text(title.isEmpty ? "Background agent" : title)
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
             Text(ChatContinuityInvariants.agentPreviewText(prompt: promptSnippet, output: output))
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
               .truncationMode(.tail)
             Spacer(minLength: 4)
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .padding(.leading, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.sm)
@@ -873,7 +874,7 @@ struct AgentCompletionCard: View {
           Button(action: openAgent) {
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .padding(.trailing, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
               .contentShape(Rectangle())
@@ -895,7 +896,7 @@ struct AgentCompletionCard: View {
           if !promptSnippet.isEmpty {
             Text(promptSnippet)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(3)
               .textSelection(.disabled)
           }
@@ -903,7 +904,7 @@ struct AgentCompletionCard: View {
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .textSelection(.disabled)
           }
           if isExpanded {
@@ -915,7 +916,7 @@ struct AgentCompletionCard: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+    .glassCard(cornerRadius: 16)
     .onChange(of: showUnavailable) { _, unavailable in
       guard unavailable else { return }
       OmiMotion.withGated(.easeInOut(duration: 0.18)) {
@@ -933,7 +934,7 @@ struct AgentCompletionCard: View {
         Image(systemName: "chevron.up")
           .scaledFont(size: OmiType.micro)
       }
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
       .padding(.top, OmiSpacing.hairline)
       .contentShape(Rectangle())
     }
@@ -969,11 +970,11 @@ struct AgentCompletionCard: View {
   private var statusColor: Color {
     switch status.lowercased() {
     case "failed", "cancelled", "canceled", "stopped", "timed_out", "timeout", "orphaned", "error":
-      return .red
+      return Ink.errorRed
     case "completed", "succeeded", "success", "done":
-      return .green
+      return Ink.listeningGreen
     default:
-      return OmiColors.textTertiary
+      return Ink.secondary
     }
   }
 }
@@ -1365,14 +1366,14 @@ struct ToolCallsGroup: View {
       if showUnavailable {
         Text("Agent unavailable — it may have been dismissed.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.bottom, compact ? OmiSpacing.xs : OmiSpacing.sm)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .fixedSize(horizontal: false, vertical: true)
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.42), radius: compact ? 14 : 16)
+    .glassCard(cornerRadius: compact ? 14 : 16)
   }
 
   private var header: some View {
@@ -1387,13 +1388,13 @@ struct ToolCallsGroup: View {
 
           Text(currentToolName)
             .scaledFont(size: OmiType.caption, weight: compact ? .semibold : .regular)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
 
           if let summary = currentToolSummary, !summary.isEmpty {
             Text(summary)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
               .truncationMode(.middle)
           }
@@ -1401,12 +1402,12 @@ struct ToolCallsGroup: View {
           if calls.count > 1 {
             Text(compact ? "· \(calls.count) steps" : "·")
               .scaledFont(size: compact ? 11 : 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
             if !compact {
               Text("\(calls.count) steps")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
 
@@ -1414,7 +1415,7 @@ struct ToolCallsGroup: View {
 
           Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .padding(.leading, OmiSpacing.sm)
         .padding(.vertical, compact ? 0 : OmiSpacing.xs)
@@ -1435,7 +1436,7 @@ struct ToolCallsGroup: View {
         }) {
           Image(systemName: "arrow.up.forward.app")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.trailing, OmiSpacing.sm)
             .padding(.vertical, compact ? 0 : OmiSpacing.xs)
             .frame(height: compact ? 34 : nil)
@@ -1544,17 +1545,17 @@ struct ToolCallCard: View {
             // Tool name
             Text(ChatContentBlock.displayName(for: name))
               .scaledFont(size: OmiType.caption, design: .monospaced)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             // Inline argument summary
             if let summary = input?.summary {
               Text("·")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
 
               Text(summary)
                 .scaledFont(size: OmiType.caption, design: .monospaced)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             }
@@ -1565,7 +1566,7 @@ struct ToolCallCard: View {
             if hasExpandableContent {
               Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                 .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
           .padding(.leading, OmiSpacing.sm)
@@ -1586,7 +1587,7 @@ struct ToolCallCard: View {
           }) {
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .padding(.trailing, OmiSpacing.sm)
               .padding(.vertical, OmiSpacing.xs)
               .contentShape(Rectangle())
@@ -1609,11 +1610,11 @@ struct ToolCallCard: View {
             VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
               Text("Input")
                 .scaledFont(size: OmiType.micro, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
 
               Text(details)
                 .scaledFont(size: OmiType.caption, design: .monospaced)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(10)
             }
           }
@@ -1623,11 +1624,11 @@ struct ToolCallCard: View {
             VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
               Text("Output")
                 .scaledFont(size: OmiType.micro, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
 
               Text(output)
                 .scaledFont(size: OmiType.caption, design: .monospaced)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .lineLimit(15)
             }
           }
@@ -1635,14 +1636,14 @@ struct ToolCallCard: View {
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.sm)
       }
     }
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.8), radius: 16)
+    .glassCard(cornerRadius: 16)
   }
 }
 
@@ -1820,19 +1821,19 @@ private func statusIcon(for status: ToolCallStatus, size: CGFloat) -> some View 
     ProgressView()
       .controlSize(.mini)
       .frame(width: size, height: size)
-      .tint(.orange)
+      .tint(PageGlass.warning)
   case .stalled:
     Image(systemName: "exclamationmark.triangle.fill")
       .scaledFont(size: size)
-      .foregroundColor(.orange)
+      .foregroundColor(PageGlass.warning)
   case .completed:
     Image(systemName: "checkmark.circle.fill")
       .scaledFont(size: size)
-      .foregroundColor(.green)
+      .foregroundColor(Ink.listeningGreen)
   case .failed:
     Image(systemName: "xmark.circle.fill")
       .scaledFont(size: size)
-      .foregroundColor(.red)
+      .foregroundColor(Ink.errorRed)
   }
 }
 
@@ -1849,31 +1850,31 @@ struct ToolCallStalledBanner: View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "exclamationmark.triangle.fill")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(.orange)
+        .foregroundColor(PageGlass.warning)
 
       Text("This is taking longer than usual.")
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Spacer(minLength: 4)
 
       Button(action: onCancel) {
         Text("Cancel")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.surface)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xxs)
-          .background(Color.red.opacity(0.85))
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.badgeRadius))
+          .background(Ink.errorRed)
+          .clipShape(Capsule(style: .continuous))
       }
       .buttonStyle(.plain)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
-    .background(Color.orange.opacity(0.1))
+    .background(Ink.rowFill)
     .overlay(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
+        .strokeBorder(PageGlass.warning.opacity(0.4), lineWidth: 1)
     )
     .clipShape(RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius))
   }
@@ -1897,18 +1898,18 @@ struct ThinkingBlock: View {
         HStack(spacing: OmiSpacing.xs) {
           Image(systemName: "brain")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           Text("Thinking")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .italic()
 
           Spacer(minLength: 4)
 
           Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xs)
@@ -1922,14 +1923,14 @@ struct ThinkingBlock: View {
 
         Text(text)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .italic()
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.sm)
           .lineLimit(30)
       }
     }
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.72), radius: 16)
+    .glassCard(cornerRadius: 16)
   }
 }
 
@@ -1954,16 +1955,16 @@ struct DiscoveryCard: View {
         HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "doc.text.magnifyingglass")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.primary)
 
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(title)
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(summary)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(2)
           }
 
@@ -1971,7 +1972,7 @@ struct DiscoveryCard: View {
 
           Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
@@ -1991,8 +1992,6 @@ struct DiscoveryCard: View {
         .frame(maxHeight: 300)
       }
     }
-    .omiPanel(
-      fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18),
-      shadowOpacity: 0.08, shadowRadius: 10, shadowY: 6)
+    .glassCard(cornerRadius: 18)
   }
 }

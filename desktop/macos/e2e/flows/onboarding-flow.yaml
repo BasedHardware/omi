@@ -32,6 +32,18 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/OnboardingOpenerComposer.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingOpenerView.swift
   - desktop/macos/Desktop/Sources/MainWindow/OnboardingWalkthroughOverlay.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicDirector.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicMark.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicSequence.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindowArt.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindows.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingCinematic.swift
+  - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingSound.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingGlassChrome.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingIntroGate.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingPermissionRuntime.swift
+  - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBPostOnboardingGuidance.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/OnboardingLoadingAnimation.swift
 preconditions:
   - automation_bridge_ready
 

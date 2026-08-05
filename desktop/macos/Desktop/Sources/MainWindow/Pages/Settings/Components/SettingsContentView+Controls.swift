@@ -68,17 +68,12 @@ private struct SettingsTextInputStyle: ViewModifier {
     content
       .textFieldStyle(.plain)
       .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textPrimary)
+      .foregroundColor(Ink.primary)
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.sm)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-          .fill(OmiColors.backgroundTertiary)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-              .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
-          )
-      )
+      // A well, not a card: `Ink.hairline` is the outline of something you type into, which is a
+      // different job from the rule between two blocks — see `Ink.hairline` vs `Ink.separator`.
+      .settingsGlassWell(radius: SettingsGlassMetrics.controlRadius)
   }
 }
 
@@ -111,15 +106,15 @@ extension SettingsContentView {
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(ShortcutSettings.voiceSpeedLabel(for: currentSpeed))
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
             Text("Voice playback speed")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
           Spacer()
           Text("\(String(format: "%.1f", currentSpeed))×")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
         }
 
         VStack(spacing: OmiSpacing.xs) {
@@ -131,14 +126,14 @@ extension SettingsContentView {
 
             ZStack(alignment: .leading) {
               // Track background
-              RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                .fill(OmiColors.backgroundQuaternary)
+              RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+                .fill(Ink.hairline)
                 .frame(width: trackWidth, height: 6)
                 .offset(x: trackInset)
 
               // Filled track
-              RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                .fill(OmiColors.accent)
+              RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+                .fill(Ink.primary)
                 .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
                 .offset(x: trackInset)
 
@@ -146,7 +141,7 @@ extension SettingsContentView {
               ForEach(0..<steps.count, id: \.self) { i in
                 Circle()
                   .fill(
-                    i <= currentIndex ? OmiColors.accent : OmiColors.backgroundQuaternary
+                    i <= currentIndex ? Ink.accent : Ink.hairline
                   )
                   .frame(width: 12, height: 12)
                   .position(
@@ -158,7 +153,7 @@ extension SettingsContentView {
 
               // Thumb
               Circle()
-                .fill(Color.white)
+                .fill(Ink.surface)
                 .frame(width: 22, height: 22)
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                 .position(
@@ -186,11 +181,11 @@ extension SettingsContentView {
           HStack {
             Text("Slow")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             Spacer()
             Text("Max")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
@@ -212,20 +207,20 @@ extension SettingsContentView {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text("Frequency")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
           Text("How often to receive notifications")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         Spacer()
         Text(currentLabel)
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.accent)
+          .foregroundColor(Ink.accent)
           .padding(.horizontal, OmiSpacing.sm)
           .padding(.vertical, OmiSpacing.xxs)
           .background(
-            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-              .fill(OmiColors.accent.opacity(0.15))
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+              .fill(Ink.accent.opacity(0.15))
           )
       }
 
@@ -234,20 +229,20 @@ extension SettingsContentView {
         let trackInset = SettingsControlMetrics.steppedSliderInset(in: geo.size.width)
 
         ZStack(alignment: .leading) {
-          RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-            .fill(OmiColors.backgroundQuaternary)
+          RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+            .fill(Ink.hairline)
             .frame(width: trackWidth, height: 6)
             .offset(x: trackInset)
 
-          RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-            .fill(OmiColors.accent)
+          RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+            .fill(Ink.primary)
             .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
             .offset(x: trackInset)
 
           ForEach(0..<stepCount, id: \.self) { i in
             Circle()
               .fill(
-                i <= currentIndex ? OmiColors.accent : OmiColors.backgroundQuaternary
+                i <= currentIndex ? Ink.accent : Ink.hairline
               )
               .frame(width: 12, height: 12)
               .position(
@@ -258,7 +253,7 @@ extension SettingsContentView {
           }
 
           Circle()
-            .fill(Color.white)
+            .fill(Ink.surface)
             .frame(width: 22, height: 22)
             .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
             .position(
@@ -286,11 +281,11 @@ extension SettingsContentView {
       HStack {
         Text(frequencyOptions.first?.1 ?? "Off")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         Spacer()
         Text(frequencyOptions.last?.1 ?? "Maximum")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
 
@@ -307,16 +302,16 @@ extension SettingsContentView {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
           .scaledFont(size: OmiType.subheading)
-          .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textTertiary)
+          .foregroundColor(isSelected ? Ink.accent : Ink.secondary)
 
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(label)
             .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-            .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
 
           Text(subtitle)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         Spacer()
@@ -324,8 +319,8 @@ extension SettingsContentView {
       .padding(.vertical, OmiSpacing.xs)
       .padding(.horizontal, OmiSpacing.sm)
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isSelected ? OmiColors.accent.opacity(0.1) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isSelected ? Ink.accent.opacity(0.1) : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -338,40 +333,40 @@ extension SettingsContentView {
       HStack {
         Text("Tier \(tier)")
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(unlocked ? OmiColors.accent : OmiColors.textTertiary)
+          .foregroundColor(unlocked ? Ink.accent : Ink.secondary)
           .padding(.horizontal, OmiSpacing.xs)
           .padding(.vertical, OmiSpacing.hairline)
           .background(
-            RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-              .fill(unlocked ? OmiColors.accent.opacity(0.15) : OmiColors.backgroundTertiary)
+            RoundedRectangle(cornerRadius: OmiChrome.stripRadius, style: .continuous)
+              .fill(unlocked ? Ink.accent.opacity(0.15) : Ink.rowFill)
           )
 
         Text(name)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(unlocked ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(unlocked ? Ink.primary : Ink.secondary)
 
         Spacer()
 
         if unlocked {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(.green)
+            .foregroundColor(Ink.listeningGreen)
         } else {
           Image(systemName: "lock.fill")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
       HStack(spacing: OmiSpacing.sm) {
         Text(requirement)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         if let progress = progress, !unlocked {
           Text("(\(progress))")
             .scaledMonospacedDigitFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary.opacity(0.7))
+            .foregroundColor(Ink.secondary)
         }
       }
     }
@@ -382,13 +377,13 @@ extension SettingsContentView {
     HStack {
       Text(label)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Spacer()
 
       Text(formatNumber(value))
         .scaledMonospacedDigitFont(size: 14, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
     }
   }
 
@@ -396,7 +391,7 @@ extension SettingsContentView {
     HStack {
       Text(label)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Spacer()
 
@@ -486,18 +481,18 @@ extension SettingsContentView {
               HStack(spacing: OmiSpacing.xs) {
                 Text("omi")
                   .scaledFont(size: OmiType.heading, weight: .bold)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
 
                 if !updaterViewModel.activeChannelLabel.isEmpty {
                   Text("(\(updaterViewModel.activeChannelLabel))")
                     .scaledFont(size: OmiType.body, weight: .medium)
-                    .foregroundColor(OmiColors.accent)
+                    .foregroundColor(Ink.secondary)
                 }
               }
 
               Text("Version \(updaterViewModel.currentVersion) (\(updaterViewModel.buildNumber))")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .textSelection(.enabled)
             }
 
@@ -505,7 +500,7 @@ extension SettingsContentView {
           }
 
           Divider()
-            .background(OmiColors.backgroundQuaternary)
+            .background(Ink.hairline)
 
           // Links
           linkRow(title: "What's New", url: AppBuild.changelogURLString)
@@ -517,13 +512,13 @@ extension SettingsContentView {
             HStack {
               Text("Privacy Policy")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
 
               Spacer()
 
               Image(systemName: "arrow.right")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
           }
           .buttonStyle(.plain)
@@ -537,11 +532,11 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "arrow.triangle.2.circlepath")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             Text("Software Updates")
               .scaledFont(size: OmiType.subheading, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Spacer()
 
@@ -560,7 +555,7 @@ extension SettingsContentView {
           if let lastCheck = updaterViewModel.lastUpdateCheckDate {
             Text("Last checked: \(lastCheck, style: .relative) ago")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           if let failure = updaterViewModel.lastUpdateFailure {
@@ -568,15 +563,15 @@ extension SettingsContentView {
               HStack(alignment: .top, spacing: OmiSpacing.sm) {
                 Image(systemName: "exclamationmark.triangle.fill")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.warning)
+                  .foregroundColor(SettingsInk.notice)
 
                 VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                   Text("Update Needs Attention")
                     .scaledFont(size: OmiType.body, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+                    .foregroundColor(Ink.primary)
                   Text(failure.userMessage)
                     .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textSecondary)
+                    .foregroundColor(Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
               }
@@ -602,12 +597,12 @@ extension SettingsContentView {
               }
             }
             .padding(OmiSpacing.md)
-            .background(OmiColors.backgroundTertiary)
-            .cornerRadius(OmiChrome.elementRadius)
+            .background(Ink.rowFill)
+            .cornerRadius(SettingsGlassMetrics.controlRadius)
           }
 
           Divider()
-            .background(OmiColors.backgroundQuaternary)
+            .background(Ink.hairline)
 
           settingRow(
             title: "Automatic Updates",
@@ -636,21 +631,21 @@ extension SettingsContentView {
           if updaterViewModel.usesManagedUpdatePolicy {
             Text("Release builds always auto-check and auto-install updates in the background.")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           } else if AppBuild.isNamedDevelopmentBundle {
             Text("Named developer bundles do not use shared Sparkle updates. Run omi-dev update instead.")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           } else if AnalyticsManager.isDevBuild {
             Text(
               "Development builds keep automatic installation disabled to avoid replacing the local app."
             )
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           }
 
           Divider()
-            .background(OmiColors.backgroundQuaternary)
+            .background(Ink.hairline)
 
           settingRow(
             title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
@@ -661,7 +656,7 @@ extension SettingsContentView {
               // would make Sparkle replace it with the stable-identity app in place.
               Text(UpdateChannel.beta.displayName)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
             } else {
               SettingsMenuPicker(
                 selection: Binding(
@@ -705,16 +700,16 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "exclamationmark.bubble.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Report an Issue")
               .scaledFont(size: OmiType.subheading, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text("Help us improve omi")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Spacer()
@@ -730,36 +725,30 @@ extension SettingsContentView {
 
   // MARK: - Helper Views
 
+  /// A printed chord in a settings row. The one place a monospaced face appears on this surface, and
+  /// it is `SettingsKeyHint` rather than a second spelling of one.
   func fontShortcutRow(label: String, keys: String) -> some View {
     HStack {
       Text(label)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
       Spacer()
-      Text(keys)
-        .scaledMonospacedFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.hairline)
-        .background(OmiColors.backgroundTertiary.opacity(0.8))
-        .cornerRadius(OmiChrome.badgeRadius)
+      SettingsKeyHint(text: keys)
     }
   }
 
+  /// The card every settings block sits on.
+  ///
+  /// The corner is `SettingsGlassMetrics.cardRadius` and **not** `InkGlass.cornerRadius`: 22 is the
+  /// corner of the glass itself, and a card drawn inside the panel at the panel's own radius reads as
+  /// a second pane rather than as content on the first.
   func settingsCard<Content: View>(
     settingId: String? = nil, @ViewBuilder content: () -> Content
   ) -> some View {
     let card = content()
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(OmiSpacing.xl)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(OmiColors.backgroundTertiary.opacity(0.5))
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
-          )
-      )
+      .padding(OmiSpacing.lg)
+      .settingsGlassCard()
     return Group {
       if let settingId = settingId {
         card.modifier(
@@ -771,17 +760,24 @@ extension SettingsContentView {
     }
   }
 
+  /// A labelled control inside a card: a title, a sentence under it, and the control on the right.
+  ///
+  /// The title is `Ink.primary` and the subtitle `Ink.secondary` — the two rungs glass carries. They
+  /// were `secondary`/`tertiary` under the dark palette, which is the same *pair* one step down; on
+  /// glass the bottom rung is `Ink.secondary` (see its doc comment), so keeping the pair means moving
+  /// both up rather than flattening the title into its own subtitle.
   func settingRow<Content: View>(
     title: String, subtitle: String, settingId: String? = nil, @ViewBuilder control: () -> Content
   ) -> some View {
     let row = HStack {
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(title)
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(Ink.primary)
         Text(subtitle)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Spacer()
@@ -799,15 +795,17 @@ extension SettingsContentView {
     }
   }
 
+  /// A card's own heading: the icon in the tile every settings row uses, and the title beside it.
+  ///
+  /// The tile rather than a bare glyph, for the reason `SettingsIconTile` exists — a column of SF
+  /// Symbols at wildly different optical weights only lines up on a fixed ground.
   func settingsCardHeader(icon: String, title: String) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textSecondary)
+    HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
+      SettingsIconTile(symbol: icon)
 
       Text(title)
         .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
     }
   }
 
@@ -824,13 +822,13 @@ extension SettingsContentView {
       HStack {
         Text(title)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
 
         Image(systemName: "arrow.up.right")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .buttonStyle(.plain)
@@ -839,12 +837,12 @@ extension SettingsContentView {
   func trackingItem(_ text: String) -> some View {
     HStack(spacing: OmiSpacing.sm) {
       Circle()
-        .fill(OmiColors.textTertiary.opacity(0.5))
+        .fill(Ink.hairline)
         .frame(width: 4, height: 4)
 
       Text(text)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -852,11 +850,11 @@ extension SettingsContentView {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "checkmark")
         .scaledFont(size: OmiType.micro, weight: .bold)
-        .foregroundColor(.green)
+        .foregroundColor(Ink.listeningGreen)
 
       Text(text)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -871,17 +869,17 @@ extension SettingsContentView {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         Image(systemName: icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 20, alignment: .leading)
 
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text(title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(subtitle)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
 

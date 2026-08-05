@@ -27,7 +27,7 @@ struct TasksWidget: View {
       HStack {
         Text("Tasks")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
       }
 
       if totalTaskCount == 0 {
@@ -38,10 +38,10 @@ struct TasksWidget: View {
           VStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle")
               .scaledFont(size: OmiType.title)
-              .foregroundColor(OmiColors.textQuaternary)
+              .foregroundColor(Ink.secondary)
             Text("No incomplete tasks")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Spacer(minLength: 0)
@@ -75,10 +75,10 @@ struct TasksWidget: View {
               Spacer()
               Text("View all tasks")
                 .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
               Image(systemName: "chevron.right")
                 .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
               Spacer()
             }
           }
@@ -92,7 +92,7 @@ struct TasksWidget: View {
     }
     .padding(OmiSpacing.xl)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    .omiPanel(fill: OmiColors.backgroundSecondary)
+    .glassCard()
   }
 }
 
@@ -117,7 +117,7 @@ struct TaskRowView: View {
       }) {
         Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
           .scaledFont(size: OmiType.heading)
-          .foregroundColor(task.completed ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(task.completed ? Ink.primary : Ink.secondary)
       }
       .buttonStyle(.plain)
       .disabled(isToggling)
@@ -127,26 +127,26 @@ struct TaskRowView: View {
         HStack(spacing: OmiSpacing.xs) {
           Text(task.description)
             .scaledFont(size: OmiType.body)
-            .foregroundColor(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
+            .foregroundColor(task.completed ? Ink.secondary : Ink.primary)
             .strikethrough(task.completed)
             .lineLimit(2)
 
           if task.recurrenceRule == "daily" {
             Image(systemName: "repeat")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.accent.opacity(0.7))
+              .foregroundColor(Ink.accent.opacity(0.7))
           }
         }
 
         if task.recurrenceRule == "daily" {
           Text("Daily")
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(OmiColors.accent.opacity(0.8))
+            .foregroundColor(Ink.accent.opacity(0.8))
             .padding(.horizontal, OmiSpacing.xs)
             .padding(.vertical, OmiSpacing.hairline)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                .fill(OmiColors.accent.opacity(0.1))
+                .fill(Ink.accent.opacity(0.1))
             )
         }
       }
@@ -157,7 +157,7 @@ struct TaskRowView: View {
     .padding(.horizontal, OmiSpacing.md)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-        .fill(task.completed ? OmiColors.backgroundRaised.opacity(0.55) : OmiColors.backgroundTertiary.opacity(0.45))
+        .fill(task.completed ? Ink.rowFill.opacity(0.55) : Ink.rowFillHover.opacity(0.45))
     )
   }
 }
@@ -172,6 +172,6 @@ struct TaskRowView: View {
     )
     .frame(width: 350)
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

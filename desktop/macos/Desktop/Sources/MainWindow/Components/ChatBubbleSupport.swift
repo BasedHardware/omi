@@ -28,7 +28,7 @@ struct ChatMessageTimestamp: View {
   var body: some View {
     Text(date, format: .dateTime.year().month(.abbreviated).day().hour().minute())
       .scaledFont(size: OmiType.micro)
-      .foregroundColor(OmiColors.textTertiary.opacity(0.82))
+      .foregroundColor(Ink.secondary.opacity(0.82))
   }
 }
 

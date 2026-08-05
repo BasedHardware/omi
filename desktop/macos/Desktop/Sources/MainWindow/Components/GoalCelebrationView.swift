@@ -15,7 +15,7 @@ struct GoalCelebrationView: View {
     ZStack {
       if showCelebration {
         // Dim overlay
-        Color.black.opacity(phase == .dim ? 0.4 : (phase == .confetti || phase == .text ? 0.5 : 0))
+        Color.black.opacity(phase == .dim ? 0.22 : (phase == .confetti || phase == .text ? 0.28 : 0))
           .ignoresSafeArea()
           .allowsHitTesting(false)
 
@@ -42,13 +42,13 @@ struct GoalCelebrationView: View {
 
             Text(goal.title)
               .scaledFont(size: OmiType.heading, weight: .medium)
-              .foregroundColor(.white)
+              .foregroundColor(Ink.primary)
               .multilineTextAlignment(.center)
               .padding(.horizontal, OmiSpacing.page)
 
             Text("\(Int(goal.targetValue)) \(goal.unit ?? "") reached")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.white.opacity(0.7))
+              .foregroundColor(Ink.secondary)
           }
           .transition(.scale(scale: 0.7).combined(with: .opacity))
         }
@@ -114,7 +114,7 @@ struct GoalConfettiView: View {
         Color(red: 0.133, green: 0.773, blue: 0.369),  // Green
         Color(red: 0.2, green: 0.6, blue: 1.0),  // Blue
         .pink, .orange, .cyan, .mint,
-        OmiColors.accent, OmiColors.accent.opacity(0.7),
+        Ink.accent, Ink.accent.opacity(0.7),
       ]
       return (0..<40).map { _ in
         (

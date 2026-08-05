@@ -25,11 +25,11 @@ extension SettingsContentView {
 
           Text("Control how often you receive notifications")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           if notificationsEnabled {
             Divider()
-              .background(OmiColors.backgroundQuaternary)
+              .background(Ink.hairline)
 
             notificationFrequencySlider(settingId: "notifications.frequency")
 
@@ -133,11 +133,11 @@ extension SettingsContentView {
 
           Text("Receive a daily summary of your conversations and activities")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
 
           if dailySummaryEnabled {
             Divider()
-              .background(OmiColors.backgroundQuaternary)
+              .background(Ink.hairline)
 
             settingRow(
               title: "Summary Time", subtitle: "When to send your daily summary",
@@ -204,25 +204,25 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(.green)
+              .foregroundColor(Ink.listeningGreen)
               .frame(width: 20, alignment: .leading)
 
             Text("Server-side encryption")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             Text("Active")
               .scaledFont(size: OmiType.micro, weight: .semibold)
-              .foregroundColor(.green)
+              .foregroundColor(Ink.listeningGreen)
               .padding(.horizontal, OmiSpacing.xxs)
               .padding(.vertical, OmiSpacing.hairline)
-              .background(Color.green.opacity(0.15))
+              .background(Ink.listeningGreen.opacity(0.15))
               .cornerRadius(OmiChrome.stripRadius)
           }
 
           Text("Your data is encrypted and stored securely with Google Cloud infrastructure.")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -237,18 +237,18 @@ extension SettingsContentView {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "list.bullet")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .frame(width: 20)
 
               Text("What We Track")
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Spacer()
 
               Image(systemName: "chevron.right")
                 .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .rotationEffect(.degrees(isTrackingExpanded ? 90 : 0))
             }
           }
@@ -278,12 +278,12 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.sm) {
             Image(systemName: "hand.raised.fill")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 20)
 
             Text("Privacy Guarantees")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
           }
 
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {

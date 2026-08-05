@@ -101,11 +101,11 @@ struct CaptureListeningControls: View {
           Text("Rewind")
             .scaledFont(size: OmiType.caption, weight: .semibold)
         }
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .padding(.horizontal, OmiSpacing.md)
         .frame(height: 30)
-        .background(Capsule(style: .continuous).fill(OmiColors.backgroundTertiary))
-        .overlay(Capsule(style: .continuous).stroke(OmiColors.textPrimary.opacity(0.12), lineWidth: 1))
+        .background(Capsule(style: .continuous).fill(Ink.rowFillHover))
+        .overlay(Capsule(style: .continuous).stroke(Ink.primary.opacity(0.12), lineWidth: 1))
         .contentShape(Capsule())
       }
       .buttonStyle(.plain)

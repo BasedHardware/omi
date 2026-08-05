@@ -18,12 +18,12 @@ struct RewindSearchBar: View {
       // Search field
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "magnifyingglass")
-          .foregroundColor(isSearchFocused ? OmiColors.accent : OmiColors.textTertiary)
+          .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
           .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
         TextField("Search your screen history...", text: $searchQuery)
           .textFieldStyle(.plain)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .focused($isSearchFocused)
 
         if isSearching {
@@ -37,7 +37,7 @@ struct RewindSearchBar: View {
             searchQuery = ""
           } label: {
             Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -46,10 +46,10 @@ struct RewindSearchBar: View {
         if searchQuery.isEmpty && !isSearchFocused {
           Text("⌘F")
             .scaledFont(size: OmiType.micro, weight: .medium, design: .monospaced)
-            .foregroundColor(OmiColors.textQuaternary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.xs)
             .padding(.vertical, OmiSpacing.hairline)
-            .background(OmiColors.backgroundQuaternary)
+            .background(Ink.rowFillHover)
             .cornerRadius(OmiChrome.stripRadius)
         }
       }
@@ -57,10 +57,10 @@ struct RewindSearchBar: View {
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-          .fill(OmiColors.backgroundTertiary)
+          .fill(Ink.rowFillHover)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-              .stroke(isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+              .stroke(isSearchFocused ? Ink.accent.opacity(0.5) : Color.clear, lineWidth: 1)
           )
       )
 
@@ -115,14 +115,14 @@ struct RewindSearchBar: View {
             Image(systemName: "chevron.down")
               .scaledFont(size: OmiType.micro)
           }
-          .foregroundColor(selectedApp != nil ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .foregroundColor(selectedApp != nil ? Ink.primary : Ink.secondary)
           .padding(.horizontal, OmiSpacing.md)
           .padding(.vertical, OmiSpacing.xs)
-          .background(selectedApp != nil ? Color.white : OmiColors.backgroundTertiary)
+          .background(selectedApp != nil ? Ink.primary : Ink.rowFillHover)
           .cornerRadius(OmiChrome.elementRadius)
           .overlay(
             RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-              .stroke(selectedApp != nil ? OmiColors.border : Color.clear, lineWidth: 1)
+              .stroke(selectedApp != nil ? Ink.separator : Color.clear, lineWidth: 1)
           )
         }
         .menuStyle(.borderlessButton)
@@ -161,10 +161,10 @@ struct RewindSearchBar: View {
               Text("Clear")
             }
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xxs)
-            .background(OmiColors.backgroundQuaternary)
+            .background(Ink.rowFillHover)
             .cornerRadius(OmiChrome.stripRadius)
           }
           .buttonStyle(.plain)
@@ -182,14 +182,14 @@ struct RewindSearchBar: View {
     } label: {
       Text(title)
         .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
-        .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+        .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xxs)
-        .background(isSelected ? Color.white : Color.clear)
+        .background(isSelected ? Ink.primary : Color.clear)
         .cornerRadius(OmiChrome.badgeRadius)
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-            .stroke(isSelected ? OmiColors.border : Color.clear, lineWidth: 1)
+            .stroke(isSelected ? Ink.separator : Color.clear, lineWidth: 1)
         )
     }
     .buttonStyle(.plain)
@@ -220,6 +220,6 @@ struct RewindSearchBar: View {
       )
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

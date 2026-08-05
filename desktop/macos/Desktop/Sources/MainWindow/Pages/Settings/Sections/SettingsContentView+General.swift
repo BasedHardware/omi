@@ -12,12 +12,12 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "rectangle.dashed.badge.record")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
+            .foregroundColor(Ink.accent)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Screen Capture")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(
               permissionError
@@ -27,7 +27,7 @@ extension SettingsContentView {
             .foregroundColor(
               permissionError != nil || screenCaptureHealth == .temporarilyUnavailable
                 || screenCaptureHealth == .recovering
-                ? OmiColors.warning : OmiColors.textTertiary
+                ? SettingsInk.notice : Ink.secondary
             )
           }
 
@@ -60,12 +60,12 @@ extension SettingsContentView {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "mic.fill")
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(OmiColors.info)
+            .foregroundColor(Ink.accent)
 
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Audio Recording")
               .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
 
             Text(
               transcriptionError
@@ -75,7 +75,7 @@ extension SettingsContentView {
                   : "Audio recording is paused")
             )
             .scaledFont(size: OmiType.body)
-            .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
+            .foregroundColor(transcriptionError != nil ? SettingsInk.notice : Ink.secondary)
           }
 
           Spacer()
@@ -108,17 +108,17 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "bell.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.info)
+              .foregroundColor(Ink.accent)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Notifications")
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(notificationStatusText)
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(
-                  appState.isNotificationBannerDisabled ? OmiColors.warning : OmiColors.textTertiary
+                  appState.isNotificationBannerDisabled ? SettingsInk.notice : Ink.secondary
                 )
             }
 
@@ -163,20 +163,20 @@ extension SettingsContentView {
             HStack(spacing: OmiSpacing.sm) {
               Image(systemName: "exclamationmark.triangle.fill")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.warning)
+                .foregroundColor(SettingsInk.notice)
 
               Text(
                 "Banners disabled - you won't see visual alerts. Set style to \"Banners\" in System Settings."
               )
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.warning)
+              .foregroundColor(SettingsInk.notice)
 
               Spacer()
             }
             .padding(OmiSpacing.sm)
             .background(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .fill(OmiColors.warning.opacity(0.1))
+              RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                .fill(SettingsInk.notice.opacity(0.1))
             )
           }
         }
@@ -189,16 +189,16 @@ extension SettingsContentView {
             HStack(spacing: OmiSpacing.lg) {
               Image(systemName: "speaker.wave.2.fill")
                 .scaledFont(size: OmiType.subheading)
-                .foregroundColor(OmiColors.info)
+                .foregroundColor(Ink.accent)
 
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text("System Audio")
                   .scaledFont(size: OmiType.subheading, weight: .semibold)
-                  .foregroundColor(OmiColors.textPrimary)
+                  .foregroundColor(Ink.primary)
 
                 Text("Choose when Omi records audio from other apps (calls, videos, music).")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
 
               Spacer()
@@ -224,7 +224,7 @@ extension SettingsContentView {
                 "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
               )
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
             }
           }
@@ -237,17 +237,17 @@ extension SettingsContentView {
           HStack(spacing: OmiSpacing.lg) {
             Image(systemName: "textformat.size")
               .scaledFont(size: 16, weight: .medium)
-              .foregroundColor(OmiColors.info)
+              .foregroundColor(Ink.accent)
               .frame(width: 12)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Font Size")
                 .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text("Scale: \(Int(fontScaleSettings.scale * 100))%")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -265,22 +265,22 @@ extension SettingsContentView {
             // original 12/18 ratio rather than the type registers.
             Text("A")
               .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
-              .tint(OmiColors.info)
+              .tint(Ink.accent)
               .onChange(of: fontScaleSettings.scale) { _, _ in
                 performStepHaptic()
               }
 
             Text("A")
               .scaledFont(size: 18, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Text("The quick brown fox jumps over the lazy dog")
             .scaledFont(size: 14)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.top, OmiSpacing.xxs)
 

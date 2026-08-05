@@ -21,7 +21,7 @@ struct TaskDetailButton: View {
     } label: {
       Image(systemName: "info.circle")
         .scaledFont(size: OmiType.micro)
-        .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
+        .foregroundColor(showTooltip ? Ink.secondary : Ink.secondary)
     }
     .buttonStyle(.plain)
     .onHover { hovering in
@@ -179,12 +179,12 @@ private struct TaskDetailTooltip: View {
     HStack(alignment: .top, spacing: OmiSpacing.xs) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .frame(width: 70, alignment: .trailing)
 
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
     }
   }
 
@@ -192,12 +192,12 @@ private struct TaskDetailTooltip: View {
     VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .padding(.leading, 76)
 
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.leading, 76)
     }
   }
@@ -290,7 +290,8 @@ struct TaskDetailView: View {
       }
     }
     .frame(width: 550, height: 600)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
+    .glassContent()
   }
 
   // MARK: - Header
@@ -300,17 +301,17 @@ struct TaskDetailView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text("Task Details")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         if let source = task.source {
           Text(source)
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.xs)
             .padding(.vertical, OmiSpacing.hairline)
             .background(
               RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
-                .fill(OmiColors.backgroundSecondary)
+                .fill(Ink.rowFill)
             )
         }
       }
@@ -331,12 +332,12 @@ struct TaskDetailView: View {
 
       Text(task.description)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(OmiSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
           RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundSecondary)
+            .fill(Ink.rowFill)
         )
     }
   }
@@ -406,7 +407,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -432,7 +433,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -454,7 +455,7 @@ struct TaskDetailView: View {
           HStack {
             Text("Link")
               .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .frame(width: 100, alignment: .leading)
 
             Button {
@@ -476,7 +477,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -502,7 +503,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -538,7 +539,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -565,7 +566,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -594,7 +595,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -623,7 +624,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -692,7 +693,7 @@ struct TaskDetailView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
+          .fill(Ink.rowFill)
       )
     }
   }
@@ -702,19 +703,19 @@ struct TaskDetailView: View {
   private func sectionHeader(_ title: String) -> some View {
     Text(title)
       .scaledFont(size: OmiType.body, weight: .semibold)
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
   }
 
   private func detailRow(_ label: String, _ value: String) -> some View {
     HStack(alignment: .top) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .frame(width: 100, alignment: .leading)
 
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .textSelection(.enabled)
         .if_available_writingToolsNone()
     }
@@ -724,11 +725,11 @@ struct TaskDetailView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .textSelection(.enabled)
         .if_available_writingToolsNone()
     }

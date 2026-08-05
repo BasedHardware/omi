@@ -777,7 +777,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           .scaleEffect(0.8)
         Text("Loading...")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       .frame(maxWidth: .infinity)
       .padding(.vertical, 80)
@@ -826,25 +826,25 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle")
         .scaledFont(size: OmiType.hero)
-        .foregroundColor(OmiColors.warning)
+        .foregroundColor(Ink.errorRed)
 
       Text("Failed to load chats")
         .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text(error)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
 
       if let onRetry {
         Button(action: onRetry) {
           Text("Try Again")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
-            .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
+            .glassCard(cornerRadius: PageGlass.chipRadius)
         }
         .buttonStyle(.plain)
       }
@@ -920,18 +920,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scheduleInitialScroll(proxy: proxy, delay: ChatScrollLiveEdge.explicitJumpSettlingDelay)
       } label: {
         ZStack(alignment: .center) {
-          Circle()
-            .fill(OmiColors.backgroundPrimary)
+          Color.clear
             .frame(width: 36, height: 36)
-            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-          Image(systemName: "arrow.down.circle.fill")
-            .scaledFont(size: OmiType.title)
-            .foregroundColor(OmiColors.textSecondary)
+            // A free-floating object over the transcript, so it is real glass
+            // with its own ambient shadow rather than a wash on the panel.
+            .glassFloatingBar(cornerRadius: 18)
+          Image(systemName: "arrow.down")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+            .foregroundColor(Ink.primary)
         }
         // Activity pulse: subtle white glow when new content arrived below
         .overlay(
           Circle()
-            .stroke(OmiColors.textSecondary.opacity(hasActivityBelow ? 0.6 : 0), lineWidth: 1.5)
+            .stroke(Ink.secondary.opacity(hasActivityBelow ? 0.6 : 0), lineWidth: 1.5)
         )
         .opacity(hasActivityBelow ? 1.0 : 0.85)
         .scaleEffect(hasActivityBelow ? 1.08 : 1.0)

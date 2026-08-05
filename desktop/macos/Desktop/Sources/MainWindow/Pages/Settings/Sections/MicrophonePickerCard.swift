@@ -97,11 +97,11 @@ struct MicrophonePickerCard: View {
       HStack {
         Image(systemName: "mic")
           .scaledFont(size: 16)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Text("Microphone")
           .scaledFont(size: 15, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
       }
@@ -177,27 +177,27 @@ struct MicrophonePickerCard: View {
       HStack(alignment: .top, spacing: 12) {
         Image(systemName: selected ? "checkmark.circle.fill" : "circle")
           .scaledFont(size: 20)
-          .foregroundColor(selected ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(selected ? Ink.primary : Ink.secondary)
 
         VStack(alignment: .leading, spacing: 4) {
           HStack(spacing: 8) {
             Text(title)
               .scaledFont(size: 14, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
             if let badge {
               Text(badge)
                 .scaledFont(size: 11, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
-                .background(OmiColors.textTertiary.opacity(0.25))
+                .background(Ink.hairline)
                 .clipShape(Capsule())
             }
           }
           if let subtitle {
             Text(subtitle)
               .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
 

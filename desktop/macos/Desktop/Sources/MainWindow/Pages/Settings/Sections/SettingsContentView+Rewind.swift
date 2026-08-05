@@ -13,21 +13,21 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "internaldrive.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Storage")
                 .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               if let stats = rewindStats {
                 Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               } else {
                 Text("Loading...")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
             }
 
@@ -45,16 +45,16 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "eye.slash.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Excluded Apps")
                 .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text("Screen capture is paused when these apps are active")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -66,7 +66,7 @@ extension SettingsContentView {
           }
 
           Divider()
-            .background(OmiColors.backgroundQuaternary)
+            .background(Ink.hairline)
 
           // List of excluded apps
           if rewindSettings.excludedApps.isEmpty {
@@ -75,10 +75,10 @@ extension SettingsContentView {
               VStack(spacing: OmiSpacing.sm) {
                 Image(systemName: "checkmark.shield")
                   .scaledFont(size: 24)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                 Text("No apps excluded")
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
               }
               .padding(.vertical, OmiSpacing.lg)
               Spacer()
@@ -97,7 +97,7 @@ extension SettingsContentView {
           }
 
           Divider()
-            .background(OmiColors.backgroundQuaternary)
+            .background(Ink.hairline)
 
           // Add app section
           AppRuleEditorView(
@@ -119,25 +119,25 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "battery.75percent")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Battery Optimization")
                 .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text(
                 "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
               )
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
             }
 
             Spacer()
 
             Text("Automatic")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
@@ -148,16 +148,16 @@ extension SettingsContentView {
           HStack {
             Image(systemName: "clock.fill")
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
 
             VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
               Text("Data Retention")
                 .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               Text("How long to keep screen recordings")
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Spacer()

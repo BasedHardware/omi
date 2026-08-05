@@ -15,29 +15,30 @@ struct SettingsPage: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
-          // Section header
+          // The pane's own heading. Open Runde at display size — the one run on this surface above
+          // `Font.inkDisplayThreshold`, which is what decides the face; everything below it stays SF
+          // Pro, because that is what a native macOS app sets a settings pane in.
           HStack {
             Text(selectedSection.displayTitle)
-              .scaledFont(size: OmiType.title, weight: .bold)
-              .foregroundColor(OmiColors.textPrimary)
+              .inkStyle(.stepHeadline, color: Ink.primary)
               .id(selectedSection)
               .transition(.opacity)
               .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
 
             Spacer()
           }
-          .padding(.horizontal, OmiSpacing.section)
-          .padding(.top, OmiSpacing.section)
-          .padding(.bottom, OmiSpacing.xxl)
+          .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+          .padding(.top, SettingsGlassMetrics.paneTopPadding)
+          .padding(.bottom, SettingsGlassMetrics.sectionSpacing)
 
-          // Settings content - embedded SettingsView with dark theme override
           SettingsContentView(
             appState: appState,
             selectedSection: $selectedSection,
             highlightedSettingId: $highlightedSettingId,
             chatProvider: chatProvider
           )
-          .padding(.horizontal, OmiSpacing.section)
+          .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+          .padding(.bottom, SettingsGlassMetrics.paneBottomPadding)
 
           Spacer()
         }
@@ -51,7 +52,9 @@ struct SettingsPage: View {
         }
       }
     }
-    .background(OmiColors.backgroundSecondary.opacity(0.3))
+    // Deliberately no background: the window wears the glass, and the glass owns the ground. A fill
+    // here — even a faint one — is a second ground painted over the material, which is how a
+    // translucent window ends up looking opaque.
     .onAppear {
       AnalyticsManager.shared.settingsPageOpened()
     }
@@ -523,16 +526,14 @@ struct SettingsContentView: View {
   /// settings page (visually mirrors `advancedCategoryHeader` but lives here so
   /// routing does not depend on the Sections content files).
   func mergedSectionHeader(title: String, icon: String) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.accent)
+    HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
+      SettingsIconTile(symbol: icon)
       Text(title)
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
       Spacer()
     }
-    .padding(.top, OmiSpacing.lg)
+    .padding(.top, SettingsGlassMetrics.sectionSpacing)
   }
 
   var body: some View {

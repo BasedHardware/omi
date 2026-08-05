@@ -596,12 +596,22 @@ final class ChatPromptTimelineMetricsTests: XCTestCase {
 
   /// Size means "the cursor is here" and nothing else. Sizing the active mark
   /// too would have the rail reshape itself as the reader scrolls.
+  ///
+  /// The colour assertion is that the two states are the *same* colour, rather
+  /// than that they are any particular one. It used to name `.white`, which was
+  /// only ever correct because the rail sat on a near-black page: on the
+  /// light-pinned glass panel a white rail is invisible (`InkGlass` pins
+  /// `.aqua`, so `labelColor` resolves near-black). Naming the literal made the
+  /// guard a restatement of the implementation; the invariant it was written for
+  /// is that "active" is carried by opacity alone.
   func testTheActiveMarkIsLitRatherThanResized() {
     XCTAssertEqual(
       ChatPromptTimelineMetrics.markWidth(isHovered: false, proximity: 0),
       ChatPromptTimelineMetrics.restWidth)
-    XCTAssertEqual(ChatPromptTimelineMetrics.markColor(isActive: true), .white)
-    XCTAssertEqual(ChatPromptTimelineMetrics.markColor(isActive: false), .white)
+    XCTAssertEqual(
+      ChatPromptTimelineMetrics.markColor(isActive: true),
+      ChatPromptTimelineMetrics.markColor(isActive: false),
+      "active must be carried by opacity, not by a second colour")
   }
 
   /// With the cursor off the rail entirely, every other mark fades to its

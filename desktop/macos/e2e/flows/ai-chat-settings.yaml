@@ -22,6 +22,8 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowBorderView.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowDemoWindow.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/UI/GlowEdgeWindow.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsGlassKit.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentSettings.swift
 preconditions:
   - automation_bridge_ready
 

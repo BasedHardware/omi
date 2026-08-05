@@ -17,11 +17,11 @@ struct DailyTaskCreationSheet: View {
         HStack {
           Image(systemName: "repeat.circle.fill")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
 
           Text("Create Daily Task")
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Spacer()
 
@@ -30,19 +30,19 @@ struct DailyTaskCreationSheet: View {
           }
           .buttonStyle(.plain)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         }
 
         Text("This task will repeat every day until completed")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
 
       // Task description
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         Text("Task Description")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         TextField("What needs to be done daily?", text: $taskDescription)
           .textFieldStyle(.roundedBorder)
@@ -57,7 +57,7 @@ struct DailyTaskCreationSheet: View {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         Text("Priority")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         HStack(spacing: OmiSpacing.md) {
           ForEach(["high", "medium", "low"], id: \.self) { level in
@@ -69,17 +69,17 @@ struct DailyTaskCreationSheet: View {
               HStack(spacing: OmiSpacing.xs) {
                 Image(systemName: level == "high" ? "flag.fill" : "flag")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(isSelected ? .white : priorityColor(level))
+                  .foregroundColor(isSelected ? Ink.surface : priorityColor(level))
 
                 Text(level.capitalized)
                   .scaledFont(size: OmiType.body)
-                  .foregroundColor(isSelected ? .white : OmiColors.textPrimary)
+                  .foregroundColor(isSelected ? Ink.surface : Ink.primary)
               }
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
               .background(
                 RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .fill(isSelected ? priorityColor(level) : OmiColors.backgroundSecondary)
+                  .fill(isSelected ? priorityColor(level) : Ink.rowFill)
               )
             }
             .buttonStyle(.plain)
@@ -107,14 +107,14 @@ struct DailyTaskCreationSheet: View {
             Text(isCreating ? "Creating..." : "Create Daily Task")
           }
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.surface)
           .padding(.horizontal, OmiSpacing.xl)
           .padding(.vertical, OmiSpacing.sm)
           .background(
             RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
               .fill(
                 taskDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                  ? OmiColors.textTertiary : OmiColors.accent)
+                  ? Ink.secondary : Ink.accent)
           )
         }
         .buttonStyle(.plain)
@@ -123,7 +123,8 @@ struct DailyTaskCreationSheet: View {
     }
     .padding(OmiSpacing.xxl)
     .frame(width: 450, height: 320)
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
+    .glassContent()
     .onAppear {
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
         isTextFieldFocused = true
@@ -133,10 +134,10 @@ struct DailyTaskCreationSheet: View {
 
   private func priorityColor(_ level: String) -> Color {
     switch level {
-    case "high": return Color.red
-    case "medium": return Color.orange
-    case "low": return Color.blue
-    default: return OmiColors.textSecondary
+    case "high": return Ink.errorRed
+    case "medium": return PageGlass.warning
+    case "low": return Ink.accent
+    default: return Ink.secondary
     }
   }
 

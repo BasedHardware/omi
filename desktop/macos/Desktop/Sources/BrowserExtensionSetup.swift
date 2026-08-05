@@ -43,7 +43,7 @@ struct BrowserExtensionSetup: View {
         HStack(spacing: OmiSpacing.sm) {
           ForEach(Phase.allCases, id: \.rawValue) { p in
             Circle()
-              .fill(p.rawValue <= phase.rawValue ? OmiColors.accent : OmiColors.textTertiary.opacity(0.3))
+              .fill(p.rawValue <= phase.rawValue ? Ink.accent : Ink.hairline)
               .frame(width: 8, height: 8)
           }
         }
@@ -89,7 +89,7 @@ struct BrowserExtensionSetup: View {
           Button(action: onSkip) {
             Text("Skip for now")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.secondary)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -99,11 +99,11 @@ struct BrowserExtensionSetup: View {
     }
     .frame(width: phase == .connect ? 880 : 480, height: phase == .connect ? 520 : 420)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-        .fill(OmiColors.backgroundSecondary)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(Ink.wash)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-            .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+            .stroke(Ink.separator, lineWidth: 1)
         )
     )
     .omiAnimation(.easeInOut(duration: 0.3), value: phase)
@@ -115,17 +115,17 @@ struct BrowserExtensionSetup: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "globe")
         .scaledFont(size: 48)
-        .foregroundColor(OmiColors.accent)
+        .foregroundColor(Ink.primary)
 
       Text("Set up browser access")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text(
         "This lets the AI use your signed-in browser session — search the web, fill forms, and interact with sites on your behalf."
       )
       .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
       .multilineTextAlignment(.center)
       .padding(.horizontal, OmiSpacing.page)
 
@@ -153,7 +153,7 @@ struct BrowserExtensionSetup: View {
       VStack(spacing: OmiSpacing.lg) {
         Text("Connect the extension")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         browserPicker
 
@@ -164,7 +164,7 @@ struct BrowserExtensionSetup: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             Text(browserInstalled ? "\(selectedTarget.name) is installed" : "Install \(selectedTarget.name)")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(browserInstalled ? OmiColors.textTertiary : OmiColors.textPrimary)
+              .foregroundColor(browserInstalled ? Ink.secondary : Ink.primary)
 
             if !browserInstalled {
               Button(action: {
@@ -194,7 +194,7 @@ struct BrowserExtensionSetup: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             Text("Install the Playwright MCP Bridge extension")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(extensionStepDone ? OmiColors.textTertiary : OmiColors.textPrimary)
+              .foregroundColor(extensionStepDone ? Ink.secondary : Ink.primary)
 
             Button(action: {
               if let url = selectedTarget.extensionInstallURL() {
@@ -223,7 +223,7 @@ struct BrowserExtensionSetup: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             Text("Open the extension and copy the auth token")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(tokenStepDone ? OmiColors.textTertiary : OmiColors.textPrimary)
+              .foregroundColor(tokenStepDone ? Ink.secondary : Ink.primary)
 
             Button(action: {
               if let url = selectedTarget.extensionStatusURL() {
@@ -254,22 +254,22 @@ struct BrowserExtensionSetup: View {
           VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             Text("Paste it here")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(isTokenValid ? OmiColors.textTertiary : OmiColors.textPrimary)
+              .foregroundColor(isTokenValid ? Ink.secondary : Ink.primary)
 
             TextField("Paste token here...", text: $tokenInput)
               .textFieldStyle(.plain)
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .padding(OmiSpacing.sm)
               .background(
-                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                  .fill(OmiColors.backgroundPrimary.opacity(0.5))
+                RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                  .fill(Ink.wash)
                   .overlay(
-                    RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+                    RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
                       .stroke(
                         tokenError != nil
-                          ? OmiColors.error.opacity(0.5)
-                          : isTokenValid ? Color.green.opacity(0.5) : OmiColors.textTertiary.opacity(0.3),
+                          ? Ink.errorRed.opacity(0.5)
+                          : isTokenValid ? Ink.listeningGreen.opacity(0.5) : Ink.hairline,
                         lineWidth: 1
                       )
                   )
@@ -282,7 +282,7 @@ struct BrowserExtensionSetup: View {
             if let error = tokenError {
               Text(error)
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.error)
+                .foregroundColor(Ink.errorRed)
             }
           }
         }
@@ -312,7 +312,7 @@ struct BrowserExtensionSetup: View {
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
       Text("Browser")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Picker("", selection: $selectedTarget) {
         ForEach(BrowserAutomationTargetResolver.knownTargets) { target in
@@ -334,7 +334,7 @@ struct BrowserExtensionSetup: View {
       {
         Text("Default")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.success)
+          .foregroundColor(Ink.listeningGreen)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -346,19 +346,19 @@ struct BrowserExtensionSetup: View {
       if let gifName = activeGifName {
         AnimatedGIFView(gifName: gifName)
           .id(gifName)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
+          .clipShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous))
           .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-              .stroke(OmiColors.textTertiary.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+              .stroke(Ink.hairline, lineWidth: 1)
           )
       } else if !browserInstalled {
         VStack(spacing: OmiSpacing.md) {
           Image(systemName: "desktopcomputer")
             .scaledFont(size: OmiType.hero)
-            .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+            .foregroundColor(Ink.secondary)
           Text("Install \(selectedTarget.name) to get started")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -366,8 +366,8 @@ struct BrowserExtensionSetup: View {
     }
     .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundPrimary.opacity(0.5))
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+        .fill(Ink.wash)
     )
   }
 
@@ -380,45 +380,45 @@ struct BrowserExtensionSetup: View {
 
         Text("Testing connection...")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Text("Sending a test request to verify the extension is working.")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal, OmiSpacing.page)
       } else if verifySuccess {
         Image(systemName: "checkmark.circle.fill")
           .scaledFont(size: 48)
-          .foregroundColor(.green)
+          .foregroundColor(Ink.listeningGreen)
 
         Text("Connected")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Text("The browser extension is working. The AI can now use \(selectedTarget.name).")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal, OmiSpacing.page)
       } else if let error = verifyError {
         Image(systemName: "exclamationmark.triangle.fill")
           .scaledFont(size: 48)
-          .foregroundColor(OmiColors.warning)
+          .foregroundColor(SettingsInk.notice)
 
         Text("Connection failed")
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Text(error)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal, OmiSpacing.page)
 
         Text("Make sure \(selectedTarget.name) is open and the extension page shows \"Connected\".")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal, OmiSpacing.page)
       }
@@ -430,17 +430,17 @@ struct BrowserExtensionSetup: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "checkmark.circle.fill")
         .scaledFont(size: 48)
-        .foregroundColor(.green)
+        .foregroundColor(Ink.listeningGreen)
 
       Text("All set")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text(
         "Browser access is configured. The AI can now browse the web, fill forms, and interact with sites using your \(selectedTarget.name) sessions."
       )
       .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
       .multilineTextAlignment(.center)
       .padding(.horizontal, OmiSpacing.page)
     }
@@ -453,11 +453,11 @@ struct BrowserExtensionSetup: View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: icon)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.accent)
+        .foregroundColor(Ink.secondary)
         .frame(width: 20)
       Text(text)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
     }
   }
 
@@ -466,15 +466,15 @@ struct BrowserExtensionSetup: View {
       if done {
         Image(systemName: "checkmark")
           .scaledFont(size: OmiType.caption, weight: .bold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.surface)
           .frame(width: 22, height: 22)
-          .background(Circle().fill(Color.green))
+          .background(Circle().fill(Ink.listeningGreen))
       } else {
         Text(number)
           .scaledFont(size: OmiType.caption, weight: .bold)
-          .foregroundColor(.white)
+          .foregroundColor(Ink.surface)
           .frame(width: 22, height: 22)
-          .background(Circle().fill(OmiColors.textTertiary.opacity(0.5)))
+          .background(Circle().fill(Ink.hairline))
       }
     }
   }

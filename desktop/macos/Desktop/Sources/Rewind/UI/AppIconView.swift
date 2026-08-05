@@ -21,12 +21,12 @@ struct AppIconView: View {
         // findable), so give the row a distinct mark instead of a generic
         // placeholder.
         RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-          .fill(OmiColors.backgroundQuaternary)
+          .fill(Ink.rowFillHover)
           .frame(width: size, height: size)
           .overlay(
             Text(String(appName.prefix(1)).uppercased())
               .font(.system(size: size * 0.55, weight: .semibold, design: .rounded))
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           )
       }
     }
@@ -164,6 +164,6 @@ final class AppIconCache {
       AppIconView(appName: "Terminal", size: 32)
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

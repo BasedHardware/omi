@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 
 private let chatMarkRestingOpacity = 0.95
@@ -238,7 +239,7 @@ final class ChatMarkModel {
         width: diameter,
         height: diameter
       )
-      context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(frame.opacity)))
+      context.fill(Path(ellipseIn: rect), with: .color(Ink.primary.opacity(frame.opacity)))
     }
   }
 

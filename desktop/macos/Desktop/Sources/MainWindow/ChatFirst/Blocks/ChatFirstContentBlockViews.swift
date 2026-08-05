@@ -37,7 +37,7 @@ struct QuestionCardView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text(text)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
       // A completed question remains useful transcript context, but its
@@ -51,14 +51,10 @@ struct QuestionCardView: View {
             } label: {
               Text(option.label)
                 .scaledFont(size: OmiType.caption, weight: .medium)
-                .foregroundStyle(OmiColors.textSecondary)
+                .foregroundStyle(Ink.secondary)
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.sm)
-                .omiControlSurface(
-                  fill: OmiColors.backgroundPrimary.opacity(0.7),
-                  radius: OmiChrome.chipRadius,
-                  stroke: OmiColors.border.opacity(0.65)
-                )
+                .glassChip()
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Send suggestion: \(option.label)")
@@ -69,14 +65,7 @@ struct QuestionCardView: View {
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
-    )
+    .glassCard()
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("chat-first-question-\(questionID)")
     .onAppear {
@@ -153,12 +142,12 @@ struct TaskCardView: View {
         ZStack {
           Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
             .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundStyle(task.completed ? OmiColors.success : OmiColors.textTertiary)
+            .foregroundStyle(task.completed ? Ink.listeningGreen : Ink.secondary)
 
           if showCompletionAcknowledgement {
             Image(systemName: "checkmark")
               .scaledFont(size: OmiType.caption, weight: .bold)
-              .foregroundStyle(OmiColors.success)
+              .foregroundStyle(Ink.listeningGreen)
               .transition(.scale.combined(with: .opacity))
           }
         }
@@ -172,8 +161,8 @@ struct TaskCardView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         Text(task.description)
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundStyle(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-          .strikethrough(task.completed, color: OmiColors.textTertiary)
+          .foregroundStyle(task.completed ? Ink.secondary : Ink.primary)
+          .strikethrough(task.completed, color: Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
 
         HStack(spacing: OmiSpacing.xs) {
@@ -200,14 +189,7 @@ struct TaskCardView: View {
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
-    )
+    .glassCard()
   }
 
   private func toggle(_ task: TaskActionItem) {
@@ -427,11 +409,11 @@ private struct ChatFirstLinkBlockView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Label(eyebrow, systemImage: systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
 
       Text(summary)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
       Button(action: action) {
@@ -444,14 +426,10 @@ private struct ChatFirstLinkBlockView: View {
           Image(systemName: "arrow.up.right")
         }
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xs)
-        .omiControlSurface(
-          fill: OmiColors.backgroundPrimary.opacity(0.72),
-          radius: OmiChrome.chipRadius,
-          stroke: OmiColors.border.opacity(0.7)
-        )
+        .glassChip()
       }
       .buttonStyle(.plain)
       .disabled(isOpening)
@@ -460,14 +438,7 @@ private struct ChatFirstLinkBlockView: View {
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
-    )
+    .glassCard()
   }
 }
 
@@ -484,14 +455,10 @@ struct ChatFirstDestinationBadge: View {
     Button(action: action) {
       Label(title, systemImage: systemImage)
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xxs)
-        .omiControlSurface(
-          fill: OmiColors.backgroundPrimary.opacity(0.68),
-          radius: OmiChrome.chipRadius,
-          stroke: OmiColors.border.opacity(0.65)
-        )
+        .glassChip()
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Open \(title)")
@@ -505,17 +472,10 @@ struct ChatFirstUnavailableBlockView: View {
   var body: some View {
     Label("\(entityName) is no longer available", systemImage: "exclamationmark.circle")
       .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundStyle(OmiColors.textTertiary)
+      .foregroundStyle(Ink.secondary)
       .padding(OmiSpacing.md)
       .frame(maxWidth: 560, alignment: .leading)
-      .omiPanel(
-        fill: OmiColors.backgroundTertiary.opacity(0.7),
-        radius: OmiChrome.sectionRadius,
-        stroke: OmiColors.border.opacity(0.45),
-        shadowOpacity: 0,
-        shadowRadius: 0,
-        shadowY: 0
-      )
+      .glassCard()
       .accessibilityLabel("\(entityName) is no longer available")
       .accessibilityIdentifier("chat-first-\(entityName.lowercased())-unavailable")
   }
@@ -530,18 +490,11 @@ private struct ChatFirstLoadingBlockView: View {
         .controlSize(.small)
       Text("Loading \(entityName.lowercased())")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
     }
     .padding(OmiSpacing.md)
     .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.7),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.45),
-      shadowOpacity: 0,
-      shadowRadius: 0,
-      shadowY: 0
-    )
+    .glassCard()
     .accessibilityLabel("Loading \(entityName.lowercased())")
     .accessibilityIdentifier("chat-first-\(entityName.lowercased())-loading")
   }

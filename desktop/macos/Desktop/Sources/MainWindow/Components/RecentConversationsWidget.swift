@@ -14,14 +14,14 @@ struct RecentConversationsWidget: View {
       HStack {
         Text("Recent Conversations")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         Button(action: onViewAll) {
           Text("View All")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.accent)
+            .foregroundColor(Ink.accent)
         }
         .buttonStyle(.plain)
       }
@@ -30,7 +30,7 @@ struct RecentConversationsWidget: View {
         VStack(spacing: OmiSpacing.sm) {
           Text("No conversations yet")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, OmiSpacing.lg)
@@ -52,10 +52,10 @@ struct RecentConversationsWidget: View {
     .padding(OmiSpacing.xl)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+        .fill(Ink.rowFillHover.opacity(0.5))
         .overlay(
           RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-            .stroke(OmiColors.backgroundQuaternary.opacity(0.5), lineWidth: 1)
+            .stroke(Ink.rowFillHover.opacity(0.5), lineWidth: 1)
         )
     )
   }

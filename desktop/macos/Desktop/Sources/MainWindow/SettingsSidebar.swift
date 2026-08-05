@@ -384,7 +384,7 @@ struct SettingsSidebar: View {
       // Settings title
       Text("Settings")
         .scaledFont(size: OmiType.heading, weight: .bold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.bottom, OmiSpacing.md)
 
@@ -422,20 +422,23 @@ struct SettingsSidebar: View {
       Spacer()
     }
     .frame(width: SettingsSidebarMetrics.expandedWidth)
-    .background(OmiColors.backgroundPrimary)
+    // A half-step of shading, and deliberately not a second material: the window already wears the
+    // glass, and a `.regularMaterial` here would be a *within-window* blur stacked on it — two
+    // materials in one window, which on light glass reads as a grey slab down the side.
+    .background(Ink.rowFill)
   }
 
   private var searchField: some View {
     HStack(spacing: OmiSpacing.sm) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(isSearchFocused ? OmiColors.accent : OmiColors.textTertiary)
+        .foregroundColor(isSearchFocused ? Ink.accent : Ink.secondary)
         .omiAnimation(.easeInOut(duration: 0.15), value: isSearchFocused)
 
       TextField("Search settings...", text: $searchQuery)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .focused($isSearchFocused)
 
       if !searchQuery.isEmpty {
@@ -444,7 +447,7 @@ struct SettingsSidebar: View {
         } label: {
           Image(systemName: "xmark.circle.fill")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -452,12 +455,13 @@ struct SettingsSidebar: View {
     .padding(.horizontal, OmiSpacing.sm)
     .padding(.vertical, OmiSpacing.sm)
     .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(OmiColors.backgroundTertiary)
+      RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+        .fill(Ink.wash)
         .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(
-              isSearchFocused ? OmiColors.accent.opacity(0.5) : Color.clear, lineWidth: 1)
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+            // Focused takes the one accent at full strength; at rest it is a control outline, which
+            // is `Ink.hairline` and not `Ink.separator` — a field is something you type into.
+            .strokeBorder(isSearchFocused ? Ink.accent : Ink.hairline, lineWidth: 1)
         )
     )
   }
@@ -468,7 +472,7 @@ struct SettingsSidebar: View {
         if filteredSearchItems.isEmpty {
           Text("No results")
             .scaledFont(size: OmiType.body)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.xl)
         } else {
@@ -494,11 +498,11 @@ struct SettingsSidebar: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "chevron.left")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Text("Back")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
       }
@@ -506,8 +510,8 @@ struct SettingsSidebar: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isBackHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isBackHovered ? Ink.rowHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -552,12 +556,12 @@ struct SettingsSidebarItem: View {
           HStack(spacing: OmiSpacing.md) {
             Image(systemName: icon)
               .scaledFont(size: OmiType.subheading)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+              .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
               .frame(width: iconWidth)
 
             Text(section.displayTitle)
               .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-              .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+              .foregroundColor(isSelected ? Ink.surface : Ink.primary)
               .lineLimit(1)
               .truncationMode(.tail)
               .layoutPriority(1)
@@ -568,17 +572,22 @@ struct SettingsSidebarItem: View {
           .padding(.vertical, OmiSpacing.md)
           .contentShape(Rectangle())
           .background(
-            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+            // Selection is the one thing on this pane that is actionable and is not already a
+            // button, which is exactly what the single accent is for. A row *shaded* rather than
+            // filled cannot be told apart from a hover on a surface this light — the shading a dark
+            // palette could spend here does not exist on glass.
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
               .fill(
                 isSelected
-                  ? OmiColors.backgroundTertiary.opacity(0.8)
-                  : (isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear))
+                  ? AnyShapeStyle(Ink.accent)
+                  : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
           )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
           isHovered = hovering
         }
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
       }
     }
   }
@@ -602,12 +611,12 @@ struct SettingsSubsectionItem: View {
 
         Image(systemName: subsection.icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(isSelected ? Ink.surface : Ink.secondary)
           .frame(width: 16)
 
         Text(subsection.rawValue)
           .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .foregroundColor(isSelected ? Ink.surface : Ink.primary)
 
         Spacer()
       }
@@ -615,17 +624,18 @@ struct SettingsSubsectionItem: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
           .fill(
             isSelected
-              ? OmiColors.backgroundTertiary.opacity(0.6)
-              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.3) : Color.clear))
+              ? AnyShapeStyle(Ink.accent)
+              : AnyShapeStyle(isHovered ? Ink.rowHover : Color.clear))
       )
     }
     .buttonStyle(.plain)
     .onHover { hovering in
       isHovered = hovering
     }
+    .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
   }
 }
 
@@ -641,17 +651,17 @@ struct SettingsSearchResultRow: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: item.icon)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 20)
 
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(item.name)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
 
           Text(item.breadcrumb)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
 
         Spacer()
@@ -660,8 +670,8 @@ struct SettingsSearchResultRow: View {
       .padding(.vertical, OmiSpacing.sm)
       .contentShape(Rectangle())
       .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+          .fill(isHovered ? Ink.rowHover : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -682,8 +692,14 @@ struct SettingHighlightModifier: ViewModifier {
     content
       .id(settingId)
       .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isHighlighted ? OmiColors.accent.opacity(0.12) : Color.clear)
+        // The "here it is" flash after a search jump: a wash of the one accent plus its edge, cut to
+        // the card's own corner so the flash lands on the card rather than beside it.
+        RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+          .fill(isHighlighted ? Ink.accent.opacity(0.12) : Color.clear)
+          .overlay(
+            RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+              .strokeBorder(isHighlighted ? Ink.accent : Color.clear, lineWidth: 1)
+          )
           .omiAnimation(.easeInOut(duration: 0.3), value: isHighlighted)
           .allowsHitTesting(false)
       )
@@ -706,6 +722,6 @@ struct SettingHighlightModifier: ViewModifier {
       highlightedSettingId: .constant(nil),
       onBack: {}
     )
-    .preferredColorScheme(.dark)
+    .preferredColorScheme(.light)
   }
 #endif

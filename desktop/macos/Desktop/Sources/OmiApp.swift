@@ -132,7 +132,7 @@ struct OMIApp: App {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
     }
-    .windowStyle(.titleBar)
+    .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the glass runs under the title bar.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {
@@ -616,7 +616,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
         if Self.isMainOmiWindow(window) {
           foundOmiWindow = true
-          window.appearance = NSAppearance(named: .darkAqua)
+          WindowGlass.wear(window, as: .titled)  // Transparent + light-pinned, or there is no glass.
           // Ensure fullscreen always creates a dedicated Space
           window.collectionBehavior.insert(.fullScreenPrimary)
           if shouldSuppressMainWindow {
@@ -1095,7 +1095,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           window.center()
         }
         window.makeKeyAndOrderFront(nil)
-        window.appearance = NSAppearance(named: .darkAqua)
+        WindowGlass.wear(window, as: .titled)  // Re-asserted: a summon can outlive the launch pass.
         return true
       }
     }

@@ -57,11 +57,11 @@ enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
 
   var color: Color {
     switch self {
-    case .person: return Color(red: 0.31, green: 0.77, blue: 0.96)
-    case .organization: return Color(red: 0.96, green: 0.66, blue: 0.22)
-    case .place: return Color(red: 0.33, green: 0.84, blue: 0.67)
-    case .thing: return OmiColors.textSecondary
-    case .concept: return Color(red: 0.27, green: 0.63, blue: 0.96)
+    case .person: return Color(nsColor: .systemTeal)
+    case .organization: return Color(nsColor: .systemOrange)
+    case .place: return Color(nsColor: .systemGreen)
+    case .thing: return Ink.secondary
+    case .concept: return Color(nsColor: .systemBlue)
     }
   }
 
@@ -1708,7 +1708,7 @@ struct MemoryAtlasDetailPanel: View {
     VStack(alignment: .leading, spacing: 0) {
       header
 
-      Divider().overlay(OmiColors.border.opacity(0.2))
+      Divider().overlay(Ink.separator.opacity(0.2))
 
       ScrollView {
         VStack(alignment: .leading, spacing: 18) {
@@ -1734,9 +1734,9 @@ struct MemoryAtlasDetailPanel: View {
       }
     }
     .frame(width: 320)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
     .overlay(alignment: .leading) {
-      Rectangle().fill(OmiColors.border.opacity(0.25)).frame(width: 1)
+      Rectangle().fill(Ink.separator.opacity(0.25)).frame(width: 1)
     }
     .accessibilityIdentifier("memory_atlas_detail_panel")
   }
@@ -1747,15 +1747,15 @@ struct MemoryAtlasDetailPanel: View {
       HStack(spacing: 7) {
         ProgressView()
           .controlSize(.small)
-          .tint(OmiColors.textTertiary)
+          .tint(Ink.secondary)
         Text("Reading your memories…")
           .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
       }
     } else if evidence.isEmpty && unresolvedEvidenceCount == 0 {
       Text("Source memories are still being linked for this entity.")
         .scaledFont(size: 11)
-        .foregroundColor(OmiColors.textQuaternary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     } else {
       ForEach(evidence) { item in
@@ -1769,7 +1769,7 @@ struct MemoryAtlasDetailPanel: View {
           "\(unresolvedEvidenceCount) cited memor\(unresolvedEvidenceCount == 1 ? "y" : "ies") could not be found on this device"
         )
         .scaledFont(size: 10)
-        .foregroundColor(OmiColors.textQuaternary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
       }
     }
@@ -1781,7 +1781,7 @@ struct MemoryAtlasDetailPanel: View {
         Button(action: onBack) {
           Image(systemName: "chevron.left")
             .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 22, height: 30)
             .contentShape(Rectangle())
         }
@@ -1798,11 +1798,11 @@ struct MemoryAtlasDetailPanel: View {
       VStack(alignment: .leading, spacing: 3) {
         Text(subject.title)
           .scaledFont(size: 15, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .fixedSize(horizontal: false, vertical: true)
         Text(subject.subtitle)
           .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
 
@@ -1811,7 +1811,7 @@ struct MemoryAtlasDetailPanel: View {
       Button(action: onFocus) {
         Image(systemName: "scope")
           .scaledFont(size: 11, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 24, height: 24)
           .contentShape(Rectangle())
       }
@@ -1822,7 +1822,7 @@ struct MemoryAtlasDetailPanel: View {
       Button(action: onClose) {
         Image(systemName: "xmark")
           .scaledFont(size: 10, weight: .semibold)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 24, height: 24)
           .contentShape(Rectangle())
       }
@@ -1842,7 +1842,7 @@ struct MemoryAtlasDetailPanel: View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title.uppercased())
         .scaledFont(size: 9.5, weight: .semibold)
-        .foregroundColor(OmiColors.textQuaternary)
+        .foregroundColor(Ink.secondary)
         .tracking(0.6)
       content()
     }
@@ -1865,17 +1865,17 @@ struct MemoryAtlasDetailPanel: View {
         VStack(alignment: .leading, spacing: 1) {
           Text(row.otherLabel)
             .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(isHovered ? OmiColors.textPrimary : OmiColors.textSecondary)
+            .foregroundColor(isHovered ? Ink.primary : Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
           Text(row.relationship)
             .scaledFont(size: 10)
-            .foregroundColor(OmiColors.textQuaternary)
+            .foregroundColor(Ink.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
         Spacer(minLength: 4)
         Image(systemName: "chevron.right")
           .scaledFont(size: 9, weight: .semibold)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
           .opacity(isHovered ? 1 : 0)
           .padding(.top, 3)
       }
@@ -1884,7 +1884,7 @@ struct MemoryAtlasDetailPanel: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-          .fill(isHovered ? OmiColors.backgroundRaised.opacity(0.7) : Color.clear)
+          .fill(isHovered ? Ink.rowFill.opacity(0.7) : Color.clear)
       )
       .contentShape(Rectangle())
     }
@@ -1908,7 +1908,7 @@ struct MemoryAtlasDetailPanel: View {
       VStack(alignment: .leading, spacing: 4) {
         Text(item.content)
           .scaledFont(size: 11.5)
-          .foregroundColor(isHovered ? OmiColors.textPrimary : OmiColors.textSecondary)
+          .foregroundColor(isHovered ? Ink.primary : Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
           .frame(maxWidth: .infinity, alignment: .leading)
         // The date holds this row whether or not the cursor is here, so the
@@ -1917,7 +1917,7 @@ struct MemoryAtlasDetailPanel: View {
           if let createdAt = item.createdAt {
             Text(createdAt.formatted(date: .abbreviated, time: .shortened))
               .scaledFont(size: 9.5)
-              .foregroundColor(OmiColors.textQuaternary)
+              .foregroundColor(Ink.secondary)
           }
           Spacer(minLength: 4)
           HStack(spacing: 3) {
@@ -1926,7 +1926,7 @@ struct MemoryAtlasDetailPanel: View {
             Image(systemName: "arrow.up.right")
               .scaledFont(size: 8, weight: .semibold)
           }
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .opacity(isHovered ? 1 : 0)
         }
       }
@@ -1934,7 +1934,7 @@ struct MemoryAtlasDetailPanel: View {
       .padding(10)
       .background(
         RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(OmiColors.backgroundRaised.opacity(isHovered ? 0.95 : 0.6))
+          .fill(Ink.rowFill.opacity(isHovered ? 0.95 : 0.6))
       )
       .contentShape(Rectangle())
     }
@@ -2034,10 +2034,10 @@ struct CanonicalMemoryAtlasPage: View {
         Button(action: onBack) {
           Label("Memories", systemImage: "chevron.left")
             .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, 10)
             .frame(height: 30)
-            .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 11)
+            .glassChip()
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("memory_atlas_back_to_memories")
@@ -2048,7 +2048,7 @@ struct CanonicalMemoryAtlasPage: View {
         // vocabulary. "Atlas" survives in type and symbol names only.
         Text("Brain Map")
           .scaledFont(size: 17, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
@@ -2064,14 +2064,14 @@ struct CanonicalMemoryAtlasPage: View {
         // buys completeness, and the drawn map is the one the user can check.
         Text(headerCountLabel)
           .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .accessibilityIdentifier("memory_atlas_header_counts")
       }
       .padding(.horizontal, 18)
       .frame(height: 44)
-      .background(OmiColors.backgroundSecondary)
+      .background(Ink.rowFill)
 
-      Divider().overlay(OmiColors.border.opacity(0.25))
+      Divider().overlay(Ink.separator.opacity(0.25))
 
       CanonicalMemoryAtlasSurface(
         graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
@@ -2084,7 +2084,7 @@ struct CanonicalMemoryAtlasPage: View {
         onLeave: onBack
       )
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_page")
     .task { await viewModel.prepareCanonicalAtlas() }
     .onAppear {
@@ -2121,7 +2121,7 @@ struct CanonicalMemoryAtlasTabView: View {
       isRebuilding: viewModel.isRebuilding,
       onLeave: onLeave
     )
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_tab")
     .task { await viewModel.prepareCanonicalAtlas() }
     .onAppear {
@@ -2444,7 +2444,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         let (regions, quietened) = territory(in: proxy.size, plan: plan)
 
         ZStack {
-          OmiColors.backgroundPrimary
+          Color.clear
 
           atlasCanvas(size: proxy.size, plan: plan, regions: regions, quietened: quietened)
             // Camera gestures belong to the painted atlas only. Keeping them
@@ -2532,7 +2532,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("canonical_memory_atlas")
     .onAppear(perform: maybeAutoplayTimeline)
@@ -2653,13 +2653,13 @@ private struct CanonicalMemoryAtlasSurface: View {
       HStack(spacing: 8) {
         Image(systemName: "magnifyingglass")
           .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         TextField("Search your entities", text: $searchText)
           .textFieldStyle(.plain)
           .focused($searchIsFocused)
           .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .onSubmit { selectFirstSearchResult() }
           .onChange(of: searchText) { _, newValue in
             updateSearchMatches(newValue)
@@ -2673,7 +2673,7 @@ private struct CanonicalMemoryAtlasSurface: View {
           } label: {
             Image(systemName: "xmark.circle.fill")
               .scaledFont(size: 11)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
           .help("Clear search (Esc)")
@@ -2682,7 +2682,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
       .padding(.horizontal, 12)
       .frame(width: compact ? 250 : 320, height: 30)
-      .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 11, stroke: OmiColors.border.opacity(0.3))
+      .glassChip()
 
       Spacer()
 
@@ -2693,12 +2693,12 @@ private struct CanonicalMemoryAtlasSurface: View {
       if recentConnectionCount > 0 {
         HStack(spacing: 6) {
           Circle()
-            .fill(snapshot.activeClusters.first?.color ?? OmiColors.textSecondary)
+            .fill(snapshot.activeClusters.first?.color ?? Ink.secondary)
             .frame(width: 6, height: 6)
           Text(recentConnectionLabel)
             .scaledFont(size: 11, weight: .medium)
         }
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
       }
 
       // The legacy Brain Map carried a rebuild control; without it a thin or
@@ -2707,9 +2707,9 @@ private struct CanonicalMemoryAtlasSurface: View {
         Button(action: onRebuild) {
           Image(systemName: "arrow.clockwise")
             .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary.opacity(isRebuilding ? 0.35 : 1))
+            .foregroundColor(Ink.secondary.opacity(isRebuilding ? 0.35 : 1))
             .frame(width: 26, height: 26)
-            .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 9)
+            .glassChip()
         }
         .buttonStyle(.plain)
         .disabled(isRebuilding)
@@ -2720,7 +2720,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
     .padding(.horizontal, compact ? 12 : 18)
     .frame(height: compact ? 40 : 44)
-    .background(OmiColors.backgroundPrimary)
+    .background(Color.clear)
     .accessibilityHint("Press Command-F to search. Press Return to select the first visible result.")
   }
 
@@ -2739,7 +2739,7 @@ private struct CanonicalMemoryAtlasSurface: View {
           Circle().fill(cluster.color).frame(width: 5, height: 5)
           Text(cluster.title)
             .scaledFont(size: 10)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
       }
     }
@@ -2897,10 +2897,10 @@ private struct CanonicalMemoryAtlasSurface: View {
       // Even-odd, so an enclave inside a territory is drawn as the hole it is
       // rather than being filled over.
       context.fill(
-        shape, with: .color(OmiColors.textPrimary.opacity(entered ? 0.07 : 0.05)),
+        shape, with: .color(Ink.primary.opacity(entered ? 0.07 : 0.05)),
         style: FillStyle(eoFill: true))
       context.stroke(
-        shape, with: .color(OmiColors.textPrimary.opacity(entered ? 0.5 : 0.34)), lineWidth: 1)
+        shape, with: .color(Ink.primary.opacity(entered ? 0.5 : 0.34)), lineWidth: 1)
     }
   }
 
@@ -3143,7 +3143,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       drawSpecialNode(
         anchor,
         radius: compact ? 6 : (isInspectMode ? 18 : (isFocusMode ? 12 : 7)),
-        color: OmiColors.textPrimary,
+        color: Ink.primary,
         opacity: selectedNodeID == nil || plan.relatedNodeIDs.contains(anchor.id) ? 0.86 : 0.16,
         context: &context,
         size: size
@@ -3154,7 +3154,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       drawSpecialNode(
         selectedNode,
         radius: compact ? 7 : (isInspectMode ? 26 : (isFocusMode ? 18 : 9)),
-        color: selectedNode.cluster?.color ?? OmiColors.textPrimary,
+        color: selectedNode.cluster?.color ?? Ink.primary,
         opacity: 0.95,
         context: &context,
         size: size
@@ -3199,7 +3199,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       let center = point(for: placement.normalizedPosition, in: size)
       guard visibleBounds.contains(center) else { continue }
 
-      let color = placement.cluster?.color ?? OmiColors.textPrimary
+      let color = placement.cluster?.color ?? Ink.primary
       let estimatedLabelWidth = min(
         152.0,
         max(44.0, CGFloat(placement.node.label.count) * 6.4 + 18)
@@ -3210,7 +3210,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       )
       let text = Text(placement.node.label)
         .font(.system(size: 11, weight: placement.id == snapshot.anchorNodeID ? .semibold : .medium))
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
       let labelOffset: CGFloat =
         if placement.id == selectedNodeID {
           34
@@ -3255,7 +3255,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         size: compact ? 9.5 : (isInspectMode ? 14 : (isFocusMode ? 13 : 11)),
         weight: selected ? .semibold : .medium
       )
-      .foregroundColor(OmiColors.textPrimary)
+      .foregroundColor(Ink.primary)
       .lineLimit(1)
       .truncationMode(.tail)
       .multilineTextAlignment(.center)
@@ -3274,7 +3274,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     let selected = selectedNodeID == placement.id
     let related = selectedNodeID == nil || relatedNodeIDs.contains(placement.id)
     let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
-    let color = placement.cluster?.color ?? OmiColors.textPrimary
+    let color = placement.cluster?.color ?? Ink.primary
     let diameter = nodeDiameter(placement, selected: selected)
 
     // Keeping the label out of the laid-out frame is what makes the ring land
@@ -3295,13 +3295,13 @@ private struct CanonicalMemoryAtlasSurface: View {
             .frame(width: diameter + 14, height: diameter + 14)
         }
         Circle()
-          .fill(OmiColors.backgroundRaised)
+          .fill(Ink.rowFill)
           .overlay(Circle().stroke(color, lineWidth: selected ? 2.2 : 1.4))
           .frame(width: diameter, height: diameter)
         if placement.id == snapshot.anchorNodeID {
           Image(systemName: "person.fill")
             .scaledFont(size: max(9, diameter * 0.38))
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
         }
       }
       .frame(width: hitDiameter, height: hitDiameter)
@@ -3346,7 +3346,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         otherNodeID: otherID,
         otherLabel: other.node.label,
         relationship: MemoryAtlasLayoutEngine.combinedRelationshipDisplayName(edge.relationshipLabels),
-        accent: other.cluster?.color ?? OmiColors.textTertiary
+        accent: other.cluster?.color ?? Ink.secondary
       )
     }
 
@@ -3356,7 +3356,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         typeName: placement.cluster?.title,
         connectionSummary: "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")"
       ),
-      accent: placement.cluster?.color ?? OmiColors.textPrimary,
+      accent: placement.cluster?.color ?? Ink.primary,
       related: relationships,
       evidence: evidence,
       evidenceIsLoading: evidenceIsLoading,
@@ -3385,7 +3385,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         otherNodeID: endpoint.id,
         otherLabel: endpoint.node.label,
         relationship: endpoint.cluster?.title ?? "Entity",
-        accent: endpoint.cluster?.color ?? OmiColors.textTertiary
+        accent: endpoint.cluster?.color ?? Ink.secondary
       )
     }
 
@@ -3451,17 +3451,17 @@ private struct CanonicalMemoryAtlasSurface: View {
 
     return HStack(spacing: 14) {
       Circle()
-        .fill((placement.cluster?.color ?? OmiColors.textPrimary).opacity(0.14))
-        .overlay(Circle().stroke(placement.cluster?.color ?? OmiColors.textPrimary, lineWidth: 1.5))
+        .fill((placement.cluster?.color ?? Ink.primary).opacity(0.14))
+        .overlay(Circle().stroke(placement.cluster?.color ?? Ink.primary, lineWidth: 1.5))
         .frame(width: 34, height: 34)
 
       VStack(alignment: .leading, spacing: 2) {
         Text(placement.node.label)
           .scaledFont(size: compact ? 12 : 14, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text(relationshipText)
           .scaledFont(size: compact ? 10 : 12)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
       }
 
@@ -3473,7 +3473,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         } label: {
           Label("Focus", systemImage: "scope")
             .scaledFont(size: 11, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("memory_atlas_focus_selection")
@@ -3487,14 +3487,14 @@ private struct CanonicalMemoryAtlasSurface: View {
           : "\(evidenceIds.count) source memor\(evidenceIds.count == 1 ? "y" : "ies")"
       )
       .scaledFont(size: 10)
-      .foregroundColor(OmiColors.textQuaternary)
+      .foregroundColor(Ink.secondary)
 
       Button {
         clearSelection()
       } label: {
         Image(systemName: "xmark")
           .scaledFont(size: 10, weight: .semibold)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 24, height: 24)
           .contentShape(Rectangle())
       }
@@ -3505,9 +3505,9 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
     .padding(.horizontal, compact ? 12 : 18)
     .frame(height: compact ? 50 : 56)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
     .overlay(alignment: .top) {
-      Divider().overlay(OmiColors.border.opacity(0.24))
+      Divider().overlay(Ink.separator.opacity(0.24))
     }
   }
 
@@ -3515,13 +3515,13 @@ private struct CanonicalMemoryAtlasSurface: View {
     HStack(spacing: 18) {
       Text(atlasLevelLabel)
         .scaledFont(size: 11, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Spacer()
     }
     .padding(.horizontal, 18)
     .frame(height: 36)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
   }
 
   // MARK: - Time axis
@@ -3534,10 +3534,10 @@ private struct CanonicalMemoryAtlasSurface: View {
       HStack(spacing: 8) {
         Button(action: togglePlayback) {
           ZStack {
-            Circle().fill(OmiColors.textPrimary).frame(width: 22, height: 22)
+            Circle().fill(Ink.primary).frame(width: 22, height: 22)
             Image(systemName: isTimePlaying ? "pause.fill" : "play.fill")
               .scaledFont(size: 9, weight: .bold)
-              .foregroundColor(OmiColors.backgroundPrimary)
+              .foregroundColor(Ink.surface)
               .offset(x: isTimePlaying ? 0 : 1)
           }
         }
@@ -3548,7 +3548,7 @@ private struct CanonicalMemoryAtlasSurface: View {
 
         Text(asOfLabel)
           .scaledFont(size: 11, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .lineLimit(1)
 
         Text(
@@ -3556,7 +3556,7 @@ private struct CanonicalMemoryAtlasSurface: View {
             entities: visibleEntityCount, connections: visibleConnectionCount)
         )
         .scaledFont(size: 10)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .monospacedDigit()
         .lineLimit(1)
 
@@ -3564,17 +3564,17 @@ private struct CanonicalMemoryAtlasSurface: View {
 
         Text(atlasLevelLabel)
           .scaledFont(size: 10, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
 
         if timeCursor < 0.9995 {
           Button(action: jumpToNow) {
             Text("Now")
               .scaledFont(size: 10, weight: .semibold)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .padding(.horizontal, 8)
               .frame(height: 18)
-              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 6)
+              .glassChip()
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("memory_atlas_timeline_now")
@@ -3585,22 +3585,22 @@ private struct CanonicalMemoryAtlasSurface: View {
       HStack(spacing: 8) {
         Text(shortDate(timeline?.start))
           .scaledFont(size: 9)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
 
         timelineTrack
 
         Text(timeline?.hasChronologicalRange == true ? "Now" : "Imported")
           .scaledFont(size: 9)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
           .lineLimit(1)
       }
     }
     .padding(.horizontal, 18)
     .padding(.vertical, 8)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
     .overlay(alignment: .top) {
-      Divider().overlay(OmiColors.border.opacity(0.24))
+      Divider().overlay(Ink.separator.opacity(0.24))
     }
     .accessibilityIdentifier("memory_atlas_timeline")
   }
@@ -3652,28 +3652,28 @@ private struct CanonicalMemoryAtlasSurface: View {
       )
       context.fill(
         Path(roundedRect: rect, cornerRadius: 1),
-        with: .color(OmiColors.textPrimary.opacity(born ? 0.3 : 0.08))
+        with: .color(Ink.primary.opacity(born ? 0.3 : 0.08))
       )
     }
 
     var baseline = Path()
     baseline.move(to: CGPoint(x: 0, y: baseY))
     baseline.addLine(to: CGPoint(x: size.width, y: baseY))
-    context.stroke(baseline, with: .color(OmiColors.border.opacity(0.5)), lineWidth: 1)
+    context.stroke(baseline, with: .color(Ink.separator.opacity(0.5)), lineWidth: 1)
 
     var filled = Path()
     filled.move(to: CGPoint(x: 0, y: baseY))
     filled.addLine(to: CGPoint(x: cursorX, y: baseY))
-    context.stroke(filled, with: .color(OmiColors.textPrimary.opacity(0.85)), lineWidth: 1.5)
+    context.stroke(filled, with: .color(Ink.primary.opacity(0.85)), lineWidth: 1.5)
 
     var playhead = Path()
     playhead.move(to: CGPoint(x: cursorX, y: 0))
     playhead.addLine(to: CGPoint(x: cursorX, y: size.height))
-    context.stroke(playhead, with: .color(OmiColors.textPrimary.opacity(0.85)), lineWidth: 1.5)
+    context.stroke(playhead, with: .color(Ink.primary.opacity(0.85)), lineWidth: 1.5)
 
     context.fill(
       Path(ellipseIn: CGRect(x: cursorX - 5, y: baseY - 5, width: 10, height: 10)),
-      with: .color(OmiColors.textPrimary)
+      with: .color(Ink.primary)
     )
   }
 
@@ -3803,10 +3803,8 @@ private struct CanonicalMemoryAtlasSurface: View {
       .accessibilityLabel("Zoom in")
     }
     .scaledFont(size: 10)
-    .foregroundColor(OmiColors.textSecondary)
-    .omiControlSurface(
-      fill: OmiColors.backgroundRaised.opacity(0.96), radius: 10, stroke: OmiColors.border.opacity(0.3)
-    )
+    .foregroundColor(Ink.secondary)
+    .glassChip()
     .buttonStyle(.plain)
   }
 

@@ -7,15 +7,15 @@ extension RewindPage {
       Capsule()
         .fill(
           screenCaptureHealth == .active
-            ? OmiColors.accent
-            : (screenCaptureHealth == .stopped ? Color.red : OmiColors.warning)
+            ? Ink.accent
+            : (screenCaptureHealth == .stopped ? Ink.errorRed : PageGlass.warning)
         )
         .frame(width: 36, height: 20)
 
       Circle()
-        .fill(isMonitoring ? OmiColors.backgroundPrimary : Color.white)
+        .fill(Ink.surface)
         .frame(width: 16, height: 16)
-        .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.08), radius: 1, x: 0, y: 1)
         .offset(x: isMonitoring ? 8 : -8)
         .omiAnimation(.easeInOut(duration: 0.15), value: isMonitoring)
     }

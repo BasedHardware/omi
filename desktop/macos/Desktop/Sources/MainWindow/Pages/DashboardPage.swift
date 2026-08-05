@@ -470,7 +470,7 @@ struct DashboardPage: View {
                 .foregroundColor(.white)
             }
             .padding(OmiSpacing.xl)
-            .background(OmiColors.backgroundSecondary)
+            .background(Ink.rowFill)
             .cornerRadius(OmiChrome.smallControlRadius)
           }
         }
@@ -1503,7 +1503,7 @@ struct DashboardPage: View {
         )
         .id(appsPopupPresentationID)
         .frame(width: popupSize.width, height: popupSize.height)
-        .background(OmiColors.backgroundPrimary)
+        .background(Ink.surface)
         .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
         .overlay(
           RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
@@ -1551,7 +1551,7 @@ struct DashboardPage: View {
 
         homeConnectSheetContent()
           .frame(width: sheetSize.width, height: sheetSize.height)
-          .background(OmiColors.backgroundPrimary)
+          .background(Ink.surface)
           .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
           .overlay(
             RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
@@ -1876,11 +1876,11 @@ struct DashboardPage: View {
 
       Text("Ask omi anything")
         .scaledFont(size: OmiType.subheading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text("Your personal AI assistant — knows you through your memories and conversations")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
         .padding(.horizontal, OmiSpacing.page)
     }
@@ -2046,27 +2046,27 @@ struct DashboardPage: View {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "exclamationmark.triangle.fill")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.warning)
+          .foregroundColor(PageGlass.warning)
         Text(error)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         Spacer(minLength: OmiSpacing.sm)
         Button("Retry") {
           Task { await intelligenceStore.load() }
         }
         .buttonStyle(.plain)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary.opacity(0.88))
+          .fill(Ink.rowFillHover)
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .stroke(OmiColors.border.opacity(0.7), lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
       .accessibilityIdentifier("dashboard-intelligence-error")
     }
@@ -2079,33 +2079,33 @@ struct DashboardPage: View {
         HStack(spacing: OmiSpacing.xs) {
           Image(systemName: "checklist")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Text(
             incompleteTaskCount == 0
               ? "No tasks"
               : "\(incompleteTaskCount) task\(incompleteTaskCount == 1 ? "" : "s")"
           )
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         }
 
         // Subtle divider dot
         Circle()
-          .fill(OmiColors.textQuaternary)
+          .fill(Ink.secondary)
           .frame(width: 3, height: 3)
 
         // Goals summary
         HStack(spacing: OmiSpacing.xs) {
           Image(systemName: "target")
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
           Text(
             activeGoalCount == 0
               ? "No goals"
               : "\(activeGoalCount) goal\(activeGoalCount == 1 ? "" : "s")"
           )
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         }
 
         Spacer()
@@ -2113,17 +2113,17 @@ struct DashboardPage: View {
         // Expand chevron
         Image(systemName: "chevron.down")
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary.opacity(0.6))
+          .fill(Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-          .stroke(OmiColors.border.opacity(0.12), lineWidth: 1)
+          .stroke(Ink.separator, lineWidth: 1)
       )
     }
     .buttonStyle(.plain)
@@ -2194,7 +2194,7 @@ struct DashboardPage: View {
       HStack {
         Text("Goals")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
         Button("All goals") { showingAllGoals = true }
           .buttonStyle(.plain)
@@ -2208,7 +2208,7 @@ struct DashboardPage: View {
       if intelligenceStore.focusedGoals.isEmpty {
         Text("Keep a few outcomes in focus.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
       }
       Spacer(minLength: 0)
     }
@@ -2216,7 +2216,7 @@ struct DashboardPage: View {
     .frame(minWidth: 0, maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-        .fill(OmiColors.backgroundSecondary.opacity(0.65))
+        .fill(Ink.rowFill)
     )
   }
 
@@ -2226,7 +2226,7 @@ struct DashboardPage: View {
       Button(action: { widgetsCollapsed = true }) {
         Image(systemName: "chevron.up")
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(OmiColors.textQuaternary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 48, height: 20)
       }
       .buttonStyle(.plain)
@@ -3644,7 +3644,7 @@ private struct HomeBridgeChevron: View {
       Rectangle()
         .fill(
           LinearGradient(
-            colors: [.clear, OmiColors.border.opacity(0.65), .clear],
+            colors: [.clear, Ink.separator, .clear],
             startPoint: .top,
             endPoint: .bottom
           )
@@ -3653,7 +3653,7 @@ private struct HomeBridgeChevron: View {
 
       Image(systemName: "chevron.right")
         .scaledFont(size: OmiType.subheading, weight: .bold)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
     }
     .frame(width: 22)
     .accessibilityHidden(true)
@@ -3708,12 +3708,12 @@ private struct HomeSourceRow: View {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(title)
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
             .lineLimit(1)
 
           Text(subtitle)
             .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textTertiary)
+            .foregroundStyle(Ink.secondary)
             .lineLimit(1)
         }
 
@@ -3725,11 +3725,11 @@ private struct HomeSourceRow: View {
       .padding(.vertical, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: 13, style: .continuous)
-          .fill(isHovering ? Color.white.opacity(0.08) : Color.white.opacity(0.035))
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: 13, style: .continuous)
-          .stroke(isHovering ? OmiColors.success.opacity(0.28) : Color.white.opacity(0.06), lineWidth: 1)
+          .stroke(isHovering ? Ink.listeningGreen.opacity(0.28) : Ink.separator, lineWidth: 1)
       )
       .contentShape(.rect(cornerRadius: 13))
     }
@@ -3745,10 +3745,10 @@ private struct HomeSourceRow: View {
     } else if let systemImage {
       ZStack {
         RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-          .fill(OmiColors.backgroundPrimary.opacity(0.78))
+          .fill(Ink.rowFillHover)
         Image(systemName: systemImage)
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
       }
       .frame(width: 32, height: 32)
     }
@@ -3760,15 +3760,15 @@ private struct HomeSourceRow: View {
     case .connect:
       Image(systemName: "plus")
         .scaledFont(size: OmiType.caption, weight: .bold)
-        .foregroundStyle(OmiColors.success)
+        .foregroundStyle(Ink.listeningGreen)
     case .connected:
       Image(systemName: "checkmark")
         .scaledFont(size: OmiType.caption, weight: .bold)
-        .foregroundStyle(OmiColors.success)
+        .foregroundStyle(Ink.listeningGreen)
     case .open:
       Image(systemName: "chevron.right")
         .scaledFont(size: OmiType.caption, weight: .bold)
-        .foregroundStyle(OmiColors.success)
+        .foregroundStyle(Ink.listeningGreen)
     }
   }
 }
@@ -3904,17 +3904,17 @@ private struct HomeMetricTile: View {
 
           Image(systemName: "arrow.up.right")
             .scaledFont(size: OmiType.micro, weight: .bold)
-            .foregroundStyle(isHovering ? accent : OmiColors.textQuaternary)
+            .foregroundStyle(isHovering ? accent : Ink.secondary)
         }
 
         Text(value)
           .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundStyle(OmiColors.textPrimary)
+          .foregroundStyle(Ink.primary)
           .lineLimit(1)
 
         Text(title)
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundStyle(OmiColors.textTertiary)
+          .foregroundStyle(Ink.secondary)
           .lineLimit(1)
       }
       .padding(OmiSpacing.md)
@@ -3943,11 +3943,11 @@ private struct HomeSectionHeader: View {
     VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
       Text(title)
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
 
       Text(subtitle)
         .scaledFont(size: OmiType.caption)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
     }
   }
 }
@@ -4187,12 +4187,12 @@ private struct HomeConnectorCard: View {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(title)
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
             .lineLimit(1)
 
           Text(subtitle)
             .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textTertiary)
+            .foregroundStyle(Ink.secondary)
             .lineLimit(1)
         }
 
@@ -4205,7 +4205,7 @@ private struct HomeConnectorCard: View {
             Text(status)
               .scaledFont(size: OmiType.caption, weight: .semibold)
           }
-          .foregroundStyle(OmiColors.success)
+          .foregroundStyle(Ink.listeningGreen)
           .lineLimit(1)
         } else {
           HStack(spacing: OmiSpacing.xxs) {
@@ -4214,7 +4214,7 @@ private struct HomeConnectorCard: View {
             Text(actionTitle)
               .scaledFont(size: OmiType.caption, weight: .semibold)
           }
-          .foregroundStyle(OmiColors.success)
+          .foregroundStyle(Ink.listeningGreen)
           .lineLimit(1)
         }
       }
@@ -4232,13 +4232,13 @@ private struct HomeConnectorCard: View {
 
   private var cardBackground: some View {
     RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-      .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.94 : 0.72))
+      .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
   }
 
   private var cardStroke: some View {
     RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
       .stroke(
-        isHovering ? OmiColors.success.opacity(0.32) : OmiColors.border.opacity(0.42),
+        isHovering ? Ink.listeningGreen.opacity(0.32) : Ink.separator,
         lineWidth: 1
       )
   }
@@ -4253,45 +4253,45 @@ private struct HomeMoreAppsCard: View {
       HStack(spacing: OmiSpacing.md) {
         ZStack {
           RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-            .fill(OmiColors.backgroundPrimary)
+            .fill(Ink.rowFillHover)
             .overlay(
               RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                .stroke(OmiColors.border.opacity(0.55), lineWidth: 1)
+                .stroke(Ink.separator, lineWidth: 1)
             )
 
           Image(systemName: "square.grid.2x2.fill")
             .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundStyle(OmiColors.textSecondary)
+            .foregroundStyle(Ink.secondary)
         }
         .frame(width: 36, height: 36)
 
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text("Connect more")
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
 
           Text("Browse all apps")
             .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textTertiary)
+            .foregroundStyle(Ink.secondary)
         }
 
         Spacer()
 
         Image(systemName: "chevron.right")
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundStyle(OmiColors.success)
+          .foregroundStyle(Ink.listeningGreen)
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
       .frame(minHeight: 56)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.94 : 0.72))
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
           .stroke(
-            isHovering ? OmiColors.success.opacity(0.32) : OmiColors.border.opacity(0.42),
+            isHovering ? Ink.listeningGreen.opacity(0.32) : Ink.separator,
             lineWidth: 1
           )
       )
@@ -4306,12 +4306,12 @@ private struct HomeFlowArrow: View {
   var body: some View {
     VStack(spacing: OmiSpacing.xxs) {
       Rectangle()
-        .fill(OmiColors.border.opacity(0.75))
+        .fill(Ink.separator)
         .frame(width: 1, height: 14)
 
       Image(systemName: "chevron.down")
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
     }
     .frame(maxWidth: .infinity)
     .accessibilityHidden(true)
@@ -4348,12 +4348,12 @@ private struct HomeMetricCard: View {
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(value)
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
             .lineLimit(1)
 
           Text(title)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundStyle(OmiColors.textTertiary)
+            .foregroundStyle(Ink.secondary)
             .lineLimit(1)
         }
 
@@ -4361,17 +4361,17 @@ private struct HomeMetricCard: View {
 
         Image(systemName: "arrow.up.right")
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundStyle(isHovering ? accent : OmiColors.textQuaternary)
+          .foregroundStyle(isHovering ? accent : Ink.secondary)
       }
       .padding(OmiSpacing.md)
       .frame(minHeight: 64)
       .background(
         RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-          .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.96 : 0.78))
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
       )
       .overlay(
         RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-          .stroke(isHovering ? accent.opacity(0.34) : OmiColors.border.opacity(0.44), lineWidth: 1)
+          .stroke(isHovering ? accent.opacity(0.34) : Ink.separator, lineWidth: 1)
       )
       .contentShape(.rect(cornerRadius: OmiChrome.chipRadius))
     }
@@ -4411,33 +4411,33 @@ private struct HomeAIButton: View {
         } else if let systemImage {
           ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-              .fill(OmiColors.backgroundTertiary)
+              .fill(Ink.rowFillHover)
             Image(systemName: systemImage)
               .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundStyle(OmiColors.textSecondary)
+              .foregroundStyle(Ink.secondary)
           }
           .frame(width: 26, height: 26)
         }
 
         Text(title)
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundStyle(OmiColors.textSecondary)
+          .foregroundStyle(Ink.secondary)
           .lineLimit(1)
 
         Image(systemName: "chevron.right")
           .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundStyle(isHovering ? OmiColors.success : OmiColors.textQuaternary)
+          .foregroundStyle(isHovering ? Ink.listeningGreen : Ink.secondary)
       }
       .padding(.leading, OmiSpacing.sm)
       .padding(.trailing, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.xs)
       .background(
         Capsule(style: .continuous)
-          .fill(OmiColors.backgroundSecondary.opacity(isHovering ? 0.96 : 0.76))
+          .fill(isHovering ? Ink.rowFillHover : Ink.rowFill)
       )
       .overlay(
         Capsule(style: .continuous)
-          .stroke(isHovering ? OmiColors.success.opacity(0.32) : OmiColors.border.opacity(0.42), lineWidth: 1)
+          .stroke(isHovering ? Ink.listeningGreen.opacity(0.32) : Ink.separator, lineWidth: 1)
       )
       .contentShape(Capsule())
     }
@@ -4458,6 +4458,6 @@ private struct HomeAIButton: View {
       selectedIndex: .constant(0)
     )
     .frame(width: 800, height: 600)
-    .background(OmiColors.backgroundPrimary)
+    .inkGlassPanel()
   }
 #endif

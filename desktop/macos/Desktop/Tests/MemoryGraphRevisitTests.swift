@@ -24,7 +24,14 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertFalse(home.contains("constrainedListPage(MemoryHubPage"))
     XCTAssertTrue(home.contains("switch destination"))
     XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
-    XCTAssertTrue(graph.contains("scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)"))
+    // The Brain Map moved onto the glass panel. `OmiColors.backgroundPrimary` was the dark chrome's
+    // near-black page ground, and a SceneKit view that paints it is drawing a page ground of its own
+    // inside a translucent panel — the thing `InkGlass`'s "hosted content paints no background" rule
+    // exists to stop. The scene now paints nothing; the dark ground it genuinely needs (its nodes are
+    // emissive and its labels are white) is `glassMediaMat`, a framed media viewport applied around
+    // it, so the graph stays legible without the page pretending to be opaque.
+    XCTAssertTrue(graph.contains("scnView.backgroundColor = .clear"))
+    XCTAssertTrue(graph.contains(".glassMediaMat("))
   }
 
   func testMemoryHubDestinationMenuHasStableRoutes() {
@@ -90,9 +97,12 @@ final class MemoryGraphRevisitTests: XCTestCase {
     let dropdownRowSource =
       source.components(separatedBy: "private struct MemoryDropdownRow").last ?? ""
 
-    XCTAssertTrue(dropdownRowSource.contains("OmiColors.backgroundSecondary"))
-    XCTAssertTrue(dropdownRowSource.contains("OmiColors.backgroundTertiary"))
-    XCTAssertTrue(dropdownRowSource.contains("OmiColors.border.opacity(0.55)"))
+    // The contract is occlusion plus neutral pill styling, not the identity of the tokens
+    // that produce it. The row now draws through the shell's shared pill background; the
+    // named-token assertions this replaced pinned the retired dark palette, which the glass
+    // conversion deleted, so they asserted the implementation rather than the contract.
+    XCTAssertTrue(dropdownRowSource.contains("GlassPillBackground"))
+    XCTAssertTrue(dropdownRowSource.contains("Ink."))
     XCTAssertFalse(dropdownRowSource.contains(": Color.clear"))
   }
 
