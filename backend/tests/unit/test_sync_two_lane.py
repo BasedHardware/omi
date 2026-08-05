@@ -81,6 +81,44 @@ def test_normalize_capture_window_overlaps_successive_future_segments_for_merge(
     assert second_start == now - 30
 
 
+def test_batch_clock_shift_preserves_five_minute_offline_shard_span():
+    """#4771: five successive 60s WALs with +3min RTC skew stay contiguous.
+
+    Independent per-window normalize collapses every shard onto ``[now-60, now]``,
+    so the sync pipeline either opens five one-minute conversations or dedupes
+    later shards away. A shared batch shift keeps the full five-minute span and
+    ends at server now (yesterday's capture no longer fans out as "today" crumbs).
+    """
+    now = 2_000_000_000.0
+    skew = 180.0
+    windows = [(now + skew + i * 60, now + skew + (i + 1) * 60) for i in range(5)]
+
+    # Independent normalize collapses (the failure mode #4771 reports).
+    independent = [lanes.normalize_capture_window(start, end, now=now) for start, end in windows]
+    assert {end for _start, end in independent} == {now}
+    assert {start for start, _end in independent} == {now - 60}
+
+    shift = lanes.batch_clock_shift(windows, now=now)
+    assert shift == skew + 5 * 60  # newest end - now
+
+    normalized = [lanes.normalize_capture_window(start, end, now=now, clock_shift=shift) for start, end in windows]
+    starts = [start for start, _end in normalized]
+    ends = [end for _start, end in normalized]
+    assert ends[-1] == now
+    assert starts[0] == now - 300
+    assert starts == [now - 300 + i * 60 for i in range(5)]
+    assert ends == [now - 240 + i * 60 for i in range(5)]
+    # Adjacent shards still overlap/abut for closest-conversation merge.
+    for i in range(len(normalized) - 1):
+        assert starts[i + 1] <= ends[i]
+
+
+def test_batch_clock_shift_zero_when_batch_already_in_the_past():
+    now = 2_000_000_000.0
+    windows = [(now - 600, now - 540), (now - 540, now - 480)]
+    assert lanes.batch_clock_shift(windows, now=now) == 0.0
+
+
 def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     now = 2_000_000_000
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')

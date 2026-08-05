@@ -45,11 +45,38 @@ def maximum_future_skew_seconds() -> int:
     return max(0, int(os.getenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', '300')))
 
 
+def batch_clock_shift(
+    windows: Iterable[tuple[float, float]],
+    *,
+    now: Optional[float] = None,
+) -> float:
+    """Shared positive clock skew for a sync batch (#4771).
+
+    Independently shifting each window so its own end equals ``now`` collapses
+    successive ~60s offline shards onto the same interval. Later shards then
+    miss or dedupe-drop against the conversation created from earlier ones,
+    which surfaces as many one-minute conversations dated at sync time.
+
+    Use one shift — ``max(0, newest_end - now)`` — for every window in the
+    batch so relative offsets and total duration survive.
+    """
+    effective_now = time.time() if now is None else float(now)
+    newest_end: Optional[float] = None
+    for _start, end in windows:
+        end_f = float(end)
+        if newest_end is None or end_f > newest_end:
+            newest_end = end_f
+    if newest_end is None:
+        return 0.0
+    return max(0.0, newest_end - effective_now)
+
+
 def normalize_capture_window(
     start_ts: float,
     end_ts: float,
     *,
     now: Optional[float] = None,
+    clock_shift: Optional[float] = None,
 ) -> tuple[float, float]:
     """Shift a capture window so it never ends after server now.
 
@@ -57,12 +84,31 @@ def normalize_capture_window(
     (phone a few minutes ahead) previously produced conversations that appear
     in the future in the app (#4770). Preserve duration by shifting the whole
     window backward when the end is past ``now``.
+
+    When ``clock_shift`` is provided (batch shared skew from
+    :func:`batch_clock_shift`), apply that shift instead of per-window
+    ``end - now`` so successive shards keep their relative spacing (#4771).
     """
-    effective_now = time.time() if now is None else now
-    if end_ts <= effective_now:
-        return float(start_ts), float(end_ts)
-    shift = end_ts - effective_now
-    return float(start_ts) - shift, float(end_ts) - shift
+    effective_now = time.time() if now is None else float(now)
+    start = float(start_ts)
+    end = float(end_ts)
+    if clock_shift is None:
+        if end <= effective_now:
+            return start, end
+        shift = end - effective_now
+    else:
+        shift = max(0.0, float(clock_shift))
+        if shift == 0.0 and end <= effective_now:
+            return start, end
+    start -= shift
+    end -= shift
+    # Last shard can still overshoot ``now`` by its own duration when the shared
+    # shift was estimated from starts only; keep a hard end clamp.
+    if end > effective_now:
+        extra = end - effective_now
+        start -= extra
+        end -= extra
+    return start, end
 
 
 def capture_times_within_window(filenames: Iterable[str], lower: float, upper: float) -> bool:

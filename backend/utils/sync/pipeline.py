@@ -116,7 +116,7 @@ from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
-from utils.sync.lanes import SyncLane, normalize_capture_window
+from utils.sync.lanes import SyncLane, batch_clock_shift, normalize_capture_window
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -1042,6 +1042,7 @@ def process_segment(
     client_platform: Optional[str] = None,
     sync_lane: str = SyncLane.FRESH.value,
     deferred_outcome: dict | None = None,
+    clock_shift: Optional[float] = None,
 ):
     provider = 'unknown'
     model = 'unknown'
@@ -1130,10 +1131,12 @@ def process_segment(
         segment_end_timestamp = timestamp + transcript_segments[-1].end
 
         # Clamp mild client clock skew before closest-conversation lookup so
-        # multi-segment offline WALs merge instead of splitting (#4770).
-        # Looking up with raw future timestamps misses the conversation created
-        # from an earlier segment that was already normalized.
-        timestamp, segment_end_timestamp = normalize_capture_window(timestamp, segment_end_timestamp)
+        # multi-segment offline WALs merge instead of splitting (#4770/#4771).
+        # Use the batch-shared ``clock_shift`` when provided so successive ~60s
+        # shards keep relative offsets instead of collapsing onto ``now``.
+        timestamp, segment_end_timestamp = normalize_capture_window(
+            timestamp, segment_end_timestamp, clock_shift=clock_shift
+        )
 
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
@@ -2086,6 +2089,16 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
 
+            # Shared clock skew for the whole batch (#4771): shifting each ~60s
+            # shard independently to end at ``now`` collapses them and recreates
+            # the one-minute conversation spam the reporter saw.
+            batch_windows = []
+            for segment_path in segment_list:
+                segment_start = float(get_timestamp_from_path(segment_path))
+                segment_duration = float(get_wav_duration(segment_path) or 0.0)
+                batch_windows.append((segment_start, segment_start + segment_duration))
+            shared_clock_shift = batch_clock_shift(batch_windows)
+
             def _process_one_segment(path: str):
                 segment_id = segment_ids_by_path.get(path)
                 if path in already_processed or (segment_id and segment_id in durable_processed_segment_ids):
@@ -2111,6 +2124,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     client_platform=client_platform,
                     sync_lane=sync_lane,
                     deferred_outcome=deferred_outcome,
+                    clock_shift=shared_clock_shift,
                 )
                 if ok:
                     # Persist result contributions before the processed marker.

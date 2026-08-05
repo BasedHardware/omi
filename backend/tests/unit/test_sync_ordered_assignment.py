@@ -157,6 +157,19 @@ class TestCallersUseOrderedAssignment:
         assert '_OrderedTurnstile(' in body
         assert 'assignment_turnstile,' in body, 'v2 must pass the turnstile to process_segment'
 
+    def test_v1_and_v2_pass_shared_batch_clock_shift(self):
+        """#4771: successive ~60s future-skewed shards need one shared shift, not per-window collapse."""
+        v1 = _async_function_body(_read_sync_source(), 'sync_local_files')
+        v2 = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
+        for label, body in (('v1', v1), ('v2', v2)):
+            assert 'batch_clock_shift(' in body, f'{label} must compute a shared batch clock shift'
+            assert 'clock_shift=shared_clock_shift' in body, f'{label} must pass clock_shift into process_segment'
+
+    def test_process_segment_applies_clock_shift_before_lookup(self):
+        body = _function_body(_read_pipeline_source(), 'process_segment')
+        assert 'clock_shift' in body
+        assert body.index('normalize_capture_window') < body.index('get_closest_conversation_to_timestamps')
+
     def test_both_pipelines_reprocess_merged_conversations(self):
         source = _read_sync_source()
         v1 = _async_function_body(source, 'sync_local_files')
