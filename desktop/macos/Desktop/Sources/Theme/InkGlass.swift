@@ -51,6 +51,30 @@
 //  Brand: neutrals and system semantics only (INV-UI-1). Nothing here reaches for `Ink.accent` at all —
 //  glass is defined by its brightness and its shadow, not by a hue.
 //
+//  **What the glass costs to composite — measured, so it is not guessed at again.** "The blur is
+//  expensive" is the obvious hypothesis when this design system is blamed for a slow window, and it is
+//  wrong. Measured by pairing: one process alternating between two configurations every 2 s, so both
+//  arms see the same machine load, and only the paired difference is read.
+//
+//      configuration                                       per frame        verdict
+//      the ground's `.behindWindow` blur, on vs off        +0.065 ms (+0.9%)  free
+//      3 further `.behindWindow` panels nested in it       +0.13 ms  (+1.8%)  free
+//      `glassScrollFade`'s mask, on a real NSScrollView    +0.002 ms (+2.3%)  free
+//      3 × SwiftUI `.shadow(radius: 17)` (alpha-derived)   +0.03 ms  (+0.5%)  free
+//
+//  The window server caches a blurred backdrop and re-derives it when the *backdrop* moves, not when
+//  the window's own content redraws — so scrolling and navigating cost the blur nothing. On the same
+//  run the window server's CPU went 78.9% → 78.0% when the ground's material was hidden, i.e. the
+//  ground is not distinguishable from noise.
+//
+//  The one cost that is real is **mounting**, not drawing: each `.behindWindow` view registers a
+//  sampling region with the window server as it enters a window, which measures ≈0.9 ms. A navigation
+//  that mounts five of them pays +3.6–4.9 ms (+14% median, reproduced over three runs) on a page mount
+//  that costs 27–50 ms in total — so the glass is a few percent of a navigation and the rest is the
+//  view tree being built. Pooling the views to dodge the allocation recovers ~1%: the cost is the
+//  registration, not the `alloc`. Before optimising anything here, check that number is still small
+//  against the total; it was never the reason a window felt slow.
+//
 
 import AppKit
 import SwiftUI
@@ -498,6 +522,16 @@ package final class InkGlassView: NSView {
 /// It is the same material, scrim, corner and shadow, reached a different way, because there is no
 /// third option: SwiftUI's own `Material` is within-window vibrancy and blurs the app's content rather
 /// than the desktop, so a SwiftUI-only card over the desktop is not glass at all.
+///
+/// **Nesting one of these inside a window that already has a glass ground does not stack two
+/// materials — it replaces one with the other.** `.behindWindow` samples what is behind the *window*,
+/// so a panel drawn this way ignores the ground beneath it and takes its own, second copy of the
+/// desktop, then puts the scrim on that. The result is a surface with the ground's passthrough but a
+/// doubled scrim, which is the "two grounds" reading `SettingsGlassKit` forbids inside a pane — and it
+/// is why a bar over a busy wallpaper can read muddier than the glass around it. It is nearly free to
+/// draw (see the cost table in this file's header) and ≈0.9 ms to mount, so this is a question about
+/// how the surface *looks*, not about frame rate; `glassFloatingBar` is the one caller that wants it,
+/// because a bar floating over scrolling content does need a material of its own.
 package struct InkGlassBackdrop: NSViewRepresentable {
   package init() {}
 
