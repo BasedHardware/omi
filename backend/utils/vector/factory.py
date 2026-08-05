@@ -17,10 +17,12 @@ _instance: Optional[VectorStore] = None
 def get_vector_store(env: Optional[Mapping[str, str]] = None) -> VectorStore:
     """Return the configured vector store (singleton, resolved on first use).
 
-    ``env`` selects the backend from that mapping instead of ``os.environ``. Pass it when a caller
-    has already validated backend-specific dependencies against a specific environment (the
-    vector-repair worker entrypoint does) so selection and validation read one source, never one
-    validated and the other constructed from a different mapping."""
+    ``env`` selects the *backend* from that mapping instead of ``os.environ``, so a caller that
+    validated backend-specific dependencies against a specific environment (the vector-repair worker
+    entrypoint) selects the same backend it validated. The adapters still read their *connection*
+    config (Pinecone key/index, ``QDRANT_URL``/prefix/dim) from ``os.environ``; in production ``env``
+    is ``os.environ`` so the two agree. Passing a divergent ``env`` aligns only backend selection, not
+    the adapter's client construction."""
     global _instance
     if _instance is None:
         with _lock:
