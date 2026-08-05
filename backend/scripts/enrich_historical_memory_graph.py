@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 from collections import Counter
 from pathlib import Path
@@ -38,6 +39,31 @@ from utils.memory.historical_graph_enrichment import (  # noqa: E402
 MAX_PAGE_SIZE = 25
 MAX_STRUCTURED_SCAN_SIZE = 1250
 HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS = 20.0
+
+
+class HistoricalGraphPlannerTimeout(TimeoutError):
+    """The planner did not return within its process-level deadline."""
+
+
+def _plan_with_deadline(*, item: MemoryItem, control: MemoryControlState, llm: Any):
+    """Enforce the planner deadline even if a provider client ignores its timeout.
+
+    Cloud Run runs this synchronous script in its main thread on POSIX.  The
+    signal interrupts a stuck socket/read and is handled by the existing
+    per-item error path, so the page can continue to another candidate.
+    """
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _expired(_signum, _frame):
+        raise HistoricalGraphPlannerTimeout("historical graph planner deadline exceeded")
+
+    signal.signal(signal.SIGALRM, _expired)
+    signal.setitimer(signal.ITIMER_REAL, HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS)
+    try:
+        return plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def _arguments() -> argparse.Namespace:
@@ -188,7 +214,7 @@ def run_enrichment(
                 planned = (
                     _structured_plan(item, control)
                     if structured_only
-                    else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+                    else _plan_with_deadline(item=item, control=control, llm=llm)
                 )
             # The planner is an external dependency. A transient transport or
             # provider failure must not make a bounded page fail closed for all
@@ -222,7 +248,7 @@ def run_enrichment(
                     candidate = (
                         _structured_plan(item, control)
                         if structured_only
-                        else plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+                        else _plan_with_deadline(item=item, control=control, llm=llm)
                     )
                 # Do not repeatedly select a temporarily failing item during
                 # one page; continue looking through this bounded scan and
