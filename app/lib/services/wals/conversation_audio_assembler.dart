@@ -197,13 +197,15 @@ Future<ConversationAudioAssembly> assembleConversationAudio({
     rethrow;
   }
 
+  final latestSourceEnd = ordered.map((source) => source.part.wal.wallClockEndSeconds).reduce(
+        (left, right) => left > right ? left : right,
+      );
+  final playableEnd = first.timerStart + totalFrames / fps;
   return ConversationAudioAssembly(
     file: destination,
     timerStart: first.timerStart,
     totalFrames: totalFrames,
-    captureEndSeconds: ordered.map((source) => source.part.wal.wallClockEndSeconds).reduce(
-          (left, right) => left > right ? left : right,
-        ),
+    captureEndSeconds: latestSourceEnd > playableEnd ? latestSourceEnd : playableEnd,
     hadLiveGap: hadLiveGap,
     sourceWals: orderedSources.map((part) => part.wal).toList(growable: false),
   );

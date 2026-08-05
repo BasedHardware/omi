@@ -147,6 +147,44 @@ void main() {
     expect(await secondFile.exists(), isTrue);
   });
 
+  test('canonical capture end never precedes its playable payload', () async {
+    final firstFile = File('${directory.path}/first.bin');
+    final secondFile = File('${directory.path}/second.bin');
+    await firstFile.writeAsBytes(_frame([1]), flush: true);
+    await secondFile.writeAsBytes(_frame([2]), flush: true);
+    final destination = File('${directory.path}/canonical.bin');
+
+    final result = await assembleConversationAudio(
+      parts: [
+        ConversationAudioPart(
+          wal: _wal(
+            timerStart: 1000,
+            sourceId: 'ring_10_11',
+            filePath: firstFile.path,
+            status: WalStatus.synced,
+            captureEndSeconds: 1000,
+          ),
+          file: firstFile,
+        ),
+        ConversationAudioPart(
+          wal: _wal(
+            timerStart: 1000,
+            sourceId: 'ring_11_12',
+            filePath: secondFile.path,
+            status: WalStatus.miss,
+            captureEndSeconds: 1000,
+          ),
+          file: secondFile,
+        ),
+      ],
+      destination: destination,
+      silenceFrameFactory: (_) => [0],
+    );
+
+    expect(result.totalFrames, 2);
+    expect(result.captureEndSeconds, closeTo(1000.02, 0.0001));
+  });
+
   test('removes a replay overlap when the original ranges preserve the complete sequence', () async {
     final firstFile = File('${directory.path}/first.bin');
     final replayFile = File('${directory.path}/replay.bin');

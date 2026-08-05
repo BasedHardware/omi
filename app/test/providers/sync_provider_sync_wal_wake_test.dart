@@ -664,6 +664,34 @@ void main() {
     expect(provider.logicalRingArchiveMembersForTest(provider.userVisibleWals.first), archives.take(2));
   });
 
+  test('a backwards device clock step keeps logical playback in pendant sequence order', () async {
+    SharedPreferences.setMockInitialValues({'conversationSilenceDuration': 120});
+    await SharedPreferencesUtil.init();
+    final beforeRollback = _ringArchive(
+      timerStart: 2000,
+      startSequence: 0,
+      endSequence: 100,
+    );
+    final afterRollback = _ringArchive(
+      timerStart: 1000,
+      startSequence: 100,
+      endSequence: 200,
+    );
+    final provider = SyncProvider(
+      walService: _FakeWalService(_FakeSyncs([beforeRollback, afterRollback])),
+      startBackgroundSync: false,
+    );
+    addTearDown(provider.dispose);
+    await provider.initialized;
+
+    expect(provider.userVisibleWals, hasLength(1));
+    expect(
+      provider.logicalRingArchiveMembersForTest(provider.userVisibleWals.single),
+      [beforeRollback, afterRollback],
+      reason: 'display order follows immutable pendant sequence, not the corrected RTC',
+    );
+  });
+
   test('unlimited conversation setting uses the shared four-hour boundary', () async {
     SharedPreferences.setMockInitialValues({'conversationSilenceDuration': -1});
     await SharedPreferencesUtil.init();

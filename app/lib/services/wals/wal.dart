@@ -9,6 +9,7 @@ const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
 const _maximumPersistedCaptureFutureSkewSeconds = 24 * 60 * 60;
+const _maximumCaptureEndRoundingShortfallSeconds = 2.0;
 const _minimumEffectiveConversationBoundarySeconds = 2 * 60;
 const _unlimitedConversationBoundarySeconds = 4 * 60 * 60;
 
@@ -194,9 +195,14 @@ class Wal {
   double? get validatedCaptureEndSeconds {
     final persistedEnd = captureEndSeconds;
     final nowSeconds = DateTime.now().millisecondsSinceEpoch / 1000;
+    final framesPerSecond = codec.getFramesPerSecond();
+    final minimumPlayableEnd = framesPerSecond > 0 && totalFrames > 0
+        ? timerStart + totalFrames / framesPerSecond - _maximumCaptureEndRoundingShortfallSeconds
+        : timerStart.toDouble();
     if (persistedEnd == null ||
         !persistedEnd.isFinite ||
         persistedEnd < timerStart ||
+        persistedEnd < minimumPlayableEnd ||
         persistedEnd > nowSeconds + _maximumPersistedCaptureFutureSkewSeconds) {
       return null;
     }

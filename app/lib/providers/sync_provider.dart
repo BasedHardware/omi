@@ -151,6 +151,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       ..sort((left, right) {
         final deviceCompare = left.device.compareTo(right.device);
         if (deviceCompare != 0) return deviceCompare;
+        final leftRange = RingProtocol.parseRecoverySourceRange(left.sourceId);
+        final rightRange = RingProtocol.parseRecoverySourceRange(right.sourceId);
+        final sequenceCompare = (leftRange?.start ?? 0).compareTo(rightRange?.start ?? 0);
+        if (sequenceCompare != 0) return sequenceCompare;
         final timeCompare = left.timerStart.compareTo(right.timerStart);
         if (timeCompare != 0) return timeCompare;
         return left.id.compareTo(right.id);

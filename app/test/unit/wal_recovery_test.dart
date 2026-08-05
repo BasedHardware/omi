@@ -122,6 +122,24 @@ void main() {
         expect(restored.toJson(), isNot(contains('capture_end_seconds')));
       }
     });
+
+    test('capture end cannot claim less wall time than the encoded payload', () {
+      final restored = Wal.fromJson({
+        'timer_start': 1000,
+        'codec': 'BleAudioCodec.opus',
+        'seconds': 10,
+        'total_frames': 500,
+        'capture_end_seconds': 1001,
+      });
+
+      expect(restored.validatedCaptureEndSeconds, isNull);
+      expect(restored.wallClockEndSeconds, 1005);
+      expect(
+        restored.toJson(),
+        isNot(contains('capture_end_seconds')),
+        reason: 'a truncated wall span must not survive the next manifest rewrite',
+      );
+    });
   });
 
   group('Wal source identity', () {

@@ -2249,7 +2249,11 @@ void main() {
       expect(uploadedClaimModes, [isTrue]);
       expect(externalSync.testWals, hasLength(1));
       expect(externalSync.testWals.single.canonicalReplacement, isTrue);
-      expect(externalSync.testWals.single.captureEndSeconds, now - 0.25);
+      expect(
+        externalSync.testWals.single.captureEndSeconds,
+        now,
+        reason: 'canonical metadata cannot end before its complete two-second payload',
+      );
     });
 
     test('conversation stamping claims the complete configured ring window', () async {
