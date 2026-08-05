@@ -50,7 +50,11 @@ def get_auth_provider() -> AuthProvider:
 
                     _instance = OIDCAuthProvider()
                 else:
-                    raise ValueError(f"unknown AUTH_BACKEND: {backend!r} (expected 'firebase' or 'oidc')")
+                    # Unreachable: auth_backend_name() only ever returns 'firebase' or 'oidc' (an
+                    # unknown value is coerced to the default). AssertionError (not ValueError) flags
+                    # a programming error — a future VALID_AUTH_BACKENDS entry that forgot to extend
+                    # this dispatch — rather than implying a user misconfiguration reached here.
+                    raise AssertionError(f"unhandled auth backend: {backend!r}")
     return _instance
 
 
@@ -64,11 +68,11 @@ def reset_auth_provider_for_tests() -> None:
         _instance = None
     try:
         from utils.auth.adapters.oidc import reset_jwks_cache_for_tests
-
-        reset_jwks_cache_for_tests()
-    except Exception:
+    except ImportError:
         # The OIDC adapter may be unimportable in a firebase-only test env; nothing to reset then.
-        pass
+        return
+    # A failure inside the reset itself is a real bug — let it surface instead of being swallowed.
+    reset_jwks_cache_for_tests()
 
 
 __all__ = ["auth_backend_name", "get_auth_provider", "reset_auth_provider_for_tests"]
