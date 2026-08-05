@@ -50,6 +50,9 @@ export function useRecording() {
   const isMountedRef = useRef<boolean>(true);
   // Starts as client_conversation_id; upgraded by conversation_session (in_progress only).
   const conversationIdRef = useRef<string | null>(null);
+  // Prevent noisy "unexpected" warnings when we intentionally stop/disconnect
+  // the transcription socket (normal stop + pagehide cleanup both disconnect synchronously).
+  const intentionalSocketDisconnectRef = useRef<boolean>(false);
 
   // Start recording
   const startRecording = useCallback(async (overrideMode?: AudioMode) => {
@@ -61,6 +64,7 @@ export function useRecording() {
     // Use override mode if provided, otherwise use context audioMode
     const effectiveMode = overrideMode ?? audioMode;
 
+    intentionalSocketDisconnectRef.current = false;
     setState('initializing');
     setSegments([]);
     setDuration(0);
@@ -108,6 +112,10 @@ export function useRecording() {
           // Surface disconnects that leave recording "alive" while audio drops
           // (#5399 / #10941). Token-refresh close events are ignored inside the socket.
           if (!isMountedRef.current) return;
+          if (intentionalSocketDisconnectRef.current) {
+            intentionalSocketDisconnectRef.current = false;
+            return;
+          }
           console.warn('Transcription socket disconnected while recording may still be active');
         },
       });
@@ -153,6 +161,7 @@ export function useRecording() {
 
       // Cleanup on error
       if (transcriptionSocketRef.current) {
+        intentionalSocketDisconnectRef.current = true;
         transcriptionSocketRef.current.disconnect();
         transcriptionSocketRef.current = null;
       }
@@ -207,6 +216,7 @@ export function useRecording() {
 
     // Disconnect WebSocket
     if (transcriptionSocketRef.current) {
+      intentionalSocketDisconnectRef.current = true;
       transcriptionSocketRef.current.disconnect();
       transcriptionSocketRef.current = null;
     }
@@ -270,6 +280,7 @@ export function useRecording() {
           audioCaptureRef.current.stop();
         }
         if (transcriptionSocketRef.current) {
+          intentionalSocketDisconnectRef.current = true;
           transcriptionSocketRef.current.disconnect();
         }
         if (durationIntervalRef.current) {
