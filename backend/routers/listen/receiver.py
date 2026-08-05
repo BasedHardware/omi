@@ -39,6 +39,7 @@ from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.byok import get_byok_key
+from utils.executors import db_executor, run_blocking
 from utils.transcribe_decisions import should_skip_custom_stt_postprocessing
 from utils.stt.live_failure import (
     flush_live_stt_buffer,
@@ -335,11 +336,11 @@ class ListenReceiver:
         # process_conversation, #7690). WebSocket BYOK headers are copied into
         # context in _admit without HTTP middleware validation, so a raw
         # X-BYOK-* header alone is not enough — require users_db.is_byok_active.
-        # Defer both lookups so Omi-STT sessions never pay for them.
+        # Defer both lookups so Omi-STT sessions never pay for them. Offload the
+        # Firestore enrollment read onto db_executor (async blocker gate).
         if self.host.use_custom_stt:
-            has_llm_byok_key = bool(
-                users_db.is_byok_active(self.host.request.uid) and (get_byok_key('openai') or get_byok_key('anthropic'))
-            )
+            byok_active = await run_blocking(db_executor, users_db.is_byok_active, self.host.request.uid)
+            has_llm_byok_key = bool(byok_active and (get_byok_key('openai') or get_byok_key('anthropic')))
             skip_photo_description = should_skip_custom_stt_postprocessing(
                 uses_custom_stt=True,
                 has_llm_byok_key=has_llm_byok_key,
