@@ -140,4 +140,11 @@ void main() {
       expect(nextSecondsSinceTranscriptProgress(monitoringActive: false, previousSeconds: 10), 0);
     });
   });
+
+  group('shouldPreserveTranscriptStallAcrossSocketClose (#6977)', () {
+    test('preserves stall UI only for intentional watchdog restarts', () {
+      expect(shouldPreserveTranscriptStallAcrossSocketClose(stallRestartInFlight: true), isTrue);
+      expect(shouldPreserveTranscriptStallAcrossSocketClose(stallRestartInFlight: false), isFalse);
+    });
+  });
 }

@@ -62,3 +62,12 @@ bool shouldMarkFramesSyncedAfterSocketSend({
   if (last == null) return false;
   return now.difference(last) <= grace;
 }
+
+/// Keep "reconnecting" visible across an intentional watchdog socket restart.
+///
+/// When the watchdog calls `stop()`, `onClosed` fires immediately. Clearing the
+/// stall flag there would flash Listening again before reconnect completes.
+bool shouldPreserveTranscriptStallAcrossSocketClose({
+  required bool stallRestartInFlight,
+}) =>
+    stallRestartInFlight;

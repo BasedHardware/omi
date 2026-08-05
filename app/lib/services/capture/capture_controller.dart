@@ -697,6 +697,13 @@ class CaptureController extends ChangeNotifier
     }
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
+    // Start the stall watchdog here — not only from onConnected(). PureSocket
+    // calls onConnected() synchronously inside connect(), before this subscribe
+    // runs, so the listener map is empty on first connect and a watchdog started
+    // only from onConnected never arms for a fresh BLE session (#6977 / cubic).
+    if (recordingState == RecordingState.deviceRecord) {
+      _startTranscriptStallWatchdog();
+    }
     if (_sessionStartSeconds == 0) {
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
@@ -1640,7 +1647,19 @@ class CaptureController extends ChangeNotifier
   void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
-    _clearTranscriptStallState();
+
+    // Watchdog-triggered restart: keep isTranscriptStalled true so the UI stays
+    // on "reconnecting" until onConnected / real transcript progress clears it.
+    // Full clear here would flash Listening between stop() and the next socket.
+    if (shouldPreserveTranscriptStallAcrossSocketClose(
+      stallRestartInFlight: _transcriptStallRestartInFlight,
+    )) {
+      _lastTranscriptProgressAt = null;
+      _secondsSinceLastTranscriptProgress = 0;
+      _stopTranscriptStallWatchdog();
+    } else {
+      _clearTranscriptStallState();
+    }
 
     if (closeCode == 4002) {
       externalActions.markAsOutOfCreditsAndRefresh();
