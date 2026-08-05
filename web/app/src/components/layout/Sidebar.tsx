@@ -403,7 +403,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </span>
             </Link>
 
-            <div className="flex items-center gap-1">
+            {/* Collapsed, these stack: two 36px controls side by side overflow
+                a 56px column, so a row would clip the second one. */}
+            <div
+              className={cn(
+                'flex gap-1',
+                showText ? 'flex-row items-center' : 'flex-col items-center',
+              )}
+            >
               <button
                 onClick={toggleNotificationCenter}
                 className={cn(
