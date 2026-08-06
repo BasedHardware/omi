@@ -19,6 +19,14 @@ import SwiftUI
 /// **Nothing became unreachable.** INV-NAV-1 is about the destination a shell routes to, not about how
 /// many pills the bar has: every established destination — Conversations, Memories, Brain Map, Tasks,
 /// Rewind, Focus, Insights — is in the `Library` menu and still lands on its own feature-complete page.
+///
+/// **It is a panel, and it is the same panel as the two below it.** The window has no ground
+/// (`ShellWindowChrome`), so a bar drawn with nothing behind it is type hanging on the user's wallpaper
+/// — legible, and reading as a fault rather than as a design. One full-lane bar rather than a pill
+/// hugging its own content, for two reasons: the row already pins its trailing controls to the lane's
+/// trailing edge, so a content-hugging shape would have to become *two* pills and lose that edge; and
+/// three objects stacked on one lane with one corner and one shadow read as one surface, where a narrow
+/// pill floating over two wide panels reads as a stray. Everything it wears is `InkGlass`'s.
 struct DesktopTopBar: View {
   @Binding var selectedIndex: Int
   @Binding var memoryDestinationRawValue: Int
@@ -58,12 +66,19 @@ struct DesktopTopBar: View {
           persistentControls: { ShellStatusIcons(appState: appState) },
           settings: { settingsButton }
         )
-        .frame(width: laneWidth)
+        // The inset first, then the lane: the *glass* is exactly `laneWidth`, so the bar shares a
+        // leading edge with the panels under it, and the controls sit inside that edge rather than
+        // touching the corner.
+        .padding(.horizontal, TopNavigationLayoutMetrics.barContentInset)
+        .frame(width: laneWidth, height: TopNavigationLayoutMetrics.barHeight)
+        .inkGlassPanel(
+          cornerRadius: TopNavigationLayoutMetrics.barCornerRadius,
+          shadow: TopNavigationLayoutMetrics.barShadow)
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .frame(height: 44)
+    .frame(height: TopNavigationLayoutMetrics.barHeight)
     .padding(.vertical, OmiSpacing.sm)
     // The Library submenu is an inline overlay. Elevation belongs to the shared
     // top-bar component so every shell and exported preview paints it above the
@@ -390,6 +405,10 @@ enum LibraryDestination: Int, CaseIterable, Identifiable {
 enum TopNavigationLayoutMetrics {
   /// The top bar follows the same readable lane as the query bar and results panel below it,
   /// retaining the composer's horizontal inset at narrow sizes.
+  ///
+  /// It is the **source** of that lane rather than a copy of it: `QueryShellLayout.laneWidth` and
+  /// `PageGlassLaneLayout.laneWidth` both delegate here, so the bar and whatever is under it cannot
+  /// drift apart.
   static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
     max(
       0,
@@ -399,6 +418,29 @@ enum TopNavigationLayoutMetrics {
       )
     )
   }
+
+  /// The bar's own height.
+  ///
+  /// The row inside it is 32 pt (the icon buttons; the pills are 30), so this is that plus a band of
+  /// air top and bottom. Comfortably more than twice `barCornerRadius`, which matters: at exactly
+  /// twice, the 22 pt corner degenerates into a capsule and the bar stops being the same *shape* as
+  /// the panels under it — it becomes a giant pill sitting on two rounded rectangles.
+  static let barHeight: CGFloat = 52
+
+  /// The air between the bar's glass edge and the first pill inside it.
+  ///
+  /// One spacing token, not a tuned number. It exists so a *selected* pill — which is a filled capsule
+  /// — never touches the panel's rounded edge, which is the one state where a flush row looks broken
+  /// rather than tight.
+  static let barContentInset: CGFloat = OmiSpacing.sm
+
+  /// The corner the bar is cut to — the shared one, never a second opinion about 22. See
+  /// `InkGlass.cornerRadius`: a bar and a timeline rounded differently read as two products.
+  static var barCornerRadius: CGFloat { InkGlass.cornerRadius }
+
+  /// The bar's shadow: the one broad ambient shadow every floating object in this app casts, so the
+  /// three objects on the lane are lit by the same light.
+  static var barShadow: InkGlassShadow { .ambient }
 }
 
 /// Keeps the persistent capture and settings controls visible while replacing

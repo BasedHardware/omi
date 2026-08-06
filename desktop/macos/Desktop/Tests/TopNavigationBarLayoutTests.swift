@@ -198,6 +198,74 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 768)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 40), 8)
   }
+
+  /// The bar's *glass* is the lane and its controls are inset inside it — so the inset has to leave a
+  /// real row behind at the narrowest window the shell allows.
+  ///
+  /// The failure this guards is silent: `.padding` then `.frame(width:)` clamps a negative inner width
+  /// to zero rather than complaining, so an inset grown past the lane produces an empty bar and a
+  /// clean build.
+  func testTheBarsContentSurvivesItsInsetAtTheNarrowestWindow() {
+    let lane = TopNavigationLayoutMetrics.contentLaneWidth(for: DesktopWindowLayoutPolicy.width)
+    let row = lane - TopNavigationLayoutMetrics.barContentInset * 2
+
+    XCTAssertGreaterThan(row, 0, "the bar's inset swallowed its own row")
+    // Enough for the compact fallback: the menu, the status icons and the gear with their spacings.
+    XCTAssertGreaterThan(
+      row, 300,
+      "at the minimum window width the bar must still fit its compact row without clipping")
+  }
+
+  /// The row is laid out inside the inset, not inside the glass — so the leading pill starts one
+  /// spacing token in from the panel edge rather than flush against the corner.
+  func testTheRowIsPlacedInsideTheBarsInsetRatherThanAgainstItsCorner() {
+    let lane = TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400)
+    let inset = TopNavigationLayoutMetrics.barContentInset
+    let recorder = TopNavigationLayoutRecorder()
+    let host = NSHostingView(
+      rootView: TopNavigationBarLayout(
+        expandedNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .expanded) {
+            Color.clear.frame(width: 420, height: 32)
+          }
+        },
+        compactNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .compact) {
+            Color.clear.frame(width: 68, height: 32)
+          }
+        },
+        persistentControls: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .persistentControls) {
+            Color.clear.frame(width: 150, height: 32)
+          }
+        },
+        settings: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .settings) {
+            Color.clear.frame(width: 32, height: 32)
+          }
+        }
+      )
+      // Exactly what `DesktopTopBar` builds: the inset, then the lane, then the glass.
+      .padding(.horizontal, inset)
+      .frame(width: lane, height: TopNavigationLayoutMetrics.barHeight)
+    )
+    host.frame = NSRect(
+      x: 0, y: 0, width: lane, height: TopNavigationLayoutMetrics.barHeight)
+    host.layoutSubtreeIfNeeded()
+
+    guard
+      let navigation = recorder.frame(of: .expanded),
+      let settings = recorder.frame(of: .settings)
+    else {
+      return XCTFail("expected the expanded row to be placed inside the bar")
+    }
+    // Measured leading-to-trailing rather than against an absolute origin: what has to be true is
+    // that the row is the lane *minus its inset on both sides*, whatever coordinate space SwiftUI
+    // hands the layout. Drop the padding and this is `lane`.
+    XCTAssertEqual(
+      settings.maxX - navigation.minX, lane - inset * 2, accuracy: 0.5,
+      "the row must be laid out inside the bar's inset, not against its corner")
+  }
 }
 
 private enum TopNavigationLayoutSlot: Hashable {
