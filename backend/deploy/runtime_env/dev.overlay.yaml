@@ -199,6 +199,7 @@ overlay:
     - .github/workflows/gcp_backend_auto_dev.yml
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
+    - .github/workflows/gcp_x_connector_sync_job.yml
     - .github/workflows/gcp_memory_maintenance_job.yml
     - .github/workflows/gcp_memory_maintenance_job_auto_dev.yml
     network:
@@ -423,6 +424,14 @@ overlay:
         env:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
+          GOOGLE_CLOUD_PROJECT:
+            value: based-hardware
+        forbidden_env:
+        - HOSTED_PUSHER_API_URL
+      x-connector-sync-job:
+        flags:
+          --remove-env-vars: HOSTED_PUSHER_API_URL
+        env:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           PINECONE_INDEX_NAME:

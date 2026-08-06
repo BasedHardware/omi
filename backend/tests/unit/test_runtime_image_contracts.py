@@ -53,6 +53,15 @@ def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_con
     }
 
 
+def test_x_connector_sync_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
+    x_connector_sync_job = _contract(contracts_module, 'x-connector-sync-job')
+
+    assert dict(x_connector_sync_job.smoke_environment) == {
+        'ENCRYPTION_SECRET': '0123456789abcdef0123456789abcdef',
+        'OPENAI_API_KEY': 'fake-x-connector-sync-image-smoke-only',
+    }
+
+
 def test_registered_import_smokes_declare_their_import_time_environment(contracts_module):
     assert contracts_module.import_smoke_environment_errors(contracts_module.load_contracts()) == []
 
