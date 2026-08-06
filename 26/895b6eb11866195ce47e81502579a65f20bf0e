@@ -1,17 +1,25 @@
 backend/utils/paper/context.py
   s_569f1df936cc22::t_c87471e9157cd3 60,144,167
+  s_814cfc8af23811::t_49af0eba118d81 60,144,167
 backend/utils/paper/editorial.py
   s_569f1df936cc22::t_16dcc13058bfb7 67,83,91,127,138-139,156,191,196,245,260,265,322,342-344,375,381-383
+  s_814cfc8af23811::t_ad3397ca791649 67,83,91,127,138-139,156,191,196,245,260,265,322,342-344,375,381-383
 backend/utils/paper/interests.py
   s_569f1df936cc22::t_4aad75bea633c8 30,126-127
+  s_814cfc8af23811::t_87713287e3d746 30,126-127
 backend/utils/paper/photo.py
   s_569f1df936cc22::t_284e1566c9e045 21,61,67-68,97
+  s_814cfc8af23811::t_b60032ab9cac70 21,61,67-68,97
 backend/utils/paper/render.py
   s_569f1df936cc22::t_85e6d483af0c9c 12,63-68
+  s_814cfc8af23811::t_8e089a8e9cc3a0 63-68
+  s_814cfc8af23811::t_4d5fbaeb790857 12
 backend/utils/paper/sources/discovery.py
   s_569f1df936cc22::t_4e4798986907a6 58-60
+  s_814cfc8af23811::t_323648243e3202 58-60
 backend/utils/paper/sources/gmail_source.py
   s_569f1df936cc22::t_a6006bae47199a 15
+  s_814cfc8af23811::t_cb5f781a1dbd58 15
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -23,6 +31,14 @@ backend/utils/paper/sources/gmail_source.py
       "agent_id": {
         "tool": "claude",
         "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_814cfc8af23811": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1fcdb13-5b42-47d9-a8ea-d2da9669b2be",
         "model": "claude-opus-5"
       },
       "human_author": "Archit Lal <architdraftid@gmail.com>"
