@@ -18,8 +18,19 @@ import XCTest
 /// Frames are solid colours so a wrong frame is unambiguous rather than a subtle diff, and every
 /// assertion reads the *decoded* centre pixel rather than any bookkeeping the cursor keeps.
 final class RewindVideoFrameCursorTests: XCTestCase {
-  private var testUserId: String!
-  private var userDir: URL!
+  /// XCTest builds a fresh instance per test method, so initializing here gives each test its own
+  /// user directory without a mutable, implicitly-unwrapped property.
+  private let testUserId = "frame-cursor-test-\(UUID().uuidString)"
+  private var userDir: URL {
+    Self.applicationSupportRoot
+      .appendingPathComponent("Omi", isDirectory: true)
+      .appendingPathComponent("users", isDirectory: true)
+      .appendingPathComponent(testUserId, isDirectory: true)
+  }
+
+  private static let applicationSupportRoot: URL =
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    ?? FileManager.default.temporaryDirectory
 
   /// Red, green, blue, red, green, blue — repeating so an off-by-one is visible as a wrong colour
   /// rather than accidentally matching its neighbour.
@@ -31,19 +42,12 @@ final class RewindVideoFrameCursorTests: XCTestCase {
   override func setUp() async throws {
     try await super.setUp()
     await RewindStorage.shared.reset()
-    testUserId = "frame-cursor-test-\(UUID().uuidString)"
     RewindDatabase.currentUserId = testUserId
     try await RewindStorage.shared.initialize()
-
-    userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-      .appendingPathComponent("Omi", isDirectory: true)
-      .appendingPathComponent("users", isDirectory: true)
-      .appendingPathComponent(testUserId, isDirectory: true)
   }
 
   override func tearDown() async throws {
-    if let userDir { try? FileManager.default.removeItem(at: userDir) }
+    try? FileManager.default.removeItem(at: userDir)
     RewindDatabase.currentUserId = nil
     await RewindStorage.shared.reset()
     try await super.tearDown()

@@ -14,16 +14,13 @@ import XCTest
 /// observers of the provider.
 @MainActor
 final class ChatComposerDraftTests: XCTestCase {
-  private var rootURL: URL!
-
-  override func setUp() async throws {
-    rootURL = FileManager.default.temporaryDirectory
-      .appendingPathComponent("ChatComposerDraftTests-\(UUID().uuidString)", isDirectory: true)
-  }
+  /// XCTest builds a fresh instance per test method, so each test gets its own directory without a
+  /// mutable, implicitly-unwrapped property.
+  private let rootURL = FileManager.default.temporaryDirectory
+    .appendingPathComponent("ChatComposerDraftTests-\(UUID().uuidString)", isDirectory: true)
 
   override func tearDown() async throws {
     try? FileManager.default.removeItem(at: rootURL)
-    rootURL = nil
   }
 
   func testEditsPublishOnTheDraftAndPersistThroughTheStore() {
