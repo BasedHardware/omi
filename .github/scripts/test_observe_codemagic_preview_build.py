@@ -163,7 +163,11 @@ class CodemagicPreviewBuildObserverTests(unittest.TestCase):
         self.assertIn("Observe Codemagic preview build to a terminal status", text)
         self.assertIn("Retain Codemagic preview build observation evidence", text)
         self.assertIn("codemagic-preview-build-observation-", text)
-        self.assertIn("echo \"build_id=$build_id\" >> \"$GITHUB_OUTPUT\"", text)
+        self.assertIn('[[ "$build_id" =~ ^[A-Za-z0-9_-]+$ ]]', text)
+        self.assertIn('echo "build_id=$build_id" >> "$GITHUB_OUTPUT"', text)
+        self.assertIn("CODEMAGIC_BUILD_ID:", text)
+        self.assertIn('--build-id "$CODEMAGIC_BUILD_ID"', text)
+        self.assertNotIn('--build-id "${{ steps.dispatch.outputs.build_id }}"', text)
 
 
 if __name__ == "__main__":
