@@ -2133,16 +2133,16 @@ class AppLocalizationsId extends AppLocalizations {
   String get editMemory => '✏️ Edit Memori';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Sematkan sebagai dasar';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Lepas dari dasar';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Memori dasar';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Selalu dalam konteks';
 
   @override
   String get memoryContentHint => 'Saya suka makan es krim...';

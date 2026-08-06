@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Pereiti prie nemokamos versijos",
     "getFreeUnlimitedAccess": "Gaukite nemokamą neribotą prieigą",
     "shareDataForTraining": "Dalytis duomenimis mokymui",
-    "yourRequestUnderReview": "Jūsų užklausa nagrinėjama"
+    "yourRequestUnderReview": "Jūsų užklausa nagrinėjama",
+    "pinAsBaseline": "Prisegti kaip pagrindą",
+    "unpinAsBaseline": "Atsegti nuo pagrindo",
+    "baselineMemory": "Pagrindinė atmintis",
+    "alwaysInContext": "Visada kontekste"
 }

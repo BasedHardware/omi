@@ -2125,16 +2125,16 @@ class AppLocalizationsFi extends AppLocalizations {
   String get editMemory => '✏️ Muokkaa muistia';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Kiinnitä perustaksi';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Irrota perustasta';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Perusmuisti';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Aina kontekstissa';
 
   @override
   String get memoryContentHint => 'Pidän jäätelön syömisestä...';

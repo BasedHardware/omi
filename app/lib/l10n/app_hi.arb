@@ -3209,5 +3209,9 @@
     "downgradeToFreemiumAction": "मुफ़्त संस्करण पर जाएँ",
     "getFreeUnlimitedAccess": "मुफ़्त असीमित एक्सेस पाएँ",
     "shareDataForTraining": "प्रशिक्षण के लिए डेटा साझा करें",
-    "yourRequestUnderReview": "आपका अनुरोध समीक्षाधीन है"
+    "yourRequestUnderReview": "आपका अनुरोध समीक्षाधीन है",
+    "pinAsBaseline": "आधार के रूप में पिन करें",
+    "unpinAsBaseline": "आधार से अनपिन करें",
+    "baselineMemory": "आधार मेमोरी",
+    "alwaysInContext": "हमेशा संदर्भ में"
 }

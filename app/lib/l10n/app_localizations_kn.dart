@@ -2132,16 +2132,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get editMemory => '✏️ ಸ್ಮೃತಿ ಸಂಪಾದಿಸಿ';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'ಆಧಾರವಾಗಿ ಪಿನ್ ಮಾಡಿ';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'ಆಧಾರದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'ಆಧಾರ ಸ್ಮೃತಿ';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ';
 
   @override
   String get memoryContentHint => 'ನಾನು ಐಸ್ ಕ್ರೀಮ್ ತಿನ್ನಲು ಪ್ರೀತಿ ಮಾಡುತ್ತೇನೆ...';

@@ -2132,16 +2132,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get editMemory => '✏️ Upraviť pamäť';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Pripnúť ako základ';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odopnúť zo základu';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Základná pamäť';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vždy v kontexte';
 
   @override
   String get memoryContentHint => 'Rád jem zmrzlinu...';

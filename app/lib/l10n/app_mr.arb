@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "मोफत आवृत्तीवर जा",
     "getFreeUnlimitedAccess": "मोफत अमर्यादित प्रवेश मिळवा",
     "shareDataForTraining": "प्रशिक्षणासाठी डेटा सामायिक करा",
-    "yourRequestUnderReview": "तुमची विनंती पुनरावलोकनाधीन आहे"
+    "yourRequestUnderReview": "तुमची विनंती पुनरावलोकनाधीन आहे",
+    "pinAsBaseline": "आधार म्हणून पिन करा",
+    "unpinAsBaseline": "आधारातून अनपिन करा",
+    "baselineMemory": "आधार स्मृती",
+    "alwaysInContext": "नेहमी संदर्भात"
 }

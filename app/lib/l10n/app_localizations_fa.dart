@@ -2125,16 +2125,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String get editMemory => '✏️ ویرایش خاطره';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'سنجاق به‌عنوان مبنا';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'برداشتن سنجاق از مبنا';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'حافظه مبنا';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'همیشه در زمینه';
 
   @override
   String get memoryContentHint => 'من دوست دارم بستنی بخورم...';

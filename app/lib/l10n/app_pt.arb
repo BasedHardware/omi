@@ -3244,5 +3244,9 @@
     "downgradeToFreemiumAction": "Mudar para a versão gratuita",
     "getFreeUnlimitedAccess": "Obtenha acesso ilimitado gratuito",
     "shareDataForTraining": "Partilhar dados para treino",
-    "yourRequestUnderReview": "O seu pedido está em análise"
+    "yourRequestUnderReview": "O seu pedido está em análise",
+    "pinAsBaseline": "Fixar como base",
+    "unpinAsBaseline": "Desafixar da base",
+    "baselineMemory": "Memória base",
+    "alwaysInContext": "Sempre no contexto"
 }

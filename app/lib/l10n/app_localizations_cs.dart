@@ -2129,16 +2129,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get editMemory => '✏️ Upravit vzpomínku';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Připnout jako základ';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odepnout ze základu';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Základní paměť';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vždy v kontextu';
 
   @override
   String get memoryContentHint => 'Rád/a jím zmrzlinu...';

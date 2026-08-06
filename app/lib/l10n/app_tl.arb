@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "Lumipat sa libreng bersyon",
     "getFreeUnlimitedAccess": "Kumuha ng libreng walang limitasyong access",
     "shareDataForTraining": "Magbahagi ng data para sa training",
-    "yourRequestUnderReview": "Sinusuri ang iyong kahilingan"
+    "yourRequestUnderReview": "Sinusuri ang iyong kahilingan",
+    "pinAsBaseline": "I-pin bilang baseline",
+    "unpinAsBaseline": "Alisin sa baseline",
+    "baselineMemory": "Baseline na memorya",
+    "alwaysInContext": "Palaging nasa konteksto"
 }

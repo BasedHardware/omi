@@ -2089,16 +2089,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get editMemory => '✏️ 메모리 편집';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => '기준으로 고정';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => '기준에서 고정 해제';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => '기준 메모리';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => '항상 컨텍스트에 포함';
 
   @override
   String get memoryContentHint => '아이스크림 먹는 걸 좋아해요...';

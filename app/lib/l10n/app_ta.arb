@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "இலவச பதிப்புக்கு மாறவும்",
     "getFreeUnlimitedAccess": "இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்",
     "shareDataForTraining": "பயிற்சிக்காக தரவைப் பகிரவும்",
-    "yourRequestUnderReview": "உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது"
+    "yourRequestUnderReview": "உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது",
+    "pinAsBaseline": "அடிப்படையாகப் பின் செய்",
+    "unpinAsBaseline": "அடிப்படையிலிருந்து அகற்று",
+    "baselineMemory": "அடிப்படை நினைவு",
+    "alwaysInContext": "எப்போதும் சூழலில்"
 }

@@ -2133,16 +2133,16 @@ class AppLocalizationsNl extends AppLocalizations {
   String get editMemory => '✏️ Geheugen bewerken';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Vastzetten als basis';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Losmaken van basis';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Basisherinnering';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Altijd in context';
 
   @override
   String get memoryContentHint => 'Ik hou van ijs eten...';

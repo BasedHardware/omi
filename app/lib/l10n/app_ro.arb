@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Treci la versiunea gratuită",
     "getFreeUnlimitedAccess": "Obține acces nelimitat gratuit",
     "shareDataForTraining": "Partajează date pentru antrenare",
-    "yourRequestUnderReview": "Cererea ta este în curs de examinare"
+    "yourRequestUnderReview": "Cererea ta este în curs de examinare",
+    "pinAsBaseline": "Fixează ca referință",
+    "unpinAsBaseline": "Anulează fixarea ca referință",
+    "baselineMemory": "Memorie de referință",
+    "alwaysInContext": "Mereu în context"
 }

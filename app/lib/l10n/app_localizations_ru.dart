@@ -2134,16 +2134,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get editMemory => '✏️ Редактировать память';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Закрепить как базовое';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Открепить от базового';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Базовая память';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Всегда в контексте';
 
   @override
   String get memoryContentHint => 'Я люблю есть мороженое...';

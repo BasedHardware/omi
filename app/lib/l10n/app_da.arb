@@ -3226,5 +3226,9 @@
     "downgradeToFreemiumAction": "Skift til gratisversionen",
     "getFreeUnlimitedAccess": "Få gratis ubegrænset adgang",
     "shareDataForTraining": "Del data til træning",
-    "yourRequestUnderReview": "Din anmodning er under behandling"
+    "yourRequestUnderReview": "Din anmodning er under behandling",
+    "pinAsBaseline": "Fastgør som baseline",
+    "unpinAsBaseline": "Frigør fra baseline",
+    "baselineMemory": "Baseline-hukommelse",
+    "alwaysInContext": "Altid i kontekst"
 }

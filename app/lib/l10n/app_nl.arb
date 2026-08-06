@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Overstappen naar de gratis versie",
     "getFreeUnlimitedAccess": "Krijg gratis onbeperkte toegang",
     "shareDataForTraining": "Gegevens delen voor training",
-    "yourRequestUnderReview": "Je aanvraag wordt beoordeeld"
+    "yourRequestUnderReview": "Je aanvraag wordt beoordeeld",
+    "pinAsBaseline": "Vastzetten als basis",
+    "unpinAsBaseline": "Losmaken van basis",
+    "baselineMemory": "Basisherinnering",
+    "alwaysInContext": "Altijd in context"
 }

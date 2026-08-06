@@ -2137,16 +2137,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String get editMemory => '✏️ Editează amintirea';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Fixează ca referință';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Anulează fixarea ca referință';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Memorie de referință';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Mereu în context';
 
   @override
   String get memoryContentHint => 'Îmi place să mănânc înghețată...';

@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "무료 버전으로 변경",
     "getFreeUnlimitedAccess": "무제한 액세스를 무료로 받기",
     "shareDataForTraining": "학습을 위한 데이터 공유",
-    "yourRequestUnderReview": "요청을 검토 중입니다"
+    "yourRequestUnderReview": "요청을 검토 중입니다",
+    "pinAsBaseline": "기준으로 고정",
+    "unpinAsBaseline": "기준에서 고정 해제",
+    "baselineMemory": "기준 메모리",
+    "alwaysInContext": "항상 컨텍스트에 포함"
 }

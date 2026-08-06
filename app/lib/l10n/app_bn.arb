@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "ফ্রি সংস্করণে নেমে যান",
     "getFreeUnlimitedAccess": "ফ্রি আনলিমিটেড অ্যাক্সেস পান",
     "shareDataForTraining": "প্রশিক্ষণের জন্য ডেটা শেয়ার করুন",
-    "yourRequestUnderReview": "আপনার অনুরোধ পর্যালোচনাধীন"
+    "yourRequestUnderReview": "আপনার অনুরোধ পর্যালোচনাধীন",
+    "pinAsBaseline": "বেসলাইন হিসেবে পিন করুন",
+    "unpinAsBaseline": "বেসলাইন থেকে আনপিন করুন",
+    "baselineMemory": "বেসলাইন মেমরি",
+    "alwaysInContext": "সর্বদা প্রসঙ্গে"
 }

@@ -2102,16 +2102,16 @@ class AppLocalizationsHi extends AppLocalizations {
   String get editMemory => '✏️ स्मृति संपादित करें';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'आधार के रूप में पिन करें';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'आधार से अनपिन करें';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'आधार मेमोरी';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'हमेशा संदर्भ में';
 
   @override
   String get memoryContentHint => 'मुझे आइसक्रीम पसंद है...';

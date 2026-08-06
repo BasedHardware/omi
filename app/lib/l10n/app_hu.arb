@@ -3304,5 +3304,9 @@
     "downgradeToFreemiumAction": "Váltás az ingyenes verzióra",
     "getFreeUnlimitedAccess": "Szerezz ingyenes korlátlan hozzáférést",
     "shareDataForTraining": "Adatmegosztás tanításhoz",
-    "yourRequestUnderReview": "A kérelmedet vizsgáljuk"
+    "yourRequestUnderReview": "A kérelmedet vizsgáljuk",
+    "pinAsBaseline": "Rögzítés alapként",
+    "unpinAsBaseline": "Rögzítés feloldása alapként",
+    "baselineMemory": "Alapmemória",
+    "alwaysInContext": "Mindig a kontextusban"
 }

@@ -2141,16 +2141,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get editMemory => '✏️ Emlékezet szerkesztése';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Rögzítés alapként';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Rögzítés feloldása alapként';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Alapmemória';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Mindig a kontextusban';
 
   @override
   String get memoryContentHint => 'Szeretek fagyit enni...';

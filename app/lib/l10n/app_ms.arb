@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Turun ke versi percuma",
     "getFreeUnlimitedAccess": "Dapatkan akses tanpa had secara percuma",
     "shareDataForTraining": "Kongsi data untuk latihan",
-    "yourRequestUnderReview": "Permintaan anda sedang disemak"
+    "yourRequestUnderReview": "Permintaan anda sedang disemak",
+    "pinAsBaseline": "Sematkan sebagai asas",
+    "unpinAsBaseline": "Nyahsemat daripada asas",
+    "baselineMemory": "Memori asas",
+    "alwaysInContext": "Sentiasa dalam konteks"
 }

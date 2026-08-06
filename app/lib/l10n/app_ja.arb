@@ -3184,5 +3184,9 @@
     "downgradeToFreemiumAction": "無料版に変更",
     "getFreeUnlimitedAccess": "無制限アクセスを無料で入手",
     "shareDataForTraining": "トレーニング用にデータを共有",
-    "yourRequestUnderReview": "リクエストを確認中です"
+    "yourRequestUnderReview": "リクエストを確認中です",
+    "pinAsBaseline": "ベースラインに固定",
+    "unpinAsBaseline": "ベースラインから解除",
+    "baselineMemory": "ベースラインメモリ",
+    "alwaysInContext": "常にコンテキストに含む"
 }

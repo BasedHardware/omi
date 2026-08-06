@@ -2139,16 +2139,16 @@ class AppLocalizationsTa extends AppLocalizations {
   String get editMemory => '✏️ பதிவை திருத்தவும்';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'அடிப்படையாகப் பின் செய்';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'அடிப்படையிலிருந்து அகற்று';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'அடிப்படை நினைவு';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'எப்போதும் சூழலில்';
 
   @override
   String get memoryContentHint => 'நான் ஐஸ் கிரீம் சாப்பிட விரும்புவேன்...';

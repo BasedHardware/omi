@@ -2127,16 +2127,16 @@ class AppLocalizationsSr extends AppLocalizations {
   String get editMemory => '✏️ Уреди сећање';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Закачи као основу';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Откачи са основе';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Основна меморија';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Увек у контексту';
 
   @override
   String get memoryContentHint => 'Волим да једем сладолед...';

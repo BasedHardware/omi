@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "מעבר לגרסה החינמית",
     "getFreeUnlimitedAccess": "קבלו גישה בלתי מוגבלת בחינם",
     "shareDataForTraining": "שיתוף נתונים לאימון",
-    "yourRequestUnderReview": "הבקשה שלכם בבדיקה"
+    "yourRequestUnderReview": "הבקשה שלכם בבדיקה",
+    "pinAsBaseline": "הצמדה כבסיס",
+    "unpinAsBaseline": "ביטול הצמדה מהבסיס",
+    "baselineMemory": "זיכרון בסיס",
+    "alwaysInContext": "תמיד בהקשר"
 }

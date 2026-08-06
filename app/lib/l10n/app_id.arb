@@ -3250,5 +3250,9 @@
     "downgradeToFreemiumAction": "Turunkan ke versi gratis",
     "getFreeUnlimitedAccess": "Dapatkan akses tanpa batas gratis",
     "shareDataForTraining": "Bagikan data untuk pelatihan",
-    "yourRequestUnderReview": "Permintaan Anda sedang ditinjau"
+    "yourRequestUnderReview": "Permintaan Anda sedang ditinjau",
+    "pinAsBaseline": "Sematkan sebagai dasar",
+    "unpinAsBaseline": "Lepas dari dasar",
+    "baselineMemory": "Memori dasar",
+    "alwaysInContext": "Selalu dalam konteks"
 }

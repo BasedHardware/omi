@@ -2145,16 +2145,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get editMemory => '✏️ Erinnerung bearbeiten';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Als Basis anheften';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Von Basis lösen';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Basis-Erinnerung';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Immer im Kontext';
 
   @override
   String get memoryContentHint => 'Ich esse gerne Eis...';

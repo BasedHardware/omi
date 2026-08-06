@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Υποβάθμιση σε δωρεάν έκδοση",
     "getFreeUnlimitedAccess": "Απόκτησε δωρεάν απεριόριστη πρόσβαση",
     "shareDataForTraining": "Κοινή χρήση δεδομένων για εκπαίδευση",
-    "yourRequestUnderReview": "Το αίτημά σου εξετάζεται"
+    "yourRequestUnderReview": "Το αίτημά σου εξετάζεται",
+    "pinAsBaseline": "Καρφίτσωμα ως βάση",
+    "unpinAsBaseline": "Ξεκαρφίτσωμα από τη βάση",
+    "baselineMemory": "Μνήμη βάσης",
+    "alwaysInContext": "Πάντα στο πλαίσιο"
 }

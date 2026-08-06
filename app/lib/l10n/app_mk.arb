@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "Префрлете се на бесплатна верзија",
     "getFreeUnlimitedAccess": "Добијте бесплатен неограничен пристап",
     "shareDataForTraining": "Споделете податоци за обука",
-    "yourRequestUnderReview": "Вашето барање се разгледува"
+    "yourRequestUnderReview": "Вашето барање се разгледува",
+    "pinAsBaseline": "Закачи како основа",
+    "unpinAsBaseline": "Откачи од основа",
+    "baselineMemory": "Основна меморија",
+    "alwaysInContext": "Секогаш во контекст"
 }

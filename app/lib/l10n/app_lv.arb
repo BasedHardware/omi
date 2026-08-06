@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Pāriet uz bezmaksas versiju",
     "getFreeUnlimitedAccess": "Iegūstiet bezmaksas neierobežotu piekļuvi",
     "shareDataForTraining": "Kopīgot datus apmācībai",
-    "yourRequestUnderReview": "Jūsu pieprasījums tiek izskatīts"
+    "yourRequestUnderReview": "Jūsu pieprasījums tiek izskatīts",
+    "pinAsBaseline": "Piespraust kā pamatu",
+    "unpinAsBaseline": "Atspraust no pamata",
+    "baselineMemory": "Pamata atmiņa",
+    "alwaysInContext": "Vienmēr kontekstā"
 }

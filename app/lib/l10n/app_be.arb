@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "Перайсці на бясплатны план",
     "getFreeUnlimitedAccess": "Атрымайце бязмежны доступ бясплатна",
     "shareDataForTraining": "Дзяліцца дадзенымі для навучання",
-    "yourRequestUnderReview": "Ваш запыт разглядаецца"
+    "yourRequestUnderReview": "Ваш запыт разглядаецца",
+    "pinAsBaseline": "Замацаваць як базавае",
+    "unpinAsBaseline": "Адмацаваць ад базавага",
+    "baselineMemory": "Базавая памяць",
+    "alwaysInContext": "Заўсёды ў кантэксце"
 }

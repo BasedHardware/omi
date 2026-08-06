@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "ಉಚಿತ ಆವೃತ್ತಿಗೆ ಬದಲಿಸಿ",
     "getFreeUnlimitedAccess": "ಉಚಿತ ಅಮಿತ ಪ್ರವೇಶ ಪಡೆಯಿರಿ",
     "shareDataForTraining": "ತರಬೇತಿಗಾಗಿ ಡೇಟಾ ಹಂಚಿಕೊಳ್ಳಿ",
-    "yourRequestUnderReview": "ನಿಮ್ಮ ವಿನಂತಿ ಪರಿಶೀಲನೆಯಲ್ಲಿದೆ"
+    "yourRequestUnderReview": "ನಿಮ್ಮ ವಿನಂತಿ ಪರಿಶೀಲನೆಯಲ್ಲಿದೆ",
+    "pinAsBaseline": "ಆಧಾರವಾಗಿ ಪಿನ್ ಮಾಡಿ",
+    "unpinAsBaseline": "ಆಧಾರದಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ",
+    "baselineMemory": "ಆಧಾರ ಸ್ಮೃತಿ",
+    "alwaysInContext": "ಯಾವಾಗಲೂ ಸಂದರ್ಭದಲ್ಲಿ"
 }

@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Byt till gratisversionen",
     "getFreeUnlimitedAccess": "Få gratis obegränsad åtkomst",
     "shareDataForTraining": "Dela data för träning",
-    "yourRequestUnderReview": "Din förfrågan granskas"
+    "yourRequestUnderReview": "Din förfrågan granskas",
+    "pinAsBaseline": "Fäst som utgångspunkt",
+    "unpinAsBaseline": "Lossa från utgångspunkt",
+    "baselineMemory": "Utgångsminne",
+    "alwaysInContext": "Alltid i kontexten"
 }

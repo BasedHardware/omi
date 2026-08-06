@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "ఉచిత వెర్షన్‌కు మారండి",
     "getFreeUnlimitedAccess": "ఉచిత అపరిమిత యాక్సెస్ పొందండి",
     "shareDataForTraining": "శిక్షణ కోసం డేటాను భాగస్వామ్యం చేయండి",
-    "yourRequestUnderReview": "మీ అభ్యర్థన సమీక్షలో ఉంది"
+    "yourRequestUnderReview": "మీ అభ్యర్థన సమీక్షలో ఉంది",
+    "pinAsBaseline": "ఆధారంగా పిన్ చేయండి",
+    "unpinAsBaseline": "ఆధారం నుండి అన్‌పిన్ చేయండి",
+    "baselineMemory": "ఆధార మెమరీ",
+    "alwaysInContext": "ఎల్లప్పుడూ సందర్భంలో"
 }

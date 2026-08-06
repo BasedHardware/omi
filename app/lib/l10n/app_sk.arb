@@ -3213,5 +3213,9 @@
     "downgradeToFreemiumAction": "Prejsť na bezplatnú verziu",
     "getFreeUnlimitedAccess": "Získajte neobmedzený prístup zadarmo",
     "shareDataForTraining": "Zdieľať údaje na trénovanie",
-    "yourRequestUnderReview": "Vaša žiadosť sa posudzuje"
+    "yourRequestUnderReview": "Vaša žiadosť sa posudzuje",
+    "pinAsBaseline": "Pripnúť ako základ",
+    "unpinAsBaseline": "Odopnúť zo základu",
+    "baselineMemory": "Základná pamäť",
+    "alwaysInContext": "Vždy v kontexte"
 }

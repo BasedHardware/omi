@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "مفت ورژن پر جائیں",
     "getFreeUnlimitedAccess": "مفت لامحدود رسائی حاصل کریں",
     "shareDataForTraining": "تربیت کے لیے ڈیٹا شیئر کریں",
-    "yourRequestUnderReview": "آپ کی درخواست زیرِ غور ہے"
+    "yourRequestUnderReview": "آپ کی درخواست زیرِ غور ہے",
+    "pinAsBaseline": "بنیاد کے طور پر پن کریں",
+    "unpinAsBaseline": "بنیاد سے ان پن کریں",
+    "baselineMemory": "بنیادی یادداشت",
+    "alwaysInContext": "ہمیشہ سیاق میں"
 }

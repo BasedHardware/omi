@@ -10783,5 +10783,9 @@
     "downgradeToFreemiumAction": "Preklopi na brezplačno različico",
     "getFreeUnlimitedAccess": "Pridobite brezplačen neomejen dostop",
     "shareDataForTraining": "Deli podatke za učenje",
-    "yourRequestUnderReview": "Vaša zahteva je v pregledu"
+    "yourRequestUnderReview": "Vaša zahteva je v pregledu",
+    "pinAsBaseline": "Pripni kot osnovo",
+    "unpinAsBaseline": "Odpni z osnove",
+    "baselineMemory": "Osnovni spomin",
+    "alwaysInContext": "Vedno v kontekstu"
 }

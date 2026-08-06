@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Vaihda ilmaisversioon",
     "getFreeUnlimitedAccess": "Hanki ilmainen rajaton käyttöoikeus",
     "shareDataForTraining": "Jaa dataa koulutukseen",
-    "yourRequestUnderReview": "Pyyntösi on käsittelyssä"
+    "yourRequestUnderReview": "Pyyntösi on käsittelyssä",
+    "pinAsBaseline": "Kiinnitä perustaksi",
+    "unpinAsBaseline": "Irrota perustasta",
+    "baselineMemory": "Perusmuisti",
+    "alwaysInContext": "Aina kontekstissa"
 }

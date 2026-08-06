@@ -3243,5 +3243,9 @@
     "downgradeToFreemiumAction": "Перейти на бесплатную версию",
     "getFreeUnlimitedAccess": "Получите безлимитный доступ бесплатно",
     "shareDataForTraining": "Поделиться данными для обучения",
-    "yourRequestUnderReview": "Ваш запрос на рассмотрении"
+    "yourRequestUnderReview": "Ваш запрос на рассмотрении",
+    "pinAsBaseline": "Закрепить как базовое",
+    "unpinAsBaseline": "Открепить от базового",
+    "baselineMemory": "Базовая память",
+    "alwaysInContext": "Всегда в контексте"
 }

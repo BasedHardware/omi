@@ -2128,16 +2128,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String get editMemory => '✏️ Uredi spomin';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Pripni kot osnovo';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odpni z osnove';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Osnovni spomin';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vedno v kontekstu';
 
   @override
   String get memoryContentHint => 'Rad imam jesti sladoled...';

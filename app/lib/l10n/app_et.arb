@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Mine üle tasuta versioonile",
     "getFreeUnlimitedAccess": "Saa tasuta piiramatu juurdepääs",
     "shareDataForTraining": "Jaga andmeid treenimiseks",
-    "yourRequestUnderReview": "Sinu taotlus on läbivaatamisel"
+    "yourRequestUnderReview": "Sinu taotlus on läbivaatamisel",
+    "pinAsBaseline": "Kinnita alusena",
+    "unpinAsBaseline": "Eemalda aluselt",
+    "baselineMemory": "Alusmälu",
+    "alwaysInContext": "Alati kontekstis"
 }

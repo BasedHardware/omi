@@ -2125,16 +2125,16 @@ class AppLocalizationsNo extends AppLocalizations {
   String get editMemory => '✏️ Rediger minne';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Fest som grunnlag';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Løsne fra grunnlag';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Grunnlagsminne';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Alltid i kontekst';
 
   @override
   String get memoryContentHint => 'Jeg liker å spise iskrem...';

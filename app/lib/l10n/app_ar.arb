@@ -3184,5 +3184,9 @@
     "downgradeToFreemiumAction": "الرجوع إلى النسخة المجانية",
     "getFreeUnlimitedAccess": "احصل على وصول غير محدود مجانًا",
     "shareDataForTraining": "مشاركة البيانات للتدريب",
-    "yourRequestUnderReview": "طلبك قيد المراجعة"
+    "yourRequestUnderReview": "طلبك قيد المراجعة",
+    "pinAsBaseline": "التثبيت كأساس",
+    "unpinAsBaseline": "إلغاء التثبيت من الأساس",
+    "baselineMemory": "ذاكرة أساسية",
+    "alwaysInContext": "دائمًا في السياق"
 }

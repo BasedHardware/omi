@@ -3208,5 +3208,9 @@
     "downgradeToFreemiumAction": "Перейти на безкоштовну версію",
     "getFreeUnlimitedAccess": "Отримайте безлімітний доступ безкоштовно",
     "shareDataForTraining": "Поділитися даними для навчання",
-    "yourRequestUnderReview": "Ваш запит розглядається"
+    "yourRequestUnderReview": "Ваш запит розглядається",
+    "pinAsBaseline": "Закріпити як базове",
+    "unpinAsBaseline": "Відкріпити від базового",
+    "baselineMemory": "Базова пам'ять",
+    "alwaysInContext": "Завжди в контексті"
 }

@@ -2132,16 +2132,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get editMemory => '✏️ Rediģēt atmiņu';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Piespraust kā pamatu';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Atspraust no pamata';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pamata atmiņa';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vienmēr kontekstā';
 
   @override
   String get memoryContentHint => 'Man patīk ēst saldējumu...';
