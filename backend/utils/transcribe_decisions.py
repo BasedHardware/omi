@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
+from models.conversation_enums import ConversationSource
+
 MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
 MIN_CONVERSATION_TIMEOUT_SECONDS = 120
 TARGET_SAMPLE_RATE = 16000
@@ -174,10 +176,14 @@ def decide_existing_conversation_action(
 
 
 def normalize_listen_source(value: Optional[str]) -> str:
-    """Collapse empty/missing listen sources onto the default pendant source."""
+    """Normalize listen sources the same way conversations persist them.
+
+    Empty/missing → `omi`. Unknown tokens → `unknown` via ConversationSource._missing_,
+    matching create_new_in_progress_conversation.
+    """
     if not isinstance(value, str) or not value.strip():
-        return 'omi'
-    return value.strip().lower()
+        return ConversationSource.omi.value
+    return ConversationSource(value.strip()).value
 
 
 def should_attach_to_existing_in_progress(

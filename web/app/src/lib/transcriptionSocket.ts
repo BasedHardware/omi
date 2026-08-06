@@ -329,7 +329,11 @@ export class TranscriptionSocket {
             this.options.onError('Authentication failed');
             this.ws?.close(1000, 'Auth failed');
           }
-        } else if (data.type === 'conversation_session' && typeof data.conversation_id === 'string') {
+        } else if (
+          data.type === 'conversation_session' &&
+          typeof data.conversation_id === 'string' &&
+          data.status === 'in_progress'
+        ) {
           this.options.onConversationSession?.(data.conversation_id);
         }
         // Handle other event messages (silently ignore for now)

@@ -224,8 +224,10 @@ def test_cross_source_in_progress_must_not_attach():
     assert should_attach_to_existing_in_progress(existing_source='omi', request_source='web') is False
     assert should_attach_to_existing_in_progress(existing_source='web', request_source='desktop') is False
     assert should_attach_to_existing_in_progress(existing_source=None, request_source='') is True
-    assert normalize_listen_source('Web') == 'web'
+    assert normalize_listen_source('Web') == 'unknown'
     assert normalize_listen_source(None) == 'omi'
+    assert normalize_listen_source('web') == 'web'
+    assert should_attach_to_existing_in_progress(existing_source='unknown', request_source='Web') is True
 
 
 def test_recording_session_identity_retries_and_rollovers_are_distinct():

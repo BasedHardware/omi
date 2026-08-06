@@ -47,8 +47,7 @@ export function useRecording() {
 
   // Local ref for preventing state updates after unmount (this one is local since it's component-specific)
   const isMountedRef = useRef<boolean>(true);
-  // Web owns this UUID so prepare() never attaches to a live pendant conversation (#5388).
-  const clientConversationIdRef = useRef<string | null>(null);
+  // Starts as client_conversation_id; upgraded by conversation_session (in_progress only).
   const conversationIdRef = useRef<string | null>(null);
 
   // Start recording
@@ -84,7 +83,6 @@ export function useRecording() {
 
       // Create transcription socket
       const clientConversationId = crypto.randomUUID();
-      clientConversationIdRef.current = clientConversationId;
       conversationIdRef.current = clientConversationId;
       const socket = createTranscriptionSocket({
         language,
@@ -222,9 +220,8 @@ export function useRecording() {
     setState('idle');
 
     // Process this web conversation by ID — never the shared Redis pointer (#5388).
-    const conversationId = conversationIdRef.current || clientConversationIdRef.current;
+    const conversationId = conversationIdRef.current;
     conversationIdRef.current = null;
-    clientConversationIdRef.current = null;
     const finalize = conversationId
       ? finalizeConversationById(conversationId)
       : processInProgressConversation();

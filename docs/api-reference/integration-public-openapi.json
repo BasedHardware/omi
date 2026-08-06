@@ -375,6 +375,7 @@
           "phone",
           "phone_call",
           "desktop",
+          "web",
           "openglass",
           "screenpipe",
           "workflow",
