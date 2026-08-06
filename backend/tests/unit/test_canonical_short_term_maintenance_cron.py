@@ -39,6 +39,7 @@ def _enable_for(monkeypatch, *uids: str) -> None:
             backfill=SimpleNamespace(summary=SimpleNamespace(read_ready_count=0)),
             backfill_ready_uids=tuple(uids),
             generation_reconciled_uids=(),
+            generation_reconcile_errors=(),
         ),
     )
 
@@ -69,6 +70,7 @@ def test_enabled_cohort_runs_lifecycle_before_maintenance(monkeypatch):
         backfill=SimpleNamespace(summary=SimpleNamespace(read_ready_count=1)),
         backfill_ready_uids=(CANONICAL_A,),
         generation_reconciled_uids=(CANONICAL_A,),
+        generation_reconcile_errors=(),
     )
     lifecycle_calls = []
     monkeypatch.setattr(
@@ -151,6 +153,7 @@ def test_graph_backfill_uses_per_item_fences_while_lifecycle_staging_is_incomple
             backfill=SimpleNamespace(summary=SimpleNamespace(read_ready_count=0)),
             backfill_ready_uids=(),
             generation_reconciled_uids=(),
+            generation_reconcile_errors=(),
         ),
     )
     monkeypatch.setattr(

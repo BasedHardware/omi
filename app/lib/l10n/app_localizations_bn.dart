@@ -746,11 +746,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'আপনার প্ল্যান $date এ নবায়ন হয়।';
-  }
-
-  @override
   String get basicPlan => 'বিনামূল্যে পরিকল্পনা';
 
   @override
@@ -2129,16 +2124,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String get editMemory => '✏️ স্মৃতি সম্পাদনা করুন';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'বেসলাইন হিসেবে পিন করুন';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'বেসলাইন থেকে আনপিন করুন';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'বেসলাইন মেমরি';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'সর্বদা প্রসঙ্গে';
 
   @override
   String get memoryContentHint => 'আমি আইসক্রিম খেতে পছন্দ করি...';
@@ -9783,4 +9778,53 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না';
+
+  @override
+  String get planSheetChooseYourPlan => 'সীমাহীন Omi আনলক করতে আপনার প্ল্যান বেছে নিন।';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, মোবাইল এবং ওয়েবে উপলব্ধ';
+
+  @override
+  String get popularBadge => 'জনপ্রিয়';
+
+  @override
+  String get worksOnDesktop => 'ডেস্কটপে কাজ করে';
+
+  @override
+  String get noDesktopAccess => 'ডেস্কটপে কাজ করে না';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months মাস / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count মাস ফ্রি',
+      one: '১ মাস ফ্রি',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi ফ্রি, তবে ফ্রি সংস্করণে কিছু সীমাবদ্ধতা আছে যা আপনার অভিজ্ঞতাকে প্রভাবিত করে:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '৫-৭ সেকেন্ড বিলম্ব (রিয়েল-টাইম নয়)';
+
+  @override
+  String get downgradeToFreemiumAction => 'ফ্রি সংস্করণে নেমে যান';
+
+  @override
+  String get getFreeUnlimitedAccess => 'ফ্রি আনলিমিটেড অ্যাক্সেস পান';
+
+  @override
+  String get shareDataForTraining => 'প্রশিক্ষণের জন্য ডেটা শেয়ার করুন';
+
+  @override
+  String get yourRequestUnderReview => 'আপনার অনুরোধ পর্যালোচনাধীন';
 }

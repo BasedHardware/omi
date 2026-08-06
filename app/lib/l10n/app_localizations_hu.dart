@@ -750,11 +750,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Előfizetésed $date-án megújul.';
-  }
-
-  @override
   String get basicPlan => 'Ingyenes csomag';
 
   @override
@@ -2144,16 +2139,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get editMemory => '✏️ Emlékezet szerkesztése';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Rögzítés alapként';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Rögzítés feloldása alapként';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Alapmemória';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Mindig a kontextusban';
 
   @override
   String get memoryContentHint => 'Szeretek fagyit enni...';
@@ -9817,4 +9812,54 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Túl régi a szinkronizáláshoz — az Omi nem tudja elfogadni';
+
+  @override
+  String get planSheetChooseYourPlan => 'Válaszd ki a csomagodat a korlátlan Omi feloldásához.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Elérhető Macen, mobilon és weben';
+
+  @override
+  String get popularBadge => 'NÉPSZERŰ';
+
+  @override
+  String get worksOnDesktop => 'Működik asztali gépen';
+
+  @override
+  String get noDesktopAccess => 'Nem működik asztali gépen';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months hónap / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hónap ingyen',
+      one: '1 hónap ingyen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Az Omi ingyenes, de az ingyenes verziónak vannak korlátai, amelyek befolyásolják az élményt:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 másodperces késleltetés (nem valós idejű)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Váltás az ingyenes verzióra';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Szerezz ingyenes korlátlan hozzáférést';
+
+  @override
+  String get shareDataForTraining => 'Adatmegosztás tanításhoz';
+
+  @override
+  String get yourRequestUnderReview => 'A kérelmedet vizsgáljuk';
 }

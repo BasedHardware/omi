@@ -121,6 +121,97 @@ def test_terminal_backfill_reconciles_only_the_scheduler_owned_write_generation(
     assert store.get(_path(uid)).to_dict()["account_generation"] == 1
 
 
+def test_one_principal_missing_state_head_does_not_starve_the_rest_of_the_cohort(monkeypatch):
+    """The dev cohort carries synthetic principals with read_ready checkpoints
+    and no migrated state head; raising for them starved every other user's
+    lifecycle progression on each scheduled run."""
+    legacy_uid = "cohort-legacy"
+    healthy_uid = "cohort-healthy"
+    store = _seeded_store(
+        monkeypatch,
+        {
+            _path(legacy_uid): lifecycle._write_control_payload(legacy_uid),
+            _path(healthy_uid): lifecycle._write_control_payload(healthy_uid),
+        },
+    )
+    monkeypatch.setattr(lifecycle, "list_canonical_cohort_uids", lambda: [legacy_uid, healthy_uid])
+    monkeypatch.setattr(lifecycle, "reconcile_canonical_memory_onboarding", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        lifecycle,
+        "run_canonical_legacy_backfill_page",
+        lambda **_kwargs: SimpleNamespace(summary=SimpleNamespace(read_ready_count=2)),
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "FirestoreCheckpointStore",
+        lambda: SimpleNamespace(read=lambda _uid: SimpleNamespace(state=lifecycle.MigrationState.read_ready)),
+    )
+
+    def _trusted_read(**kwargs):
+        uid = kwargs["uid"]
+        if uid == legacy_uid:
+            return SimpleNamespace(
+                require_account_generation=lambda: (_ for _ in ()).throw(
+                    lifecycle.V3TrustedAccountGenerationReadError(
+                        lifecycle.V3AccountGenerationFailureReason.MISSING_STATE_HEAD
+                    )
+                )
+            )
+        return SimpleNamespace(require_account_generation=lambda: 3)
+
+    monkeypatch.setattr(lifecycle, "read_memory_v3_trusted_account_generation", _trusted_read)
+
+    report = lifecycle.run_canonical_cohort_lifecycle()
+
+    assert report.generation_reconciled_uids == (healthy_uid,)
+    assert report.generation_reconcile_errors == ()
+    assert store.get(_path(healthy_uid)).to_dict()["account_generation"] == 3
+
+
+def test_a_malformed_state_head_is_reported_per_principal_without_starving_the_cohort(monkeypatch):
+    broken_uid = "cohort-broken"
+    healthy_uid = "cohort-healthy"
+    store = _seeded_store(
+        monkeypatch,
+        {
+            _path(broken_uid): lifecycle._write_control_payload(broken_uid),
+            _path(healthy_uid): lifecycle._write_control_payload(healthy_uid),
+        },
+    )
+    monkeypatch.setattr(lifecycle, "list_canonical_cohort_uids", lambda: [broken_uid, healthy_uid])
+    monkeypatch.setattr(lifecycle, "reconcile_canonical_memory_onboarding", lambda: SimpleNamespace())
+    monkeypatch.setattr(
+        lifecycle,
+        "run_canonical_legacy_backfill_page",
+        lambda **_kwargs: SimpleNamespace(summary=SimpleNamespace(read_ready_count=2)),
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "FirestoreCheckpointStore",
+        lambda: SimpleNamespace(read=lambda _uid: SimpleNamespace(state=lifecycle.MigrationState.read_ready)),
+    )
+
+    def _trusted_read(**kwargs):
+        uid = kwargs["uid"]
+        if uid == broken_uid:
+            return SimpleNamespace(
+                require_account_generation=lambda: (_ for _ in ()).throw(
+                    lifecycle.V3TrustedAccountGenerationReadError(
+                        lifecycle.V3AccountGenerationFailureReason.MALFORMED_STATE_HEAD
+                    )
+                )
+            )
+        return SimpleNamespace(require_account_generation=lambda: 4)
+
+    monkeypatch.setattr(lifecycle, "read_memory_v3_trusted_account_generation", _trusted_read)
+
+    report = lifecycle.run_canonical_cohort_lifecycle()
+
+    assert report.generation_reconciled_uids == (healthy_uid,)
+    assert report.generation_reconcile_errors == (f"uid={broken_uid}: generation_reconcile:malformed_state_head",)
+    assert store.get(_path(healthy_uid)).to_dict()["account_generation"] == 4
+
+
 def test_terminal_backfill_reconciles_a_newer_trusted_head_after_a_prior_scheduler_generation(monkeypatch):
     uid = "cohort-a"
     store = _seeded_store(monkeypatch, {_path(uid): lifecycle._write_control_payload(uid, account_generation=1)})

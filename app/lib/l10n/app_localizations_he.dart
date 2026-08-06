@@ -742,11 +742,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'התוכנית שלך מתחדשת ב-$date.';
-  }
-
-  @override
   String get basicPlan => 'תוכנית חינם';
 
   @override
@@ -2113,16 +2108,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String get editMemory => '✏️ עריכת זכרון';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'הצמדה כבסיס';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'ביטול הצמדה מהבסיס';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'זיכרון בסיס';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'תמיד בהקשר';
 
   @override
   String get memoryContentHint => 'אני אוהב לאכול גלידה...';
@@ -9702,4 +9697,53 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ישן מדי לסנכרון — Omi לא יכול לקבל אותו';
+
+  @override
+  String get planSheetChooseYourPlan => 'בחרו תוכנית כדי לפתוח את Omi ללא הגבלה.';
+
+  @override
+  String get availableOnMacMobileWeb => 'זמין ב-Mac, בנייד ובאינטרנט';
+
+  @override
+  String get popularBadge => 'פופולרי';
+
+  @override
+  String get worksOnDesktop => 'עובד במחשב';
+
+  @override
+  String get noDesktopAccess => 'לא עובד במחשב';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months חודשים / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count חודשים חינם',
+      one: 'חודש אחד חינם',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'עיכוב של 5-7 שניות (לא בזמן אמת)';
+
+  @override
+  String get downgradeToFreemiumAction => 'מעבר לגרסה החינמית';
+
+  @override
+  String get getFreeUnlimitedAccess => 'קבלו גישה בלתי מוגבלת בחינם';
+
+  @override
+  String get shareDataForTraining => 'שיתוף נתונים לאימון';
+
+  @override
+  String get yourRequestUnderReview => 'הבקשה שלכם בבדיקה';
 }

@@ -1617,12 +1617,6 @@ abstract class AppLocalizations {
   /// **'Your plan will cancel on {date}.'**
   String cancelAtPeriodEnd(String date);
 
-  /// Renewal message
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan renews on {date}.'**
-  String renewsOn(String date);
-
   /// Basic plan name
   ///
   /// In en, this message translates to:
@@ -18230,6 +18224,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Too old to sync — Omi can\'t accept it'**
   String get syncStatusTooOld;
+
+  /// Plans sheet subtitle prompting a free user to pick a paid plan
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your plan to unlock unlimited Omi.'**
+  String get planSheetChooseYourPlan;
+
+  /// Plans sheet highlight: which platforms Omi runs on
+  ///
+  /// In en, this message translates to:
+  /// **'Available on Mac, mobile, and web'**
+  String get availableOnMacMobileWeb;
+
+  /// Badge shown on the most popular plan card
+  ///
+  /// In en, this message translates to:
+  /// **'POPULAR'**
+  String get popularBadge;
+
+  /// Plan card row: this tier includes the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Works on Desktop'**
+  String get worksOnDesktop;
+
+  /// Plan card row: this tier does not include the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Doesn\'t work on Desktop'**
+  String get noDesktopAccess;
+
+  /// Annual plan card subtitle showing the billing term and total price
+  ///
+  /// In en, this message translates to:
+  /// **'{months} months / {price}'**
+  String annualBillingSummary(int months, String price);
+
+  /// Badge on an annual plan card showing how many months the annual price saves
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 Month Free} other{{count} Months Free}}'**
+  String monthsFreeBadge(int count);
+
+  /// Intro line above the list of free-tier limitations
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is free, but freemium has limits that affect your experience:'**
+  String get freemiumLimitsIntro;
+
+  /// Free-tier limitation: transcription is delayed rather than live
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second delay (not real-time)'**
+  String get downgradeLimitDelayNotRealTime;
+
+  /// Button that moves the user from a paid plan to the free tier
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade to Freemium'**
+  String get downgradeToFreemiumAction;
+
+  /// Title of the training-data opt-in card offering free unlimited access
+  ///
+  /// In en, this message translates to:
+  /// **'Get Free Unlimited Access'**
+  String get getFreeUnlimitedAccess;
+
+  /// Subtitle of the training-data opt-in card
+  ///
+  /// In en, this message translates to:
+  /// **'Share data for training'**
+  String get shareDataForTraining;
+
+  /// Subtitle shown while a training-data access request is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Your request is under review'**
+  String get yourRequestUnderReview;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -385,6 +385,45 @@ def _canonical_delete_all_stage(monkeypatch, *, read_cutover_done: bool):
     return purge
 
 
+def _canonical_delete_default_stage(monkeypatch, *, read_cutover_done: bool):
+    """Canonical owns writes for the default-scope delete; pick the rollout stage."""
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: True)
+    monkeypatch.setattr(mem_mod, 'canonical_read_enabled', lambda *a, **k: read_cutover_done)
+    delete_default = MagicMock()
+    monkeypatch.setattr(mem_mod, 'MemoryService', lambda **kwargs: SimpleNamespace(delete_default=delete_default))
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+    return delete_default, purge
+
+
+def test_default_delete_uses_canonical_scope_and_mirrors_legacy_during_dual_read(monkeypatch):
+    delete_default, purge = _canonical_delete_default_stage(monkeypatch, read_cutover_done=False)
+
+    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
+
+    delete_default.assert_called_once_with('u1')
+    purge.assert_called_once_with('u1')
+
+
+def test_default_delete_after_read_cutover_leaves_legacy_alone(monkeypatch):
+    delete_default, purge = _canonical_delete_default_stage(monkeypatch, read_cutover_done=True)
+
+    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
+
+    delete_default.assert_called_once_with('u1')
+    purge.assert_not_called()
+
+
+def test_legacy_default_delete_still_purges(monkeypatch):
+    monkeypatch.setattr(mem_mod, '_canonical_write_enabled_or_fail_closed', lambda *a, **k: False)
+    purge = MagicMock()
+    monkeypatch.setattr(mem_mod, '_purge_legacy_memories', purge)
+
+    assert mem_mod.delete_memories(scope='default', uid='u1') == {'status': 'ok'}
+
+    purge.assert_called_once_with('u1')
+
+
 def test_delete_all_during_dual_write_also_wipes_the_store_the_user_reads(monkeypatch):
     """#10446 follow-up: before persisted read cutover a canonical delete-all is
     invisible because GET /v3/memories still reads legacy. "Delete everything"

@@ -421,6 +421,7 @@ class MemoriesViewModel: ObservableObject {
     if let expectedOffset, currentOffset != expectedOffset { return false }
     canonicalLifecycleExposed = page.canonicalLifecycleExposed
     canonicalLifecycleCapabilityEstablished = true
+    defaultMemoryDeleteSupported = page.defaultMemoryDeleteSupported
     persistCanonicalLifecycleExposure(page.canonicalLifecycleExposed)
     if let deviceScopeCapability = deviceScopeSupportedOverride ?? page.deviceScopeSupported {
       deviceScopeSupported = deviceScopeCapability
@@ -477,8 +478,15 @@ class MemoriesViewModel: ObservableObject {
     await loadTagCountsFromDatabase()
   }
 
+  /// Visibility bulk mutations still use an unscoped legacy endpoint and stay
+  /// disabled. Default-scope deletion is enabled only after the current server
+  /// advertises the scoped-delete contract.
   private var bulkServerMutationsAvailable: Bool { false }
+  private var bulkDeletionServerMutationAvailable: Bool { defaultMemoryDeleteSupported }
   var areBulkServerMutationsAvailable: Bool { bulkServerMutationsAvailable }
+  var isBulkDeletionAvailable: Bool { bulkDeletionServerMutationAvailable }
+
+  @Published private(set) var defaultMemoryDeleteSupported = false
 
   // MARK: - Initialization
 
@@ -621,6 +629,7 @@ class MemoriesViewModel: ObservableObject {
     searchResults = []
     canonicalLifecycleExposed = false
     canonicalLifecycleCapabilityEstablished = false
+    defaultMemoryDeleteSupported = false
     selectedLayerFilter = .defaultAccess
     selectedTags = []
     filteredFromDatabase = []
@@ -2036,8 +2045,8 @@ struct MemoriesPage: View {
     } message: {
       Text(
         viewModel.canonicalLifecycleExposed
-          ? "This would delete Short-term and Long-term memories only. Archive is not included. Bulk deletion remains disabled until the backend supports layer-scoped mutation semantics."
-          : "This would delete default memories. Bulk deletion remains disabled until the backend supports scoped mutation semantics."
+          ? "This deletes Short-term and Long-term memories only. Archive is not included."
+          : "This deletes your default memories."
       )
     }
   }
@@ -2482,13 +2491,13 @@ struct MemoriesPage: View {
       }
       .buttonStyle(.plain)
       .disabled(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+        !viewModel.isBulkDeletionAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
       )
       .opacity(
-        !viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
+        !viewModel.isBulkDeletionAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress
           ? 0.5 : 1
       )
-      .help("Bulk memory deletion is disabled until the backend supports layer-scoped operations.")
+      .help("Delete Short-term and Long-term memories; Archive is kept separate.")
     }
     .padding(.vertical, OmiSpacing.xxs)
     .frame(width: 200)

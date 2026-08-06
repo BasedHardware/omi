@@ -176,6 +176,10 @@ def run_canonical_short_term_maintenance_for_cohort(
         summary.lifecycle_write_enrolled_total = len(lifecycle.write_enrolled_uids)
         summary.lifecycle_backfill_read_ready_total = lifecycle.backfill.summary.read_ready_count
         summary.lifecycle_generation_reconciled_total = len(lifecycle.generation_reconciled_uids)
+        for reconcile_error in lifecycle.generation_reconcile_errors:
+            message = f"canonical_cohort_lifecycle:{reconcile_error}"
+            logger.warning("canonical_short_term_maintenance_cron: %s", message)
+            summary.errors.append(message)
     logger.info(
         "canonical_short_term_maintenance_cron: start run_id=%s user_count=%d",
         effective_run_id,

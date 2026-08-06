@@ -13,6 +13,7 @@ import database.vector_db as vector_db
 from database.vector_db import delete_memory_vector, upsert_memory_vector, upsert_memory_vectors_batch
 from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
+    delete_default_canonical_memories,
     delete_all_canonical_memories,
     delete_canonical_memory,
     memory_item_to_memorydb,
@@ -71,9 +72,7 @@ def _canonical_external_write_enabled_or_fail_closed(uid: str) -> bool:
     return False
 
 
-def _read_backend_or_fail_closed(
-    uid: str, *, legacy: "LegacyMemoryBackend", canonical: "CanonicalMemoryBackend"
-):
+def _read_backend_or_fail_closed(uid: str, *, legacy: "LegacyMemoryBackend", canonical: "CanonicalMemoryBackend"):
     """Choose a read backend without ever reclassifying an enrolled user as legacy."""
 
     if resolve_memory_system(uid) != MemorySystem.CANONICAL:
@@ -281,8 +280,7 @@ def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List
     ]
 
 
-def _canonical_search_memories_mcp(
-    uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
+def _canonical_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
     capped_limit = max(1, min(limit, 20))
     items = search_canonical_memories(uid, query, limit=capped_limit)
     formatted: List[McpSearchPayload] = []
@@ -364,6 +362,11 @@ class LegacyMemoryBackend:
     def delete_all(self, uid: str) -> None:
         memories_db.delete_all_memories(uid)
 
+    def delete_default(self, uid: str) -> None:
+        # Legacy memories have no separate Archive tier, so the default scope
+        # retains the legacy backend's existing delete-all behavior.
+        self.delete_all(uid)
+
 
 class CanonicalMemoryBackend:
     def read(
@@ -439,6 +442,9 @@ class CanonicalMemoryBackend:
 
     def delete_all(self, uid: str) -> None:
         delete_all_canonical_memories(uid)
+
+    def delete_default(self, uid: str) -> None:
+        delete_default_canonical_memories(uid)
 
 
 class MemoryService:
@@ -593,6 +599,9 @@ class MemoryService:
     def delete_all(self, uid: str) -> None:
         self._resolve_mutation_backend(uid).delete_all(uid)
 
+    def delete_default(self, uid: str) -> None:
+        self._resolve_mutation_backend(uid).delete_default(uid)
+
     def retract_conversation_memories(self, uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
         backend = self._resolve_mutation_backend(uid)
         if backend is self._legacy:
@@ -630,9 +639,7 @@ class MemoryService:
         ``require_canonical_promotion`` remains accepted for compatibility, but
         canonical external writes are always processed before durable admission.
         """
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             payload = required_processing_payload(memory_db.model_dump(mode="python"), source_surface=consumer)
             committed_id = self._canonical.write(uid, payload)
             item = read_canonical_memory_item(uid, committed_id or memory_db.id)
@@ -676,9 +683,7 @@ class MemoryService:
         require_canonical_promotion: bool = True,
     ) -> List[MemoryDB]:
         """Batch-create external memories with legacy vector upsert when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             payloads = [
                 required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
                 for memory in memory_dbs
@@ -728,9 +733,7 @@ class MemoryService:
         delete_vector: bool = True,
     ) -> None:
         """Delete external memory with legacy vector cleanup when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             try:
                 self._canonical.delete(uid, memory_id)
             except ValueError:
@@ -762,9 +765,7 @@ class MemoryService:
         upsert_vector: bool = True,
     ) -> MemoryDB:
         """Update external memory content with legacy vector upsert when applicable."""
-        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
-            uid
-        ):
+        if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(uid):
             try:
                 return self._canonical.update_content(uid, memory_id, content)
             except ValueError:

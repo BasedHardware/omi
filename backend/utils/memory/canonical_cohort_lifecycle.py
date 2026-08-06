@@ -31,7 +31,11 @@ from utils.memory.canonical_memory_onboarding import (
     reconcile_canonical_memory_onboarding,
 )
 from utils.memory.memory_system import list_canonical_cohort_uids
-from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import (
+    V3AccountGenerationFailureReason,
+    V3TrustedAccountGenerationReadError,
+    read_memory_v3_trusted_account_generation,
+)
 from utils.memory.v3.limited_rollout_config import build_whitelisted_user_control_state
 
 
@@ -43,6 +47,7 @@ class CanonicalCohortLifecycleReport:
     backfill_ready_uids: tuple[str, ...]
     generation_reconciled_uids: tuple[str, ...]
     backfill: CanonicalLegacyBackfillPage
+    generation_reconcile_errors: tuple[str, ...] = ()
 
 
 def _inert_control_payload(uid: str) -> dict[str, Any]:
@@ -164,16 +169,32 @@ def run_canonical_cohort_lifecycle() -> CanonicalCohortLifecycleReport:
     backfill_ready = tuple(
         uid for uid in list_canonical_cohort_uids() if checkpoint_store.read(uid).state == MigrationState.read_ready
     )
-    generation_reconciled = tuple(
-        uid for uid in backfill_ready if _reconcile_terminal_backfill_generation(uid=uid)
-    )
+    # One principal's malformed or missing trusted state must fail closed for
+    # that principal only. Raising here starved every other cohort user's
+    # lifecycle progression on each scheduled run.
+    generation_reconciled: list[str] = []
+    reconcile_errors: list[str] = []
+    for uid in backfill_ready:
+        try:
+            if _reconcile_terminal_backfill_generation(uid=uid):
+                generation_reconciled.append(uid)
+        except V3TrustedAccountGenerationReadError as exc:
+            if exc.reason == V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
+                # A read_ready checkpoint without a migrated state head is a
+                # legacy principal that has not produced one yet: preserved,
+                # reconciled once the head exists, and not a cohort error.
+                continue
+            reconcile_errors.append(f"uid={uid}: generation_reconcile:{exc.reason.value}")
+        except RuntimeError as exc:
+            reconcile_errors.append(f"uid={uid}: generation_reconcile:{exc}")
     return CanonicalCohortLifecycleReport(
         onboarding=onboarding,
         write_enrolled_uids=tuple(write_enrolled),
         preserved_uids=tuple(preserved),
         backfill_ready_uids=backfill_ready,
-        generation_reconciled_uids=generation_reconciled,
+        generation_reconciled_uids=tuple(generation_reconciled),
         backfill=backfill,
+        generation_reconcile_errors=tuple(reconcile_errors),
     )
 
 

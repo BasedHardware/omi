@@ -748,11 +748,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Gói của bạn sẽ gia hạn vào $date.';
-  }
-
-  @override
   String get basicPlan => 'Gói miễn phí';
 
   @override
@@ -2133,16 +2128,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get editMemory => '✏️ Chỉnh sửa bộ nhớ';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Ghim làm chuẩn';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Bỏ ghim khỏi chuẩn';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Bộ nhớ chuẩn';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Luôn trong ngữ cảnh';
 
   @override
   String get memoryContentHint => 'Tôi thích ăn kem...';
@@ -9773,4 +9768,54 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Quá cũ để đồng bộ — Omi không thể chấp nhận';
+
+  @override
+  String get planSheetChooseYourPlan => 'Chọn gói của bạn để mở khóa Omi không giới hạn.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Có sẵn trên Mac, di động và web';
+
+  @override
+  String get popularBadge => 'PHỔ BIẾN';
+
+  @override
+  String get worksOnDesktop => 'Hoạt động trên máy tính';
+
+  @override
+  String get noDesktopAccess => 'Không hoạt động trên máy tính';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months tháng / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Miễn phí $count tháng',
+      one: 'Miễn phí 1 tháng',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi miễn phí, nhưng bản miễn phí có những giới hạn ảnh hưởng đến trải nghiệm của bạn:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Độ trễ 5-7 giây (không theo thời gian thực)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Chuyển xuống bản miễn phí';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Nhận quyền truy cập không giới hạn miễn phí';
+
+  @override
+  String get shareDataForTraining => 'Chia sẻ dữ liệu để huấn luyện';
+
+  @override
+  String get yourRequestUnderReview => 'Yêu cầu của bạn đang được xem xét';
 }

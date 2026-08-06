@@ -90,6 +90,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
         'X-Omi-Memory-Next-Cursor',
         'X-Omi-Memory-Device-Scope-Supported',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+        'X-Omi-Memory-Default-Delete-Supported',
         'Link',
         'Cache-Control',
     }
@@ -97,6 +98,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
 
 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-Exposed'
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
+_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
 
 
 @dataclass(frozen=True)
@@ -283,6 +285,7 @@ def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
         headers={
             _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
             _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+            _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
         },
     )
 
@@ -353,6 +356,10 @@ def _set_device_scope_capability_header(http_response: Response, *, supported: b
 
 def _set_canonical_lifecycle_exposure_header(http_response: Response, *, exposed: bool) -> None:
     http_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = 'true' if exposed else 'false'
+
+
+def _set_default_delete_capability_header(http_response: Response, *, supported: bool) -> None:
+    http_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true' if supported else 'false'
 
 
 def _canonical_lifecycle_exposed_for(memory_response: V3ComposedResponse) -> bool:
@@ -793,6 +800,7 @@ def get_memories(
             headers={
                 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
                 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+                _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
             },
         )
 
@@ -800,6 +808,7 @@ def get_memories(
         _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
         _set_device_scope_capability_header(response, supported=True)
         _set_canonical_lifecycle_exposure_header(response, exposed=True)
+        _set_default_delete_capability_header(response, supported=True)
         # Clamp pagination parameters before handing an eligible account to a
         # canonical reader.
         clamped_offset = max(0, offset)
@@ -831,6 +840,7 @@ def get_memories(
 
     _set_device_scope_capability_header(response, supported=False)
     _set_canonical_lifecycle_exposure_header(response, exposed=False)
+    _set_default_delete_capability_header(response, supported=False)
 
     if memory_runtime.service is None:
         logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
@@ -847,6 +857,7 @@ def get_memories(
     memory_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = (
         'true' if canonical_lifecycle_exposed else 'false'
     )
+    memory_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true'
     _apply_memory_response_headers(response, memory_response)
     logger.info(
         "v3_get route=GET /v3/memories source=%s status=%s decision=%s",
@@ -1009,12 +1020,19 @@ def delete_memory(
 
 @router.delete('/v3/memories', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memories(
+    scope: Literal['all', 'default'] = Query(
+        'all',
+        description="Delete all memories or only default-access Short-term and Long-term memories.",
+    ),
     uid: str = Depends(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
 ):
     if _canonical_write_enabled_or_fail_closed(uid):
-        MemoryService().delete_all(uid)
+        if scope == 'default':
+            MemoryService().delete_default(uid)
+        else:
+            MemoryService().delete_all(uid)
         _mirror_delete_all_into_legacy(uid)
         return {'status': 'ok'}
 

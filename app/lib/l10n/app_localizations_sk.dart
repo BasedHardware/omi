@@ -749,11 +749,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Váš plán sa obnoví $date.';
-  }
-
-  @override
   String get basicPlan => 'Bezplatný plán';
 
   @override
@@ -2135,16 +2130,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String get editMemory => '✏️ Upraviť pamäť';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Pripnúť ako základ';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Odopnúť zo základu';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Základná pamäť';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vždy v kontexte';
 
   @override
   String get memoryContentHint => 'Rád jem zmrzlinu...';
@@ -9769,4 +9764,55 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Príliš staré na synchronizáciu — Omi ho nemôže prijať';
+
+  @override
+  String get planSheetChooseYourPlan => 'Vyberte si plán a odomknite neobmedzené Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Dostupné na Macu, mobile a webe';
+
+  @override
+  String get popularBadge => 'OBĽÚBENÉ';
+
+  @override
+  String get worksOnDesktop => 'Funguje na počítači';
+
+  @override
+  String get noDesktopAccess => 'Nefunguje na počítači';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mesiacov / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mesiacov zadarmo',
+      many: '$count mesiaca zadarmo',
+      few: '$count mesiace zadarmo',
+      one: '$count mesiac zadarmo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi je zadarmo, ale bezplatná verzia má obmedzenia, ktoré ovplyvňujú váš zážitok:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Oneskorenie 5–7 sekúnd (nie v reálnom čase)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Prejsť na bezplatnú verziu';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Získajte neobmedzený prístup zadarmo';
+
+  @override
+  String get shareDataForTraining => 'Zdieľať údaje na trénovanie';
+
+  @override
+  String get yourRequestUnderReview => 'Vaša žiadosť sa posudzuje';
 }
