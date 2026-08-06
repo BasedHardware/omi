@@ -130,6 +130,68 @@ void main() {
       expect(harness.drainPasses, 1);
     });
 
+    test('opted-in background device reconnect runs one recovery pass', () async {
+      final harness = _TransferHarness()..backgroundDeviceRecoveryEnabled = true;
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      await harness.coordinator.wake(WakeTrigger.deviceConnected);
+
+      expect(harness.reconcilePasses, 1);
+      expect(harness.discoveryPasses, 1);
+      expect(harness.drainPasses, 1);
+    });
+
+    test('background device reconnect requires persistent BLE and auto-upload opt-ins', () async {
+      final noPersistentBle = _TransferHarness();
+      final noAutoUpload = _TransferHarness(autoUploadEnabled: false)..backgroundDeviceRecoveryEnabled = true;
+      addTearDown(noPersistentBle.dispose);
+      addTearDown(noAutoUpload.dispose);
+
+      noPersistentBle.coordinator.setForeground(false);
+      noAutoUpload.coordinator.setForeground(false);
+      await noPersistentBle.coordinator.wake(WakeTrigger.deviceConnected);
+      await noAutoUpload.coordinator.wake(WakeTrigger.deviceConnected);
+
+      expect(noPersistentBle.discoveryPasses, 0);
+      expect(noPersistentBle.drainPasses, 0);
+      expect(noAutoUpload.discoveryPasses, 0);
+      expect(noAutoUpload.drainPasses, 0);
+    });
+
+    test('persistent BLE opt-in does not authorize other background wakes', () async {
+      final harness = _TransferHarness()..backgroundDeviceRecoveryEnabled = true;
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      await harness.coordinator.wake(WakeTrigger.connectivityRestored);
+      await harness.coordinator.wake(WakeTrigger.cooldownElapsed);
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+
+      expect(harness.reconcilePasses, 0);
+      expect(harness.discoveryPasses, 0);
+      expect(harness.drainPasses, 0);
+    });
+
+    test('failed background reconnect pass persists for foreground retry without a timer', () async {
+      final harness = _TransferHarness()
+        ..backgroundDeviceRecoveryEnabled = true
+        ..drainFails = true;
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      await harness.coordinator.wake(WakeTrigger.deviceConnected);
+
+      expect(harness.drainPasses, 1);
+      expect(harness.walState, 'miss');
+      expect(harness.scheduledCooldowns, isEmpty);
+      expect(harness.coordinator.nextCooldownAt, isNull);
+
+      harness.coordinator.setForeground(true);
+      await harness.coordinator.wake(WakeTrigger.foregrounded);
+      expect(harness.drainPasses, 2);
+    });
+
     test('startup resumes a pending backlog once without loss or duplication', () async {
       final sharedBacklog = <String>['pending-wal'];
       final drainedWalIds = <String>[];
@@ -195,6 +257,67 @@ void main() {
       expect(harness.scheduledCooldowns, hasLength(1));
       expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
     });
+
+    test('auto-sync opt-out preserves manual authority across repeated contention', () async {
+      final harness = _TransferHarness(autoUploadEnabled: false)..drainContended = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      expect(harness.drainPasses, 1);
+      expect(harness.drainTriggers, [WakeTrigger.userRetry]);
+      expect(harness.scheduledCooldowns.single.delay, const Duration(seconds: 5));
+
+      harness.scheduledCooldowns.single.callback();
+      await _settle();
+      expect(harness.drainPasses, 2);
+      expect(harness.drainTriggers, [
+        WakeTrigger.userRetry,
+        WakeTrigger.userRetry,
+      ]);
+      expect(harness.scheduledCooldowns.last.delay, const Duration(seconds: 10));
+
+      harness.drainContended = false;
+      harness.scheduledCooldowns.last.callback();
+      await _settle();
+
+      expect(harness.drainPasses, 3);
+      expect(harness.drainTriggers.last, WakeTrigger.userRetry);
+      expect(harness.backlog, isEmpty);
+    });
+
+    test('completed device snapshot retries as local upload without rearming', () async {
+      final harness = _TransferHarness(autoUploadEnabled: false)
+        ..drainFails = true
+        ..drainHasDeviceSnapshotReceipt = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      harness.scheduledCooldowns.single.callback();
+      await _settle();
+
+      expect(
+        harness.drainTriggers,
+        [WakeTrigger.userRetry, WakeTrigger.userRetryLocalUpload],
+      );
+    });
+
+    test('later success invalidates an older scheduled cooldown callback', () async {
+      final harness = _TransferHarness()..drainContended = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      final staleCooldown = harness.scheduledCooldowns.single;
+
+      harness.drainContended = false;
+      await harness.coordinator.wake(WakeTrigger.userRetry);
+      expect(harness.drainPasses, 2);
+      expect(harness.coordinator.nextCooldownAt, isNull);
+
+      staleCooldown.callback();
+      await _settle();
+
+      expect(harness.drainPasses, 2);
+    });
   });
 }
 
@@ -218,6 +341,7 @@ class _TransferHarness {
       refreshPending: _refreshPending,
       drain: _drain,
       autoUploadEnabled: () => _autoUploadEnabled,
+      backgroundDeviceRecoveryEnabled: () => backgroundDeviceRecoveryEnabled,
       connectivityChanges: connectivity.stream,
       initiallyConnected: true,
       clock: () => DateTime.utc(2026, 1, 1),
@@ -237,7 +361,9 @@ class _TransferHarness {
   bool drainFails = false;
   bool drainNeedsReconciliation = false;
   bool drainContended = false;
+  bool drainHasDeviceSnapshotReceipt = false;
   bool uploadedWalAwaitingReconcile = false;
+  bool backgroundDeviceRecoveryEnabled = false;
   bool reconciledUploadedWal = false;
   bool reofferedUploadedWal = false;
   String walState = 'miss';
@@ -245,6 +371,7 @@ class _TransferHarness {
   int discoveryPasses = 0;
   int pendingRefreshes = 0;
   int drainPasses = 0;
+  final List<WakeTrigger> drainTriggers = [];
   int _concurrentDrains = 0;
   int maximumConcurrentDrains = 0;
 
@@ -269,9 +396,10 @@ class _TransferHarness {
     pendingRefreshes++;
   }
 
-  Future<RecordingTransferDrainResult> _drain() async {
+  Future<RecordingTransferDrainResult> _drain(WakeTrigger trigger) async {
     if (backlog.isEmpty) return const RecordingTransferDrainResult.skipped();
     drainPasses++;
+    drainTriggers.add(trigger);
     _concurrentDrains++;
     maximumConcurrentDrains = maximumConcurrentDrains < _concurrentDrains ? _concurrentDrains : maximumConcurrentDrains;
     try {
@@ -287,6 +415,7 @@ class _TransferHarness {
           attempted: true,
           failed: true,
           needsReconciliation: drainNeedsReconciliation,
+          hasDeviceSnapshotReceipt: drainHasDeviceSnapshotReceipt,
         );
       }
       drainedWalIds.addAll(backlog);

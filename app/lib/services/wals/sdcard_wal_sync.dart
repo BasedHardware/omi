@@ -14,9 +14,42 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
+/// Ends the legacy first-packet deadline only for payloads that the legacy
+/// parser can consume. Ring firmware replies with two-byte ACKs on the same
+/// characteristic; accepting one as data would disable the timeout forever.
+class LegacyStorageFirstPacketDeadline {
+  LegacyStorageFirstPacketDeadline({required this.timeout, required this.onTimeout});
+
+  final Duration timeout;
+  final void Function() onTimeout;
+  Timer? _timer;
+  bool _acceptedPacket = false;
+
+  static bool accepts(List<int> value) => value.length == 1 || value.length == 83 || value.length == 440;
+
+  void start() {
+    _timer = Timer(timeout, () {
+      if (!_acceptedPacket) onTimeout();
+    });
+    if (_acceptedPacket) _timer?.cancel();
+  }
+
+  bool observe(List<int> value) {
+    if (!accepts(value)) return false;
+    if (!_acceptedPacket) {
+      _acceptedPacket = true;
+      _timer?.cancel();
+    }
+    return true;
+  }
+
+  void cancel() => _timer?.cancel();
+}
+
 class SDCardWalSyncImpl implements SDCardWalSync {
   List<Wal> _wals = [];
   BtDevice? _device;
+  int _deviceBindingGeneration = 0;
 
   StreamSubscription? _storageStream;
 
@@ -276,18 +309,29 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
-    bool firstDataReceived = false;
-    Timer? timeoutTimer;
+    late final LegacyStorageFirstPacketDeadline firstPacketDeadline;
+    firstPacketDeadline = LegacyStorageFirstPacketDeadline(
+      timeout: const Duration(seconds: 5),
+      onTimeout: () {
+        if (completer.isCompleted) return;
+        hasError = true;
+        final error = TimeoutException('No data received from SD card within 5 seconds');
+        Logger.debug('SD card read timeout: ${error.message}');
+        DebugLogManager.logWarning('SD card BLE read timeout: no data in 5s', {'offset': offset});
+        completer.completeError(error);
+      },
+    );
 
     _storageStream = await _getBleStorageBytesListener(
       deviceId,
       onStorageBytesReceived: (List<int> value) async {
         if (value.isEmpty || hasError) return;
 
-        if (!firstDataReceived) {
-          firstDataReceived = true;
-          timeoutTimer?.cancel();
+        if (firstPacketDeadline.observe(value)) {
           Logger.debug('First data received, timeout cancelled');
+        } else {
+          Logger.debug('Ignoring unsupported legacy SD notification (${value.length} bytes)');
+          return;
         }
 
         if (value.length == 1) {
@@ -345,15 +389,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
-      if (!firstDataReceived && !completer.isCompleted) {
-        hasError = true;
-        final error = TimeoutException('No data received from SD card within 5 seconds');
-        Logger.debug('SD card read timeout: ${error.message}');
-        DebugLogManager.logWarning('SD card BLE read timeout: no data in 5s', {'offset': offset});
-        completer.completeError(error);
-      }
-    });
+    firstPacketDeadline.start();
 
     try {
       await completer.future;
@@ -361,7 +397,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       rethrow;
     } finally {
       await _storageStream?.cancel();
-      timeoutTimer.cancel();
+      firstPacketDeadline.cancel();
     }
 
     // After download: compute accurate duration from actual frame count
@@ -415,18 +451,29 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     await _storageStream?.cancel();
     final completer = Completer<bool>();
     bool hasError = false;
-    bool firstDataReceived = false;
-    Timer? timeoutTimer;
+    late final LegacyStorageFirstPacketDeadline firstPacketDeadline;
+    firstPacketDeadline = LegacyStorageFirstPacketDeadline(
+      timeout: const Duration(seconds: 5),
+      onTimeout: () {
+        if (completer.isCompleted) return;
+        hasError = true;
+        final error = TimeoutException('No data received from SD card within 5 seconds');
+        Logger.debug('SD card read timeout: ${error.message}');
+        DebugLogManager.logWarning('SD card BLE read timeout: no data in 5s', {'offset': offset});
+        completer.completeError(error);
+      },
+    );
 
     _storageStream = await _getBleStorageBytesListener(
       deviceId,
       onStorageBytesReceived: (List<int> value) async {
         if (value.isEmpty || hasError) return;
 
-        if (!firstDataReceived) {
-          firstDataReceived = true;
-          timeoutTimer?.cancel();
+        if (firstPacketDeadline.observe(value)) {
           Logger.debug('First data received, timeout cancelled');
+        } else {
+          Logger.debug('Ignoring unsupported legacy SD notification (${value.length} bytes)');
+          return;
         }
 
         if (value.length == 1) {
@@ -555,15 +602,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
-      if (!firstDataReceived && !completer.isCompleted) {
-        hasError = true;
-        final error = TimeoutException('No data received from SD card within 5 seconds');
-        Logger.debug('SD card read timeout: ${error.message}');
-        DebugLogManager.logWarning('SD card BLE read timeout: no data in 5s', {'offset': offset});
-        completer.completeError(error);
-      }
-    });
+    firstPacketDeadline.start();
 
     try {
       await completer.future;
@@ -571,7 +610,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       rethrow;
     } finally {
       await _storageStream?.cancel();
-      timeoutTimer.cancel();
+      firstPacketDeadline.cancel();
     }
 
     // Flush remaining data, respecting any unprocessed timestamp markers
@@ -866,9 +905,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   void setDevice(BtDevice? device) async {
+    final generation = ++_deviceBindingGeneration;
     _device = device;
     final syncingWal = _wals.where((w) => w.isSyncing).firstOrNull;
-    _wals = await _getMissingWals();
+    final discoveredWals = await _getMissingWals();
+    if (generation != _deviceBindingGeneration) return;
+    _wals = discoveredWals;
     // Re-add the syncing WAL if it was lost
     if (syncingWal != null && !_wals.any((w) => w.id == syncingWal.id)) {
       _wals = [syncingWal, ..._wals];

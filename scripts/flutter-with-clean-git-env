@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# This wrapper owns the app working directory as well as the environment
+# boundary. Hook callers must not reproduce either setup step.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT/app"
+
+# Git exports repository-local GIT_* variables to hooks. Flutter invokes Git to
+# determine its own SDK version; inheriting the caller's GIT_DIR makes Flutter
+# inspect the Omi worktree instead and report 0.0.0-unknown. Clear only Git's
+# documented repository-local variables, then execute the real Flutter SDK.
+while IFS= read -r variable; do
+  unset "$variable"
+done < <(git rev-parse --local-env-vars)
+
+exec flutter "$@"

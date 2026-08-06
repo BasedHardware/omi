@@ -65,7 +65,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     });
 
     final syncProvider = context.read<SyncProvider>();
-    final waveformData = await syncProvider.getWaveformForWal(widget.wal.id);
+    final waveformData = await syncProvider.getWaveformForWal(widget.wal);
 
     if (mounted) {
       setState(() {

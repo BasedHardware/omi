@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wals/conversation_audio_assembler.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/mutex.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/utils/audio_player_utils.dart';
@@ -18,6 +22,65 @@ import 'package:omi/utils/waveform_utils.dart';
 enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
+
+typedef LogicalArchivePlaybackMaterializer = Future<Wal?> Function(
+  Wal logicalWal,
+  List<Wal> members,
+);
+
+bool _isPhysicalRingArchive(Wal wal) =>
+    wal.originalStorage == WalStorage.sdcard &&
+    (wal.sourceId?.startsWith('archive_ring_') == true || wal.sourceId?.startsWith('archive2_ring_') == true) &&
+    RingProtocol.parseRecoverySourceRange(wal.sourceId) != null;
+
+WalStatus _logicalArchiveStatus(List<Wal> members) {
+  if (members.any((wal) => wal.status == WalStatus.corrupted)) return WalStatus.corrupted;
+  if (members.any((wal) => wal.status == WalStatus.miss)) return WalStatus.miss;
+  if (members.any((wal) => wal.status == WalStatus.inProgress)) return WalStatus.inProgress;
+  if (members.any((wal) => wal.status == WalStatus.uploaded)) return WalStatus.uploaded;
+  return WalStatus.synced;
+}
+
+class _LogicalRingArchiveWal extends Wal {
+  _LogicalRingArchiveWal(this.members)
+      : assert(members.isNotEmpty),
+        super(
+          timerStart: members.first.timerStart,
+          codec: members.first.codec,
+          seconds: _wallSpanSeconds(members),
+          captureEndSeconds: _captureEndSeconds(members),
+          sampleRate: members.first.sampleRate,
+          channel: members.first.channel,
+          status: _logicalArchiveStatus(members),
+          storage: WalStorage.disk,
+          device: members.first.device,
+          deviceModel: members.first.deviceModel,
+          totalFrames: members.fold(0, (total, wal) => total + wal.totalFrames),
+          originalStorage: WalStorage.sdcard,
+          sourceId: _sourceId(members),
+          uploadIntent: WalUploadIntent.historicalBackfill,
+          retryCount: members.map((wal) => wal.retryCount).reduce((left, right) => left > right ? left : right),
+        ) {
+    isSyncing = members.any((wal) => wal.isSyncing);
+    syncStartedAt = members
+        .map((wal) => wal.syncStartedAt)
+        .whereType<DateTime>()
+        .fold<DateTime?>(null, (earliest, value) => earliest == null || value.isBefore(earliest) ? value : earliest);
+  }
+
+  final List<Wal> members;
+
+  static double _captureEndSeconds(List<Wal> members) =>
+      members.map((wal) => wal.wallClockEndSeconds).reduce((left, right) => left > right ? left : right);
+
+  static int _wallSpanSeconds(List<Wal> members) => (_captureEndSeconds(members) - members.first.timerStart).ceil();
+
+  static String _sourceId(List<Wal> members) {
+    final first = RingProtocol.parseRecoverySourceRange(members.first.sourceId)!;
+    final last = RingProtocol.parseRecoverySourceRange(members.last.sourceId)!;
+    return 'logical_ring_archives_${first.start}_${last.end}_${members.first.timerStart}';
+  }
+}
 
 List<SyncedConversationPointer> sortSyncedConversationPointers(
   Iterable<SyncedConversationPointer> pointers,
@@ -40,6 +103,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final Future<void> Function(LocalWalSyncImpl phone) _waitForWalReady;
   final Future<void> Function() _startRecovery;
   final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
+  final LogicalArchivePlaybackMaterializer? _logicalArchivePlaybackMaterializer;
+  final Mutex _syncOperationMutex = Mutex();
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
   @visibleForTesting
@@ -48,6 +113,94 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // WAL management
   List<Wal> _allWals = [];
   List<Wal> get allWals => _allWals;
+  RingBacklogDrainReceipt? _manualRingBacklogReceipt;
+  List<Wal>? _userVisibleWalsCache;
+  int _userVisibleWalsCacheStamp = 0;
+  final Map<String, Future<Wal?>> _logicalPlaybackWals = {};
+
+  int get _effectiveConversationBoundarySeconds => effectiveConversationBoundarySeconds(
+        SharedPreferencesUtil().conversationSilenceDuration,
+      );
+
+  /// Shared invalidation key for every cache derived from [userVisibleWals].
+  ///
+  /// Conversation timeout changes can regroup the same underlying WAL list,
+  /// so list identity and length alone are insufficient.
+  int get _displayCacheStamp => Object.hash(
+        identityHashCode(_allWals),
+        _allWals.length,
+        _effectiveConversationBoundarySeconds,
+      );
+
+  /// User-facing recordings exclude the pendant's immutable transfer ranges.
+  ///
+  /// Those ranges are internal assembly inputs, not independently meaningful
+  /// recordings. They become visible only after LocalWalSync has compacted
+  /// them into one historical archive or canonical conversation artifact.
+  List<Wal> get userVisibleWals {
+    final effectiveBoundarySeconds = _effectiveConversationBoundarySeconds;
+    final stamp = _displayCacheStamp;
+    final cached = _userVisibleWalsCache;
+    if (cached != null && _userVisibleWalsCacheStamp == stamp) return cached;
+    final nonRaw = _allWals
+        .where(
+          (wal) => wal.originalStorage != WalStorage.sdcard || RingProtocol.parseSourceRange(wal.sourceId) == null,
+        )
+        .toList();
+    final physicalArchives = nonRaw.where(_isPhysicalRingArchive).toList()
+      ..sort((left, right) {
+        final deviceCompare = left.device.compareTo(right.device);
+        if (deviceCompare != 0) return deviceCompare;
+        final leftRange = RingProtocol.parseRecoverySourceRange(left.sourceId);
+        final rightRange = RingProtocol.parseRecoverySourceRange(right.sourceId);
+        final sequenceCompare = (leftRange?.start ?? 0).compareTo(rightRange?.start ?? 0);
+        if (sequenceCompare != 0) return sequenceCompare;
+        final timeCompare = left.timerStart.compareTo(right.timerStart);
+        if (timeCompare != 0) return timeCompare;
+        return left.id.compareTo(right.id);
+      });
+    final groups = <List<Wal>>[];
+    for (final archive in physicalArchives) {
+      if (groups.isEmpty) {
+        groups.add([archive]);
+        continue;
+      }
+      final current = groups.last;
+      final previous = current.last;
+      final sameEncoding = previous.device == archive.device &&
+          previous.codec == archive.codec &&
+          previous.sampleRate == archive.sampleRate &&
+          previous.channel == archive.channel &&
+          previous.frameSize == archive.frameSize;
+      final wallGap = archive.timerStart - previous.wallClockEndSeconds;
+      if (sameEncoding && wallGap < effectiveBoundarySeconds) {
+        current.add(archive);
+      } else {
+        groups.add([archive]);
+      }
+    }
+    final logicalArchives = groups.map((members) {
+      final immutableMembers = List<Wal>.unmodifiable(members);
+      return _LogicalRingArchiveWal(immutableMembers);
+    });
+    final visible = [
+      ...nonRaw.where((wal) => !_isPhysicalRingArchive(wal)),
+      ...logicalArchives,
+    ];
+    _userVisibleWalsCache = visible;
+    _userVisibleWalsCacheStamp = stamp;
+    return visible;
+  }
+
+  bool isLogicalRingArchiveDisplayWal(Wal wal) => wal is _LogicalRingArchiveWal;
+
+  bool canDeleteWal(Wal wal) => !isLogicalRingArchiveDisplayWal(wal);
+
+  List<Wal> _logicalMembersFor(Wal wal) => wal is _LogicalRingArchiveWal ? wal.members : const [];
+
+  @visibleForTesting
+  List<Wal> logicalRingArchiveMembersForTest(Wal wal) => List<Wal>.unmodifiable(_logicalMembersFor(wal));
+
   bool _isLoadingWals = false;
   bool get isLoadingWals => _isLoadingWals;
 
@@ -82,8 +235,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // cache off the input list's identity, so without stable refs here the
   // widget-level cache misses every rebuild and recomputes the sort.
   //
-  // Invalidation: stamp = identityHashCode(_allWals) ^ _allWals.length.
-  // This works because every wal-status mutation path in the codebase
+  // Invalidation includes the shared display cache stamp so a conversation
+  // timeout preference change also rebuilds these logical-WAL partitions.
+  // List identity works because every wal-status mutation path in the codebase
   // (sdcard, flash, storage, local) flips state in place, then notifies
   // the provider, which calls refreshWals() to reassign _allWals from
   // the wal service (see refreshWals at the bottom of this class). The
@@ -100,12 +254,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _filteredWalsCacheStamp = 0;
 
   void _ensureFilteredCaches() {
-    final stamp = identityHashCode(_allWals) ^ _allWals.length;
+    final stamp = _displayCacheStamp;
     if (_pendingWalsCache != null && _filteredWalsCacheStamp == stamp) return;
     final pending = <Wal>[];
     final synced = <Wal>[];
     final corrupted = <Wal>[];
-    for (final w in _allWals) {
+    for (final w in userVisibleWals) {
       if (w.status == WalStatus.synced) {
         synced.add(w);
       } else if (w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow) {
@@ -139,7 +293,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
-  List<Wal> get pendingDeletableWals => _allWals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
+  /// Logical recordings ready for a user-initiated upload.
+  ///
+  /// Raw pendant ranges and physical archive boundaries are intentionally
+  /// excluded so status cards describe the same recordings as the Sync list.
+  int get readyToSyncRecordingCount => userVisibleWals.where((w) => w.status == WalStatus.miss).length;
+
+  /// Logical recordings accepted by the server and awaiting reconciliation.
+  int get processingRecordingCount => userVisibleWals.where((w) => w.status == WalStatus.uploaded).length;
+
+  List<Wal> get pendingDeletableWals =>
+      userVisibleWals.where((w) => !w.isSyncing && w.status == WalStatus.miss).toList();
 
   // Count-only accessors for status-chip badges. Read length from the
   // shared cached partitions so the chips don't trigger an extra iteration
@@ -194,17 +358,18 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// thousands of wals and frequent `notifyListeners()` during active sync
   /// this avoids 5–15ms of redundant sort work per rebuild.
   List<Wal> get displaySortedWals {
-    final stamp = identityHashCode(_allWals) ^ _allWals.length;
+    final stamp = _displayCacheStamp;
     final cached = _sortedCache;
     if (cached != null && _sortedCacheStamp == stamp) return cached;
-    final list = List<Wal>.from(_allWals);
+    final list = List<Wal>.from(userVisibleWals);
     list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
     _sortedCache = list;
     _sortedCacheStamp = stamp;
     return list;
   }
 
-  int _countWhere(bool Function(WalSyncDisplayState) test) => _allWals.where((w) => test(w.syncDisplayState)).length;
+  int _countWhere(bool Function(WalSyncDisplayState) test) =>
+      userVisibleWals.where((w) => test(w.syncDisplayState)).length;
 
   int get syncingWalsCount => _countWhere((s) => s == WalSyncDisplayState.syncing);
   int get syncedWalsCount => _countWhere((s) => s == WalSyncDisplayState.synced);
@@ -241,26 +406,26 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   List<Wal> get filteredWals {
     if (_storageFilter == null) {
-      return _allWals;
+      return userVisibleWals;
     }
 
     // SD Card filter: show WALs on SD card OR transferred from SD card
     if (_storageFilter == WalStorage.sdcard) {
-      return _allWals
+      return userVisibleWals
           .where((wal) => wal.storage == WalStorage.sdcard || wal.originalStorage == WalStorage.sdcard)
           .toList();
     }
 
     // Flash Page filter: show WALs on flash page OR transferred from flash page
     if (_storageFilter == WalStorage.flashPage) {
-      return _allWals
+      return userVisibleWals
           .where((wal) => wal.storage == WalStorage.flashPage || wal.originalStorage == WalStorage.flashPage)
           .toList();
     }
 
     // Phone filter: show WALs on phone that are NOT originally from SD card or flash page
     if (_storageFilter == WalStorage.disk || _storageFilter == WalStorage.mem) {
-      return _allWals
+      return userVisibleWals
           .where(
             (wal) =>
                 (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
@@ -271,7 +436,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
 
     // Other filters
-    return _allWals.where((wal) => wal.storage == _storageFilter).toList();
+    return userVisibleWals.where((wal) => wal.storage == _storageFilter).toList();
   }
 
   // Sync state
@@ -337,12 +502,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
+    @visibleForTesting LogicalArchivePlaybackMaterializer? logicalArchivePlaybackMaterializer,
   })  : _walServiceOverride = walService,
         _uploadGate = uploadGate ?? SyncUploadGate.instance,
         _startBackgroundSync = startBackgroundSync,
         _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
         _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)),
+        _logicalArchivePlaybackMaterializer = logicalArchivePlaybackMaterializer {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -390,6 +557,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         drain: _drainEligibleWals,
         autoUploadEnabled: () =>
             !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
+        backgroundDeviceRecoveryEnabled: () =>
+            defaultTargetPlatform == TargetPlatform.android && SharedPreferencesUtil().backgroundModeEnabled,
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
       );
@@ -425,13 +594,25 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _walService.getSyncs().refreshWalsFromDevice();
   }
 
-  Future<RecordingTransferDrainResult> _drainEligibleWals() async {
+  Future<RecordingTransferDrainResult> _drainEligibleWals(WakeTrigger trigger) async {
     if (_isDisposed || _syncState.isProcessing) return const RecordingTransferDrainResult.contended();
-    if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) {
+    final syncs = _walService.getSyncs();
+    final activeRingTail = syncs.isRingAudioTailActive == true;
+    if ((syncs.isStorageSyncing && !activeRingTail) || syncs.isSdCardSyncing) {
       return const RecordingTransferDrainResult.contended();
     }
 
-    final hadEligibleWals = missingWals.isNotEmpty;
+    final isManualPass = trigger == WakeTrigger.userRetry || trigger == WakeTrigger.userRetryLocalUpload;
+    RingBacklogDrainReceipt? receipt =
+        isManualPass ? _manualRingBacklogReceipt : syncs.pendingAutomaticRingBacklogReceipt as RingBacklogDrainReceipt?;
+
+    // Only a brand-new user tap may arm a device snapshot. Once it yields a
+    // receipt, every upload/reconcile retry reuses that immutable boundary.
+    // This prevents a slow backend from repeatedly latching newer writeSeq.
+    final requestedRingDrain = activeRingTail && trigger == WakeTrigger.userRetry && receipt == null
+        ? syncs.requestActiveRingBacklogDrain(progress: this)
+        : null;
+    final hadEligibleWals = missingWals.isNotEmpty || requestedRingDrain != null || receipt != null;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 
     // Reconciles a persisted fair-use cooldown the server may already have
@@ -444,18 +625,88 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
-    final result = await _performSync(
-      operation: () => _walService.getSyncs().syncAll(progress: this),
-      context: 'coordinated recording transfer',
-      rethrowOnError: true,
-    );
-    await refreshWals();
+    AuthorizedRecoverySyncResult? authorizedResult;
+    var manualReceiptWasUsed = isManualPass && receipt != null;
+    var automaticReceiptWasUsed = !isManualPass && receipt != null;
+    var requestCancelled = false;
+    SyncLocalFilesResponse? result;
+    try {
+      result = await _performSync(
+        operation: () async {
+          if (requestedRingDrain != null) {
+            final completed = await requestedRingDrain;
+            if (completed == null) {
+              requestCancelled = true;
+              return null;
+            }
+            receipt = completed;
+            _manualRingBacklogReceipt = completed;
+            manualReceiptWasUsed = true;
+          }
+
+          final authorizedReceipt = receipt;
+          if (authorizedReceipt != null) {
+            authorizedResult = await syncs.syncAuthorizedRingRecovery(
+              receipt: authorizedReceipt,
+              progress: this,
+            ) as AuthorizedRecoverySyncResult;
+            return authorizedResult!.response;
+          }
+
+          // Ordinary wakes while the live tail owns BLE may upload only the
+          // fresh phone lane. A row retry and an exhausted receipt likewise
+          // stay phone-only; neither can start a second device reader.
+          final phoneOnly = syncs.isRingAudioTailActive == true ||
+              trigger == WakeTrigger.userRetryLocalUpload ||
+              trigger == WakeTrigger.ringBacklogSnapshotCompleted;
+          if (phoneOnly) {
+            return syncs.syncPhoneWals(
+              progress: this,
+              includeBackfill: false,
+            );
+          }
+          return syncs.syncAll(progress: this);
+        },
+        context: 'coordinated recording transfer',
+        rethrowOnError: true,
+      );
+      await refreshWals();
+    } catch (_) {
+      return RecordingTransferDrainResult(
+        attempted: true,
+        failed: true,
+        needsReconciliation: uploadedWals.isNotEmpty,
+        hasDeviceSnapshotReceipt: manualReceiptWasUsed,
+      );
+    }
+
+    if (requestCancelled) {
+      return const RecordingTransferDrainResult.skipped();
+    }
+    final failed = (result?.localUploadFailures ?? 0) > 0;
+    final deferred = authorizedResult?.hasDeferredRecovery ?? false;
+    if (authorizedResult != null && !failed && !deferred) {
+      final completedReceipt = receipt!;
+      if (manualReceiptWasUsed && identical(_manualRingBacklogReceipt, completedReceipt)) {
+        _manualRingBacklogReceipt = null;
+      }
+      if (automaticReceiptWasUsed) {
+        syncs.completeAutomaticRingBacklogReceipt(completedReceipt);
+      }
+    }
     return RecordingTransferDrainResult(
       attempted: true,
-      failed: (result?.localUploadFailures ?? 0) > 0,
+      failed: failed,
       needsReconciliation: uploadedWals.isNotEmpty,
+      deferred: deferred,
+      hasDeviceSnapshotReceipt: manualReceiptWasUsed,
     );
   }
+
+  /// Production drain seam exposed only so coordinator regressions can execute
+  /// the real provider orchestration with deterministic transports.
+  @visibleForTesting
+  Future<RecordingTransferDrainResult> drainEligibleWalsForTest(WakeTrigger trigger) => _drainEligibleWals(trigger);
 
   void _onAudioPlayerStateChanged() {
     notifyListeners();
@@ -495,6 +746,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> deleteWal(Wal wal) async {
+    if (!canDeleteWal(wal)) {
+      Logger.debug('SyncProvider: logical ring archive deletion is disabled to preserve complete recovery coverage');
+      return;
+    }
     await _walService.getSyncs().deleteWal(wal);
     await refreshWals();
   }
@@ -540,17 +795,28 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal) async {
-    // UI Sync/Auto Sync still call syncWal for a single row, but must not
-    // race a coordinator drain (or device download) on the same WAL stack.
-    if (_startBackgroundSync && _isTransferSeamBusy()) {
-      await _wakeTransfer(WakeTrigger.userRetry);
+    final logicalMembers = _logicalMembersFor(wal);
+    final selectedWal = logicalMembers.isEmpty
+        ? wal
+        : logicalMembers.firstWhere(
+            (member) => member.status == WalStatus.miss,
+            orElse: () => logicalMembers.first,
+          );
+    final isPhoneWal = selectedWal.storage == WalStorage.disk || selectedWal.storage == WalStorage.mem;
+    if (_startBackgroundSync && !isPhoneWal && _isTransferSeamBusy()) {
+      // A selected device row is not authority to drain the whole pendant.
+      // Keep the row retryable while the one BLE reader is occupied instead
+      // of translating its identity into a global coordinator wake.
+      const message = 'Device recording transfer is already in progress. Try this recording again when it finishes';
+      Logger.debug('SyncProvider: deferring selected device WAL ${selectedWal.id}: $message');
+      _updateSyncState(_syncState.toError(message: message, failedWal: wal));
       return;
     }
     await _uploadGate.prepareToUpload();
     if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
     final result = await _performSync(
-      operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
+      operation: () => _walService.getSyncs().syncWal(wal: selectedWal, progress: this),
       context: 'sync WAL ${wal.id}',
       failedWal: wal,
     );
@@ -564,10 +830,29 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isTransferSeamBusy() {
     if (_syncState.isProcessing) return true;
     final syncs = _walService.getSyncs();
-    return syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true;
+    return syncs.isRingAudioTailActive == true || syncs.isStorageSyncing == true || syncs.isSdCardSyncing == true;
   }
 
   Future<SyncLocalFilesResponse?> _performSync({
+    required Future<SyncLocalFilesResponse?> Function() operation,
+    required String context,
+    Wal? failedWal,
+    bool rethrowOnError = false,
+  }) async {
+    await _syncOperationMutex.acquire();
+    try {
+      return await _performSyncOwned(
+        operation: operation,
+        context: context,
+        failedWal: failedWal,
+        rethrowOnError: rethrowOnError,
+      );
+    } finally {
+      _syncOperationMutex.release();
+    }
+  }
+
+  Future<SyncLocalFilesResponse?> _performSyncOwned({
     required Future<SyncLocalFilesResponse?> Function() operation,
     required String context,
     Wal? failedWal,
@@ -658,16 +943,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> retrySync() async {
+    final failedWal = _syncState.failedWal;
+    if (failedWal != null) {
+      await syncWal(failedWal);
+      return;
+    }
     if (_startBackgroundSync) {
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
-    final failedWal = _syncState.failedWal;
-    if (failedWal != null) {
-      await syncWal(failedWal);
-    } else {
-      await _syncWalsDirect();
-    }
+    await _syncWalsDirect();
   }
 
   void clearSyncResult() {
@@ -727,6 +1012,77 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool isWalPlaying(String walId) => _audioPlayerUtils.isPlaying(walId);
   bool canPlayOrShareWal(Wal wal) => _audioPlayerUtils.canPlayOrShare(wal);
 
+  /// Resolves a user-visible logical ring row to one playable, ordered file.
+  /// Physical storage archives remain hidden; the detail page receives the
+  /// same conversation-shaped audio boundary used by cloud upload.
+  Future<Wal?> resolveWalForDetail(Wal wal) async {
+    final members = _logicalMembersFor(wal);
+    if (members.isEmpty) return wal;
+
+    final cached = _logicalPlaybackWals[wal.id];
+    if (cached != null) return cached;
+
+    final materialization = _logicalArchivePlaybackMaterializer != null
+        ? _logicalArchivePlaybackMaterializer!(wal, members)
+        : _materializeLogicalArchiveForPlayback(wal, members);
+    _logicalPlaybackWals[wal.id] = materialization;
+    final resolved = await materialization;
+    if (resolved == null) _logicalPlaybackWals.remove(wal.id);
+    return resolved;
+  }
+
+  Future<Wal?> _materializeLogicalArchiveForPlayback(
+    Wal logicalWal,
+    List<Wal> members,
+  ) async {
+    try {
+      final parts = <ConversationAudioPart>[];
+      for (final member in members) {
+        final path = await Wal.getFilePath(member.filePath);
+        if (path == null || !await File(path).exists()) return null;
+        parts.add(ConversationAudioPart(wal: member, file: File(path)));
+      }
+
+      final firstFile = parts.first.file;
+      final safeSource = logicalWal.sourceId!.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '');
+      final destination = File('${firstFile.parent.path}/playback_$safeSource.bin');
+      final assembly = await assembleConversationAudio(
+        parts: parts,
+        destination: destination,
+        silenceFrameFactory: encodeOpusSilenceFrame,
+        conversationBoundarySeconds: _effectiveConversationBoundarySeconds,
+      );
+      final framesPerSecond = logicalWal.codec.getFramesPerSecond();
+      final playable = Wal(
+        timerStart: assembly.timerStart,
+        codec: logicalWal.codec,
+        seconds: framesPerSecond > 0 ? (assembly.totalFrames + framesPerSecond - 1) ~/ framesPerSecond : 0,
+        captureEndSeconds: assembly.captureEndSeconds,
+        sampleRate: logicalWal.sampleRate,
+        channel: logicalWal.channel,
+        status: logicalWal.status,
+        storage: WalStorage.disk,
+        filePath: destination.path.split('/').last,
+        device: logicalWal.device,
+        deviceModel: logicalWal.deviceModel,
+        totalFrames: assembly.totalFrames,
+        originalStorage: WalStorage.sdcard,
+        sourceId: logicalWal.sourceId,
+        uploadIntent: logicalWal.uploadIntent,
+        retryCount: logicalWal.retryCount,
+      );
+      playable.isSyncing = logicalWal.isSyncing;
+      return playable;
+    } catch (error, stackTrace) {
+      Logger.handle(
+        error,
+        stackTrace,
+        message: 'Unable to assemble logical recording for playback',
+      );
+      return null;
+    }
+  }
+
   Future<void> toggleWalPlayback(Wal wal) async {
     await _audioPlayerUtils.togglePlayback(wal);
   }
@@ -747,15 +1103,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _audioPlayerUtils.skipBackward(duration: duration);
   }
 
-  Future<List<double>?> getWaveformForWal(String walId) async {
-    final wal = _allWals.firstWhere((w) => w.id == walId, orElse: () => throw Exception('WAL not found'));
-
-    String? wavFilePath = _audioPlayerUtils.getCachedAudioPath(walId);
+  Future<List<double>?> getWaveformForWal(Wal wal) async {
+    String? wavFilePath = _audioPlayerUtils.getCachedAudioPath(wal.id);
     if (wavFilePath == null && canPlayOrShareWal(wal)) {
       wavFilePath = await _audioPlayerUtils.ensureAudioFileExists(wal);
     }
 
-    return await compute(_generateWaveformInBackground, {'walId': walId, 'wavFilePath': wavFilePath});
+    return await compute(_generateWaveformInBackground, {'walId': wal.id, 'wavFilePath': wavFilePath});
   }
 
   static Future<List<double>?> _generateWaveformInBackground(Map<String, dynamic> params) async {

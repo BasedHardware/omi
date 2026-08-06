@@ -18,6 +18,7 @@ jobs:
       has_app_codegen: ${{ steps.changes.outputs.has_app_codegen }}
       has_app_compile_smoke: ${{ steps.changes.outputs.has_app_compile_smoke }}
       has_app_dart: ${{ steps.changes.outputs.has_app_dart }}
+      has_app_ios_native: ${{ steps.changes.outputs.has_app_ios_native }}
       has_app_l10n: ${{ steps.changes.outputs.has_app_l10n }}
       has_flutter_generated: ${{ steps.changes.outputs.has_flutter_generated }}
     steps:
@@ -281,6 +282,19 @@ jobs:
 
       - name: Setup Gradle for Flutter compile smoke
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # The repository intentionally does not track Flutter's generated
+          # gradlew scripts or wrapper jar. Pin the distribution declared by
+          # android/gradle/wrapper/gradle-wrapper.properties instead.
+          gradle-version: '8.14.2'
+
+      - name: Configure Flutter SDK for Gradle
+        working-directory: app
+        run: printf 'flutter.sdk=%s\n' "$FLUTTER_ROOT" > android/local.properties
+
+      - name: Run Android native unit tests
+        working-directory: app
+        run: gradle -p android testDevDebugUnitTest
 
       - name: Build Flutter Android dev debug APK
         working-directory: app
@@ -294,3 +308,15 @@ jobs:
         # Single ABI: a compile smoke doesn't need arm + arm64 + x86_64 native
         # libs, and the extra ABIs double disk usage during stripDebugSymbols.
         run: flutter build apk --debug --flavor dev --target-platform android-arm64
+
+  ios-native-unit-tests:
+    name: iOS Native Unit Tests
+    runs-on: macos-15
+    needs: changes
+    if: needs.changes.outputs.has_app_ios_native == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Run hermetic iOS BLE ownership tests
+        run: bash app/ios/test/run_ble_legacy_audio_ownership_tests.sh

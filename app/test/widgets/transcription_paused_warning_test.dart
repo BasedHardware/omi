@@ -87,7 +87,7 @@ void main() {
   }
 
   group('simplified status indicators (#6672)', () {
-    testWidgets('shows terminal live STT failure until the backend is ready again', (tester) async {
+    testWidgets('distinguishes retryable STT recovery from terminal unavailability', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);
       captureProvider.updateRecordingState(RecordingState.record);
@@ -108,6 +108,21 @@ void main() {
       expect(captureProvider.recordingState, RecordingState.record);
       expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
       final context = tester.element(find.byType(ConversationCaptureWidget));
+      expect(find.text(AppLocalizations.of(context).transcriptionReconnecting), findsWidgets);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsNothing);
+
+      captureProvider.onMessageEventReceived(
+        MessageServiceStatusEvent(
+          status: 'stt_failed',
+          outcome: 'upstream_error',
+          provider: 'deepgram',
+          retryable: false,
+          reason: 'unsupported_codec',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text(AppLocalizations.of(context).transcriptionReconnecting), findsNothing);
       expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsWidgets);
 
       captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
@@ -165,6 +180,26 @@ void main() {
       expect(find.text(listeningText), findsWidgets);
       expect(find.text(reconnectText), findsNothing);
       expect(find.byIcon(Icons.cloud_off), findsNothing);
+    });
+
+    testWidgets('shows reconnecting after an abnormal device live-socket close', (tester) async {
+      final captureProvider = CaptureProvider();
+      captureProvider.updateRecordingDevice(
+        BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50),
+      );
+      captureProvider.updateRecordingState(RecordingState.deviceRecord);
+
+      await pumpCaptureWidget(tester, captureProvider);
+      captureProvider.onClosed(1006);
+      await tester.pump();
+
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      expect(
+        find.text(AppLocalizations.of(context).transcriptionReconnecting),
+        findsWidgets,
+      );
+      expect(find.text(AppLocalizations.of(context).listening), findsNothing);
+      captureProvider.dispose();
     });
 
     testWidgets('paused state overrides Listening during device recording', (tester) async {

@@ -1,13 +1,18 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
@@ -35,6 +40,14 @@ class _LocalSyncs {
   Future<void> deleteAllPendingWals() => phone.deleteAllPendingWals();
 
   Future<void> deleteAllCorruptedWals() => phone.deleteAllCorruptedWals();
+
+  Future<void> deleteWal(Wal wal) => phone.deleteWal(wal);
+
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+  }) =>
+      phone.syncWal(wal: wal, progress: progress);
 }
 
 class _WalService implements IWalService {
@@ -73,7 +86,12 @@ Wal _wal({required int timerStart, required String? filePath}) {
 SyncUploadGate _offlineGate() {
   return SyncUploadGate(
     limiter: SyncRateLimiter.instance,
-    uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+    uploader: (files,
+        {onUploadProgress,
+        conversationId,
+        claimLiveCapture = false,
+        syncLane = SyncUploadLane.fresh,
+        replaceTranscript = false}) async {
       throw StateError('unexpected upload in terminal WAL-state test');
     },
     fairUseStatusLoader: () async => {'stage': 'none'},
@@ -201,5 +219,176 @@ void main() {
     await syncProvider.deleteAllClearableWals();
 
     expect(syncProvider.allWals, isEmpty, reason: 'Clear All must still be able to remove it');
+  });
+
+  test('raw pendant transfer ranges stay hidden until assembled', () async {
+    final rawRange = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'raw.bin',
+      sourceId: 'ring_10_11',
+    );
+    final assembledArchive = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'archive.bin',
+      sourceId: 'archive_ring_10_40_1000',
+    );
+    localSync.testWals = [rawRange, assembledArchive];
+
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+
+    expect(syncProvider.allWals, [rawRange, assembledArchive]);
+    expect(syncProvider.userVisibleWals, hasLength(1));
+    final logicalArchive = syncProvider.userVisibleWals.single;
+    expect(syncProvider.isLogicalRingArchiveDisplayWal(logicalArchive), isTrue);
+    expect(syncProvider.logicalRingArchiveMembersForTest(logicalArchive), [assembledArchive]);
+    expect(syncProvider.pendingWals, [logicalArchive]);
+    expect(syncProvider.displaySortedWals, [logicalArchive]);
+    expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), [logicalArchive]);
+    expect(syncProvider.readyToSyncRecordingCount, 1);
+    expect(syncProvider.processingRecordingCount, 0);
+    expect(syncProvider.missingWals, hasLength(2), reason: 'raw transfer ranges remain internal accounting only');
+  });
+
+  testWidgets('Sync status card counts logical recordings instead of raw pendant ranges', (tester) async {
+    final rawRange = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 1,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'raw.bin',
+      sourceId: 'ring_10_11',
+    );
+    final assembledArchive = Wal(
+      timerStart: 1000,
+      codec: BleAudioCodec.opus,
+      seconds: 30,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+      originalStorage: WalStorage.sdcard,
+      device: 'cv1',
+      filePath: 'archive.bin',
+      sourceId: 'archive_ring_10_40_1000',
+    );
+    localSync.testWals = [rawRange, assembledArchive];
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    final userProvider = UserProvider(
+      privateCloudSyncFetcher: () async => false,
+      privateCloudSyncSetter: (_) async => true,
+    );
+    addTearDown(userProvider.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<SyncProvider>.value(value: syncProvider),
+          ChangeNotifierProvider<UserProvider>.value(value: userProvider),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SyncPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 recording ready to sync'), findsOneWidget);
+    expect(find.text('2 recordings ready to sync'), findsNothing);
+  });
+
+  test('logical archive sync submits every physical part in one job while row deletion stays non-destructive',
+      () async {
+    SharedPreferencesUtil().conversationSilenceDuration = 120;
+    final uploadedBatches = <List<String>>[];
+    final gate = SyncUploadGate(
+      limiter: SyncRateLimiter.instance,
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        claimLiveCapture = false,
+        syncLane = SyncUploadLane.fresh,
+        replaceTranscript = false,
+      }) async {
+        uploadedBatches.add(files.map((file) => file.path).toList());
+        return UploadFilesResult.done(
+          SyncLocalFilesResponse(
+            newConversationIds: ['logical-archive-conversation'],
+            updatedConversationIds: [],
+          ),
+        );
+      },
+      fairUseStatusLoader: () async => {'stage': 'none'},
+    );
+    localSync = LocalWalSyncImpl(_Listener(), uploadGate: gate);
+    final archives = <Wal>[];
+    for (var index = 0; index < 10; index++) {
+      final timerStart = 1000 + index * 300;
+      final fileName = 'logical-archive-$index.bin';
+      File('${tempDir.path}/$fileName').writeAsBytesSync([1, 0, 0, 0, index]);
+      archives.add(
+        Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 300,
+          captureEndSeconds: timerStart + 300,
+          totalFrames: 1,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          originalStorage: WalStorage.sdcard,
+          device: 'cv1',
+          filePath: fileName,
+          sourceId: 'archive2_ring_${index * 100}_${(index + 1) * 100}_$timerStart',
+          uploadIntent: WalUploadIntent.historicalBackfill,
+        ),
+      );
+    }
+    localSync.testWals = archives;
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: gate,
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    final logical = syncProvider.userVisibleWals.single;
+
+    await syncProvider.deleteWal(logical);
+
+    expect(localSync.testWals, archives);
+    expect(archives.every((wal) => File('${tempDir.path}/${wal.filePath}').existsSync()), isTrue);
+
+    await syncProvider.syncWal(logical);
+
+    expect(uploadedBatches, hasLength(1));
+    expect(uploadedBatches.single, hasLength(10));
+    expect(archives.every((wal) => wal.status == WalStatus.synced), isTrue);
   });
 }

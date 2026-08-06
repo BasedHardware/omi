@@ -72,4 +72,24 @@ void main() {
     final indicator = tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
     expect(indicator.value, 0.0);
   });
+
+  testWidgets('shows fixed-snapshot drain progress without falsifying the cached storage total', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        DeviceStorageCard(
+          status: _status(usedMb: 338, freeMb: 131),
+          drainProgress: 0.42,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Downloading from your device'), findsOneWidget);
+    expect(find.text('42%'), findsOneWidget);
+    final progress = tester.widget<LinearProgressIndicator>(
+      find.byKey(const ValueKey('device-storage-drain-progress')),
+    );
+    expect(progress.value, 0.42);
+    expect(find.textContaining('338 MB of 469 MB used'), findsOneWidget);
+  });
 }

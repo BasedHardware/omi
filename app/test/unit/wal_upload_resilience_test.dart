@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart'
+    show SyncJobFetch, SyncJobFetchOutcome, SyncUploadLane, SyncUploadTooLargeException, UploadFilesResult;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -47,6 +49,7 @@ Wal _makeWal({
   WalStatus status = WalStatus.miss,
   WalStorage storage = WalStorage.disk,
   String? filePath = 'audio_1000.bin',
+  String? sourceId,
 }) {
   return Wal(
     timerStart: timerStart,
@@ -56,6 +59,7 @@ Wal _makeWal({
     storage: storage,
     device: 'omi',
     filePath: filePath,
+    sourceId: sourceId,
   );
 }
 
@@ -89,7 +93,12 @@ void main() {
       listener,
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
           throw uploadFailure;
         },
         fairUseStatusLoader: () async => {'stage': 'none'},
@@ -109,6 +118,62 @@ void main() {
   // -------------------------------------------------------------------------
   // getMissingWals — status filter
   // -------------------------------------------------------------------------
+
+  group('atomic WAL manifest', () {
+    test('failed temporary write preserves the previous complete manifest', () async {
+      final original = _makeWal(timerStart: 1000);
+      expect(await WalFileManager.saveWals([original]), isTrue);
+
+      // A directory at the temporary-file path deterministically fails the
+      // rewrite before rename. The production manifest must remain readable.
+      await Directory('${tempDir.path}/wals.json.tmp').create();
+
+      await expectLater(WalFileManager.saveWals([_makeWal(timerStart: 2000)]), throwsA(isA<FileSystemException>()));
+
+      final restored = await WalFileManager.loadWals();
+      expect(restored.map((wal) => wal.timerStart), [1000]);
+    });
+
+    test('successful rewrite leaves no partial manifest beside the committed file', () async {
+      expect(await WalFileManager.saveWals([_makeWal(timerStart: 3000)]), isTrue);
+
+      expect(File('${tempDir.path}/wals.json').existsSync(), isTrue);
+      expect(File('${tempDir.path}/wals.json.tmp').existsSync(), isFalse);
+      expect(File('${tempDir.path}/wals_backup.json.tmp').existsSync(), isFalse);
+      expect((await WalFileManager.loadWals()).single.timerStart, 3000);
+    });
+
+    test('backup recovery retains the newest durably acknowledged ring range', () async {
+      final first = _makeWal(timerStart: 3000, sourceId: 'ring_100_200');
+      final acknowledged = _makeWal(timerStart: 4000, sourceId: 'ring_200_300');
+
+      expect(await WalFileManager.saveWals([first]), isTrue);
+      expect(await WalFileManager.saveWals([first, acknowledged]), isTrue);
+      await File('${tempDir.path}/wals.json').writeAsString('{corrupted', flush: true);
+
+      final recovered = await WalFileManager.loadWals();
+      expect(recovered.map((wal) => wal.sourceId), ['ring_100_200', 'ring_200_300']);
+    });
+
+    test('backup recovery retains the newest range when the primary manifest is missing', () async {
+      final acknowledged = _makeWal(timerStart: 5000, sourceId: 'ring_300_400');
+
+      expect(await WalFileManager.saveWals([acknowledged]), isTrue);
+      await File('${tempDir.path}/wals.json').delete();
+
+      final recovered = await WalFileManager.loadWals();
+      expect(recovered.single.sourceId, 'ring_300_400');
+    });
+
+    test('concurrent callers commit in invocation order without sharing a temp writer', () async {
+      final olderWrite = WalFileManager.saveWals([_makeWal(timerStart: 4000)]);
+      final newerWrite = WalFileManager.saveWals([_makeWal(timerStart: 5000)]);
+
+      await Future.wait([olderWrite, newerWrite]);
+
+      expect((await WalFileManager.loadWals()).single.timerStart, 5000);
+    });
+  });
 
   group('getMissingWals', () {
     test('returns only miss WALs, excludes synced and corrupted', () async {
@@ -288,6 +353,72 @@ void main() {
   // -------------------------------------------------------------------------
 
   group('zombie miss: upload failure leaves WAL stuck as miss', () {
+    test('transient reconciliation failure stops after one bounded slice', () async {
+      final fetchedJobs = <String>[];
+      final reconcileSync = LocalWalSyncImpl(
+        listener,
+        syncJobStatusFetcher: (jobId) async {
+          fetchedJobs.add(jobId);
+          return const SyncJobFetch(SyncJobFetchOutcome.transient);
+        },
+      );
+      final uploaded = List.generate(
+        8,
+        (index) => _makeWal(
+          timerStart: 2000 + index,
+          status: WalStatus.uploaded,
+          filePath: null,
+        )..jobId = 'offline-job-$index',
+      );
+      reconcileSync.testWals = uploaded;
+
+      await reconcileSync.reconcileUploadedWals();
+
+      expect(fetchedJobs, hasLength(3));
+      expect(uploaded.every((wal) => wal.status == WalStatus.uploaded), isTrue);
+      expect(uploaded.every((wal) => wal.jobId != null), isTrue);
+    });
+
+    test('one failed batch pauses its lane instead of hammering the whole backlog', () async {
+      var uploadAttempts = 0;
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
+          uploadAttempts++;
+          throw StateError('offline');
+        },
+        fairUseStatusLoader: () async => {'stage': 'none'},
+      );
+      final laneSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: gate,
+      );
+      final wals = <Wal>[];
+      for (var index = 0; index < 21; index++) {
+        final filename = 'offline_backlog_$index.bin';
+        await File('${tempDir.path}/$filename').writeAsBytes([index], flush: true);
+        wals.add(
+          _makeWal(
+            timerStart: 1000 + index,
+            filePath: filename,
+          ),
+        );
+      }
+      laneSync.testWals = wals;
+
+      final result = await laneSync.syncAll();
+
+      expect(uploadAttempts, 1);
+      expect(result?.localUploadFailures, 1);
+      expect(wals.every((wal) => wal.status == WalStatus.miss), isTrue);
+      expect(wals.every((wal) => !wal.isSyncing), isTrue);
+    });
+
     test('failed upload leaves WAL as miss with retryCount unchanged', () async {
       // Simulates what the user observes: a recording that exists on disk,
       // gets picked up by syncAll(), upload attempt fails (network/server error),
@@ -327,14 +458,7 @@ void main() {
       expect(stuck.isSyncing, false, reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
     });
 
-    test('KNOWN GAP: syncAll picks up miss WAL regardless of retryCount', () async {
-      // getOrphanedWals() gates on retryCount < 3 (line 438), but syncAll()
-      // at line 504 filters ONLY on status==miss && storage==disk.
-      // A WAL that has already failed 100 times is treated identically to one
-      // that has never been tried.
-      //
-      // Fix needed: syncAll() should skip WALs with retryCount >= N,
-      // or _autoUploadPendingPhoneFiles should apply the cap before calling syncAll().
+    test('automatic sync skips a miss WAL whose retry budget is exhausted', () async {
       const filename = 'high_retry_7000.bin';
       final file = File('${tempDir.path}/$filename');
       await file.writeAsBytes([0xAA, 0xBB]);
@@ -343,18 +467,61 @@ void main() {
       wal.retryCount = 50; // Has failed 50 times already
       sync.testWals = [wal];
 
-      // syncAll will still attempt the upload — retryCount is never consulted.
-      // We verify by observing that isSyncing is cleared after the attempt,
-      // meaning syncAll processed the WAL (not skipped it).
       final result = await sync.syncAll();
 
-      expect(result?.localUploadFailures, 1);
-      expect(
-        sync.testWals.first.isSyncing,
-        false,
-        reason: 'isSyncing cleared confirms syncAll processed this WAL, '
-            'despite retryCount=50 — no cap is enforced',
+      expect(result, isNull);
+      expect(sync.testWals.first.retryCount, 50);
+      expect(file.existsSync(), isTrue, reason: 'exhausting automatic retries never deletes source audio');
+    });
+
+    test('an oversized transaction is quarantined without blocking later healthy audio', () async {
+      var uploadAttempts = 0;
+      final gate = SyncUploadGate(
+        limiter: SyncRateLimiter.instance,
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            claimLiveCapture = false,
+            syncLane = SyncUploadLane.fresh,
+            replaceTranscript = false}) async {
+          uploadAttempts++;
+          if (uploadAttempts == 1) {
+            throw const SyncUploadTooLargeException();
+          }
+          return UploadFilesResult.done(
+            SyncLocalFilesResponse(
+              newConversationIds: ['healthy-conversation'],
+              updatedConversationIds: [],
+            ),
+          );
+        },
+        fairUseStatusLoader: () async => {'stage': 'none'},
       );
+      final oversizedSync = LocalWalSyncImpl(listener, uploadGate: gate);
+      final wals = <Wal>[];
+      for (var index = 0; index < 21; index++) {
+        final filename = 'oversized_queue_$index.bin';
+        await File('${tempDir.path}/$filename').writeAsBytes([index], flush: true);
+        wals.add(_makeWal(timerStart: 10000 + index, filePath: filename));
+      }
+      oversizedSync.testWals = wals;
+
+      final result = await oversizedSync.syncAll();
+
+      expect(uploadAttempts, 2, reason: 'the healthy tail must upload in the same drain');
+      expect(result?.localUploadFailures, 1);
+      expect(wals.where((wal) => wal.status == WalStatus.synced), hasLength(1));
+      final quarantined = wals.where((wal) => wal.status == WalStatus.miss).toList();
+      expect(quarantined, hasLength(20));
+      expect(quarantined.every((wal) => wal.retryCount == walMaxAutoRetries), isTrue);
+      expect(
+        quarantined.every((wal) => File('${tempDir.path}/${wal.filePath}').existsSync()),
+        isTrue,
+        reason: '413 handling must retain every rejected source file',
+      );
+
+      await oversizedSync.syncAll();
+      expect(uploadAttempts, 2, reason: 'the same deterministic 413 batch must not auto-retry forever');
     });
   });
 

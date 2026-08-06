@@ -56,7 +56,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return Consumer3<SyncProvider, UserProvider, DeviceProvider>(
       builder: (context, syncProvider, userProvider, deviceProvider, _) {
         final syncState = syncProvider.syncState;
-        final hasAnyRecording = syncProvider.allWals.isNotEmpty;
+        final hasAnyRecording = syncProvider.userVisibleWals.isNotEmpty;
         // Compute the filtered list once per build and pass it down — the
         // SliverList.builder uses it via index, so calling it again inside
         // itemBuilder would re-sort+re-filter on every visible row.
@@ -101,10 +101,15 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                       _buildConversationsCard(syncProvider),
                     ],
                     if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
-                    if (WalSyncs.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
+                    if (DeviceStorageProtocolPolicy.isRingBufferFirmware(deviceProvider.currentFirmwareVersion) &&
                         deviceProvider.ringStatus != null) ...[
                       const SizedBox(height: 32),
-                      DeviceStorageCard(status: deviceProvider.ringStatus!),
+                      DeviceStorageCard(
+                        status: deviceProvider.ringStatus!,
+                        drainProgress: syncState.isSyncing && syncState.phase == SyncPhase.downloadingFromDevice
+                            ? syncState.progress
+                            : null,
+                      ),
                     ],
                     const SizedBox(height: 32),
                     _buildStorageSettings(userProvider),
@@ -141,7 +146,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
         )
         .length;
-    final hasAnyRecording = p.allWals.isNotEmpty;
+    final hasAnyRecording = p.userVisibleWals.isNotEmpty;
 
     final isActive = s.isSyncing || s.isFetchingConversations;
     final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
@@ -157,7 +162,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           title = l.syncCardDownloadingTitle;
           final cur = s.currentFile ?? 0;
           final tot = s.totalFiles ?? 0;
-          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          if (tot > 0) {
+            progressText = l.syncCardProgressOf(cur, tot);
+          } else {
+            progressText = '${(s.progress.clamp(0.0, 1.0) * 100).round()}%';
+          }
           break;
         case SyncPhase.waitingForInternet:
           title = l.syncCardWaitingInternet;
@@ -210,12 +219,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (showSpinner) ...[
-            const SizedBox(
+            SizedBox(
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
+                value: s.phase == SyncPhase.downloadingFromDevice ? s.progress.clamp(0.0, 1.0) : null,
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent),
+                valueColor: const AlwaysStoppedAnimation(Colors.deepPurpleAccent),
               ),
             ),
             const SizedBox(width: 12),
@@ -540,7 +550,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             // Index suffix because `wal.id` (device_timerStart) is not unique
             // across SD-card + on-phone copies of the same recording.
             key: ValueKey('${wal.id}#$i'),
-            direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
+            direction: state == WalSyncDisplayState.syncing || !syncProvider.canDeleteWal(wal)
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return OmiConfirmDialog.show(
@@ -589,7 +601,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
+      onTap: () async {
         final syncProvider = context.read<SyncProvider>();
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
           ScaffoldMessenger.of(
@@ -597,7 +609,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           ).showSnackBar(SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)));
           return;
         }
-        Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: wal)));
+        final detailWal = await syncProvider.resolveWalForDetail(wal);
+        if (!mounted) return;
+        if (detailWal == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.audioPlaybackUnavailable)),
+          );
+          return;
+        }
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: detailWal)),
+        );
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

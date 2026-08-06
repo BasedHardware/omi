@@ -64,6 +64,114 @@ void main() {
       expect(wal.retryCount, 0);
       expect(wal.lastRetryAt, 0);
     });
+
+    test('device-owned upload intent persists across restart', () {
+      final wal = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        uploadIntent: WalUploadIntent.liveContinuity,
+      );
+
+      final restored = Wal.fromJson(wal.toJson());
+
+      expect(restored.uploadIntent, WalUploadIntent.liveContinuity);
+    });
+
+    test('wall-clock capture end persists while playable duration remains independent', () {
+      final wal = Wal(
+        timerStart: 1000,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        totalFrames: 200,
+        captureEndSeconds: 1007.75,
+      );
+
+      final restored = Wal.fromJson(wal.toJson());
+
+      expect(restored.seconds, 2);
+      expect(restored.captureEndSeconds, 1007.75);
+      expect(restored.wallClockEndSeconds, 1007.75);
+    });
+
+    test('legacy manifest derives wall-clock capture end from playable duration', () {
+      final restored = Wal.fromJson({
+        'timer_start': 1000,
+        'codec': 'BleAudioCodec.opus',
+        'seconds': 9,
+        'total_frames': 250,
+      });
+
+      expect(restored.captureEndSeconds, isNull);
+      expect(restored.wallClockEndSeconds, 1002.5);
+      expect(restored.toJson(), isNot(contains('capture_end_seconds')));
+    });
+
+    test('invalid persisted capture ends fail closed to the legacy duration fallback', () {
+      final farFuture = DateTime.now().millisecondsSinceEpoch / 1000 + const Duration(days: 2).inSeconds;
+      for (final invalidEnd in <Object>['not-a-number', double.nan, double.infinity, 999, farFuture]) {
+        final restored = Wal.fromJson({
+          'timer_start': 1000,
+          'codec': 'BleAudioCodec.opus',
+          'seconds': 9,
+          'total_frames': 200,
+          'capture_end_seconds': invalidEnd,
+        });
+
+        expect(restored.wallClockEndSeconds, 1002);
+        expect(restored.toJson(), isNot(contains('capture_end_seconds')));
+      }
+    });
+
+    test('capture end cannot claim less wall time than the encoded payload', () {
+      final restored = Wal.fromJson({
+        'timer_start': 1000,
+        'codec': 'BleAudioCodec.opus',
+        'seconds': 10,
+        'total_frames': 500,
+        'capture_end_seconds': 1001,
+      });
+
+      expect(restored.validatedCaptureEndSeconds, isNull);
+      expect(restored.wallClockEndSeconds, 1005);
+      expect(
+        restored.toJson(),
+        isNot(contains('capture_end_seconds')),
+        reason: 'a truncated wall span must not survive the next manifest rewrite',
+      );
+    });
+  });
+
+  group('Wal source identity', () {
+    test('sequence-range sourceId persists and owns retry identity', () {
+      final wal = Wal(
+        timerStart: 1700000000,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        device: 'cv1',
+        sourceId: 'ring_100_200',
+      );
+
+      final restored = Wal.fromJson(wal.toJson());
+
+      expect(restored.sourceId, 'ring_100_200');
+      expect(restored.id, 'cv1_ring_100_200');
+    });
+
+    test('legacy WAL identity remains timestamp-based when sourceId is absent', () {
+      final wal = Wal(timerStart: 1700000000, codec: BleAudioCodec.opus, seconds: 10, device: 'cv1');
+
+      expect(wal.id, 'cv1_1700000000');
+    });
+
+    test('source-aware filename keeps backend timestamp as the final token', () {
+      final wal = Wal(timerStart: 1700000000, codec: BleAudioCodec.opus, seconds: 10, device: 'cv1');
+
+      final filename = wal.getFileNameByTimeStarts(1700000000, sourceId: 'ring_100_200');
+
+      expect(filename, endsWith('_ring_100_200_1700000000.bin'));
+      expect(int.parse(filename.split('_').last.replaceFirst('.bin', '')), 1700000000);
+    });
   });
 
   group('stampConversationId', () {
@@ -124,7 +232,11 @@ void main() {
         ),
       ];
 
-      await sync.stampConversationId(now - 150, 'conv-xyz');
+      await sync.stampConversationId(
+        now - 150,
+        'conv-xyz',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, 'conv-xyz');
       expect(sync.testWals[1].conversationId, 'conv-xyz');
@@ -145,7 +257,11 @@ void main() {
         ),
       ];
 
-      await sync.stampConversationId(now - 100, 'new-conv');
+      await sync.stampConversationId(
+        now - 100,
+        'new-conv',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, 'old-conv');
     });
@@ -426,7 +542,11 @@ void main() {
       ];
 
       // Session started at now - 100, so only wal at now - 50 qualifies
-      await sync.stampConversationId(now - 100, 'conv-boundary');
+      await sync.stampConversationId(
+        now - 100,
+        'conv-boundary',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, isNull); // timerStart < sessionStart
       expect(sync.testWals[1].conversationId, 'conv-boundary');
@@ -444,7 +564,11 @@ void main() {
         ),
       ];
 
-      await sync.stampConversationId(now - 100, 'conv-exact');
+      await sync.stampConversationId(
+        now - 100,
+        'conv-exact',
+        hasServerSpeechProof: true,
+      );
 
       expect(sync.testWals[0].conversationId, 'conv-exact');
     });

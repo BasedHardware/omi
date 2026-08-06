@@ -451,6 +451,13 @@ class UploadFilesResult {
 /// 429 is backend capacity unless the response carries Omi's explicit reason.
 enum SyncRateLimitKind { fairUse, backendCapacity }
 
+/// Client-side upload scheduling priority.
+///
+/// This does not create a separate persisted rate-limit domain: current
+/// servers apply one upload admission boundary. It only keeps newly captured
+/// continuity work ahead of historical recovery in the local scheduler.
+enum SyncUploadLane { fresh, backfill }
+
 @visibleForTesting
 bool shouldRequestSyncCaptureManifest(String? conversationId, bool claimLiveCapture) =>
     conversationId != null && claimLiveCapture;
@@ -501,6 +508,19 @@ class SyncRecoveryWindowExceededException implements Exception {
 
   @override
   String toString() => 'SyncRecoveryWindowExceededException()';
+}
+
+/// Thrown when the upload boundary rejects the complete multipart request as
+/// too large (HTTP 413).
+///
+/// This is deterministic for the same immutable WAL batch. Callers must keep
+/// the source audio, stop automatic retries for that batch, and let unrelated
+/// recordings continue instead of treating it like an offline lane.
+class SyncUploadTooLargeException implements Exception {
+  const SyncUploadTooLargeException();
+
+  @override
+  String toString() => 'SyncUploadTooLargeException()';
 }
 
 /// Classifies a sync 422 as the backend's terminal lookback rejection.
@@ -568,7 +588,12 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   bool claimLiveCapture = false,
+  SyncUploadLane syncLane = SyncUploadLane.fresh,
+  bool replaceTranscript = false,
 }) async {
+  if (replaceTranscript && conversationId == null) {
+    throw ArgumentError('Canonical transcript replacement requires a conversation id');
+  }
   String? captureManifest;
   if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
@@ -576,6 +601,9 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
   if (conversationId != null) {
     url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  }
+  if (replaceTranscript) {
+    url += '${conversationId == null ? '?' : '&'}transcript_mode=replace';
   }
   var response = await makeMultipartApiCall(
     url: url,
@@ -605,7 +633,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   if (response.statusCode == 400) {
     throw Exception('Audio file could not be processed by server');
   } else if (response.statusCode == 413) {
-    throw Exception('Audio file is too large to upload');
+    throw const SyncUploadTooLargeException();
   } else if (response.statusCode == 429 ||
       (response.statusCode == 503 &&
           response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {

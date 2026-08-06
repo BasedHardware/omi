@@ -11,7 +11,6 @@ import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -131,8 +130,9 @@ class WalListItem extends StatelessWidget {
           decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
           child: Dismissible(
             key: Key(wal.id),
-            direction:
-                displayState == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
+            direction: displayState == WalSyncDisplayState.syncing || !syncProvider.canDeleteWal(wal)
+                ? DismissDirection.none
+                : DismissDirection.endToStart,
             confirmDismiss: (direction) {
               final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
               return OmiConfirmDialog.show(
@@ -150,12 +150,22 @@ class WalListItem extends StatelessWidget {
               child: const Icon(Icons.delete, color: Colors.white),
             ),
             onDismissed: (direction) {
-              ServiceManager.instance().wal.getSyncs().deleteWal(wal);
+              syncProvider.deleteWal(wal);
             },
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () {
-                Navigator.of(context).push(MaterialPageRoute(builder: (context) => WalItemDetailPage(wal: wal)));
+              onTap: () async {
+                final detailWal = await syncProvider.resolveWalForDetail(wal);
+                if (!context.mounted) return;
+                if (detailWal == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.l10n.audioPlaybackUnavailable)),
+                  );
+                  return;
+                }
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => WalItemDetailPage(wal: detailWal)),
+                );
               },
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -497,8 +507,8 @@ class _SyncPageState extends State<SyncPage> {
     }
 
     final isActive = syncProvider.isSyncing;
-    final uploaded = syncProvider.uploadedWals.length;
-    final readyToSync = syncProvider.missingWals.length;
+    final uploaded = syncProvider.processingRecordingCount;
+    final readyToSync = syncProvider.readyToSyncRecordingCount;
     final bool showSpinner = (isActive || uploaded > 0) && !syncProvider.isRateLimited;
 
     String title;
@@ -905,7 +915,7 @@ class _SyncPageState extends State<SyncPage> {
                 // Recordings list
                 Consumer<SyncProvider>(
                   builder: (context, syncProvider, child) {
-                    if (syncProvider.isLoadingWals && syncProvider.allWals.isEmpty) {
+                    if (syncProvider.isLoadingWals && syncProvider.userVisibleWals.isEmpty) {
                       return const SliverToBoxAdapter(
                         child: Center(
                           child: Padding(
@@ -916,7 +926,7 @@ class _SyncPageState extends State<SyncPage> {
                       );
                     }
 
-                    if (syncProvider.allWals.isEmpty) {
+                    if (syncProvider.userVisibleWals.isEmpty) {
                       return SliverToBoxAdapter(child: _buildEmptyState(context));
                     }
 

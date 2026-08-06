@@ -16,7 +16,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 ///     0x01 ACK         [0x01][status]
 ///     0x02 INFO        [0x02][read:u64][write:u64][cap:u32][dropped:u64][pkt_size:u16]
 ///     0x03 DATA        [0x03][raw_bytes...]   <-- not aligned to record boundaries
-///     0x04 DONE        [0x04][status][next_seq:u64]
+///     0x04 DONE        [0x04][status][next_seq:u64](optional [crc32:u32])
 ///     0x05 READ_BEGIN  [0x05][transfer_start_seq:u64][packet_count:u32]
 ///
 ///   Each ring record (packet_size = 444 bytes):
@@ -38,6 +38,17 @@ class RingProtocol {
   static const int cmdAdvance = 0x12;
   static const int cmdClear = 0x13;
   static const int cmdStop = 0x03;
+
+  static const int statusOk = 0;
+  static const int statusStorageNotReady = 9;
+  static const int statusSequenceOutOfRange = 10;
+  static const int statusStorageFailed = 11;
+
+  /// Parse a two-byte ACK notification. Returns null for every other frame.
+  static int? parseAckStatus(List<int> value) {
+    if (value.length < 2 || value[0] != notifyAck) return null;
+    return value[1];
+  }
 
   /// Parse the 16-byte status read into a RingStatus. Returns null if the
   /// payload is too short.
@@ -71,7 +82,11 @@ class RingProtocol {
   static DoneNotification? parseDoneNotification(List<int> value) {
     if (value.isEmpty || value[0] != notifyDone || value.length < 10) return null;
     final bd = ByteData.sublistView(Uint8List.fromList(value));
-    return DoneNotification(status: bd.getUint8(1), nextSeq: bd.getUint64(2, Endian.big));
+    return DoneNotification(
+      status: bd.getUint8(1),
+      nextSeq: bd.getUint64(2, Endian.big),
+      transferCrc32: value.length >= 14 ? bd.getUint32(10, Endian.big) : null,
+    );
   }
 
   /// Parse a NOTIFY_READ_BEGIN (0x05) notification.
@@ -111,15 +126,65 @@ class RingProtocol {
     return (record[0] << 24) | (record[1] << 16) | (record[2] << 8) | record[3];
   }
 
+  /// Record timestamps survive a reboot where the device's current RTC-valid
+  /// flag may be false. Trust plausible embedded capture time rather than
+  /// collapsing old audio onto the retry time.
+  static bool isPlausibleRecordTimestamp(
+    int timestamp, {
+    required int nowSeconds,
+  }) {
+    const earliestSupportedTimestamp = 1704067200;
+    const maximumFutureSkewSeconds = 24 * 60 * 60;
+    return timestamp >= earliestSupportedTimestamp && timestamp <= nowSeconds + maximumFutureSkewSeconds;
+  }
+
+  /// The pendant may discard records only after the complete transfer reached
+  /// durable phone storage. A BLE TX completion or a partial stream is not an
+  /// acknowledgement.
+  static bool canAdvance({
+    required bool reachedDone,
+    required bool doneOk,
+    required bool flushError,
+    required bool isCancelled,
+    required bool receivedCompleteRange,
+    required bool protocolError,
+    required bool crcVerified,
+  }) {
+    return reachedDone &&
+        doneOk &&
+        !flushError &&
+        !isCancelled &&
+        receivedCompleteRange &&
+        !protocolError &&
+        crcVerified;
+  }
+
+  /// Validate that READ_BEGIN, DATA, and DONE describe one complete contiguous
+  /// record range. This catches missing notification bytes before a cumulative
+  /// ADVANCE command could discard the corresponding SD records.
+  static bool receivedCompleteRange({
+    required int? transferStartSeq,
+    required int? announcedPacketCount,
+    required int? doneNextSeq,
+    required int receivedPacketCount,
+    required int pendingBytes,
+  }) {
+    if (transferStartSeq == null || announcedPacketCount == null || doneNextSeq == null) return false;
+    return announcedPacketCount >= 0 &&
+        doneNextSeq == transferStartSeq + announcedPacketCount &&
+        receivedPacketCount == announcedPacketCount &&
+        pendingBytes == 0;
+  }
+
   /// Parse the 440-byte audio payload of a ring record into opus frames.
   /// Format: [size:1][frame:size]... with zero padding allowed at any point.
   /// A leading byte of 0 is a no-op padding marker; otherwise it is the
   /// length of the next frame.
   ///
-  /// Boundary uses `>=` to match the firmware's overflow rule in
-  /// transport.c:write_to_storage — at the boundary the firmware writes a
-  /// trailing size byte without its frame (the frame goes to the next 440B
-  /// block); the bytes after it are stale and must not be parsed.
+  /// Boundary uses `>=` for compatibility with legacy 3.0.20 records. That
+  /// firmware can flush a record after writing only a size marker at the exact
+  /// boundary, leaving stale bytes where the frame would be. New firmware
+  /// preserves this no-exact-fit wire invariant.
   static List<List<int>> parseAudioPayload(List<int> audio) {
     final frames = <List<int>>[];
     int offset = 0;
@@ -137,16 +202,252 @@ class RingProtocol {
     }
     return frames;
   }
+
+  /// Parse the immutable source identity written by the ring recovery path.
+  /// The half-open range is `[start, end)`.
+  static ({int start, int end})? parseSourceRange(String? sourceId) {
+    if (sourceId == null) return null;
+    final match = RegExp(r'^ring_(\d+)_(\d+)$').firstMatch(sourceId);
+    if (match == null) return null;
+    final start = int.parse(match.group(1)!);
+    final end = int.parse(match.group(2)!);
+    if (end <= start) return null;
+    return (start: start, end: end);
+  }
+
+  /// Sequence identity retained by both immutable ring fragments and a local
+  /// archive assembled from those fragments.
+  ///
+  /// Archives remain eligible for a later exact conversation repair when the
+  /// server completion arrives after the two-minute local close boundary.
+  static ({int start, int end})? parseRecoverySourceRange(String? sourceId) {
+    final raw = parseSourceRange(sourceId);
+    if (raw != null || sourceId == null) return raw;
+    final match = RegExp(r'^(?:archive|archive2)_ring_(\d+)_(\d+)_\d+$').firstMatch(sourceId);
+    if (match == null) return null;
+    final start = int.parse(match.group(1)!);
+    final end = int.parse(match.group(2)!);
+    if (end <= start) return null;
+    return (start: start, end: end);
+  }
+
+  /// Parse only source identities that prove contiguous durable ring coverage.
+  ///
+  /// Legacy `archive_ring_*` files may have been produced by a greedy grouper
+  /// that spanned sequence gaps, so they remain valid recovery/upload inputs
+  /// but can never authorize a device ADVANCE after an app upgrade.
+  static ({int start, int end})? parseDurableCoverageSourceRange(
+    String? sourceId,
+  ) {
+    final raw = parseSourceRange(sourceId);
+    if (raw != null || sourceId == null) return raw;
+    final match = RegExp(r'^archive2_ring_(\d+)_(\d+)_\d+$').firstMatch(sourceId);
+    if (match == null) return null;
+    final start = int.parse(match.group(1)!);
+    final end = int.parse(match.group(2)!);
+    if (end <= start) return null;
+    return (start: start, end: end);
+  }
+}
+
+/// In-memory index of ring ranges already durably represented on the phone.
+///
+/// This is sequence identity, not audio-content deduplication. It lets the app
+/// fetch the live head before an old backlog, then advance the pendant only
+/// when the historical gap closes.
+class RingSequenceCoverage {
+  final List<({int start, int end})> _ranges = [];
+
+  RingSequenceCoverage([Iterable<({int start, int end})> ranges = const []]) {
+    for (final range in ranges) {
+      add(range.start, range.end);
+    }
+  }
+
+  void add(int start, int end) {
+    if (end <= start) return;
+    var mergedStart = start;
+    var mergedEnd = end;
+    var index = 0;
+    while (index < _ranges.length && _ranges[index].end < mergedStart) {
+      index += 1;
+    }
+    while (index < _ranges.length && _ranges[index].start <= mergedEnd) {
+      final range = _ranges.removeAt(index);
+      if (range.start < mergedStart) mergedStart = range.start;
+      if (range.end > mergedEnd) mergedEnd = range.end;
+    }
+    _ranges.insert(index, (start: mergedStart, end: mergedEnd));
+  }
+
+  /// Highest sequence covered without a gap beginning at [start].
+  int contiguousEndFrom(int start) {
+    var end = start;
+    for (final range in _ranges) {
+      if (range.end <= end) continue;
+      if (range.start > end) break;
+      end = range.end;
+    }
+    return end;
+  }
+
+  /// First covered range beginning at or after [start].
+  ({int start, int end})? firstRangeAtOrAfter(int start) {
+    for (final range in _ranges) {
+      if (range.end <= start) continue;
+      return range;
+    }
+    return null;
+  }
+
+  /// First uncovered sequence in `[start, end)`, or [end] if fully covered.
+  int firstUncovered(int start, int end) {
+    var cursor = start;
+    for (final range in _ranges) {
+      if (range.end <= cursor) continue;
+      if (range.start > cursor) return cursor;
+      if (range.end > cursor) cursor = range.end;
+      if (cursor >= end) return end;
+    }
+    return cursor;
+  }
+
+  /// Newest uncovered range ending at or before [end], bounded to [maxCount].
+  ///
+  /// VAD makes record count an audio-duration measure rather than a wall
+  /// clock. Recent recovery therefore walks backward from the live head and
+  /// stops based on the timestamps found in the records.
+  ({int start, int end})? lastUncoveredBefore(
+    int lowerBound,
+    int end, {
+    required int maxCount,
+  }) {
+    if (maxCount <= 0 || end <= lowerBound) return null;
+    var cursor = end;
+    for (var index = _ranges.length - 1; index >= 0; index--) {
+      final range = _ranges[index];
+      if (range.start >= cursor) continue;
+      if (range.end < cursor) {
+        final gapLowerBound = lowerBound > range.end ? lowerBound : range.end;
+        final start = (cursor - maxCount).clamp(gapLowerBound, cursor);
+        return start < cursor ? (start: start, end: cursor) : null;
+      }
+      if (range.start < cursor) cursor = range.start;
+      if (cursor <= lowerBound) return null;
+    }
+    final start = (cursor - maxCount).clamp(lowerBound, cursor);
+    return start < cursor ? (start: start, end: cursor) : null;
+  }
+
+  bool covers(int start, int end) => end <= contiguousEndFrom(start);
+
+  List<({int start, int end})> get ranges => List.unmodifiable(_ranges);
+}
+
+class RingStorageException implements Exception {
+  const RingStorageException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class RingCommandRejectedException extends RingStorageException {
+  const RingCommandRejectedException({
+    required this.command,
+    required this.status,
+  }) : super(
+          status == RingProtocol.statusStorageNotReady
+              ? 'Device storage is not ready'
+              : status == RingProtocol.statusStorageFailed
+                  ? 'Device storage needs attention'
+                  : 'Device rejected $command (status $status)',
+        );
+
+  final String command;
+  final int status;
+
+  bool get isRetryable => status == RingProtocol.statusStorageNotReady;
+}
+
+class RingInfoUnavailableException extends RingStorageException {
+  const RingInfoUnavailableException() : super('Device storage did not provide ring information');
+}
+
+/// Bounded retry for the ring snapshot handshake.
+///
+/// Firmware waits for its SD remount before replying, but a remount can finish
+/// immediately after that deadline. Retry only the explicit retryable status
+/// (or a missing response), and always stop after [maxAttempts].
+class RingInfoRetryPolicy {
+  const RingInfoRetryPolicy({
+    this.maxAttempts = 3,
+    this.backoff = const [Duration(milliseconds: 500), Duration(seconds: 1)],
+  }) : assert(maxAttempts > 0);
+
+  final int maxAttempts;
+  final List<Duration> backoff;
+
+  Future<RingInfo> run(
+    Future<RingInfo?> Function() request, {
+    Future<void> Function(Duration delay)? wait,
+  }) async {
+    final waitFor = wait ?? Future<void>.delayed;
+    RingStorageException lastError = const RingInfoUnavailableException();
+
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        final info = await request();
+        if (info != null) return info;
+        lastError = const RingInfoUnavailableException();
+      } on RingCommandRejectedException catch (error) {
+        if (!error.isRetryable) rethrow;
+        lastError = error;
+      }
+
+      if (attempt + 1 < maxAttempts) {
+        final delay = backoff.isEmpty ? Duration.zero : backoff[attempt.clamp(0, backoff.length - 1)];
+        await waitFor(delay);
+      }
+    }
+
+    throw lastError;
+  }
 }
 
 /// Decoded NOTIFY_DONE payload.
 class DoneNotification {
   final int status;
   final int nextSeq;
+  final int? transferCrc32;
 
-  const DoneNotification({required this.status, required this.nextSeq});
+  const DoneNotification({
+    required this.status,
+    required this.nextSeq,
+    this.transferCrc32,
+  });
 
   bool get isOk => status == 0;
+}
+
+/// Incremental IEEE CRC-32 over raw NOTIFY_DATA payload bytes.
+///
+/// New firmware includes this value in DONE. Legacy 3.0.20 firmware omits it,
+/// so callers verify when present while retaining read compatibility.
+class RingTransferCrc32 {
+  int _crc = 0xFFFFFFFF;
+
+  void add(List<int> bytes) {
+    for (final byte in bytes) {
+      _crc ^= byte & 0xFF;
+      for (var bit = 0; bit < 8; bit++) {
+        _crc = (_crc & 1) != 0 ? (_crc >> 1) ^ 0xEDB88320 : _crc >> 1;
+      }
+    }
+  }
+
+  int get value => (_crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
 }
 
 /// Decoded NOTIFY_READ_BEGIN payload.
@@ -154,7 +455,10 @@ class ReadBeginNotification {
   final int transferStartSeq;
   final int packetCount;
 
-  const ReadBeginNotification({required this.transferStartSeq, required this.packetCount});
+  const ReadBeginNotification({
+    required this.transferStartSeq,
+    required this.packetCount,
+  });
 }
 
 /// Reassembles unaligned NOTIFY_DATA byte chunks into 444-byte ring records.

@@ -5,7 +5,8 @@ set -eo pipefail
 # Git runs hooks with the working directory at the top of the invoking work
 # tree, so fall back to it when `git rev-parse --show-toplevel` cannot resolve a
 # work tree. This keeps linked worktrees from aborting into a --no-verify push.
-cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$REPO_ROOT"
 
 # shellcheck source=dev-harness/_resolve_python.sh
 source scripts/dev-harness/_resolve_python.sh
@@ -357,16 +358,12 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter build_runner generated-output check"
     (
-      # Git exports linked-worktree metadata to hooks. Flutter resolves its own
-      # SDK version through Git, so those variables must not leak into Flutter.
-      unset GIT_DIR GIT_WORK_TREE
-      cd app
-      flutter pub run build_runner build --delete-conflicting-outputs
-      git diff --exit-code -- lib || {
+      "$REPO_ROOT/scripts/flutter-with-clean-git-env" pub run build_runner build --delete-conflicting-outputs
+      git diff --exit-code -- app/lib || {
         echo "FAIL: generated Dart files are stale. Run: cd app && flutter pub run build_runner build --delete-conflicting-outputs" >&2
         exit 1
       }
-      untracked=$(git ls-files --others --exclude-standard -- lib)
+      untracked=$(git ls-files --others --exclude-standard -- app/lib)
       if [ -n "$untracked" ]; then
         echo "FAIL: generated Dart files are stale; untracked generated files were produced:" >&2
         echo "$untracked" >&2
@@ -385,15 +382,12 @@ check_flutter_generated_if_needed() {
     fi
     echo "==> Flutter l10n generated-output check"
     (
-      # Keep Flutter's SDK-version Git lookup isolated from hook worktree state.
-      unset GIT_DIR GIT_WORK_TREE
-      cd app
-      flutter gen-l10n
-      git diff --exit-code -- lib/l10n || {
+      "$REPO_ROOT/scripts/flutter-with-clean-git-env" gen-l10n
+      git diff --exit-code -- app/lib/l10n || {
         echo "FAIL: generated localization files are stale. Run: cd app && flutter gen-l10n" >&2
         exit 1
       }
-      untracked=$(git ls-files --others --exclude-standard -- lib/l10n)
+      untracked=$(git ls-files --others --exclude-standard -- app/lib/l10n)
       if [ -n "$untracked" ]; then
         echo "FAIL: generated localization files are stale; untracked generated files were produced:" >&2
         echo "$untracked" >&2

@@ -39,34 +39,56 @@ agent-flutter snapshot -i --json    # see what's on screen
 - **App must be authenticated and connected to the correct backend** (local, dev, or prod — depends on the task)
 - Marionette already integrated: `marionette_flutter: ^0.3.0` in pubspec.yaml
 
+For an authenticated physical Android run, do not build immediately after
+`test.sh`: its ignored local configuration is intentionally hermetic. Follow
+[`BLE_RELIABILITY_ACCEPTANCE.md`](./BLE_RELIABILITY_ACCEPTANCE.md) →
+"Authenticated Android physical-device builds" and require
+`scripts/verify_android_physical_test_auth_config.sh` to pass before installing
+the dev APK.
+
 ### Setup (iOS physical device)
 
 Full iOS physical-device playbook (setup, driving, verification, troubleshooting): [`IOS_DEVICE_TESTING.md`](./IOS_DEVICE_TESTING.md).
+For pendant reconnect, DFU handoff, timestamp, and backlog acceptance on Android and iOS, also run
+[`BLE_RELIABILITY_ACCEPTANCE.md`](./BLE_RELIABILITY_ACCEPTANCE.md).
 
-Verified 2026-07-11 on an iPhone XR (iOS 18.7.9), app 1.0.543, prod-flavor debug build, agent-flutter CLI + marionette MCP. iOS Simulator has no BLE — use a physical device for anything beyond onboarding/UI checks (see also iOS Simulator Known Limitations below).
+Verified 2026-07-29 on an iPhone 13 Pro Max (iOS 26.5.2), isolated
+production-backed dev build, agent-flutter CLI, and a CV1 on firmware 3.0.29.
+iOS Simulator has no BLE — use a physical device for anything beyond
+onboarding/UI checks (see also iOS Simulator Known Limitations below).
 
 ```bash
 # 1. Get the physical device id
 flutter devices
 
-# 2. Run in debug mode with stdout captured — prod flavor (dev flavor can fail codesigning on a
-#    fresh worktree: "provisioning profile doesn't support the App Groups capability")
-cd app && flutter run -d <device-id> --flavor prod > /tmp/omi-flutter.log 2>&1 &
+# 2. Verify the ignored production-backed dev inputs before building
+cd app && scripts/verify_ios_physical_test_auth_config.sh
+
+# 3. Run the isolated dev app in debug mode with stdout captured
+flutter run -d <device-id> --flavor dev > /tmp/omi-flutter.log 2>&1 &
 # Wait for "A Dart VM Service ... is available" in the log
 
-# 3. Connect agent-flutter — auto-detects the ws URI from the log
+# 4. Connect agent-flutter — auto-detects the ws URI from the log
 AGENT_FLUTTER_LOG=/tmp/omi-flutter.log agent-flutter connect
 agent-flutter snapshot -i --json
 ```
 
 **Gotchas:**
-- **Fresh git worktrees need real prod config seeded from the primary checkout** before building the `prod` flavor: copy `app/.env`, `app/lib/firebase_options_prod.dart`, `app/ios/Config/Prod/GoogleService-Info.plist`, `app/lib/env/prod_env.g.dart`. The `test.sh` bootstrap seeds dev-placeholder versions that point at the wrong Firebase project.
+- **Fresh worktrees need the maintainer's production-backed dev fixture** before
+  building. The exact ignored files and safe metadata preflight are documented
+  in `IOS_DEVICE_TESTING.md`. Staging Firebase plus the production API fails
+  custom-token auth; an Android Firebase app ID crashes iOS initialization.
 - **adb-backed commands do NOT work on iOS**: `back`, `press x y`, `dismiss`, `text --press`, `text --fill`. Use in-app back buttons (find the top-left `IconButton` ref) and marionette ref presses only.
 - **`fill @ref` can silently no-op on keyless `TextField`s on iOS** — it reports success but the controller stays empty. Verify via the marionette MCP `get_interactive_elements` (shows the `TextEditingController` contents). Durable fix: add a `ValueKey` to the field, hot reload (sheet state survives), then enter text by key.
 - **`snapshot` labels are empty with `marionette_flutter` 0.3.0** on iOS. Primary orientation/assertion tool is `agent-flutter text` (semantic text dump) — assert outcomes by text presence (e.g. the copy snackbar text). Target elements by type + bounds from `snapshot -i`.
 - `agent-flutter screenshot` output path must be under `/tmp`.
 - Check behavior via the run log: `grep -iE 'exception|error' /tmp/omi-flutter.log` after each flow. A `PlatformException` 4001 (Intercom push token, notifications not granted) is benign.
 - iOS terminates the debug connection if the app is backgrounded/locked too long ("The OS has terminated the Flutter debug connection for being inactive") — keep the device unlocked; reconnecting requires relaunching `flutter run`.
+- **Never hand the phone back with that debug/JIT build.** Before an
+  unattended drain or dogfood run, use the signed profile/AOT build and guarded
+  in-place installer in `BLE_RELIABILITY_ACCEPTANCE.md` → "Standalone iOS
+  dogfood builds". The installer rejects `kernel_blob.bin` and cold-launches
+  the exact isolated bundle while preserving its data container.
 - General key guidance (same as Android): prefer `find key "name"`; when a control can't be targeted, add a `ValueKey` in source + hot reload rather than fighting coordinates.
 
 ### Commands

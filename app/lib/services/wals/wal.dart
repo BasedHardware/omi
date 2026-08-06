@@ -8,6 +8,22 @@ const sdcardChunkSizeSecs = 180;
 const newFrameSyncDelaySeconds = 15;
 const framesPerFlashPage = 8;
 const secondsPerFlashPage = 1.4;
+const _maximumPersistedCaptureFutureSkewSeconds = 24 * 60 * 60;
+const _maximumCaptureEndRoundingShortfallSeconds = 2.0;
+const _minimumEffectiveConversationBoundarySeconds = 2 * 60;
+const _unlimitedConversationBoundarySeconds = 4 * 60 * 60;
+
+/// Mirrors the single-channel backend conversation timeout contract.
+///
+/// The settings UI uses `-1` for the four-hour option, while the backend
+/// clamps every shorter value to two minutes.
+int effectiveConversationBoundarySeconds(int configured) {
+  if (configured == -1) return _unlimitedConversationBoundarySeconds;
+  if (configured < _minimumEffectiveConversationBoundarySeconds) {
+    return _minimumEffectiveConversationBoundarySeconds;
+  }
+  return configured;
+}
 
 /// Sync lifecycle of a recording.
 ///
@@ -29,6 +45,14 @@ enum WalStatus { inProgress, miss, uploaded, synced, corrupted, outsideRecoveryW
 enum WalStorage { mem, disk, sdcard, flashPage }
 
 enum SyncMethod { ble }
+
+/// Why this recording is entering the cloud-upload queue.
+///
+/// [liveContinuity] is assigned only by a source transport that knows the
+/// recording belongs to the current/recent capture window. It may use the
+/// latency-sensitive upload lane even before the server assigns a conversation
+/// id. [historicalBackfill] is always background work.
+enum WalUploadIntent { liveContinuity, historicalBackfill }
 
 /// User-facing sync state for a single recording, derived from [Wal.status],
 /// [Wal.isSyncing] and [Wal.retryCount]. This is what the sync UI renders so a
@@ -96,6 +120,14 @@ class Wal {
   int channel;
   int sampleRate;
   int seconds;
+
+  /// Wall-clock end of captured audio, in Unix seconds.
+  ///
+  /// Pendant VAD can omit silence between records, so [seconds] remains the
+  /// playable audio duration and cannot describe when the capture ended.
+  /// Legacy manifests leave this null and use [wallClockEndSeconds]'s duration
+  /// fallback.
+  double? captureEndSeconds;
   String device;
   String? deviceModel;
 
@@ -121,9 +153,27 @@ class Wal {
 
   WalStorage? originalStorage;
 
+  /// Stable identity assigned by the durable source transport.
+  ///
+  /// Device-storage recovery uses the source sequence range here so a retry is
+  /// idempotent even when another recording has the same second-resolution
+  /// timestamp. Legacy WALs leave this null and retain their historical ID.
+  String? sourceId;
+
   /// The conversation this WAL belongs to. Stamped when ConversationProcessingStartedEvent
   /// arrives so WALs survive app kill and can be recovered on startup.
   String? conversationId;
+
+  /// Durable upload-lane ownership assigned by the source transport.
+  ///
+  /// Legacy WALs leave this null and retain the conservative rule that only a
+  /// server conversation id proves they belong to the fresh lane.
+  WalUploadIntent? uploadIntent;
+
+  /// This file is the complete, sequence-ordered phone reconstruction of a
+  /// live pendant conversation. The server replaces the realtime preview
+  /// transcript atomically instead of appending duplicate fragments.
+  bool canonicalReplacement;
 
   /// Number of sync retry attempts for this WAL.
   int retryCount;
@@ -139,7 +189,35 @@ class Wal {
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int uploadedAt;
 
-  String get id => '${device}_$timerStart';
+  String get id => sourceId == null ? '${device}_$timerStart' : '${device}_$sourceId';
+
+  /// Valid persisted wall-clock end, or null for legacy/corrupt metadata.
+  double? get validatedCaptureEndSeconds {
+    final persistedEnd = captureEndSeconds;
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch / 1000;
+    final framesPerSecond = codec.getFramesPerSecond();
+    final minimumPlayableEnd = framesPerSecond > 0 && totalFrames > 0
+        ? timerStart + totalFrames / framesPerSecond - _maximumCaptureEndRoundingShortfallSeconds
+        : timerStart.toDouble();
+    if (persistedEnd == null ||
+        !persistedEnd.isFinite ||
+        persistedEnd < timerStart ||
+        persistedEnd < minimumPlayableEnd ||
+        persistedEnd > nowSeconds + _maximumPersistedCaptureFutureSkewSeconds) {
+      return null;
+    }
+    return persistedEnd;
+  }
+
+  /// Best available wall-clock end for recency and conversation boundaries.
+  double get wallClockEndSeconds {
+    final persistedEnd = validatedCaptureEndSeconds;
+    if (persistedEnd != null) return persistedEnd;
+    final framesPerSecond = codec.getFramesPerSecond();
+    final playableDuration =
+        framesPerSecond > 0 && totalFrames > 0 ? totalFrames / framesPerSecond : seconds.toDouble();
+    return timerStart + playableDuration;
+  }
 
   /// Single source of truth for how this recording's sync state is shown to the
   /// user. The sync page renders an explicit label + icon for every value so a
@@ -194,6 +272,7 @@ class Wal {
     required this.timerStart,
     required this.codec,
     required this.seconds,
+    this.captureEndSeconds,
     this.sampleRate = 16000,
     this.channel = 1,
     this.status = WalStatus.inProgress,
@@ -208,7 +287,10 @@ class Wal {
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
     this.originalStorage,
+    this.sourceId,
     this.conversationId,
+    this.uploadIntent,
+    this.canonicalReplacement = false,
     this.retryCount = 0,
     this.lastRetryAt = 0,
     this.jobId,
@@ -227,6 +309,7 @@ class Wal {
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
+      captureEndSeconds: json['capture_end_seconds'] is num ? (json['capture_end_seconds'] as num).toDouble() : null,
       device: json['device'] ?? "phone",
       deviceModel: json['device_model'],
       storageOffset: json['storage_offset'] ?? 0,
@@ -236,7 +319,10 @@ class Wal {
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
       originalStorage:
           json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      sourceId: json['source_id'],
       conversationId: json['conversation_id'],
+      uploadIntent: json['upload_intent'] != null ? WalUploadIntent.values.asNameMap()[json['upload_intent']] : null,
+      canonicalReplacement: json['canonical_replacement'] ?? false,
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
@@ -245,6 +331,7 @@ class Wal {
   }
 
   Map<String, dynamic> toJson() {
+    final persistedCaptureEnd = validatedCaptureEndSeconds;
     return {
       'timer_start': timerStart,
       'codec': codec.toString(),
@@ -254,6 +341,7 @@ class Wal {
       'storage': storage.name,
       'file_path': filePath,
       'seconds': seconds,
+      if (persistedCaptureEnd != null) 'capture_end_seconds': persistedCaptureEnd,
       'device': device,
       'device_model': deviceModel,
       'storage_offset': storageOffset,
@@ -262,7 +350,10 @@ class Wal {
       'total_frames': totalFrames,
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
+      'source_id': sourceId,
       'conversation_id': conversationId,
+      'upload_intent': uploadIntent?.name,
+      'canonical_replacement': canonicalReplacement,
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
@@ -273,11 +364,16 @@ class Wal {
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_$timerStart.bin";
   }
 
-  getFileNameByTimeStarts(int timestarts) {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timestarts}.bin";
+  getFileNameByTimeStarts(int timestarts, {String? sourceId}) {
+    final sourceSuffix = sourceId == null ? '' : '_${sourceId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), "")}';
+    // Backend timestamp parsing treats the final underscore-delimited token as
+    // capture epoch seconds, so source identity must precede the timestamp.
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs$frameSize"
+        "$sourceSuffix"
+        "_$timestarts.bin";
   }
 
   static Future<String?> getFilePath(String? pathOrName) async {

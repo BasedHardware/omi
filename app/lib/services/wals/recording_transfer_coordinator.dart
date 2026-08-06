@@ -6,7 +6,25 @@ import 'package:omi/utils/logger.dart';
 ///
 /// All recording recovery paths use this closed set so a wake can be audited
 /// without introducing a second recovery owner.
-enum WakeTrigger { startup, foregrounded, connectivityRestored, deviceConnected, cooldownElapsed, userRetry }
+enum WakeTrigger {
+  startup,
+  foregrounded,
+  connectivityRestored,
+  deviceConnected,
+  cooldownElapsed,
+
+  /// A new explicit tap may authorize one new device snapshot.
+  userRetry,
+
+  /// Retry phone/cloud work already authorized by an earlier explicit tap.
+  ///
+  /// This must never start or expand a device backlog read.
+  userRetryLocalUpload,
+
+  /// A bounded automatic ring snapshot is durable and eligible for its
+  /// sequence-scoped phone/cloud pass.
+  ringBacklogSnapshotCompleted,
+}
 
 /// Result reported by the production drain seam.
 ///
@@ -19,6 +37,8 @@ class RecordingTransferDrainResult {
     required this.failed,
     required this.needsReconciliation,
     this.contended = false,
+    this.deferred = false,
+    this.hasDeviceSnapshotReceipt = false,
   });
 
   /// Nothing eligible to drain (empty backlog). Not a retry signal.
@@ -26,26 +46,37 @@ class RecordingTransferDrainResult {
       : attempted = false,
         failed = false,
         needsReconciliation = false,
-        contended = false;
+        contended = false,
+        deferred = false,
+        hasDeviceSnapshotReceipt = false;
 
   /// Drain could not run because another sync owned the seam. Retry later.
   const RecordingTransferDrainResult.contended()
       : attempted = false,
         failed = false,
         needsReconciliation = false,
-        contended = true;
+        contended = true,
+        deferred = false,
+        hasDeviceSnapshotReceipt = false;
 
   final bool attempted;
   final bool failed;
   final bool needsReconciliation;
   final bool contended;
+
+  /// Sequence-scoped work exists but is not yet a complete upload unit.
+  final bool deferred;
+
+  /// A manual device snapshot has already yielded a bounded receipt. Any
+  /// retry must keep phone-upload authority without arming a newer snapshot.
+  final bool hasDeviceSnapshotReceipt;
 }
 
 typedef RecordingTransferPass = Future<void> Function();
-typedef RecordingTransferDrain = Future<RecordingTransferDrainResult> Function();
+typedef RecordingTransferDrain = Future<RecordingTransferDrainResult> Function(WakeTrigger trigger);
 typedef RecordingTransferCooldownScheduler = void Function(Duration delay, void Function() callback);
 
-/// The single foreground owner for recording recovery.
+/// The single owner for recording recovery.
 ///
 /// It deliberately knows no provider or transport details. Production wires
 /// the seams once, while tests use the same coordinator with fake connectivity,
@@ -57,6 +88,7 @@ class RecordingTransferCoordinator {
     required RecordingTransferPass refreshPending,
     required RecordingTransferDrain drain,
     required bool Function() autoUploadEnabled,
+    bool Function()? backgroundDeviceRecoveryEnabled,
     Stream<bool>? connectivityChanges,
     bool initiallyConnected = true,
     DateTime Function()? clock,
@@ -66,6 +98,7 @@ class RecordingTransferCoordinator {
         _refreshPending = refreshPending,
         _drain = drain,
         _autoUploadEnabled = autoUploadEnabled,
+        _backgroundDeviceRecoveryEnabled = backgroundDeviceRecoveryEnabled ?? _disabled,
         _clock = clock ?? DateTime.now,
         _scheduleCooldown = scheduleCooldown {
     _configured = true;
@@ -78,12 +111,14 @@ class RecordingTransferCoordinator {
         _refreshPending = _noop,
         _drain = _skippedDrain,
         _autoUploadEnabled = _disabled,
+        _backgroundDeviceRecoveryEnabled = _disabled,
         _clock = DateTime.now;
 
   static final RecordingTransferCoordinator instance = RecordingTransferCoordinator._singleton();
 
   static Future<void> _noop() async {}
-  static Future<RecordingTransferDrainResult> _skippedDrain() async => const RecordingTransferDrainResult.skipped();
+  static Future<RecordingTransferDrainResult> _skippedDrain(WakeTrigger _) async =>
+      const RecordingTransferDrainResult.skipped();
   static bool _disabled() => false;
 
   static const List<Duration> _failureBackoff = [
@@ -98,6 +133,7 @@ class RecordingTransferCoordinator {
   RecordingTransferPass _refreshPending;
   RecordingTransferDrain _drain;
   bool Function() _autoUploadEnabled;
+  bool Function() _backgroundDeviceRecoveryEnabled;
   final DateTime Function() _clock;
   RecordingTransferCooldownScheduler? _scheduleCooldown;
 
@@ -125,6 +161,7 @@ class RecordingTransferCoordinator {
     required RecordingTransferPass refreshPending,
     required RecordingTransferDrain drain,
     required bool Function() autoUploadEnabled,
+    required bool Function() backgroundDeviceRecoveryEnabled,
     required Stream<bool> connectivityChanges,
     required bool initiallyConnected,
   }) {
@@ -133,6 +170,7 @@ class RecordingTransferCoordinator {
     _refreshPending = refreshPending;
     _drain = drain;
     _autoUploadEnabled = autoUploadEnabled;
+    _backgroundDeviceRecoveryEnabled = backgroundDeviceRecoveryEnabled;
     _configured = true;
     _listenToConnectivity(connectivityChanges, initiallyConnected);
 
@@ -170,15 +208,21 @@ class RecordingTransferCoordinator {
   /// Coalesces concurrent events into a single extra serial pass. Five wakes
   /// during one pass therefore run at most two passes and never parallel drains.
   Future<void> wake(WakeTrigger trigger) {
-    // Recovery is foreground-only. Persisted WAL state is recovered by the
-    // foreground wake, so background connectivity/device callbacks must not
-    // start discovery or a whole-WAL drain.
-    if (!_foreground) return Future.value();
-
     if (!_configured) {
       _wakeBeforeConfigured = _preferWake(_wakeBeforeConfigured, trigger);
       return Future.value();
     }
+
+    // Android's persistent BLE mode is an explicit user opt-in. Its native
+    // reconnect callback may run one recovery pass while Dart is still alive
+    // in the background, but only when automatic uploads are also enabled.
+    // Every other background wake remains suppressed; persisted state is
+    // recovered by the next foreground wake.
+    final allowedBackgroundDeviceReconnect = !_foreground &&
+        trigger == WakeTrigger.deviceConnected &&
+        _backgroundDeviceRecoveryEnabled() &&
+        _autoUploadEnabled();
+    if (!_foreground && !allowedBackgroundDeviceReconnect) return Future.value();
 
     final active = _inFlight;
     if (active != null) {
@@ -201,10 +245,25 @@ class RecordingTransferCoordinator {
   }
 
   WakeTrigger _preferWake(WakeTrigger? existing, WakeTrigger incoming) {
-    if (existing == WakeTrigger.userRetry || incoming != WakeTrigger.userRetry) {
-      return existing ?? incoming;
+    if (existing == null) return incoming;
+    return _wakePriority(incoming) > _wakePriority(existing) ? incoming : existing;
+  }
+
+  int _wakePriority(WakeTrigger trigger) {
+    switch (trigger) {
+      case WakeTrigger.userRetry:
+        return 3;
+      case WakeTrigger.userRetryLocalUpload:
+        return 2;
+      case WakeTrigger.ringBacklogSnapshotCompleted:
+        return 1;
+      case WakeTrigger.startup:
+      case WakeTrigger.foregrounded:
+      case WakeTrigger.connectivityRestored:
+      case WakeTrigger.deviceConnected:
+      case WakeTrigger.cooldownElapsed:
+        return 0;
     }
-    return incoming;
   }
 
   Future<void> _run(WakeTrigger firstWake) async {
@@ -226,13 +285,14 @@ class RecordingTransferCoordinator {
       await _discover();
       await _refreshPending();
 
-      final mayUpload = trigger == WakeTrigger.userRetry || _autoUploadEnabled();
+      final mayUpload =
+          trigger == WakeTrigger.userRetry || trigger == WakeTrigger.userRetryLocalUpload || _autoUploadEnabled();
       if (!mayUpload) {
-        if (reconcileFailed) _scheduleRetry('reconcile pass failed');
+        if (reconcileFailed) _scheduleRetry('reconcile pass failed', trigger);
         return;
       }
 
-      final result = await _drain();
+      final result = await _drain(trigger);
       await _refreshPending();
 
       // Partial upload success still leaves `uploaded` WALs that need the
@@ -243,21 +303,44 @@ class RecordingTransferCoordinator {
       }
 
       if (result.failed) {
-        _scheduleRetry('eligible WAL upload returned a retryable failure');
+        _scheduleRetry(
+          'eligible WAL upload returned a retryable failure',
+          trigger,
+          hasDeviceSnapshotReceipt: result.hasDeviceSnapshotReceipt,
+        );
         return;
       }
       if (result.contended) {
-        _scheduleRetry('eligible WAL drain was contended');
+        _scheduleRetry(
+          'eligible WAL drain was contended',
+          trigger,
+          hasDeviceSnapshotReceipt: result.hasDeviceSnapshotReceipt,
+        );
+        return;
+      }
+      if (result.deferred) {
+        _scheduleRetry(
+          'authorized ring recovery is not yet a complete upload unit',
+          trigger,
+          hasDeviceSnapshotReceipt: result.hasDeviceSnapshotReceipt,
+        );
         return;
       }
       if (reconcileFailed) {
-        _scheduleRetry('reconcile pass failed');
+        _scheduleRetry(
+          'reconcile pass failed',
+          trigger,
+          hasDeviceSnapshotReceipt: result.hasDeviceSnapshotReceipt,
+        );
         return;
       }
-      _failureStreak = 0;
+      _clearRetryState();
     } catch (error, stackTrace) {
       Logger.debug('RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace');
-      _scheduleRetry('pass threw while recovering recording transfers');
+      _scheduleRetry(
+        'pass threw while recovering recording transfers',
+        trigger,
+      );
     }
   }
 
@@ -272,7 +355,11 @@ class RecordingTransferCoordinator {
     }
   }
 
-  void _scheduleRetry(String reason) {
+  void _scheduleRetry(
+    String reason,
+    WakeTrigger trigger, {
+    bool hasDeviceSnapshotReceipt = false,
+  }) {
     if (!_foreground) return;
     final index = _failureStreak.clamp(0, _failureBackoff.length - 1);
     final delay = _failureBackoff[index];
@@ -286,7 +373,11 @@ class RecordingTransferCoordinator {
       if (!_foreground || generation != _cooldownGeneration) return;
       _cooldownTimer = null;
       nextCooldownAt = null;
-      unawaited(wake(WakeTrigger.cooldownElapsed));
+      final retryTrigger = _retryTrigger(
+        trigger,
+        hasDeviceSnapshotReceipt: hasDeviceSnapshotReceipt,
+      );
+      unawaited(wake(retryTrigger));
     }
 
     final scheduler = _scheduleCooldown;
@@ -295,6 +386,27 @@ class RecordingTransferCoordinator {
     } else {
       _cooldownTimer = Timer(delay, fire);
     }
+  }
+
+  WakeTrigger _retryTrigger(
+    WakeTrigger trigger, {
+    required bool hasDeviceSnapshotReceipt,
+  }) {
+    if (trigger == WakeTrigger.userRetry) {
+      return hasDeviceSnapshotReceipt ? WakeTrigger.userRetryLocalUpload : WakeTrigger.userRetry;
+    }
+    if (trigger == WakeTrigger.userRetryLocalUpload || trigger == WakeTrigger.ringBacklogSnapshotCompleted) {
+      return trigger;
+    }
+    return WakeTrigger.cooldownElapsed;
+  }
+
+  void _clearRetryState() {
+    _failureStreak = 0;
+    _cooldownGeneration++;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = null;
+    nextCooldownAt = null;
   }
 
   void dispose() {

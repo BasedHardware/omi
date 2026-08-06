@@ -8,11 +8,15 @@ import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/mutex.dart';
 
+export 'package:omi/backend/http/api/conversations.dart' show SyncUploadLane;
+
 typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   bool claimLiveCapture,
+  SyncUploadLane syncLane,
+  bool replaceTranscript,
 });
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
 
@@ -92,6 +96,8 @@ class SyncUploadGate {
     UploadProgressCallback? onUploadProgress,
     String? conversationId,
     bool claimLiveCapture = false,
+    SyncUploadLane lane = SyncUploadLane.fresh,
+    bool replaceTranscript = false,
   }) async {
     await _uploadMutex.acquire();
     try {
@@ -117,6 +123,8 @@ class SyncUploadGate {
           onUploadProgress: onUploadProgress,
           conversationId: conversationId,
           claimLiveCapture: claimLiveCapture,
+          syncLane: lane,
+          replaceTranscript: replaceTranscript,
         );
         _limiter.clear();
         return result;

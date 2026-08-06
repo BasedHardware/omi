@@ -79,6 +79,18 @@ void main() {
       expect(done.status, 0);
       expect(done.nextSeq, 12345);
       expect(done.isOk, isTrue);
+      expect(done.transferCrc32, isNull);
+    });
+
+    test('decodes optional transfer CRC32 extension', () {
+      final bd = ByteData(14)
+        ..setUint8(0, 0x04)
+        ..setUint8(1, 0)
+        ..setUint64(2, 12345, Endian.big)
+        ..setUint32(10, 0xCBF43926, Endian.big);
+      final done = RingProtocol.parseDoneNotification(bd.buffer.asUint8List())!;
+      expect(done.nextSeq, 12345);
+      expect(done.transferCrc32, 0xCBF43926);
     });
 
     test('non-zero status surfaces as isOk=false', () {
@@ -92,6 +104,93 @@ void main() {
 
     test('returns null for truncated payload', () {
       expect(RingProtocol.parseDoneNotification([0x04, 0]), isNull);
+    });
+  });
+
+  group('RingSequenceCoverage', () {
+    test('merges fetched live head with backlog only after the gap closes', () {
+      final coverage = RingSequenceCoverage();
+
+      coverage.add(980, 1000);
+      expect(coverage.contiguousEndFrom(0), 0);
+      expect(coverage.firstRangeAtOrAfter(0), (start: 980, end: 1000));
+
+      coverage.add(0, 500);
+      expect(coverage.contiguousEndFrom(0), 500);
+
+      coverage.add(500, 980);
+      expect(coverage.contiguousEndFrom(0), 1000);
+      expect(coverage.ranges, [(start: 0, end: 1000)]);
+    });
+
+    test('sequence identity skips an already durable head without content matching', () {
+      final coverage = RingSequenceCoverage([
+        (start: 100, end: 120),
+        (start: 140, end: 160),
+      ]);
+
+      expect(coverage.firstUncovered(100, 160), 120);
+      coverage.add(120, 140);
+      expect(coverage.firstUncovered(100, 160), 160);
+      expect(coverage.covers(100, 160), isTrue);
+    });
+
+    test('recent recovery selects newest missing ranges backward from the live head', () {
+      final coverage = RingSequenceCoverage([
+        (start: 980, end: 1000),
+        (start: 850, end: 900),
+      ]);
+
+      expect(
+        coverage.lastUncoveredBefore(0, 980, maxCount: 96),
+        (start: 900, end: 980),
+      );
+      coverage.add(900, 980);
+      expect(
+        coverage.lastUncoveredBefore(0, 900, maxCount: 96),
+        (start: 754, end: 850),
+      );
+    });
+
+    test('parses only valid immutable ring source identities', () {
+      expect(RingProtocol.parseSourceRange('ring_42_84'), (start: 42, end: 84));
+      expect(RingProtocol.parseSourceRange('ring_84_42'), isNull);
+      expect(RingProtocol.parseSourceRange('legacy_42_84'), isNull);
+      expect(RingProtocol.parseSourceRange(null), isNull);
+    });
+
+    test('retains sequence identity after local historical compaction', () {
+      expect(
+        RingProtocol.parseRecoverySourceRange('archive_ring_42_84_1700000000'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseRecoverySourceRange('ring_42_84'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseRecoverySourceRange('archive2_ring_42_84_1700000000'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseRecoverySourceRange('archive_ring_84_42_1700000000'),
+        isNull,
+      );
+    });
+
+    test('device ADVANCE trusts raw ranges and truthful v2 archives only', () {
+      expect(
+        RingProtocol.parseDurableCoverageSourceRange('ring_42_84'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseDurableCoverageSourceRange('archive2_ring_42_84_1700000000'),
+        (start: 42, end: 84),
+      );
+      expect(
+        RingProtocol.parseDurableCoverageSourceRange('archive_ring_42_84_1700000000'),
+        isNull,
+      );
     });
   });
 
@@ -146,6 +245,148 @@ void main() {
       expect(bytes[0], 0x12);
       // 0xCAFEBABE as u64 BE = 00 00 00 00 CA FE BA BE
       expect(bytes.sublist(1).toList(), [0x00, 0x00, 0x00, 0x00, 0xCA, 0xFE, 0xBA, 0xBE]);
+    });
+  });
+
+  group('RingProtocol.canAdvance', () {
+    test('allows deletion only after a complete durable transfer', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects transport completion without application completion', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: false,
+          doneOk: false,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: false,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a completed transfer when durable flush failed', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: true,
+          isCancelled: false,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a cancelled transfer', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: true,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects a CRC mismatch', () {
+      expect(
+        RingProtocol.canAdvance(
+          reachedDone: true,
+          doneOk: true,
+          flushError: false,
+          isCancelled: false,
+          receivedCompleteRange: true,
+          protocolError: false,
+          crcVerified: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
+  group('RingTransferCrc32', () {
+    test('matches the standard IEEE CRC-32 golden vector across fragments', () {
+      final crc = RingTransferCrc32()
+        ..add('123'.codeUnits)
+        ..add('456'.codeUnits)
+        ..add('789'.codeUnits);
+
+      expect(crc.value, 0xCBF43926);
+    });
+  });
+
+  group('RingProtocol.receivedCompleteRange', () {
+    test('accepts an exact contiguous READ_BEGIN through DONE range', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 20,
+          pendingBytes: 0,
+        ),
+        isTrue,
+      );
+    });
+
+    test('rejects a missing record even when DONE arrived', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 19,
+          pendingBytes: 0,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects trailing partial record bytes', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 120,
+          receivedPacketCount: 20,
+          pendingBytes: 17,
+        ),
+        isFalse,
+      );
+    });
+
+    test('rejects DONE watermark inconsistent with announced count', () {
+      expect(
+        RingProtocol.receivedCompleteRange(
+          transferStartSeq: 100,
+          announcedPacketCount: 20,
+          doneNextSeq: 121,
+          receivedPacketCount: 20,
+          pendingBytes: 0,
+        ),
+        isFalse,
+      );
     });
   });
 
@@ -207,21 +448,16 @@ void main() {
       expect(frames, isEmpty);
     });
 
-    test('drops a frame that would end exactly at the buffer boundary (firmware overflow guard)', () {
-      // [size=2][0xAA, 0xBB] — the frame would end exactly at audio.length.
-      // The firmware (transport.c:write_to_storage) never writes a frame ending
-      // exactly at the last byte: a size byte at the boundary with no room for
-      // its frame is an overflow artifact, and the bytes after it are stale from
-      // a previous write. The parser's >= guard drops it; parsing the stale
-      // region as opus otherwise yields OpusException -4 "corrupted stream".
+    test('drops a boundary-aligned frame for legacy record compatibility', () {
+      // Legacy 3.0.20 may leave a size marker followed by stale bytes when a
+      // frame would consume the complete payload.
       final frames = RingProtocol.parseAudioPayload([2, 0xAA, 0xBB]);
       expect(frames, isEmpty);
     });
 
-    test('drops the boundary-aligned last frame in tightly-packed input (440B exactly)', () {
-      // 40 frames of [size=10][10B] = 40 * 11 = 440 bytes — the 40th frame would
-      // end precisely at audio.length. The firmware never emits such a frame, so
-      // the >= boundary guard drops it: 39 frames survive, the last being #38.
+    test('drops the boundary-aligned last frame in tightly-packed legacy input', () {
+      // 40 frames of [size=10][10B] = 440 bytes. The final frame shape is
+      // indistinguishable from a legacy stale-tail artifact and is rejected.
       final audio = <int>[];
       for (int i = 0; i < 40; i++) {
         audio.add(10);

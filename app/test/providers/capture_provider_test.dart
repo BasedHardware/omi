@@ -609,6 +609,41 @@ void main() {
   });
 
   group('terminal live transcription status', () {
+    test('reports an abnormal live transport close as retrying until ready', () {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(
+        _device(id: 'cv1-a', type: DeviceType.omi),
+      );
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      provider.onClosed(1006);
+
+      final failure = provider.terminalTranscriptionFailure;
+      expect(failure?.status, 'stt_failed');
+      expect(failure?.provider, 'transport');
+      expect(failure?.outcome, 'transport_unavailable');
+      expect(failure?.reason, 'socket_closed');
+      expect(failure?.retryable, isTrue);
+
+      provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
+      expect(provider.terminalTranscriptionFailure, isNull);
+      provider.dispose();
+    });
+
+    test('reports a live transport error as retrying', () {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(
+        _device(id: 'cv1-a', type: DeviceType.omi),
+      );
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      provider.onError(StateError('socket failed'));
+
+      expect(provider.terminalTranscriptionFailure?.reason, 'socket_error');
+      expect(provider.terminalTranscriptionFailure?.retryable, isTrue);
+      provider.dispose();
+    });
+
     test('preserves server STT failure across socket close until ready', () {
       final provider = CaptureProvider();
       final failure = MessageServiceStatusEvent(
@@ -1146,10 +1181,12 @@ void main() {
     test('connectivity flicker does not toggle readiness of a ready socket', () {
       final provider = CaptureProvider();
 
-      // Drive the provider into the socket-subscribed state (the scenario the
-      // old getter got wrong): onConnected mirrors the transcript WebSocket
-      // subscribing, which sets _transcriptServiceReady = true.
+      // Drive the provider through the production readiness boundary. A raw
+      // WebSocket connection is not sufficient: the STT service must publish
+      // its explicit ready status before audio or UI claims the session works.
       provider.onConnected();
+      expect(provider.transcriptServiceReady, isFalse);
+      provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
       expect(provider.transcriptServiceReady, isTrue);
 
       // A connectivity flicker must not toggle readiness off. Before the fix

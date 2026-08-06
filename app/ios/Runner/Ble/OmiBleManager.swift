@@ -31,6 +31,13 @@ final class OmiBleManager: NSObject {
     /// Whether the user explicitly disconnected (suppress auto-reconnect).
     private var manuallyDisconnected: Set<String> = []
 
+    /// A CoreBluetooth restoration launch with Background Mode disabled must
+    /// not be allowed to reconnect any cached paired UUID. The restoration
+    /// dictionary can be empty even though Flutter still knows the device.
+    /// Only a real foreground transition consumes this process-wide gate.
+    private var backgroundRestoreRequiresForegroundActivation = false
+    private var deferredForegroundConnectUuids: Set<String> = []
+
     /// RSSI keep-alive timer — periodic reads prevent connection supervision timeout.
     private var rssiTimer: Timer?
 
@@ -62,6 +69,16 @@ final class OmiBleManager: NSObject {
     private var scanTimer: Timer?
     /// Queued scan request if Bluetooth wasn't ready when startScan was called.
     private var pendingScan: (timeout: Int, serviceUuids: [String])?
+
+    /// CCCD disables already requested for restored legacy audio subscriptions
+    /// that have no current Dart/native owner.
+    private var orphanedLegacyAudioDisableRequests: Set<String> = []
+
+    /// Parsed native stream ownership. The raw preference is compared on each
+    /// legacy audio callback, while JSON parsing only repeats when Dart changes it.
+    private var nativeBleConfigCacheInitialized = false
+    private var cachedNativeBleConfigRaw: String?
+    private var cachedLegacyAudioOwner: BleLegacyAudioOwner?
 
     // MARK: - Initialization
 
@@ -122,14 +139,21 @@ final class OmiBleManager: NSObject {
     // MARK: - Connection
 
     func connectPeripheral(uuid: String) {
+        if BleRestoredPeripheralPolicy.shouldDeferConnect(
+            requiresForegroundActivation: backgroundRestoreRequiresForegroundActivation
+        ) {
+            deferredForegroundConnectUuids.insert(uuid)
+            releaseDeferredRestoredPeripheral(uuid: uuid)
+            NSLog(
+                "[OmiBle] Deferred connect for restored peripheral \(uuid); "
+                    + "waiting for foreground activation"
+            )
+            return
+        }
         manuallyDisconnected.remove(uuid)
 
         if let peripheral = peripherals[uuid] {
-            if peripheral.state == .connected {
-                NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, skipping")
-                return
-            }
-            centralManager.connect(peripheral, options: nil)
+            connectOrRevalidate(peripheral, uuid: uuid)
             return
         }
 
@@ -139,6 +163,41 @@ final class OmiBleManager: NSObject {
         if let peripheral = retrieved.first {
             peripheral.delegate = self
             peripherals[uuid] = peripheral
+            connectOrRevalidate(peripheral, uuid: uuid)
+        }
+    }
+
+    private func releaseDeferredRestoredPeripheral(uuid: String) {
+        guard let identifier = UUID(uuidString: uuid) else { return }
+        let peripheral = peripherals[uuid]
+            ?? centralManager.retrievePeripherals(withIdentifiers: [identifier]).first
+        guard let peripheral else { return }
+
+        peripheral.delegate = self
+        peripherals[uuid] = peripheral
+        manuallyDisconnected.insert(uuid)
+        if peripheral.state == .connected || peripheral.state == .connecting {
+            centralManager.cancelPeripheralConnection(peripheral)
+            NSLog(
+                "[OmiBle] Released deferred restored peripheral \(uuid); "
+                    + "waiting for foreground activation"
+            )
+        }
+    }
+
+    private func connectOrRevalidate(_ peripheral: CBPeripheral, uuid: String) {
+        switch BleKnownPeripheralConnectionPolicy.action(
+            isConnected: peripheral.state == .connected
+        ) {
+        case .rediscoverServices:
+            // CoreBluetooth may keep the link alive across process relaunch
+            // without replaying didConnect. Rediscovery republishes onDeviceReady
+            // after Flutter installs its callback, restoring the canonical ring
+            // stream instead of leaving a connected-but-inert session.
+            NSLog("[OmiBle] connectPeripheral: \(uuid) already connected; rediscovering services")
+            peripheral.delegate = self
+            peripheral.discoverServices(nil)
+        case .connect:
             centralManager.connect(peripheral, options: nil)
         }
     }
@@ -170,6 +229,15 @@ final class OmiBleManager: NSObject {
     /// cost nothing while iOS waits at the chipset level.
     func reconnectStalePeripherals() {
         guard centralManager.state == .poweredOn else { return }
+        if backgroundRestoreRequiresForegroundActivation {
+            backgroundRestoreRequiresForegroundActivation = false
+            let deferredUuids = deferredForegroundConnectUuids
+            deferredForegroundConnectUuids.removeAll()
+            for uuid in deferredUuids {
+                NSLog("[OmiBle] Foreground activation reconnecting deferred peripheral \(uuid)")
+                connectPeripheral(uuid: uuid)
+            }
+        }
         for (uuid, peripheral) in peripherals {
             guard everConnected.contains(uuid) else { continue }
             if manuallyDisconnected.contains(uuid) { continue }
@@ -283,6 +351,58 @@ final class OmiBleManager: NSObject {
 
     private func peripheralUuidString(_ peripheral: CBPeripheral) -> String {
         return peripheral.identifier.uuidString
+    }
+
+    private func characteristicKey(
+        peripheralUuid: String,
+        serviceUuid: String,
+        characteristicUuid: String
+    ) -> String {
+        return "\(peripheralUuid):\(serviceUuid):\(characteristicUuid)".lowercased()
+    }
+
+    private func configuredLegacyAudioOwner() -> BleLegacyAudioOwner? {
+        let raw = UserDefaults.standard.string(forKey: "flutter.nativeBleStreamConfig")
+        if !nativeBleConfigCacheInitialized || raw != cachedNativeBleConfigRaw {
+            nativeBleConfigCacheInitialized = true
+            cachedNativeBleConfigRaw = raw
+            cachedLegacyAudioOwner = BleLegacyAudioOwnershipPolicy.owner(from: raw)
+        }
+        return cachedLegacyAudioOwner
+    }
+
+    /// Returns true when the notification is orphaned and must not be forwarded.
+    ///
+    /// iOS restores notification subscriptions independently of Flutter. When
+    /// Dart intentionally omits its native stream config (the 3.0.29 ring owner),
+    /// release a restored legacy audio CCCD and drop packets until CoreBluetooth
+    /// confirms the transition.
+    private func rejectOrphanedLegacyAudioNotification(
+        peripheral: CBPeripheral,
+        characteristic: CBCharacteristic
+    ) -> Bool {
+        guard let service = characteristic.service else { return false }
+        let uuid = peripheralUuidString(peripheral)
+        let serviceUuid = fullUuidString(service.uuid)
+        let characteristicUuid = fullUuidString(characteristic.uuid)
+        let decision = BleLegacyAudioOwnershipPolicy.decision(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: characteristicUuid,
+            configuredOwner: configuredLegacyAudioOwner()
+        )
+        guard decision == .orphanedLegacyAudio else { return false }
+
+        let key = characteristicKey(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: characteristicUuid
+        )
+        if characteristic.isNotifying, orphanedLegacyAudioDisableRequests.insert(key).inserted {
+            NSLog("[OmiBle] Releasing orphaned legacy audio notification for \(uuid)")
+            peripheral.setNotifyValue(false, for: characteristic)
+        }
+        return true
     }
 
     /// Normalize a CBUUID to its full 128-bit string representation.
@@ -521,6 +641,9 @@ final class OmiBleManager: NSObject {
     private func cleanupPeripheral(_ peripheralUuid: String) {
         stopRssiKeepAlive()
         discoveredServices.removeValue(forKey: peripheralUuid)
+        orphanedLegacyAudioDisableRequests = orphanedLegacyAudioDisableRequests.filter {
+            !$0.hasPrefix(peripheralUuid.lowercased())
+        }
 
         // Clean up pending completions
         let completionKeys = readCompletions.keys.filter { $0.hasPrefix(peripheralUuid.lowercased()) }
@@ -550,23 +673,50 @@ extension OmiBleManager: CBCentralManagerDelegate {
             NSLog("[OmiBle] Executing queued scan (timeout=\(pending.timeout))")
             startScan(timeout: pending.timeout, serviceUuids: pending.serviceUuids)
         }
+        if central.state == .poweredOn,
+           BleRestoredPeripheralPolicy.shouldResumeDeferredConnect(
+               requiresForegroundActivation: backgroundRestoreRequiresForegroundActivation,
+               applicationIsActive: UIApplication.shared.applicationState == .active
+           ) {
+            reconnectStalePeripherals()
+        }
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        // Restore previously connected peripherals after app relaunch
+        let restoredAction = BleRestoredPeripheralPolicy.action(
+            backgroundModeEnabled: UserDefaults.standard.bool(
+                forKey: "flutter.backgroundModeEnabled"
+            )
+        )
+        if restoredAction == .releaseConnection {
+            backgroundRestoreRequiresForegroundActivation = true
+        }
+
+        // Restore previously connected peripherals after app relaunch only
+        // when the user explicitly opted into Background Mode. Otherwise an
+        // OS-restored iOS process can monopolize a one-connection pendant while
+        // the user is deliberately trying to use Android or another host.
         if let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
             var uuids: [String] = []
             for peripheral in restoredPeripherals {
                 let uuid = peripheralUuidString(peripheral)
                 peripheral.delegate = self
                 peripherals[uuid] = peripheral
-                uuids.append(uuid)
-
-                // Re-establish connection if not already connected
-                if peripheral.state != .connected {
-                    central.connect(peripheral, options: nil)
-                } else {
-                    peripheral.discoverServices(nil)
+                switch restoredAction {
+                case .restoreConnection:
+                    uuids.append(uuid)
+                    if peripheral.state != .connected {
+                        central.connect(peripheral, options: nil)
+                    } else {
+                        peripheral.discoverServices(nil)
+                    }
+                case .releaseConnection:
+                    manuallyDisconnected.insert(uuid)
+                    central.cancelPeripheralConnection(peripheral)
+                    NSLog(
+                        "[OmiBle] Released restored peripheral \(uuid); "
+                            + "Background Mode is disabled"
+                    )
                 }
             }
             flutterApi?.onStateRestored(peripheralUuids: uuids) { _ in }
@@ -703,6 +853,18 @@ extension OmiBleManager: CBPeripheralDelegate {
         let allDiscovered = services.allSatisfy { $0.characteristics != nil }
 
         if allDiscovered {
+            // State restoration can bring back a legacy audio CCCD before Dart
+            // selects the storage-authoritative ring owner. Release it before
+            // publishing device readiness so only the selected audio lane runs.
+            for discoveredService in services {
+                for characteristic in discoveredService.characteristics ?? [] {
+                    _ = rejectOrphanedLegacyAudioNotification(
+                        peripheral: peripheral,
+                        characteristic: characteristic
+                    )
+                }
+            }
+
             let bleServices = services.map { svc in
                 BleService(
                     uuid: self.fullUuidString(svc.uuid),
@@ -762,6 +924,13 @@ extension OmiBleManager: CBPeripheralDelegate {
         // Handle notification
         guard let data = characteristic.value, !data.isEmpty else { return }
 
+        if rejectOrphanedLegacyAudioNotification(
+            peripheral: peripheral,
+            characteristic: characteristic
+        ) {
+            return
+        }
+
         if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
         }
@@ -817,6 +986,15 @@ extension OmiBleManager: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
         let charUuid = fullUuidString(characteristic.uuid)
+        if let service = characteristic.service {
+            orphanedLegacyAudioDisableRequests.remove(
+                characteristicKey(
+                    peripheralUuid: uuid,
+                    serviceUuid: fullUuidString(service.uuid),
+                    characteristicUuid: charUuid
+                )
+            )
+        }
         if let error = error {
             NSLog("[OmiBle] Failed to update notification state for \(charUuid): \(error.localizedDescription)")
         } else {

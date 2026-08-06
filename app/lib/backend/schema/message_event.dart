@@ -12,6 +12,8 @@ abstract class MessageEvent {
         return MessageServiceStatusEvent.fromJson(json);
       case 'memory_processing_started':
         return ConversationProcessingStartedEvent.fromJson(json);
+      case 'conversation_session':
+        return ConversationSessionEvent.fromJson(json);
       case 'memory_created':
         return ConversationEvent.fromJson(json);
       case 'last_memory':
@@ -43,6 +45,37 @@ abstract class MessageEvent {
 
 class UnknownEvent extends MessageEvent {
   UnknownEvent({required super.eventType});
+}
+
+class ConversationSessionEvent extends MessageEvent {
+  ConversationSessionEvent({
+    required this.conversationId,
+    required this.status,
+    this.recordingSessionId,
+    this.lifecycleVersion,
+    this.lifecyclePhase,
+    this.lifecycleSequence,
+  }) : super(eventType: 'conversation_session');
+
+  final String conversationId;
+  final String status;
+  final String? recordingSessionId;
+  final int? lifecycleVersion;
+  final String? lifecyclePhase;
+  final int? lifecycleSequence;
+
+  bool get isInProgress => status == 'in_progress' && (lifecyclePhase == null || lifecyclePhase == 'in_progress');
+
+  factory ConversationSessionEvent.fromJson(Map<String, dynamic> json) {
+    return ConversationSessionEvent(
+      conversationId: json['conversation_id'] as String,
+      status: json['status'] as String? ?? 'in_progress',
+      recordingSessionId: json['recording_session_id'] as String?,
+      lifecycleVersion: (json['lifecycle_version'] as num?)?.toInt(),
+      lifecyclePhase: json['lifecycle_phase'] as String?,
+      lifecycleSequence: (json['lifecycle_sequence'] as num?)?.toInt(),
+    );
+  }
 }
 
 class MessageServiceStatusEvent extends MessageEvent {

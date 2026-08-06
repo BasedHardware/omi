@@ -159,12 +159,16 @@ git init -q --bare "$TMPDIR/fallback-bare.git"
 # This contract also runs beneath `make preflight`; suppress nested Make's
 # directory banner so stdout remains the resolver value under both entrypoints.
 out="$(cd "$FB_ROOT" && env -u PYTHON GIT_DIR="$TMPDIR/fallback-bare.git" make --no-print-directory print-resolved-python 2>/dev/null)"
-# Resolve the physical path because Git Bash exposes /tmp as a logical mount
-# while BASH_SOURCE resolves the same directory through its Windows path.
+# Resolve both sides to physical paths because macOS exposes /tmp as a logical
+# alias for /private/tmp, while Git Bash can expose the same directory through
+# a Windows path. Comparing only one normalized side makes the test itself
+# platform-dependent.
+actual_path="${out#PYTHON=}"
+actual="PYTHON=$(cd "$(dirname "$actual_path")" && pwd -P)/$(basename "$actual_path")"
 expected="PYTHON=$(cd "$FB_ROOT" && pwd -P)/backend/.venv/bin/python"
-if [ "$out" != "$expected" ]; then
+if [ "$actual" != "$expected" ]; then
   echo "FAIL: Makefile repo-root resolution collapsed when show-toplevel could not resolve a work tree." >&2
-  printf 'Expected: %s\nGot:      %s\n' "$expected" "$out" >&2
+  printf 'Expected: %s\nGot:      %s\n' "$expected" "$actual" >&2
   exit 1
 fi
 echo "linked-worktree repo-root fallback test passed."
@@ -204,3 +208,59 @@ for spelling in yes on 1 TRUE; do
   fi
 done
 echo "repair-git-primary-worktree boolean-spelling test passed."
+
+# Git hooks export the invoking repository's GIT_* variables. Flutter shells
+# out to Git to determine its SDK version, so inheriting those variables makes
+# it inspect this repository and report 0.0.0-unknown. Exercise the production
+# wrapper through a fake Flutter binary and prove both environment cleanup and
+# argument forwarding.
+mkdir -p "$TMPDIR/flutter-bin"
+cat >"$TMPDIR/flutter-bin/flutter" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+for variable in \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES \
+  GIT_COMMON_DIR \
+  GIT_CONFIG \
+  GIT_CONFIG_COUNT \
+  GIT_DIR \
+  GIT_INDEX_FILE \
+  GIT_OBJECT_DIRECTORY \
+  GIT_WORK_TREE; do
+  if printenv "$variable" >/dev/null 2>&1; then
+    echo "FAIL: Flutter inherited $variable from the Git hook." >&2
+    exit 42
+  fi
+done
+printf '%s\n' "$*" >"$FLUTTER_ENV_PROBE"
+printf '%s\n' "$PWD" >"$FLUTTER_CWD_PROBE"
+EOF
+chmod +x "$TMPDIR/flutter-bin/flutter"
+
+flutter_probe="$TMPDIR/flutter-args.txt"
+flutter_cwd_probe="$TMPDIR/flutter-cwd.txt"
+env \
+  PATH="$TMPDIR/flutter-bin:$PATH" \
+  FLUTTER_ENV_PROBE="$flutter_probe" \
+  FLUTTER_CWD_PROBE="$flutter_cwd_probe" \
+  GIT_CONFIG_COUNT=0 \
+  GIT_DIR="$TMPDIR/repo/.git" \
+  GIT_WORK_TREE="$TMPDIR/repo" \
+  "$ROOT/scripts/flutter-with-clean-git-env" \
+  pub run build_runner build --delete-conflicting-outputs
+
+expected_flutter_args="pub run build_runner build --delete-conflicting-outputs"
+actual_flutter_args="$(cat "$flutter_probe")"
+if [ "$actual_flutter_args" != "$expected_flutter_args" ]; then
+  echo "FAIL: Flutter Git-env wrapper changed command arguments." >&2
+  printf 'Expected: %s\nGot:      %s\n' "$expected_flutter_args" "$actual_flutter_args" >&2
+  exit 1
+fi
+expected_flutter_cwd="$ROOT/app"
+actual_flutter_cwd="$(cat "$flutter_cwd_probe")"
+if [ "$actual_flutter_cwd" != "$expected_flutter_cwd" ]; then
+  echo "FAIL: Flutter hook wrapper did not own the app working directory." >&2
+  printf 'Expected: %s\nGot:      %s\n' "$expected_flutter_cwd" "$actual_flutter_cwd" >&2
+  exit 1
+fi
+echo "Flutter hook environment cleanup test passed."

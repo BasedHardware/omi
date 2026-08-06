@@ -255,6 +255,22 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "SCA-273: the real watch presentation contract must stop its ripple after five seconds, preserve elapsed time, and localize accessibility labels for every native locale"
+  - id: android-physical-test-auth-config
+    command: ["bash", "app/scripts/test_verify_android_physical_test_auth_config.sh"]
+    triggers: ["app/scripts/verify_android_physical_test_auth_config.sh", "app/scripts/test_verify_android_physical_test_auth_config.sh", "app/AGENTS.md", "app/e2e/BLE_RELIABILITY_ACCEPTANCE.md", "app/e2e/SKILL.md", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "authenticated Android hardware runs must reject the hermetic empty-URL and placeholder-Firebase inputs before an APK can create false BLE evidence"
+  - id: ios-physical-test-auth-config
+    command: ["bash", "app/scripts/test_verify_ios_physical_test_auth_config.sh"]
+    triggers: ["app/scripts/verify_ios_physical_test_auth_config.sh", "app/scripts/test_verify_ios_physical_test_auth_config.sh", "app/AGENTS.md", "app/e2e/IOS_DEVICE_TESTING.md", "app/e2e/SKILL.md", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "authenticated isolated iOS hardware runs must reject the hermetic API target, the wrong Firebase project, and non-iOS Firebase app registrations before a build can create false BLE evidence"
+  - id: ios-dogfood-artifact-mode
+    command: ["python3", "app/e2e/scripts/test_verify_ios_dogfood_artifact.py"]
+    triggers: ["app/e2e/scripts/build_signed_ios_physical_dev.sh", "app/e2e/scripts/install_ios_dogfood_profile.sh", "app/e2e/scripts/verify_ios_dogfood_artifact.py", "app/e2e/scripts/test_verify_ios_dogfood_artifact.py", "app/e2e/BLE_RELIABILITY_ACCEPTANCE.md", "app/e2e/IOS_DEVICE_TESTING.md", "app/e2e/SKILL.md", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "the 2026-08-05 detached-debug incident proved that an authenticated physical pass can still leave a JIT app that crashes during unattended dogfooding; this artifact-boundary guard is narrower than runtime Flutter policy and must fail before device mutation"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]

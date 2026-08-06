@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter_sound/flutter_sound.dart';
@@ -39,6 +40,20 @@ List<Uint8List> parseLengthPrefixedFrames(Uint8List data) {
   return frames;
 }
 
+/// Keeps the platform audio-session transition ordered ahead of playback.
+///
+/// On iOS, opening a player does not make its route authoritative after the
+/// recorder, a video, or another app owned the shared audio session. Starting
+/// first can therefore advance the player while producing no audible output.
+@visibleForTesting
+Future<void> startPlaybackAfterActivatingSession({
+  required Future<void> Function() activateSession,
+  required Future<void> Function() startPlayer,
+}) async {
+  await activateSession();
+  await startPlayer();
+}
+
 class AudioPlayerUtils extends ChangeNotifier {
   // Singleton pattern
   static final AudioPlayerUtils _instance = AudioPlayerUtils._internal();
@@ -51,6 +66,7 @@ class AudioPlayerUtils extends ChangeNotifier {
   FlutterSoundPlayer? _audioPlayer;
   String? _currentPlayingId;
   bool _isProcessingAudio = false;
+  bool _playbackSessionActive = false;
 
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
@@ -113,12 +129,12 @@ class AudioPlayerUtils extends ChangeNotifier {
   }
 
   Future<void> _stopPlayback() async {
-    await _audioPlayer?.stopPlayer();
-    _currentPlayingId = null;
-    _currentPosition = Duration.zero;
-    _totalDuration = Duration.zero;
-    _positionSubscription?.cancel();
-    notifyListeners();
+    try {
+      await _audioPlayer?.stopPlayer();
+    } finally {
+      await _deactivatePlaybackSession();
+      _resetPlaybackState();
+    }
   }
 
   Future<void> _startPlayback(Wal wal) async {
@@ -127,31 +143,72 @@ class AudioPlayerUtils extends ChangeNotifier {
     _totalDuration = Duration.zero;
     notifyListeners();
 
-    // Initialize player lazily on first use
-    await _ensurePlayerInitialized();
+    try {
+      // Initialize player lazily on first use.
+      await _ensurePlayerInitialized();
 
-    final audioFilePath = await _getOrCreateAudioFile(wal);
-    if (audioFilePath == null) {
+      final audioFilePath = await _getOrCreateAudioFile(wal);
+      if (audioFilePath == null) {
+        throw StateError('Unable to create a playable audio file');
+      }
+
+      await startPlaybackAfterActivatingSession(
+        activateSession: _activatePlaybackSession,
+        startPlayer: () async {
+          await _audioPlayer?.startPlayer(
+            fromURI: audioFilePath,
+            whenFinished: _onPlaybackFinished,
+          );
+        },
+      );
+
+      _currentPlayingId = wal.id;
+      _isProcessingAudio = false;
+      _setupPositionTracking(wal);
+    } catch (error, stackTrace) {
+      await _deactivatePlaybackSession();
       _resetPlaybackState();
-      Logger.error('AudioPlayerUtils: Unable to create playable audio file for WAL ${wal.id}');
+      Logger.handle(
+        error,
+        stackTrace,
+        message: 'AudioPlayerUtils: Unable to play WAL ${wal.id}',
+      );
       AppSnackbar.showSnackbarError(
         globalNavigatorKey.currentContext?.l10n.audioPlaybackFailed ??
             'Unable to play audio. The file may be corrupted or missing.',
       );
-      return;
     }
-
-    _currentPlayingId = wal.id;
-    _isProcessingAudio = false;
-
-    await _audioPlayer?.startPlayer(fromURI: audioFilePath, whenFinished: () => _onPlaybackFinished());
-
-    _setupPositionTracking(wal);
   }
 
   void _onPlaybackFinished() {
     Logger.debug('Audio playback finished');
+    unawaited(_deactivatePlaybackSession());
     _resetPlaybackState();
+  }
+
+  Future<void> _activatePlaybackSession() async {
+    final session = await AudioSession.instance;
+    await session.configure(
+      const AudioSessionConfiguration.speech().copyWith(
+        avAudioSessionSetActiveOptions: AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
+      ),
+    );
+    final activated = await session.setActive(true);
+    if (!activated) {
+      throw StateError('The platform audio session refused playback activation');
+    }
+    _playbackSessionActive = true;
+  }
+
+  Future<void> _deactivatePlaybackSession() async {
+    if (!_playbackSessionActive) return;
+    _playbackSessionActive = false;
+    try {
+      final session = await AudioSession.instance;
+      await session.setActive(false);
+    } catch (error) {
+      Logger.debug('AudioPlayerUtils: audio session deactivation failed: $error');
+    }
   }
 
   void _resetPlaybackState() {

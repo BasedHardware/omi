@@ -14,7 +14,8 @@ export 'package:omi/backend/http/api/conversations.dart'
         SyncJobFetchOutcome,
         SyncRateLimitedException,
         SyncRateLimitKind,
-        SyncRecoveryWindowExceededException;
+        SyncRecoveryWindowExceededException,
+        SyncUploadTooLargeException;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -41,7 +42,10 @@ abstract class IWalSync {
   Future<List<Wal>> getMissingWals();
   Future deleteWal(Wal wal);
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
-  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress});
+  Future<SyncLocalFilesResponse?> syncWal({
+    required Wal wal,
+    IWalSyncProgressListener? progress,
+  });
   void cancelSync();
 
   void start();
@@ -62,13 +66,35 @@ abstract class IWalService {
 
 enum WalServiceStatus { init, ready, stop }
 
+enum ExternalWalRegistration { added, alreadyRegistered }
+
+/// Proof that the live ring owner durably consumed one bounded device snapshot.
+///
+/// Cloud retries carry this receipt instead of asking the pendant for another
+/// snapshot, so newly recorded audio cannot silently expand an older manual or
+/// automatic backlog request.
+class RingBacklogDrainReceipt {
+  const RingBacklogDrainReceipt({
+    required this.deviceId,
+    required this.targetWriteSeq,
+  });
+
+  final String deviceId;
+  final int targetWriteSeq;
+}
+
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
-  Future<void> addExternalWal(Wal wal);
+  Future<ExternalWalRegistration> addExternalWal(
+    Wal wal, {
+    bool scheduleUpload = true,
+  });
   Future<List<Wal>> getAllWals();
+  Future<Wal?> getWalById(String id);
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();
+  Future<void> markExternalWalSynced(Wal wal);
 
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
@@ -112,9 +138,15 @@ abstract class RingStorageSync implements IWalSync {
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
+  bool get isAudioTailActive;
+  bool get isFastSyncActive;
   double get currentSpeedKBps;
   Future<bool> hasFilesToSync();
   Future<void> refreshWalsFromDevice();
+  Future<RingBacklogDrainReceipt?>? requestAudioTailBacklogDrain({
+    IWalSyncProgressListener? progress,
+  });
+  void cancelRequestedAudioTailBacklogDrain();
 }
 
 abstract class FlashPageWalSync implements IWalSync {

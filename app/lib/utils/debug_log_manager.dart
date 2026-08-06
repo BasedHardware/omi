@@ -2,10 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+
+typedef DebugLogPhysicalMutationRunner = Future<void> Function(
+  Future<void> Function() mutation,
+);
 
 /// Lightweight debug log manager to persist important diagnostics when
 /// developer debug logging is enabled.
@@ -24,41 +29,51 @@ class DebugLogManager {
 
   static File? _file;
   static final DateFormat _ts = DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-  static bool _initializing = false;
   static bool _prunedOnce = false;
+  static Future<void> _ioTail = Future<void>.value();
+  static DebugLogPhysicalMutationRunner? _physicalMutationRunner;
 
   static bool get isEnabled => SharedPreferencesUtil().devLogsToFileEnabled;
 
-  static Future<File> _ensureFile() async {
-    if (_file != null) return _file!;
-    if (_initializing) {
-      // Wait briefly if concurrent init
-      for (int i = 0; i < 10 && _file == null; i++) {
-        await Future.delayed(const Duration(milliseconds: 50));
-      }
-      if (_file != null) return _file!;
-    }
-    _initializing = true;
+  static Future<T> _serializeIo<T>(Future<T> Function() operation) async {
+    final previous = _ioTail;
+    final release = Completer<void>();
+    _ioTail = release.future;
+    await previous;
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      if (!_prunedOnce) {
-        await _pruneOldLogs(retainDays: 3);
-        _prunedOnce = true;
-      }
-      final f = File('${dir.path}/${_dailyFileName()}');
-      if (!(await f.exists())) {
-        await f.create(recursive: true);
-      }
-      _file = f;
-      return f;
+      return await operation();
     } finally {
-      _initializing = false;
+      release.complete();
     }
+  }
+
+  static Future<void> _runPhysicalMutation(
+    Future<void> Function() mutation,
+  ) {
+    final runner = _physicalMutationRunner;
+    return runner == null ? mutation() : runner(mutation);
+  }
+
+  static Future<File> _ensureFileOwned() async {
+    if (_file != null) return _file!;
+    final dir = await getApplicationDocumentsDirectory();
+    if (!_prunedOnce) {
+      await _pruneOldLogsOwned(retainDays: 3);
+      _prunedOnce = true;
+    }
+    final f = File('${dir.path}/${_dailyFileName()}');
+    if (!(await f.exists())) {
+      await _runPhysicalMutation(
+        () => f.create(recursive: true),
+      );
+    }
+    _file = f;
+    return f;
   }
 
   static Future<File?> getLogFile() async {
     try {
-      return await _ensureFile();
+      return await _serializeIo(_ensureFileOwned);
     } catch (_) {
       return null;
     }
@@ -67,37 +82,49 @@ class DebugLogManager {
   static Future<void> setEnabled(bool enabled) async {
     SharedPreferencesUtil().devLogsToFileEnabled = enabled;
     if (!enabled) return;
-    await _ensureFile();
-    await _pruneOldLogs(retainDays: 3);
+    await _serializeIo(() async {
+      await _ensureFileOwned();
+      await _pruneOldLogsOwned(retainDays: 3);
+    });
   }
 
   static String _timestamp() => _ts.format(DateTime.now().toUtc());
 
-  static Future<void> _rotateIfNeeded(File f) async {
+  static Future<void> _rotateIfNeededOwned(File f) async {
     try {
       final len = await f.length();
       if (len <= _maxFileBytes) return;
       // Simple rotation: delete old file
-      await f.writeAsString('', mode: FileMode.write, flush: true);
+      await _runPhysicalMutation(
+        () => f.writeAsString('', mode: FileMode.write, flush: true),
+      );
     } catch (_) {}
   }
 
   static Future<void> _append(String line) async {
     if (!isEnabled) return;
-    try {
-      final f = await _ensureFile();
-      await _rotateIfNeeded(f);
-      await f.writeAsString('$line\n', mode: FileMode.append, flush: false);
-    } catch (_) {
-      // Swallow to avoid impacting app flow
-    }
+    await _serializeIo(() async {
+      try {
+        final f = await _ensureFileOwned();
+        await _rotateIfNeededOwned(f);
+        await _runPhysicalMutation(
+          () => f.writeAsString('$line\n', mode: FileMode.append, flush: false),
+        );
+      } catch (_) {
+        // Swallow to avoid impacting app flow
+      }
+    });
   }
 
   static Future<void> clear() async {
-    try {
-      final f = await _ensureFile();
-      await f.writeAsString('', mode: FileMode.write, flush: true);
-    } catch (_) {}
+    await _serializeIo(() async {
+      try {
+        final f = await _ensureFileOwned();
+        await _runPhysicalMutation(
+          () => f.writeAsString('', mode: FileMode.write, flush: true),
+        );
+      } catch (_) {}
+    });
   }
 
   /// Returns available debug log files (within retention), sorted newest first.
@@ -125,7 +152,7 @@ class DebugLogManager {
     }
   }
 
-  static Future<void> _pruneOldLogs({int retainDays = 3}) async {
+  static Future<void> _pruneOldLogsOwned({int retainDays = 3}) async {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final now = DateTime.now().toUtc();
@@ -145,11 +172,22 @@ class DebugLogManager {
         final age = now.difference(fileDate).inDays;
         if (age > retainDays) {
           try {
-            await entity.delete();
+            await _runPhysicalMutation(entity.delete);
           } catch (_) {}
         }
       }
     } catch (_) {}
+  }
+
+  @visibleForTesting
+  static Future<void> resetForTesting({
+    DebugLogPhysicalMutationRunner? physicalMutationRunner,
+  }) async {
+    await _ioTail;
+    _file = null;
+    _prunedOnce = false;
+    _physicalMutationRunner = physicalMutationRunner;
+    _ioTail = Future<void>.value();
   }
 
   static Future<void> logError(
