@@ -67,18 +67,26 @@ enum RewindSearchLayout {
   /// The clamp, as a function, so both ends of it are a test rather than a screenshot: below the
   /// floor the panel is a sliver, above the ceiling it is taller than the Rewind tab, and inside it
   /// the panel is exactly as tall as what is in it and nothing scrolls that did not need to.
-  static func resultsBodyHeight(contentHeight: CGFloat) -> CGFloat {
-    min(max(contentHeight, minimumResultsBodyHeight), maximumResultsBodyHeight)
+  /// `available` is the room the page actually has left for the body after its own chrome.
+  ///
+  /// The reference's ceiling was measured for a floating window over the desktop, where the only
+  /// limit is the display. Rewind is a tab: the room is whatever is left under the app's nav and the
+  /// query bar, and on a short window that is *less* than `maximumResultsBodyHeight`. A body taller
+  /// than its container is the sliced-card defect arriving by the one route the clamp did not cover,
+  /// so the ceiling is the smaller of the two.
+  static func resultsBodyHeight(contentHeight: CGFloat, available: CGFloat = .infinity) -> CGFloat {
+    let ceiling = min(maximumResultsBodyHeight, max(minimumResultsBodyHeight, available))
+    return min(max(contentHeight, minimumResultsBodyHeight), ceiling)
   }
 
   /// **Whether the body scrolls** — the content did not fit in the height the clamp gave it.
   ///
   /// The one question the bottom edge's appearance turns on. A row of cards sliced by the panel's
   /// edge with no fade and no scroller reads as a clipped view, not as "there is more below".
-  static func bodyScrolls(contentHeight: CGFloat) -> Bool {
+  static func bodyScrolls(contentHeight: CGFloat, available: CGFloat = .infinity) -> Bool {
     // Half a point of slack: a content height that lands exactly on the ceiling fits, and
     // floating-point measurement noise must not make a settled panel flicker its fade on.
-    contentHeight > resultsBodyHeight(contentHeight: contentHeight) + 0.5
+    contentHeight > resultsBodyHeight(contentHeight: contentHeight, available: available) + 0.5
   }
 
   /// The soft edge at the bottom of a body that has more below it, and the room the content gains
@@ -92,8 +100,8 @@ enum RewindSearchLayout {
   /// **How deep the bottom edge fades for a measured content height** — the whole of the view's
   /// decision, as a value. A fade the panel forgets to turn on, and a fade it leaves on over content
   /// that fits, are both invisible in a `body` and both obvious here.
-  static func scrollFade(contentHeight: CGFloat) -> CGFloat {
-    bodyScrolls(contentHeight: contentHeight) ? scrollFadeHeight : 0
+  static func scrollFade(contentHeight: CGFloat, available: CGFloat = .infinity) -> CGFloat {
+    bodyScrolls(contentHeight: contentHeight, available: available) ? scrollFadeHeight : 0
   }
 
   /// The results panel's own header — the `Filter` row and the rule under it.

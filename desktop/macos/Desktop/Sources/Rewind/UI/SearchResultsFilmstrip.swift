@@ -31,6 +31,9 @@ struct RewindSearchResultsPanel: View {
   /// The total number of screenshots behind those groups, for the count the header reports.
   let totalScreenshots: Int
   @Binding var selectedIndex: Int
+  /// The room the page has left for the body. See `RewindSearchLayout.resultsBodyHeight` — inside a
+  /// tab this, and not the reference's ceiling, is usually what bounds the panel.
+  var availableBodyHeight: CGFloat = .infinity
   var onOpen: (Int) -> Void = { _ in }
 
   /// Whether the filter block is open. Closed by default: **the results are what the panel is for**,
@@ -43,10 +46,15 @@ struct RewindSearchResultsPanel: View {
   @State private var contentHeight: CGFloat = 0
 
   private var bodyHeight: CGFloat {
-    RewindSearchLayout.resultsBodyHeight(contentHeight: contentHeight)
+    RewindSearchLayout.resultsBodyHeight(
+      contentHeight: contentHeight, available: availableBodyHeight)
   }
-  private var scrolls: Bool { RewindSearchLayout.bodyScrolls(contentHeight: contentHeight) }
-  private var fade: CGFloat { RewindSearchLayout.scrollFade(contentHeight: contentHeight) }
+  private var scrolls: Bool {
+    RewindSearchLayout.bodyScrolls(contentHeight: contentHeight, available: availableBodyHeight)
+  }
+  private var fade: CGFloat {
+    RewindSearchLayout.scrollFade(contentHeight: contentHeight, available: availableBodyHeight)
+  }
 
   /// The apps this answer came from, most frequent first, so the tiles a user reaches for are the
   /// ones they are most likely to want.
@@ -266,6 +274,40 @@ extension RewindSearchResultsPanel {
       .inkGlassPanel(cornerRadius: RewindSearchLayout.panelCornerRadius, shadow: .ambient)
       .contentShape(
         RoundedRectangle(cornerRadius: RewindSearchLayout.panelCornerRadius, style: .continuous))
+  }
+}
+
+/// The results panel, sized to the room the page actually gives it.
+///
+/// The `GeometryReader` is here and not in the page for the reason every other number on this
+/// surface is here: "how tall may the body be" is the panel's own question, and a page that had to
+/// compute it would be a second opinion about `RewindSearchLayout`'s clamp. It reports the room
+/// offered, and the panel subtracts its own header and margins from it.
+struct RewindSearchResultsSurface: View {
+  let groups: [SearchResultGroup]
+  let query: String
+  let totalScreenshots: Int
+  @Binding var selectedIndex: Int
+  var onOpen: (Int) -> Void = { _ in }
+
+  var body: some View {
+    GeometryReader { proxy in
+      RewindSearchResultsPanel(
+        groups: groups,
+        query: query,
+        totalScreenshots: totalScreenshots,
+        selectedIndex: $selectedIndex,
+        availableBodyHeight: max(
+          0,
+          proxy.size.height - RewindSearchLayout.panelHeaderHeight - RewindSearchLayout.panelGap
+            - RewindSearchLayout.shadowMargin),
+        onOpen: onOpen
+      )
+      .panel
+      // The gap that makes the bar above and this panel read as two objects rather than one slab.
+      .padding(.top, RewindSearchLayout.panelGap)
+      .frame(maxWidth: .infinity, alignment: .top)
+    }
   }
 }
 
