@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Ваш план аднаўляецца на {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Бясплатны план",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10767,5 +10757,22 @@
     "whisperModelSizeLarge": "Вялікая",
     "whisperModelSizeMedium": "Сярэдняя",
     "whisperModelSizeSmall": "Малая",
-    "whisperModelSizeTiny": "Мініяцюрная"
+    "whisperModelSizeTiny": "Мініяцюрная",
+    "planSheetChooseYourPlan": "Выберыце свой план, каб адкрыць безмежны Omi.",
+    "availableOnMacMobileWeb": "Даступна на Mac, мабільным і ў вэбе",
+    "popularBadge": "ПАПУЛЯРНЫ",
+    "worksOnDesktop": "Працуе на камп'ютары",
+    "noDesktopAccess": "Не працуе на камп'ютары",
+    "annualBillingSummary": "{months} мес. / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} месяц бясплатна} few{{count} месяцы бясплатна} many{{count} месяцаў бясплатна} other{{count} месяца бясплатна}}",
+    "freemiumLimitsIntro": "Omi бясплатны, але бясплатная версія мае абмежаванні, якія ўплываюць на ваш вопыт:",
+    "downgradeLimitDelayNotRealTime": "Затрымка 5-7 секунд (не ў рэальным часе)",
+    "downgradeToFreemiumAction": "Перайсці на бясплатны план",
+    "getFreeUnlimitedAccess": "Атрымайце бязмежны доступ бясплатна",
+    "shareDataForTraining": "Дзяліцца дадзенымі для навучання",
+    "yourRequestUnderReview": "Ваш запыт разглядаецца",
+    "pinAsBaseline": "Замацаваць як базавае",
+    "unpinAsBaseline": "Адмацаваць ад базавага",
+    "baselineMemory": "Базавая памяць",
+    "alwaysInContext": "Заўсёды ў кантэксце"
 }
