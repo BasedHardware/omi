@@ -1,0 +1,24 @@
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_569f1df936cc22::t_c64324673819ef 262-267
+  s_569f1df936cc22::t_c18c41af2ffbbc 201-261,268
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_569f1df936cc22::t_f0e7cfb95e6e4f 22-29
+  s_569f1df936cc22::t_ec71b7017d914d 69-76,81
+  s_569f1df936cc22::t_9983ff1d9e3046 408-411,421-443
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "15d88a9fd5a9160e238d71e56fff721bc73c0c6e",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
