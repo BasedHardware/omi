@@ -550,8 +550,11 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     discardDeferredInstall()
     Task { @MainActor in
       AnalyticsManager.shared.updateInstallStarted(attempt: attempt)
-      self.viewModel?.updateAvailable = false
-      self.viewModel?.updateRestartImminent = false
+      // Keep restart-imminent visible through the install/relaunch handoff so
+      // chat-first / Settings do not go idle right before the app terminates.
+      self.viewModel?.availableVersion = version
+      self.viewModel?.updateAvailable = true
+      self.viewModel?.updateRestartImminent = true
       self.viewModel?.updateDeferredForActiveRecording = false
     }
   }
@@ -748,8 +751,18 @@ final class UpdaterViewModel: ObservableObject {
 
   /// Whether Sparkle has an active update session (downloading, installing, etc.)
   @Published private(set) var updateSessionInProgress: Bool = false {
-    didSet { UpdaterViewModel._isUpdateInProgress = updateSessionInProgress }
+    didSet {
+      UpdaterViewModel._isUpdateInProgress = updateSessionInProgress
+      if !updateSessionInProgress {
+        userInitiatedCheckInProgress = false
+      }
+    }
   }
+
+  /// True while a user-triggered `checkForUpdates()` session is active.
+  /// Background Sparkle polls also set `updateSessionInProgress`; this flag
+  /// keeps the chat-first "Checking…" chip from flashing on every auto-poll.
+  @Published private(set) var userInitiatedCheckInProgress: Bool = false
 
   /// Whether a user can start a new manual update check from Settings.
   var canManuallyCheckForUpdates: Bool {
@@ -876,12 +889,15 @@ final class UpdaterViewModel: ObservableObject {
   /// Manually check for updates
   func checkForUpdates() {
     guard AppBuild.allowsSparkleUpdates else { return }
+    userInitiatedCheckInProgress = true
     updaterController.checkForUpdates(nil)
   }
 
   /// Background update check (no UI). Used after channel changes.
   func checkForUpdatesInBackground() {
     guard AppBuild.allowsSparkleUpdates else { return }
+    // Background polls must not inherit a stale user-initiated "Checking…" chip.
+    userInitiatedCheckInProgress = false
     updaterController.updater.checkForUpdatesInBackground()
   }
 

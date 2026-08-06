@@ -533,6 +533,14 @@ extension SettingsContentView {
 
       // Software Updates
       settingsCard(settingId: "about.updates") {
+        let updateStatus = DesktopUpdateStatusPresentation.kind(
+          sessionInProgress: updaterViewModel.updateSessionInProgress,
+          updateAvailable: updaterViewModel.updateAvailable,
+          availableVersion: updaterViewModel.availableVersion,
+          restartImminent: updaterViewModel.updateRestartImminent,
+          deferredForRecording: updaterViewModel.updateDeferredForActiveRecording,
+          userInitiatedCheck: updaterViewModel.userInitiatedCheckInProgress
+        )
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
           HStack {
             Image(systemName: "arrow.triangle.2.circlepath")
@@ -545,7 +553,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button(updaterViewModel.updateSessionInProgress ? "Checking…" : "Check Now") {
+            Button(updateStatus.checkActionTitle) {
               updaterViewModel.checkForUpdates()
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -554,16 +562,9 @@ extension SettingsContentView {
               updaterViewModel.canManuallyCheckForUpdates
                 ? "Check for app updates"
                 : updaterViewModel.updateSessionInProgress
-                  ? "An update is already downloading…" : "Already checking for updates…")
+                  ? "An update is already in progress…" : "Already checking for updates…")
           }
 
-          let updateStatus = DesktopUpdateStatusPresentation.kind(
-            sessionInProgress: updaterViewModel.updateSessionInProgress,
-            updateAvailable: updaterViewModel.updateAvailable,
-            availableVersion: updaterViewModel.availableVersion,
-            restartImminent: updaterViewModel.updateRestartImminent,
-            deferredForRecording: updaterViewModel.updateDeferredForActiveRecording
-          )
           if updateStatus.isVisible {
             HStack(alignment: .center, spacing: OmiSpacing.sm) {
               if updateStatus.showsProgress {

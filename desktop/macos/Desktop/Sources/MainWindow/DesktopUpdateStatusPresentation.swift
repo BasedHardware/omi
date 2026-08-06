@@ -78,6 +78,21 @@ enum DesktopUpdateStatusPresentation {
       }
       return title
     }
+    /// Compact Settings / control label while a session is active.
+    var checkActionTitle: String {
+      switch self {
+      case .idle, .updateAvailable:
+        return "Check Now"
+      case .checking:
+        return "Checking…"
+      case .downloading:
+        return "Downloading…"
+      case .restartImminent:
+        return "Restarting…"
+      case .deferredForRecording:
+        return "Waiting…"
+      }
+    }
   }
 
   static func kind(
@@ -85,7 +100,8 @@ enum DesktopUpdateStatusPresentation {
     updateAvailable: Bool,
     availableVersion: String,
     restartImminent: Bool = false,
-    deferredForRecording: Bool = false
+    deferredForRecording: Bool = false,
+    userInitiatedCheck: Bool = false
   ) -> Kind {
     if deferredForRecording {
       return .deferredForRecording(version: availableVersion)
@@ -96,7 +112,10 @@ enum DesktopUpdateStatusPresentation {
     if sessionInProgress && updateAvailable {
       return .downloading(version: availableVersion)
     }
-    if sessionInProgress {
+    // Only surface "Checking…" for user-initiated checks. Automatic Sparkle
+    // polls (every 2–10 min) also set sessionInProgress and would otherwise
+    // flash a non-actionable chip in the chat-first top bar (#11108 / cubic).
+    if sessionInProgress && userInitiatedCheck {
       return .checking
     }
     if updateAvailable {
@@ -118,14 +137,15 @@ struct DesktopUpdateStatusChip: View {
       updateAvailable: updaterViewModel.updateAvailable,
       availableVersion: updaterViewModel.availableVersion,
       restartImminent: updaterViewModel.updateRestartImminent,
-      deferredForRecording: updaterViewModel.updateDeferredForActiveRecording
+      deferredForRecording: updaterViewModel.updateDeferredForActiveRecording,
+      userInitiatedCheck: updaterViewModel.userInitiatedCheckInProgress
     )
   }
 
   var body: some View {
     if kind.isVisible {
       Button(action: {
-        if updaterViewModel.canCheckForUpdates {
+        if updaterViewModel.canManuallyCheckForUpdates {
           updaterViewModel.checkForUpdates()
         }
       }) {
@@ -180,14 +200,15 @@ struct DesktopUpdateStatusBanner: View {
       updateAvailable: updaterViewModel.updateAvailable,
       availableVersion: updaterViewModel.availableVersion,
       restartImminent: updaterViewModel.updateRestartImminent,
-      deferredForRecording: updaterViewModel.updateDeferredForActiveRecording
+      deferredForRecording: updaterViewModel.updateDeferredForActiveRecording,
+      userInitiatedCheck: updaterViewModel.userInitiatedCheckInProgress
     )
   }
 
   var body: some View {
     if kind.isVisible {
       Button(action: {
-        if updaterViewModel.canCheckForUpdates {
+        if updaterViewModel.canManuallyCheckForUpdates {
           updaterViewModel.checkForUpdates()
         }
       }) {
