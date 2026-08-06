@@ -1,0 +1,24 @@
+desktop/macos/changelog/unreleased/20260806-remove-focus.json
+  s_569f1df936cc22::t_8cd21c8759aae5 1-3
+desktop/macos/changelog/unreleased/20260806-flat-top-navigation.json
+  s_569f1df936cc22::t_81aca1f5ac1ab7 2
+  s_569f1df936cc22::t_d4175241c68575 1,3
+docs/product/invariants/desktop-shell-feature-parity.md
+  s_569f1df936cc22::t_881cb6d27ac618 13-14,31,42-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c58734781fcb27bf4fd5cc849f3207e0209351d2",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
