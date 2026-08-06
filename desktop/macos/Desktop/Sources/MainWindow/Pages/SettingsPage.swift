@@ -196,7 +196,10 @@ struct SettingsContentView: View {
   @State var isLoadingStats = false
   @State var chatMessageCount: Int?
   @State var isLoadingChatMessages = false
-  @State var showProfileAndStats = false
+  // Persisted, because the copy beside it promises to "keep … hidden until you need them" — a
+  // promise a plain `@State` breaks at the next relaunch, and re-hiding a panel every session is
+  // the opposite of what the control offers.
+  @AppStorage("settingsShowProfileAndStats") var showProfileAndStats = false
 
   // AI User Profile
   @State var aiProfileId: Int64?
