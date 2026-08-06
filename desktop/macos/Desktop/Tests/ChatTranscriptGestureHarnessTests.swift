@@ -123,7 +123,12 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     XCTAssertFalse(harness.isAtBottom, "precondition: the reader left the live edge")
 
     harness.togglePresentation()
-    harness.settleInitialPlacement()
+    // CI can run slower across multiple SwiftUI layout turns. Wait until
+    // the re-presented transcript has settled back onto the live edge.
+    let deadline = Date().addingTimeInterval(2.0)
+    while Date() < deadline && !harness.isAtBottom {
+      harness.pump(0.05)
+    }
 
     XCTAssertTrue(
       harness.isAtBottom,
