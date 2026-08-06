@@ -1,0 +1,24 @@
+desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
+  s_569f1df936cc22::t_09c851e75ee7ee 1002-1013,1015-1020,1023-1025
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
+  s_569f1df936cc22::t_fa0c7408906f92 7-17,19-28,30-36,38-61,64-95
+desktop/macos/Desktop/Tests/RewindStorageSummaryStateTests.swift
+  s_569f1df936cc22::t_9b31985aa668f8 41-72
+  s_569f1df936cc22::t_81a9ae14bd8327 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3e7294deecf781744916ce074a6dd6604b0fcc92",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
