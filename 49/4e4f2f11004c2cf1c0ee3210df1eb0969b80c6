@@ -1,0 +1,29 @@
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_c2fd1906b68faa 179-258
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
+  s_569f1df936cc22::t_6a977adb091db6 61-71
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryChatCapability.swift
+  s_569f1df936cc22::t_cda57ad12291d5 1-80
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  s_569f1df936cc22::t_68a4afbd8ca06e 16-23,26,29,34,36-37,42-44,47-51,54-79,112-113,116-130,141-155,165-186
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  s_569f1df936cc22::t_04c7870d88b564 38,45-52,83,177-205
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_d34ef406cff797 18-25,29,50-51,78,80,82-85,91-92,104-150,190-295,315-316,324-327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "494e4f2f11004c2cf1c0ee3210df1eb0969b80c6",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
