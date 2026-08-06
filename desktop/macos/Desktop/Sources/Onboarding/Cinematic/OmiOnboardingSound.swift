@@ -228,7 +228,15 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
   /// One format for every node, so a mono asset (`click` is mono) can never be scheduled on a voice
   /// that was connected as stereo. Everything is converted to it at preload, once.
   ///
-  static let canonicalFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+  /// Computed rather than stored, because the two toolchains disagree about the type. Xcode 16.4
+  /// (what CI pins) does not see `AVAudioFormat` as `Sendable` and rejects it as shared mutable
+  /// state; Swift 6.2 does see it as `Sendable` and rejects `nonisolated(unsafe)` as unnecessary.
+  /// A computed property is global state to neither, so it compiles under both. Cost is one small
+  /// allocation at preload and on a device-change rebuild — never per frame — and AVAudioEngine
+  /// compares formats by value, so a fresh equal instance connects exactly as the stored one did.
+  static var canonicalFormat: AVAudioFormat? {
+    AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)
+  }
 
   /// Enough voices that a click can overlap the three before it. Beyond that the oldest voice is
   /// reused, which is inaudible at these lengths (40–400 ms) and is bounded work.

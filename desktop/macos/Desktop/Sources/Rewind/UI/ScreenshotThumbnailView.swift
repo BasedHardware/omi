@@ -30,6 +30,15 @@ import SwiftUI
 /// so its ImageIO step lands on the main thread and every cell that appears mid-scroll pays for it in
 /// dropped frames. `downsampledImage` is `nonisolated` and pure, so this calls the actor only for the
 /// bytes and does the decode on a background task.
+///
+/// Carries one decoded image back from that task. `NSImage` is a mutable AppKit class old enough to
+/// predate `Sendable` and cannot conform, so the hand-off is boxed rather than bare. It is safe
+/// because the image is built inside the detached task and read exactly once on the way out — the
+/// two isolation domains never hold it at the same time.
+private struct ThumbnailBox: @unchecked Sendable {
+  let image: NSImage?
+}
+
 @MainActor
 final class RewindThumbnailLoader {
   static let shared = RewindThumbnailLoader()
@@ -66,10 +75,14 @@ final class RewindThumbnailLoader {
     do {
       let data = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
       // The expensive half, off the main thread. `downsampledImage` touches no actor state.
-      let image = await Task.detached(priority: .utility) {
-        RewindStorage.downsampledImage(from: data, maxPixelSize: size)
+      //
+      // `NSImage` predates `Sendable` and cannot conform, so the decoded image comes back in a box
+      // rather than bare: the value is constructed inside the detached task and read once here, so
+      // no two isolation domains ever hold it at the same time.
+      let boxed = await Task.detached(priority: .utility) {
+        ThumbnailBox(image: RewindStorage.downsampledImage(from: data, maxPixelSize: size))
       }.value
-      guard let image else { return nil }
+      guard let image = boxed.image else { return nil }
       if let id = screenshot.id {
         cache.setObject(image, forKey: NSNumber(value: id))
       }

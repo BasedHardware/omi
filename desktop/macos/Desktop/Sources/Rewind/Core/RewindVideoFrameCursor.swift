@@ -42,9 +42,12 @@ final class RewindDecodedFrameBox {
 /// A backward step, or a step into a different chunk, reopens — there is nothing cheaper available
 /// for either, and reopening is exactly what happens today.
 ///
-/// Not `Sendable` on purpose: `AVAssetReader` is not, and this lives as actor state on
-/// `RewindStorage` so it never crosses a boundary.
-final class RewindVideoFrameCursor {
+/// `@unchecked Sendable` because every stored property is touched only from `RewindStorage`'s actor
+/// isolation, which the compiler cannot see. An earlier comment here claimed the type "never crosses
+/// a boundary" — that was wrong, and Xcode 16.4 said so: `open` is a nonisolated `async` factory, so
+/// returning the cursor into the actor *is* a crossing. It is a safe one, because the only reference
+/// at that instant is the one being returned, and from then on the cursor lives as actor state.
+final class RewindVideoFrameCursor: @unchecked Sendable {
   /// The chunk-relative path this cursor decodes, used to decide whether it can serve a request.
   let videoPath: String
 
