@@ -549,14 +549,14 @@ class TestSegmentDeduplication:
                 'start': 0.0,
                 'end': 5.0,
                 'timestamp': conv_start,
-                'text': 'Hello there',
+                'text': 'Hello there, how is the project going',
                 'speaker': 'SPEAKER_00',
             },
             {
                 'start': 5.0,
                 'end': 12.0,
                 'timestamp': conv_start + 5.0,
-                'text': 'How are you',
+                'text': 'How are you doing with the offline sync',
                 'speaker': 'SPEAKER_00',
             },
         ]
@@ -567,14 +567,14 @@ class TestSegmentDeduplication:
                 'start': 0.0,
                 'end': 5.0,
                 'timestamp': conv_start + offset,
-                'text': 'Hello there',
+                'text': 'Hello there, how is the project going',
                 'speaker': 'SPEAKER_00',
             },
             {
                 'start': 5.0,
                 'end': 12.0,
                 'timestamp': conv_start + offset + 5.0,
-                'text': 'How are you',
+                'text': 'How are you doing with the offline sync',
                 'speaker': 'SPEAKER_00',
             },
         ]
@@ -588,17 +588,38 @@ class TestSegmentDeduplication:
 
         conv_start = 1_700_000_000.0
         existing = [
-            {'start': 0.0, 'end': 2.0, 'timestamp': conv_start, 'text': 'yeah'},
+            {
+                'start': 0.0,
+                'end': 5.0,
+                'timestamp': conv_start,
+                'text': 'We should schedule the offline sync review',
+            },
         ]
-        # Same short phrase 20 minutes later — keep it
+        # Same long phrase 20 minutes later — keep it
         later = 20 * 60
         incoming = [
             {
                 'start': 0.0,
-                'end': 2.0,
+                'end': 5.0,
                 'timestamp': conv_start + later,
-                'text': 'yeah',
+                'text': 'We should schedule the offline sync review',
             },
+        ]
+
+        deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
+        assert len(deduped) == 1
+        assert deduped[0]['text'] == 'We should schedule the offline sync review'
+
+    def test_dedup_keeps_short_repeated_backchannel_inside_slop(self):
+        """Short backchannels inside the slop window must not be silently dropped."""
+        from utils.sync.merge_dedupe import dedupe_segments_for_merge
+
+        conv_start = 1_700_000_000.0
+        existing = [
+            {'start': 0.0, 'end': 1.0, 'timestamp': conv_start, 'text': 'yeah'},
+        ]
+        incoming = [
+            {'start': 0.0, 'end': 1.0, 'timestamp': conv_start + 30.0, 'text': 'yeah'},
         ]
 
         deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
@@ -1048,7 +1069,7 @@ class TestProcessSegmentReal:
         mock_segment.model_dump.return_value = {
             'start': 0.0,
             'end': 5.0,
-            'text': 'hello',
+            'text': 'hello there from the offline wal chunk',
             'speaker': 'SPEAKER_00',
         }
 
@@ -1060,7 +1081,7 @@ class TestProcessSegmentReal:
             'started_at': MagicMock(timestamp=MagicMock(return_value=conv_start)),
             'finished_at': datetime.fromtimestamp(conv_start + 5.0, tz=timezone.utc),
             'transcript_segments': [
-                {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'},
+                {'start': 0.0, 'end': 5.0, 'text': 'hello there from the offline wal chunk', 'speaker': 'SPEAKER_00'},
             ],
             'discarded': False,
         }

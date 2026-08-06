@@ -1174,6 +1174,7 @@ def process_segment(
             for segment in closest_memory['transcript_segments']:
                 segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
 
+            incoming_count = len(transcript_segments)
             # Deduplicate before append. Exact absolute ranges cover 207 retries;
             # text+slop covers live+offline / clock-offset duplicates (#4769).
             deduped_segments = dedupe_segments_for_merge(
@@ -1181,13 +1182,12 @@ def process_segment(
                 closest_memory['transcript_segments'],
                 transcript_segments,
             )
+            dropped_for_dedupe = incoming_count - len(deduped_segments)
             if not deduped_segments:
                 logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
                 with lock:
                     response['updated_memories'].add(closest_memory['id'])
-                # No chunk upload here: this segment is a duplicate (retry or overlap with an
-                # existing/realtime conversation), so its audio is already represented — uploading
-                # again would double the audio in the merge.
+                # No chunk upload: duplicate of existing/realtime audio.
                 _set_deferred_segment_outcome(
                     deferred_outcome,
                     outcome=TranscriptionOutcome.SUCCESS,
@@ -1232,10 +1232,9 @@ def process_segment(
             # save with updated finished_at
             with lock:
                 response['updated_memories'].add(closest_memory['id'])
-            # Store the chunk before saving segments so "segment present ⇒ chunk present"
-            # holds — a retry that dedup-skips this segment won't leave its audio missing.
-            # Deterministic chunk path makes the upload overwrite-safe.
-            if private_cloud_sync_enabled:
+            # Upload only when no lines were dropped — partial dedupe + full WAV
+            # would reintroduce duplicate private-cloud audio for dropped ranges.
+            if private_cloud_sync_enabled and dropped_for_dedupe == 0:
                 _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
             update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
 
