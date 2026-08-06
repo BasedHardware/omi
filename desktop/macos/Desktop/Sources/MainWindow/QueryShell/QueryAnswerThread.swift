@@ -26,6 +26,9 @@ struct QueryAnswerThread: View {
   @ObservedObject var chatProvider: ChatProvider
   let onOpenConversation: (String) -> Void
   let onOpenMemories: () -> Void
+  /// Re-sends the query that failed. The words are still in the bar, so retrying is the same action
+  /// the user would take by hand — it must not be a second send path.
+  let onRetry: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -48,7 +51,12 @@ struct QueryAnswerThread: View {
         onRetry: { Task { await chatProvider.retryLoad() } },
         localSendToken: chatProvider.localSendToken,
         onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
-        horizontalContentPadding: 0,
+        // **Not zero.** The assistant's identity mark is drawn in an overlay offset
+        // `ChatOmiMarkPlacement.markGutter` to the left of the message column, so a transcript with
+        // no leading inset draws it outside the panel and clips it away — leaving omi's replies as
+        // bare text with no anchor while the user's keep their capsule. Asking for exactly the
+        // gutter the mark needs is what makes the two sides read as a conversation.
+        horizontalContentPadding: ChatOmiMarkPlacement.markGutter,
         verticalContentPadding: OmiSpacing.sm,
         welcomeContent: { EmptyView() }
       )
@@ -58,11 +66,23 @@ struct QueryAnswerThread: View {
       // never produced a message, so without this the panel swaps to the answer mode, shows the
       // question, and then sits silent forever — which is indistinguishable from a slow answer. It
       // is the shared `ChatErrorCard` and the shared recovery, not a second error vocabulary.
+      // **Both error shapes, because the provider has two and only one of them was covered.**
+      // A `BridgeError` that maps to a card lands on `currentError`; everything else lands on the
+      // legacy `errorMessage` with `currentError` nil — and *that* is the branch a crashed agent
+      // runtime actually takes. Handling only the card left the exact failure this build produces
+      // rendering as an empty panel, which is why the first version of this fix did not fix it.
       if let error = chatProvider.currentError {
         ChatErrorCard(
           state: error,
           onRecover: { Task { await chatProvider.recoverFromError() } },
           onDismiss: { chatProvider.dismissCurrentError() }
+        )
+        .accessibilityIdentifier("query-shell-answer-error")
+      } else if let raw = chatProvider.errorMessage, !raw.isEmpty {
+        QueryAnswerFailureNotice(
+          raw: raw,
+          onRetry: onRetry,
+          onDismiss: { chatProvider.errorMessage = nil }
         )
         .accessibilityIdentifier("query-shell-answer-error")
       }
@@ -119,6 +139,52 @@ struct QueryAnswerSource: Identifiable, Equatable {
         return nil
       }
     }
+  }
+}
+
+/// A turn that failed without a structured card.
+///
+/// The raw string is run through the shared `AgentErrorClassifier` rather than shown as-is: the
+/// provider's `errorMessage` is a `localizedDescription`, so untranslated it reads
+/// "pi-mono process exited (code 1)" — which is true, and tells the person holding the keyboard
+/// nothing about whether to wait, retry, or give up. The classifier already owns that mapping and
+/// already knows which failures are worth retrying.
+private struct QueryAnswerFailureNotice: View {
+  let raw: String
+  let onRetry: () -> Void
+  let onDismiss: () -> Void
+
+  private var classified: ClassifiedAgentError { AgentErrorClassifier.classify(raw) }
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
+      Image(systemName: "exclamationmark.circle")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundStyle(Ink.errorRed)
+      Text(classified.userMessage)
+        .scaledFont(size: OmiType.caption, weight: .regular)
+        .foregroundStyle(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      if classified.retryable {
+        Button("Try again", action: onRetry)
+          .buttonStyle(.plain)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.accent)
+      }
+      Button {
+        onDismiss()
+      } label: {
+        Image(systemName: "xmark")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Dismiss")
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .glassCard(cornerRadius: PageGlass.rowRadius)
   }
 }
 

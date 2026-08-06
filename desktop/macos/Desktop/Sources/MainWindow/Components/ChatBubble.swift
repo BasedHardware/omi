@@ -170,7 +170,7 @@ struct ChatBubble: View {
           size: 24
         )
         .frame(width: 32, height: 32)
-        .offset(x: -(32 + OmiSpacing.md))
+        .offset(x: -ChatOmiMarkPlacement.markGutter)
       }
     }
     .contentShape(Rectangle())

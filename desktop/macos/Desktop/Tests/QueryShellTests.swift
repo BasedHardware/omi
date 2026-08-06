@@ -127,6 +127,33 @@ final class QueryShellTests: XCTestCase {
       "off must never render as on")
   }
 
+  // MARK: - The answer thread
+
+  /// The mark is drawn in an overlay offset by exactly this much. A host that insets the transcript
+  /// by less draws it outside the container and the assistant's only identity cue disappears —
+  /// which is what left ask mode's replies as bare text beside capsuled user turns.
+  func testTheAssistantMarksGutterIsTheOffsetItIsDrawnAt() {
+    XCTAssertEqual(ChatOmiMarkPlacement.markGutter, 32 + OmiSpacing.md)
+    XCTAssertGreaterThanOrEqual(
+      ChatOmiMarkPlacement.markGutter, ChatOmiMarkPlacement.reservedRowHeight,
+      "the gutter must be at least as wide as the mark is tall")
+  }
+
+  /// **The failure this build actually produces must not render as an empty panel.**
+  ///
+  /// A crashed agent runtime throws something that is not a `BridgeError` with a card, so it lands
+  /// on the provider's legacy `errorMessage` with `currentError` nil. Handling only the structured
+  /// card left the panel silent for the one failure that has occurred on every turn here.
+  func testACrashedAgentRuntimeProducesRetryableUserFacingCopy() {
+    let classified = AgentErrorClassifier.classify("pi-mono process exited (code 1)")
+    XCTAssertEqual(classified.code, .runtimeCrashed)
+    XCTAssertTrue(classified.retryable, "a crashed runtime is worth another attempt")
+    XCTAssertFalse(
+      classified.userMessage.contains("pi-mono"),
+      "the panel must not show a process name to the person holding the keyboard")
+    XCTAssertFalse(classified.userMessage.isEmpty)
+  }
+
   /// The chips are the only vocabulary the panel body is filtered by, so their identity is a
   /// contract with whatever occupies the seam.
   func testTheChipsAreTheFourTypesTheSpineMerges() {

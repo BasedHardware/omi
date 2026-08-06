@@ -46,6 +46,14 @@ enum ChatOmiMarkPlacement {
   /// the transcript's live edge.
   static let reservedRowHeight: CGFloat = 32
 
+  /// **How much clear room the mark needs to the left of the message column.**
+  ///
+  /// The mark is drawn in an overlay offset by exactly this much, so a transcript hosted with less
+  /// leading inset than this does not merely crowd it — it draws the mark outside the container and
+  /// the assistant's only identity cue silently disappears. Naming it here means a host can ask for
+  /// the gutter instead of rediscovering the offset by reading `ChatBubble`.
+  static let markGutter: CGFloat = 32 + OmiSpacing.md
+
   static func finalAssistantMessageID(in messages: [ChatMessage]) -> String? {
     messages.last(where: { $0.sender == .ai })?.id
   }

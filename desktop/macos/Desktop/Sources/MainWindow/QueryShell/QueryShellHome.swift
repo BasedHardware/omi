@@ -118,7 +118,8 @@ struct QueryShellHome: View {
       QueryAnswerThread(
         chatProvider: chatProvider,
         onOpenConversation: openConversation,
-        onOpenMemories: openMemories
+        onOpenMemories: openMemories,
+        onRetry: ask
       )
     }
   }
