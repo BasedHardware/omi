@@ -138,31 +138,134 @@ def test_route_releases_slot_after_success(monkeypatch):
     asyncio.run(_scenario())
 
 
-def test_oversize_middleware_rejects_by_content_length(monkeypatch):
+def _drain_app(consumed):
+    """A stand-in for the multipart parser: pulls the whole body via receive, recording bytes seen."""
+
+    async def app(scope, receive, send):
+        while True:
+            message = await receive()
+            if message.get("type") == "http.request":
+                consumed[0] += len(message.get("body", b""))
+                if not message.get("more_body"):
+                    break
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    return app
+
+
+def _receiver(chunks):
+    idx = [0]
+
+    async def receive():
+        i = idx[0]
+        idx[0] += 1
+        if i < len(chunks):
+            return chunks[i]
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    return receive
+
+
+def test_asgi_limit_rejects_oversize_content_length_before_app(monkeypatch):
     main = _load_main(monkeypatch, max_upload=1024)
 
-    class _Req:
-        method = "POST"
-        url = types.SimpleNamespace(path="/v1/audio/transcriptions")
-        headers = {"content-length": "2048"}
+    async def _unreachable(scope, receive, send):
+        raise AssertionError("body must not reach the app / parser when Content-Length exceeds the limit")
 
-    async def _call_next(_req):
-        raise AssertionError("body must not be parsed/spooled when Content-Length exceeds the limit")
+    mw = main.LimitUploadSizeMiddleware(_unreachable, max_bytes=1024)
+    scope = {"type": "http", "method": "POST", "path": "/v1/audio/transcriptions",
+             "headers": [(b"content-length", b"2048")]}
+    sent = []
 
-    resp = asyncio.run(main._reject_oversize_before_spooling(_Req(), _call_next))
-    assert resp.status_code == 413
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(mw(scope, _receiver([]), send))
+    assert sent[0]["type"] == "http.response.start" and sent[0]["status"] == 413
 
 
-def test_oversize_middleware_passes_through_within_limit(monkeypatch):
+def test_asgi_limit_aborts_chunked_stream_before_full_spool(monkeypatch):
+    # The key fix: an undeclared-length (chunked) body is bounded as it streams, aborting before the
+    # parser can spool it all. Content-Length is absent here.
+    main = _load_main(monkeypatch, max_upload=1024)
+    consumed = [0]
+    mw = main.LimitUploadSizeMiddleware(_drain_app(consumed), max_bytes=1024)
+    chunks = [{"type": "http.request", "body": b"x" * 512, "more_body": True} for _ in range(6)]  # 3072 total
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "POST", "path": "/v1/audio/transcriptions", "headers": []}
+    asyncio.run(mw(scope, _receiver(chunks), send))
+    assert sent[0]["status"] == 413
+    # The parser never saw the whole 3072-byte body: it was aborted once the running total passed 1024.
+    assert consumed[0] <= 1024 + 512
+
+
+def test_asgi_limit_returns_clean_413_when_inner_app_reports_its_own_error(monkeypatch):
+    # Real stack: the multipart parser catches the aborted read and sends its own 4xx. The middleware
+    # must swallow that and return exactly one clean 413.
+    main = _load_main(monkeypatch, max_upload=1024)
+
+    async def app_reports_400(scope, receive, send):
+        try:
+            while True:
+                message = await receive()
+                if message.get("type") == "http.request" and not message.get("more_body"):
+                    break
+        except Exception:
+            await send({"type": "http.response.start", "status": 400, "headers": []})
+            await send({"type": "http.response.body", "body": b"bad multipart"})
+            return
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    mw = main.LimitUploadSizeMiddleware(app_reports_400, max_bytes=1024)
+    chunks = [{"type": "http.request", "body": b"x" * 512, "more_body": True} for _ in range(6)]
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "POST", "path": "/v1/audio/transcriptions", "headers": []}
+    asyncio.run(mw(scope, _receiver(chunks), send))
+    starts = [m for m in sent if m["type"] == "http.response.start"]
+    assert len(starts) == 1 and starts[0]["status"] == 413
+
+
+def test_asgi_limit_passes_through_within_limit(monkeypatch):
     main = _load_main(monkeypatch, max_upload=4096)
-    sentinel = object()
+    consumed = [0]
+    mw = main.LimitUploadSizeMiddleware(_drain_app(consumed), max_bytes=4096)
+    chunks = [{"type": "http.request", "body": b"small", "more_body": False}]
+    sent = []
 
-    class _Req:
-        method = "POST"
-        url = types.SimpleNamespace(path="/v1/audio/transcriptions")
-        headers = {"content-length": "100"}
+    async def send(message):
+        sent.append(message)
 
-    async def _call_next(_req):
-        return sentinel
+    scope = {"type": "http", "method": "POST", "path": "/v1/audio/transcriptions", "headers": []}
+    asyncio.run(mw(scope, _receiver(chunks), send))
+    assert sent[0]["status"] == 200
+    assert consumed[0] == 5
 
-    assert asyncio.run(main._reject_oversize_before_spooling(_Req(), _call_next)) is sentinel
+
+def test_asgi_limit_ignores_non_transcription_paths(monkeypatch):
+    main = _load_main(monkeypatch, max_upload=8)
+    reached = [False]
+
+    async def app(scope, receive, send):
+        reached[0] = True
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    mw = main.LimitUploadSizeMiddleware(app, max_bytes=8)
+    # A GET to /health with a large declared length must pass through untouched.
+    scope = {"type": "http", "method": "GET", "path": "/health", "headers": [(b"content-length", b"9999")]}
+
+    async def send(_message):
+        pass
+
+    asyncio.run(mw(scope, _receiver([]), send))
+    assert reached[0] is True

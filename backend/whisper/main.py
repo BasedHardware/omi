@@ -14,7 +14,6 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
 
 MODEL = os.getenv("WHISPER_MODEL", "large-v3")
@@ -47,24 +46,93 @@ def _build_model() -> WhisperModel:
 _model: Optional[WhisperModel] = None if os.getenv("WHISPER_SKIP_MODEL_LOAD") == "1" else _build_model()
 
 
-@app.middleware("http")
-async def _reject_oversize_before_spooling(request, call_next):
-    # Reject an oversized upload from its declared Content-Length BEFORE FastAPI parses and spools the
-    # multipart body to a temp file — the in-process buffer is bounded by _read_bounded, but without
-    # this repeated large uploads would still fill temp disk during parsing. Chunked requests (no
-    # Content-Length) fall through to the streaming bound in _read_bounded.
-    if request.method == "POST" and request.url.path == "/v1/audio/transcriptions":
-        content_length = request.headers.get("content-length")
-        if content_length is not None:
-            try:
-                declared = int(content_length)
-            except ValueError:
-                declared = -1
-            if declared > MAX_UPLOAD_BYTES:
-                return JSONResponse(
-                    status_code=413, content={"detail": f"audio exceeds {MAX_UPLOAD_BYTES} bytes"}
-                )
-    return await call_next(request)
+_TRANSCRIBE_PATH = "/v1/audio/transcriptions"
+
+
+class _BodyTooLarge(Exception):
+    pass
+
+
+class LimitUploadSizeMiddleware:
+    """Pure-ASGI guard that rejects an oversized transcription body BEFORE FastAPI / python-multipart
+    spools it to a temp file.
+
+    The Content-Length fast path rejects a declared-oversize request outright. For chunked or
+    otherwise undeclared-length uploads it counts the streamed bytes as the multipart parser pulls
+    them (wrapping ``receive``) and aborts once the running total exceeds MAX_UPLOAD_BYTES — so a
+    single request can never spool more than ~that many bytes to temp disk, and repeated oversized
+    uploads can't accumulate. This runs at the ASGI boundary, ahead of body parsing/spooling, unlike
+    an http middleware that only sees the request after the body is read. ``_read_bounded`` stays as
+    the in-process second layer for the bytes actually handed to the route.
+    """
+
+    def __init__(self, app: Any, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or scope.get("method") != "POST" or scope.get("path") != _TRANSCRIBE_PATH:
+            await self.app(scope, receive, send)
+            return
+
+        for name, value in scope.get("headers", []):
+            if name == b"content-length":
+                try:
+                    declared = int(value)
+                except ValueError:
+                    declared = -1
+                if declared > self.max_bytes:
+                    await self._reject(send)
+                    return
+                break
+
+        total = 0
+        overflow = False
+        response_started = False
+
+        async def counting_receive() -> dict:
+            nonlocal total, overflow
+            message = await receive()
+            if message.get("type") == "http.request":
+                total += len(message.get("body", b""))
+                if total > self.max_bytes:
+                    overflow = True
+                    raise _BodyTooLarge()
+            return message
+
+        async def tracking_send(message: dict) -> None:
+            nonlocal response_started
+            # Once we've decided to reject, swallow whatever the inner app tries to send (the multipart
+            # parser turns the aborted read into its own 4xx/5xx) so we can return a clean 413 instead.
+            if overflow:
+                return
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, counting_receive, tracking_send)
+        except _BodyTooLarge:
+            pass
+        if overflow and not response_started:
+            await self._reject(send)
+
+    async def _reject(self, send: Any) -> None:
+        body = f'{{"detail":"audio exceeds {self.max_bytes} bytes"}}'.encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
+
+app.add_middleware(LimitUploadSizeMiddleware, max_bytes=MAX_UPLOAD_BYTES)
 
 
 @app.get("/health")
