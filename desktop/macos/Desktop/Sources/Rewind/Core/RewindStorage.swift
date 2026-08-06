@@ -999,17 +999,31 @@ actor RewindStorage {
   // MARK: - Storage Stats
 
   /// Get total storage size in bytes (both Screenshots and Videos)
+  /// The storage roots to measure, or `nil` when none is resolved.
+  ///
+  /// "Not initialized" and "zero bytes on disk" are different facts, and summing
+  /// an unresolved root as 0 conflated them: both directories are `nil` until
+  /// `initialize()` runs and again after `resetForUserSwitch()`, so a store
+  /// holding tens of megabytes reported a confident zero. Observed live on a
+  /// running bundle as `total_frames: 328` alongside `storage_bytes: 0`, while
+  /// two sibling bundles on the same account reported ~44–48 MB.
+  static func resolvedStorageRoots(screenshots: URL?, videos: URL?) -> [URL]? {
+    let roots = [screenshots, videos].compactMap { $0 }
+    return roots.isEmpty ? nil : roots
+  }
+
   func getTotalStorageSize() async throws -> Int64 {
+    guard
+      let roots = Self.resolvedStorageRoots(
+        screenshots: screenshotsDirectory, videos: videosDirectory)
+    else {
+      throw RewindError.storageError("Rewind storage is not initialized; total size is unknown")
+    }
+
     var totalSize: Int64 = 0
-
-    if let screenshotsDirectory = screenshotsDirectory {
-      totalSize += try calculateDirectorySize(at: screenshotsDirectory)
+    for root in roots {
+      totalSize += try calculateDirectorySize(at: root)
     }
-
-    if let videosDirectory = videosDirectory {
-      totalSize += try calculateDirectorySize(at: videosDirectory)
-    }
-
     return totalSize
   }
 

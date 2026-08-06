@@ -4,39 +4,95 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+/// What the Rewind storage card should say.
+///
+/// `RewindIndexer.getStats()` returns `nil` both before it has run and when the
+/// Rewind database fails to open, so the card could not tell "not read yet"
+/// from "could not be read" — a Rewind store that never opens left it reading
+/// "Loading..." with no end and no way to retry. Resolving the caption from the
+/// stats *and* whether a read has completed is what separates the two.
+enum RewindStorageSummaryState: Equatable {
+  case loading
+  case loaded(caption: String)
+  case unavailable
+
+  static func resolve(
+    stats: (total: Int, indexed: Int, storageSize: Int64)?,
+    didCompleteRead: Bool
+  ) -> RewindStorageSummaryState {
+    if let stats {
+      return .loaded(caption: "\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
+    }
+    return didCompleteRead ? .unavailable : .loading
+  }
+}
+
+/// The storage card's contents. It owns whether a read has completed — the
+/// parent's `rewindStats` alone cannot express that — and writes the result
+/// back through the binding so there is still one stats value on the pane.
+struct RewindStorageSummary: View {
+  @Binding var stats: (total: Int, indexed: Int, storageSize: Int64)?
+  @State private var didCompleteRead = false
+  @State private var isReloading = false
+
+  var body: some View {
+    HStack {
+      Image(systemName: "internaldrive.fill")
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(Ink.secondary)
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Storage")
+          .scaledFont(size: OmiType.subheading, weight: .medium)
+          .foregroundColor(Ink.primary)
+
+        switch RewindStorageSummaryState.resolve(stats: stats, didCompleteRead: didCompleteRead) {
+        case .loaded(let caption):
+          Text(caption)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+        case .loading:
+          Text("Loading…")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+        case .unavailable:
+          Text("Couldn't read Rewind storage")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(SettingsInk.notice)
+        }
+      }
+
+      Spacer()
+
+      if case .unavailable = RewindStorageSummaryState.resolve(
+        stats: stats, didCompleteRead: didCompleteRead)
+      {
+        Button("Retry") {
+          Task { await read() }
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .disabled(isReloading)
+      }
+    }
+    .task { await read() }
+  }
+
+  private func read() async {
+    guard !isReloading else { return }
+    isReloading = true
+    let next = await RewindIndexer.shared.getStats()
+    stats = next
+    didCompleteRead = true
+    isReloading = false
+  }
+}
+
 extension SettingsContentView {
   var rewindSection: some View {
     VStack(spacing: OmiSpacing.xl) {
       // Storage Stats
       settingsCard(settingId: "rewind.storage") {
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          HStack {
-            Image(systemName: "internaldrive.fill")
-              .scaledFont(size: OmiType.subheading)
-              .foregroundColor(Ink.secondary)
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text("Storage")
-                .scaledFont(size: OmiType.subheading, weight: .medium)
-                .foregroundColor(Ink.primary)
-
-              if let stats = rewindStats {
-                Text("\(stats.total) frames • \(RewindStorage.formatBytes(stats.storageSize))")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-              } else {
-                Text("Loading...")
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-              }
-            }
-
-            Spacer()
-          }
-        }
-      }
-      .task {
-        rewindStats = await RewindIndexer.shared.getStats()
+        RewindStorageSummary(stats: $rewindStats)
       }
 
       // Excluded Apps
