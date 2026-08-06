@@ -105,7 +105,6 @@ final class GlassContentChromeTests: XCTestCase {
     "MainWindow/Pages/PersonaPage.swift",
     "MainWindow/Pages/TasksPage.swift",
     "MainWindow/Pages/TaskDetailViews.swift",
-    "MainWindow/Pages/FocusPage.swift",
     "MainWindow/Pages/InsightPage.swift",
     "MainWindow/Pages/GoalsHistoryPage.swift",
     "MainWindow/Pages/MemoryExportDestinationSheet.swift",
