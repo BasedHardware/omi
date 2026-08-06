@@ -217,7 +217,9 @@ def fetch_buzz(profile: InterestProfile, day: date, limit: int = 12) -> tuple[li
             line = _to_line(hit, category)
             if line is None:
                 continue
-            points = hit.get('points') if isinstance(hit.get('points'), int) else 0
+            # Bind once so the isinstance check narrows the value actually used.
+            raw_points = hit.get('points')
+            points: int = raw_points if isinstance(raw_points, int) else 0
             object_id = str(hit['objectID'])
             existing = best.get(object_id)
             if existing is None or points > existing[0]:
