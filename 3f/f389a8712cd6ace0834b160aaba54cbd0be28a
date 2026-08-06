@@ -1,0 +1,30 @@
+desktop/macos/Desktop/Sources/Rewind/UI/AppIconView.swift
+  s_569f1df936cc22::t_ae757a40a14bca 71-74
+  s_569f1df936cc22::t_da1dc04078b972 12-17,22-29,34-39,42-47,51
+  s_569f1df936cc22::t_7d00be83a54c23 175-178
+desktop/macos/Desktop/Sources/Rewind/Core/RewindPalette.swift
+  s_569f1df936cc22::t_6a776c872dfe59 1-236
+desktop/macos/Desktop/Tests/RewindPaletteTests.swift
+  s_569f1df936cc22::t_3a56cdada60ab1 1-259
+  s_569f1df936cc22::t_ddd29b64576290 260-264
+desktop/macos/e2e/flows/rewind.yaml
+  s_569f1df936cc22::t_043e767b9e0a18 41-43
+  s_569f1df936cc22::t_51824bb4776028 17
+  s_569f1df936cc22::t_efe24e61393567 44-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3ff389a8712cd6ace0834b160aaba54cbd0be28a",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
