@@ -465,7 +465,7 @@ struct RewindPage: View {
   /// (`RewindSearchResultsPanel`); the page keeps only what is genuinely the page's — which group is
   /// selected, and what opening one does.
   private var fullScreenResultsView: some View {
-    RewindSearchResultsPanel(
+    RewindSearchResultsSurface(
       groups: viewModel.groupedSearchResults,
       query: viewModel.activeSearchQuery ?? "",
       totalScreenshots: viewModel.totalScreenshotCount,
@@ -477,11 +477,6 @@ struct RewindPage: View {
       searchViewMode = .timeline
       scheduleLoadCurrentFrame()
     }
-    .panel
-    // The gap that makes the bar above and this panel read as two objects rather than one slab.
-    .padding(.top, RewindSearchLayout.panelGap)
-    .padding(.bottom, RewindSearchLayout.shadowMargin)
-    .frame(maxWidth: .infinity, alignment: .top)
     .onChange(of: selectedGroupIndex) { _, _ in
       invalidatePendingFrameLoad()
     }
