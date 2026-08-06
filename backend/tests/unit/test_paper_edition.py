@@ -5,7 +5,9 @@ ones that fail invisibly: focus time that silently inflates, and the Gmail
 exclusion list that silently lets a credential onto a printable page.
 """
 
-from datetime import date
+import json
+import urllib.parse
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -17,12 +19,15 @@ from models.paper import (
     InterestProfile,
     NewsletterStory,
     Photo,
+    Provenance,
     SourceRef,
     Yesterday,
 )
 from utils.paper.context import focus_blocks, screen_day_window
 from utils.paper.render import render_text
+from utils.paper.sources import hackernews
 from utils.paper.sources.gmail_source import _sender_name, exclusion_reason
+from utils.paper.sources.hackernews import fetch_buzz
 
 # ---------------------------------------------------------------------------
 # Focus time — measured, not assumed
@@ -324,3 +329,312 @@ def test_degraded_sources_are_surfaced_not_swallowed():
 
 def test_for_you_reports_empty_when_nothing_cleared_the_bar():
     assert ForYou().is_empty
+
+
+# ---------------------------------------------------------------------------
+# Hacker News — the buzz source. Hermetic: the HTTP layer is faked, and a test
+# that reaches the network is a bug in the test.
+# ---------------------------------------------------------------------------
+
+DAY = date(2026, 8, 5)
+
+
+def _stamp(when: date, hour: int = 12) -> int:
+    """Unix seconds for a wall time, built here rather than borrowed from the module."""
+    return int(datetime(when.year, when.month, when.day, hour, tzinfo=timezone.utc).timestamp())
+
+
+def _hit(object_id, title, points, when=DAY, url='https://example.com/story'):
+    return {
+        'objectID': object_id,
+        'title': title,
+        'points': points,
+        'created_at_i': _stamp(when),
+        'url': url,
+    }
+
+
+class _HNResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def read(self):
+        return json.dumps(self._payload).encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+
+def _fake_hn(monkeypatch, responder):
+    """Fake the HTTP layer. `responder(params)` returns hits, or raises to fail a query."""
+    calls = []
+
+    def fake_urlopen(request, *_args, **_kwargs):
+        params = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(request.full_url).query))
+        calls.append(params)
+        return _HNResponse({'hits': responder(params)})
+
+    monkeypatch.setattr(hackernews.urllib.request, 'urlopen', fake_urlopen)
+    return calls
+
+
+def _profile(*topics):
+    return InterestProfile(interests=[Interest(topic=topic, evidence='worked on it') for topic in topics])
+
+
+def _is_topic_query(params):
+    return bool(params.get('query'))
+
+
+def _is_front_page(params):
+    return params.get('tags') == 'story' and not params.get('query')
+
+
+def test_a_story_seen_twice_keeps_its_higher_scoring_copy(monkeypatch):
+    """The same story comes back from several queries; the page must rank it once, at its real score.
+
+    Keeping the first copy seen would file a 90-point story at the 10 points the
+    narrow topic query happened to report, and bury it under smaller news.
+    """
+
+    def responder(params):
+        if _is_topic_query(params):
+            return [_hit('1', 'Memory retrieval at scale', points=10)]
+        if _is_front_page(params):
+            return [_hit('1', 'Memory retrieval at scale', points=90), _hit('2', 'A memory of Unix', points=50)]
+        return []
+
+    _fake_hn(monkeypatch, responder)
+    lines, health = fetch_buzz(_profile('memory'), DAY)
+
+    assert [line.claim.text for line in lines] == ['Memory retrieval at scale', 'A memory of Unix']
+    assert health.kept == 2
+
+
+@pytest.mark.parametrize(
+    'case,when',
+    [
+        ('older than the window', date(2026, 7, 30)),
+        ('the day the window opens minus one', date(2026, 8, 1)),
+        ('filed after the edition day', date(2026, 8, 6)),
+    ],
+)
+def test_a_story_outside_the_three_day_window_is_never_printed(monkeypatch, case, when):
+    """Yesterday's paper printing last month's story is the failure that makes a brief worthless."""
+
+    def responder(params):
+        if _is_front_page(params):
+            return [_hit('old', 'Stale news', points=400, when=when), _hit('new', 'Fresh news', points=60)]
+        return []
+
+    _fake_hn(monkeypatch, responder)
+    lines, health = fetch_buzz(_profile('memory'), DAY)
+
+    assert [line.claim.text for line in lines] == ['Fresh news'], case
+    assert health.fetched == 2  # both were read; only one was kept
+
+
+def test_the_window_comes_from_the_day_argument_not_the_clock(monkeypatch):
+    """A run for a past date must fetch that date's buzz, or the source cannot be tested at all."""
+    calls = _fake_hn(monkeypatch, lambda params: [])
+    fetch_buzz(_profile('memory'), date(2021, 3, 15))
+
+    floors = {int(params['numericFilters'].split('created_at_i>')[1]) for params in calls}
+    assert floors == {_stamp(date(2021, 3, 12), hour=0)}
+
+
+def test_every_query_failing_reports_the_source_as_down(monkeypatch):
+    """An outage must not be printed as a quiet day — that is a false claim about the reader's field."""
+
+    def responder(params):
+        raise OSError('hn.algolia.com unreachable')
+
+    _fake_hn(monkeypatch, responder)
+    lines, health = fetch_buzz(_profile('memory', 'agents'), DAY)
+
+    assert lines == []
+    assert health.ok is False
+    assert 'failed' in health.note
+
+
+def test_a_quiet_day_is_reported_healthy_and_says_so(monkeypatch):
+    """Nothing cleared the bar is a real answer, and must read differently from an outage."""
+    _fake_hn(monkeypatch, lambda params: [])
+    lines, health = fetch_buzz(_profile('memory'), DAY)
+
+    assert lines == []
+    assert health.ok is True
+    assert health.note and 'failed' not in health.note
+
+
+def test_one_failed_query_does_not_cost_the_others(monkeypatch):
+    """A single flaky topic search must not blank the section."""
+
+    def responder(params):
+        if _is_topic_query(params):
+            raise TimeoutError('slow')
+        if _is_front_page(params):
+            return [_hit('1', 'Something large happened', points=300)]
+        return []
+
+    _fake_hn(monkeypatch, responder)
+    lines, health = fetch_buzz(_profile('memory'), DAY)
+
+    assert [line.claim.text for line in lines] == ['Something large happened']
+    assert health.ok is True
+    assert health.note == '1/3 queries failed'
+
+
+def test_every_buzz_line_is_printable_and_keeps_its_title_verbatim(monkeypatch):
+    """No source, no print. The permalink is also what makes the title checkable."""
+
+    def responder(params):
+        if _is_front_page(params):
+            return [
+                _hit(
+                    '49199308',
+                    'A handful of cities have replaced Flock with Axon',
+                    points=91,
+                    url='https://www.404media.co/cities-are-ditching-flock/',
+                )
+            ]
+        return []
+
+    _fake_hn(monkeypatch, responder)
+    lines, _ = fetch_buzz(_profile('surveillance'), DAY)
+
+    (line,) = lines
+    assert line.claim.is_printable
+    assert line.claim.text == 'A handful of cities have replaced Flock with Axon'
+    assert line.claim.provenance is Provenance.REPORTED
+    assert line.category == 'front page'
+    assert [(source.name, source.url) for source in line.claim.sources] == [
+        ('Hacker News', 'https://news.ycombinator.com/item?id=49199308'),
+        ('404media.co', 'https://www.404media.co/cities-are-ditching-flock/'),
+    ]
+
+
+def test_a_text_post_with_no_link_still_carries_its_source(monkeypatch):
+    """Ask HN and Tell HN stories come back with `url: null`; they still have a permalink."""
+
+    def responder(params):
+        if _is_front_page(params):
+            return [dict(_hit('49200389', 'Tell HN: Lost over 20yrs of Yahoo Emails', points=120), url=None)]
+        return []
+
+    _fake_hn(monkeypatch, responder)
+    lines, _ = fetch_buzz(_profile('email'), DAY)
+
+    (line,) = lines
+    assert line.claim.is_printable
+    assert [source.name for source in line.claim.sources] == ['Hacker News']
+
+
+def test_a_fuzzy_search_hit_is_not_filed_under_an_interest(monkeypatch):
+    """Algolia is typo-tolerant, so `query=rust` really does return "AI **Just** Created Viruses".
+
+    Observed against the live API. Printing that under the reader's rust interest
+    claims a connection to their work that is not there.
+    """
+
+    def responder(params):
+        if params.get('query') == 'rust':
+            return [
+                _hit('1', 'AI Just Created Viruses Not Found in Nature', points=14),
+                _hit('2', 'Rust 2.0 lands with a new borrow checker', points=8),
+            ]
+        return []
+
+    _fake_hn(monkeypatch, responder)
+    lines, _ = fetch_buzz(_profile('rust'), DAY)
+
+    assert [(line.category, line.claim.text) for line in lines] == [
+        ('rust', 'Rust 2.0 lands with a new borrow checker')
+    ]
+
+
+def test_the_section_stays_bounded(monkeypatch):
+    """A newspaper page is finite; the highest-scoring stories are the ones that fit."""
+
+    def responder(params):
+        if _is_front_page(params):
+            return [_hit(str(n), f'Story {n}', points=n) for n in range(1, 31)]
+        return []
+
+    _fake_hn(monkeypatch, responder)
+    lines, health = fetch_buzz(_profile('memory'), DAY, limit=3)
+
+    assert [line.claim.text for line in lines] == ['Story 30', 'Story 29', 'Story 28']
+    assert health.kept == 3
+
+
+def test_a_reader_with_no_learned_interests_still_gets_the_general_buzz(monkeypatch):
+    """The general and Show HN queries need no profile, so a new account is not a blank page."""
+
+    def responder(params):
+        if params.get('tags') == 'show_hn':
+            return [_hit('1', 'Show HN: A tool for reading papers', points=40)]
+        return []
+
+    calls = _fake_hn(monkeypatch, responder)
+    lines, health = fetch_buzz(InterestProfile(), DAY)
+
+    assert len(calls) == 2  # show_hn + front page, no topic searches
+    assert [(line.category, line.claim.text) for line in lines] == [('show hn', 'Show HN: A tool for reading papers')]
+    assert health.ok is True
+
+
+# ---------------------------------------------------------------------------
+# The timeline — a position on it is a claim about when
+# ---------------------------------------------------------------------------
+
+
+def _conversation(title, started, finished=''):
+    return {'structured': {'title': title}, 'started_at': started, 'finished_at': finished}
+
+
+def test_a_session_that_never_closed_is_not_counted_as_its_length():
+    """A real day held one 12h56m "conversation" running 05:38 to 18:35.
+
+    It was 67% of the day's recorded total, so the headline figure read 19h and
+    every genuine session was buried under it. It keeps its place on the day,
+    because it really did start then, but its length is not a measurement.
+    """
+    from utils.paper.context import build_timeline
+
+    entries = build_timeline(
+        [
+            _conversation('Left running', '2026-08-05T05:38:00Z', '2026-08-05T18:35:00Z'),
+            _conversation('A real talk', '2026-08-05T00:11:00Z', '2026-08-05T01:35:00Z'),
+        ]
+    )
+    left_open = next(e for e in entries if e.label == 'Left running')
+    real = next(e for e in entries if e.label == 'A real talk')
+
+    assert left_open.unbounded and left_open.minutes == 0
+    assert not real.unbounded and real.minutes == 84
+    assert left_open.start_minute == 5 * 60 + 38  # still placed on the day
+
+
+def test_the_recorded_total_excludes_unclosed_sessions():
+    from models.paper import TimelineEntry, Yesterday
+
+    yesterday = Yesterday(
+        timeline=[
+            TimelineEntry(label='real', start='2026-08-05T09:00:00Z', minutes=84),
+            TimelineEntry(label='open', start='2026-08-05T05:38:00Z', minutes=0, unbounded=True),
+        ]
+    )
+    assert yesterday.recorded_minutes == 84
+    assert yesterday.unbounded_sessions == 1
+
+
+def test_a_conversation_with_no_usable_start_is_left_off_the_timeline():
+    """Better absent than placed somewhere plausible."""
+    from utils.paper.context import build_timeline
+
+    entries = build_timeline([_conversation('No stamp', ''), _conversation('Real', '2026-08-05T09:00:00Z')])
+    assert [e.label for e in entries] == ['Real']

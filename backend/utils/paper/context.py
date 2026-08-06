@@ -16,7 +16,7 @@ import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.daily_summaries as daily_summaries_db
 import database.screen_activity as screen_activity_db
-from models.paper import FocusBlock, SourceHealth
+from models.paper import FocusBlock, SourceHealth, TimelineEntry
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -37,6 +37,12 @@ MIN_TRACKED_MINUTES = 30
 # How many apps reach the page. Beyond this it stops being a summary.
 MAX_FOCUS_BLOCKS = 6
 
+# A recorded conversation longer than this is a session that was left open,
+# not a conversation. One real day had a single 12h56m 'conversation' running
+# 05:38 to 18:35 — 67% of the day's total — which made the headline figure
+# wrong and buried every genuine session under it on the timeline.
+MAX_PLAUSIBLE_SESSION_MINUTES = 240
+
 CONVERSATION_LIMIT = 60
 ACTION_ITEM_LIMIT = 50
 
@@ -52,6 +58,7 @@ class DayContext:
         self.day = day
         self.summary: dict[str, Any] | None = None
         self.conversations: list[dict[str, Any]] = []
+        self.timeline: list[TimelineEntry] = []
         self.focus: list[FocusBlock] = []
         self.screen_titles: list[str] = []
         self.commitments: list[dict[str, Any]] = []
@@ -128,6 +135,50 @@ def focus_blocks(rows: list[dict[str, Any]]) -> list[FocusBlock]:
     return blocks[:MAX_FOCUS_BLOCKS]
 
 
+def _stamp_minutes(start: str, end: str) -> int:
+    """Recorded length of a stretch, from its own stamps."""
+    try:
+        opened = datetime.fromisoformat(str(start).replace('Z', '+00:00'))
+        closed = datetime.fromisoformat(str(end).replace('Z', '+00:00'))
+    except (ValueError, TypeError):
+        return 0
+    return max(0, int((closed - opened).total_seconds() // 60))
+
+
+def build_timeline(conversations: list[dict[str, Any]]) -> list[TimelineEntry]:
+    """The day in order, from recorded conversation stamps.
+
+    Nothing here is inferred. A conversation with no usable start stamp is left
+    off rather than placed somewhere plausible, because the whole point of a
+    timeline is that the position on it is a claim about when.
+    """
+    entries: list[TimelineEntry] = []
+    for conversation in conversations:
+        start = str(conversation.get('started_at') or conversation.get('created_at') or '')
+        if len(start) < 16:
+            continue
+        end = str(conversation.get('finished_at') or '')
+        structured = conversation.get('structured') or {}
+        label = str(structured.get('title') or '').strip()
+        if not label:
+            continue
+        minutes = _stamp_minutes(start, end) if end else 0
+        unbounded = minutes > MAX_PLAUSIBLE_SESSION_MINUTES
+        entries.append(
+            TimelineEntry(
+                label=label,
+                start=start,
+                end=end,
+                kind='conversation',
+                # Kept on the day at its real start, but not counted as a length.
+                minutes=0 if unbounded else minutes,
+                unbounded=unbounded,
+            )
+        )
+    entries.sort(key=lambda entry: entry.start)
+    return entries
+
+
 def _read_summary(uid: str, day: date, context: DayContext) -> None:
     try:
         context.summary = daily_summaries_db.get_daily_summary_by_date(uid, day.isoformat())
@@ -155,6 +206,7 @@ def _read_conversations(uid: str, day: date, context: DayContext) -> None:
             end_date=end,
         )
         context.conversations = rows or []
+        context.timeline = build_timeline(context.conversations)
         context.health.append(
             SourceHealth(
                 source='conversations',

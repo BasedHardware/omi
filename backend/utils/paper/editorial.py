@@ -166,6 +166,7 @@ Return only JSON, no fences:
 {{
   "headline": "<= {max_words} words. What the day was actually about.",
   "story": "3 to 5 sentences on what they did and worked through. Past tense.",
+  "done": ["<something that was actually finished or shipped. Not a plan, not a decision. Empty list if nothing closed.>"],
   "decisions": ["<a decision they actually made, quoted close to the record>"],
   "unacted": "<one idea they raised and did not act on, or empty string if none>"
 }}"""
@@ -194,6 +195,7 @@ def write_yesterday(uid: str, context: DayContext) -> Yesterday | None:
     if not headline and not story and not context.focus:
         return None
 
+    done = [clip(d, MAX_SUMMARY_CHARS) for d in (payload.get('done') or []) if str(d).strip()][:5]
     decisions = [str(d).strip() for d in (payload.get('decisions') or []) if str(d).strip()][:5]
     if not decisions:
         decisions = [
@@ -205,7 +207,9 @@ def write_yesterday(uid: str, context: DayContext) -> Yesterday | None:
     return Yesterday(
         headline=headline,
         story=story,
+        timeline=context.timeline,
         focus=context.focus,
+        done=done,
         decisions=decisions,
         unacted=clip(payload.get('unacted'), MAX_SUMMARY_CHARS),
         source_date=context.day.isoformat(),
@@ -490,3 +494,69 @@ def write_cover(uid: str, contents: list[str]) -> Cover:
         emphasis=clip_words(payload.get('emphasis'), 2),
         standfirst=clip(payload.get('standfirst'), MAX_SUMMARY_CHARS),
     )
+
+
+# ---------------------------------------------------------------------------
+# Buzz
+# ---------------------------------------------------------------------------
+
+_BUZZ_PROMPT = """Pick the stories worth this reader's attention from what the internet is \
+talking about today.
+
+THIS READER:
+{rubric}
+
+STORIES:
+{stories}
+
+Most of these will not matter to them. Ranking by popularity alone fills the page with the \
+front page of a news site, which they can already read. Pick only the ones that touch what \
+they are actually working on, and say why in one clause.
+
+HARD RULE: do not rewrite a headline and do not add facts. You are selecting and explaining, \
+not reporting. If nothing genuinely connects, return an empty list.
+
+{style}
+
+Return only JSON, no fences:
+{{"picks": [{{"index": <0-based index into STORIES>, "why": "<one clause, why it matters to them>"}}]}}
+
+At most {limit}."""
+
+
+def pick_buzz(uid: str, lines: list[NewsLine], profile, limit: int = 4) -> list[NewsLine]:
+    """Select the buzz worth printing, and say why each one is here.
+
+    The source ranks by points because it does no model work by design, which
+    means the front page crowds out everything topical and a lexical topic match
+    can file "In Memory of My Wife" under memory systems. The judgement of what
+    is actually relevant belongs here.
+    """
+    rubric = rubric_text(profile)
+    if not lines or not rubric:
+        return []
+
+    rendered = '\n'.join(f'[{index}] {line.claim.text}' for index, line in enumerate(lines[:30]))
+    payload = ask_model(
+        uid,
+        _BUZZ_PROMPT.format(rubric=rubric, stories=rendered, style=_STYLE, limit=limit),
+        'omi-paper-buzz',
+    )
+
+    picked: list[NewsLine] = []
+    seen: set[int] = set()
+    for raw in (payload.get('picks') or [])[:limit]:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            index = int(raw.get('index', -1))
+        except (TypeError, ValueError):
+            continue
+        if not 0 <= index < len(lines) or index in seen:
+            continue
+        seen.add(index)
+        why = clip(raw.get('why'), MAX_SUMMARY_CHARS)
+        # No reason means no connection, which is the whole basis for printing it.
+        if why:
+            picked.append(lines[index].model_copy(update={'why': why}))
+    return picked

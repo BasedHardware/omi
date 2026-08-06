@@ -26,10 +26,11 @@ from utils.retrieval.tools.integration_base import (
 from . import context as context_mod
 from . import interests as interests_mod
 from . import photo as photo_mod
-from .editorial import build_today, cluster_newsletters, rank_for_you, write_cover, write_yesterday
+from .editorial import build_today, cluster_newsletters, pick_buzz, rank_for_you, write_cover, write_yesterday
 from .sources.calendar_source import fetch_today
 from .sources.discovery import paper_candidates, web_candidates
 from .sources.gmail_source import GOOGLE_INTEGRATION_KEY, fetch_newsletters
+from .sources.hackernews import fetch_buzz
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +181,10 @@ async def build_edition(
 
     candidates, arxiv_health = await run_blocking(llm_executor, paper_candidates, profile, target_date)
     edition.source_health.append(arxiv_health)
+
+    buzz_lines, buzz_health = await run_blocking(llm_executor, fetch_buzz, profile, target_date)
+    edition.source_health.append(buzz_health)
+    news = list(news) + await run_blocking(llm_executor, pick_buzz, uid, buzz_lines, profile)
 
     edition.today = await run_blocking(
         llm_executor, build_today, uid, events, _commitments_from(day_context, target_date), calendar_health.ok

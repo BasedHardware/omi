@@ -64,6 +64,24 @@
   ul { margin: 0 0 0.8rem; padding-left: 1.1rem; }
   li { margin-bottom: 0.35rem; }
 
+  /* The day strip. Hand-drawn from recorded stamps, so it can be read exactly. */
+  .strip { display: block; margin: 0.4rem 0 0.2rem; overflow: visible; }
+  /* Sessions abut and overlap, so a solid fill reads as one black band. A
+     light fill with its own edge keeps each stretch legible as a stretch. */
+  .strip-block { fill: var(--ink); fill-opacity: 0.18; stroke: var(--ink); stroke-opacity: 0.55; stroke-width: 0.75; }
+  .strip-tick { stroke: var(--rule); stroke-width: 1; }
+  .strip-axis { stroke: var(--rule); stroke-width: 1; }
+  .strip-label {
+    fill: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px;
+  }
+  .sessions { list-style: none; padding: 0; margin: 0.6rem 0 1rem; }
+  .sessions li { display: flex; gap: 0.75rem; align-items: baseline; }
+  .sessions time {
+    color: var(--muted); min-width: 3.2rem; font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem;
+  }
+  .sessions .len { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+
   .focus { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; margin: 0.75rem 0 1rem; }
   .focus div { white-space: nowrap; }
   .focus b { font-weight: normal; }
@@ -113,6 +131,22 @@
   {% if edition.yesterday.headline %}<h3>{{ edition.yesterday.headline }}</h3>{% endif %}
   {% if edition.yesterday.story %}<p>{{ edition.yesterday.story }}</p>{% endif %}
 
+  {% if day_strip %}
+  <div class="furniture">The day, {{ edition.yesterday.recorded_minutes | hours }} recorded across {{ edition.yesterday.timeline | length }} conversations{% if edition.yesterday.unbounded_sessions %} · {{ edition.yesterday.unbounded_sessions }} left open, not counted{% endif %}</div>
+  {{ day_strip | safe }}
+  <ul class="sessions">
+    {% for entry in edition.yesterday.timeline | sort(attribute='minutes', reverse=true) %}
+    {% if loop.index <= 5 and (entry.minutes or entry.unbounded) %}
+    <li>
+      <time>{{ entry.start | clock }}</time>
+      <span>{{ entry.label }}</span>
+      <span class="len">{% if entry.unbounded %}left open{% else %}{{ entry.minutes | hours }}{% endif %}</span>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+  {% endif %}
+
   {% if edition.yesterday.focus %}
   <div class="focus furniture">
     {% for block in edition.yesterday.focus %}
@@ -121,7 +155,15 @@
   </div>
   {% endif %}
 
+  {% if edition.yesterday.done %}
+  <div class="furniture">Done</div>
+  <ul>
+    {% for item in edition.yesterday.done %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
   {% if edition.yesterday.decisions %}
+  <div class="furniture">Decided</div>
   <ul>
     {% for decision in edition.yesterday.decisions %}<li>{{ decision }}</li>{% endfor %}
   </ul>
@@ -153,6 +195,7 @@
     </ul>
     {% endif %}
     {% if edition.today.commitments %}
+    <div class="furniture">To do</div>
     <ul>
       {% for commitment in edition.today.commitments %}
       <li>{{ commitment.text }}{% if commitment.due %} <span class="story-sources">due {{ commitment.due }}</span>{% endif %}</li>
@@ -211,8 +254,9 @@
     {% for line in edition.for_you.news %}
     {% if line.claim.is_printable %}
     <li>
-      {{ line.claim.text }}
+      {% if line.claim.sources and line.claim.sources[0].url %}<a href="{{ line.claim.sources[0].url }}">{{ line.claim.text }}</a>{% else %}{{ line.claim.text }}{% endif %}
       <span class="story-sources">({{ line.claim.sources | map(attribute='name') | join(', ') }})</span>
+      {% if line.why %}<br><span class="why">{{ line.why }}</span>{% endif %}
     </li>
     {% endif %}
     {% endfor %}
@@ -237,7 +281,7 @@
   <ul>
     {% for health in edition.source_health %}
     {% if health.ok %}
-    <li>{{ health.source }} ok, {% if health.fetched %}{{ health.kept }} of {{ health.fetched }}{% else %}{{ health.note or 'nothing found' }}{% endif %}</li>
+    <li>{{ health.source }} ok, {% if health.fetched %}{{ health.kept }} of {{ health.fetched }}{% elif health.kept %}{{ health.kept }} kept{% else %}{{ health.note or 'nothing found' }}{% endif %}</li>
     {% else %}
     <li>{{ health.source }} unavailable{% if health.note %} — {{ health.note }}{% endif %}</li>
     {% endif %}

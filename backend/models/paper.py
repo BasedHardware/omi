@@ -106,12 +106,41 @@ class FocusBlock(BaseModel):
     detail: str = ''
 
 
+class TimelineEntry(BaseModel):
+    """One stretch of the day, at the time it actually happened.
+
+    Built from recorded start and end stamps, never from a model. The timeline
+    is the one part of the page that claims *when*, so every value on it is
+    measured or it is not printed.
+    """
+
+    label: str
+    start: str = ''  # ISO stamp
+    end: str = ''
+    kind: str = 'conversation'  # conversation | screen
+    minutes: int = 0
+    # A capture that never closed. It has a real start, so it keeps its place on
+    # the day, but its length is not a measurement and is not counted or printed
+    # as one.
+    unbounded: bool = False
+
+    @property
+    def start_minute(self) -> int:
+        """Minutes past local midnight, or -1 when the stamp will not parse."""
+        try:
+            return int(self.start[11:13]) * 60 + int(self.start[14:16])
+        except (ValueError, IndexError):
+            return -1
+
+
 class Yesterday(BaseModel):
     """What the reader did and thought, in their own day's terms."""
 
     headline: str = ''
     story: str = ''  # 3-5 plain sentences
+    timeline: list[TimelineEntry] = Field(default_factory=list)
     focus: list[FocusBlock] = Field(default_factory=list)
+    done: list[str] = Field(default_factory=list)  # what actually got finished
     decisions: list[str] = Field(default_factory=list)
     unacted: str = ''  # an idea raised and not taken up — the highest-value line
     source_date: str = ''
@@ -119,6 +148,24 @@ class Yesterday(BaseModel):
     @property
     def tracked_minutes(self) -> int:
         return sum(block.minutes for block in self.focus)
+
+    @property
+    def recorded_minutes(self) -> int:
+        """Only stretches whose length is actually a measurement."""
+        return sum(entry.minutes for entry in self.timeline if not entry.unbounded)
+
+    @property
+    def unbounded_sessions(self) -> int:
+        return sum(1 for entry in self.timeline if entry.unbounded)
+
+    @property
+    def span(self) -> tuple[int, int]:
+        """First and last minute of the day that carries anything, for the axis."""
+        starts = [e.start_minute for e in self.timeline if e.start_minute >= 0]
+        if not starts:
+            return (0, 0)
+        ends = [e.start_minute + max(e.minutes, 1) for e in self.timeline if e.start_minute >= 0]
+        return (min(starts), max(ends))
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +264,7 @@ class ToolItem(BaseModel):
 class NewsLine(BaseModel):
     category: str
     claim: Claim
+    why: str = ''  # the tie to this reader, when the editorial layer found one
 
 
 class ForYou(BaseModel):

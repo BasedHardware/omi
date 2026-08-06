@@ -9,6 +9,7 @@ them, and the editorial layer only ever sees real records.
 import logging
 import re
 import urllib.parse
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import date
@@ -21,6 +22,11 @@ logger = logging.getLogger(__name__)
 _API = 'https://export.arxiv.org/api/query'
 _NS = {'atom': 'http://www.w3.org/2005/Atom'}
 _TIMEOUT_SECONDS = 25
+
+# arXiv asks for three seconds between requests. Firing four queries back to
+# back gets 200s with empty feeds, which is indistinguishable from a quiet
+# week — the section simply vanished with the health line saying it was fine.
+_COURTESY_DELAY_SECONDS = 3.0
 
 # arXiv asks for a descriptive agent so they can contact heavy users.
 _USER_AGENT = 'omi-paper/0.1 (+https://omi.me; daily research brief)'
@@ -78,7 +84,9 @@ def fetch_papers(queries: list[str], since: date, limit: int = 40) -> tuple[list
     failures: list[str] = []
     fetched = 0
 
-    for query in queries:
+    for index, query in enumerate(queries):
+        if index:
+            time.sleep(_COURTESY_DELAY_SECONDS)
         params = urllib.parse.urlencode(
             {
                 'search_query': f'all:"{query}"',
@@ -109,11 +117,22 @@ def fetch_papers(queries: list[str], since: date, limit: int = 40) -> tuple[list
             seen[item.identifier] = item
 
     items = sorted(seen.values(), key=lambda p: p.submitted, reverse=True)
+
+    if failures:
+        note = f'{len(failures)}/{len(queries)} queries failed'
+    elif queries and fetched == 0:
+        # Every query answered and every feed was empty. arXiv always has recent
+        # submissions for a broad query, so this is throttling rather than a
+        # quiet week, and reporting it as "nothing found" hides an outage.
+        note = 'every feed came back empty, likely rate limited'
+    else:
+        note = ''
+
     health = SourceHealth(
         source='arXiv',
-        ok=len(failures) < len(queries),
+        ok=len(failures) < len(queries) and not (queries and fetched == 0),
         fetched=fetched,
         kept=len(items),
-        note=f'{len(failures)}/{len(queries)} queries failed' if failures else '',
+        note=note,
     )
     return items, health
