@@ -1,0 +1,66 @@
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistantSettings.swift
+  s_569f1df936cc22::t_e9ab1f696980df 139-143,146-151,154-156
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistantSettings.swift
+  s_569f1df936cc22::t_9c23e5276a9ef5 329-335,338-343,346-348
+desktop/macos/Desktop/Tests/SettingsAssistantControlsTests.swift
+  s_569f1df936cc22::t_260e00610fb62e 242
+  s_569f1df936cc22::t_880699976da8be 238-240
+  s_569f1df936cc22::t_59c09fe6085a37 22-30
+  s_569f1df936cc22::t_53c317c3f11e2c 256-259
+  s_569f1df936cc22::t_3a9d843a16d9bb 261
+  s_569f1df936cc22::t_e0d0fa5826ffbf 41,45
+  s_569f1df936cc22::t_50c69cac3bbe0f 75-78
+  s_569f1df936cc22::t_71ae3dc922977a 12-14,16,20-21
+  s_569f1df936cc22::t_5ca4e7a279702a 1-4,31-40,42-44,46-50,57-59,64,66,79-237,241,243-255,260,262-287
+  s_569f1df936cc22::t_c1197c94356fac 60-62
+  s_569f1df936cc22::t_02cce7910bf535 51-56,63,65,67-74
+  s_569f1df936cc22::t_b2655901e84dc2 5-11,15,17-19
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AssistantSettings.swift
+  s_569f1df936cc22::t_f894a91b4e0adc 93-97,100-105,108-109
+desktop/macos/changelog/unreleased/20260806-assistant-settings-restored.json
+  s_569f1df936cc22::t_83b1a9f62b1c8d 1-3
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistantSettings.swift
+  s_569f1df936cc22::t_7f80b62856ff0f 200-204,207-212,215-217
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  s_569f1df936cc22::t_1185658a10bd8d 551-555,557,561-562,566-567,571-572
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+Controls.swift
+  s_569f1df936cc22::t_353cfe4e910386 346-361
+  s_569f1df936cc22::t_96a9e95fcdf034 36-78,362
+  s_814cfc8af23811::t_1b77ef21f8b8b0 363
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
+  s_569f1df936cc22::t_9c3c4080f40277 25-35
+  s_569f1df936cc22::t_2c487b3befea5a 56-63
+  s_569f1df936cc22::t_f539f29a572784 64
+desktop/macos/changelog/unreleased/20260806-assistant-interval-slider-honesty.json
+  s_569f1df936cc22::t_11c530032b7e56 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Assistants.swift
+  s_569f1df936cc22::t_d37f129956d89d 129-135,146-147
+  s_569f1df936cc22::t_67048406113314 778-784,795-796
+  s_569f1df936cc22::t_1ba903d79b4b72 401-407,418-419
+  s_569f1df936cc22::t_1c2c2addb2523b 1020-1099
+  s_569f1df936cc22::t_a68952d7f0a64c 611-617,628-629
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "73c7f85fbcd5cff7ec9abbbaa7f63b00e9541a31",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_814cfc8af23811": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1fcdb13-5b42-47d9-a8ea-d2da9669b2be",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
