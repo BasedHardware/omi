@@ -12,6 +12,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/PageGlassLane.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsDestinationView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
   - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
@@ -96,3 +97,23 @@ steps:
     expect:
       text_visible:
         - Conversations
+
+  - id: S10
+    name: Verify the window has no chrome and is still closable, minimisable and movable
+    do: >-
+      The main window has no title bar buttons: capture the whole desktop
+      (screencapture -x -o) and verify there are no red/yellow/green circles at the
+      window's top-left — the nav bar's glass and the desktop are all that is there.
+      Then verify nothing was lost with them. Drag the window by an empty part of the
+      top navigation bar and confirm its position changed by the drag delta; drag it
+      by the transparent title-bar band above the nav bar and confirm the same. Drag
+      inside the results list and confirm the window did NOT move (the scroll view
+      owns that gesture) and that the wheel still scrolls it. Press ⌘M and confirm the
+      window minimises, restore it, then press ⌘W and confirm the window closes while
+      the menu-bar app keeps running. Reopen it and confirm the re-summoned window
+      also has no buttons.
+    expect:
+      text_visible:
+        - Omi
+        - Library
+        - Apps
