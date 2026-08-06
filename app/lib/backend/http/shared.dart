@@ -33,25 +33,27 @@ class AuthTokenUnavailableException implements Exception {
 }
 
 // Normal-mode connectivity failures on mobile (no network, DNS failure,
-// connection reset, TLS handshake during reconnect, request timeout). Reporting
-// these to Crashlytics drowns out real signal — caller logs them locally and
-// either returns null or rethrows for the upstream sync state machine.
-bool _isTransientNetworkError(Object e) {
+// connection reset, TLS handshake during reconnect, request timeout, OS abort
+// when the app backgrounds mid-upload). Reporting these to Crashlytics drowns
+// out real signal — caller logs them locally and either returns null or
+// rethrows for the upstream sync state machine.
+bool isTransientNetworkError(Object e) {
   if (e is SocketException) return true;
   if (e is HandshakeException) return true;
   if (e is TimeoutException) return true;
-  if (e is http.ClientException) {
-    final m = e.message;
-    return m.contains('SocketException') ||
-        m.contains('HandshakeException') ||
-        m.contains('TimeoutException') ||
-        m.contains('Connection closed') ||
-        m.contains('Connection reset') ||
-        m.contains('Failed host lookup') ||
-        m.contains('Network is unreachable') ||
-        m.contains('Bad file descriptor');
-  }
-  return false;
+  final text = e is http.ClientException ? e.message : e.toString();
+  final lower = text.toLowerCase();
+  return text.contains('SocketException') ||
+      text.contains('HandshakeException') ||
+      text.contains('TimeoutException') ||
+      text.contains('Connection closed') ||
+      text.contains('Connection reset') ||
+      text.contains('Failed host lookup') ||
+      text.contains('Network is unreachable') ||
+      text.contains('Bad file descriptor') ||
+      // Android leave/background mid-multipart (#4587): match the full abort
+      // phrase only — a bare "ClientSoftware" token is not a connectivity signal.
+      lower.contains('software caused connection abort');
 }
 
 Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
@@ -318,7 +320,7 @@ Future<http.Response?> makeApiCall({
     return null;
   } catch (e, stackTrace) {
     Logger.debug('HTTP request failed: $e, $stackTrace');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
     return null;
@@ -457,7 +459,7 @@ Future<http.Response> makeMultipartApiCall({
     return http.Response('', 401, reasonPhrase: 'Authentication unavailable');
   } catch (e, stackTrace) {
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
     rethrow;
@@ -523,7 +525,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
     return http.Response('', 401, reasonPhrase: 'Authentication unavailable');
   } catch (e, stackTrace) {
     Logger.debug('Unpooled multipart HTTP request failed: $e, $stackTrace');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
     rethrow;
@@ -612,7 +614,7 @@ Stream<String> makeStreamingApiCall({
     Logger.debug('Authenticated streaming request blocked before send: ${e.result.runtimeType}');
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
     }
   }
@@ -696,7 +698,7 @@ Stream<String> makeMultipartStreamingApiCall({
     Logger.debug('Authenticated multipart streaming request blocked before send: ${e.result.runtimeType}');
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');
-    if (!_isTransientNetworkError(e)) {
+    if (!isTransientNetworkError(e)) {
       PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
     }
   }
