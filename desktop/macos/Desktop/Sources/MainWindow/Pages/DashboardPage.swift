@@ -695,8 +695,8 @@ struct DashboardPage: View {
       let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
       let panelWidth = homeStageContentWidth(for: proxy.size.width)
 
-      // No canvas of its own. The shell's `glassShellGround()` is the one ground in this
-      // window; Home used to paint a near-black gradient over it edge to edge, which
+      // No canvas of its own. The window has no ground at all (`ShellWindowChrome`) and Home's
+      // own panels are the glass; Home used to paint a near-black gradient edge to edge, which
       // survived the palette conversion and left every `Ink` colour on the page — all of
       // which resolve *dark* on the light-pinned panel — drawn near-black on near-black.
       ZStack(alignment: .topTrailing) {

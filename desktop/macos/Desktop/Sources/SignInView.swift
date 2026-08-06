@@ -6,7 +6,7 @@ import SwiftUI
 /// product rather than a template.
 ///
 /// **It paints no ground.** There was a full-bleed dune photograph here under a black gradient, and
-/// it is gone rather than restyled: the window wears the glass (`DesktopHomeView.glassShellGround`,
+/// it is gone rather than restyled: the window wears the glass (`ShellWindowChrome`,
 /// "the one ground in this window — nothing above it paints a background"), so an opaque image on top
 /// of it hid the panel entirely and forced every label on this screen to be white. White type is what
 /// made this the worst-affected screen in the light conversion — it survived only *because* the art

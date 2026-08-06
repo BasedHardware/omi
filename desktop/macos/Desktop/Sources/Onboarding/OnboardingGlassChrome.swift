@@ -2,10 +2,11 @@
 //  OnboardingGlassChrome.swift — the chrome every first-run card wears.
 //
 //  Onboarding and sign-in are the first screens a new user ever sees, and they are hosted on the
-//  shell's one piece of glass (`glassShellGround`). That makes them the surfaces where the two rules
+//  shell's glass panels (`ShellWindowChrome` leaves the window itself bare). That makes them the
+//  surfaces where the two rules
 //  the glass is built on bite hardest, so they are encoded here rather than restated per step:
 //
-//  1. **The card paints no ground.** `DesktopHomeView` applies `glassShellGround()` once and says so
+//  1. **The card paints no ground.** The panel beneath it already is the glass, and says so
 //     ("The one ground in this window. Nothing above it paints a background."). A first-run screen
 //     that fills itself — with a colour, an image, or a `Material` — is an opaque slab pasted over
 //     the panel, and the panel is the product. What replaced the dark art here is not "no design",

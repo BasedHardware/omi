@@ -428,7 +428,7 @@ struct DesktopHomeView: View {
         }
       }
     }
-    .environment(\.colorScheme, .light)  // The window owns the ground (`ShellGlassGround`); this is its light pin.
+    .environment(\.colorScheme, .light)  // No window ground since `ShellWindowChrome`; each panel is its own glass.
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)
@@ -1386,9 +1386,9 @@ struct DesktopHomeView: View {
     )
   }
 
-  // Main content area. It paints **no background**: the window's glass is the
-  // one ground (see `glassShellGround`), and a second one would slip an opaque
-  // sheet between the desktop and the `.behindWindow` blur.
+  // Main content area. It paints **no background**: the window has no ground at all
+  // (`ShellWindowChrome`), so each destination floats on its own panel and one painted
+  // here would slip an opaque sheet between the desktop and every `.behindWindow` blur.
   private var mainContentContainer: some View {
     // Page content - switch recreates views on tab change
     // Extracted into a separate struct so that pages like TasksPage

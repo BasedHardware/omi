@@ -23,9 +23,9 @@ enum SBOnboardingPanelLayout {
 /// word-by-word and performs real side-effects. Replaces the legacy wizard.
 ///
 /// **It paints no ground.** A full-bleed dune photograph under a black gradient used to sit behind
-/// this card, which meant the window's glass (`DesktopHomeView.glassShellGround` — "the one ground in
-/// this window") was covered by the very first screen a new user reaches, and every label on it had
-/// to be white to survive. On the light-pinned panel that art is gone and the type is near-black:
+/// this card, which meant the shell's glass — then a single window-wide ground, since retired in
+/// favour of per-panel glass (`ShellWindowChrome`) — was covered by the very first screen a new
+/// user reaches, and every label on it had to be white to survive. On the light-pinned panel that art is gone and the type is near-black:
 /// blurred desktop, one wash-and-hairline card, two rungs of ink.
 ///
 /// The card itself was `Color.white.opacity(0.05)` over `.ultraThinMaterial`. That is *within-window*

@@ -43,8 +43,8 @@ struct ChatFirstShell: View {
   }
 
   var body: some View {
-    // No ground of its own — the window's glass (`glassShellGround`) is already
-    // under this, and a second scrim would spend the passthrough budget twice.
+    // No ground of its own — the window has none either (`ShellWindowChrome`), so the
+    // panels below are the glass, and a scrim here would spend the passthrough budget twice.
     VStack(spacing: 0) {
       DesktopTopBar(
         selectedIndex: modernTopBarSelection,
