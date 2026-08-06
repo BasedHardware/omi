@@ -1,0 +1,29 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-rewind.json
+  s_569f1df936cc22::t_f0b6a6233029ea 5
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_acebfdccb4f1d0::t_3edffade75579f 468
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c68d18e8dbdc3c63e8660d51b0f8ccae500547e8",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
