@@ -169,7 +169,6 @@ def run_canonical_short_term_maintenance_for_cohort(
     client = db_client if db_client is not None else default_db_client
     uids = list_canonical_cohort_uids()
     summary = CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=len(uids))
-    lifecycle_backfill_ready_uids: tuple[str, ...] = ()
     try:
         lifecycle = run_canonical_cohort_lifecycle(db_client=client)
     except Exception as exc:
@@ -180,7 +179,6 @@ def run_canonical_short_term_maintenance_for_cohort(
         summary.lifecycle_write_enrolled_total = len(lifecycle.write_enrolled_uids)
         summary.lifecycle_backfill_read_ready_total = lifecycle.backfill.summary.read_ready_count
         summary.lifecycle_generation_reconciled_total = len(lifecycle.generation_reconciled_uids)
-        lifecycle_backfill_ready_uids = lifecycle.backfill_ready_uids
     logger.info(
         "canonical_short_term_maintenance_cron: start run_id=%s user_count=%d",
         effective_run_id,
@@ -287,7 +285,7 @@ def run_canonical_short_term_maintenance_for_cohort(
             skipped,
         )
 
-        if not canonical_graph_backfill_enabled() or uid not in lifecycle_backfill_ready_uids:
+        if not canonical_graph_backfill_enabled():
             continue
         try:
             graph_page_size = canonical_graph_backfill_page_size()

@@ -2,7 +2,7 @@
 agent-proxy — WebSocket proxy that bridges the mobile app to a user's agent VM.
 
 Auth: Firebase ID token in Authorization header (Bearer <token>) during WS upgrade.
-Flow: validate token → fetch VM from Firestore → if stopped, restart → connect to VM WS → bidirectional pump.
+Flow: validate token → fetch VM from Firestore → request reconciliation when unavailable → connect to VM WS → bidirectional pump.
 History: fetches last 10 agent messages from Firestore and prepends to prompt.
 """
 
@@ -19,8 +19,6 @@ from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple, cast
 
 import firebase_admin
-import google.auth
-import google.auth.transport.requests
 import httpx
 import websockets
 from cryptography.hazmat.primitives import hashes
@@ -28,8 +26,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from firebase_admin import auth, credentials, firestore
-from google.cloud.firestore import DELETE_FIELD, ArrayUnion, transactional
-from google.cloud.firestore_v1 import Increment, Query
+from google.cloud.firestore import ArrayUnion, transactional
+from google.cloud.firestore_v1 import Query
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -44,6 +42,7 @@ from services.agent_vm_lifecycle import (
     heartbeat_session_lease,
     reconcile_requested,
     release_session_lease,
+    request_vm_start,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,6 @@ logger = logging.getLogger(__name__)
 from resilience import circuit_open, classify_error  # noqa: E402
 
 HISTORY_LIMIT = 10
-GCE_PROJECT = "based-hardware"
 # Legacy placeholder that earlier builds persisted as agentVm.ip when the GCE
 # IP poll timed out. Never written any more; still read so already-poisoned
 # records heal on the next connect instead of resetting a healthy VM forever.
@@ -171,117 +169,6 @@ async def _require_account_deletion_access_async(uid: str) -> None:
     await run_blocking(db_executor, _require_account_deletion_access, uid)
 
 
-def _refresh_vm(uid: str) -> Optional[Dict[str, Any]]:
-    """Re-read the VM info from Firestore (called after restart to get new IP)."""
-    doc = _get_firestore_db().collection('users').document(uid).get()
-    if doc.exists:
-        return cast(Optional[Dict[str, Any]], _typed_doc(doc).get('agentVm'))
-    return None
-
-
-# --------------- GCE helpers ---------------
-
-
-class VmNotFoundError(Exception):
-    """The GCE instance backing the user's agentVm record no longer exists."""
-
-
-def _get_gce_access_token() -> str:
-    """Get a GCE access token via Application Default Credentials."""
-    creds, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/cloud-platform'])  # type: ignore[reportUnknownMemberType]
-    creds.refresh(google.auth.transport.requests.Request())
-    return cast(str, creds.token)
-
-
-async def _check_gce_status(vm_name: str, zone: str) -> str:
-    """Check the actual GCE instance status.
-
-    A 404 is reported as `NOT_FOUND` rather than folded into `UNKNOWN`: the
-    instance is gone (the agent-vm reaper deletes aged TERMINATED VMs), which
-    is unrecoverable here and needs the stale Firestore record cleared, while
-    `UNKNOWN` means "could not tell" and must leave the record alone.
-    """
-    token = await run_blocking(critical_executor, _get_gce_access_token)
-    url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
-        if resp.status_code == 404:
-            return "NOT_FOUND"
-        if resp.status_code != 200:
-            return "UNKNOWN"
-        return resp.json().get("status", "UNKNOWN")
-
-
-async def _start_vm_and_wait(vm_name: str, zone: str) -> str:
-    """Start a stopped/terminated GCE VM and return the new IP."""
-
-    t0 = time.monotonic()
-    token = await run_blocking(critical_executor, _get_gce_access_token)
-    instance_url = f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}"
-    start_url = (
-        f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/start"
-    )
-
-    async with httpx.AsyncClient(timeout=180) as client:
-        instance_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
-        if instance_resp.status_code == 404:
-            raise VmNotFoundError(vm_name)
-        already_running = instance_resp.status_code == 200 and instance_resp.json().get("status") == "RUNNING"
-        if already_running:
-            logger.info(f"[vm-start] {vm_name} is already RUNNING; resolving its external IP")
-        else:
-            resp = await client.post(start_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
-            if resp.status_code not in (200, 204):
-                raise Exception(f"GCE start failed: {resp.status_code} {resp.text}")
-            t_start = time.monotonic() - t0
-            logger.info(f"[vm-start] {vm_name} start API call: {t_start:.1f}s")
-
-            op_name = resp.json().get("name")
-            if not op_name:
-                raise Exception("Missing operation name in GCE start response")
-
-            op_url = (
-                f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
-            )
-            for i in range(24):
-                await asyncio.sleep(5)
-                token = await run_blocking(critical_executor, _get_gce_access_token)
-                status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {token}"})
-                status = status_resp.json()
-                if status.get("status") == "DONE":
-                    if "error" in status:
-                        raise Exception(f"GCE start operation failed: {status['error']}")
-                    t_op = time.monotonic() - t0
-                    logger.info(f"[vm-start] {vm_name} operation done after {i + 1} polls: {t_op:.1f}s")
-                    break
-
-        # Poll for a valid external IP (may take a few seconds after operation completes)
-        ip = None
-        for attempt in range(6):
-            token = await run_blocking(critical_executor, _get_gce_access_token)
-            inst_resp = await client.get(instance_url, headers={"Authorization": f"Bearer {token}"})
-            instance = inst_resp.json()
-            try:
-                candidate = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-                if candidate and candidate != "unknown":
-                    ip = candidate
-                    t_ip = time.monotonic() - t0
-                    logger.info(f"[vm-start] {vm_name} got IP {ip} on attempt {attempt + 1}: {t_ip:.1f}s total")
-                    break
-            except (KeyError, IndexError):
-                pass
-            if attempt < 5:
-                logger.info(f"[vm-start] {vm_name} no IP yet, retrying ({attempt + 1}/6)...")
-                await asyncio.sleep(3)
-
-        if not ip:
-            t_fail = time.monotonic() - t0
-            logger.error(f"[vm-start] {vm_name} failed to get IP after 6 attempts: {t_fail:.1f}s")
-            raise RuntimeError(f"VM {vm_name} started but never reported an external IP")
-
-        return ip
-
-
 def _is_usable_vm_ip(ip: Any) -> bool:
     """True when `ip` is an address the proxy can actually dial.
 
@@ -289,142 +176,6 @@ def _is_usable_vm_ip(ip: Any) -> bool:
     `if ip:` reader on the connect path while resolving to nothing.
     """
     return isinstance(ip, str) and bool(ip) and ip != UNRESOLVED_VM_IP
-
-
-def _update_firestore_vm(
-    uid: str,
-    expected_vm_name: str,
-    expected_auth_token: str,
-    ip: str | None,
-    status: str,
-    *,
-    restart_failed: bool = False,
-    restart_succeeded: bool = False,
-) -> bool:
-    """Update the user's agentVm fields in Firestore (incl. circuit-breaker state).
-
-    `agentVm.ip` is the address every later connect dials, so this writer is
-    the one place that decides what may become that address. A placeholder
-    must never be persisted: it is truthy, so it passes the `status == "ready"
-    and vm_ip` fast path, fails the health probe, and sends `_ensure_vm_running`
-    down the `health_failed` branch — which finds GCE reporting RUNNING and
-    hard-resets a healthy VM, then writes the same placeholder back. Nothing
-    else repairs the field, so the user is stuck in that loop permanently.
-    """
-    if status == "ready" and not _is_usable_vm_ip(ip):
-        raise ValueError(f"refusing to persist ready agentVm without usable ip for uid={uid}")
-
-    update: Dict[str, Any] = {"agentVm.status": status}
-    if ip is not None:
-        if not _is_usable_vm_ip(ip):
-            raise ValueError(f"refusing to persist unusable agentVm.ip for uid={uid}")
-        update["agentVm.ip"] = ip
-    if restart_failed:
-        update["agentVm.restartFailures"] = Increment(1)
-        update["agentVm.lastRestartFailureAt"] = time.time()
-    if restart_succeeded:
-        update["agentVm.restartFailures"] = 0
-    client = _get_firestore_db()
-    return _update_firestore_vm_if_allowed_txn(
-        client.transaction(),
-        client.collection('account_deletions').document(uid),
-        client.collection('users').document(uid),
-        expected_vm_name,
-        expected_auth_token,
-        update,
-    )
-
-
-@transactional
-def _update_firestore_vm_if_allowed_txn(
-    transaction: Any,
-    deletion_ref: Any,
-    user_ref: Any,
-    expected_vm_name: str,
-    expected_auth_token: str,
-    update: Dict[str, Any],
-) -> bool:
-    deletion = deletion_ref.get(transaction=transaction)
-    raw_status = (deletion.to_dict() or {}).get('wipe_status') if deletion.exists else None
-    status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
-    if account_deletion_blocks_access(status):
-        raise AccountDeletionAccessBlocked(status or 'unknown')
-    user = user_ref.get(transaction=transaction)
-    current = (user.to_dict() or {}).get('agentVm') if user.exists else None
-    if not isinstance(current, dict):
-        return False
-    if current.get('vmName') != expected_vm_name or current.get('authToken') != expected_auth_token:
-        return False
-    transaction.update(user_ref, update)
-    return True
-
-
-def _clear_agent_vm(uid: str, expected_vm_name: str, expected_auth_token: str) -> bool:
-    """Delete the user's agentVm record once its GCE instance is gone.
-
-    The reaper deletes aged TERMINATED `omi-agent-*` instances but leaves the
-    Firestore record saying `ready` with the old IP, and nothing here can
-    recreate an instance. Keeping the record makes every later connect dial a
-    dead address and makes the desktop provision endpoint report `exists`, so
-    the user's agent stays broken forever. Clearing it is what lets a client
-    provision a new VM — the same repair `GET /v2/agent/status` already does.
-    """
-    client = _get_firestore_db()
-    return _clear_agent_vm_if_allowed_txn(
-        client.transaction(),
-        client.collection('account_deletions').document(uid),
-        client.collection('users').document(uid),
-        expected_vm_name,
-        expected_auth_token,
-    )
-
-
-@transactional
-def _clear_agent_vm_if_allowed_txn(
-    transaction: Any,
-    deletion_ref: Any,
-    user_ref: Any,
-    expected_vm_name: str,
-    expected_auth_token: str,
-) -> bool:
-    deletion = deletion_ref.get(transaction=transaction)
-    raw_status = (deletion.to_dict() or {}).get('wipe_status') if deletion.exists else None
-    status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
-    if account_deletion_blocks_access(status):
-        raise AccountDeletionAccessBlocked(status or 'unknown')
-    user = user_ref.get(transaction=transaction)
-    current = (user.to_dict() or {}).get('agentVm') if user.exists else None
-    if not isinstance(current, dict):
-        return False
-    if current.get('vmName') != expected_vm_name or current.get('authToken') != expected_auth_token:
-        return False
-    transaction.update(user_ref, {"agentVm": DELETE_FIELD})
-    return True
-
-
-async def _reset_vm(vm_name: str, zone: str) -> None:
-    """Hard-reset a RUNNING VM whose agent process is unresponsive."""
-    token = await run_blocking(critical_executor, _get_gce_access_token)
-    reset_url = (
-        f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/instances/{vm_name}/reset"
-    )
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(reset_url, headers={"Authorization": f"Bearer {token}"}, content=b"")
-        if resp.status_code not in (200, 204):
-            raise Exception(f"GCE reset failed: {resp.status_code} {resp.text}")
-        logger.info(f"[agent-proxy] VM {vm_name} reset initiated")
-        # Wait for the operation to complete
-        op_name = resp.json().get("name")
-        if op_name:
-            op_url = (
-                f"https://compute.googleapis.com/compute/v1/projects/{GCE_PROJECT}/zones/{zone}/operations/{op_name}"
-            )
-            for _ in range(12):
-                await asyncio.sleep(5)
-                t = await run_blocking(critical_executor, _get_gce_access_token)
-                status_resp = await client.get(op_url, headers={"Authorization": f"Bearer {t}"})
-                if status_resp.json().get("status") == "DONE":
-                    break
 
 
 def _vm_unavailable_event(uid: str) -> Dict[str, Any]:
@@ -445,11 +196,9 @@ def _vm_unavailable_event(uid: str) -> Dict[str, Any]:
 
 
 async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool = False) -> Optional[Dict[str, Any]]:
-    """If VM is stopped, restart it and return updated VM info. Returns None on failure."""
+    """Ask the reconciler to restore an unavailable VM without mutating GCE here."""
     vm_name = cast(str, vm.get("vmName"))
     vm_auth_token = cast(str, vm.get("authToken", ""))
-    zone = cast(str, vm.get("zone", "us-central1-a"))
-    fs_status = cast(str, vm.get("status", ""))
 
     if circuit_open(vm, time.time()):
         # 3 consecutive restart failures within the cooldown: stop hammering
@@ -460,77 +209,16 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
         )
         return None
 
-    # A record whose stored IP is the legacy placeholder can never be repaired by
-    # the reset branch below — it writes the same value back. Fall through to a
-    # full restart so `_start_vm_and_wait` resolves a real address.
-    if fs_status == "ready" and _is_usable_vm_ip(vm.get("ip")):
-        # Verify it's actually running
-        try:
-            gce_status = await _check_gce_status(vm_name, zone)
-        except Exception:
-            return vm  # Can't check, assume it's fine
-
-        if gce_status == "NOT_FOUND":
-            # Instance reaped: neither restart nor reset can bring it back, and
-            # leaving the record makes the caller wait out the full health
-            # timeout before failing. Clear it so a client can provision anew.
-            logger.warning(f"[agent-proxy] VM {vm_name} no longer exists in GCE — clearing stale agentVm record")
-            await run_blocking(db_executor, _clear_agent_vm, uid, vm_name, vm_auth_token)
-            return None
-
-        if gce_status == "RUNNING":
-            if health_failed:
-                # VM is RUNNING but agent process is dead — hard reset
-                logger.info(f"[agent-proxy] VM {vm_name} is RUNNING but unhealthy, resetting...")
-                await run_blocking(db_executor, _update_firestore_vm, uid, vm_name, vm_auth_token, None, "provisioning")
-                try:
-                    await _reset_vm(vm_name, zone)
-                    await run_blocking(
-                        db_executor,
-                        lambda: _update_firestore_vm(
-                            uid,
-                            vm_name,
-                            vm_auth_token,
-                            vm.get("ip"),
-                            "ready",
-                            restart_succeeded=True,
-                        ),
-                    )
-                    return await run_blocking(db_executor, _refresh_vm, uid)
-                except Exception:
-                    logger.error(f"[agent-proxy] Failed to reset VM {vm_name}", exc_info=True)
-                    await run_blocking(
-                        db_executor,
-                        lambda: _update_firestore_vm(uid, vm_name, vm_auth_token, None, "error", restart_failed=True),
-                    )
-                    return None
-            return vm
-        if gce_status not in ("TERMINATED", "STOPPED"):
-            return vm  # STAGING, etc. — let it be
-
-    # VM needs restart
-    logger.info(f"[agent-proxy] VM {vm_name} needs restart, starting...")
-    await run_blocking(db_executor, _update_firestore_vm, uid, vm_name, vm_auth_token, None, "provisioning")
-
-    try:
-        ip = await _start_vm_and_wait(vm_name, zone)
-        await run_blocking(
-            db_executor,
-            lambda: _update_firestore_vm(uid, vm_name, vm_auth_token, ip, "ready", restart_succeeded=True),
-        )
-        logger.info(f"[agent-proxy] VM {vm_name} restarted, ip={ip}")
-        return await run_blocking(db_executor, _refresh_vm, uid)
-    except VmNotFoundError:
-        logger.warning(f"[agent-proxy] VM {vm_name} no longer exists in GCE — clearing stale agentVm record")
-        await run_blocking(db_executor, _clear_agent_vm, uid, vm_name, vm_auth_token)
+    requested = await run_blocking(db_executor, request_vm_start, uid, vm_name, vm_auth_token)
+    if not requested:
         return None
-    except Exception:
-        logger.error(f"[agent-proxy] Failed to restart VM {vm_name}", exc_info=True)
-        await run_blocking(
-            db_executor,
-            lambda: _update_firestore_vm(uid, vm_name, vm_auth_token, None, "error", restart_failed=True),
-        )
-        return None
+    logger.info(
+        "[agent-proxy] queued reconciler repair for uid=%s vm=%s health_failed=%s",
+        uid,
+        vm_name,
+        health_failed,
+    )
+    return {**vm, "status": "updating", "ip": None}
 
 
 async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120) -> bool:
@@ -645,6 +333,20 @@ async def _prepare_vm_for_session(
             candidate_vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm, health_failed=True)
             if deletion_blocked or lease_lost.is_set():
                 return None
+            if candidate_vm is not None and candidate_vm.get("status") == "updating":
+                await _send_startup_event(
+                    websocket,
+                    uid,
+                    {
+                        "type": "error",
+                        "code": "agent_vm_draining",
+                        "state": "updating",
+                        "retryable": True,
+                        "message": "Your agent is being updated. Please retry shortly.",
+                    },
+                )
+                await _close_client(websocket, uid, 1013, "Agent VM is updating")
+                return None
             if (
                 candidate_vm is None
                 or candidate_vm.get("status") != "ready"
@@ -674,6 +376,20 @@ async def _prepare_vm_for_session(
         await _send_startup_event(websocket, uid, {"type": "status", "message": "Starting your agent VM..."})
         candidate_vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm)
         if deletion_blocked or lease_lost.is_set():
+            return None
+        if candidate_vm is not None and candidate_vm.get("status") == "updating":
+            await _send_startup_event(
+                websocket,
+                uid,
+                {
+                    "type": "error",
+                    "code": "agent_vm_draining",
+                    "state": "updating",
+                    "retryable": True,
+                    "message": "Your agent is being updated. Please retry shortly.",
+                },
+            )
+            await _close_client(websocket, uid, 1013, "Agent VM is updating")
             return None
         if (
             candidate_vm is None
@@ -970,6 +686,13 @@ async def agent_ws(websocket: WebSocket):
     # sessions to finish.  The lease is re-read after readiness because a drain
     # can begin while a stopped VM is being started.
     if reconcile_requested(vm):
+        # An idle-stop lease uses the same drain fence. Preserve this user's
+        # demand before rejecting the socket so the reconciler starts the VM
+        # after the stop operation releases its lease.
+        try:
+            await _ensure_vm_running(uid, vm)
+        except Exception:
+            logger.warning("[agent-proxy] uid=%s could not queue reconciler demand while draining", uid, exc_info=True)
         await websocket.accept()
         await _send_startup_event(
             websocket,
@@ -1092,6 +815,10 @@ async def agent_ws(websocket: WebSocket):
             )
             if not lease_claimed:
                 lease_lost.set()
+                # A conflicting idle-stop/reconcile lease denied admission.
+                # Register demand instead of leaving the owner stopped after
+                # that lease completes.
+                await _ensure_vm_running(uid, vm)
                 await _send_startup_event(
                     websocket,
                     uid,

@@ -33,8 +33,7 @@ class ConversationCapturingPage extends StatefulWidget {
 }
 
 class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
-  static String? _preservedTranscriptSessionId;
-  static TranscriptScrollState _preservedTranscriptScrollState = TranscriptScrollState();
+  final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
@@ -53,11 +52,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   TranscriptScrollState _scrollStateFor(String sessionId) {
-    if (_preservedTranscriptSessionId != sessionId) {
-      _preservedTranscriptSessionId = sessionId;
-      _preservedTranscriptScrollState = TranscriptScrollState();
-    }
-    return _preservedTranscriptScrollState;
+    return _transcriptScrollStateStore.forSession(sessionId);
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
@@ -215,8 +210,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     provider.photos.isNotEmpty
                         ? "📸"
                         : effectivelyMuted
-                            ? "🔇"
-                            : "🎙️",
+                        ? "🔇"
+                        : "🎙️",
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -251,72 +246,67 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                       ),
                                     )
                                   : provider.photos.isNotEmpty
-                                      ? _buildChronologicalTimeline(
-                                          provider,
-                                          transcriptSessionId,
-                                          transcriptScrollState,
-                                        )
-                                      : getTranscriptWidget(
-                                          false,
-                                          provider.segments,
-                                          provider.photos,
-                                          deviceProvider.connectedDevice,
-                                          bottomMargin: 0,
-                                          suggestions: provider.suggestionsBySegmentId,
-                                          taggingSegmentIds: provider.taggingSegmentIds,
-                                          transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
-                                          followLatest: true,
-                                          scrollState: transcriptScrollState,
-                                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
-                                          contentVersion: provider.segmentsPhotosVersion,
-                                          onAcceptSuggestion: (suggestion) {
-                                            provider.assignSpeakerToConversation(
-                                              suggestion.speakerId,
-                                              suggestion.personId,
-                                              suggestion.personName,
-                                              [suggestion.segmentId],
+                                  ? _buildChronologicalTimeline(provider, transcriptSessionId, transcriptScrollState)
+                                  : getTranscriptWidget(
+                                      false,
+                                      provider.segments,
+                                      provider.photos,
+                                      deviceProvider.connectedDevice,
+                                      bottomMargin: 0,
+                                      suggestions: provider.suggestionsBySegmentId,
+                                      taggingSegmentIds: provider.taggingSegmentIds,
+                                      transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                                      followLatest: true,
+                                      scrollState: transcriptScrollState,
+                                      jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
+                                      contentVersion: provider.segmentsPhotosVersion,
+                                      onAcceptSuggestion: (suggestion) {
+                                        provider.assignSpeakerToConversation(
+                                          suggestion.speakerId,
+                                          suggestion.personId,
+                                          suggestion.personName,
+                                          [suggestion.segmentId],
+                                        );
+                                      },
+                                      editSegment: (segmentId, speakerId) {
+                                        final connectivityProvider = Provider.of<ConnectivityProvider>(
+                                          context,
+                                          listen: false,
+                                        );
+                                        if (!connectivityProvider.isConnected) {
+                                          ConnectivityProvider.showNoInternetDialog(context);
+                                          return;
+                                        }
+                                        showModalBottomSheet(
+                                          context: context,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.black,
+                                          shape: const RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                          ),
+                                          builder: (context) {
+                                            final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+                                              (s) => s.speakerId == speakerId,
+                                              orElse: () => SpeakerLabelSuggestionEvent.empty(),
                                             );
-                                          },
-                                          editSegment: (segmentId, speakerId) {
-                                            final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                              context,
-                                              listen: false,
-                                            );
-                                            if (!connectivityProvider.isConnected) {
-                                              ConnectivityProvider.showNoInternetDialog(context);
-                                              return;
-                                            }
-                                            showModalBottomSheet(
-                                              context: context,
-                                              isScrollControlled: true,
-                                              backgroundColor: Colors.black,
-                                              shape: const RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                              ),
-                                              builder: (context) {
-                                                final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                                  (s) => s.speakerId == speakerId,
-                                                  orElse: () => SpeakerLabelSuggestionEvent.empty(),
-                                                );
-                                                return NameSpeakerBottomSheet(
-                                                  speakerId: speakerId,
-                                                  segmentId: segmentId,
-                                                  segments: provider.segments,
-                                                  suggestion: suggestion,
-                                                  onSpeakerAssigned:
-                                                      (speakerId, personId, personName, segmentIds) async {
-                                                    await provider.assignSpeakerToConversation(
-                                                      speakerId,
-                                                      personId,
-                                                      personName,
-                                                      segmentIds,
-                                                    );
-                                                  },
+                                            return NameSpeakerBottomSheet(
+                                              speakerId: speakerId,
+                                              segmentId: segmentId,
+                                              segments: provider.segments,
+                                              suggestion: suggestion,
+                                              onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
+                                                await provider.assignSpeakerToConversation(
+                                                  speakerId,
+                                                  personId,
+                                                  personName,
+                                                  segmentIds,
                                                 );
                                               },
                                             );
                                           },
-                                        ),
+                                        );
+                                      },
+                                    ),
                             ),
                           ],
                         ),
@@ -409,11 +399,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments.
-  Widget _buildChronologicalTimeline(
-    CaptureProvider provider,
-    String sessionId,
-    TranscriptScrollState scrollState,
-  ) {
+  Widget _buildChronologicalTimeline(CaptureProvider provider, String sessionId, TranscriptScrollState scrollState) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
 
