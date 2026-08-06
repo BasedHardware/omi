@@ -1,0 +1,53 @@
+desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  s_814cfc8af23811::t_cf0bceb47cf21b 2057-2060,2083-2085,2102-2104,2141-2146,2188-2192
+desktop/macos/Desktop/Sources/Chat/AgentErrorClassifier.swift
+  s_569f1df936cc22::t_a2472f805e68df 18,37-44,84-101
+desktop/macos/Desktop/Sources/Chat/AgentRuntimePayload.swift
+  s_569f1df936cc22::t_618146ec147920 1-76
+desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  s_acebfdccb4f1d0::t_e98485781f7acc 2561-2573,2931-2932
+desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
+  s_569f1df936cc22::t_639099a63b4979 20-22,116-117,123-128,150,175
+desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
+  s_814cfc8af23811::t_3e1ebdf2a64232 64-65,249-258
+desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
+  s_569f1df936cc22::t_25f6b6d056df74 221-223
+desktop/macos/Desktop/Tests/AgentErrorClassifierTests.swift
+  s_569f1df936cc22::t_906f80e1b014ea 9-32
+desktop/macos/Desktop/Tests/AgentRuntimePayloadTests.swift
+  s_569f1df936cc22::t_ea84ce109b96e0 1-143
+desktop/macos/changelog/unreleased/20260806-agent-runtime-payload-guard.json
+  s_acebfdccb4f1d0::t_b49efd9efb6028 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7c916fec4e3129a0415e16581932a6f02a45a943",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_814cfc8af23811": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1fcdb13-5b42-47d9-a8ea-d2da9669b2be",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
