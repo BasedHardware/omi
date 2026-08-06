@@ -8,12 +8,15 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/AppIconView.swift
-  - desktop/macos/Desktop/Sources/Rewind/UI/InteractiveTimelineBar.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindPlaybackChrome.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelinePlayerView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelineView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindPalette.swift
 preconditions:
   - auth_ready
 
@@ -34,6 +37,12 @@ steps:
   - id: S3
     name: Verify permission gate or timeline
     do: "Check the Rewind content area. If Screen Recording permission is not granted, verify 'Screen Recording Permission Required' message with 'Grant Permission' button (orange). If permission is granted, verify timeline content with screenshot thumbnails and time markers."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3b
+    name: Verify per-app colour identity and scrub smoothness
+    do: "With the timeline showing, find an app badge whose real icon could not be resolved — it draws as a letter monogram on a filled circle. Verify the circle is a solid, saturated colour (not grey) and that the letter is white and legible on it. Verify two different apps get two different colours, and that the same app keeps its colour after quitting and relaunching the app (RewindPalette hashes the name, so the colour must not change across launches). Then hold the left/right arrow keys to scrub several seconds of frames and verify the stage image keeps up with the keypresses rather than lagging behind them."
     expect:
       interactive_count: { min: 1 }
 
