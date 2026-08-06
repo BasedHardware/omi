@@ -58,7 +58,17 @@ struct QueryAnswerThread: View {
         // gutter the mark needs is what makes the two sides read as a conversation.
         horizontalContentPadding: ChatOmiMarkPlacement.markGutter,
         verticalContentPadding: OmiSpacing.sm,
-        welcomeContent: { EmptyView() }
+        // **The one thing an empty transcript here is ever allowed to say.** The post-onboarding
+        // opener is composed by the provider the moment onboarding finishes — a greeting by name
+        // and tappable starters — and its only renderer was the deleted chat page and the legacy
+        // hub. Landing on a search surface that has never heard of you is not the first thing the
+        // app should do after asking you who you are. Everything else stays `EmptyView`: an empty
+        // answer thread is a mode you entered by asking, so it is about to have a question in it.
+        welcomeContent: {
+          if let opener = chatProvider.onboardingOpener {
+            OnboardingOpenerView(opener: opener, chatProvider: chatProvider)
+          }
+        }
       )
       .frame(maxWidth: .infinity, minHeight: 240, maxHeight: 460)
 

@@ -35,13 +35,21 @@ extension View {
   }
 }
 
-struct QueryResultsPanel<Content: View>: View {
+struct QueryResultsPanel<Content: View, Accessory: View>: View {
   @Binding var request: QueryShellRequest
   let mode: QueryShellMode
   /// The whole corpus, for the resting sentence. Nil while it is still being counted, which reads as
   /// "counting…" rather than as a confident zero.
   let total: Int?
   let onExitAnswer: () -> Void
+  /// One slot in the header's leading cluster, next to `Filter ›` / `‹ Results`.
+  ///
+  /// **The chrome still learns nothing about the body.** It does not know that the thing beside the
+  /// filter is a way into the transcript, or that the thing beside the back chip is a chat menu —
+  /// it knows there is a control there and where controls on this panel sit. The alternative was to
+  /// hand this file a `HomeChatMenu`, which would make a panel that draws counts and time windows
+  /// start knowing what chat is.
+  @ViewBuilder var headerAccessory: () -> Accessory
   @ViewBuilder var content: () -> Content
 
   @State private var matching: Int = 0
@@ -72,6 +80,7 @@ struct QueryResultsPanel<Content: View>: View {
       } else {
         filterControl
       }
+      headerAccessory()
       Spacer(minLength: OmiSpacing.sm)
       Text(countSentence)
         .scaledFont(size: OmiType.caption, weight: .regular)
@@ -162,6 +171,35 @@ struct QueryResultsPanel<Content: View>: View {
       }
       Spacer(minLength: 0)
     }
+  }
+}
+
+/// The label a header control wears, so a control added beside `Filter ›` matches it instead of
+/// re-deriving 12 pt of padding and `chipHeight + 2` at a second call site.
+struct QueryPanelChipLabel: View {
+  let systemImage: String
+  var title: String? = nil
+  var trailingSystemImage: String? = nil
+  var isActive: Bool = false
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Image(systemName: systemImage)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+      if let title {
+        Text(title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+      }
+      if let trailingSystemImage {
+        Image(systemName: trailingSystemImage)
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+      }
+    }
+    .foregroundStyle(Ink.primary)
+    .padding(.horizontal, 12)
+    .frame(height: QueryShellLayout.chipHeight + 2)
+    .glassChip(isActive: isActive)
   }
 }
 

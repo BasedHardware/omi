@@ -15,9 +15,18 @@
 //  The legacy hub is still here, behind the `useLegacyHomeDesign` setting that already gated it, so
 //  the change is reversible by the person it happened to rather than by a rebuild.
 //
+//  **This is the app's only chat destination**, which makes it the only place the controls of the
+//  deleted standalone chat page can live (`6be26e85bc`; INV-NAV-1 forbids bringing that page back).
+//  So this file also hosts: the chat overflow menu (copy / clear / AI settings), the way back into
+//  the transcript after you navigate away, the provider's two chat-blocking product flows, and the
+//  `home_*` automation entry points that used to land on the legacy hub. It adds no second
+//  transcript, no second send path and no second turn handler — every one of them acts on the one
+//  `ChatProvider` (INV-6).
+//
 //  Brand: `Ink` semantics only (INV-UI-1).
 //
 
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -38,6 +47,8 @@ struct QueryShellHome: View {
   @State private var request = QueryShellRequest()
   @State private var mode: QueryShellMode = .results
   @State private var screenCount: Int?
+  /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
+  @State private var didCopyTranscript = false
   @FocusState private var isQueryFocused: Bool
 
   var body: some View {
@@ -64,15 +75,21 @@ struct QueryShellHome: View {
           text: $request.text,
           focus: $isQueryFocused,
           isWorking: chatProvider.isSending,
+          isStopping: chatProvider.isStopping,
           mode: mode,
+          attachments: chatProvider.pendingAttachments,
           onSearch: search,
-          onAsk: ask
+          onAsk: ask,
+          onStop: { chatProvider.stopAgent(owner: .mainChat) },
+          onAttachmentsAdded: stageAttachments,
+          onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) }
         )
         QueryResultsPanel(
           request: $request,
           mode: mode,
           total: total,
-          onExitAnswer: { showResults() }
+          onExitAnswer: { showResults() },
+          headerAccessory: { headerAccessory }
         ) {
           panelBody
         }
@@ -84,7 +101,53 @@ struct QueryShellHome: View {
     }
     // A typed character belongs in the field even when the field is not focused: this is a search
     // surface, and a search surface that swallows the first letter you type is broken.
-    .onAppear { isQueryFocused = true }
+    .onAppear {
+      isQueryFocused = true
+      showOnboardingOpenerIfPresent()
+    }
+    .onChange(of: chatProvider.onboardingOpener == nil) { _, _ in showOnboardingOpenerIfPresent() }
+    // The two product flows the provider drives and nothing renders. Both were hosted only by the
+    // deleted chat page, so since that deletion a browser tool with no extension token has killed
+    // the turn and offered no way to fix it, and the usage-cap nudge has fired into nothing. They
+    // are hosted here because this is where chat is; the provider already foregrounds the window.
+    .sheet(isPresented: $chatProvider.needsBrowserExtensionSetup) {
+      BrowserExtensionSetup(
+        onComplete: { chatProvider.needsBrowserExtensionSetup = false },
+        onDismiss: { chatProvider.needsBrowserExtensionSetup = false },
+        chatProvider: chatProvider
+      )
+      .fixedSize()
+    }
+    .alert("Upgrade Required", isPresented: $chatProvider.showOmiThresholdAlert) {
+      Button("Upgrade to Omi Pro") {
+        chatProvider.showOmiThresholdAlert = false
+        if let url = URL(string: "https://omi.me/pricing") { NSWorkspace.shared.open(url) }
+      }
+      Button("Later", role: .cancel) { chatProvider.showOmiThresholdAlert = false }
+    } message: {
+      Text("Upgrade to Omi Pro for $199/month to continue chatting.")
+    }
+    // `home_open_chat` / `home_ask` / `home_attach` / `home_close_panel`. They were written against
+    // the legacy hub and have been inert since Home became this surface — the bridge answered "ok"
+    // and nothing happened, which is worse than an error. Each one runs the exact function its
+    // on-screen control runs.
+    .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
+      guard !useLegacyHomeDesign else { return }
+      showAnswer()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
+      guard !useLegacyHomeDesign else { return }
+      showResults()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
+      guard !useLegacyHomeDesign, let query = note.userInfo?["query"] as? String else { return }
+      request.text = query
+      ask()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
+      guard !useLegacyHomeDesign, let path = note.userInfo?["path"] as? String else { return }
+      stageAttachments([URL(fileURLWithPath: path)])
+    }
     // Escape leaves answer mode before the shell's own Escape handler navigates anywhere, because the
     // answer *is* this page — there is nowhere else to go back to first.
     .onEscapeKey(priority: .content) {
@@ -124,6 +187,112 @@ struct QueryShellHome: View {
     }
   }
 
+  // MARK: - The panel's chat controls
+
+  /// The one slot the panel gives its host, filled differently per mode: on the list it is the way
+  /// into the conversation, and in the conversation it is what you can do to it.
+  @ViewBuilder
+  private var headerAccessory: some View {
+    switch mode {
+    case .results:
+      if HomeChatReentry.isOffered(
+        messageCount: chatProvider.messages.count, isLoading: chatProvider.isLoading)
+      {
+        transcriptEntryButton
+      }
+    case .answer:
+      if menu.isPresentable {
+        chatMenu
+      }
+    }
+  }
+
+  private var menu: HomeChatMenu {
+    HomeChatMenu.resolve(
+      messageCount: chatProvider.messages.count,
+      isSending: chatProvider.isSending,
+      isClearing: chatProvider.isClearing)
+  }
+
+  /// **The mirror of `‹ Results`.** Without it the transcript survives navigation and is invisible:
+  /// the mode is view state, so leaving Home and coming back leaves you on the list with no control
+  /// anywhere that admits a conversation exists. This is not a second destination — it is the same
+  /// panel, the same provider and the same transcript, one chip away.
+  private var transcriptEntryButton: some View {
+    Button(action: showAnswer) {
+      QueryPanelChipLabel(
+        systemImage: "bubble.left.and.text.bubble.right",
+        title: "Chat",
+        trailingSystemImage: "chevron.right")
+    }
+    .buttonStyle(.plain)
+    .help("Back to your conversation with omi")
+    .accessibilityIdentifier("query-shell-open-chat")
+  }
+
+  /// Clear, copy and the jump to AI settings — the deleted chat page's last three controls, which
+  /// have had nowhere to live since it went. An overflow rather than three icons in the header,
+  /// because none of them is something you reach for during a conversation.
+  private var chatMenu: some View {
+    Menu {
+      Button(didCopyTranscript ? "Copied" : "Copy conversation", action: copyTranscript)
+        .disabled(!menu.canCopy)
+      Button("Clear conversation", role: .destructive, action: clearTranscript)
+        .disabled(!menu.canClear)
+      Divider()
+      Button("AI settings…") {
+        NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
+      }
+    } label: {
+      QueryPanelChipLabel(
+        systemImage: didCopyTranscript ? "checkmark" : "ellipsis",
+        isActive: chatProvider.isClearing)
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
+    // Same override and same reason as `Filter ›`: a `Menu` label inherits the shell's `.tint`,
+    // which on this surface is the accent that belongs to `⌘⏎ Ask` alone.
+    .tint(Ink.primary)
+    .help("Conversation actions")
+    .accessibilityLabel("Conversation actions")
+    .accessibilityIdentifier("query-shell-chat-menu")
+  }
+
+  private func copyTranscript() {
+    let text = HomeChatTranscript.plainText(chatProvider.messages)
+    guard !text.isEmpty else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+    AnalyticsManager.shared.shareAction(category: "main_chat_conversation_copy")
+    didCopyTranscript = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { didCopyTranscript = false }
+  }
+
+  /// Clearing empties the one transcript, so the panel goes back to the list rather than sitting in
+  /// answer mode staring at nothing it can explain.
+  private func clearTranscript() {
+    Task {
+      await chatProvider.clearChat()
+      await MainActor.run { showResults() }
+    }
+  }
+
+  /// Staging goes through the provider, which owns the cap and the upload — the paperclip, a drop on
+  /// the bar and the automation bridge all end here rather than each keeping their own list.
+  private func stageAttachments(_ urls: [URL]) {
+    let staged = urls.compactMap(ChatAttachment.from(url:))
+    guard !staged.isEmpty else { return }
+    chatProvider.addAttachments(staged)
+  }
+
+  /// The post-onboarding opener is a greeting with starters in it, and the only surface that can
+  /// show it is the answer thread — so its arrival puts the panel there.
+  private func showOnboardingOpenerIfPresent() {
+    guard chatProvider.onboardingOpener != nil, mode != .answer else { return }
+    showAnswer()
+  }
+
   // MARK: - The two keys
 
   /// `⏎` — the panel is already filtering as you type, so this only has to put you back on the list
@@ -143,12 +312,17 @@ struct QueryShellHome: View {
     OmiUISound.play(.commit)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: question.count, hasSelectedAppContext: false, source: "query_shell")
-    OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = .answer }
+    chatProvider.dismissOnboardingOpener()
+    showAnswer()
     Task { await chatProvider.sendMessage(question) }
   }
 
   private func showResults() {
     OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = .results }
+  }
+
+  private func showAnswer() {
+    OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = .answer }
   }
 
   // MARK: - Where a row goes

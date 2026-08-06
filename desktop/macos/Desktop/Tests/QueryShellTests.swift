@@ -176,4 +176,84 @@ final class QueryShellTests: XCTestCase {
       QueryShellKind.allCases.map(\.rawValue), ["all", "conversations", "memories", "rewind"])
     XCTAssertEqual(QueryShellKind.allCases.map(\.title).first, "All")
   }
+
+  // MARK: - Chat capability on the one chat surface
+
+  /// **The regression the deleted chat page left behind.** Clear and copy had their only call sites
+  /// on a page that was removed for being an unreachable reduced copy, so from that commit until
+  /// this one there was no way to clear or copy the conversation anywhere in the app.
+  func testTheConversationMenuOffersCopyAndClearOnceThereIsAConversation() {
+    let empty = HomeChatMenu.resolve(messageCount: 0, isSending: false, isClearing: false)
+    XCTAssertFalse(empty.canCopy)
+    XCTAssertFalse(empty.canClear)
+    XCTAssertFalse(empty.isPresentable, "an overflow over nothing is chrome pretending to be a control")
+
+    let settled = HomeChatMenu.resolve(messageCount: 4, isSending: false, isClearing: false)
+    XCTAssertTrue(settled.canCopy)
+    XCTAssertTrue(settled.canClear)
+    XCTAssertTrue(settled.isPresentable)
+  }
+
+  /// Clearing races a turn that is about to append to the thing being cleared, so it waits — but
+  /// copying what is already on screen never has to.
+  func testClearYieldsToALiveTurnWhileCopyDoesNot() {
+    let sending = HomeChatMenu.resolve(messageCount: 4, isSending: true, isClearing: false)
+    XCTAssertTrue(sending.canCopy)
+    XCTAssertFalse(sending.canClear)
+    XCTAssertTrue(sending.isPresentable)
+
+    let clearing = HomeChatMenu.resolve(messageCount: 4, isSending: false, isClearing: true)
+    XCTAssertFalse(clearing.canClear, "clear must not be re-entrant")
+    XCTAssertFalse(clearing.canCopy, "the transcript being torn down is not a transcript to copy")
+  }
+
+  /// Copy promises the conversation, not the machinery: an assistant turn contributes its answer
+  /// and not its reasoning, which is the same promise the per-message copy button already makes.
+  func testCopyingTheConversationWritesTheAnswersAndNotTheReasoning() {
+    let messages = [
+      ChatMessage(text: "what did priya say about the deadline", sender: .user),
+      ChatMessage(
+        text: "", sender: .ai,
+        contentBlocks: [
+          .thinking(id: "t", text: "the user is asking about a person named priya"),
+          .text(id: "a", text: "She moved it to Friday."),
+        ]),
+    ]
+    let copied = HomeChatTranscript.plainText(messages)
+    XCTAssertEqual(copied, "You: what did priya say about the deadline\n\nomi: She moved it to Friday.")
+    XCTAssertFalse(copied.contains("the user is asking"))
+  }
+
+  /// A turn that produced nothing copyable — a bare tool row, a send that failed — contributes no
+  /// line rather than an attributed blank.
+  func testAnEmptyTurnContributesNoLineAndAnEmptyTranscriptCopiesNothing() {
+    XCTAssertEqual(HomeChatTranscript.plainText([]), "")
+    let messages = [
+      ChatMessage(text: "hello", sender: .user),
+      ChatMessage(text: "   ", sender: .ai),
+    ]
+    XCTAssertEqual(HomeChatTranscript.plainText(messages), "You: hello")
+  }
+
+  /// **"All of chat is there" is not the same as "chat is reachable".** Asking is a mode, and the
+  /// mode is view state, so leaving Home and coming back leaves the transcript on the provider and
+  /// nothing on screen admitting it exists. The panel's corner offers the way back — but only once
+  /// history has actually loaded, or the chip flickers in during every launch.
+  func testTheWayBackIntoTheTranscriptAppearsOnlyForLoadedHistory() {
+    XCTAssertFalse(HomeChatReentry.isOffered(messageCount: 0, isLoading: false))
+    XCTAssertFalse(
+      HomeChatReentry.isOffered(messageCount: 12, isLoading: true),
+      "a count that is still being restored is not history yet")
+    XCTAssertTrue(HomeChatReentry.isOffered(messageCount: 12, isLoading: false))
+  }
+
+  /// It is the same rule Home already had for its resting mode. Two opinions about "is there
+  /// history worth showing" is how one of them silently stops matching the other.
+  func testReentryReusesHomesOneOpinionAboutExistingHistory() {
+    for (count, loading) in [(0, false), (12, true), (12, false), (1, false)] {
+      XCTAssertEqual(
+        HomeChatReentry.isOffered(messageCount: count, isLoading: loading),
+        HomeHistoryPresentationPolicy.restingMode(isLoading: loading, messageCount: count) == .chat)
+    }
+  }
 }
