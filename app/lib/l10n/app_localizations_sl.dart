@@ -4596,7 +4596,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Konča se $date';
+    return 'Se konča $date';
   }
 
   @override
@@ -9802,4 +9802,64 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Prestaro za sinhronizacijo — Omi ga ne more sprejeti';
+
+  @override
+  String get planSheetChooseYourPlan => 'Izberite svoj paket in odklenite neomejeni Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Na voljo na Macu, mobilnem in spletu';
+
+  @override
+  String get popularBadge => 'PRILJUBLJENO';
+
+  @override
+  String get worksOnDesktop => 'Deluje na računalniku';
+
+  @override
+  String get noDesktopAccess => 'Ne deluje na računalniku';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mesecev / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mesece brezplačno',
+      one: '1 mesec brezplačno',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Vaš paket se je končal $date.\nZnova se naročite – strošek novega obračunskega obdobja bo zaračunan takoj.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Vaš paket bo preklican $date.\nZnova se naročite, da obdržite ugodnosti – brez plačila do $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi je brezplačen, vendar ima brezplačna različica omejitve, ki vplivajo na vašo izkušnjo:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Zamik 5–7 sekund (ne v realnem času)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Preklopi na brezplačno različico';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Pridobite brezplačen neomejen dostop';
+
+  @override
+  String get shareDataForTraining => 'Deli podatke za učenje';
+
+  @override
+  String get yourRequestUnderReview => 'Vaša zahteva je v pregledu';
 }

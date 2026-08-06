@@ -4596,7 +4596,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date کو ختم ہوتا ہے';
+    return '$date کو ختم ہوگا';
   }
 
   @override
@@ -9788,4 +9788,63 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا';
+
+  @override
+  String get planSheetChooseYourPlan => 'لامحدود Omi کھولنے کے لیے اپنا پلان منتخب کریں۔';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac، موبائل اور ویب پر دستیاب';
+
+  @override
+  String get popularBadge => 'مقبول';
+
+  @override
+  String get worksOnDesktop => 'ڈیسک ٹاپ پر کام کرتا ہے';
+
+  @override
+  String get noDesktopAccess => 'ڈیسک ٹاپ پر کام نہیں کرتا';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months ماہ / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ماہ مفت',
+      one: '1 ماہ مفت',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'آپ کا پلان $date کو ختم ہو گیا۔\nابھی دوبارہ سبسکرائب کریں - نئی بلنگ مدت کے لیے فوری چارج کیا جائے گا۔';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'آپ کا پلان $date کو منسوخ ہو جائے گا۔\nفوائد برقرار رکھنے کے لیے ابھی دوبارہ سبسکرائب کریں - $date تک کوئی چارج نہیں۔';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi مفت ہے، لیکن مفت ورژن میں ایسی حدود ہیں جو آپ کے تجربے پر اثر ڈالتی ہیں:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 سیکنڈ کی تاخیر (ریئل ٹائم نہیں)';
+
+  @override
+  String get downgradeToFreemiumAction => 'مفت ورژن پر جائیں';
+
+  @override
+  String get getFreeUnlimitedAccess => 'مفت لامحدود رسائی حاصل کریں';
+
+  @override
+  String get shareDataForTraining => 'تربیت کے لیے ڈیٹا شیئر کریں';
+
+  @override
+  String get yourRequestUnderReview => 'آپ کی درخواست زیرِ غور ہے';
 }

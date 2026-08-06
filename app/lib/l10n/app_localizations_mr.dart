@@ -4598,7 +4598,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date ला समाप्त होईल';
+    return '$date रोजी संपेल';
   }
 
   @override
@@ -9783,4 +9783,64 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'सिंक करण्यासाठी खूप जुने — Omi ते स्वीकारू शकत नाही';
+
+  @override
+  String get planSheetChooseYourPlan => 'अमर्यादित Omi अनलॉक करण्यासाठी तुमची योजना निवडा.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, मोबाइल आणि वेबवर उपलब्ध';
+
+  @override
+  String get popularBadge => 'लोकप्रिय';
+
+  @override
+  String get worksOnDesktop => 'डेस्कटॉपवर चालते';
+
+  @override
+  String get noDesktopAccess => 'डेस्कटॉपवर चालत नाही';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months महिने / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count महिने मोफत',
+      one: '1 महिना मोफत',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'तुमची योजना $date रोजी संपली.\nआता पुन्हा सदस्यता घ्या - नवीन बिलिंग कालावधीसाठी लगेच शुल्क आकारले जाईल.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'तुमची योजना $date रोजी रद्द होईल.\nफायदे टिकवण्यासाठी आता पुन्हा सदस्यता घ्या - $date पर्यंत कोणतेही शुल्क नाही.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi मोफत आहे, परंतु मोफत आवृत्तीला मर्यादा आहेत ज्या तुमच्या अनुभवावर परिणाम करतात:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 सेकंद विलंब (रिअल-टाइम नाही)';
+
+  @override
+  String get downgradeToFreemiumAction => 'मोफत आवृत्तीवर जा';
+
+  @override
+  String get getFreeUnlimitedAccess => 'मोफत अमर्यादित प्रवेश मिळवा';
+
+  @override
+  String get shareDataForTraining => 'प्रशिक्षणासाठी डेटा सामायिक करा';
+
+  @override
+  String get yourRequestUnderReview => 'तुमची विनंती पुनरावलोकनाधीन आहे';
 }

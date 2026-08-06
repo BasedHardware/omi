@@ -4601,7 +4601,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Скончыцца $date';
+    return 'Заканчваецца $date';
   }
 
   @override
@@ -9804,4 +9804,64 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Занадта старое для сінхранізацыі — Omi не можа яго прыняць';
+
+  @override
+  String get planSheetChooseYourPlan => 'Выберыце свой план, каб адкрыць безмежны Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Даступна на Mac, мабільным і ў вэбе';
+
+  @override
+  String get popularBadge => 'ПАПУЛЯРНЫ';
+
+  @override
+  String get worksOnDesktop => 'Працуе на камп\'ютары';
+
+  @override
+  String get noDesktopAccess => 'Не працуе на камп\'ютары';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months мес. / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count месяцы бясплатна',
+      one: '1 месяц бясплатна',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Ваш план скончыўся $date.\nАднавіце падпіску зараз — плата спішацца адразу за новы разліковы перыяд.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Ваш план будзе скасаваны $date.\nАднавіце падпіску, каб захаваць перавагі — без аплаты да $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi бясплатны, але бясплатная версія мае абмежаванні, якія ўплываюць на ваш вопыт:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Затрымка 5-7 секунд (не ў рэальным часе)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Перайсці на бясплатны план';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Атрымайце бязмежны доступ бясплатна';
+
+  @override
+  String get shareDataForTraining => 'Дзяліцца дадзенымі для навучання';
+
+  @override
+  String get yourRequestUnderReview => 'Ваш запыт разглядаецца';
 }

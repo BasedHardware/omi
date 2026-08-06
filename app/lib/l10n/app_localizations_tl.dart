@@ -4629,7 +4629,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Nagtatapos sa $date';
+    return 'Magtatapos sa $date';
   }
 
   @override
@@ -9864,4 +9864,64 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';
+
+  @override
+  String get planSheetChooseYourPlan => 'Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Available sa Mac, mobile, at web';
+
+  @override
+  String get popularBadge => 'SIKAT';
+
+  @override
+  String get worksOnDesktop => 'Gumagana sa desktop';
+
+  @override
+  String get noDesktopAccess => 'Hindi gumagana sa desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months buwan / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count buwang libre',
+      one: '1 buwang libre',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Natapos ang iyong plano noong $date.\nMag-subscribe ulit ngayon - agad kang sisingilin para sa bagong billing period.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Makakansela ang iyong plano sa $date.\nMag-subscribe ulit para mapanatili ang mga benepisyo - walang singil hanggang $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 segundong delay (hindi real-time)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Lumipat sa libreng bersyon';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Kumuha ng libreng walang limitasyong access';
+
+  @override
+  String get shareDataForTraining => 'Magbahagi ng data para sa training';
+
+  @override
+  String get yourRequestUnderReview => 'Sinusuri ang iyong kahilingan';
 }

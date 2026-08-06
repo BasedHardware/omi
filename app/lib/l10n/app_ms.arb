@@ -3192,5 +3192,21 @@
     "whisperModelSizeLarge": "Besar",
     "whisperModelSizeMedium": "Sederhana",
     "whisperModelSizeSmall": "Kecil",
-    "whisperModelSizeTiny": "Sangat kecil"
+    "whisperModelSizeTiny": "Sangat kecil",
+    "planSheetChooseYourPlan": "Pilih pelan anda untuk membuka Omi tanpa had.",
+    "availableOnMacMobileWeb": "Tersedia di Mac, mudah alih dan web",
+    "popularBadge": "POPULAR",
+    "worksOnDesktop": "Berfungsi pada desktop",
+    "noDesktopAccess": "Tidak berfungsi pada desktop",
+    "annualBillingSummary": "{months} bulan / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 bulan percuma} other{{count} bulan percuma}}",
+    "endsOnDate": "Tamat pada {date}",
+    "planEndedResubscribe": "Pelan anda tamat pada {date}.\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh bil baharu.",
+    "planCancelsResubscribe": "Pelan anda akan dibatalkan pada {date}.\nLanggan semula untuk mengekalkan manfaat anda - tiada caj sehingga {date}.",
+    "freemiumLimitsIntro": "Omi adalah percuma, tetapi versi percuma mempunyai had yang menjejaskan pengalaman anda:",
+    "downgradeLimitDelayNotRealTime": "Lengah 5-7 saat (bukan masa nyata)",
+    "downgradeToFreemiumAction": "Turun ke versi percuma",
+    "getFreeUnlimitedAccess": "Dapatkan akses tanpa had secara percuma",
+    "shareDataForTraining": "Kongsi data untuk latihan",
+    "yourRequestUnderReview": "Permintaan anda sedang disemak"
 }

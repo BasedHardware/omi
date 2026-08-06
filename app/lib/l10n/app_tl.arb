@@ -10767,5 +10767,21 @@
     "whisperModelSizeLarge": "Malaki",
     "whisperModelSizeMedium": "Katamtaman",
     "whisperModelSizeSmall": "Maliit",
-    "whisperModelSizeTiny": "Napakaliit"
+    "whisperModelSizeTiny": "Napakaliit",
+    "planSheetChooseYourPlan": "Piliin ang iyong plano para ma-unlock ang walang limitasyong Omi.",
+    "availableOnMacMobileWeb": "Available sa Mac, mobile, at web",
+    "popularBadge": "SIKAT",
+    "worksOnDesktop": "Gumagana sa desktop",
+    "noDesktopAccess": "Hindi gumagana sa desktop",
+    "annualBillingSummary": "{months} buwan / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 buwang libre} other{{count} buwang libre}}",
+    "endsOnDate": "Magtatapos sa {date}",
+    "planEndedResubscribe": "Natapos ang iyong plano noong {date}.\nMag-subscribe ulit ngayon - agad kang sisingilin para sa bagong billing period.",
+    "planCancelsResubscribe": "Makakansela ang iyong plano sa {date}.\nMag-subscribe ulit para mapanatili ang mga benepisyo - walang singil hanggang {date}.",
+    "freemiumLimitsIntro": "Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:",
+    "downgradeLimitDelayNotRealTime": "5-7 segundong delay (hindi real-time)",
+    "downgradeToFreemiumAction": "Lumipat sa libreng bersyon",
+    "getFreeUnlimitedAccess": "Kumuha ng libreng walang limitasyong access",
+    "shareDataForTraining": "Magbahagi ng data para sa training",
+    "yourRequestUnderReview": "Sinusuri ang iyong kahilingan"
 }

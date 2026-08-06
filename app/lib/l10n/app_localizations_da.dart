@@ -4576,7 +4576,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Slutter $date';
+    return 'Slutter den $date';
   }
 
   @override
@@ -9760,4 +9760,63 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'For gammel til at synkronisere — Omi kan ikke acceptere den';
+
+  @override
+  String get planSheetChooseYourPlan => 'Vælg din plan for at låse op for ubegrænset Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Tilgængelig på Mac, mobil og web';
+
+  @override
+  String get popularBadge => 'POPULÆR';
+
+  @override
+  String get worksOnDesktop => 'Virker på computer';
+
+  @override
+  String get noDesktopAccess => 'Virker ikke på computer';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months måneder / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count måneder gratis',
+      one: '1 måned gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Din plan sluttede den $date.\nTegn abonnement igen nu – du bliver opkrævet med det samme for en ny betalingsperiode.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Din plan annulleres den $date.\nTegn abonnement igen for at beholde dine fordele – ingen betaling før $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi er gratis, men gratisversionen har begrænsninger, der påvirker din oplevelse:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 sekunders forsinkelse (ikke i realtid)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Skift til gratisversionen';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Få gratis ubegrænset adgang';
+
+  @override
+  String get shareDataForTraining => 'Del data til træning';
+
+  @override
+  String get yourRequestUnderReview => 'Din anmodning er under behandling';
 }

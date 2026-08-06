@@ -4592,7 +4592,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'پایان می‌یابد در $date';
+    return 'پایان در $date';
   }
 
   @override
@@ -9776,4 +9776,63 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'برای همگام‌سازی خیلی قدیمی است — Omi نمی‌تواند آن را بپذیرد';
+
+  @override
+  String get planSheetChooseYourPlan => 'برای باز کردن Omi نامحدود، طرح خود را انتخاب کنید.';
+
+  @override
+  String get availableOnMacMobileWeb => 'در دسترس روی Mac، موبایل و وب';
+
+  @override
+  String get popularBadge => 'محبوب';
+
+  @override
+  String get worksOnDesktop => 'روی دسکتاپ کار می‌کند';
+
+  @override
+  String get noDesktopAccess => 'روی دسکتاپ کار نمی‌کند';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months ماه / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ماه رایگان',
+      one: '۱ ماه رایگان',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'طرح شما در $date به پایان رسید.\nاکنون دوباره مشترک شوید - هزینه دوره صورتحساب جدید بلافاصله دریافت می‌شود.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'طرح شما در $date لغو می‌شود.\nبرای حفظ مزایا اکنون دوباره مشترک شوید - تا $date هزینه‌ای دریافت نمی‌شود.';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi رایگان است، اما نسخه رایگان محدودیت‌هایی دارد که بر تجربه شما اثر می‌گذارد:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '۵ تا ۷ ثانیه تأخیر (بلادرنگ نیست)';
+
+  @override
+  String get downgradeToFreemiumAction => 'بازگشت به نسخه رایگان';
+
+  @override
+  String get getFreeUnlimitedAccess => 'دسترسی نامحدود رایگان بگیرید';
+
+  @override
+  String get shareDataForTraining => 'اشتراک‌گذاری داده برای آموزش';
+
+  @override
+  String get yourRequestUnderReview => 'درخواست شما در حال بررسی است';
 }

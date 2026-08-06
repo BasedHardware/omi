@@ -3168,5 +3168,21 @@
     "rayBanMetaMicPickerDescription": "メガネの Bluetooth マイクを選択してください。Omi の使用中は音楽が一時停止します。",
     "rayBanMetaMicPickerEmpty": "Bluetooth マイクが見つかりません。iPhone の設定でメガネを接続してから、もう一度お試しください。",
     "rayBanMetaMicPickerLoadError": "Bluetooth マイクを読み込めませんでした。Bluetooth がオンになっていることを確認して、もう一度お試しください。",
-    "rayBanMetaMicPickerConnectError": "そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。"
+    "rayBanMetaMicPickerConnectError": "そのマイクに接続できませんでした。iPhone の設定で接続されていることを確認してください。",
+    "planSheetChooseYourPlan": "プランを選んで、無制限のOmiを解放しましょう。",
+    "availableOnMacMobileWeb": "Mac、モバイル、ウェブで利用可能",
+    "popularBadge": "人気",
+    "worksOnDesktop": "デスクトップで利用できます",
+    "noDesktopAccess": "デスクトップでは利用できません",
+    "annualBillingSummary": "{months}か月 / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1か月無料} other{{count}か月無料}}",
+    "endsOnDate": "{date}に終了",
+    "planEndedResubscribe": "プランは{date}に終了しました。\n今すぐ再登録してください。新しい請求期間の料金がすぐに請求されます。",
+    "planCancelsResubscribe": "プランは{date}に解約されます。\n特典を維持するには今すぐ再登録してください。{date}までは請求されません。",
+    "freemiumLimitsIntro": "Omiは無料ですが、無料版には体験に影響する制限があります:",
+    "downgradeLimitDelayNotRealTime": "5〜7秒の遅延（リアルタイムではありません）",
+    "downgradeToFreemiumAction": "無料版に変更",
+    "getFreeUnlimitedAccess": "無制限アクセスを無料で入手",
+    "shareDataForTraining": "トレーニング用にデータを共有",
+    "yourRequestUnderReview": "リクエストを確認中です"
 }

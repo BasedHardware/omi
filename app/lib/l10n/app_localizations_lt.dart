@@ -9791,4 +9791,64 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';
+
+  @override
+  String get planSheetChooseYourPlan => 'Pasirinkite planą ir atrakinkite neribotą Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Pasiekiama Mac, mobiliajame ir žiniatinklyje';
+
+  @override
+  String get popularBadge => 'POPULIARU';
+
+  @override
+  String get worksOnDesktop => 'Veikia kompiuteryje';
+
+  @override
+  String get noDesktopAccess => 'Neveikia kompiuteryje';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mėn. / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mėn. nemokamai',
+      one: '1 mėnuo nemokamai',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Jūsų planas baigėsi $date.\nPrenumeruokite dar kartą – mokestis už naują atsiskaitymo laikotarpį bus nuskaitytas iš karto.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Jūsų planas bus atšauktas $date.\nPrenumeruokite dar kartą, kad išsaugotumėte privalumus – iki $date mokestis netaikomas.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi yra nemokamas, tačiau nemokama versija turi apribojimų, kurie veikia jūsų patirtį:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekundžių delsa (ne realiuoju laiku)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Pereiti prie nemokamos versijos';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Gaukite nemokamą neribotą prieigą';
+
+  @override
+  String get shareDataForTraining => 'Dalytis duomenimis mokymui';
+
+  @override
+  String get yourRequestUnderReview => 'Jūsų užklausa nagrinėjama';
 }

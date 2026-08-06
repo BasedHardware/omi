@@ -4599,7 +4599,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Završava se $date';
+    return 'Ističe $date';
   }
 
   @override
@@ -9801,4 +9801,64 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Prestaro za sinkronizaciju — Omi ga ne može prihvatiti';
+
+  @override
+  String get planSheetChooseYourPlan => 'Odaberite svoj plan da otključate neograničeni Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Dostupno na Macu, mobitelu i webu';
+
+  @override
+  String get popularBadge => 'POPULARNO';
+
+  @override
+  String get worksOnDesktop => 'Radi na desktopu';
+
+  @override
+  String get noDesktopAccess => 'Ne radi na desktopu';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mjeseci / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mjeseca besplatno',
+      one: '1 mjesec besplatno',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Vaš plan je istekao $date.\nPretplatite se ponovo - naplata će uslijediti odmah za novi obračunski period.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Vaš plan će biti otkazan $date.\nPretplatite se ponovo da zadržite pogodnosti - bez naplate do $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi je besplatan, ali besplatna verzija ima ograničenja koja utiču na vaše iskustvo:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Pređite na besplatnu verziju';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Ostvarite besplatan neograničen pristup';
+
+  @override
+  String get shareDataForTraining => 'Dijelite podatke za treniranje';
+
+  @override
+  String get yourRequestUnderReview => 'Vaš zahtjev je na pregledu';
 }

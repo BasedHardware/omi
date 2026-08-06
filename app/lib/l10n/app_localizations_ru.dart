@@ -9810,4 +9810,63 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Слишком старая для синхронизации — Omi не может её принять';
+
+  @override
+  String get planSheetChooseYourPlan => 'Выберите тариф, чтобы открыть безлимитный Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Доступно на Mac, мобильном и в вебе';
+
+  @override
+  String get popularBadge => 'ПОПУЛЯРНЫЙ';
+
+  @override
+  String get worksOnDesktop => 'Работает на компьютере';
+
+  @override
+  String get noDesktopAccess => 'Не работает на компьютере';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months мес. / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count месяца бесплатно',
+      one: '1 месяц бесплатно',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Ваш тариф закончился $date.\nОформите подписку заново — оплата за новый расчётный период спишется сразу.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Ваш тариф будет отменён $date.\nОформите подписку заново, чтобы сохранить преимущества — без оплаты до $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi бесплатен, но у бесплатной версии есть ограничения, влияющие на ваш опыт:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Задержка 5–7 секунд (не в реальном времени)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Перейти на бесплатную версию';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Получите безлимитный доступ бесплатно';
+
+  @override
+  String get shareDataForTraining => 'Поделиться данными для обучения';
+
+  @override
+  String get yourRequestUnderReview => 'Ваш запрос на рассмотрении';
 }

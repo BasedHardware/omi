@@ -3168,5 +3168,21 @@
     "whisperModelSizeLarge": "كبير",
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "صغير",
-    "whisperModelSizeTiny": "صغير جدًا"
+    "whisperModelSizeTiny": "صغير جدًا",
+    "planSheetChooseYourPlan": "اختر خطتك لفتح Omi بلا حدود.",
+    "availableOnMacMobileWeb": "متوفر على Mac والهاتف والويب",
+    "popularBadge": "الأكثر شيوعًا",
+    "worksOnDesktop": "يعمل على سطح المكتب",
+    "noDesktopAccess": "لا يعمل على سطح المكتب",
+    "annualBillingSummary": "{months} شهرًا / {price}",
+    "monthsFreeBadge": "{count, plural, =1{شهر مجاني} other{{count} أشهر مجانية}}",
+    "endsOnDate": "ينتهي في {date}",
+    "planEndedResubscribe": "انتهت خطتك في {date}.\nأعد الاشتراك الآن - سيتم خصم المبلغ فورًا لفترة فوترة جديدة.",
+    "planCancelsResubscribe": "من المقرر إلغاء خطتك في {date}.\nأعد الاشتراك الآن للاحتفاظ بمزاياك - لا رسوم حتى {date}.",
+    "freemiumLimitsIntro": "Omi مجاني، لكن النسخة المجانية بها قيود تؤثر على تجربتك:",
+    "downgradeLimitDelayNotRealTime": "تأخير من 5 إلى 7 ثوانٍ (ليس فوريًا)",
+    "downgradeToFreemiumAction": "الرجوع إلى النسخة المجانية",
+    "getFreeUnlimitedAccess": "احصل على وصول غير محدود مجانًا",
+    "shareDataForTraining": "مشاركة البيانات للتدريب",
+    "yourRequestUnderReview": "طلبك قيد المراجعة"
 }

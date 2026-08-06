@@ -4565,7 +4565,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date को समाप्त होता है';
+    return '$date को समाप्त होगा';
   }
 
   @override
@@ -9753,4 +9753,64 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'सिंक करने के लिए बहुत पुराना — Omi इसे स्वीकार नहीं कर सकता';
+
+  @override
+  String get planSheetChooseYourPlan => 'असीमित Omi अनलॉक करने के लिए अपना प्लान चुनें।';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, मोबाइल और वेब पर उपलब्ध';
+
+  @override
+  String get popularBadge => 'लोकप्रिय';
+
+  @override
+  String get worksOnDesktop => 'डेस्कटॉप पर काम करता है';
+
+  @override
+  String get noDesktopAccess => 'डेस्कटॉप पर काम नहीं करता';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months महीने / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count महीने मुफ़्त',
+      one: '1 महीना मुफ़्त',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'आपका प्लान $date को समाप्त हो गया।\nअभी दोबारा सदस्यता लें - नई बिलिंग अवधि के लिए तुरंत शुल्क लिया जाएगा।';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'आपका प्लान $date को रद्द होगा।\nलाभ बनाए रखने के लिए अभी दोबारा सदस्यता लें - $date तक कोई शुल्क नहीं।';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi मुफ़्त है, लेकिन मुफ़्त संस्करण की कुछ सीमाएँ हैं जो आपके अनुभव को प्रभावित करती हैं:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 सेकंड की देरी (रीयल-टाइम नहीं)';
+
+  @override
+  String get downgradeToFreemiumAction => 'मुफ़्त संस्करण पर जाएँ';
+
+  @override
+  String get getFreeUnlimitedAccess => 'मुफ़्त असीमित एक्सेस पाएँ';
+
+  @override
+  String get shareDataForTraining => 'प्रशिक्षण के लिए डेटा साझा करें';
+
+  @override
+  String get yourRequestUnderReview => 'आपका अनुरोध समीक्षाधीन है';
 }

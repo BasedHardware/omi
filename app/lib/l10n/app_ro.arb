@@ -3192,5 +3192,21 @@
     "whisperModelSizeLarge": "Mare",
     "whisperModelSizeMedium": "Mediu",
     "whisperModelSizeSmall": "Mic",
-    "whisperModelSizeTiny": "Foarte mic"
+    "whisperModelSizeTiny": "Foarte mic",
+    "planSheetChooseYourPlan": "Alege-ți planul pentru a debloca Omi nelimitat.",
+    "availableOnMacMobileWeb": "Disponibil pe Mac, mobil și web",
+    "popularBadge": "POPULAR",
+    "worksOnDesktop": "Funcționează pe desktop",
+    "noDesktopAccess": "Nu funcționează pe desktop",
+    "annualBillingSummary": "{months} luni / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 lună gratuit} other{{count} luni gratuit}}",
+    "endsOnDate": "Se încheie pe {date}",
+    "planEndedResubscribe": "Planul tău s-a încheiat pe {date}.\nAbonează-te din nou acum - vei fi taxat imediat pentru o nouă perioadă de facturare.",
+    "planCancelsResubscribe": "Planul tău va fi anulat pe {date}.\nAbonează-te din nou pentru a-ți păstra beneficiile - fără taxare până pe {date}.",
+    "freemiumLimitsIntro": "Omi este gratuit, dar versiunea gratuită are limite care îți afectează experiența:",
+    "downgradeLimitDelayNotRealTime": "Întârziere de 5-7 secunde (nu în timp real)",
+    "downgradeToFreemiumAction": "Treci la versiunea gratuită",
+    "getFreeUnlimitedAccess": "Obține acces nelimitat gratuit",
+    "shareDataForTraining": "Partajează date pentru antrenare",
+    "yourRequestUnderReview": "Cererea ta este în curs de examinare"
 }

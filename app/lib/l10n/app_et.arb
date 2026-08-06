@@ -3192,5 +3192,21 @@
     "whisperModelSizeLarge": "Suur",
     "whisperModelSizeMedium": "Keskmine",
     "whisperModelSizeSmall": "Väike",
-    "whisperModelSizeTiny": "Pisike"
+    "whisperModelSizeTiny": "Pisike",
+    "planSheetChooseYourPlan": "Vali oma pakett, et avada piiramatu Omi.",
+    "availableOnMacMobileWeb": "Saadaval Macis, mobiilis ja veebis",
+    "popularBadge": "POPULAARNE",
+    "worksOnDesktop": "Töötab arvutis",
+    "noDesktopAccess": "Ei tööta arvutis",
+    "annualBillingSummary": "{months} kuud / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 kuu tasuta} other{{count} kuud tasuta}}",
+    "endsOnDate": "Lõpeb {date}",
+    "planEndedResubscribe": "Sinu pakett lõppes {date}.\nTelli uuesti – uue arveldusperioodi eest võetakse tasu kohe.",
+    "planCancelsResubscribe": "Sinu pakett tühistatakse {date}.\nTelli uuesti, et hüved säiliksid – tasu ei võeta enne {date}.",
+    "freemiumLimitsIntro": "Omi on tasuta, kuid tasuta versioonil on piirangud, mis mõjutavad sinu kogemust:",
+    "downgradeLimitDelayNotRealTime": "5–7 sekundi viivitus (mitte reaalajas)",
+    "downgradeToFreemiumAction": "Mine üle tasuta versioonile",
+    "getFreeUnlimitedAccess": "Saa tasuta piiramatu juurdepääs",
+    "shareDataForTraining": "Jaga andmeid treenimiseks",
+    "yourRequestUnderReview": "Sinu taotlus on läbivaatamisel"
 }

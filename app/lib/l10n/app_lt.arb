@@ -3192,5 +3192,21 @@
     "whisperModelSizeLarge": "Didelis",
     "whisperModelSizeMedium": "Vidutinis",
     "whisperModelSizeSmall": "Mažas",
-    "whisperModelSizeTiny": "Mažytis"
+    "whisperModelSizeTiny": "Mažytis",
+    "planSheetChooseYourPlan": "Pasirinkite planą ir atrakinkite neribotą Omi.",
+    "availableOnMacMobileWeb": "Pasiekiama Mac, mobiliajame ir žiniatinklyje",
+    "popularBadge": "POPULIARU",
+    "worksOnDesktop": "Veikia kompiuteryje",
+    "noDesktopAccess": "Neveikia kompiuteryje",
+    "annualBillingSummary": "{months} mėn. / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 mėnuo nemokamai} other{{count} mėn. nemokamai}}",
+    "endsOnDate": "Baigiasi {date}",
+    "planEndedResubscribe": "Jūsų planas baigėsi {date}.\nPrenumeruokite dar kartą – mokestis už naują atsiskaitymo laikotarpį bus nuskaitytas iš karto.",
+    "planCancelsResubscribe": "Jūsų planas bus atšauktas {date}.\nPrenumeruokite dar kartą, kad išsaugotumėte privalumus – iki {date} mokestis netaikomas.",
+    "freemiumLimitsIntro": "Omi yra nemokamas, tačiau nemokama versija turi apribojimų, kurie veikia jūsų patirtį:",
+    "downgradeLimitDelayNotRealTime": "5–7 sekundžių delsa (ne realiuoju laiku)",
+    "downgradeToFreemiumAction": "Pereiti prie nemokamos versijos",
+    "getFreeUnlimitedAccess": "Gaukite nemokamą neribotą prieigą",
+    "shareDataForTraining": "Dalytis duomenimis mokymui",
+    "yourRequestUnderReview": "Jūsų užklausa nagrinėjama"
 }

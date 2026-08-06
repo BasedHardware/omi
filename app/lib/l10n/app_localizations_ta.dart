@@ -4621,7 +4621,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date இல் முடிகிறது';
+    return '$date அன்று முடிகிறது';
   }
 
   @override
@@ -9844,4 +9844,63 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
+
+  @override
+  String get planSheetChooseYourPlan => 'வரம்பற்ற Omi-ஐ திறக்க உங்கள் திட்டத்தைத் தேர்ந்தெடுக்கவும்.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, மொபைல் மற்றும் வலையில் கிடைக்கிறது';
+
+  @override
+  String get popularBadge => 'பிரபலம்';
+
+  @override
+  String get worksOnDesktop => 'டெஸ்க்டாப்பில் இயங்கும்';
+
+  @override
+  String get noDesktopAccess => 'டெஸ்க்டாப்பில் இயங்காது';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months மாதங்கள் / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மாதங்கள் இலவசம்',
+      one: '1 மாதம் இலவசம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'உங்கள் திட்டம் $date அன்று முடிந்தது.\nஇப்போது மீண்டும் சந்தா செலுத்தவும் - புதிய பட்டியல் காலத்திற்கு உடனடியாக கட்டணம் விதிக்கப்படும்.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'உங்கள் திட்டம் $date அன்று ரத்தாகும்.\nபலன்களைத் தக்கவைக்க இப்போது மீண்டும் சந்தா செலுத்தவும் - $date வரை கட்டணம் இல்லை.';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi இலவசம், ஆனால் இலவச பதிப்பில் உங்கள் அனுபவத்தைப் பாதிக்கும் வரம்புகள் உள்ளன:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 வினாடி தாமதம் (நிகழ்நேரம் அல்ல)';
+
+  @override
+  String get downgradeToFreemiumAction => 'இலவச பதிப்புக்கு மாறவும்';
+
+  @override
+  String get getFreeUnlimitedAccess => 'இலவச வரம்பற்ற அணுகலைப் பெறுங்கள்';
+
+  @override
+  String get shareDataForTraining => 'பயிற்சிக்காக தரவைப் பகிரவும்';
+
+  @override
+  String get yourRequestUnderReview => 'உங்கள் கோரிக்கை பரிசீலனையில் உள்ளது';
 }

@@ -3192,5 +3192,21 @@
     "whisperModelSizeLarge": "Μεγάλο",
     "whisperModelSizeMedium": "Μεσαίο",
     "whisperModelSizeSmall": "Μικρό",
-    "whisperModelSizeTiny": "Μικροσκοπικό"
+    "whisperModelSizeTiny": "Μικροσκοπικό",
+    "planSheetChooseYourPlan": "Επίλεξε το πρόγραμμά σου για να ξεκλειδώσεις το Omi χωρίς όρια.",
+    "availableOnMacMobileWeb": "Διαθέσιμο σε Mac, κινητό και web",
+    "popularBadge": "ΔΗΜΟΦΙΛΕΣ",
+    "worksOnDesktop": "Λειτουργεί σε υπολογιστή",
+    "noDesktopAccess": "Δεν λειτουργεί σε υπολογιστή",
+    "annualBillingSummary": "{months} μήνες / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 μήνας δωρεάν} other{{count} μήνες δωρεάν}}",
+    "endsOnDate": "Λήγει στις {date}",
+    "planEndedResubscribe": "Το πρόγραμμά σου έληξε στις {date}.\nΚάνε ξανά συνδρομή τώρα – θα χρεωθείς άμεσα για νέα περίοδο χρέωσης.",
+    "planCancelsResubscribe": "Το πρόγραμμά σου θα ακυρωθεί στις {date}.\nΚάνε ξανά συνδρομή για να κρατήσεις τα προνόμιά σου – καμία χρέωση μέχρι τις {date}.",
+    "freemiumLimitsIntro": "Το Omi είναι δωρεάν, αλλά η δωρεάν έκδοση έχει περιορισμούς που επηρεάζουν την εμπειρία σου:",
+    "downgradeLimitDelayNotRealTime": "Καθυστέρηση 5-7 δευτερολέπτων (όχι σε πραγματικό χρόνο)",
+    "downgradeToFreemiumAction": "Υποβάθμιση σε δωρεάν έκδοση",
+    "getFreeUnlimitedAccess": "Απόκτησε δωρεάν απεριόριστη πρόσβαση",
+    "shareDataForTraining": "Κοινή χρήση δεδομένων για εκπαίδευση",
+    "yourRequestUnderReview": "Το αίτημά σου εξετάζεται"
 }

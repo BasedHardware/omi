@@ -4615,7 +4615,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date న ముగుస్తుంది';
+    return '$dateన ముగుస్తుంది';
   }
 
   @override
@@ -9823,4 +9823,63 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'సింక్ చేయడానికి చాలా పాతది — Omi దీన్ని అంగీకరించలేదు';
+
+  @override
+  String get planSheetChooseYourPlan => 'అపరిమిత Omi అన్‌లాక్ చేయడానికి మీ ప్లాన్‌ను ఎంచుకోండి.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, మొబైల్ మరియు వెబ్‌లో అందుబాటులో ఉంది';
+
+  @override
+  String get popularBadge => 'ప్రసిద్ధం';
+
+  @override
+  String get worksOnDesktop => 'డెస్క్‌టాప్‌లో పనిచేస్తుంది';
+
+  @override
+  String get noDesktopAccess => 'డెస్క్‌టాప్‌లో పనిచేయదు';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months నెలలు / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count నెలలు ఉచితం',
+      one: '1 నెల ఉచితం',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'మీ ప్లాన్ $dateన ముగిసింది.\nఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - కొత్త బిల్లింగ్ వ్యవధికి వెంటనే ఛార్జ్ చేయబడుతుంది.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'మీ ప్లాన్ $dateన రద్దవుతుంది.\nప్రయోజనాలను నిలుపుకోవడానికి ఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - $date వరకు ఎలాంటి ఛార్జీ లేదు.';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi ఉచితం, కానీ ఉచిత వెర్షన్‌లో మీ అనుభవాన్ని ప్రభావితం చేసే పరిమితులు ఉన్నాయి:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 సెకన్ల ఆలస్యం (రియల్-టైమ్ కాదు)';
+
+  @override
+  String get downgradeToFreemiumAction => 'ఉచిత వెర్షన్‌కు మారండి';
+
+  @override
+  String get getFreeUnlimitedAccess => 'ఉచిత అపరిమిత యాక్సెస్ పొందండి';
+
+  @override
+  String get shareDataForTraining => 'శిక్షణ కోసం డేటాను భాగస్వామ్యం చేయండి';
+
+  @override
+  String get yourRequestUnderReview => 'మీ అభ్యర్థన సమీక్షలో ఉంది';
 }

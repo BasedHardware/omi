@@ -10767,5 +10767,21 @@
     "whisperModelSizeLarge": "పెద్దది",
     "whisperModelSizeMedium": "మధ్యస్థం",
     "whisperModelSizeSmall": "చిన్నది",
-    "whisperModelSizeTiny": "అతి చిన్నది"
+    "whisperModelSizeTiny": "అతి చిన్నది",
+    "planSheetChooseYourPlan": "అపరిమిత Omi అన్‌లాక్ చేయడానికి మీ ప్లాన్‌ను ఎంచుకోండి.",
+    "availableOnMacMobileWeb": "Mac, మొబైల్ మరియు వెబ్‌లో అందుబాటులో ఉంది",
+    "popularBadge": "ప్రసిద్ధం",
+    "worksOnDesktop": "డెస్క్‌టాప్‌లో పనిచేస్తుంది",
+    "noDesktopAccess": "డెస్క్‌టాప్‌లో పనిచేయదు",
+    "annualBillingSummary": "{months} నెలలు / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 నెల ఉచితం} other{{count} నెలలు ఉచితం}}",
+    "endsOnDate": "{date}న ముగుస్తుంది",
+    "planEndedResubscribe": "మీ ప్లాన్ {date}న ముగిసింది.\nఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - కొత్త బిల్లింగ్ వ్యవధికి వెంటనే ఛార్జ్ చేయబడుతుంది.",
+    "planCancelsResubscribe": "మీ ప్లాన్ {date}న రద్దవుతుంది.\nప్రయోజనాలను నిలుపుకోవడానికి ఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - {date} వరకు ఎలాంటి ఛార్జీ లేదు.",
+    "freemiumLimitsIntro": "Omi ఉచితం, కానీ ఉచిత వెర్షన్‌లో మీ అనుభవాన్ని ప్రభావితం చేసే పరిమితులు ఉన్నాయి:",
+    "downgradeLimitDelayNotRealTime": "5-7 సెకన్ల ఆలస్యం (రియల్-టైమ్ కాదు)",
+    "downgradeToFreemiumAction": "ఉచిత వెర్షన్‌కు మారండి",
+    "getFreeUnlimitedAccess": "ఉచిత అపరిమిత యాక్సెస్ పొందండి",
+    "shareDataForTraining": "శిక్షణ కోసం డేటాను భాగస్వామ్యం చేయండి",
+    "yourRequestUnderReview": "మీ అభ్యర్థన సమీక్షలో ఉంది"
 }

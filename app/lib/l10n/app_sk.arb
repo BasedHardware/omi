@@ -3197,5 +3197,21 @@
     "whisperModelSizeLarge": "Veľký",
     "whisperModelSizeMedium": "Stredný",
     "whisperModelSizeSmall": "Malý",
-    "whisperModelSizeTiny": "Veľmi malý"
+    "whisperModelSizeTiny": "Veľmi malý",
+    "planSheetChooseYourPlan": "Vyberte si plán a odomknite neobmedzené Omi.",
+    "availableOnMacMobileWeb": "Dostupné na Macu, mobile a webe",
+    "popularBadge": "OBĽÚBENÉ",
+    "worksOnDesktop": "Funguje na počítači",
+    "noDesktopAccess": "Nefunguje na počítači",
+    "annualBillingSummary": "{months} mesiacov / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 mesiac zadarmo} other{{count} mesiace zadarmo}}",
+    "endsOnDate": "Končí {date}",
+    "planEndedResubscribe": "Váš plán sa skončil {date}.\nObnovte predplatné teraz – platba za nové zúčtovacie obdobie prebehne ihneď.",
+    "planCancelsResubscribe": "Váš plán bude zrušený {date}.\nObnovte predplatné a zachovajte si výhody – do {date} bez poplatku.",
+    "freemiumLimitsIntro": "Omi je zadarmo, ale bezplatná verzia má obmedzenia, ktoré ovplyvňujú váš zážitok:",
+    "downgradeLimitDelayNotRealTime": "Oneskorenie 5–7 sekúnd (nie v reálnom čase)",
+    "downgradeToFreemiumAction": "Prejsť na bezplatnú verziu",
+    "getFreeUnlimitedAccess": "Získajte neobmedzený prístup zadarmo",
+    "shareDataForTraining": "Zdieľať údaje na trénovanie",
+    "yourRequestUnderReview": "Vaša žiadosť sa posudzuje"
 }

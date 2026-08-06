@@ -4594,7 +4594,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Закінчується $date';
+    return 'Завершується $date';
   }
 
   @override
@@ -9794,4 +9794,64 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Занадто старий для синхронізації — Omi не може його прийняти';
+
+  @override
+  String get planSheetChooseYourPlan => 'Виберіть тариф, щоб відкрити безлімітний Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Доступно на Mac, мобільному та в вебі';
+
+  @override
+  String get popularBadge => 'ПОПУЛЯРНИЙ';
+
+  @override
+  String get worksOnDesktop => 'Працює на комп\'ютері';
+
+  @override
+  String get noDesktopAccess => 'Не працює на комп\'ютері';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months міс. / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count місяці безкоштовно',
+      one: '1 місяць безкоштовно',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Ваш тариф завершився $date.\nОформіть підписку знову — оплата за новий розрахунковий період спишеться одразу.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Ваш тариф буде скасовано $date.\nОформіть підписку знову, щоб зберегти переваги — без оплати до $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi безкоштовний, але безкоштовна версія має обмеження, що впливають на ваш досвід:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Затримка 5–7 секунд (не в реальному часі)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Перейти на безкоштовну версію';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Отримайте безлімітний доступ безкоштовно';
+
+  @override
+  String get shareDataForTraining => 'Поділитися даними для навчання';
+
+  @override
+  String get yourRequestUnderReview => 'Ваш запит розглядається';
 }

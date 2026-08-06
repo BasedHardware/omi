@@ -4612,7 +4612,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Se termină pe $date';
+    return 'Se încheie pe $date';
   }
 
   @override
@@ -9820,4 +9820,64 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';
+
+  @override
+  String get planSheetChooseYourPlan => 'Alege-ți planul pentru a debloca Omi nelimitat.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Disponibil pe Mac, mobil și web';
+
+  @override
+  String get popularBadge => 'POPULAR';
+
+  @override
+  String get worksOnDesktop => 'Funcționează pe desktop';
+
+  @override
+  String get noDesktopAccess => 'Nu funcționează pe desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months luni / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count luni gratuit',
+      one: '1 lună gratuit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Planul tău s-a încheiat pe $date.\nAbonează-te din nou acum - vei fi taxat imediat pentru o nouă perioadă de facturare.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Planul tău va fi anulat pe $date.\nAbonează-te din nou pentru a-ți păstra beneficiile - fără taxare până pe $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi este gratuit, dar versiunea gratuită are limite care îți afectează experiența:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Întârziere de 5-7 secunde (nu în timp real)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Treci la versiunea gratuită';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Obține acces nelimitat gratuit';
+
+  @override
+  String get shareDataForTraining => 'Partajează date pentru antrenare';
+
+  @override
+  String get yourRequestUnderReview => 'Cererea ta este în curs de examinare';
 }

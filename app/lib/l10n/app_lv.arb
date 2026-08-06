@@ -3192,5 +3192,21 @@
     "whisperModelSizeLarge": "Liels",
     "whisperModelSizeMedium": "Vidējs",
     "whisperModelSizeSmall": "Mazs",
-    "whisperModelSizeTiny": "Sīks"
+    "whisperModelSizeTiny": "Sīks",
+    "planSheetChooseYourPlan": "Izvēlieties savu plānu, lai atbloķētu neierobežotu Omi.",
+    "availableOnMacMobileWeb": "Pieejams Mac, mobilajā ierīcē un tīmeklī",
+    "popularBadge": "POPULĀRS",
+    "worksOnDesktop": "Darbojas datorā",
+    "noDesktopAccess": "Nedarbojas datorā",
+    "annualBillingSummary": "{months} mēneši / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 mēnesis bez maksas} other{{count} mēneši bez maksas}}",
+    "endsOnDate": "Beidzas {date}",
+    "planEndedResubscribe": "Jūsu plāns beidzās {date}.\nAbonējiet atkārtoti – maksa par jauno norēķinu periodu tiks ieturēta uzreiz.",
+    "planCancelsResubscribe": "Jūsu plāns tiks atcelts {date}.\nAbonējiet atkārtoti, lai saglabātu priekšrocības – līdz {date} maksa netiks ieturēta.",
+    "freemiumLimitsIntro": "Omi ir bez maksas, taču bezmaksas versijai ir ierobežojumi, kas ietekmē jūsu pieredzi:",
+    "downgradeLimitDelayNotRealTime": "5–7 sekunžu aizkave (nav reāllaikā)",
+    "downgradeToFreemiumAction": "Pāriet uz bezmaksas versiju",
+    "getFreeUnlimitedAccess": "Iegūstiet bezmaksas neierobežotu piekļuvi",
+    "shareDataForTraining": "Kopīgot datus apmācībai",
+    "yourRequestUnderReview": "Jūsu pieprasījums tiek izskatīts"
 }

@@ -10767,5 +10767,21 @@
     "whisperModelSizeLarge": "Veliki",
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Mali",
-    "whisperModelSizeTiny": "Sićušni"
+    "whisperModelSizeTiny": "Sićušni",
+    "planSheetChooseYourPlan": "Odaberite svoj plan da otključate neograničeni Omi.",
+    "availableOnMacMobileWeb": "Dostupno na Macu, mobitelu i webu",
+    "popularBadge": "POPULARNO",
+    "worksOnDesktop": "Radi na desktopu",
+    "noDesktopAccess": "Ne radi na desktopu",
+    "annualBillingSummary": "{months} mjeseci / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 mjesec besplatno} other{{count} mjeseca besplatno}}",
+    "endsOnDate": "Ističe {date}",
+    "planEndedResubscribe": "Vaš plan je istekao {date}.\nPretplatite se ponovo - naplata će uslijediti odmah za novi obračunski period.",
+    "planCancelsResubscribe": "Vaš plan će biti otkazan {date}.\nPretplatite se ponovo da zadržite pogodnosti - bez naplate do {date}.",
+    "freemiumLimitsIntro": "Omi je besplatan, ali besplatna verzija ima ograničenja koja utiču na vaše iskustvo:",
+    "downgradeLimitDelayNotRealTime": "Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)",
+    "downgradeToFreemiumAction": "Pređite na besplatnu verziju",
+    "getFreeUnlimitedAccess": "Ostvarite besplatan neograničen pristup",
+    "shareDataForTraining": "Dijelite podatke za treniranje",
+    "yourRequestUnderReview": "Vaš zahtjev je na pregledu"
 }

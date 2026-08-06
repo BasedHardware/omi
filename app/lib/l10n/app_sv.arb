@@ -3192,5 +3192,21 @@
     "whisperModelSizeLarge": "Stor",
     "whisperModelSizeMedium": "Mellan",
     "whisperModelSizeSmall": "Liten",
-    "whisperModelSizeTiny": "Mycket liten"
+    "whisperModelSizeTiny": "Mycket liten",
+    "planSheetChooseYourPlan": "Välj din plan för att låsa upp obegränsad Omi.",
+    "availableOnMacMobileWeb": "Tillgänglig på Mac, mobil och webb",
+    "popularBadge": "POPULÄR",
+    "worksOnDesktop": "Fungerar på datorn",
+    "noDesktopAccess": "Fungerar inte på datorn",
+    "annualBillingSummary": "{months} månader / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 månad gratis} other{{count} månader gratis}}",
+    "endsOnDate": "Slutar {date}",
+    "planEndedResubscribe": "Din plan avslutades {date}.\nPrenumerera igen nu – du debiteras direkt för en ny faktureringsperiod.",
+    "planCancelsResubscribe": "Din plan avslutas {date}.\nPrenumerera igen för att behålla dina förmåner – ingen debitering förrän {date}.",
+    "freemiumLimitsIntro": "Omi är gratis, men gratisversionen har begränsningar som påverkar din upplevelse:",
+    "downgradeLimitDelayNotRealTime": "5–7 sekunders fördröjning (inte i realtid)",
+    "downgradeToFreemiumAction": "Byt till gratisversionen",
+    "getFreeUnlimitedAccess": "Få gratis obegränsad åtkomst",
+    "shareDataForTraining": "Dela data för träning",
+    "yourRequestUnderReview": "Din förfrågan granskas"
 }

@@ -4596,7 +4596,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Завршава се дана $date';
+    return 'Истиче $date';
   }
 
   @override
@@ -9788,4 +9788,64 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Превише стара за синхронизацију — Omi не може да је прихвати';
+
+  @override
+  String get planSheetChooseYourPlan => 'Изаберите свој план да откључате неограничени Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Доступно на Mac-у, мобилном и вебу';
+
+  @override
+  String get popularBadge => 'ПОПУЛАРНО';
+
+  @override
+  String get worksOnDesktop => 'Ради на рачунару';
+
+  @override
+  String get noDesktopAccess => 'Не ради на рачунару';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months месеци / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count месеца бесплатно',
+      one: '1 месец бесплатно',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'Ваш план је истекао $date.\nПоново се претплатите – наплата за нови обрачунски период биће извршена одмах.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'Ваш план ће бити отказан $date.\nПоново се претплатите да задржите погодности – без наплате до $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi је бесплатан, али бесплатна верзија има ограничења која утичу на ваше искуство:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Кашњење од 5-7 секунди (није у реалном времену)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Пређите на бесплатну верзију';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Остварите бесплатан неограничен приступ';
+
+  @override
+  String get shareDataForTraining => 'Делите податке за обуку';
+
+  @override
+  String get yourRequestUnderReview => 'Ваш захтев је на прегледу';
 }

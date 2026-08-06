@@ -10767,5 +10767,21 @@
     "whisperModelSizeLarge": "Вялікая",
     "whisperModelSizeMedium": "Сярэдняя",
     "whisperModelSizeSmall": "Малая",
-    "whisperModelSizeTiny": "Мініяцюрная"
+    "whisperModelSizeTiny": "Мініяцюрная",
+    "planSheetChooseYourPlan": "Выберыце свой план, каб адкрыць безмежны Omi.",
+    "availableOnMacMobileWeb": "Даступна на Mac, мабільным і ў вэбе",
+    "popularBadge": "ПАПУЛЯРНЫ",
+    "worksOnDesktop": "Працуе на камп'ютары",
+    "noDesktopAccess": "Не працуе на камп'ютары",
+    "annualBillingSummary": "{months} мес. / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 месяц бясплатна} other{{count} месяцы бясплатна}}",
+    "endsOnDate": "Заканчваецца {date}",
+    "planEndedResubscribe": "Ваш план скончыўся {date}.\nАднавіце падпіску зараз — плата спішацца адразу за новы разліковы перыяд.",
+    "planCancelsResubscribe": "Ваш план будзе скасаваны {date}.\nАднавіце падпіску, каб захаваць перавагі — без аплаты да {date}.",
+    "freemiumLimitsIntro": "Omi бясплатны, але бясплатная версія мае абмежаванні, якія ўплываюць на ваш вопыт:",
+    "downgradeLimitDelayNotRealTime": "Затрымка 5-7 секунд (не ў рэальным часе)",
+    "downgradeToFreemiumAction": "Перайсці на бясплатны план",
+    "getFreeUnlimitedAccess": "Атрымайце бязмежны доступ бясплатна",
+    "shareDataForTraining": "Дзяліцца дадзенымі для навучання",
+    "yourRequestUnderReview": "Ваш запыт разглядаецца"
 }

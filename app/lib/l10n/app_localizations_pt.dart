@@ -4576,7 +4576,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Termina em $date';
+    return 'Termina a $date';
   }
 
   @override
@@ -9783,4 +9783,63 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Demasiado antiga para sincronizar — o Omi não pode aceitá-la';
+
+  @override
+  String get planSheetChooseYourPlan => 'Escolha o seu plano para desbloquear o Omi sem limites.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Disponível no Mac, no telemóvel e na web';
+
+  @override
+  String get popularBadge => 'POPULAR';
+
+  @override
+  String get worksOnDesktop => 'Funciona no computador';
+
+  @override
+  String get noDesktopAccess => 'Não funciona no computador';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months meses / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count meses grátis',
+      one: '1 mês grátis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String planEndedResubscribe(String date) {
+    return 'O seu plano terminou a $date.\nSubscreva novamente agora - será cobrado de imediato um novo período de faturação.';
+  }
+
+  @override
+  String planCancelsResubscribe(String date) {
+    return 'O seu plano será cancelado a $date.\nSubscreva novamente para manter os benefícios - sem cobrança até $date.';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'O Omi é gratuito, mas a versão gratuita tem limites que afetam a sua experiência:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Atraso de 5-7 segundos (não é em tempo real)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Mudar para a versão gratuita';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Obtenha acesso ilimitado gratuito';
+
+  @override
+  String get shareDataForTraining => 'Partilhar dados para treino';
+
+  @override
+  String get yourRequestUnderReview => 'O seu pedido está em análise';
 }

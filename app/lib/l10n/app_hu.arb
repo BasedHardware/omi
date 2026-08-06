@@ -3288,5 +3288,21 @@
     "whisperModelSizeLarge": "Nagy",
     "whisperModelSizeMedium": "Közepes",
     "whisperModelSizeSmall": "Kicsi",
-    "whisperModelSizeTiny": "Apró"
+    "whisperModelSizeTiny": "Apró",
+    "planSheetChooseYourPlan": "Válaszd ki a csomagodat a korlátlan Omi feloldásához.",
+    "availableOnMacMobileWeb": "Elérhető Macen, mobilon és weben",
+    "popularBadge": "NÉPSZERŰ",
+    "worksOnDesktop": "Működik asztali gépen",
+    "noDesktopAccess": "Nem működik asztali gépen",
+    "annualBillingSummary": "{months} hónap / {price}",
+    "monthsFreeBadge": "{count, plural, =1{1 hónap ingyen} other{{count} hónap ingyen}}",
+    "endsOnDate": "Lejár: {date}",
+    "planEndedResubscribe": "A csomagod {date} napján lejárt.\nIratkozz fel újra – az új számlázási időszak díja azonnal levonásra kerül.",
+    "planCancelsResubscribe": "A csomagod {date} napján megszűnik.\nIratkozz fel újra, hogy megtartsd az előnyöket – {date} előtt nincs levonás.",
+    "freemiumLimitsIntro": "Az Omi ingyenes, de az ingyenes verziónak vannak korlátai, amelyek befolyásolják az élményt:",
+    "downgradeLimitDelayNotRealTime": "5–7 másodperces késleltetés (nem valós idejű)",
+    "downgradeToFreemiumAction": "Váltás az ingyenes verzióra",
+    "getFreeUnlimitedAccess": "Szerezz ingyenes korlátlan hozzáférést",
+    "shareDataForTraining": "Adatmegosztás tanításhoz",
+    "yourRequestUnderReview": "A kérelmedet vizsgáljuk"
 }
