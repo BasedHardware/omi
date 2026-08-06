@@ -6,7 +6,7 @@
     ".github/actions/deploy-public-build/action.yml:credentials-json-gh-action": 1,
     ".github/workflows/desktop_backend_auto_dev.yml:credentials-json-gh-action": 1,
     ".github/workflows/desktop_backend_auto_dev.yml:google-application-credentials-env": 1,
-    ".github/workflows/desktop_backend_auto_dev.yml:service-account-json-env": 1,
+    ".github/workflows/desktop_backend_auto_dev.yml:service-account-json-env": 2,
     ".github/workflows/desktop_backend_prod.yml:credentials-json-gh-action": 1,
     ".github/workflows/desktop_backend_prod.yml:google-application-credentials-env": 1,
     ".github/workflows/desktop_backend_prod.yml:service-account-json-env": 2,
