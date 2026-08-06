@@ -1,0 +1,23 @@
+desktop/macos/changelog/unreleased/20260806-rewind-timeline-glass.json
+  s_569f1df936cc22::t_6e46506e18106f 1-3
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_569f1df936cc22::t_e69b7600d7c69b 424-434
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_569f1df936cc22::t_48d151d7d42db0 45-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3b4652dffa74d34e4761e9ae2b57b0c8a1babf21",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
