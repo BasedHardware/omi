@@ -1,0 +1,33 @@
+.github/checks-manifest.yaml
+  s_569f1df936cc22::t_a17474dbe2750a 494-504
+desktop/macos/AGENTS.md
+  s_569f1df936cc22::t_ffb78a628c14de 257
+desktop/macos/run.sh
+  s_569f1df936cc22::t_fee92a49a6f11c 1048-1051,1053-1073,1075-1087,1190-1193
+desktop/macos/scripts/agent-runtime-payload.sh
+  s_569f1df936cc22::t_649abfd089e69f 1-73
+desktop/macos/scripts/fast-dev-bundle.sh
+  s_569f1df936cc22::t_a7869c89ec1c1e 7-9,132-139,151-152
+desktop/macos/scripts/smoke-signed-desktop-artifact.sh
+  s_569f1df936cc22::t_73bc26b1c513b4 548-556
+desktop/macos/tests/test-fast-dev-bundle.sh
+  s_569f1df936cc22::t_4bd00bbec5ccd2 58-91,94-111
+desktop/macos/tests/test-signed-artifact-smoke.sh
+  s_569f1df936cc22::t_5c3f8a270bc556 153-154,181-188,338-354
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "80e0303bf085cd811491b056b220934ede092362",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
