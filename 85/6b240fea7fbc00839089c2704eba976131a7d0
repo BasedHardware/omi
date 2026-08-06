@@ -1,0 +1,80 @@
+desktop/lock-in/Sources/LockInApp/Views/TodayView.swift
+  s_acebfdccb4f1d0::t_5a91353d21e11c 333-363,438,444,538
+  s_acebfdccb4f1d0::t_9bf4e4c20aae92 4,6-9,11-14,16-20,22-25,28-31,33,81,109,111-114,148-149,237-327,329-330,370,372,382-406,408,427,432-433,448,457,465,469,562,693,700
+  s_acebfdccb4f1d0::t_fe82a6a63de8b7 122,126-128
+  s_569f1df936cc22::t_7510a2ad7a6f2a 32,39-41,46-49,52-55,57,60-61,64-66,69,72-80,82,115,150,179-180,182-186,193,233-236,328,331-332,364-369,371,373-381,407,409-426,428-431,434-435,437,439-443,445-447,449-456,458-464,466-468,474,476-478,480-483,492-493,508,523,533,539-543,547-549,552-561,563-567,569-572,574,614-616,625,638,662,664-666,688-692,695-699
+desktop/lock-in/Sources/LockInApp/Views/Breakdown/BreakdownModel.swift
+  s_acebfdccb4f1d0::t_9c8d77bab623ea 1-276
+desktop/lock-in/Sources/LockInApp/Model/TodayProvider.swift
+  s_acebfdccb4f1d0::t_dda120b7588ef8 412-420
+  s_acebfdccb4f1d0::t_b25cb5efd0460c 145,147-149,151-152,157-162,184-185,187-190,194-195,197,199-386
+  s_acebfdccb4f1d0::t_8db8ecaad0cdb2 854-860,864,866
+  s_acebfdccb4f1d0::t_bb3db4047cd166 6
+  s_acebfdccb4f1d0::t_7055a7c49e4f11 673-679
+  s_acebfdccb4f1d0::t_76f97b87ab9b30 807-814
+  s_acebfdccb4f1d0::t_6417b2ff0a41cb 105-142
+desktop/lock-in/Sources/LockInApp/Views/Breakdown/BreakdownView.swift
+  s_acebfdccb4f1d0::t_8ec3fbafbe7cce 1-317
+desktop/lock-in/Sources/LockInApp/MenuBar/StatusPopoverView.swift
+  s_acebfdccb4f1d0::t_8cecf6102571c3 5,7-19,22-27,29,32-35,38,60,62-81,83-103,105-115,119-145,148,152,159-192,302
+desktop/lock-in/Sources/LockInCore/Breakdown.swift
+  s_acebfdccb4f1d0::t_0b114280151534 1-427
+desktop/lock-in/Sources/LockInApp/Views/ScoreDetail/ScoreDetailView.swift
+  s_acebfdccb4f1d0::t_a6666720f2b8fe 260-261
+  s_acebfdccb4f1d0::t_53c9eac0a5941f 353,355-361,375-388
+  s_acebfdccb4f1d0::t_45bc3c86d991fc 1-259,262-352,354,362-374,389-502
+  s_acebfdccb4f1d0::t_4454a9ddf35469 503-511
+desktop/lock-in/Sources/LockInCore/Score.swift
+  s_acebfdccb4f1d0::t_379ac752f5cedc 18-24,51-178,188-195,199-200,222,224,226-228,233-360
+  s_569f1df936cc22::t_546b1f32eb65b3 394-395
+desktop/lock-in/Sources/LockInApp/Views/Breakdown/BreakdownRow.swift
+  s_acebfdccb4f1d0::t_e06eeb8f53e1c9 1-234
+desktop/lock-in/Tests/LockInCoreTests/BreakdownTests.swift
+  s_acebfdccb4f1d0::t_758d5d3e6c0cd8 68
+  s_acebfdccb4f1d0::t_0975aea2408eb3 1-67,69-188,191-323
+  s_acebfdccb4f1d0::t_7698aa36f54377 189-190
+desktop/lock-in/Tests/LockInCoreTests/ScoreTests.swift
+  s_acebfdccb4f1d0::t_14871b990bc899 253-531
+desktop/lock-in/Sources/LockInApp/Model/DayWorker.swift
+  s_acebfdccb4f1d0::t_5389120f9670c1 167-179
+desktop/lock-in/Sources/LockInApp/Model/AppModel.swift
+  s_acebfdccb4f1d0::t_32056b79fb9943 89-101
+  s_acebfdccb4f1d0::t_96f37f5aa1c830 16-24,27,30-45
+  s_acebfdccb4f1d0::t_9478136b8492d0 66-69
+desktop/lock-in/Sources/LockInApp/Design/Ink.swift
+  s_acebfdccb4f1d0::t_8827aea6a2cd67 247-260
+  s_acebfdccb4f1d0::t_441f13fdb20047 128-136
+  s_acebfdccb4f1d0::t_e020d89aea5a5e 215-220
+desktop/lock-in/Sources/LockInApp/Views/History/DayDetail.swift
+  s_acebfdccb4f1d0::t_d804e2568dd07f 195-196
+  s_acebfdccb4f1d0::t_7a3b5e1e01b76e 11-17,28-30,36-46,48-49
+desktop/lock-in/Sources/LockInApp/Views/ScoreDetail/ScoreDetailModel.swift
+  s_acebfdccb4f1d0::t_60e1fae57cca0e 1-119
+  s_569f1df936cc22::t_da0ed70e47750c 120-121
+desktop/lock-in/Tests/LockInAppTests/LiveVerdictTests.swift
+  s_acebfdccb4f1d0::t_773069c3129cb0 1-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "856b240fea7fbc00839089c2704eba976131a7d0",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
