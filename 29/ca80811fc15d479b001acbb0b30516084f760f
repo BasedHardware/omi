@@ -1,0 +1,231 @@
+desktop/lock-in/Sources/LockInApp/Views/Breakdown/BreakdownView.swift
+  s_acebfdccb4f1d0::t_9dbde122d3e844 234-237,239,242
+desktop/lock-in/Sources/LockInApp/MenuBar/StatusItemController.swift
+  s_acebfdccb4f1d0::t_772080a6e35276 97-99,102,109-110,114,117-122,124-142,146,151-193
+  s_acebfdccb4f1d0::t_cf97cdc204c9ea 23-29
+  s_acebfdccb4f1d0::t_7a030424dc7e09 84-86,89
+  s_569f1df936cc22::t_0b8fbe1e4d7588 194
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingView.swift
+  s_acebfdccb4f1d0::t_f6e665ec6c85ec 101,139-146,157-158
+  s_acebfdccb4f1d0::t_ce5ab09c8ec222 55-57,99-100,102-103
+desktop/lock-in/Sources/LockInApp/Views/ShareCard.swift
+  s_acebfdccb4f1d0::t_e7272bf69f6216 59
+  s_acebfdccb4f1d0::t_538c164df480ff 230-231
+  s_acebfdccb4f1d0::t_4e1793338f2fdb 237-242
+  s_acebfdccb4f1d0::t_c6b503ef23e0ff 32-45,52-53
+  s_acebfdccb4f1d0::t_a569978b01e330 66-67,191-192,197,211-229,232-236,243-260
+  s_acebfdccb4f1d0::t_8b6d0e7bdbf867 84-90,97,101-102,108-109,112-113,120
+  s_acebfdccb4f1d0::t_d2973747bc2e6a 162-167
+  s_acebfdccb4f1d0::t_f98233fd9a8988 133-142,145-154
+  s_acebfdccb4f1d0::t_e958a9247a1b8e 91-96,99-100,103-107,110-111
+  s_acebfdccb4f1d0::t_aaf73525e48b32 30-31,65,68-70,187-190,193-196,198,261-263
+desktop/lock-in/Sources/LockInApp/Views/History/HistoryCell.swift
+  s_acebfdccb4f1d0::t_f12d2da3d4ed8f 12-31
+  s_acebfdccb4f1d0::t_de10d96869dde6 82-85
+  s_acebfdccb4f1d0::t_2559fa4573a1cf 76-81,88-90,92-97
+  s_569f1df936cc22::t_ca6a06d5e0d8ff 86-87
+desktop/lock-in/Tests/LockInAppTests/RewindNavigationTests.swift
+  s_acebfdccb4f1d0::t_ca1900449596b3 1-60
+desktop/lock-in/Sources/LockInApp/Views/Timeline/TimelineDetail.swift
+  s_acebfdccb4f1d0::t_5c44bb6fdfdefa 32
+  s_acebfdccb4f1d0::t_7cb1c9b4f054f6 267-269
+desktop/lock-in/Sources/LockInApp/Onboarding/AccessibilityPermission.swift
+  s_acebfdccb4f1d0::t_4cb743dd155435 46-75
+desktop/lock-in/Sources/LockInApp/Views/History/StreakChain.swift
+  s_acebfdccb4f1d0::t_2a98aa14ec6483 53
+  s_acebfdccb4f1d0::t_b46035f5f7979a 113-114,117
+  s_acebfdccb4f1d0::t_a24b8a6b8833ce 20-22
+  s_acebfdccb4f1d0::t_0dbcf65f5b832a 126-132
+  s_acebfdccb4f1d0::t_0cbc4a92a40a0e 57,59,63-64
+  s_acebfdccb4f1d0::t_1aaa046a113edc 82
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingTables.swift
+  s_acebfdccb4f1d0::t_a83835efef5ac9 23-67,118
+  s_acebfdccb4f1d0::t_2f914cd655e59d 88-91,93-104,106-108,112-117
+  s_acebfdccb4f1d0::t_3a171ffa202ed5 2,119-123
+desktop/lock-in/Sources/LockInApp/Views/Breakdown/BreakdownModel.swift
+  s_acebfdccb4f1d0::t_b3894631acf521 195-198
+  s_acebfdccb4f1d0::t_bc590d9f055730 165,168
+desktop/lock-in/Tests/LockInAppTests/OnboardingTests.swift
+  s_acebfdccb4f1d0::t_f092051f99447c 1-226
+desktop/lock-in/Sources/LockInApp/Onboarding/IntroStep.swift
+  s_acebfdccb4f1d0::t_9cf6217e8243e1 51,54-68,73
+  s_acebfdccb4f1d0::t_0c65bbc45ffe82 123-124
+  s_acebfdccb4f1d0::t_20fd4d010d62e7 37-39,69-72,74-80,91-95,97-98,100,102-103,106,128-130,133-139,207,234-239,241-247,251,259-261,265-268,270,274-276,279
+desktop/lock-in/Sources/LockInApp/Views/Breakdown/BreakdownRow.swift
+  s_acebfdccb4f1d0::t_074d9dd08c3e04 81-83,85
+  s_acebfdccb4f1d0::t_f7a1255e653e5a 182-183,185,191-197
+  s_569f1df936cc22::t_6a8b8eb1d8e7a8 198
+desktop/lock-in/Sources/LockInApp/Views/TodayView.swift
+  s_acebfdccb4f1d0::t_a274046bde3d17 147-148,151-153,158
+  s_acebfdccb4f1d0::t_e97ae5fd0a88a5 457-474,489-492,507-518,522-524
+  s_acebfdccb4f1d0::t_f32a588947e20e 476-480,484-485
+  s_acebfdccb4f1d0::t_1dec154451fe5a 282-293
+  s_acebfdccb4f1d0::t_d0d6141e038e4d 136,357,368,420,903-937
+  s_acebfdccb4f1d0::t_13881cb9c19487 85-112,117
+  s_acebfdccb4f1d0::t_4f2007b377372d 193-235
+  s_acebfdccb4f1d0::t_355952059f41d2 27-31,41-54
+  s_acebfdccb4f1d0::t_316e3ec5893206 38-40
+  s_acebfdccb4f1d0::t_7d3af46656e66f 129-135
+  s_acebfdccb4f1d0::t_59b56be270c4d8 311-318
+  s_acebfdccb4f1d0::t_5bb45998f7d9c3 149-150
+  s_acebfdccb4f1d0::t_206678402b1154 1
+  s_acebfdccb4f1d0::t_325ffe109ea9c4 352,556-578,580
+  s_acebfdccb4f1d0::t_b88a0edf2d6bdf 300-310,319-324,333
+  s_acebfdccb4f1d0::t_261f4c5348f72a 579
+  s_acebfdccb4f1d0::t_cd456e81319308 604-614
+  s_acebfdccb4f1d0::t_c3fa0fe46e37fe 753-761,768-772
+  s_acebfdccb4f1d0::t_a010b1aa54ebf3 401,875-887
+  s_acebfdccb4f1d0::t_74b75f6652024a 32-37
+  s_acebfdccb4f1d0::t_a2aaedf0137c17 250-254
+  s_acebfdccb4f1d0::t_6110ec55dbd709 256-268
+  s_acebfdccb4f1d0::t_c30371a885f11d 627-634,636-640,656-658,661-666,668-683,687-688
+  s_acebfdccb4f1d0::t_444f24cf581706 830-833,842
+  s_acebfdccb4f1d0::t_d0040725e666c2 731-733,735-736,739-745
+  s_acebfdccb4f1d0::t_56dda187b920c4 834-837,841
+  s_acebfdccb4f1d0::t_2ea485f005ac92 137,146,255,327,332,334-337,345-351,354-356,358,361,365-367,369,394-400,402,405-410,416-419,421,527,538,547,616-617,620-621
+desktop/lock-in/Sources/LockInSync/LockInAPI.swift
+  s_acebfdccb4f1d0::t_e4f433af416ade 39-43
+desktop/lock-in/Sources/LockInApp/Views/History/DayDetail.swift
+  s_acebfdccb4f1d0::t_7bb5c0bf2e062a 96-102
+  s_acebfdccb4f1d0::t_5d6b246eac36a8 164-172
+  s_acebfdccb4f1d0::t_0d13b14823fe3a 36-46,48-55
+  s_acebfdccb4f1d0::t_a9a0ae9f878c05 192
+  s_569f1df936cc22::t_85cb523fce3658 173-174
+desktop/lock-in/Sources/LockInApp/Views/History/MonthGrid.swift
+  s_acebfdccb4f1d0::t_ef01d3330d952f 156-157
+  s_acebfdccb4f1d0::t_bba848d2703dfd 171
+  s_acebfdccb4f1d0::t_561b146b2f1dc4 115-118,122,126
+  s_acebfdccb4f1d0::t_a98258a420c2eb 22-23
+  s_acebfdccb4f1d0::t_0cb1ffa372f5c0 147-149,151
+  s_acebfdccb4f1d0::t_ea2db938c25777 136
+desktop/lock-in/Sources/LockInCore/Models.swift
+  s_acebfdccb4f1d0::t_e9f028086e3705 261-266
+desktop/lock-in/Tests/LockInAppTests/TodayFiguresTests.swift
+  s_acebfdccb4f1d0::t_f46457940ea949 1-87
+desktop/lock-in/Sources/LockInApp/MenuBar/StatusPopoverView.swift
+  s_acebfdccb4f1d0::t_f407aec4cf6910 256-260
+  s_acebfdccb4f1d0::t_ba24f3083cd6f6 188-192
+  s_acebfdccb4f1d0::t_90ff01149e2feb 169,186,284-295,298,301-302,305-316,318-320
+  s_acebfdccb4f1d0::t_07a1343d90ff48 165,170-185
+  s_acebfdccb4f1d0::t_b1cf84bb89d05b 27-31,34
+  s_acebfdccb4f1d0::t_fb5dd59abb3e61 23-25
+  s_acebfdccb4f1d0::t_61123176e1f7d6 167-168
+  s_acebfdccb4f1d0::t_a1b9ac7af8a88f 355,360
+  s_acebfdccb4f1d0::t_c5800467c1fcd1 99-103,105
+  s_acebfdccb4f1d0::t_8733737f9aa872 330-332
+  s_569f1df936cc22::t_9d89a48fa977c6 187
+desktop/lock-in/Sources/LockInApp/Views/ScoreDetail/ScoreDetailView.swift
+  s_acebfdccb4f1d0::t_1fb62de14ae4a7 159-163,165-166
+  s_acebfdccb4f1d0::t_089723bc53175a 175-181
+  s_acebfdccb4f1d0::t_760cceee96755e 306-313,315
+  s_acebfdccb4f1d0::t_c39e2c7c1bbe5b 131,134
+  s_acebfdccb4f1d0::t_12fae3f511e729 72
+  s_acebfdccb4f1d0::t_b61e49d5a480f2 123-128,130,132-133,141,146
+  s_acebfdccb4f1d0::t_ce6e3b8f022385 254-270
+  s_acebfdccb4f1d0::t_e85cc24ac72954 347-369,372,382-383,385-386,413-415
+  s_acebfdccb4f1d0::t_7b1cf81d9f8623 39-53
+  s_acebfdccb4f1d0::t_9b4fe299aa005f 195-200
+  s_acebfdccb4f1d0::t_b05e78fca7844a 341-346
+  s_acebfdccb4f1d0::t_146035afc3bf94 370-371,373-381,384,387-412
+  s_acebfdccb4f1d0::t_83e70516307d99 82-91,96-101,112-113,116-121,129,135-136,144
+  s_569f1df936cc22::t_8bb0fb2a29fe8a 145,184-185,289,322-323,428-429,553,573,581-582,596,607,635
+desktop/lock-in/Sources/LockInApp/Views/MainWindow.swift
+  s_acebfdccb4f1d0::t_9d47ca9073efcb 232,236
+  s_acebfdccb4f1d0::t_8c9a7df2414c74 267-273,275,303
+  s_acebfdccb4f1d0::t_99b252e029b830 256-258
+  s_acebfdccb4f1d0::t_a9e0ba2fed9129 239,255
+  s_acebfdccb4f1d0::t_2009dc86da3bf4 274,276-302
+  s_acebfdccb4f1d0::t_77d4d553983ccc 265,304-324
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingChrome.swift
+  s_acebfdccb4f1d0::t_e66b7ae798eb59 52-83
+desktop/lock-in/Sources/LockInApp/Views/ScoreDetail/ScoreDetailModel.swift
+  s_acebfdccb4f1d0::t_8628d46aa866db 98-108,112-115
+desktop/lock-in/Sources/LockInApp/Design/Ink.swift
+  s_acebfdccb4f1d0::t_cb752fcb832a79 266-273,276
+  s_acebfdccb4f1d0::t_3577abc25f7432 185-190
+  s_acebfdccb4f1d0::t_393fba40503738 274-275,277-279
+  s_569f1df936cc22::t_985a4971e8aaa1 280-281
+desktop/lock-in/Sources/LockInApp/Onboarding/GoalsStep.swift
+  s_acebfdccb4f1d0::t_ae4243684e8d13 271-282,285-286,291,302-306
+  s_acebfdccb4f1d0::t_dfaa43197747eb 63
+  s_acebfdccb4f1d0::t_d06e15f5e4fbd6 80,165-173,197-199,204-213,218-226
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingSignIn.swift
+  s_acebfdccb4f1d0::t_073ac437d3bc7b 58-59,61-65,67-72
+  s_acebfdccb4f1d0::t_5fd25905c72166 21-42
+desktop/lock-in/Sources/LockInApp/Onboarding/OnboardingWindow.swift
+  s_acebfdccb4f1d0::t_188bd0746f8b46 37-68,73
+  s_acebfdccb4f1d0::t_f68b2a90641ffd 2,69-72,74-80,109,113-115
+desktop/lock-in/Sources/LockInApp/Onboarding/PermissionStep.swift
+  s_acebfdccb4f1d0::t_78e19fb99eb2f2 70,82,108-116,118
+  s_acebfdccb4f1d0::t_ea1a2ade1d2ac3 83
+  s_acebfdccb4f1d0::t_76923fad8b95ab 23-24
+  s_acebfdccb4f1d0::t_f2a4272651c812 25-30,56,65-69,71,73-81,84-85,89,96,100,119,123-125,341
+desktop/lock-in/Sources/LockInApp/Views/Timeline/TimelineView.swift
+  s_acebfdccb4f1d0::t_f9fa53d315c4a2 671
+  s_acebfdccb4f1d0::t_a92061575483ce 598-600
+  s_acebfdccb4f1d0::t_e787526849c439 669
+  s_acebfdccb4f1d0::t_7b89d7f44ef45a 136-138,147-151
+  s_acebfdccb4f1d0::t_385789bcaebf70 262-267
+  s_acebfdccb4f1d0::t_cfcc7302d6a4d0 685-686,688
+  s_acebfdccb4f1d0::t_640a9510307d5a 139-146
+  s_acebfdccb4f1d0::t_f2e7fa6abf835d 607-612
+  s_acebfdccb4f1d0::t_78ca3b9e46a2ef 316,321
+desktop/lock-in/Sources/LockInApp/Views/Timeline/TimelineModel.swift
+  s_acebfdccb4f1d0::t_a9fd0fc5594931 166
+  s_acebfdccb4f1d0::t_a752aede476119 314-334
+  s_acebfdccb4f1d0::t_9e7239fdcbe172 47-53
+desktop/lock-in/Sources/LockInApp/Onboarding/TableStep.swift
+  s_acebfdccb4f1d0::t_4373c7cd560d00 2
+  s_acebfdccb4f1d0::t_3cd3e3c54bd743 128-130,133-139,142-143
+  s_acebfdccb4f1d0::t_57a08d580ecd51 34-39,44,314
+  s_acebfdccb4f1d0::t_c6a6ae6e1c254c 66-73,187,211
+  s_acebfdccb4f1d0::t_1893795c7e10d9 40
+  s_acebfdccb4f1d0::t_31dd9be8fdec72 10-11,14-20,75,99,103,123,145,152-167,170-171,176,196,202-203,209-210,237-238,260,264-267,296-302,305-313,315-317,328-333,335,354-360,367-371,373,390-394
+desktop/lock-in/Sources/LockInApp/Views/TableView.swift
+  s_acebfdccb4f1d0::t_616ca306ff568f 337-338,341-342,348,352-356,358-360,365,373-385,392,395,410-441,443
+  s_acebfdccb4f1d0::t_2c4cfaf136279c 474-486,489
+  s_acebfdccb4f1d0::t_583e30e7b97167 322,442,519,522-535,539-540,548-549,553,556,558
+  s_acebfdccb4f1d0::t_66cba61b40c63d 94-98,100-102,111,117,130-138,140,146-149,161-170,172,178,181-189,194-195,197,200-321
+  s_acebfdccb4f1d0::t_129df3ac072fa3 536-538
+  s_acebfdccb4f1d0::t_b5783a48b6de28 578
+  s_acebfdccb4f1d0::t_050852e27adac7 733-738,746-747,751-752,755-765,772-774
+  s_acebfdccb4f1d0::t_da61c7ea962400 386-391,393-394,396-409
+  s_acebfdccb4f1d0::t_bcac236e022c30 61-63
+  s_acebfdccb4f1d0::t_da34d7900e2d79 618-620,622-626,636,639-672
+  s_acebfdccb4f1d0::t_10de7af398c1cd 500-506
+  s_acebfdccb4f1d0::t_6d6fe3e89e69f0 444,673
+desktop/lock-in/Sources/LockInApp/Views/History/HistoryView.swift
+  s_acebfdccb4f1d0::t_d27b8d9f2a46a1 47
+  s_acebfdccb4f1d0::t_dc9c5340a04687 54-57,59-60
+  s_acebfdccb4f1d0::t_c4eb8fd3dc1f5f 33
+  s_acebfdccb4f1d0::t_a6926f6abe7030 99,101-102
+  s_acebfdccb4f1d0::t_5725dac7b2e172 11-13
+  s_acebfdccb4f1d0::t_d8e0bf4d80757c 124-127,130-132
+  s_acebfdccb4f1d0::t_3d625e414f82c2 36-40
+.gitignore
+  s_acebfdccb4f1d0::t_c4b64a8a2b01b2 275-277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "29ca80811fc15d479b001acbb0b30516084f760f",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
