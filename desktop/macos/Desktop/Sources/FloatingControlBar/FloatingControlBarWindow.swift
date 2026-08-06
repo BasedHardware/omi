@@ -3231,13 +3231,6 @@ class FloatingControlBarManager {
       return .suppressed
     }
 
-    switch sound {
-    case .focusLost, .focusRegained:
-      sound.playCustomSound()
-    case .default, .none:
-      break
-    }
-
     if !window.state.showingAIConversation {
       persistNotificationMessageIfNeeded(notification)
     }
@@ -3935,7 +3928,7 @@ class FloatingControlBarManager {
     // presentation surface while this async write is pending.
     let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
     let messageText = bodyText.isEmpty ? notification.title : bodyText
-    let continuityKey = "notification:\(notification.id.uuidString)"
+    let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: notification.id)
     pendingNotificationJournalWrites.insert(key)
     Task { @MainActor [weak self, weak provider] in
       guard let self else { return }

@@ -37,22 +37,48 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertLessThanOrEqual(ChatComposerLayout.fadeHeight, 12)
   }
 
-  func testOnlyConsecutiveUserRowsUseCompactSpacing() {
+  /// **A reply sits closer to its question than to the next one.** That
+  /// difference is the only thing in the layout that says which answer belongs to
+  /// which question; with one uniform gap a column of short messages reads as
+  /// scattered text, which is exactly what it did.
+  func testAReplySitsCloserToItsQuestionThanTheNextExchangeDoes() {
     let messages = [
       ChatMessage(id: "a0", text: "Answer", sender: .ai),
       ChatMessage(id: "u0", text: "First", sender: .user),
       ChatMessage(id: "u1", text: "Second", sender: .user),
       ChatMessage(id: "a1", text: "Answer", sender: .ai),
+      ChatMessage(id: "u2", text: "Third", sender: .user),
     ]
 
-    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 0, in: messages), 0)
-    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 1, in: messages), 0)
-    XCTAssertEqual(
+    func gap(_ index: Int) -> CGFloat {
       ChatTranscriptLayout.regularRowSpacing
-        + ChatTranscriptLayout.topAdjustment(at: 2, in: messages),
-      ChatTranscriptLayout.consecutiveUserRowSpacing
-    )
-    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 3, in: messages), 0)
+        + ChatTranscriptLayout.topAdjustment(at: index, in: messages)
+    }
+
+    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 0, in: messages), 0)
+    // assistant → user starts a new exchange and takes the full gap.
+    XCTAssertEqual(gap(1), ChatTranscriptLayout.regularRowSpacing)
+    XCTAssertEqual(gap(2), ChatTranscriptLayout.consecutiveUserRowSpacing)
+    // user → assistant is one exchange, so it is the tight gap.
+    XCTAssertEqual(gap(3), ChatTranscriptLayout.replySpacing)
+    XCTAssertEqual(gap(4), ChatTranscriptLayout.regularRowSpacing)
+
+    XCTAssertLessThan(
+      ChatTranscriptLayout.replySpacing, ChatTranscriptLayout.regularRowSpacing,
+      "a reply must bind to its question more tightly than to the next exchange")
+  }
+
+  /// The gap after an assistant row is also the room its hover-revealed metadata
+  /// band draws into — that band is zero-height at rest, so the space has to come
+  /// from somewhere, and it comes from here.
+  func testTheGapAfterAnAssistantRowStaysWideEnoughForItsHoverBand() {
+    let messages = [
+      ChatMessage(id: "a0", text: "Answer", sender: .ai),
+      ChatMessage(id: "a1", text: "Also this", sender: .ai),
+    ]
+    XCTAssertEqual(
+      ChatTranscriptLayout.spacing(from: messages[0], to: messages[1]),
+      ChatTranscriptLayout.regularRowSpacing)
   }
 
   func testTranscriptScrollerPolicyIsStaticAndSingle() throws {
@@ -63,7 +89,13 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     // NSScrollView's scroller visibility during layout can re-enter the transcript's own pass.
     XCTAssertFalse(messagesSource.contains("hidesNativeScrollIndicator"))
     XCTAssertFalse(messagesSource.contains("ChatTimelineScrollerSuppressionHost"))
-    XCTAssertTrue(messagesSource.contains(".scrollIndicators(.hidden)"))
+    // `.never`, not `.hidden`. Both are static, so the no-runtime-mutation reason
+    // this test exists for is unchanged — but per Apple's `ScrollIndicatorVisibility`
+    // documentation `.hidden` only requests hiding, while `.never` overrides
+    // scrollable components that would otherwise show the scroller. AppKit took the
+    // former as advisory and drew the overlay scroller over the panel's rounded edge.
+    XCTAssertTrue(messagesSource.contains(".scrollIndicators(.never)"))
+    XCTAssertFalse(messagesSource.contains(".scrollIndicators(.hidden)"))
     // The prompt rail drew a second vertical bar beside the scroller. It is gone; nothing may
     // reserve a trailing gutter for one again.
     XCTAssertFalse(messagesSource.contains("contentColumnWidth"))

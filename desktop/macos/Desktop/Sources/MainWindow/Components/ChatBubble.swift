@@ -167,9 +167,16 @@ struct ChatBubble: View {
       if message.sender == .ai, app == nil, showsOmiMark {
         ChatOmiMark(
           motion: message.isStreaming ? ChatWorkingStatus.motion(for: message) : nil,
-          size: 24
+          size: ChatOmiMarkPlacement.markSize
         )
-        .frame(width: 32, height: 32)
+        // `.leading`, not the default centre: the layout box is wider than the
+        // resting ring (the extra is travel for the streaming animation), so
+        // centring bled the ring past the gutter, outside every other margin.
+        .frame(
+          width: ChatOmiMarkPlacement.markGutter,
+          height: ChatOmiMarkPlacement.markSize,
+          alignment: .leading
+        )
         .offset(x: -ChatOmiMarkPlacement.markGutter)
       }
     }
@@ -298,22 +305,23 @@ struct ChatBubble: View {
       messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
     } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
-    } else if !message.isStreaming || !message.text.isEmpty {
+    } else if message.sender == .ai && !message.isStreaming {
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
     }
+    // **A user turn gets no metadata band.** Its timestamp-only row cost every
+    // question a reserved band for a fact the reply underneath already stamps.
   }
+
+  private var presentation: ChatRowPresentation { ChatRowPresentation.of(message) }
 
   @ViewBuilder
   private func messageTextBubble(_ text: String) -> some View {
-    OmiMarkdown(text: text, sender: message.sender)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(
-        message.sender == .user
-          ? Ink.rowFillHover : Color.clear
-      )
-      .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
-      .padding(.top, OmiSpacing.hairline)
+    if presentation == .proactivePush {
+      ChatProactivePushRow(text: text)
+    } else {
+      OmiMarkdown(text: text, sender: message.sender)
+        .chatMessageBlock(filled: presentation.isFilled)
+    }
   }
 
   private var showMoreButton: some View {
@@ -337,15 +345,9 @@ struct ChatBubble: View {
       if text.isEmpty {
         return AnyView(EmptyView())
       }
-      return AnyView(
-        OmiMarkdown(text: text, sender: .ai)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.sm)
-          // An assistant block reads directly on the panel: the glass is the ground.
-          .background(Color.clear)
-          .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
-          .padding(.top, OmiSpacing.hairline)
-      )
+      // The glass is the ground for an assistant block — so no fill, and
+      // therefore none of a container's padding either.
+      return AnyView(OmiMarkdown(text: text, sender: .ai).chatMessageBlock(filled: false))
     case .toolCalls(_, let calls):
       return AnyView(
         ToolCallsGroup(
@@ -460,40 +462,38 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
-    HStack(alignment: .center, spacing: OmiSpacing.sm) {
-      if includeRatingButtons || includeCopyButton {
-        HStack(spacing: OmiSpacing.sm) {
-          if includeRatingButtons {
-            ratingButtons
-          }
-
-          if includeCopyButton {
-            copyButton
-          }
-
-          if includeCopyButton, message.metadata != nil {
-            infoButton
-          }
-        }
-      }
-
-      Spacer(minLength: 0)
-
-      ChatMessageTimestamp(date: message.createdAt)
-    }
-    // Keep the timestamp on the message column's trailing edge rather than
-    // the intrinsic width of a short reply.
-    .frame(maxWidth: .infinity, alignment: .trailing)
-    // Quiet timeline: actions and timestamps only surface while the reader
-    // is on the message — by pointer hover or keyboard focus — or
-    // mid-interaction with them.
-    .opacity(
-      ChatBubbleMetadataReveal.isVisible(
-        hovering: isRowHovering,
-        controlFocused: isMetadataControlFocused,
-        transientFeedback: showRatingFeedback || showCopied || showInfoPopover
-      ) ? 1 : 0
+    let isVisible = ChatBubbleMetadataReveal.isVisible(
+      hovering: isRowHovering,
+      controlFocused: isMetadataControlFocused,
+      transientFeedback: showRatingFeedback || showCopied || showInfoPopover
     )
+    // **One cluster under the message.** Controls far left and timestamp far right
+    // of one line is how two halves of a row end up reading as page furniture.
+    HStack(alignment: .center, spacing: OmiSpacing.sm) {
+      if includeRatingButtons {
+        ratingButtons
+      }
+      if includeCopyButton {
+        copyButton
+      }
+      if includeCopyButton, message.metadata != nil {
+        infoButton
+      }
+      ChatMessageTimestamp(date: message.createdAt)
+      Spacer(minLength: 0)
+    }
+    // **Costs nothing until you are on the message.** It was already invisible at
+    // rest, but an `opacity(0)` row still reserves its height, and ~20 pt on every
+    // assistant turn was most of the dead space between two one-line messages. The
+    // zero-height frame keeps it in the tree — hover, focus and hit testing behave
+    // normally — and lets it draw into the gap. It only grows downward, into a row
+    // the pointer is inside, so it cannot flicker.
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(height: isVisible ? nil : 0, alignment: .top)
+    // Outside the zero-height frame, or the stack's 4 pt outlives the row it spaced.
+    .padding(.top, isVisible ? 0 : -OmiSpacing.xxs)
+    .opacity(isVisible ? 1 : 0)
+    .allowsHitTesting(isVisible)
     .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }

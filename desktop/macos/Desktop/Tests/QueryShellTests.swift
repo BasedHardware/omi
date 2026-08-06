@@ -129,14 +129,29 @@ final class QueryShellTests: XCTestCase {
 
   // MARK: - The answer thread
 
-  /// The mark is drawn in an overlay offset by exactly this much. A host that insets the transcript
-  /// by less draws it outside the container and the assistant's only identity cue disappears —
-  /// which is what left ask mode's replies as bare text beside capsuled user turns.
-  func testTheAssistantMarksGutterIsTheOffsetItIsDrawnAt() {
-    XCTAssertEqual(ChatOmiMarkPlacement.markGutter, 32 + OmiSpacing.md)
+  /// The mark is drawn in an overlay offset by exactly this much, so the gutter is
+  /// the room the mark needs — its own width plus one gap — and nothing else.
+  ///
+  /// Pinned relationally rather than to a literal, because the literal is what went
+  /// wrong: at `32 + OmiSpacing.md` the gutter was a margin of its own invention,
+  /// and on this panel — whose content starts `panelPaddingHorizontal` in — it put
+  /// the mark left of every other element's leading edge while pushing the message
+  /// column 60 pt off the glass. The measurement that fixed it was the panel's own
+  /// inset, so that is what the test compares against.
+  func testTheAssistantMarksGutterIsTheRoomTheMarkNeedsAndNoMore() {
+    XCTAssertEqual(
+      ChatOmiMarkPlacement.markGutter,
+      ChatOmiMarkPlacement.markSize + OmiSpacing.sm,
+      "the gutter is the mark's width plus one gap")
+
+    // The transcript reserves the gutter itself, so the mark lands on the panel's
+    // own content edge — level with the header chip — rather than left of it.
+    XCTAssertLessThanOrEqual(
+      ChatOmiMarkPlacement.markGutter, QueryShellLayout.panelPaddingHorizontal * 2,
+      "a gutter wider than the panel's own margins is chrome, not a gutter")
     XCTAssertGreaterThanOrEqual(
-      ChatOmiMarkPlacement.markGutter, ChatOmiMarkPlacement.reservedRowHeight,
-      "the gutter must be at least as wide as the mark is tall")
+      ChatOmiMarkPlacement.markGutter, ChatOmiMarkPlacement.markSize,
+      "the gutter must at least hold the mark it reserves room for")
   }
 
   /// **The failure this build actually produces must not render as an empty panel.**

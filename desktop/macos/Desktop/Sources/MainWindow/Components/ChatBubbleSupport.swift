@@ -26,9 +26,107 @@ struct ChatMessageTimestamp: View {
   let date: Date
 
   var body: some View {
-    Text(date, format: .dateTime.year().month(.abbreviated).day().hour().minute())
+    // Two rungs on glass, so the second rung straight. The old `.opacity(0.82)`
+    // on top of `Ink.secondary` was a third rung by arithmetic, at the one point
+    // size where it could least afford one.
+    Text(ChatMessageTimestampFormat.text(for: date))
       .scaledFont(size: OmiType.micro)
-      .foregroundColor(Ink.secondary.opacity(0.82))
+      .foregroundColor(Ink.secondary)
+      .monospacedDigit()
+  }
+}
+
+/// The time a row arrived, at the length it is actually read at.
+///
+/// `Aug 6, 2026 at 1:28 PM` under every reply is a date stamp on a chat message:
+/// six words of chrome for a fact wanted to the minute. Parked at the far end of
+/// the row from the controls it shares a line with, it stopped reading as part of
+/// the message and started reading as page furniture. Today says the time; this
+/// year adds the day; only another year is worth naming.
+enum ChatMessageTimestampFormat {
+  static func text(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+    let time = date.formatted(.dateTime.hour().minute())
+    if calendar.isDate(date, inSameDayAs: now) { return time }
+    if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+      return "\(date.formatted(.dateTime.month(.abbreviated).day())) · \(time)"
+    }
+    return "\(date.formatted(.dateTime.year().month(.abbreviated).day())) · \(time)"
+  }
+}
+
+/// What a transcript row *is*, decided once from the message instead of
+/// re-derived by whichever modifier happens to be reading `sender`.
+///
+/// Three cases because the surface has three jobs: words you typed, an answer to
+/// them, and something omi said with nothing in front of it. The first two are a
+/// conversation. The third has to account for its own presence.
+enum ChatRowPresentation: Equatable {
+  /// Your own words — a filled capsule on the trailing edge.
+  case userTurn
+  /// omi answering you. Deliberately unfilled; see `chatMessageBlock(filled:)`.
+  case assistantReply
+  /// omi speaking first. Journaled under
+  /// `ChatContinuityInvariants.proactiveNotificationContinuityKeyPrefix` (INV-6).
+  case proactivePush
+
+  static func of(_ message: ChatMessage) -> Self {
+    guard message.sender != .user else { return .userTurn }
+    return ChatContinuityInvariants.isProactiveNotification(message)
+      ? .proactivePush : .assistantReply
+  }
+
+  /// Only a user turn is a container, so only a user turn is padded like one.
+  var isFilled: Bool { self == .userTurn }
+}
+
+extension View {
+  /// The message body's ground.
+  ///
+  /// A user turn is a filled capsule and the padding is what makes it one. An
+  /// assistant reply has no fill — on a glass panel the glass is the ground, and
+  /// a second fill inside it would be a box inside a box — but the reply was
+  /// still wearing the capsule's padding: 12 pt of phantom indent and 16 pt of
+  /// dead vertical air wrapped around bare text with nothing to wrap it in. That
+  /// is what put two one-line replies further apart than a paragraph break.
+  /// Padding belongs to the container, so it now goes where the container goes.
+  func chatMessageBlock(filled: Bool) -> some View {
+    padding(.horizontal, filled ? OmiSpacing.md : 0)
+      .padding(.vertical, filled ? OmiSpacing.sm : 0)
+      .background(filled ? Ink.rowFillHover : Color.clear)
+      .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
+  }
+}
+
+/// A proactive push, drawn as the thing it is rather than as a reply.
+///
+/// Nothing above it explains why it is there, so it says so itself: a bell on the
+/// leading edge and a quiet fill that lifts it off the panel. Left bare it
+/// rendered as a one-line string dropped into the middle of a conversation —
+/// visually identical to an answer, but to a question nobody asked. The fill is
+/// not a contradiction of the bare-assistant rule above: a reply is unfilled
+/// *because* the question above it is its context, and this row has none.
+struct ChatProactivePushRow: View {
+  let text: String
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
+      Image(systemName: "bell")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundColor(Ink.secondary)
+      OmiMarkdown(text: text, sender: .ai)
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
+    )
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Omi noticed: \(text)")
   }
 }
 

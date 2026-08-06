@@ -93,16 +93,38 @@ enum ChatInitialRestoreState: Equatable {
   }
 }
 
+/// **The rhythm of the transcript**, which is what makes a column of short
+/// messages read as a conversation instead of as scattered text.
+///
+/// One rule: things that belong together sit closer than things that do not. A
+/// reply belongs to the question above it, so that gap is the small one; the next
+/// question starts a new exchange, so that gap is the large one. Before this the
+/// stack used a single 16 pt gap everywhere, which said nothing about what went
+/// with what — and because each row also carried a permanently reserved metadata
+/// band and a container's padding without a container, consecutive one-line
+/// messages ended up roughly 140 pt apart.
 enum ChatTranscriptLayout {
+  /// The stack's own spacing, and the largest gap in the ladder: the boundary
+  /// between one exchange and the next. Every other gap is this plus a negative
+  /// `topAdjustment`, so the stack has one spacing and the exceptions are named.
   static let regularRowSpacing: CGFloat = OmiSpacing.lg
   static let consecutiveUserRowSpacing: CGFloat = OmiSpacing.sm
+  /// A reply and the question that caused it are one exchange, not two events.
+  static let replySpacing: CGFloat = OmiSpacing.sm
+
+  /// The gap *before* `current`, given the row above it.
+  ///
+  /// An assistant row above always takes the full gap: it closes an exchange, and
+  /// it is also the row whose hover-revealed metadata band draws into the space
+  /// below it, so that space has to exist.
+  static func spacing(from previous: ChatMessage, to current: ChatMessage) -> CGFloat {
+    guard previous.sender == .user else { return regularRowSpacing }
+    return current.sender == .user ? consecutiveUserRowSpacing : replySpacing
+  }
 
   static func topAdjustment(at index: Int, in messages: [ChatMessage]) -> CGFloat {
     guard index > 0, messages.indices.contains(index) else { return 0 }
-    let previous = messages[index - 1]
-    let current = messages[index]
-    guard previous.sender == .user, current.sender == .user else { return 0 }
-    return consecutiveUserRowSpacing - regularRowSpacing
+    return spacing(from: messages[index - 1], to: messages[index]) - regularRowSpacing
   }
 }
 
@@ -333,11 +355,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   @State private var transcriptWindowPresentation: ChatTranscriptWindow.Presentation = .initial
   var body: some View {
     ScrollViewReader { proxy in
-      ZStack(alignment: .bottom) {
+      // Anchored to the trailing edge, not the middle. A floating control with
+      // nothing under it in the centre of a panel reads as a stray object; on the
+      // corner it reads as chrome belonging to the scroll view it commands.
+      ZStack(alignment: .bottomTrailing) {
         scrollContent(proxy: proxy)
         scrollToBottomButton(proxy: proxy)
       }
     }
+  }
+
+  /// Never less than the mark's gutter, whatever the host asked for.
+  private var leadingContentPadding: CGFloat {
+    max(horizontalContentPadding, ChatOmiMarkPlacement.markGutter)
   }
 
   private var effectiveTranscriptWindowPolicy: ChatTranscriptWindow.Policy {
@@ -366,8 +396,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         loadMoreButton
         messageContent
       }
-      .padding(.horizontal, horizontalContentPadding)
-      .padding(.trailing, trailingContentPadding)
+      // **The transcript owns the assistant mark's gutter, not its host.** The
+      // mark is drawn in an overlay offset one gutter to the left of the message
+      // column, so a host that insets by less draws it outside itself and the
+      // assistant's only identity cue silently vanishes — which is exactly what
+      // Home's chat did while passing 0. Asking every caller to know the number
+      // made that a bug each of them could reintroduce; clamping here makes it
+      // impossible.
+      .padding(.leading, leadingContentPadding)
+      .padding(.trailing, horizontalContentPadding + trailingContentPadding)
       .padding(.vertical, verticalContentPadding)
       .frame(maxWidth: .infinity)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
@@ -387,7 +424,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // visibility from a transcript overlay changes the transcript width, which
     // changes wrapping and geometry, which can re-enter SwiftUI's AttributeGraph
     // layout pass indefinitely on long histories.
-    .scrollIndicators(.hidden)
+    // `.never`, not `.hidden`. Both are static policies, so the reason this
+    // stays out of the runtime is unchanged — but `.hidden` only asks, and AppKit
+    // still drew the overlay scroller during and after a scroll, on top of the
+    // panel's rounded leading/trailing edge. `.never` overrides the scrollable
+    // component instead of requesting.
+    .scrollIndicators(.never)
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
       handleMessagesCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
@@ -877,6 +919,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       .buttonStyle(.plain)
       .accessibilityLabel("Jump to latest message")
       .padding(.bottom, OmiSpacing.lg)
+      .padding(.trailing, OmiSpacing.lg)
       .transition(.scale.combined(with: .opacity))
       .omiAnimation(.easeInOut(duration: 0.2), value: scrollMode)
       .omiAnimation(.easeInOut(duration: 0.3), value: hasActivityBelow)

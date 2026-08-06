@@ -93,6 +93,91 @@ final class ChatBubbleMetadataRevealTests: XCTestCase {
   }
 }
 
+/// A proactive push is a different kind of row from a reply, and the transcript
+/// has to be able to tell which is which before it can draw either one.
+final class ChatRowPresentationTests: XCTestCase {
+  private func message(_ text: String, sender: ChatSender, clientTurnId: String? = nil) -> ChatMessage {
+    ChatMessage(id: UUID().uuidString, clientTurnId: clientTurnId, text: text, sender: sender)
+  }
+
+  func testAProactivePushIsRecognisedByTheContinuityKeyItIsJournaledUnder() {
+    let key = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: UUID())
+    let push = message("Remove the search bar from the first release", sender: .ai, clientTurnId: key)
+
+    XCTAssertEqual(ChatRowPresentation.of(push), .proactivePush)
+    XCTAssertTrue(ChatContinuityInvariants.isProactiveNotification(push))
+    XCTAssertFalse(push.text.isEmpty)
+  }
+
+  /// The prefix is the seam between the notification writer and this renderer.
+  /// Both sides must build it from the same constant or the treatment silently
+  /// stops applying the next time one of them is edited.
+  func testTheContinuityKeyCarriesTheSharedPrefixTheWriterUses() {
+    let id = UUID()
+    XCTAssertEqual(
+      ChatContinuityInvariants.proactiveNotificationContinuityKey(id: id),
+      "\(ChatContinuityInvariants.proactiveNotificationContinuityKeyPrefix)\(id.uuidString)")
+  }
+
+  func testAnOrdinaryReplyAndAUserTurnAreNotPushes() {
+    XCTAssertEqual(ChatRowPresentation.of(message("Sounds good.", sender: .ai)), .assistantReply)
+    XCTAssertEqual(ChatRowPresentation.of(message("hey", sender: .user)), .userTurn)
+    // A user turn is never a push even if something hands it the key.
+    let key = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: UUID())
+    XCTAssertEqual(ChatRowPresentation.of(message("hey", sender: .user, clientTurnId: key)), .userTurn)
+    XCTAssertFalse(ChatContinuityInvariants.isProactiveNotification(message("hey", sender: .user, clientTurnId: key)))
+  }
+
+  /// Only a user turn is a container, so only a user turn is padded like one. A
+  /// reply that keeps a capsule's padding without a capsule is 16 pt of dead
+  /// vertical air per message.
+  func testOnlyAUserTurnIsFilled() {
+    XCTAssertTrue(ChatRowPresentation.userTurn.isFilled)
+    XCTAssertFalse(ChatRowPresentation.assistantReply.isFilled)
+    XCTAssertFalse(ChatRowPresentation.proactivePush.isFilled)
+  }
+}
+
+/// The stamp under a reply is read to the minute, not to the year.
+final class ChatMessageTimestampFormatTests: XCTestCase {
+  private let calendar = Calendar(identifier: .gregorian)
+
+  private func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int, _ min: Int) -> Date {
+    var components = DateComponents()
+    (components.year, components.month, components.day) = (y, m, d)
+    (components.hour, components.minute) = (h, min)
+    guard let date = calendar.date(from: components) else {
+      XCTFail("bad fixture date")
+      return Date()
+    }
+    return date
+  }
+
+  func testTodayIsJustTheTime() {
+    let now = date(2026, 8, 6, 17, 0)
+    let text = ChatMessageTimestampFormat.text(for: date(2026, 8, 6, 13, 28), now: now, calendar: calendar)
+
+    XCTAssertFalse(text.contains("2026"), "the year on a message sent hours ago is chrome")
+    XCTAssertFalse(text.contains("Aug"))
+    XCTAssertTrue(text.contains("28"))
+  }
+
+  func testAnEarlierDayThisYearAddsTheDayButNotTheYear() {
+    let now = date(2026, 8, 6, 17, 0)
+    let text = ChatMessageTimestampFormat.text(for: date(2026, 6, 1, 9, 5), now: now, calendar: calendar)
+
+    XCTAssertTrue(text.contains("Jun"))
+    XCTAssertFalse(text.contains("2026"))
+  }
+
+  func testAnotherYearIsTheOnlyCaseWorthNamingTheYearFor() {
+    let now = date(2026, 8, 6, 17, 0)
+    let text = ChatMessageTimestampFormat.text(for: date(2025, 12, 24, 9, 5), now: now, calendar: calendar)
+
+    XCTAssertTrue(text.contains("2025"))
+  }
+}
+
 final class ChatBubbleLayoutRegressionTests: XCTestCase {
   func testCollapsedReplyKeepsEllipsisAsTheInlineShowMoreAnchor() {
     let source = String(repeating: "reply ", count: 100)

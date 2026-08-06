@@ -3,6 +3,25 @@ import Foundation
 /// Pure INV-6 continuity helpers — prefer these over ad-hoc UI string/resource logic.
 /// Behavioral tests call these APIs; source tripwires guard forbidden dual-write patterns.
 enum ChatContinuityInvariants {
+  /// Every proactive notification enters the transcript under this continuity
+  /// key (INV-6 rule 5, origin `proactive_notification`). It is written by
+  /// `FloatingControlBarManager.persistNotificationMessageIfNeeded`, journaled
+  /// into turn metadata, and read back as `ChatMessage.clientTurnId` — so it is
+  /// the one piece of structured identity that survives a reload and says a turn
+  /// was unprompted. The renderer must ask here rather than guess from position:
+  /// "assistant row with no user row above it" is also true of the second block
+  /// of an ordinary turn.
+  static let proactiveNotificationContinuityKeyPrefix = "notification:"
+
+  static func proactiveNotificationContinuityKey(id: UUID) -> String {
+    "\(proactiveNotificationContinuityKeyPrefix)\(id.uuidString)"
+  }
+
+  static func isProactiveNotification(_ message: ChatMessage) -> Bool {
+    guard message.sender != .user, let key = message.clientTurnId else { return false }
+    return key.hasPrefix(proactiveNotificationContinuityKeyPrefix)
+  }
+
   /// Collapsed agent-card / list header preview prefers the prompt/objective.
   /// Response output belongs in the expanded body, not the one-line preview.
   static func agentPreviewText(prompt: String, output: String) -> String {
