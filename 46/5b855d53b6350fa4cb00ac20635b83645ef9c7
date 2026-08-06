@@ -1,0 +1,39 @@
+desktop/macos/changelog/unreleased/20260806-onboarding-says-what-it-starts.json
+  s_569f1df936cc22::t_6321e574e5f58c 1-3
+desktop/macos/Desktop/Sources/FloatingControlBar/GlobalShortcutManager.swift
+  s_569f1df936cc22::t_96af14ff08cbba 154-161,163-166,184-188,204-208,218-225
+desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
+  s_569f1df936cc22::t_5c262e70701b04 279-284,589-592
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift
+  s_569f1df936cc22::t_4cfc8bba0992cc 408-415,417-418,457,578,597-602,604-613,615-630
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingModel.swift
+  s_569f1df936cc22::t_4339aa0c7ce89b 130-134,299-308,316-317,319,321
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_569f1df936cc22::t_31414e464891c9 625-636
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBPostOnboardingGuidance.swift
+  s_569f1df936cc22::t_30ecfe450a4ce6 151-157,162,172
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_569f1df936cc22::t_ed28c7010f9c88 922-930
+desktop/macos/Desktop/Tests/GlobalShortcutManagerRegistrationTests.swift
+  s_569f1df936cc22::t_3297853f0cf840 1,227-274
+desktop/macos/Desktop/Tests/SBOnboardingShortcutRecordingTests.swift
+  s_569f1df936cc22::t_718886a340639c 54-102
+desktop/macos/Desktop/Tests/SBPostOnboardingGuidanceWiringTests.swift
+  s_569f1df936cc22::t_fe54f6f0f45caa 182-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "465b855d53b6350fa4cb00ac20635b83645ef9c7",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
