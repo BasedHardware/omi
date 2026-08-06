@@ -15,6 +15,7 @@ struct RewindPage: View {
   @State private var frameLoadTask: Task<Void, Never>?
   @State private var frameLoadRequestID = UUID()
   @State private var showDatePicker = false
+  @StateObject private var trackWindow = RewindTrackWindowModel()
 
   @State private var searchViewMode: SearchViewMode? = nil
   @State private var selectedGroupIndex: Int = 0
@@ -361,9 +362,9 @@ struct RewindPage: View {
         }
       }
 
-      // Search field + date picker - always present
+      // Search field — always present. "When" is the timestamp pill on the frame, not a second
+      // control up here.
       searchField(showResultsCount: isInSearchMode)
-      datePickerControls
 
       // Right side controls depend on mode
       if isInSearchMode {
@@ -456,45 +457,33 @@ struct RewindPage: View {
     }
   }
 
-  // MARK: - Full Screen Results View (Google-style vertical list with grouping)
+  // MARK: - Full Screen Results View (the search surface's second panel)
 
+  /// What the search found, as its own sheet of glass under the query bar.
+  ///
+  /// The panel owns its own grid, filter block, height clamp and scrolling
+  /// (`RewindSearchResultsPanel`); the page keeps only what is genuinely the page's — which group is
+  /// selected, and what opening one does.
   private var fullScreenResultsView: some View {
-    let groups = viewModel.groupedSearchResults
-
-    return ScrollViewReader { proxy in
-      ScrollView {
-        LazyVStack(spacing: 1) {
-          ForEach(Array(groups.enumerated()), id: \.element.id) { groupIndex, group in
-            SearchResultGroupItem(
-              group: group,
-              index: groupIndex,
-              totalGroups: groups.count,
-              totalScreenshots: viewModel.totalScreenshotCount,
-              searchQuery: viewModel.activeSearchQuery ?? "",
-              isSelected: selectedGroupIndex == groupIndex,
-              onTap: {
-                // Set the screenshots to this group's screenshots for timeline navigation
-                selectedGroupIndex = groupIndex
-                currentIndex = 0
-                searchViewMode = .timeline
-                scheduleLoadCurrentFrame()
-              }
-            )
-            .id(groupIndex)
-          }
-        }
-        .padding(.vertical, OmiSpacing.sm)
-      }
-      .onChange(of: selectedGroupIndex) { _, newIndex in
-        invalidatePendingFrameLoad()
-        if searchViewMode == .timeline && !activeScreenshots.isEmpty {
-          currentIndex = min(currentIndex, activeScreenshots.count - 1)
-          scheduleLoadCurrentFrame()
-        }
-        OmiMotion.withGated {
-          proxy.scrollTo(newIndex, anchor: .center)
-        }
-      }
+    RewindSearchResultsPanel(
+      groups: viewModel.groupedSearchResults,
+      query: viewModel.activeSearchQuery ?? "",
+      totalScreenshots: viewModel.totalScreenshotCount,
+      selectedIndex: $selectedGroupIndex
+    ) { groupIndex in
+      // Set the screenshots to this group's screenshots for timeline navigation
+      selectedGroupIndex = groupIndex
+      currentIndex = 0
+      searchViewMode = .timeline
+      scheduleLoadCurrentFrame()
+    }
+    .panel
+    // The gap that makes the bar above and this panel read as two objects rather than one slab.
+    .padding(.top, RewindSearchLayout.panelGap)
+    .padding(.bottom, RewindSearchLayout.shadowMargin)
+    .frame(maxWidth: .infinity, alignment: .top)
+    .onChange(of: selectedGroupIndex) { _, _ in
+      invalidatePendingFrameLoad()
     }
   }
 
@@ -548,100 +537,47 @@ struct RewindPage: View {
 
   // MARK: - Unified Search Field
 
+  /// The place you type. The bar's own furniture — the query chip, the count, the keyboard hint —
+  /// belongs to `RewindSearchBar`; the page supplies only the state and what clearing does.
   private func searchField(showResultsCount: Bool = false) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Image(systemName: "magnifyingglass")
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(isSearchFocused ? Ink.primary : Ink.secondary)
-
-      TextField("Search your screen history...", text: $viewModel.searchQuery)
-        .textFieldStyle(.plain)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.primary)
-        .focused($isSearchFocused)
-
-      if viewModel.isSearching {
-        ProgressView()
-          .progressViewStyle(.circular)
-          .scaleEffect(0.6)
-          .tint(Ink.surface)
-      } else if showResultsCount && !viewModel.searchQuery.isEmpty && viewModel.activeSearchQuery != nil {
-        let groups = viewModel.groupedSearchResults
-        let total = viewModel.totalScreenshotCount
-        if groups.count == total {
-          Text("\(total) results")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        } else {
-          Text("\(groups.count) groups (\(total) total)")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
+    RewindSearchBar(
+      query: $viewModel.searchQuery,
+      isSearching: viewModel.isSearching,
+      countLabel: showResultsCount && viewModel.activeSearchQuery != nil
+        ? RewindSearchResultsPanel.countLabel(
+          groups: viewModel.groupedSearchResults.count,
+          screenshots: viewModel.totalScreenshotCount)
+        : nil,
+      focus: $isSearchFocused,
+      onClear: {
+        viewModel.searchQuery = ""
+        searchViewMode = nil
       }
-
-      if !viewModel.searchQuery.isEmpty {
-        Button {
-          viewModel.searchQuery = ""
-          searchViewMode = nil
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
-      }
-    }
-    .padding(.horizontal, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.sm)
-    .frame(maxWidth: 400)
-    .background(
-      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-        .fill(Ink.rowFill)
-        .overlay(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .stroke(isSearchFocused ? Ink.hairline : Color.clear, lineWidth: 1)
-        )
     )
+    .frame(maxWidth: RewindSearchLayout.panelWidth * 0.6)
   }
 
-  // MARK: - Date Picker Controls
+  // MARK: - Day Picker
 
-  private var datePickerControls: some View {
-    Button {
-      showDatePicker.toggle()
-    } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Text(viewModel.selectedDate.formatted(.dateTime.month().day().year()))
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.primary)
-        Image(systemName: "chevron.up.chevron.down")
-          .scaledFont(size: 8, weight: .semibold)
-          .foregroundColor(Ink.secondary)
-      }
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xs)
-      .background(Ink.rowFillHover)
-      .cornerRadius(OmiChrome.badgeRadius)
-    }
-    .buttonStyle(.plain)
-    .popover(isPresented: $showDatePicker) {
-      DatePicker(
-        "",
-        selection: Binding(
-          get: { viewModel.selectedDate },
-          set: { newDate in
-            // Only reload if the selected day actually changed
-            let calendar = Calendar.current
-            guard !calendar.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
-            Task { await viewModel.filterByDate(newDate) }
-          }
-        ),
-        displayedComponents: [.date]
-      )
-      .datePickerStyle(.graphical)
-      .labelsHidden()
-      .padding(OmiSpacing.sm)
-    }
+  /// The popover behind the timestamp pill. The pill itself lives on the frame stage, per the
+  /// playback chrome — a page with a date control in the header *and* a timestamp on the picture is
+  /// two answers to "when is this".
+  private var dayPicker: some View {
+    DatePicker(
+      "",
+      selection: Binding(
+        get: { viewModel.selectedDate },
+        set: { newDate in
+          // Only reload if the selected day actually changed
+          guard !Calendar.current.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
+          Task { await viewModel.filterByDate(newDate) }
+        }
+      ),
+      displayedComponents: [.date]
+    )
+    .datePickerStyle(.graphical)
+    .labelsHidden()
+    .padding(14)
   }
 
   // MARK: - Frame Display
@@ -679,21 +615,21 @@ struct RewindPage: View {
           Image(nsImage: image)
             .resizable()
             .frame(width: displaySize.width, height: displaySize.height)
-            .cornerRadius(OmiChrome.stripRadius)
+            // Search highlight overlays with explicit frame
+            .overlay {
+              if let query = viewModel.activeSearchQuery, currentIndex < activeScreenshots.count {
+                SearchHighlightOverlay(
+                  screenshot: activeScreenshots[currentIndex],
+                  query: query,
+                  imageSize: image.size,
+                  containerSize: displaySize)
+              }
+            }
+            .clipShape(frameShape)
+            // A border keyed to the app the frame belongs to, so the picture and its segment on the
+            // track are visibly the same stretch of the day.
+            .overlay(frameShape.strokeBorder(frameBorderColor, lineWidth: 2))
             .shadow(color: .black.opacity(0.08), radius: 8)
-
-          // Search highlight overlays with explicit frame
-          if let query = viewModel.activeSearchQuery,
-            currentIndex < activeScreenshots.count
-          {
-            SearchHighlightOverlay(
-              screenshot: activeScreenshots[currentIndex],
-              query: query,
-              imageSize: image.size,
-              containerSize: displaySize
-            )
-            .frame(width: displaySize.width, height: displaySize.height)
-          }
         }
         .frame(width: geometry.size.width, height: geometry.size.height)
       } else {
@@ -716,71 +652,46 @@ struct RewindPage: View {
         .frame(width: geometry.size.width, height: geometry.size.height)
       }
     }
-    .padding(.horizontal, OmiSpacing.md)
+    .padding(.horizontal, 18)
+    .padding(.vertical, 12)
+    .overlay {
+      RewindStageChrome(
+        screenshots: activeScreenshots,
+        currentIndex: currentIndex,
+        window: trackWindow,
+        onSelect: { seekToIndex($0) },
+        showsDatePicker: $showDatePicker,
+        datePicker: AnyView(dayPicker))
+    }
   }
 
-  // MARK: - Bottom Controls (Compact - all on one line)
+  private var frameShape: RoundedRectangle {
+    RoundedRectangle(cornerRadius: 10, style: .continuous)
+  }
+
+  /// Nil is an honest outcome: with no frame resolved the border is a neutral hairline rather than an
+  /// invented colour.
+  private var frameBorderColor: Color {
+    guard activeScreenshots.indices.contains(currentIndex) else { return Ink.hairline }
+    return RewindPalette.color(forApp: activeScreenshots[currentIndex].appName)
+  }
+
+  // MARK: - Bottom Controls
 
   private var bottomControls: some View {
-    let screenshots = activeScreenshots
-
-    return VStack(spacing: OmiSpacing.sm) {
-      // Timeline bar
-      InteractiveTimelineBar(
-        screenshots: screenshots,
+    VStack(spacing: 0) {
+      RewindTrackBar(
+        screenshots: activeScreenshots,
         currentIndex: currentIndex,
         searchResultIndices: viewModel.activeSearchQuery != nil && searchViewMode != .timeline
           ? Set(searchResultIndices) : nil,
-        onSelect: { index in
-          seekToIndex(index)
-        }
-      )
-
-      // Compact control bar: position/timestamp | scroll hint
-      HStack(spacing: OmiSpacing.md) {
-        // Left: Legend indicators (only when searching)
-        if viewModel.activeSearchQuery != nil && !searchResultIndices.isEmpty {
-          HStack(spacing: OmiSpacing.xxs) {
-            RoundedRectangle(cornerRadius: 1)
-              .fill(PageGlass.warning.opacity(0.8))
-              .frame(width: 8, height: 8)
-            Text("match")
-              .scaledFont(size: 9)
-              .foregroundColor(Ink.secondary)
-          }
-        }
-
-        Spacer()
-
-        // Right: Position and timestamp
-        if currentIndex < screenshots.count {
-          let screenshot = screenshots[currentIndex]
-          HStack(spacing: OmiSpacing.sm) {
-            Text("\(currentIndex + 1)/\(screenshots.count)")
-              .scaledFont(size: OmiType.micro, design: .monospaced)
-              .foregroundColor(Ink.secondary)
-            Text(screenshot.formattedDateCompact)
-              .scaledFont(size: OmiType.micro, design: .monospaced)
-              .foregroundColor(Ink.secondary)
-          }
-        }
-
-        // Navigation hint
-        Text("scroll or drag to navigate")
-          .scaledFont(size: OmiType.micro)
-          .foregroundColor(Ink.secondary)
-      }
-      .padding(.horizontal, OmiSpacing.lg)
-      .padding(.vertical, OmiSpacing.sm)
+        window: trackWindow,
+        onSelect: { seekToIndex($0) })
+      RewindTrackFooter(
+        screenshots: activeScreenshots,
+        currentIndex: currentIndex,
+        showsMatchLegend: viewModel.activeSearchQuery != nil && !searchResultIndices.isEmpty)
     }
-    .padding(.bottom, OmiSpacing.md)
-    .background(
-      LinearGradient(
-        colors: [.clear, Ink.primary.opacity(0.12)],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-    )
   }
 
   // MARK: - Search Result Indices
