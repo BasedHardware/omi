@@ -124,9 +124,11 @@ final class DashboardCaptureStateTests: XCTestCase {
           usesLegacyHomeDesign: false
         ))
     }
+    // `.chat` was removed from `SidebarNavItem` when the standalone chat page was deleted. Escape on
+    // Home itself still must not navigate home, so the case moves to the destination Home now is.
     XCTAssertFalse(
       DesktopHomeEscapeNavigation.shouldNavigateHome(
-        selectedIndex: SidebarNavItem.chat.rawValue,
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
         usesLegacyHomeDesign: false
       ))
     XCTAssertFalse(

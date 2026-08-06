@@ -186,8 +186,11 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(navigation.route, .more(.settings))
     XCTAssertNil(navigation.pendingFocus)
 
-    navigation.selectLegacyDestination(.chat)
-    XCTAssertEqual(navigation.route, .chat)
+    // `.chat` was removed from `SidebarNavItem` when the standalone chat page was deleted (Home is
+    // the only chat). A second legacy selection still has to re-route, so the coverage moves to a
+    // destination that still exists rather than being dropped.
+    navigation.selectLegacyDestination(.dashboard)
+    XCTAssertEqual(navigation.route, .more(.dashboard))
   }
 
   func testNavigationUsesTypedOriginsWithoutEntityIdentifiersInAnalytics() throws {
