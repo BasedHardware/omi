@@ -29,16 +29,17 @@ extension SettingsContentView {
 
           // Auto-Detect option
           Button(action: {
+            guard autoDetectSupported else { return }
             transcriptionAutoDetect = true
             AssistantSettings.shared.transcriptionAutoDetect = true
             updateTranscriptionPreferences(singleLanguageMode: false)
             restartTranscriptionIfNeeded()
           }) {
             HStack(alignment: .top, spacing: OmiSpacing.md) {
-              Image(systemName: transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
+              Image(systemName: autoDetectIsActive ? "checkmark.circle.fill" : "circle")
                 .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  transcriptionAutoDetect ? Ink.accent : Ink.secondary)
+                  autoDetectIsActive ? Ink.accent : Ink.secondary)
 
               VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Auto-Detect (Multi-Language)")
@@ -56,6 +57,22 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+                // Why the option is inert for this account, rather than a checkmark that
+                // moves and a transcriber that ignores it.
+                if !autoDetectSupported {
+                  HStack(spacing: OmiSpacing.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                      .scaledFont(size: OmiType.micro)
+                      .foregroundColor(SettingsInk.notice)
+
+                    Text("\(autoDetectSubtitle) — pick one of the ten above to use it.")
+                      .scaledFont(size: OmiType.caption)
+                      .foregroundColor(SettingsInk.notice)
+                      .fixedSize(horizontal: false, vertical: true)
+                  }
+                  .padding(.top, OmiSpacing.xxs)
+                }
               }
 
               Spacer()
@@ -63,11 +80,11 @@ extension SettingsContentView {
             .padding(OmiSpacing.md)
             .background(
               RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-                .fill(transcriptionAutoDetect ? Ink.accent.opacity(0.1) : Color.clear)
+                .fill(autoDetectIsActive ? Ink.accent.opacity(0.1) : Color.clear)
                 .overlay(
                   RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
                     .stroke(
-                      transcriptionAutoDetect
+                      autoDetectIsActive
                         ? Ink.accent.opacity(0.3) : Ink.hairline,
                       lineWidth: 1)
                 )
@@ -75,6 +92,7 @@ extension SettingsContentView {
             .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous))
           }
           .buttonStyle(.plain)
+          .disabled(!autoDetectSupported)
 
           // Single Language option
           Button(action: {
@@ -84,10 +102,10 @@ extension SettingsContentView {
             restartTranscriptionIfNeeded()
           }) {
             HStack(alignment: .top, spacing: OmiSpacing.md) {
-              Image(systemName: !transcriptionAutoDetect ? "checkmark.circle.fill" : "circle")
+              Image(systemName: !autoDetectIsActive ? "checkmark.circle.fill" : "circle")
                 .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  !transcriptionAutoDetect ? Ink.accent : Ink.secondary)
+                  !autoDetectIsActive ? Ink.accent : Ink.secondary)
 
               VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Single Language (Better Accuracy)")
@@ -99,7 +117,7 @@ extension SettingsContentView {
                   .foregroundColor(Ink.secondary)
 
                 // Language picker (only shown when single language is selected)
-                if !transcriptionAutoDetect {
+                if !autoDetectIsActive {
                   HStack {
                     Text("Language:")
                       .scaledFont(size: OmiType.caption)
@@ -115,8 +133,7 @@ extension SettingsContentView {
                     ) { option in
                       transcriptionLanguage = option.id
                       AssistantSettings.shared.transcriptionLanguage = option.id
-                      updateTranscriptionPreferences(singleLanguageMode: true)
-                      updateLanguage(option.id)
+                      saveSingleLanguageSelection(option.id)
                       restartTranscriptionIfNeeded()
                     }
                   }
@@ -129,11 +146,11 @@ extension SettingsContentView {
             .padding(OmiSpacing.md)
             .background(
               RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-                .fill(!transcriptionAutoDetect ? Ink.accent.opacity(0.1) : Color.clear)
+                .fill(!autoDetectIsActive ? Ink.accent.opacity(0.1) : Color.clear)
                 .overlay(
                   RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
                     .stroke(
-                      !transcriptionAutoDetect
+                      !autoDetectIsActive
                         ? Ink.accent.opacity(0.3) : Ink.hairline,
                       lineWidth: 1)
                 )
@@ -282,6 +299,36 @@ extension SettingsContentView {
     }
   }
 
+  /// What the transcriber will actually do, as opposed to what the stored flag says.
+  ///
+  /// `AssistantSettings.effectiveTranscriptionLanguage` only enters multi-language mode when the
+  /// selected language is one the provider can auto-detect. This pane used to paint the raw
+  /// `transcriptionAutoDetect` flag, so an account left on a language outside that set (Ukrainian,
+  /// Chinese, …) with the flag on showed "Auto-Detect" ticked, hid the language picker behind that
+  /// tick, and transcribed in the single language anyway — a state you could neither see nor leave.
+  var autoDetectIsActive: Bool {
+    transcriptionAutoDetect && autoDetectSupported
+  }
+
+  /// Persists a Single-Language selection to the account in the one order that survives a reload.
+  ///
+  /// See `TranscriptionLanguageWriter` for why the order is the whole point.
+  func saveSingleLanguageSelection(_ language: String) {
+    AnalyticsManager.shared.languageChanged(language: language)
+    Task { @MainActor in
+      _ = await TranscriptionLanguageWriter.apply(
+        language: language,
+        singleLanguageMode: true,
+        setLanguage: { code in
+          _ = try await APIClient.shared.updateUserLanguage(code)
+        },
+        setSingleLanguageMode: { mode in
+          _ = try await APIClient.shared.updateTranscriptionPreferences(singleLanguageMode: mode)
+        }
+      )
+    }
+  }
+
   /// Add a word to the vocabulary
   func addVocabularyWord() {
     let word = newVocabularyWord.trimmingCharacters(in: .whitespaces)
@@ -324,6 +371,59 @@ extension SettingsContentView {
 
   // MARK: - Notifications Section
 
+}
+
+/// The two account writes a transcription-language change needs, in the only order that survives.
+///
+/// `PATCH /v1/users/language` is not only a language write. The backend follows it with
+/// `set_user_transcription_preferences(single_language_mode: not supports_live_multilingual_mode(language))`,
+/// and that predicate is true — so `single_language_mode` lands as `false` — for every language this
+/// picker offers. The pane used to fire that PATCH and the transcription-preferences PATCH as two
+/// unordered `Task`s, so the language write raced the mode the user had just chosen and normally
+/// won. The next `loadBackendSettings()`, where the account is the authority for language, then
+/// pushed both this pane and `AssistantSettings` back to Auto-Detect: choosing Single Language and
+/// a language did not survive reopening Settings.
+///
+/// Ordering is the repair. The language write goes first precisely because it clobbers the mode;
+/// the mode write goes last so the user's choice is what the account ends up holding.
+@MainActor
+enum TranscriptionLanguageWriter {
+  /// Which of the two writes landed. Reported rather than thrown so a half-written change is
+  /// visible to the caller instead of disappearing into a detached `Task`.
+  struct Outcome: Equatable {
+    var languageWritten = false
+    var modeWritten = false
+
+    var isComplete: Bool { languageWritten && modeWritten }
+  }
+
+  static func apply(
+    language: String,
+    singleLanguageMode: Bool,
+    setLanguage: (String) async throws -> Void,
+    setSingleLanguageMode: (Bool) async throws -> Void
+  ) async -> Outcome {
+    var outcome = Outcome()
+
+    do {
+      try await setLanguage(language)
+      outcome.languageWritten = true
+    } catch {
+      logError("Settings: failed to save transcription language", error: error)
+      // Fall through deliberately. The language PATCH is the thing that resets the mode, so a
+      // failed one leaves the stored mode untouched and re-asserting the user's choice is still
+      // the correct next write.
+    }
+
+    do {
+      try await setSingleLanguageMode(singleLanguageMode)
+      outcome.modeWritten = true
+    } catch {
+      logError("Settings: failed to save transcription language mode", error: error)
+    }
+
+    return outcome
+  }
 }
 
 /// Multi-select for the languages the user speaks to the VOICE ASSISTANT (push-to-talk).
