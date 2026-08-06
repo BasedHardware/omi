@@ -381,9 +381,9 @@ def test_migration_allowlist_owners_are_selected_outside_the_rollout_cohort(monk
 
     asyncio.run(reconciler.run_reconciler())
 
-    assert "migration-owner" in captured_uids, (
-        "allowlisted migration owner must be selected even when outside the rollout cohort"
-    )
+    assert (
+        "migration-owner" in captured_uids
+    ), "allowlisted migration owner must be selected even when outside the rollout cohort"
 
 
 def test_boot_image_migration_fails_closed_for_an_unverifiable_source(monkeypatch):
