@@ -121,13 +121,13 @@ extension SettingsContentView {
         }
       }
 
+      // Push-to-talk replies are always spoken, so `hasAnyFloatingBarVoiceAnswersEnabled` is a
+      // constant and these two never dimmed. A greyed, unresponsive control is how the rest of
+      // this pane says "the thing behind this is off" — spending that signal on a state no
+      // setting can reach makes a live control read as dead.
       voicePicker(settingId: "floatingbar.voice")
-        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
-        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
 
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
-        .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
-        .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
     }
   }
 
@@ -281,13 +281,15 @@ extension SettingsContentView {
               panel.message = "Select a project directory"
               if panel.runModal() == .OK, let url = panel.url {
                 aiChatWorkingDirectory = url.path
-                refreshAIChatConfig()
-                // Update ChatProvider
+                // `ChatProvider` holds its own `@AppStorage` wrapper over the same key, and a
+                // wrapper's `didSet` only fires for writes made through that wrapper — so the
+                // provider has to be written to directly for it to reconfigure the runtime.
                 chatProvider?.aiChatWorkingDirectory = url.path
-                Task { await chatProvider?.discoverClaudeConfig() }
-                if chatProvider?.workingDirectory == nil {
-                  chatProvider?.workingDirectory = url.path
-                }
+                // Unconditional. The old `== nil` guard meant choosing a *second* workspace left
+                // the agent's file-system root on the first one, so the next provider switch
+                // (`effectiveAgentWorkingDirectory()`) handed the runtime the abandoned project.
+                chatProvider?.workingDirectory = url.path
+                Task { await rediscoverAIChatConfig() }
               }
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -295,10 +297,9 @@ extension SettingsContentView {
             if !aiChatWorkingDirectory.isEmpty {
               Button("Clear") {
                 aiChatWorkingDirectory = ""
-                refreshAIChatConfig()
                 chatProvider?.aiChatWorkingDirectory = ""
-                Task { await chatProvider?.discoverClaudeConfig() }
                 chatProvider?.workingDirectory = nil
+                Task { await rediscoverAIChatConfig() }
               }
               .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             }
@@ -449,7 +450,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button(action: { refreshAIChatConfig() }) {
+            Button(action: { Task { await rediscoverAIChatConfig() } }) {
               Image(systemName: "arrow.clockwise")
                 .scaledFont(size: OmiType.body)
             }
@@ -607,12 +608,13 @@ extension SettingsContentView {
               }
             }
 
+            // No `onChange` hook: `ChatProvider` and `AgentRuntimeProcess` both read this key
+            // from `UserDefaults` (the former through a KVO publisher), so the `@AppStorage`
+            // write *is* the propagation. An empty handler here only looked like wiring.
             Toggle("", isOn: $playwrightUseExtension)
               .toggleStyle(OmiToggleStyle())
               .controlSize(.small)
               .labelsHidden()
-              .onChange(of: playwrightUseExtension) { _, _ in
-              }
           }
 
           Text("Lets the AI use your Chrome browser with all your logged-in sessions.")
@@ -732,24 +734,13 @@ extension SettingsContentView {
       playwrightExtensionToken =
         UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
     }
+    // The browser-setup sheet is presented once, by `SettingsContentView.body`, because the
+    // identical Browser Extension card in Advanced shares `showBrowserSetup`. A second `.sheet`
+    // on the same binding inside this subtree is a competing presenter for one piece of state:
+    // AppKit honours one of them and logs the other, which is a coin toss over whether "Set Up"
+    // opens anything.
     .sheet(isPresented: $showFileViewer) {
       fileViewerSheet
-    }
-    .sheet(isPresented: $showBrowserSetup) {
-      BrowserExtensionSetup(
-        onComplete: {
-          showBrowserSetup = false
-          playwrightExtensionToken =
-            UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
-        },
-        onDismiss: {
-          showBrowserSetup = false
-          playwrightExtensionToken =
-            UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
-        },
-        chatProvider: chatProvider
-      )
-      .fixedSize()
     }
   }
 
@@ -786,6 +777,19 @@ extension SettingsContentView {
     }
     .frame(width: 600, height: 500)
     .background(Ink.wash)
+  }
+
+  /// Re-scan CLAUDE.md and skills from disk, then republish them into the cards.
+  ///
+  /// `refreshAIChatConfig()` copies `ChatProvider`'s already-discovered snapshot, so on its own it
+  /// cannot see a skill added to `~/.claude/skills` since launch, nor a workspace chosen a moment
+  /// ago. Refresh and the workspace picker both *looked* like a rescan and were a re-read of the
+  /// same stale answer.
+  func rediscoverAIChatConfig() async {
+    if let provider = chatProvider {
+      await provider.discoverClaudeConfig()
+    }
+    refreshAIChatConfig()
   }
 
   func refreshAIChatConfig() {
