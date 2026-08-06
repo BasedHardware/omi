@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
+  s_569f1df936cc22::t_622dc6e6523d04 386-389,803-806
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_569f1df936cc22::t_0618517488bb90 1024
+desktop/macos/Desktop/Tests/ChatTranscriptGestureHarnessTests.swift
+  s_569f1df936cc22::t_8df7aed3e80440 134-141,145-147,149-152,155,186-188,390-434
+desktop/macos/Desktop/Tests/DesktopChatDriftGuardTests.swift
+  s_569f1df936cc22::t_d30985cf2d9491 73
+desktop/macos/Desktop/Tests/ChatScrollLiveEdgeTests.swift
+  s_cc16dfd49f54e0::t_98c7566fc30fd0 145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ef1986717e303dc5d418abd8d384b84c2d62f99d",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_cc16dfd49f54e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-af329473fc9f41b67",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
