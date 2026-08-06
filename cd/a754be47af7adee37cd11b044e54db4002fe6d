@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
+  s_569f1df936cc22::t_b6ede459068bd1 26-32,91,208,210,212-217,230,240-242,245,247,271,273-274,325-332,337,339-348,351-355,358-369,371-374,376-385,387-388,390-396,401,479-482,536-543,546-553,613-614,617-618
+desktop/macos/Desktop/Sources/Rewind/Core/RewindVideoFrameCursor.swift
+  s_569f1df936cc22::t_716e8884d4d4ed 1-147
+desktop/macos/Desktop/Tests/RewindVideoFrameCursorTests.swift
+  s_569f1df936cc22::t_c71f5e5c7ba552 1-277
+desktop/macos/e2e/flows/rewind.yaml
+  s_569f1df936cc22::t_b411147c64e6e5 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "cda754be47af7adee37cd11b044e54db4002fe6d",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
