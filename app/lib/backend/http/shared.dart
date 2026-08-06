@@ -42,6 +42,7 @@ bool isTransientNetworkError(Object e) {
   if (e is HandshakeException) return true;
   if (e is TimeoutException) return true;
   final text = e is http.ClientException ? e.message : e.toString();
+  final lower = text.toLowerCase();
   return text.contains('SocketException') ||
       text.contains('HandshakeException') ||
       text.contains('TimeoutException') ||
@@ -50,11 +51,9 @@ bool isTransientNetworkError(Object e) {
       text.contains('Failed host lookup') ||
       text.contains('Network is unreachable') ||
       text.contains('Bad file descriptor') ||
-      // Android leaves/backgrounds mid-multipart (#4587 screenshot):
-      // "ClientSoftware caused connection abort"
-      text.contains('connection abort') ||
-      text.contains('ClientSoftware') ||
-      text.contains('Software caused connection abort');
+      // Android leave/background mid-multipart (#4587): match the full abort
+      // phrase only — a bare "ClientSoftware" token is not a connectivity signal.
+      lower.contains('software caused connection abort');
 }
 
 Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
@@ -65,10 +64,9 @@ Future<String> getAuthHeader({bool expireTerminalSession = true}) async {
   final expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
-  bool isExpirationDateValid =
-      !(expiry.isBefore(DateTime.now()) ||
-          expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
-          (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
+  bool isExpirationDateValid = !(expiry.isBefore(DateTime.now()) ||
+      expiry.isAtSameMomentAs(DateTime.fromMillisecondsSinceEpoch(0)) ||
+      (expiry.isBefore(DateTime.now().add(const Duration(minutes: 5))) && expiry.isAfter(DateTime.now())));
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshResult = await AuthService.instance.refreshIdToken();
@@ -200,9 +198,9 @@ Future<void> _handleAuthUnavailable(
     AuthTokenMissingUser() => null,
     AuthTokenMissingToken() => const AuthSessionExpiredEvent(reason: AuthSessionExpirationReason.missingToken),
     AuthTokenTerminalFailure(:final code) => AuthSessionExpiredEvent(
-      reason: AuthSessionExpirationReason.terminalTokenFailure,
-      code: code,
-    ),
+        reason: AuthSessionExpirationReason.terminalTokenFailure,
+        code: code,
+      ),
     _ => null,
   };
   if (event != null) await AuthService.instance.expireSession(event);

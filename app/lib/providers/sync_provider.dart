@@ -214,11 +214,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// for being too old. Surfaced explicitly so a failure is never mistaken for
   /// a recording that simply hasn't synced yet.
   int get needsAttentionWalsCount => _countWhere(
-    (s) =>
-        s == WalSyncDisplayState.failed ||
-        s == WalSyncDisplayState.corrupted ||
-        s == WalSyncDisplayState.outsideRecoveryWindow,
-  );
+        (s) =>
+            s == WalSyncDisplayState.failed ||
+            s == WalSyncDisplayState.corrupted ||
+            s == WalSyncDisplayState.outsideRecoveryWindow,
+      );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -338,12 +338,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
-  }) : _walServiceOverride = walService,
-       _uploadGate = uploadGate ?? SyncUploadGate.instance,
-       _startBackgroundSync = startBackgroundSync,
-       _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
-       _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-       _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+  })  : _walServiceOverride = walService,
+        _uploadGate = uploadGate ?? SyncUploadGate.instance,
+        _startBackgroundSync = startBackgroundSync,
+        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -556,8 +556,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       failedWal: wal,
     );
     // A 202 leaves the WAL `uploaded` — wake the single owner so reconcile
-    // is scheduled (do not poke SyncReconciler here).
-    if (result != null && _startBackgroundSync) {
+    // is scheduled (do not poke SyncReconciler here). Soft-retry failures wake
+    // from _performSync itself; do not double-wake here.
+    if (result != null &&
+        result.localUploadFailures == 0 &&
+        result.localUploadPermanentFailures == 0 &&
+        _startBackgroundSync) {
       unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
     }
   }
@@ -614,13 +618,28 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       }
 
       // Client-side upload aborts (leave/background mid-multipart, #4587) leave
-      // WALs as `miss`. Schema requires re-arming recovery — not SyncStatus.error.
-      if ((result?.localUploadFailures ?? 0) > 0) {
+      // WALs as `miss`. Soft-retry only when failures are transient; permanent
+      // server refusals (400/413) still surface SyncStatus.error.
+      final permanentFailures = result?.localUploadPermanentFailures ?? 0;
+      final localFailures = result?.localUploadFailures ?? 0;
+      if (permanentFailures > 0) {
+        final hint = result?.localUploadPermanentError;
+        final errorMessage = _formatSyncError(
+          hint != null ? Exception(hint) : Exception('Upload failed. Check your connection and try again'),
+          failedWal,
+        );
         DebugLogManager.logWarning(
-          'SyncProvider: $context had ${result!.localUploadFailures} local upload failure(s); re-arming recovery',
+          'SyncProvider: $context had $permanentFailures permanent local upload failure(s)',
+        );
+        _updateSyncState(_syncState.toError(message: errorMessage, failedWal: failedWal));
+      } else if (localFailures > 0) {
+        DebugLogManager.logWarning(
+          'SyncProvider: $context had $localFailures transient local upload failure(s); re-arming recovery',
         );
         _updateSyncState(_syncState.toIdle());
-        if (_startBackgroundSync) {
+        // Coordinator drains use rethrowOnError and schedule their own cooldown
+        // via RecordingTransferCoordinator._runPass — do not double-wake here.
+        if (_startBackgroundSync && !rethrowOnError) {
           unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
         }
       }
@@ -629,7 +648,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       if (isTransientNetworkError(e)) {
         DebugLogManager.logWarning('SyncProvider: $context hit transient network error; re-arming recovery: $e');
         _updateSyncState(_syncState.toIdle());
-        if (_startBackgroundSync) {
+        // Wake only for direct/manual calls; coordinator owns retry scheduling.
+        if (_startBackgroundSync && !rethrowOnError) {
           unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
         }
         if (rethrowOnError) rethrow;

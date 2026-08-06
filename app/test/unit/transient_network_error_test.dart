@@ -12,6 +12,11 @@ void main() {
     );
     expect(isTransientNetworkError(abort), isTrue);
     expect(isTransientNetworkError(Exception('Software caused connection abort')), isTrue);
+    expect(isTransientNetworkError(Exception('software caused connection abort')), isTrue);
+  });
+
+  test('standalone ClientSoftware token is not treated as transient', () {
+    expect(isTransientNetworkError(Exception('ClientSoftware HTTP 400')), isFalse);
   });
 
   test('permanent HTTP errors are not transient', () {
