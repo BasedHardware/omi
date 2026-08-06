@@ -1021,8 +1021,7 @@ import XCTest
       scrollSource.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow(proxy: proxy)"))
     XCTAssertTrue(scrollSource.contains("for delay in [0.05, 0.16, 0.32]"))
-    XCTAssertTrue(scrollSource.contains("documentFrameObservation"))
-    XCTAssertTrue(scrollSource.contains("documentHeight: documentHeight"))
+    XCTAssertTrue(scrollSource.contains(".onChange(of: contentChangeToken)"))
     XCTAssertFalse(viewSource.contains("private func agentChatViewportResizeDetector"))
     XCTAssertFalse(viewSource.contains("private func scrollToBottomSettled(_ proxy: ScrollViewProxy)"))
   }

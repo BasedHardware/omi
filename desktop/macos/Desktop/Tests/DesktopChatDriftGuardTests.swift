@@ -70,13 +70,11 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertFalse(messagesSource.contains("PromptTimeline"))
   }
 
-  func testScrollDetectorsRebindAfterSwiftUIReplacesTheTranscriptScrollView() throws {
+  func testTheScrollDetectorRebindsAfterSwiftUIReplacesTheTranscriptScrollView() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
 
     // omi-test-quality: source-inspection -- AppKit representables must recover
     // when SwiftUI swaps the lazy transcript's underlying scroll hierarchy.
-    XCTAssertTrue(scrollSource.contains("context.coordinator.setupScrollObserver(for: nsView)"))
-    XCTAssertTrue(scrollSource.contains("observedClipView"))
     XCTAssertTrue(scrollSource.contains("context.coordinator.install(for: nsView)"))
     XCTAssertTrue(scrollSource.contains("installedScrollView"))
   }

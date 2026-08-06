@@ -131,45 +131,31 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
-  func testPromptRailKeepsTrackingThroughARapidBurst() throws {
-    let harness = try makeHarness()
+  /// The transcript used to cap its column at 760pt inside a 900pt panel so a
+  /// prompt rail could live in the leftover 70pt on each side. The rail is gone,
+  /// and with it the reserved gutter: rows now reach their container's edge, the
+  /// same edge the composer below them uses. Measured on the mounted transcript
+  /// because the inset was only ever visible as painted pixels — the view's own
+  /// frame was full width the whole time.
+  func testTranscriptRowsReachTheContainerEdgeWithNoReservedGutter() throws {
+    let harness = try makeHarness(messageCount: 12)
     defer { harness.tearDown() }
     harness.settleInitialPlacement()
 
-    let geometry = ChatTranscriptGeometry()
-    geometry.setMessages(harness.model.messages)
-    geometry.setViewport(CGSize(width: 900, height: 600), columnWidth: 760)
+    let viewportWidth = harness.viewportWidth
+    let painted = try XCTUnwrap(
+      harness.rightmostPaintedColumn(), "the mounted transcript painted nothing")
 
-    var deliveries: [CGFloat] = []
-    let detector = ScrollPositionDetector.Coordinator { position in
-      geometry.setContent(height: position.documentHeight, scrollTop: position.scrollTop)
-      deliveries.append(position.scrollTop)
-    }
-    detector.setupScrollObserver(for: harness.probeView)
-    defer { detector.stop() }
-
-    harness.performUpwardGesture(events: 30, pumpPerEvent: 0.004)
-    harness.pump(0.2)
-
-    XCTAssertGreaterThanOrEqual(
-      deliveries.count, 3,
-      "the rail must keep receiving positions throughout a rapid gesture")
-    XCTAssertEqual(
-      deliveries.last ?? -1, harness.scrollTop, accuracy: 4,
-      "the rail's last known position must be where the reader actually is")
+    // The old cap put the column's right edge at (900 - 760) / 2 + 760 = 830.
+    XCTAssertGreaterThan(
+      CGFloat(painted), viewportWidth - 60,
+      "transcript rows stop at x=\(painted) of \(viewportWidth), so a gutter is still reserved")
   }
 
-  func testRepeatedFastBurstsKeepTheMountedTranscriptAndPromptRailResponsive() throws {
+  func testRepeatedFastBurstsKeepTheMountedTranscriptResponsive() throws {
     let harness = try makeHarness(messageCount: 120)
     defer { harness.tearDown() }
     harness.settleInitialPlacement()
-
-    var deliveredScrollTop: CGFloat = -1
-    let detector = ScrollPositionDetector.Coordinator { position in
-      deliveredScrollTop = position.scrollTop
-    }
-    detector.setupScrollObserver(for: harness.probeView)
-    defer { detector.stop() }
 
     for cycle in 0..<20 {
       let beforeUp = harness.scrollTop
@@ -197,11 +183,9 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     }
     harness.pump(0.2)
 
-    XCTAssertEqual(
-      deliveredScrollTop,
-      harness.scrollTop,
-      accuracy: 4,
-      "the prompt rail stopped tracking before the repeated burst sequence ended"
+    XCTAssertTrue(
+      harness.usesOriginalScrollView,
+      "the transcript's native scroll view was replaced by the repeated burst sequence"
     )
   }
 
@@ -401,6 +385,51 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
 
     var usesOriginalScrollView: Bool {
       Self.firstScrollView(in: hostingView) === scrollView
+    }
+
+    var viewportWidth: CGFloat { scrollView.contentView.bounds.width }
+
+    /// The rightmost column of the viewport that the transcript actually paints,
+    /// or nil when it painted nothing. Read from the clip view's own bitmap: a
+    /// reserved gutter is invisible to frames, because the stack stays full width
+    /// and insets its contents.
+    func rightmostPaintedColumn() -> Int? {
+      let clipView = scrollView.contentView
+      let bounds = clipView.bounds
+      guard bounds.width > 0, bounds.height > 0,
+        let representation = clipView.bitmapImageRepForCachingDisplay(in: bounds)
+      else { return nil }
+      clipView.cacheDisplay(in: bounds, to: representation)
+      guard let image = representation.cgImage else { return nil }
+
+      let width = image.width
+      let height = image.height
+      var pixels = [UInt8](repeating: 0, count: width * height * 4)
+      guard
+        let context = CGContext(
+          data: &pixels,
+          width: width,
+          height: height,
+          bitsPerComponent: 8,
+          bytesPerRow: width * 4,
+          space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )
+      else { return nil }
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+      var rightmost: Int?
+      for y in 0..<height {
+        for x in stride(from: width - 1, through: 0, by: -1) {
+          if pixels[(y * width + x) * 4 + 3] > 25 {
+            rightmost = max(rightmost ?? 0, x)
+            break
+          }
+        }
+      }
+      guard let rightmost else { return nil }
+      // Back into the clip view's point space; the window may be backed at 2x.
+      return Int((CGFloat(rightmost) * bounds.width / CGFloat(width)).rounded())
     }
 
     // MARK: Gestures
@@ -675,8 +704,6 @@ struct HarnessChatHost: View {
           localSendToken: model.localSendToken,
           horizontalContentPadding: 0,
           transcriptWindowPolicy: model.transcriptWindowPolicy,
-          contentColumnWidth: 760,
-          timelineTrailingInset: 0,
           welcomeContent: { EmptyView() }
         )
       }
