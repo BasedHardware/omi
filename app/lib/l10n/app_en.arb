@@ -11597,15 +11597,6 @@
             }
         }
     },
-    "endsOnDate": "Ends on {date}",
-    "@endsOnDate": {
-        "description": "Badge on a cancelled plan card showing when access ends",
-        "placeholders": {
-            "date": {
-                "type": "String"
-            }
-        }
-    },
     "planEndedResubscribe": "Your plan ended on {date}.\nResubscribe now - you'll be charged immediately for a new billing period.",
     "@planEndedResubscribe": {
         "description": "Shown when a cancelled subscription's period has already ended",

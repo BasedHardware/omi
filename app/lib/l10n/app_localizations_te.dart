@@ -4615,7 +4615,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$dateన ముగుస్తుంది';
+    return '$date న ముగుస్తుంది';
   }
 
   @override

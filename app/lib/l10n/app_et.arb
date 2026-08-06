@@ -3200,7 +3200,6 @@
     "noDesktopAccess": "Ei tööta arvutis",
     "annualBillingSummary": "{months} kuud / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 kuu tasuta} other{{count} kuud tasuta}}",
-    "endsOnDate": "Lõpeb {date}",
     "planEndedResubscribe": "Sinu pakett lõppes {date}.\nTelli uuesti – uue arveldusperioodi eest võetakse tasu kohe.",
     "planCancelsResubscribe": "Sinu pakett tühistatakse {date}.\nTelli uuesti, et hüved säiliksid – tasu ei võeta enne {date}.",
     "freemiumLimitsIntro": "Omi on tasuta, kuid tasuta versioonil on piirangud, mis mõjutavad sinu kogemust:",

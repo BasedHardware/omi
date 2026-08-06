@@ -4576,7 +4576,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Termina a $date';
+    return 'Termina em $date';
   }
 
   @override

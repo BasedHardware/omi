@@ -4629,7 +4629,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Magtatapos sa $date';
+    return 'Nagtatapos sa $date';
   }
 
   @override

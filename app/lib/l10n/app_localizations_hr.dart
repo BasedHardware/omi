@@ -9834,8 +9834,9 @@ class AppLocalizationsHr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count mjeseca besplatno',
-      one: '1 mjesec besplatno',
+      other: '$count mjeseci besplatno',
+      few: '$count mjeseca besplatno',
+      one: '$count mjesec besplatno',
     );
     return '$_temp0';
   }

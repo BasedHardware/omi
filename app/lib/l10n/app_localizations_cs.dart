@@ -9800,8 +9800,10 @@ class AppLocalizationsCs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count měsíce zdarma',
-      one: '1 měsíc zdarma',
+      other: '$count měsíců zdarma',
+      many: '$count měsíce zdarma',
+      few: '$count měsíce zdarma',
+      one: '$count měsíc zdarma',
     );
     return '$_temp0';
   }

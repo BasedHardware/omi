@@ -4621,7 +4621,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date அன்று முடிகிறது';
+    return '$date இல் முடிகிறது';
   }
 
   @override

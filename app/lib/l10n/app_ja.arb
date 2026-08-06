@@ -3176,7 +3176,6 @@
     "noDesktopAccess": "デスクトップでは利用できません",
     "annualBillingSummary": "{months}か月 / {price}",
     "monthsFreeBadge": "{count, plural, =1{1か月無料} other{{count}か月無料}}",
-    "endsOnDate": "{date}に終了",
     "planEndedResubscribe": "プランは{date}に終了しました。\n今すぐ再登録してください。新しい請求期間の料金がすぐに請求されます。",
     "planCancelsResubscribe": "プランは{date}に解約されます。\n特典を維持するには今すぐ再登録してください。{date}までは請求されません。",
     "freemiumLimitsIntro": "Omiは無料ですが、無料版には体験に影響する制限があります:",

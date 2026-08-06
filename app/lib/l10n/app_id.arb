@@ -3242,7 +3242,6 @@
     "noDesktopAccess": "Tidak berfungsi di desktop",
     "annualBillingSummary": "{months} bulan / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 bulan gratis} other{{count} bulan gratis}}",
-    "endsOnDate": "Berakhir pada {date}",
     "planEndedResubscribe": "Paket Anda berakhir pada {date}.\nBerlangganan lagi sekarang - Anda akan langsung ditagih untuk periode penagihan baru.",
     "planCancelsResubscribe": "Paket Anda akan dibatalkan pada {date}.\nBerlangganan lagi untuk mempertahankan manfaat Anda - tanpa biaya hingga {date}.",
     "freemiumLimitsIntro": "Omi gratis, tetapi versi gratis memiliki batasan yang memengaruhi pengalaman Anda:",

@@ -10775,7 +10775,6 @@
     "noDesktopAccess": "ডেস্কটপে কাজ করে না",
     "annualBillingSummary": "{months} মাস / {price}",
     "monthsFreeBadge": "{count, plural, =1{১ মাস ফ্রি} other{{count} মাস ফ্রি}}",
-    "endsOnDate": "{date} তারিখে শেষ হবে",
     "planEndedResubscribe": "আপনার প্ল্যান {date} তারিখে শেষ হয়েছে।\nএখনই পুনরায় সাবস্ক্রাইব করুন - নতুন বিলিং চক্রের জন্য সঙ্গে সঙ্গে চার্জ করা হবে।",
     "planCancelsResubscribe": "আপনার প্ল্যান {date} তারিখে বাতিল হবে।\nসুবিধা ধরে রাখতে এখনই পুনরায় সাবস্ক্রাইব করুন - {date} পর্যন্ত কোনো চার্জ নেই।",
     "freemiumLimitsIntro": "Omi ফ্রি, তবে ফ্রি সংস্করণে কিছু সীমাবদ্ধতা আছে যা আপনার অভিজ্ঞতাকে প্রভাবিত করে:",

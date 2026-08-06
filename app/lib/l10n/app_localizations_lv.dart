@@ -9823,7 +9823,8 @@ class AppLocalizationsLv extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count mēneši bez maksas',
-      one: '1 mēnesis bez maksas',
+      one: '$count mēnesis bez maksas',
+      zero: '$count mēnešu bez maksas',
     );
     return '$_temp0';
   }

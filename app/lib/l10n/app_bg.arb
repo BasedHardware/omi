@@ -3178,7 +3178,6 @@
     "noDesktopAccess": "Не работи на настолен компютър",
     "annualBillingSummary": "{months} месеца / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 месец безплатно} other{{count} месеца безплатно}}",
-    "endsOnDate": "Изтича на {date}",
     "planEndedResubscribe": "Планът ви приключи на {date}.\nАбонирайте се отново сега – ще бъдете таксувани веднага за нов период на плащане.",
     "planCancelsResubscribe": "Планът ви ще бъде отменен на {date}.\nАбонирайте се отново, за да запазите предимствата си – без такса до {date}.",
     "freemiumLimitsIntro": "Omi е безплатен, но безплатната версия има ограничения, които влияят на изживяването ви:",

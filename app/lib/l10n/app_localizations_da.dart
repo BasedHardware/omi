@@ -4576,7 +4576,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Slutter den $date';
+    return 'Slutter $date';
   }
 
   @override

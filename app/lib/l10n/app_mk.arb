@@ -10775,7 +10775,6 @@
     "noDesktopAccess": "Не работи на компјутер",
     "annualBillingSummary": "{months} месеци / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 месец бесплатно} other{{count} месеци бесплатно}}",
-    "endsOnDate": "Завршува на {date}",
     "planEndedResubscribe": "Вашиот план заврши на {date}.\nПретплатете се повторно сега – наплатата за нов период ќе се изврши веднаш.",
     "planCancelsResubscribe": "Вашиот план ќе биде откажан на {date}.\nПретплатете се повторно за да ги задржите поволностите – без наплата до {date}.",
     "freemiumLimitsIntro": "Omi е бесплатен, но бесплатната верзија има ограничувања што влијаат на вашето искуство:",

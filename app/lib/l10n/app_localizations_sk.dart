@@ -9792,8 +9792,10 @@ class AppLocalizationsSk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count mesiace zadarmo',
-      one: '1 mesiac zadarmo',
+      other: '$count mesiacov zadarmo',
+      many: '$count mesiaca zadarmo',
+      few: '$count mesiace zadarmo',
+      one: '$count mesiac zadarmo',
     );
     return '$_temp0';
   }

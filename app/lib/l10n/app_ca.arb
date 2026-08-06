@@ -3178,7 +3178,6 @@
     "noDesktopAccess": "No funciona a l'escriptori",
     "annualBillingSummary": "{months} mesos / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 mes gratis} other{{count} mesos gratis}}",
-    "endsOnDate": "Acaba el {date}",
     "planEndedResubscribe": "El teu pla va acabar el {date}.\nTorna a subscriure't ara: se't cobrarà immediatament un nou període de facturació.",
     "planCancelsResubscribe": "El teu pla es cancel·larà el {date}.\nTorna a subscriure't per mantenir els avantatges: sense càrrec fins al {date}.",
     "freemiumLimitsIntro": "Omi és gratuït, però la versió gratuïta té límits que afecten la teva experiència:",

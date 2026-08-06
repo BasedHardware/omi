@@ -3218,7 +3218,6 @@
     "noDesktopAccess": "Virker ikke på computer",
     "annualBillingSummary": "{months} måneder / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 måned gratis} other{{count} måneder gratis}}",
-    "endsOnDate": "Slutter den {date}",
     "planEndedResubscribe": "Din plan sluttede den {date}.\nTegn abonnement igen nu – du bliver opkrævet med det samme for en ny betalingsperiode.",
     "planCancelsResubscribe": "Din plan annulleres den {date}.\nTegn abonnement igen for at beholde dine fordele – ingen betaling før {date}.",
     "freemiumLimitsIntro": "Omi er gratis, men gratisversionen har begrænsninger, der påvirker din oplevelse:",

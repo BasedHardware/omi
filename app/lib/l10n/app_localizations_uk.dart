@@ -4594,7 +4594,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Завершується $date';
+    return 'Закінчується $date';
   }
 
   @override
@@ -9820,8 +9820,10 @@ class AppLocalizationsUk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count місяці безкоштовно',
-      one: '1 місяць безкоштовно',
+      other: '$count місяця безкоштовно',
+      many: '$count місяців безкоштовно',
+      few: '$count місяці безкоштовно',
+      one: '$count місяць безкоштовно',
     );
     return '$_temp0';
   }

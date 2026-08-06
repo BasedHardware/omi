@@ -10775,7 +10775,6 @@
     "noDesktopAccess": "ڈیسک ٹاپ پر کام نہیں کرتا",
     "annualBillingSummary": "{months} ماہ / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 ماہ مفت} other{{count} ماہ مفت}}",
-    "endsOnDate": "{date} کو ختم ہوگا",
     "planEndedResubscribe": "آپ کا پلان {date} کو ختم ہو گیا۔\nابھی دوبارہ سبسکرائب کریں - نئی بلنگ مدت کے لیے فوری چارج کیا جائے گا۔",
     "planCancelsResubscribe": "آپ کا پلان {date} کو منسوخ ہو جائے گا۔\nفوائد برقرار رکھنے کے لیے ابھی دوبارہ سبسکرائب کریں - {date} تک کوئی چارج نہیں۔",
     "freemiumLimitsIntro": "Omi مفت ہے، لیکن مفت ورژن میں ایسی حدود ہیں جو آپ کے تجربے پر اثر ڈالتی ہیں:",

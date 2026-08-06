@@ -9837,7 +9837,9 @@ class AppLocalizationsRu extends AppLocalizations {
       count,
       locale: localeName,
       other: '$count месяца бесплатно',
-      one: '1 месяц бесплатно',
+      many: '$count месяцев бесплатно',
+      few: '$count месяца бесплатно',
+      one: '$count месяц бесплатно',
     );
     return '$_temp0';
   }

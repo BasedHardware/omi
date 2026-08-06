@@ -3235,7 +3235,6 @@
     "noDesktopAccess": "Masaüstünde çalışmaz",
     "annualBillingSummary": "{months} ay / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 ay ücretsiz} other{{count} ay ücretsiz}}",
-    "endsOnDate": "{date} tarihinde bitiyor",
     "planEndedResubscribe": "Planın {date} tarihinde sona erdi.\nŞimdi yeniden abone ol - yeni fatura dönemi için hemen ücretlendirilirsin.",
     "planCancelsResubscribe": "Planın {date} tarihinde iptal edilecek.\nAvantajlarını korumak için şimdi yeniden abone ol - {date} tarihine kadar ücret alınmaz.",
     "freemiumLimitsIntro": "Omi ücretsizdir, ancak ücretsiz sürümün deneyimini etkileyen sınırları vardır:",

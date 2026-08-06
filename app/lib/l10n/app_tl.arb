@@ -10775,7 +10775,6 @@
     "noDesktopAccess": "Hindi gumagana sa desktop",
     "annualBillingSummary": "{months} buwan / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 buwang libre} other{{count} buwang libre}}",
-    "endsOnDate": "Magtatapos sa {date}",
     "planEndedResubscribe": "Natapos ang iyong plano noong {date}.\nMag-subscribe ulit ngayon - agad kang sisingilin para sa bagong billing period.",
     "planCancelsResubscribe": "Makakansela ang iyong plano sa {date}.\nMag-subscribe ulit para mapanatili ang mga benepisyo - walang singil hanggang {date}.",
     "freemiumLimitsIntro": "Libre ang Omi, pero may mga limitasyon ang libreng bersyon na nakakaapekto sa iyong karanasan:",

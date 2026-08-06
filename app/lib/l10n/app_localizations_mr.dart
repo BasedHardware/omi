@@ -4598,7 +4598,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date रोजी संपेल';
+    return '$date ला समाप्त होईल';
   }
 
   @override

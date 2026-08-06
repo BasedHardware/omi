@@ -4598,7 +4598,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date tarihinde bitiyor';
+    return '$date tarihinde sona erer';
   }
 
   @override

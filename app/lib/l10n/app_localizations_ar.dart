@@ -9740,8 +9740,12 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count أشهر مجانية',
+      other: '$count شهر مجاني',
+      many: '$count شهرًا مجانيًا',
+      few: '$count أشهر مجانية',
+      two: 'شهران مجانيان',
       one: 'شهر مجاني',
+      zero: '$count شهر مجاني',
     );
     return '$_temp0';
   }

@@ -3200,7 +3200,6 @@
     "noDesktopAccess": "Δεν λειτουργεί σε υπολογιστή",
     "annualBillingSummary": "{months} μήνες / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 μήνας δωρεάν} other{{count} μήνες δωρεάν}}",
-    "endsOnDate": "Λήγει στις {date}",
     "planEndedResubscribe": "Το πρόγραμμά σου έληξε στις {date}.\nΚάνε ξανά συνδρομή τώρα – θα χρεωθείς άμεσα για νέα περίοδο χρέωσης.",
     "planCancelsResubscribe": "Το πρόγραμμά σου θα ακυρωθεί στις {date}.\nΚάνε ξανά συνδρομή για να κρατήσεις τα προνόμιά σου – καμία χρέωση μέχρι τις {date}.",
     "freemiumLimitsIntro": "Το Omi είναι δωρεάν, αλλά η δωρεάν έκδοση έχει περιορισμούς που επηρεάζουν την εμπειρία σου:",

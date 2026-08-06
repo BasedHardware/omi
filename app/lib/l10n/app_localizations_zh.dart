@@ -4503,7 +4503,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date 到期';
+    return '于$date结束';
   }
 
   @override

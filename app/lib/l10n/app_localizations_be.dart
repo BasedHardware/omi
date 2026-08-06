@@ -4601,7 +4601,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Заканчваецца $date';
+    return 'Скончыцца $date';
   }
 
   @override
@@ -9830,8 +9830,10 @@ class AppLocalizationsBe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count месяцы бясплатна',
-      one: '1 месяц бясплатна',
+      other: '$count месяца бясплатна',
+      many: '$count месяцаў бясплатна',
+      few: '$count месяцы бясплатна',
+      one: '$count месяц бясплатна',
     );
     return '$_temp0';
   }

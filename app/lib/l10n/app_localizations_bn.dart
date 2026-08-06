@@ -4594,7 +4594,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date তারিখে শেষ হবে';
+    return '$date তে শেষ হয়';
   }
 
   @override

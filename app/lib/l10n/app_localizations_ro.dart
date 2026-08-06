@@ -4612,7 +4612,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'Se încheie pe $date';
+    return 'Se termină pe $date';
   }
 
   @override
@@ -9846,8 +9846,9 @@ class AppLocalizationsRo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count luni gratuit',
-      one: '1 lună gratuit',
+      other: '$count de luni gratuit',
+      few: '$count luni gratuit',
+      one: '$count lună gratuit',
     );
     return '$_temp0';
   }

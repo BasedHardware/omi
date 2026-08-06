@@ -4596,7 +4596,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date کو ختم ہوگا';
+    return '$date کو ختم ہوتا ہے';
   }
 
   @override

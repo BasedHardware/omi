@@ -4607,7 +4607,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return '$date ರಂದು ಕೊನೆಗೊಳ್ಳುತ್ತದೆ';
+    return '$date ಮೇಲೆ ಕೊನೆಗೊಳ್ಳುತ್ತದೆ';
   }
 
   @override

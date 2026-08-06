@@ -4592,7 +4592,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String endsOnDate(String date) {
-    return 'پایان در $date';
+    return 'پایان می‌یابد در $date';
   }
 
   @override

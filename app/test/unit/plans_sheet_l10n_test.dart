@@ -45,6 +45,14 @@ const _planSheetKeys = [
 Map<String, dynamic> _arb(String locale) =>
     jsonDecode(File('lib/l10n/app_$locale.arb').readAsStringSync()) as Map<String, dynamic>;
 
+/// Top-level keys as they literally appear in the file, duplicates included.
+///
+/// `jsonDecode` silently keeps the last of a repeated key, so a second
+/// definition of an existing key is invisible to every other check here — it
+/// just quietly replaces a translated string across all 49 locales.
+List<String> _rawKeys(File arb) =>
+    RegExp(r'^    "([^"]+)":', multiLine: true).allMatches(arb.readAsStringSync()).map((m) => m.group(1)!).toList();
+
 List<Map<String, dynamic>> _tier({required int monthly, required int yearly}) => [
       {'interval': 'month', 'unit_amount': monthly},
       {'interval': 'year', 'unit_amount': yearly},
@@ -77,6 +85,20 @@ void main() {
           expect((values[key] as String).trim(), isNotEmpty, reason: '$locale has an empty $key');
         }
       });
+    }
+  });
+
+  test('no ARB defines the same key twice', () {
+    // Regression: this PR first shipped a second `endsOnDate` alongside the one
+    // that already existed, in all 49 files. Nothing failed — jsonDecode kept
+    // the new value, the old translation went dead, and the only reason it was
+    // caught was review.
+    for (final arb in Directory('lib/l10n').listSync().whereType<File>()) {
+      final name = arb.path.split('/').last;
+      if (!name.startsWith('app_') || !name.endsWith('.arb')) continue;
+      final keys = _rawKeys(arb);
+      final duplicates = keys.where((k) => keys.where((o) => o == k).length > 1).toSet();
+      expect(duplicates, isEmpty, reason: '$name defines these keys more than once: $duplicates');
     }
   });
 
@@ -116,9 +138,28 @@ void main() {
       expect(en.monthsFreeBadge(3), '3 Months Free');
     });
 
+    test('languages with few/many use the right noun form past 4', () async {
+      // =1/other alone renders the 2-4 form for every larger count. The badge
+      // is derived from live Stripe prices, so 5+ is reachable if a tier's
+      // annual discount deepens.
+      final ru = await AppLocalizations.delegate.load(const Locale('ru'));
+      expect(ru.monthsFreeBadge(1), contains('месяц '));
+      expect(ru.monthsFreeBadge(3), contains('месяца'));
+      expect(ru.monthsFreeBadge(7), contains('месяцев'));
+
+      final pl = await AppLocalizations.delegate.load(const Locale('pl'));
+      expect(pl.monthsFreeBadge(3), contains('miesiące'));
+      expect(pl.monthsFreeBadge(7), contains('miesięcy'));
+
+      final hr = await AppLocalizations.delegate.load(const Locale('hr'));
+      expect(hr.monthsFreeBadge(3), contains('mjeseca'));
+      expect(hr.monthsFreeBadge(7), contains('mjeseci'));
+    });
+
     test('interpolated strings substitute their argument', () async {
       final en = await AppLocalizations.delegate.load(const Locale('en'));
-      expect(en.endsOnDate('Aug 6, 2026'), contains('Aug 6, 2026'));
+      // Reuses the pre-existing endsOnDate rather than declaring a second one.
+      expect(en.endsOnDate('Aug 6, 2026'), 'Ends Aug 6, 2026');
       expect(en.annualBillingSummary(12, '\$161.91'), '12 months / \$161.91');
       expect(en.planRenewsOn('Sep 1, 2026'), contains('Sep 1, 2026'));
     });
