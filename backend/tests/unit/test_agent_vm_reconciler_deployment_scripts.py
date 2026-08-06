@@ -151,6 +151,7 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         in script
     )
     assert 'subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"' in script
+    assert 'network_permissions="compute.networks.use"' in script
     assert "Agent VM reconciler instance scope" in script
     assert "Agent VM reconciler disk scope" in script
     assert "compute.googleapis.com/Disk" in script
@@ -159,6 +160,8 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert "compute networks subnets add-iam-policy-binding default" in script
     assert '--region="$region"' in script
     assert '--role="$subnetwork_role"' in script
+    assert "compute networks add-iam-policy-binding default" in script
+    assert '--role="$network_role"' in script
     assert "roles/storage.objectViewer" in script
     assert "roles/iam.serviceAccountUser" in script
     assert 'AGENT_VM_RECONCILER_DEPLOYER:-}' in script
@@ -239,6 +242,11 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "compute networks subnets add-iam-policy-binding default --project=based-hardware-dev --region=us-central1 "
         "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
         "--role=projects/based-hardware-dev/roles/omiAgentVmReconcilerSubnetwork"
+    ) in commands
+    assert (
+        "compute networks add-iam-policy-binding default --project=based-hardware-dev "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=projects/based-hardware-dev/roles/omiAgentVmReconcilerNetwork"
     ) in commands
     assert (
         "projects add-iam-policy-binding based-hardware-dev "

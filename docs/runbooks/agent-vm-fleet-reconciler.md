@@ -149,8 +149,10 @@ identity and Application Default Credentials; it does not mount the desktop
 backend's Firebase key.
 Replacement additionally preserves the default Agent VM subnet and its
 external NAT, so the installer creates a two-permission subnet role and binds
-it directly to that exact regional subnet; it does not grant project-wide
-network access.
+it directly to that exact regional subnet. Because the replacement request
+also names the VPC network, the installer creates a separate one-permission
+network role bound directly to the default network; it does not grant
+project-wide network access.
 Validate the installed trigger with
 `backend/scripts/validate_agent_vm_reconciler_scheduler.py` before the first
 live execution.
