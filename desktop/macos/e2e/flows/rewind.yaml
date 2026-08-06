@@ -17,6 +17,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindPalette.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindVideoFrameCursor.swift
 preconditions:
   - auth_ready
 
