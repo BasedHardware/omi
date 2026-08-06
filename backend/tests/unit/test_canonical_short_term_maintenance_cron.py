@@ -143,7 +143,7 @@ def test_enabled_cohort_graph_backfill_uses_the_fenced_bounded_runner(monkeypatc
     assert graph_calls[0]["scan_limit"] == cron.DEFAULT_GRAPH_BACKFILL_SCAN_SIZE
 
 
-def test_graph_backfill_is_withheld_until_lifecycle_reports_readiness(monkeypatch):
+def test_graph_backfill_uses_per_item_fences_while_lifecycle_staging_is_incomplete(monkeypatch):
     _enable_for(monkeypatch, CANONICAL_A)
     monkeypatch.setenv(cron.MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED_ENV, "true")
     monkeypatch.setattr(
@@ -166,7 +166,7 @@ def test_graph_backfill_is_withheld_until_lifecycle_reports_readiness(monkeypatc
 
     summary = cron.run_canonical_short_term_maintenance_for_cohort(db_client=object(), now=NOW, run_id="cron-not-ready")
 
-    assert graph_calls == []
+    assert len(graph_calls) == 1
     assert summary.graph_enriched_total == 0
 
 

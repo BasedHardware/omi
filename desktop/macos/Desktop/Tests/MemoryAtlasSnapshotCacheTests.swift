@@ -68,7 +68,7 @@ final class MemoryAtlasSnapshotCacheTests: XCTestCase {
     let refreshed = cache.snapshot(for: second, userName: "David")
 
     XCTAssertEqual(cache.computeCount, 2)
-    XCTAssertEqual(refreshed.nodes.map(\.id), ["memory-b"])
+    XCTAssertEqual(refreshed.nodes.map(\.id), ["atlas-owner", "memory-b"])
   }
 
   private func makeGraph(memoryIDsByNode: [String: [String]]) -> KnowledgeGraphResponse {

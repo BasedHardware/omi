@@ -20,6 +20,59 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(Double(anchor.y), 0.5, accuracy: 1e-9)
   }
 
+  func testCanonicalSelfNodeWinsOverAWellConnectedPersonAndAbsorbsSelfAliases() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "user", label: "The User", nodeType: .concept),
+        KnowledgeGraphNode(id: "self-alias", label: "the user", nodeType: .person),
+        KnowledgeGraphNode(id: "chi", label: "Chi", nodeType: .person),
+        KnowledgeGraphNode(id: "project", label: "Omi", nodeType: .thing),
+      ],
+      edges: [
+        KnowledgeGraphEdge(id: "self-project", sourceId: "user", targetId: "project", label: "uses"),
+        KnowledgeGraphEdge(id: "alias-project", sourceId: "self-alias", targetId: "project", label: "uses"),
+        KnowledgeGraphEdge(id: "chi-project", sourceId: "chi", targetId: "project", label: "works_on"),
+        KnowledgeGraphEdge(id: "chi-1", sourceId: "chi", targetId: "project", label: "mentions"),
+      ])
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(snapshot.anchorNodeID, "user")
+    XCTAssertEqual(snapshot.nodeByID["user"]?.node.label, "David")
+    XCTAssertNil(snapshot.nodeByID["self-alias"], "There must be one self node, not a separate 'the user' group")
+    XCTAssertEqual(snapshot.nodeByID["user"]?.normalizedPosition, MemoryAtlasCluster.starCenter)
+  }
+
+  func testAccountNameOnNonPersonCannotReplaceTheAccountHolder() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "user", label: "The User", nodeType: .concept),
+        KnowledgeGraphNode(id: "named-memory", label: "David", nodeType: .concept),
+      ],
+      edges: []
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(snapshot.anchorNodeID, "user")
+    XCTAssertEqual(snapshot.nodeByID["user"]?.node.label, "David")
+  }
+
+  func testSyntheticAuthenticatedOwnerCentersCatalogOnlyAtlasWithoutEdges() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [],
+      edges: [],
+      catalogNodes: [KnowledgeGraphNode(id: "memory:one", label: "A memory", nodeType: .concept)]
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(snapshot.anchorNodeID, "atlas-owner")
+    XCTAssertEqual(snapshot.nodeByID["atlas-owner"]?.node.label, "David")
+    XCTAssertEqual(snapshot.nodeByID["atlas-owner"]?.normalizedPosition, MemoryAtlasCluster.starCenter)
+    XCTAssertTrue(snapshot.edges.isEmpty)
+  }
+
   func testCatalogNodesEnterAtlasAsNeutralUnconnectedMarks() throws {
     let assertionNodes = [
       KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
@@ -97,7 +150,8 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let first = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
     let second = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
 
-    XCTAssertEqual(first.nodes.count, catalog.count)
+    XCTAssertEqual(first.nodes.count, catalog.count + 1, "The authenticated owner remains the visual center")
+    XCTAssertEqual(first.anchorNodeID, "atlas-owner")
     XCTAssertTrue(first.nodes.allSatisfy { $0.cluster == nil && $0.degree == 0 })
     XCTAssertTrue(first.edges.isEmpty)
     XCTAssertTrue(first.activeClusters.isEmpty)
@@ -183,9 +237,10 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     // Before the fix this atlas occupied roughly the top third of the canvas.
     XCTAssertGreaterThan(verticalSpread, 0.5)
     XCTAssertGreaterThan(horizontalSpread, 0.25)
-    // Still inside the clamped drawing area.
-    XCTAssertGreaterThanOrEqual(ys.min() ?? 0, 0.08)
-    XCTAssertLessThanOrEqual(ys.max() ?? 1, 0.92)
+    // A high-density graph uses the expanded circular canvas instead of the
+    // former inset square, while remaining in normalized bounds.
+    XCTAssertGreaterThanOrEqual(ys.min() ?? 0, 0)
+    XCTAssertLessThanOrEqual(ys.max() ?? 1, 1)
   }
 
   func testOnlyTypesWithEntitiesGetAConstellation() {
@@ -425,7 +480,7 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(leafPositions.count, 5)
   }
 
-  func testDegreeZeroNodeIsNotPlacedInATypeSpiral() throws {
+  func testDegreeZeroNodeCanFillThePeripheralFieldWithoutObscuringTheOwner() throws {
     let graph = KnowledgeGraphResponse(
       nodes: [
         KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
@@ -441,16 +496,33 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let orphan = try XCTUnwrap(snapshot.nodeByID["orphan"])
 
     XCTAssertEqual(orphan.degree, 0)
-    // An entity with no relationships was positioned by nothing, so it belongs
-    // outside the region the relaxed map occupies rather than among entities
-    // whose positions do mean something.
-    XCTAssertFalse(
-      MemoryAtlasLayoutEngine.layoutArea.contains(orphan.normalizedPosition),
-      "An unconnected entity must not sit inside the structure")
-    // Still inside the existing clamp bounds.
-    XCTAssertGreaterThanOrEqual(orphan.normalizedPosition.x, 0.04)
-    XCTAssertLessThanOrEqual(orphan.normalizedPosition.x, 0.96)
-    XCTAssertLessThanOrEqual(orphan.normalizedPosition.y, 0.92)
+    let david = try XCTUnwrap(snapshot.nodeByID["david"])
+    XCTAssertGreaterThan(
+      hypot(
+        orphan.normalizedPosition.x - david.normalizedPosition.x,
+        orphan.normalizedPosition.y - david.normalizedPosition.y),
+      0.05,
+      "A neutral mark must not obscure the account holder")
+    // Isolates fill a circular peripheral field, not a rectangular rim.
+    XCTAssertLessThanOrEqual(
+      hypot(orphan.normalizedPosition.x - 0.5, orphan.normalizedPosition.y - 0.5),
+      0.44 + 0.000_001)
+  }
+
+  func testDisconnectedIslandSeatsDoNotStack() {
+    let groups = (0..<18).map { ["island-\($0)"] }
+    let positions = MemoryAtlasForceLayout.haloPositions(groups: groups, area: CGRect(x: 0, y: 0, width: 1, height: 1))
+    let seats = groups.compactMap { positions[$0[0]] }
+
+    XCTAssertEqual(seats.count, groups.count)
+    for index in seats.indices {
+      for otherIndex in seats.indices where otherIndex > index {
+        XCTAssertGreaterThan(
+          hypot(seats[index].x - seats[otherIndex].x, seats[index].y - seats[otherIndex].y),
+          0.049,
+          "Disconnected island seats must not overlap")
+      }
+    }
   }
 
   func testLeafAndIsolatePlacementIsDeterministicAcrossRepeatedSnapshots() {

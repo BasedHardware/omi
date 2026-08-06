@@ -328,8 +328,10 @@ class MemoryGraphViewModel: ObservableObject {
         return
       }
       let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ownerName = givenName.isEmpty ? displayName : givenName
       let projection = await Task.detached(priority: .userInitiated) {
-        MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
+        MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
       }.value
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return
@@ -384,8 +386,10 @@ class MemoryGraphViewModel: ObservableObject {
 
         if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
           let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let ownerName = givenName.isEmpty ? displayName : givenName
           let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return false

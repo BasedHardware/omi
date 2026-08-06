@@ -717,16 +717,19 @@ enum MemoryAtlasRenderPlanner {
         }
         .prefix(selectedEdgeLimit)
     )
-
+    let labelableNodes = visibleNodes.filter {
+      MemoryAtlasCatalogLayout.allowsAutomaticLabel(
+        isCatalog: $0.isCatalog, id: $0.id, selectedNodeID: selectedNodeID, matchingNodeIDs: matchingNodeIDs)
+    }
     let labelCandidates: [MemoryAtlasNodePlacement]
     if detailLevel == .inspect {
-      labelCandidates = visibleNodes
+      labelCandidates = labelableNodes
     } else if selectedNodeID != nil {
-      labelCandidates = visibleNodes.filter { relatedNodeIDs.contains($0.id) }
+      labelCandidates = labelableNodes.filter { relatedNodeIDs.contains($0.id) }
     } else if let matchingNodeIDs {
-      labelCandidates = visibleNodes.filter { matchingNodeIDs.contains($0.id) }
+      labelCandidates = labelableNodes.filter { matchingNodeIDs.contains($0.id) }
     } else {
-      labelCandidates = visibleNodes.filter { placement in
+      labelCandidates = labelableNodes.filter { placement in
         placement.id == snapshot.anchorNodeID || placement.clusterRank < labelsPerCluster
       }
     }
@@ -752,7 +755,7 @@ enum MemoryAtlasRenderPlanner {
       // are not gated by selection or by the bounded SwiftUI overlay.
       labelNodeIDs: usesCanvasLabels ? [] : Set(labels.placements.map(\.id)),
       labelAboveNodeIDs: usesCanvasLabels ? [] : labels.aboveNodeIDs,
-      canvasLabelNodes: usesCanvasLabels ? visibleNodes : [],
+      canvasLabelNodes: usesCanvasLabels ? labelableNodes : [],
       usesCanvasLabels: usesCanvasLabels,
       isFullyLabelled: isFullyLabelled,
       relatedNodeIDs: relatedNodeIDs,
@@ -948,7 +951,7 @@ enum MemoryAtlasLayoutEngine {
   ) -> MemoryAtlasSnapshot {
     // Graph responses are external data. Coalesce duplicate identifiers at the
     // boundary so a malformed server response cannot trap while building a UI.
-    let nodes = uniqueNodes(from: graph.atlasNodes)
+    var nodes = uniqueNodes(from: graph.atlasNodes)
     let assertionNodeIDs = Set(nodes.map(\.id))
     // A canonical memory without a verified relationship is still a real
     // memory. It belongs in the atlas as a neutral, explicitly unconnected
@@ -960,65 +963,44 @@ enum MemoryAtlasLayoutEngine {
     let edges = uniqueEdges(from: graph.edges).filter {
       assertionNodeIDs.contains($0.sourceId) && assertionNodeIDs.contains($0.targetId)
     }
-    guard !nodes.isEmpty || !catalogNodes.isEmpty else {
-      return MemoryAtlasSnapshot(nodes: [], edges: [], anchorNodeID: nil, clusterCenters: [:])
-    }
-
     var degree: [String: Int] = [:]
     for edge in edges {
       degree[edge.sourceId, default: 0] += 1
       degree[edge.targetId, default: 0] += 1
     }
 
-    let normalizedUserName = userName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-
-    // Entities that stand in for the account holder rather than naming them.
-    let selfSynonyms: Set<String> = ["user", "me", "myself", "i", "the user"]
-
-    let rawAnchor =
-      nodes.first {
-        $0.nodeType == .person && normalizedUserName != nil && $0.label.lowercased() == normalizedUserName
-      } ?? nodes.filter { $0.nodeType == .person }.max {
-        (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
-      }
-      ?? nodes.max {
-        (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
-      }
-
-    // The center of your own map should say your name. The extractor writes a
-    // generic "The User" whenever no memory happens to name you, and collapsing
-    // the synonyms onto that node still left the anchor labelled "The User" —
-    // the one dot the user can identify on sight was the one not identified.
-    // The generic label survives as an alias so search still finds it.
-    let anchor = rawAnchor.map { node -> KnowledgeGraphNode in
-      guard let userName, !userName.isEmpty, selfSynonyms.contains(node.label.lowercased())
-      else { return node }
+    let owner = MemoryAtlasOwnerIdentity.resolve(nodes: nodes, userName: userName)
+    let anchor: KnowledgeGraphNode? = owner.anchor.map { rawAnchor in
+      guard let userName, !userName.isEmpty, MemoryAtlasOwnerIdentity.isSelfNode(rawAnchor)
+      else { return rawAnchor }
       return KnowledgeGraphNode(
-        id: node.id,
+        id: rawAnchor.id,
         label: userName,
-        nodeType: node.nodeType,
-        aliases: node.aliases + [node.label],
-        memoryIds: node.memoryIds,
-        createdAt: node.createdAt,
-        updatedAt: node.updatedAt
+        nodeType: rawAnchor.nodeType,
+        aliases: rawAnchor.aliases + [rawAnchor.label],
+        memoryIds: rawAnchor.memoryIds,
+        createdAt: rawAnchor.createdAt,
+        updatedAt: rawAnchor.updatedAt
       )
     }
+    if owner.isSynthetic, let anchor { nodes.append(anchor) }
 
-    // Collapse every entity that stands in for the account holder — a generic
-    // "User"/"Me" node, or a second person node sharing the user's name — into
-    // the single anchor. Two ego nodes ("User" floating apart from "David") read
-    // as a data bug; the atlas should have exactly one unmistakable "you" at the
-    // center. Their relationships are rerouted onto the anchor below.
+    guard !nodes.isEmpty || !catalogNodes.isEmpty else {
+      return MemoryAtlasSnapshot(nodes: [], edges: [], anchorNodeID: nil, clusterCenters: [:])
+    }
+
+    // Merge generic account-holder aliases into one identifiable center.
     let collapsedIDs: Set<String> = {
       guard let anchor else { return [] }
       return Set(
         nodes.filter { node in
           guard node.id != anchor.id else { return false }
           let label = node.label.lowercased()
+          let normalizedUserName = userName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
           if let normalizedUserName, !normalizedUserName.isEmpty, label == normalizedUserName {
             return true
           }
-          return node.nodeType == .person && selfSynonyms.contains(label)
+          return MemoryAtlasOwnerIdentity.isSelfNode(node)
         }.map(\.id)
       )
     }()
@@ -1163,13 +1145,14 @@ enum MemoryAtlasLayoutEngine {
         )
       }
     }
-
-    // Catalog records deliberately receive no cluster and no edge. The outer
-    // halo is an honest visual distinction from assertion-backed constellations
-    // while keeping every canonical memory reachable through zoom, search, and
-    // selection. Ordering by stable id keeps a refresh from shuffling the map.
-    let catalogPositions = MemoryAtlasForceLayout.haloPositions(
-      groups: catalogNodes.sorted { $0.id < $1.id }.map { [$0.id] }, area: Self.layoutArea)
+    let assertionPositions = Dictionary(lastWriteWins: placements.map { ($0.id, $0.normalizedPosition) })
+    let catalogPositions = MemoryAtlasCatalogLayout.positions(
+      catalog: catalogNodes,
+      assertions: nodes.filter { $0.id != anchor?.id && !collapsedIDs.contains($0.id) },
+      communities: layout.communities,
+      assertionPositions: assertionPositions,
+      ownerID: anchor?.id,
+      area: Self.layoutArea)
     for (index, node) in catalogNodes.sorted(by: { $0.id < $1.id }).enumerated() {
       placements.append(
         MemoryAtlasNodePlacement(
@@ -1182,7 +1165,6 @@ enum MemoryAtlasLayoutEngine {
         )
       )
     }
-
     let positions = Dictionary(lastWriteWins: placements.map { ($0.id, $0.normalizedPosition) })
     let clusters = Dictionary(
       lastWriteWins: placements.compactMap { placement in
@@ -1370,12 +1352,11 @@ enum MemoryAtlasLayoutEngine {
   /// The region the relaxed map may occupy. Isolates are parked in the margin
   /// outside it, so it stops short of the canvas edge.
   ///
-  /// Square, because the canvas it lands on is projected square. An earlier
-  /// wide box was the map's own shape rather than the graph's: relaxation found
-  /// a roughly round arrangement and the fit then stretched it to fill a
-  /// desktop window, so the same account looked like a long smear on a wide
-  /// display and a tall one when the window was dragged narrow.
-  static let layoutArea = CGRect(x: 0.14, y: 0.14, width: 0.72, height: 0.72)
+  /// Square, because the canvas it lands on is projected square. The map uses
+  /// almost the available height: a smaller square created a visible box of
+  /// empty space around dense accounts even though the underlying layout was
+  /// circular. A wide box would stretch that circle into a desktop smear.
+  static let layoutArea = CGRect(x: 0.06, y: 0.06, width: 0.88, height: 0.88)
 
   /// How many points one unit of normalized map space is worth on screen.
   ///
@@ -2214,9 +2195,11 @@ private struct CanonicalMemoryAtlasSurface: View {
       atlasSnapshot = projection.snapshot
     } else {
       let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ownerName = givenName.isEmpty ? displayName : givenName
       atlasSnapshot = MemoryAtlasSnapshotCache.shared.snapshot(
         for: graph,
-        userName: givenName.isEmpty ? nil : givenName
+        userName: ownerName.isEmpty ? nil : ownerName
       )
     }
     snapshot = atlasSnapshot
@@ -3035,6 +3018,32 @@ private struct CanonicalMemoryAtlasSurface: View {
     let replayCursor = timeCursor < 0.9995 ? timeCursor : nil
     let paintBounds = canvasPaintBounds(for: size)
 
+    var catalogPrimaryPath = Path()
+    var catalogMutedPath = Path()
+    for placement in plan.visibleNodes where placement.isCatalog && placement.id != selectedNodeID {
+      let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
+      let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
+      let radius = nodeRadius(for: placement)
+      let center = point(for: placement.normalizedPosition, in: size)
+      guard
+        paintBounds.intersects(
+          CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+        )
+      else { continue }
+      let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+      if related && matches {
+        catalogPrimaryPath.addEllipse(in: rect)
+      } else {
+        catalogMutedPath.addEllipse(in: rect)
+      }
+    }
+    if !catalogPrimaryPath.isEmpty {
+      context.fill(catalogPrimaryPath, with: .color(OmiColors.textTertiary.opacity(0.28)))
+    }
+    if !catalogMutedPath.isEmpty {
+      context.fill(catalogMutedPath, with: .color(OmiColors.textTertiary.opacity(0.055)))
+    }
+
     for cluster in snapshot.activeClusters {
       var primaryPath = Path()
       var mutedPath = Path()
@@ -3093,35 +3102,6 @@ private struct CanonicalMemoryAtlasSurface: View {
       if !mutedPath.isEmpty {
         context.fill(mutedPath, with: .color(cluster.color.opacity(0.1)))
       }
-    }
-
-    // Catalog marks are deliberately neutral. They are durable memories, not
-    // concepts or members of a relationship cluster, and their outer placement
-    // is the only spatial statement the atlas makes about them.
-    var catalogPrimaryPath = Path()
-    var catalogMutedPath = Path()
-    for placement in plan.visibleNodes
-    where placement.cluster == nil && placement.id != snapshot.anchorNodeID && placement.id != selectedNodeID {
-      let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
-      let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
-      let radius = nodeRadius(for: placement)
-      let center = point(for: placement.normalizedPosition, in: size)
-      guard
-        paintBounds.intersects(
-          CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-      else { continue }
-      let rect = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-      if related && matches {
-        catalogPrimaryPath.addEllipse(in: rect)
-      } else {
-        catalogMutedPath.addEllipse(in: rect)
-      }
-    }
-    if !catalogPrimaryPath.isEmpty {
-      context.fill(catalogPrimaryPath, with: .color(OmiColors.textTertiary.opacity(0.44)))
-    }
-    if !catalogMutedPath.isEmpty {
-      context.fill(catalogMutedPath, with: .color(OmiColors.textTertiary.opacity(0.09)))
     }
 
     if let anchorNodeID = snapshot.anchorNodeID,
@@ -3187,15 +3167,20 @@ private struct CanonicalMemoryAtlasSurface: View {
       guard visibleBounds.contains(center) else { continue }
 
       let color = placement.cluster?.color ?? OmiColors.textPrimary
+      let rawLabel = placement.node.label.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayLabel =
+        rawLabel.count > 80
+        ? String(rawLabel.prefix(79)).trimmingCharacters(in: .whitespacesAndNewlines) + "…"
+        : rawLabel
       let estimatedLabelWidth = min(
         152.0,
-        max(44.0, CGFloat(placement.node.label.count) * 6.4 + 18)
+        max(44.0, CGFloat(displayLabel.count) * 6.4 + 18)
       )
       let labelCenterX = min(
         max(center.x, estimatedLabelWidth / 2),
         size.width - estimatedLabelWidth / 2
       )
-      let text = Text(placement.node.label)
+      let text = Text(displayLabel)
         .font(.system(size: 11, weight: placement.id == snapshot.anchorNodeID ? .semibold : .medium))
         .foregroundStyle(OmiColors.textPrimary)
       let labelOffset: CGFloat =
