@@ -173,6 +173,27 @@ def decide_existing_conversation_action(
     return ConversationLifecycleAction.continue_current
 
 
+def normalize_listen_source(value: Optional[str]) -> str:
+    """Collapse empty/missing listen sources onto the default pendant source."""
+    if not isinstance(value, str) or not value.strip():
+        return 'omi'
+    return value.strip().lower()
+
+
+def should_attach_to_existing_in_progress(
+    *,
+    existing_source: Optional[str],
+    request_source: Optional[str],
+) -> bool:
+    """Resume only when the live pointer and this socket share a source (#5388).
+
+    Device + web (or any other cross-source pair) must each own a conversation.
+    Attaching the second socket to the first pointer silently merges two audio
+    streams into one session and loses the web recording on stop.
+    """
+    return normalize_listen_source(existing_source) == normalize_listen_source(request_source)
+
+
 def decide_lifecycle_action(
     *,
     conversation_exists: bool,

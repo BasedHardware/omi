@@ -14,10 +14,12 @@ from utils.transcribe_decisions import (
     is_user_self_match,
     normalize_codec_frame,
     normalize_language,
+    normalize_listen_source,
     person_id_for_client,
     recording_session_id_for_lifecycle_event,
     select_recording_session_id,
     select_translation_language,
+    should_attach_to_existing_in_progress,
     should_enable_speaker_identification,
     should_flush_final_multi_channel_mix,
     should_force_single_language,
@@ -214,6 +216,16 @@ def test_conversation_lifecycle_actions():
         )
         == ConversationLifecycleAction.process_and_create_new
     )
+
+
+def test_cross_source_in_progress_must_not_attach():
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source='omi') is True
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source=None) is True
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source='web') is False
+    assert should_attach_to_existing_in_progress(existing_source='web', request_source='desktop') is False
+    assert should_attach_to_existing_in_progress(existing_source=None, request_source='') is True
+    assert normalize_listen_source('Web') == 'web'
+    assert normalize_listen_source(None) == 'omi'
 
 
 def test_recording_session_identity_retries_and_rollovers_are_distinct():

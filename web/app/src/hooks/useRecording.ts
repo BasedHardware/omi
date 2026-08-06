@@ -7,7 +7,7 @@ import {
   isAudioCaptureSupported,
 } from '@/lib/audioCapture';
 import { createTranscriptionSocket } from '@/lib/transcriptionSocket';
-import { processInProgressConversation, getTranscriptionPreferences } from '@/lib/api';
+import { processInProgressConversation, finalizeConversationById, getTranscriptionPreferences } from '@/lib/api';
 
 /**
  * Hook to manage recording lifecycle.
@@ -47,6 +47,9 @@ export function useRecording() {
 
   // Local ref for preventing state updates after unmount (this one is local since it's component-specific)
   const isMountedRef = useRef<boolean>(true);
+  // Web owns this UUID so prepare() never attaches to a live pendant conversation (#5388).
+  const clientConversationIdRef = useRef<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
 
   // Start recording
   const startRecording = useCallback(async (overrideMode?: AudioMode) => {
@@ -80,8 +83,12 @@ export function useRecording() {
       }
 
       // Create transcription socket
+      const clientConversationId = crypto.randomUUID();
+      clientConversationIdRef.current = clientConversationId;
+      conversationIdRef.current = clientConversationId;
       const socket = createTranscriptionSocket({
         language,
+        clientConversationId,
         onSegment: (segment: TranscriptSegment) => {
           if (!isMountedRef.current) return;
           setSegments((prev) => {
@@ -94,6 +101,9 @@ export function useRecording() {
             }
             return [...prev, segment];
           });
+        },
+        onConversationSession: (conversationId) => {
+          conversationIdRef.current = conversationId;
         },
         onError: (err) => {
           console.error('Transcription socket error:', err);
@@ -211,8 +221,14 @@ export function useRecording() {
     setSystemLevel(0);
     setState('idle');
 
-    // Process the conversation in the background - don't block the user
-    processInProgressConversation()
+    // Process this web conversation by ID — never the shared Redis pointer (#5388).
+    const conversationId = conversationIdRef.current || clientConversationIdRef.current;
+    conversationIdRef.current = null;
+    clientConversationIdRef.current = null;
+    const finalize = conversationId
+      ? finalizeConversationById(conversationId)
+      : processInProgressConversation();
+    finalize
       .then(() => {
         // Conversation processed - could show a toast notification here
       })
