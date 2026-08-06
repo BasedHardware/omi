@@ -54,6 +54,19 @@ struct QueryAnswerThread: View {
       )
       .frame(maxWidth: .infinity, minHeight: 240, maxHeight: 460)
 
+      // **A turn that failed must say so here.** The transcript renders nothing for a turn that
+      // never produced a message, so without this the panel swaps to the answer mode, shows the
+      // question, and then sits silent forever — which is indistinguishable from a slow answer. It
+      // is the shared `ChatErrorCard` and the shared recovery, not a second error vocabulary.
+      if let error = chatProvider.currentError {
+        ChatErrorCard(
+          state: error,
+          onRecover: { Task { await chatProvider.recoverFromError() } },
+          onDismiss: { chatProvider.dismissCurrentError() }
+        )
+        .accessibilityIdentifier("query-shell-answer-error")
+      }
+
       if !sources.isEmpty {
         QueryCitationStrip(
           sources: sources,

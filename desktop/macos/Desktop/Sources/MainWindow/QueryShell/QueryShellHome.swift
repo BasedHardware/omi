@@ -64,6 +64,7 @@ struct QueryShellHome: View {
           text: $request.text,
           focus: $isQueryFocused,
           isWorking: chatProvider.isSending,
+          mode: mode,
           onSearch: search,
           onAsk: ask
         )

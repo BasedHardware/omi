@@ -105,12 +105,16 @@ struct QueryResultsPanel<Content: View>: View {
       .foregroundStyle(Ink.primary)
       .padding(.horizontal, 12)
       .frame(height: QueryShellLayout.chipHeight + 2)
-      .background(Capsule(style: .continuous).fill(Ink.rowFill))
-      .contentShape(Capsule(style: .continuous))
+      .glassChip(isActive: request.range != .all)
     }
     .menuStyle(.borderlessButton)
     .menuIndicator(.hidden)
     .fixedSize()
+    // **The one tint override on this surface.** `DesktopHomeView` sets `.tint(Ink.accent)` for the
+    // whole shell, and a `Menu` label inherits the tint rather than the `foregroundStyle` set on its
+    // own content — so without this the `Filter` control renders in the accent, which on a surface
+    // that spends its single accent on `⌘⏎ Ask` reads as two primary actions.
+    .tint(Ink.primary)
     .help("Narrow the panel to a time window")
     .accessibilityIdentifier("query-shell-filter")
   }
@@ -128,8 +132,7 @@ struct QueryResultsPanel<Content: View>: View {
       .foregroundStyle(Ink.primary)
       .padding(.horizontal, 12)
       .frame(height: QueryShellLayout.chipHeight + 2)
-      .background(Capsule(style: .continuous).fill(Ink.rowFill))
-      .contentShape(Capsule(style: .continuous))
+      .glassChip(isActive: false)
     }
     .buttonStyle(.plain)
     .help("Back to what you captured")
