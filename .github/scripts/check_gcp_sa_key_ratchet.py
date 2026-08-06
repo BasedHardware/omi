@@ -8,7 +8,8 @@ long-lived key materialization or chart/workflow bindings.
 
 Baselines are a JSON object of ``relative/path:kind -> count``. Counts may fall;
 they may not rise. New ``path:kind`` keys fail until explicitly baselined — and
-baselines only shrink after real removals (``--write-baseline`` never raises).
+baselines only shrink after real removals (``--write-baseline`` never raises;
+an existing empty baseline stays shrink-only and is not treated as bootstrap).
 """
 
 from __future__ import annotations
@@ -243,28 +244,27 @@ def main() -> int:
         return 0
 
     if args.write_baseline:
+        # Missing baseline file → bootstrap. Existing file (even `{}`) → shrink-only.
+        # Do not treat an empty existing baseline as bootstrap: that would let
+        # --write-baseline re-grow path:kind entries after a completed cutover.
         if baseline_path.exists():
             previous = load_baseline(baseline_path)
-            raised = []
-            for key, count in counts.items():
-                if count > previous.get(key, 0) and key in previous:
-                    raised.append(f"{key}: {previous[key]} -> {count}")
-            # Allow brand-new keys only when bootstrapping an empty/missing file;
-            # once a baseline exists, --write-baseline may only lower or delete.
-            if previous:
-                new_keys = sorted(set(counts) - set(previous))
-                if new_keys:
-                    print("FAIL: --write-baseline refuses to add new path:kind keys:")
-                    print(*new_keys, sep="\n")
-                    return 1
-                if raised:
-                    print("FAIL: --write-baseline refuses to raise counts:")
-                    print(*raised, sep="\n")
-                    return 1
-                # Keep only keys that still exist; lower counts to match tree.
-                rewritten = {key: counts[key] for key in previous if key in counts}
-            else:
-                rewritten = counts
+            raised = [
+                f"{key}: {previous[key]} -> {count}"
+                for key, count in counts.items()
+                if key in previous and count > previous[key]
+            ]
+            new_keys = sorted(set(counts) - set(previous))
+            if new_keys:
+                print("FAIL: --write-baseline refuses to add new path:kind keys:")
+                print(*new_keys, sep="\n")
+                return 1
+            if raised:
+                print("FAIL: --write-baseline refuses to raise counts:")
+                print(*raised, sep="\n")
+                return 1
+            # Keep only keys that still exist; lower counts to match tree.
+            rewritten = {key: counts[key] for key in previous if key in counts}
         else:
             rewritten = counts
         baseline_path.parent.mkdir(parents=True, exist_ok=True)

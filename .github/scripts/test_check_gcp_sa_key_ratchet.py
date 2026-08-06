@@ -160,6 +160,51 @@ class GcpSaKeyRatchetTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
             self.assertIn("refuses to raise", completed.stdout)
 
+    def test_write_baseline_refuses_new_keys_on_existing_empty_baseline(self) -> None:
+        """Existing `{}` baseline must stay shrink-only (not re-bootstrap)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            relative = "backend/charts/new-service/values.yaml"
+            self._baseline(root, {})
+            self._write(
+                root,
+                relative,
+                "env:\n  - name: SERVICE_ACCOUNT_JSON\n    value: leaked\n",
+            )
+            completed = subprocess.run(
+                [sys.executable, str(CHECKER), "--root", str(root), "--write-baseline"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
+            self.assertIn("refuses to add new path:kind keys", completed.stdout)
+            self.assertIn(f"{relative}:service-account-json-env", completed.stdout)
+            payload = json.loads(
+                (root / ".github/scripts/gcp_sa_key_ratchet_baseline.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(payload["entries"], {})
+
+    def test_write_baseline_bootstraps_only_when_baseline_file_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            relative = "backend/main.py"
+            self._write(root, relative, "SERVICE_ACCOUNT_JSON\n")
+            completed = subprocess.run(
+                [sys.executable, str(CHECKER), "--root", str(root), "--write-baseline"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            payload = json.loads(
+                (root / ".github/scripts/gcp_sa_key_ratchet_baseline.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                payload["entries"],
+                {f"{relative}:service-account-json-env": 1},
+            )
+
     def test_repo_baseline_matches_current_tree(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(CHECKER), "--root", str(REPO_ROOT)],
