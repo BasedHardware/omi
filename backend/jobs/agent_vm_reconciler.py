@@ -37,6 +37,7 @@ from services.agent_vm_lifecycle import (
     active_session_count,
     claim_reconciler_run_lease,
     claim_vm_lease,
+    clear_missing_vm_if_current,
     clear_vm_reconcile_lease_fields,
     drift_reasons,
     release_reconciler_run_lease,
@@ -63,6 +64,8 @@ ROLLOUT_STABLE_RUNS = 3
 OWNER_DISCOVERY_LIMIT = 10_000
 OWNER_FALLBACK_SCAN_LIMIT = 1_000
 FAILED_JOB_STATES = {"retry", "quarantined", "missing", "stale", "recreate_required"}
+DEFAULT_MISSING_CLEANUP_GRACE_SECONDS = 24 * 60 * 60
+MIN_MISSING_CLEANUP_GRACE_SECONDS = 60
 _IMMUTABLE_BOOT_IMAGE = re.compile(r"^projects/[^/]+/global/images/[^/]+$")
 
 
@@ -267,16 +270,38 @@ def _select_rollout_owners(
 def _select_reconcile_owners(
     owners: Sequence[tuple[str, dict[str, Any]]], release_id: str, target_percent: int
 ) -> list[tuple[str, dict[str, Any]]]:
-    """Add user-demanded repairs to the rollout cohort without duplicating owners."""
+    """Add demanded or terminal-cleanup work to the rollout cohort without duplicates."""
     selected = _select_rollout_owners(owners, release_id, target_percent)
     selected_uids = {uid for uid, _ in selected}
-    selected.extend((uid, vm) for uid, vm in owners if uid not in selected_uids and _start_requested(vm))
+    selected.extend(
+        (uid, vm)
+        for uid, vm in owners
+        if uid not in selected_uids and (_start_requested(vm) or _missing_cleanup_candidate(vm))
+    )
     return selected
 
 
 def _start_requested(vm: Mapping[str, Any]) -> bool:
     reconcile = vm.get("reconcile")
     return isinstance(reconcile, Mapping) and bool(reconcile.get("startRequested"))
+
+
+def _missing_cleanup_candidate(vm: Mapping[str, Any]) -> bool:
+    reconcile = vm.get("reconcile")
+    return isinstance(reconcile, Mapping) and reconcile.get("state") == "missing"
+
+
+def _missing_cleanup_grace_seconds() -> int:
+    raw = os.getenv("AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS")
+    if raw is None or not raw.strip():
+        return DEFAULT_MISSING_CLEANUP_GRACE_SECONDS
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS must be an integer") from exc
+    if value < MIN_MISSING_CLEANUP_GRACE_SECONDS:
+        raise ValueError(f"AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS must be at least {MIN_MISSING_CLEANUP_GRACE_SECONDS}")
+    return value
 
 
 def _canonical_image_ref(value: str) -> str:
@@ -348,6 +373,7 @@ async def reconcile_one(
     owner: str,
     project: str,
     dry_run: bool = False,
+    missing_cleanup_grace_seconds: int | None = None,
 ) -> ReconcileResult:
     vm_name = str(vm["vmName"])
     auth_token = str(vm["authToken"])
@@ -368,6 +394,8 @@ async def reconcile_one(
         return ReconcileResult(uid, "drift" if reasons else "ready", ",".join(sorted(set(reasons))))
     reconcile_raw = vm.get("reconcile")
     reconcile_state = reconcile_raw if isinstance(reconcile_raw, Mapping) else {}
+    missing_since_raw = reconcile_state.get("missingSince")
+    missing_since = float(missing_since_raw) if isinstance(missing_since_raw, (int, float)) else None
     start_requested = bool(reconcile_state.get("startRequested"))
     start_requested_at = reconcile_state.get("startRequestedAt") if start_requested else None
     observed_start_request_at = float(start_requested_at) if isinstance(start_requested_at, (int, float)) else None
@@ -377,19 +405,66 @@ async def reconcile_one(
         return ReconcileResult(uid, "busy")
 
     now = time.time()
+    missing_cleanup_grace_seconds = (
+        _missing_cleanup_grace_seconds() if missing_cleanup_grace_seconds is None else missing_cleanup_grace_seconds
+    )
     try:
         instance = await api.get_instance(vm_name)
         if instance is None:
+            terminal_cleanup_due = (
+                not start_requested
+                and missing_since is not None
+                and missing_since <= now - missing_cleanup_grace_seconds
+            )
+            cleanup_blocked_detail: str | None = None
+            if terminal_cleanup_due:
+                if vm.get("status") not in {"ready", "stopped"}:
+                    cleanup_blocked_detail = (
+                        "GCE instance not found; original provisioning outcome is not safe to clean"
+                    )
+                else:
+                    active = await asyncio.to_thread(active_session_count, uid, vm_name)
+                    if active:
+                        cleanup_blocked_detail = f"GCE instance not found; {active} active session(s) block cleanup"
+            if terminal_cleanup_due and cleanup_blocked_detail is None:
+                assert missing_since is not None
+                deleted = await asyncio.to_thread(
+                    clear_missing_vm_if_current,
+                    uid,
+                    vm_name,
+                    zone,
+                    auth_token,
+                    owner,
+                    missing_since,
+                )
+                if deleted:
+                    return ReconcileResult(uid, "cleaned", "removed abandoned missing VM record")
+                return ReconcileResult(uid, "stale", "owner lease or terminal-cleanup fence changed")
+            recorded_missing_since = missing_since if missing_since is not None else now
+            missing_fields: dict[str, Any] = {
+                "state": "missing",
+                "lastError": "GCE instance not found",
+                "missingSince": recorded_missing_since,
+                "lease": DELETE_FIELD,
+                "drainRequested": DELETE_FIELD,
+                "drainRequestedAt": DELETE_FIELD,
+            }
+            # A provider-confirmed 404 makes the observed demand impossible to
+            # fulfill. Consume only that exact request, while the transaction
+            # preserves any newer demand that arrives during this check.
+            missing_fields.update({"startRequested": DELETE_FIELD, "startRequestedAt": DELETE_FIELD})
             if not await _update_reconcile(
                 uid,
                 vm_name,
                 auth_token,
                 owner,
-                {"state": "missing", "lastError": "GCE instance not found", **clear_vm_reconcile_lease_fields()},
+                missing_fields,
                 consume_start_request_at=observed_start_request_at,
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording missing VM")
-            return ReconcileResult(uid, "missing", "GCE instance not found")
+            if cleanup_blocked_detail:
+                return ReconcileResult(uid, "missing", cleanup_blocked_detail)
+            return ReconcileResult(uid, "cleanup_pending", "GCE instance not found; waiting for terminal cleanup grace")
         boot_drift = await _boot_image_drift(api, instance, release)
         if boot_drift:
             reason, actual = boot_drift
@@ -404,6 +479,7 @@ async def reconcile_one(
                     "driftReasons": [reason],
                     "requiredBootImage": release.boot_image,
                     "observedBootImage": actual,
+                    "missingSince": DELETE_FIELD,
                     **clear_vm_reconcile_lease_fields(),
                 },
                 consume_start_request_at=observed_start_request_at,
@@ -462,6 +538,7 @@ async def reconcile_one(
                     "retryCount": 0,
                     "lastError": None,
                     "retryAt": None,
+                    "missingSince": DELETE_FIELD,
                     **clear_vm_reconcile_lease_fields(),
                 },
                 vm_fields={"status": "stopped"},
@@ -517,6 +594,7 @@ async def reconcile_one(
                 "retryCount": 0,
                 "lastError": None,
                 "retryAt": None,
+                "missingSince": DELETE_FIELD,
                 **clear_vm_reconcile_lease_fields(),
             },
             vm_fields={
@@ -571,6 +649,7 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
     project = os.getenv("GCE_PROJECT_ID")
     if not project:
         raise RuntimeError("GCE_PROJECT_ID is required for Agent VM reconciliation")
+    missing_cleanup_grace_seconds = _missing_cleanup_grace_seconds()
     owner = f"{os.getenv('K_REVISION', 'local')}:{uuid.uuid4().hex}"
     if not dry_run and not await asyncio.to_thread(claim_reconciler_run_lease, environment, owner):
         logger.info("Agent VM reconciler skipped: another run owns the %s lease", environment)
@@ -606,7 +685,15 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
 
             async def one(uid: str, vm: dict[str, Any]) -> ReconcileResult:
                 async with semaphore:
-                    return await reconcile_one(uid, vm, release, owner=owner, project=project, dry_run=dry_run)
+                    return await reconcile_one(
+                        uid,
+                        vm,
+                        release,
+                        owner=owner,
+                        project=project,
+                        dry_run=dry_run,
+                        missing_cleanup_grace_seconds=missing_cleanup_grace_seconds,
+                    )
 
             results = await asyncio.gather(*(one(uid, vm) for uid, vm in selected))
             if lease_lost.is_set() and not dry_run:

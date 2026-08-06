@@ -10,6 +10,7 @@ import pytest
 import jobs.agent_vm_reconciler as reconciler
 import services.agent_vm_lifecycle as lifecycle
 from services.agent_vm_lifecycle import AgentVmRelease
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 RELEASE = AgentVmRelease.from_mapping(
     {
@@ -296,6 +297,16 @@ def test_start_requests_bypass_the_release_cohort_without_displacing_it(monkeypa
     assert reconciler._select_reconcile_owners(owners, RELEASE.release_id, 1) == owners
 
 
+def test_terminal_missing_records_bypass_the_release_cohort_without_displacing_it(monkeypatch):
+    owners = [
+        ("cohort", {"vmName": "cohort"}),
+        ("missing", {"vmName": "missing", "reconcile": {"state": "missing", "missingSince": 1.0}}),
+    ]
+    monkeypatch.setattr(reconciler, "rollout_selected", lambda uid, *_args: uid == "cohort")
+
+    assert reconciler._select_reconcile_owners(owners, RELEASE.release_id, 1) == owners
+
+
 def test_terminal_reconcile_write_preserves_a_newer_start_request():
     terminal_fields = lifecycle.clear_vm_reconcile_lease_fields()
 
@@ -310,6 +321,7 @@ def test_terminal_reconcile_write_preserves_a_newer_start_request():
 
 def test_active_lifecycle_lease_blocks_new_session_admission():
     assert lifecycle.reconcile_requested({"reconcile": {"lease": {"expiresAt": 101}}}, now=100)
+    assert lifecycle.reconcile_requested({"reconcile": {"state": "missing"}}, now=100)
     assert not lifecycle.reconcile_requested({"reconcile": {"lease": {"expiresAt": 100}}}, now=100)
 
 
@@ -524,9 +536,205 @@ def test_firestore_claim_and_update_are_offloaded_from_event_loop(monkeypatch):
         )
     )
 
-    assert result.state == "missing"
+    assert result.state == "cleanup_pending"
     assert len(call_threads) == 2
     assert all(thread_id != loop_thread for thread_id in call_threads)
+
+
+def test_missing_vm_is_cleaned_only_after_grace_without_sessions_or_demand(monkeypatch):
+    now = 500.0
+    deleted: list[tuple[Any, ...]] = []
+
+    class MissingApi:
+        def __init__(self, _project: str, _zone: str) -> None:
+            pass
+
+        async def get_instance(self, _vm_name: str) -> None:
+            return None
+
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", MissingApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+    monkeypatch.setattr(reconciler, "clear_missing_vm_if_current", lambda *args: deleted.append(args) or True)
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *_args, **_kwargs: pytest.fail("cleaned records stay deleted")
+    )
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "zone": "us-central1-a",
+                "status": "ready",
+                "authToken": "token",
+                "reconcile": {"state": "missing", "missingSince": now - 120},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            missing_cleanup_grace_seconds=60,
+        )
+    )
+
+    assert result.state == "cleaned"
+    assert deleted == [("user", "omi-agent-user", "us-central1-a", "token", "worker", now - 120)]
+
+
+def test_missing_404_consumes_the_observed_start_request_before_cleanup_grace(monkeypatch):
+    class MissingApi:
+        def __init__(self, _project: str, _zone: str) -> None:
+            pass
+
+        async def get_instance(self, _vm_name: str) -> None:
+            return None
+
+    updates: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", MissingApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "clear_missing_vm_if_current", lambda *_args: pytest.fail("grace has not elapsed"))
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *args, **kwargs: updates.append((args[4], kwargs)) or True
+    )
+    monkeypatch.setattr(reconciler.time, "time", lambda: 500.0)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "status": "ready",
+                "authToken": "token",
+                "reconcile": {
+                    "state": "missing",
+                    "missingSince": 1.0,
+                    "startRequested": True,
+                    "startRequestedAt": 450.0,
+                },
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            missing_cleanup_grace_seconds=60,
+        )
+    )
+
+    assert result.state == "cleanup_pending"
+    fields, kwargs = updates[-1]
+    assert fields["startRequested"] is lifecycle.DELETE_FIELD
+    assert fields["startRequestedAt"] is lifecycle.DELETE_FIELD
+    assert kwargs["consume_start_request_at"] == 450.0
+
+
+def test_terminal_cleanup_refuses_an_active_missing_vm(monkeypatch):
+    class MissingApi:
+        def __init__(self, _project: str, _zone: str) -> None:
+            pass
+
+        async def get_instance(self, _vm_name: str) -> None:
+            return None
+
+    updates: list[dict[str, Any]] = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", MissingApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 1)
+    monkeypatch.setattr(
+        reconciler, "clear_missing_vm_if_current", lambda *_args: pytest.fail("terminal cleanup must be fenced")
+    )
+    monkeypatch.setattr(reconciler, "update_vm_reconcile", lambda *args, **_kwargs: updates.append(args[4]) or True)
+    monkeypatch.setattr(reconciler.time, "time", lambda: 500.0)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "status": "ready",
+                "authToken": "token",
+                "reconcile": {"state": "missing", "missingSince": 1.0},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            missing_cleanup_grace_seconds=60,
+        )
+    )
+
+    assert result.state == "missing"
+    assert "1 active session" in result.detail
+    assert updates[-1]["missingSince"] == 1.0
+
+
+def test_missing_cleanup_lifecycle_compare_and_swap_requires_exact_owner_generation(monkeypatch):
+    def database(
+        *, start_requested: bool = False, zone: str | None = "us-central1-a", status: str = "ready"
+    ) -> StrictFirestore:
+        return StrictFirestore(
+            {
+                (
+                    "users",
+                    "user",
+                ): {
+                    "agentVm": {
+                        "vmName": "omi-agent-user",
+                        "zone": zone,
+                        "status": status,
+                        "authToken": "token",
+                        "reconcile": {
+                            "state": "claimed",
+                            "missingSince": 100.0,
+                            "startRequested": start_requested,
+                            "lease": {"owner": "worker", "expiresAt": 200.0},
+                        },
+                    }
+                }
+            }
+        )
+
+    client = database()
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
+    assert lifecycle.clear_missing_vm_if_current(
+        "user", "omi-agent-user", "us-central1-a", "token", "worker", 100.0, now=150
+    )
+    assert client.transactions[-1].updates[-1][1] == {"agentVm": lifecycle.DELETE_FIELD}
+
+    legacy_zone_client = database(zone=None)
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: legacy_zone_client)
+    assert lifecycle.clear_missing_vm_if_current(
+        "user", "omi-agent-user", "us-central1-a", "token", "worker", 100.0, now=150
+    )
+
+    for bad_client, zone, missing_since in [
+        (database(start_requested=True), "us-central1-a", 100.0),
+        (database(status="provisioning"), "us-central1-a", 100.0),
+        (database(), "wrong-zone", 100.0),
+        (database(), "us-central1-a", 99.0),
+    ]:
+        monkeypatch.setattr(lifecycle, "get_firestore_client", lambda client=bad_client: client)
+        assert not lifecycle.clear_missing_vm_if_current(
+            "user", "omi-agent-user", zone, "token", "worker", missing_since, now=150
+        )
+        assert not bad_client.transactions[-1].updates
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(None, reconciler.DEFAULT_MISSING_CLEANUP_GRACE_SECONDS), ("60", 60)],
+)
+def test_missing_cleanup_grace_uses_a_safe_default_or_valid_override(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv("AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS", raising=False)
+    else:
+        monkeypatch.setenv("AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS", value)
+    assert reconciler._missing_cleanup_grace_seconds() == expected
+
+
+@pytest.mark.parametrize("value", ["not-a-number", "59"])
+def test_missing_cleanup_grace_rejects_unsafe_configuration(monkeypatch, value):
+    monkeypatch.setenv("AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS", value)
+    with pytest.raises(ValueError, match="AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS"):
+        reconciler._missing_cleanup_grace_seconds()
 
 
 @pytest.mark.parametrize("state", ["quarantined", "missing", "stale", "recreate_required"])
@@ -538,6 +746,17 @@ def test_main_reports_nonconverged_states_as_failed_job(monkeypatch, state):
     monkeypatch.setattr(reconciler, "run_reconciler", run_reconciler)
 
     assert reconciler.main([]) == 1
+
+
+@pytest.mark.parametrize("state", ["cleanup_pending", "cleaned"])
+def test_main_accepts_expected_terminal_cleanup_states(monkeypatch, state):
+    async def run_reconciler(*, dry_run: bool = False) -> list[reconciler.ReconcileResult]:
+        assert not dry_run
+        return [reconciler.ReconcileResult("uid", state)]
+
+    monkeypatch.setattr(reconciler, "run_reconciler", run_reconciler)
+
+    assert reconciler.main([]) == 0
 
 
 class OwnerSnapshot:
