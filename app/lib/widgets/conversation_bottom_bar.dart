@@ -72,6 +72,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   AudioTimelineMapper? _timelineMapper;
   StreamSubscription<Duration>? _segmentStopSubscription;
 
+  /// Bumped on every segment seek / scrub so a stale end-handler cannot pause
+  /// a newer tap's playback (#4471 cubic).
+  int _segmentSeekGeneration = 0;
+
   List<AudioFile> _getSortedAudioFiles() {
     if (widget.conversation == null) return [];
     final files = List<AudioFile>.from(widget.conversation!.audioFiles);
@@ -181,25 +185,32 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       seekPositionSeconds: filePosition,
     );
 
-    await _seekToCombinedPosition(targetPosition);
+    // Seek without bumping generation — we own the token for this segment stop.
+    await _seekToCombinedPosition(targetPosition, invalidateSegmentStop: false);
+    if (!mounted || _audioPlayer == null) return;
+    final seekGeneration = ++_segmentSeekGeneration;
 
     _segmentStopSubscription = _audioPlayer!.positionStream.listen((position) async {
-      if (position >= stopPosition) {
-        await _segmentStopSubscription?.cancel();
-        _segmentStopSubscription = null;
-        if (_audioPlayer != null && _audioPlayer!.playing) {
-          await _audioPlayer!.pause();
-          if (mounted) setState(() {});
-        }
+      if (seekGeneration != _segmentSeekGeneration) return;
+      if (position < stopPosition) return;
+      if (seekGeneration != _segmentSeekGeneration) return;
+      await _segmentStopSubscription?.cancel();
+      _segmentStopSubscription = null;
+      if (seekGeneration != _segmentSeekGeneration) return;
+      if (_audioPlayer != null && _audioPlayer!.playing) {
+        await _audioPlayer!.pause();
+        if (seekGeneration != _segmentSeekGeneration) return;
+        if (mounted) setState(() {});
       }
     });
 
-    if (_audioPlayer != null && !_audioPlayer!.playing) {
+    if (!_audioPlayer!.playing) {
       PlatformManager.instance.analytics.audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
       await _audioPlayer!.play();
+      if (seekGeneration != _segmentSeekGeneration) return;
       if (mounted) setState(() {});
     }
   }
@@ -770,11 +781,18 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Future<void> _seekToCombinedPosition(Duration targetPosition) async {
+  Future<void> _seekToCombinedPosition(
+    Duration targetPosition, {
+    bool invalidateSegmentStop = true,
+  }) async {
     if (_audioPlayer == null) return;
 
-    await _segmentStopSubscription?.cancel();
-    _segmentStopSubscription = null;
+    // Scrubber seeks invalidate any in-flight segment end-handler.
+    if (invalidateSegmentStop) {
+      _segmentSeekGeneration++;
+      await _segmentStopSubscription?.cancel();
+      _segmentStopSubscription = null;
+    }
 
     if (_singleArtifact) {
       // targetPosition is already artifact time (the scrubber runs on the dense
