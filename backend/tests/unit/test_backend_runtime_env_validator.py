@@ -2008,6 +2008,30 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     )
 
 
+def test_x_connector_sync_job_workflow_is_listed_and_targets_job():
+    workflow = ROOT.parent / '.github/workflows/gcp_x_connector_sync_job.yml'
+    text = workflow.read_text(encoding='utf-8')
+    assert 'SERVICE: x-connector-sync-job' in text
+    assert 'SCHEDULER_JOB: x-connector-sync-6h' in text
+    assert 'Dockerfile.x_connector_sync_job' in text
+    assert "id-token: 'write'" not in text
+    assert 'verify-llm-gateway-serving' not in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.x_connector_sync_job_flags }}'
+    ) in text
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
+    for env_name in ('dev', 'prod'):
+        assert (
+            '.github/workflows/gcp_x_connector_sync_job.yml'
+            in manifest['environments'][env_name]['cloud_run']['workflow_files']
+        )
+        assert 'x-connector-sync-job' in manifest['environments'][env_name]['cloud_run']['jobs']
+        notifications = manifest['environments'][env_name]['cloud_run']['jobs']['notifications-job']
+        assert 'PINECONE_API_KEY' not in notifications.get('secrets', {})
+        assert 'PINECONE_INDEX_NAME' not in notifications.get('env', {})
+
+
 def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     validator = load_validator()
     values_file = tmp_path / 'backend_listen.yaml'

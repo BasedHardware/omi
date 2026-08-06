@@ -576,12 +576,16 @@ def disconnect(uid: str) -> None:
 
 
 # ----------------------------------------------------------------------------
-# Periodic background sync (driven by the hourly cron in modal/job.py)
+# Periodic background sync (hosted by x-connector-sync-job; Scheduler owns cadence)
 # ----------------------------------------------------------------------------
 
 
 def should_run_x_sync_job() -> bool:
-    """Gate the sync to every SYNC_JOB_INTERVAL_HOURS (the cron fires hourly)."""
+    """Legacy hour-modulo gate from when sync hitchhiked on notifications-job.
+
+    Kept for callers/tests; the dedicated Cloud Run Job must not use this —
+    Cloud Scheduler (``x-connector-sync-6h``) owns the 6h cadence.
+    """
     return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
 
 

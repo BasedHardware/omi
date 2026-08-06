@@ -140,10 +140,23 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',
         'TYPESENSE_API_KEY',
+        'PINECONE_INDEX_NAME',
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
-    assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
     assert set(notifications_job['secrets']) == {
+        'SERVICE_ACCOUNT_JSON',
+        'ENCRYPTION_SECRET',
+        'OPENAI_API_KEY',
+    }
+
+    x_sync_job = jobs['x-connector-sync-job']
+    x_sync_env = _MODULE['_render_env_vars'](x_sync_job['env'])
+    assert 'PINECONE_INDEX_NAME=memories-backend-dev' in x_sync_env
+    assert 'OMI_ENV_STAGE=dev' in x_sync_env
+    x_sync_secrets = _MODULE['_render_secrets'](x_sync_job['secrets'])
+    assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in x_sync_secrets
+    assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in x_sync_secrets
+    assert set(x_sync_job['secrets']) == {
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
@@ -283,6 +296,48 @@ def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
     text = workflow.read_text(encoding='utf-8')
     assert 'Measure runner disk cleanup' in text
     assert 'Duration: $((SECONDS - started_at))s' in text
+
+
+def test_x_connector_sync_job_workflow_passes_vpc_vars_and_checkout_sha():
+    workflow = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_x_connector_sync_job.yml'
+    text = workflow.read_text(encoding='utf-8')
+    assert 'SERVICE: x-connector-sync-job' in text
+    assert 'SCHEDULER_JOB: x-connector-sync-6h' in text
+    assert 'Dockerfile.x_connector_sync_job' in text
+    assert 'x_connector_sync_job_env_vars' in text
+    assert 'x_connector_sync_job_secrets' in text
+    assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
+    assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.x_connector_sync_job_flags }}'
+    ) in text
+    assert "id-token: 'write'" not in text
+    assert 'git rev-parse --short=7 HEAD' in text
+    assert 'short_sha=${GITHUB_SHA::7}' not in text
+    assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job x-connector-sync-job' in text
+    assert 'verify-llm-gateway-serving' not in text
+    assert 'Measure runner disk cleanup' in text
+    assert 'Duration: $((SECONDS - started_at))s' in text
+
+
+def test_selected_job_renders_x_connector_sync_outputs(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setattr(
+        'sys.argv',
+        ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'],
+    )
+
+    assert _MODULE['main']() == 0
+
+    output = capsys.readouterr().out
+    assert 'cloud_run_flags<<' in output
+    assert 'x_connector_sync_job_env_vars<<' in output
+    assert 'x_connector_sync_job_secrets<<' in output
+    assert 'backend_env_vars<<' not in output
+    assert 'notifications_job_env_vars<<' not in output
+    assert 'memory_maintenance_job_env_vars<<' not in output
 
 
 def test_backend_service_deploys_remove_retired_canonical_promotion_env_vars():

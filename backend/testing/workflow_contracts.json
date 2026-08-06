@@ -564,6 +564,7 @@
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
         "tests/unit/test_validate_memory_maintenance_scheduler.py",
+        "tests/unit/test_validate_x_connector_sync_scheduler.py",
         "tests/unit/test_verify_sync_ledger_fence_transition.py"
       ],
       "checks": [],
@@ -576,6 +577,7 @@
         "normal deploys cannot change the serving sync ledger fence mode",
         "production backend traffic shifts only after the Cloud Run-only candidate vector passes, then rolls back if the post-promotion serving route or known-audio smoke fails",
         "memory-maintenance job deploys fail unless the exact enabled hourly OAuth Scheduler trigger targets that deployed job",
+        "x-connector-sync job deploys fail unless the exact enabled 6h OAuth Scheduler trigger targets that deployed job",
         "gateway-first serving cannot be promoted until the ready workload, EndpointSlice, ingress/ILB attachment, and authenticated Cloud Run VPC route all pass"
       ]
     },

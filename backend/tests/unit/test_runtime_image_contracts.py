@@ -53,6 +53,15 @@ def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_con
     }
 
 
+def test_x_connector_sync_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
+    x_connector_sync_job = _contract(contracts_module, 'x-connector-sync-job')
+
+    assert dict(x_connector_sync_job.smoke_environment) == {
+        'ENCRYPTION_SECRET': '0123456789abcdef0123456789abcdef',
+        'OPENAI_API_KEY': 'fake-x-connector-sync-image-smoke-only',
+    }
+
+
 def test_pusher_contract_rejects_omitted_shared_package(contracts_module, tmp_path):
     pusher = _contract(contracts_module, 'pusher')
     dockerfile = _dockerfile_without(

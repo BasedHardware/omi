@@ -81,6 +81,9 @@ LOCK_CONTRACTS = {
     "gcp_notifications_job.yml": LockContract(
         "deploy-cloud-run-notifications-job-${{ github.event.inputs.environment }}"
     ),
+    "gcp_x_connector_sync_job.yml": LockContract(
+        "deploy-cloud-run-x-connector-sync-job-${{ github.event.inputs.environment }}"
+    ),
     "gcp_parakeet.yml": LockContract("deploy-gke-parakeet-${{ github.event.inputs.environment }}"),
     "gcp_personas.yml": LockContract(
         "deploy-cloud-run-omi-web-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
@@ -619,6 +622,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_models.yml",
         "gcp_nllb_translation.yml",
         "gcp_notifications_job.yml",
+        "gcp_x_connector_sync_job.yml",
         "gcp_parakeet.yml",
         "gcp_plugins.yml",
     )
