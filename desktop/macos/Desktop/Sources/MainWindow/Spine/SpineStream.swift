@@ -1,0 +1,328 @@
+//
+//  SpineStream.swift — the results panel's body: one day, top to bottom.
+//
+//  This is what occupies `QueryResultsPanel`'s seam. It draws no chrome — no query field, no chips, no
+//  frame, no count line — because the panel above owns all four. It reads one value down
+//  (`QueryShellRequest`: the term, the type, the time window) and reports one number up
+//  (`queryShellMatchCount`), which is the whole of its contract with the shell.
+//
+//  **What it owns is the reading order.** One merged reverse-chronological stream grouped by day, with
+//  the conversation dominant and the memories and frames it produced indented beneath it — and an hour
+//  rail beside it running the same direction the list does.
+//
+//  **What it deliberately does not own is any page's job.** Opening a conversation hands it to
+//  Conversations, which keeps search, filters, folders, starring, merge, edit, delete, refresh,
+//  pagination and full-row selection (INV-NAV-1); the brain map hands off to the graph; a frame hands
+//  off to Rewind. The one capability it hosts inline is the star, because a star is a single
+//  authoritative write and a list you cannot star is a list you have to leave to use.
+//
+//  Brand: `Ink` semantics only, two rungs (glass) (INV-UI-1).
+//
+
+import Combine
+import OmiTheme
+import SwiftUI
+
+// MARK: - Viewport
+
+/// Which row is under the top of the list.
+///
+/// Deliberately a reference type held in `@State` rather than a `@StateObject`: the stream needs to
+/// *own* it without *observing* it. Scrolling changes this several times a second, and a subscribed
+/// parent would re-evaluate the whole list every time. Only the rail observes it, so only the rail
+/// redraws — which is the same class of `@Published` churn a previous pass at this window was slow
+/// because of.
+@MainActor
+final class SpineViewport: ObservableObject {
+  @Published private(set) var dayID: Date?
+  @Published private(set) var hour: Int?
+
+  func report(dayID: Date, hour: Int) {
+    // Assign only on a real change: an identical publish is a redraw of the rail for nothing.
+    if self.dayID != dayID { self.dayID = dayID }
+    if self.hour != hour { self.hour = hour }
+  }
+}
+
+/// What one row tells the viewport about itself. The row nearest the top of the list wins.
+private struct SpineRowAnchor: Equatable {
+  let dayID: Date
+  let hour: Int
+  /// The row's bottom edge in the list's coordinate space. A row whose bottom is above the reading
+  /// line has scrolled behind the sticky header; among the rest, the smallest bottom is the topmost
+  /// visible row.
+  let bottom: CGFloat
+}
+
+private struct SpineTopRowKey: PreferenceKey {
+  static let defaultValue: SpineRowAnchor? = nil
+
+  static func reduce(value: inout SpineRowAnchor?, nextValue: () -> SpineRowAnchor?) {
+    guard let next = nextValue(), next.bottom > SpineLayout.readingLine else { return }
+    guard let current = value else {
+      value = next
+      return
+    }
+    if next.bottom < current.bottom { value = next }
+  }
+}
+
+enum SpineLayout {
+  /// The line the list is read from: just under the sticky day header. A row whose bottom is above
+  /// this is behind the header and is not what anybody is looking at.
+  static let readingLine: CGFloat = SpineMetrics.dayHeaderHeight + 4
+  static let coordinateSpace = "omi.spine"
+  /// How tall the stream is allowed to get before it scrolls inside the panel. The panel is one of
+  /// two objects on Home and must not grow until it swallows the gap under the query bar.
+  static let maximumHeight: CGFloat = 470
+  /// Below this the rail is dropped rather than squeezed: a rail narrower than its own hour labels
+  /// is a column of stubs, and the spine is the part worth the width.
+  static let railBreakpoint: CGFloat = 620
+}
+
+// MARK: - Stream
+
+struct SpineStream: View {
+  let request: QueryShellRequest
+  @ObservedObject var appState: AppState
+  @ObservedObject var memoriesViewModel: MemoriesViewModel
+
+  /// Hands a conversation to the page that owns conversations.
+  let onOpenConversation: (String) -> Void
+  /// Hands the day's memories to the surface that owns the graph.
+  let onOpenBrainMap: () -> Void
+  /// Hands a frame to Rewind.
+  let onOpenRewind: () -> Void
+
+  @StateObject private var store = SpineStore()
+  @State private var viewport = SpineViewport()
+
+  var body: some View {
+    GeometryReader { proxy in
+      HStack(spacing: 0) {
+        if proxy.size.width >= SpineLayout.railBreakpoint {
+          SpineRailColumn(store: store, viewport: viewport)
+          Rectangle().fill(Ink.separator).frame(width: 1)
+        }
+        Group {
+          if store.days.isEmpty {
+            emptyState
+          } else {
+            stream
+          }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    }
+    .frame(height: SpineLayout.maximumHeight)
+    .queryShellMatchCount(store.matchCount)
+    .task {
+      if appState.conversations.isEmpty { await appState.loadConversations() }
+      await memoriesViewModel.loadMemoriesIfNeeded()
+      ingest()
+    }
+    .onReceive(appState.$conversations) { _ in ingest() }
+    .onReceive(memoriesViewModel.$memories) { _ in ingest() }
+    .onChange(of: request) { _, newValue in store.apply(request: newValue) }
+  }
+
+  private func ingest() {
+    store.ingest(conversations: appState.conversations, memories: memoriesViewModel.memories)
+    store.apply(request: request)
+  }
+
+  // MARK: The list
+
+  private var stream: some View {
+    ScrollView {
+      LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+        ForEach(store.days) { day in
+          Section {
+            ForEach(day.rows) { row in
+              SpineRowView(
+                row: row,
+                showsIndent: store.kind == .everything,
+                onOpenConversation: { onOpenConversation($0.id) },
+                onToggleStar: toggleStar,
+                onOpenMoment: { _ in onOpenRewind() },
+                onOpenBrainMap: onOpenBrainMap
+              )
+              .background(anchor(for: row, in: day))
+            }
+          } header: {
+            SpineDayHeader(day: day)
+          }
+        }
+        footer
+      }
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.bottom, OmiSpacing.md)
+    }
+    .coordinateSpace(name: SpineLayout.coordinateSpace)
+    .onPreferenceChange(SpineTopRowKey.self) { anchor in
+      guard let anchor else { return }
+      Task { @MainActor in viewport.report(dayID: anchor.dayID, hour: anchor.hour) }
+    }
+    .glassScrollFade(top: 6, bottom: 18)
+  }
+
+  /// A layout-neutral reporter behind each row. A `GeometryReader` in a `background` never affects
+  /// layout, and inside a `LazyVStack` only the rows that exist report — a dozen or so, not a
+  /// thousand.
+  private func anchor(for row: SpineRow, in day: SpineDay) -> some View {
+    GeometryReader { proxy in
+      Color.clear.preference(
+        key: SpineTopRowKey.self,
+        value: SpineRowAnchor(
+          dayID: day.id,
+          hour: Calendar.current.component(.hour, from: row.anchor),
+          bottom: proxy.frame(in: .named(SpineLayout.coordinateSpace)).maxY
+        )
+      )
+    }
+  }
+
+  /// The end of the loaded stream. Only offered when there is genuinely another page behind it and
+  /// nothing is narrowing the view — paging deeper to satisfy a filter would fetch the account one
+  /// page at a time to answer a question the server already answers.
+  @ViewBuilder
+  private var footer: some View {
+    if appState.canLoadMoreConversations, !request.isFiltering {
+      SpineLoadMoreFooter(isLoading: appState.isLoadingConversations) {
+        await appState.loadMoreConversations()
+      }
+    }
+  }
+
+  private func toggleStar(_ conversation: ServerConversation) {
+    OmiUISound.play(.commit)
+    Task {
+      await appState.setConversationStarred(conversation.id, starred: !conversation.starred)
+    }
+  }
+
+  // MARK: Empty
+
+  /// Never an illustration and never a shrug — and it keeps the shell's other key in view, because
+  /// "nothing matched" is exactly when asking is the better move.
+  private var emptyState: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(store.isPreparing ? "Reading your day…" : emptyHeadline)
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundStyle(Ink.primary)
+      if !store.isPreparing {
+        Text(emptyDetail)
+          .scaledFont(size: OmiType.caption, weight: .regular)
+          .foregroundStyle(Ink.secondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.vertical, OmiSpacing.lg)
+    .padding(.horizontal, OmiSpacing.sm)
+    .accessibilityIdentifier("query-shell-empty")
+  }
+
+  private var emptyHeadline: String {
+    request.term.isEmpty
+      ? "Nothing captured in this window yet." : "Nothing captured matches “\(request.text)”."
+  }
+
+  private var emptyDetail: String {
+    guard request.term.isEmpty else { return "Press ⌘⏎ to ask Omi instead." }
+    switch store.kind {
+    case .everything: return "Conversations, memories and screen moments appear here as they happen."
+    case .conversations: return "Conversations appear here once Omi has heard one."
+    case .memories: return "Memories appear here as Omi learns things worth keeping."
+    case .screen: return "Screen moments appear here while screen capture is on."
+    }
+  }
+}
+
+// MARK: - Rail column
+
+/// The rail, in its own view so a scroll redraws twenty-four bars rather than the whole spine.
+private struct SpineRailColumn: View {
+  @ObservedObject var store: SpineStore
+  @ObservedObject var viewport: SpineViewport
+
+  /// Before anything has been scrolled the rail describes the newest day, which is what is on screen.
+  private var dayID: Date? { viewport.dayID ?? store.days.first?.id }
+
+  private var day: SpineDay? { store.days.first { $0.id == dayID } }
+
+  var body: some View {
+    SpineHourRail(
+      density: dayID.map(store.density(for:)) ?? Array(repeating: 0, count: 24),
+      currentHour: viewport.hour,
+      momentCount: dayID.map(store.momentCount(for:)) ?? 0,
+      dayTitle: day?.title ?? "",
+      conversationCount: day?.conversationCount ?? 0
+    )
+  }
+}
+
+// MARK: - Day header
+
+/// The one place in this system where uppercase and positive tracking are justified: a header pinned
+/// over moving content has to read as chrome rather than as the first line of the day.
+struct SpineDayHeader: View {
+  let day: SpineDay
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 10) {
+      Text(day.title.uppercased())
+        .font(.system(size: 11, weight: .semibold))
+        .tracking(1.0)
+        .foregroundStyle(Ink.primary)
+      Text(day.subtitle)
+        .scaledFont(size: OmiType.caption, weight: .regular)
+        .foregroundStyle(Ink.secondary)
+        .lineLimit(1)
+      Spacer(minLength: 0)
+    }
+    .padding(.leading, SpineMetrics.gutterWidth)
+    .frame(height: SpineMetrics.dayHeaderHeight, alignment: .leading)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    // Pinned headers have content sliding under them, so the header needs a ground of its own or the
+    // rows read straight through it. The panel's own scrim, not a new colour.
+    .background(Ink.surface.opacity(0.9))
+    .overlay(alignment: .bottom) { Rectangle().fill(Ink.separator).frame(height: 1) }
+  }
+}
+
+// MARK: - Load more
+
+/// Both a button and an automatic trigger: the button is what a keyboard reaches and what automation
+/// presses, scrolling to the end is what a pointer does, and both call the one guarded loader — so a
+/// page is never fetched twice.
+struct SpineLoadMoreFooter: View {
+  let isLoading: Bool
+  let load: () async -> Void
+
+  @State private var hasRequested = false
+
+  var body: some View {
+    Button {
+      Task { await load() }
+    } label: {
+      HStack(spacing: 8) {
+        if isLoading { ProgressView().controlSize(.small) }
+        Text(isLoading ? "Loading earlier days…" : "Load earlier days")
+          .scaledFont(size: OmiType.caption, weight: .regular)
+          .foregroundStyle(Ink.secondary)
+      }
+      .frame(maxWidth: .infinity)
+      .padding(.vertical, 14)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(isLoading)
+    .accessibilityIdentifier("spine-load-more")
+    .onAppear {
+      guard !hasRequested else { return }
+      hasRequested = true
+      Task { await load() }
+    }
+    .onDisappear { hasRequested = false }
+  }
+}

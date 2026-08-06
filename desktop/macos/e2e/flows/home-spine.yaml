@@ -1,0 +1,91 @@
+version: 2
+name: home-spine
+tier: manual
+description: >-
+  Home's results panel is one merged chronological spine — conversations, the memories they
+  produced and the screen moments from the same minutes, grouped by day with sticky day headers.
+  Verifies the spine renders real account data, that the type chips and the query field both
+  narrow it in place, that a soloed kind flattens the indent and gives every row its own
+  timestamp, that the hour rail tracks the topmost visible row, and that every row hands off to
+  the page that owns it (INV-NAV-1).
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: The spine opens on the newest day
+    do: >-
+      Open Home. The results panel below the query bar shows one list, newest first, under a
+      sticky day header reading TODAY (or the most recent day with anything in it) followed by a
+      count like "1,204 moments · 4 conversations". Conversation rows are the dominant element:
+      an emoji tile, a title, and a line reading like "8m 9s · 2 memories · 6 screen moments".
+    expect:
+      interactive_count: { min: 4 }
+      text_visible:
+        - All
+        - Conversations
+        - Memories
+        - Rewind
+
+  - id: S2
+    name: Memories and screen moments sit under the conversation that produced them
+    do: >-
+      Find a conversation row whose subtitle claims memories or screen moments. Directly beneath
+      it, indented past the time gutter, are those memories as plain sentences and those screen
+      moments as a horizontal strip of thumbnails captioned "<App> · <time>". They are rows of
+      the same list, not contents of the conversation's card.
+
+  - id: S3
+    name: Soloing one kind flattens the indent and restores every row's own time
+    do: >-
+      Click the "Memories" chip. The spine now shows only memory rows; the indent is gone and
+      each row states its own timestamp in the left gutter. The day header still reports the
+      whole day's counts, not the filtered subset. Click "All" to restore the merged spine.
+    expect:
+      text_visible:
+        - Memories
+
+  - id: S4
+    name: The query field narrows the same spine in place
+    do: >-
+      Type a word you know appears in a conversation title into the query bar. The spine narrows
+      to matching rows and drops any day left with nothing in it — header and all. The count line
+      in the panel's corner changes to "N results · of M captured". Clear the field to restore.
+
+  - id: S5
+    name: The hour rail runs the same direction as the list
+    do: >-
+      Look at the rail on the left of the panel. The topmost bar is the latest hour (11 PM) and
+      the bottom bar is midnight, matching the newest-first list beside it. Scroll the spine; the
+      darkened, labelled bar moves to the hour of the topmost visible row rather than tracking
+      scroll percentage.
+
+  - id: S6
+    name: Starring a conversation writes through
+    do: >-
+      Hover a conversation row and click its star. The star fills immediately. Navigate to
+      Library → Conversations and confirm the same conversation is starred there.
+
+  - id: S7
+    name: Rows hand off to the page that owns them
+    do: >-
+      Click a conversation row — the Conversations page opens on that conversation's detail
+      (INV-NAV-1: the spine hosts no copy of merge, folders, edit or delete). Return Home, scroll
+      to the foot of a day with memories and click the "How today's memories connect" card — the
+      Brain Map opens. Return Home and click a screen-moment thumbnail — Rewind opens.
+
+  - id: S8
+    name: Paging deeper loads earlier days
+    do: >-
+      Scroll to the bottom of the spine with no filter active. "Load earlier days" appears and
+      fetches the next page of conversations; older day headers appear below. The list stays
+      smooth over several pages.
