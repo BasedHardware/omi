@@ -465,10 +465,24 @@ enum Permissions {
         }
     }
 
+    /// Whether an ask should raise the system prompt, or fall back to the Settings pane.
+    ///
+    /// The prompted latch exists because `CGRequestScreenCaptureAccess` returns false immediately
+    /// once an answer is on record, so asking twice makes the row feel dead. But the latch is
+    /// permanent, and a grant can go away after it is set: a changed signing identity drops it, and
+    /// on macOS 26 screen-recording approval lapses on its own by design. In that state the latch
+    /// sends every ask to a Settings pane the app may not even be listed in, so the user toggles
+    /// something that never takes and capture stays dead forever.
+    ///
+    /// A grant this install demonstrably had, now missing, is a *fresh* ask rather than a repeat.
+    static func screenAskShouldPrompt(hasPrompted: Bool, grantWasLost: Bool) -> Bool {
+        !hasPrompted || grantWasLost
+    }
+
     private static func requestScreen() async -> Bool {
         if CGPreflightScreenCaptureAccess() { return true }
 
-        guard !hasPrompted(.screen) else {
+        guard screenAskShouldPrompt(hasPrompted: hasPrompted(.screen), grantWasLost: grantWasLost(.screen)) else {
             // `CGRequestScreenCaptureAccess` returns false immediately once the answer is on record;
             // calling it again would make the row feel dead.
             performOpenSettings(for: .screen)
