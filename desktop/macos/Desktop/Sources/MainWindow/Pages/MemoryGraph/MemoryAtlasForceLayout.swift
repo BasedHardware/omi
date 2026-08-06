@@ -257,18 +257,6 @@ enum MemoryAtlasForceLayout {
   /// 2.1, and on the even fixture it is unchanged at 1.95.
   static let communitySeparation = 0.4
 
-  /// How far past the drawing area the unconnected entities ring the map, as a
-  /// fraction of its half-extent.
-  ///
-  /// Enough to read as "outside", and no more. This used to be 0.07 with a
-  /// further 0.05 per ring on top, which put a lone entity most of a
-  /// canvas-width from anything it could be compared to — the map looked like
-  /// it had shed debris. The floor is the drawing area itself and cannot go
-  /// lower: everything the relaxation placed is fitted inside it, so coming any
-  /// closer would put an entity with no relationships among entities whose
-  /// positions mean something.
-  static let haloClearance = 0.05
-
   /// What share of the map the fit is required to fit.
   ///
   /// Not all of it, and now not almost all of it either. The relaxation leaves a
@@ -1424,29 +1412,41 @@ enum MemoryAtlasForceLayout {
   }
 
   /// Entities with no relationships at all. They carry no spatial information,
-  /// so their subdued placement must not imply a semantic community. A circular
-  /// peripheral field preserves that honesty without creating a rectangular rim
-  /// or a hollow ring around the connected graph.
+  /// so scattering them through the middle would have the map assert structure
+  /// that is not there — and placing them among the communities dilutes the
+  /// neighbourhoods the relaxation just recovered. A peripheral band says what
+  /// is true: present, not connected to anything yet. Each group takes one seat
+  /// in the band and its members cluster there. The band is a circular annulus
+  /// hugging the semantic core rather than a rim following the area's
+  /// silhouette: at real-account isolate counts a silhouette rim wraps into
+  /// nested rectangles clamped into the canvas corners — a drawn border.
   static func haloPositions(groups: [[String]], area: CGRect) -> [String: CGPoint] {
     guard !groups.isEmpty else { return [:] }
 
     var positions: [String: CGPoint] = [:]
     let baseRadius = Double(min(area.width, area.height)) * 0.5
-    let goldenAngle = Double.pi * (3 - sqrt(5))
     let clump = Double(min(area.width, area.height)) * 0.016
+    // Positions are normalized, so the unit square is the canvas; the band ends
+    // at the margin the layout has always respected.
+    let canvasReach =
+      min(
+        min(Double(area.midX), 1 - Double(area.midX)),
+        min(Double(area.midY), 1 - Double(area.midY))) - 0.04
+    let innerRadius = baseRadius * 0.92
+    // Seats stop one clump short of the band's edge, so a clustered island can
+    // never poke through the canvas margin.
+    let outerRadius =
+      max(innerRadius + clump, min(baseRadius * 1.27, canvasReach) - clump)
+    let goldenAngle = Double.pi * (3 - sqrt(5))
     let seatClearance = max(baseRadius * 0.05, clump * 2.8)
     var occupiedSeats: [CGPoint] = []
     for (offset, group) in groups.enumerated() {
-      // Golden-angle seats avoid ruled rows. A uniform-area radial sample fills
-      // the peripheral field instead of turning the catalog into a hollow ring.
+      // Golden-angle seats avoid ruled rows; a uniform-area radial sample fills
+      // the band instead of drawing a hollow ring. Re-seed only on collision so
+      // the field stays deterministic.
       let seed = group.sorted().first ?? ""
-      let innerRadius = baseRadius * 0.12
-      let outerRadius = baseRadius * 0.96
       var seat = CGPoint.zero
       for attempt in 0..<24 {
-        // Re-seed only on collision. The first candidate retains the familiar
-        // golden-angle field, while later candidates remain deterministic and
-        // fill the disk instead of creating a new ring or grid.
         let sequence = Double(offset + attempt * groups.count)
         let wobble = (stableFraction("halo-\(seed)-\(attempt)") - 0.5) * 0.11
         let angle = sequence * goldenAngle + wobble
@@ -1467,11 +1467,9 @@ enum MemoryAtlasForceLayout {
         let memberAngle =
           stableFraction(id) * 2 * .pi + Double(memberIndex) * 2.399_963_229_728_653
         let radius = group.count == 1 ? 0 : clump * (0.6 + 0.4 * stableFraction("r-\(id)"))
-        positions[id] = MemoryAtlasGeometry.constrainedToDisk(
-          CGPoint(
-            x: seat.x + CGFloat(cos(memberAngle) * radius),
-            y: seat.y + CGFloat(sin(memberAngle) * radius)),
-          in: area)
+        positions[id] = CGPoint(
+          x: seat.x + CGFloat(cos(memberAngle) * radius),
+          y: seat.y + CGFloat(sin(memberAngle) * radius))
       }
     }
     return positions
