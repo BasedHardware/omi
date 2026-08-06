@@ -10,6 +10,6 @@
 class FontFamily {
   FontFamily._();
 
-  /// Font family: SF Pro Display
-  static const String sFProDisplay = 'SF Pro Display';
+  /// Font family: Space Grotesk
+  static const String spaceGrotesk = 'Space Grotesk';
 }

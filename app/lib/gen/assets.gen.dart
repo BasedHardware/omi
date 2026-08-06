@@ -52,6 +52,21 @@ class $AssetsFontsGen {
   String get sfprodisplaythinitalic =>
       'assets/fonts/SFPRODISPLAYTHINITALIC.OTF';
 
+  /// File path: assets/fonts/SpaceGrotesk-300.ttf
+  String get spaceGrotesk300 => 'assets/fonts/SpaceGrotesk-300.ttf';
+
+  /// File path: assets/fonts/SpaceGrotesk-400.ttf
+  String get spaceGrotesk400 => 'assets/fonts/SpaceGrotesk-400.ttf';
+
+  /// File path: assets/fonts/SpaceGrotesk-500.ttf
+  String get spaceGrotesk500 => 'assets/fonts/SpaceGrotesk-500.ttf';
+
+  /// File path: assets/fonts/SpaceGrotesk-600.ttf
+  String get spaceGrotesk600 => 'assets/fonts/SpaceGrotesk-600.ttf';
+
+  /// File path: assets/fonts/SpaceGrotesk-700.ttf
+  String get spaceGrotesk700 => 'assets/fonts/SpaceGrotesk-700.ttf';
+
   /// List of all assets
   List<String> get values => [
     sfprodisplayblackitalic,
@@ -62,6 +77,11 @@ class $AssetsFontsGen {
     sfprodisplayregular,
     sfprodisplaysemibolditalic,
     sfprodisplaythinitalic,
+    spaceGrotesk300,
+    spaceGrotesk400,
+    spaceGrotesk500,
+    spaceGrotesk600,
+    spaceGrotesk700,
   ];
 }
 
