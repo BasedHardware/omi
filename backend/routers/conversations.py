@@ -54,7 +54,10 @@ from utils import byok
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
+    clamp_conversation_search_pagination,
+    conversation_matches_date_range,
     conversation_matches_speaker,
+    parse_exact_conversation_reference,
     search_conversations,
 )
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -1253,6 +1256,31 @@ def search_conversations_endpoint(
             end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
+
+    exact_conversation_id = parse_exact_conversation_reference(search_request.query)
+    if exact_conversation_id:
+        exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+        conversations = conversations_db.get_conversations_by_id_without_photos(
+            uid,
+            [exact_conversation_id],
+            include_discarded=bool(search_request.include_discarded),
+        )
+        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+        conversations = [
+            conversation
+            for conversation in conversations
+            if conversation_matches_speaker(conversation, search_request.speaker_id)
+            and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
+        ]
+        if exact_page != 1:
+            conversations = []
+        redact_conversations_for_list(conversations)
+        return {
+            'items': conversations[:exact_per_page],
+            'total_pages': 1,
+            'current_page': exact_page,
+            'per_page': exact_per_page,
+        }
 
     try:
         search_results = search_conversations(
