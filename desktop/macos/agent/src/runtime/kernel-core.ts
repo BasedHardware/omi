@@ -786,12 +786,14 @@ export class KernelCore {
         requestedAdapterId: session.defaultAdapterId,
       });
       const contextSnapshot = input.admittedContextSnapshot
-        ? inheritContextSnapshotForSession(
-            this.store,
-            input.admittedContextSnapshot,
-            session.sessionId,
-            session.ownerId,
-          )
+        ? input.admittedContextSnapshot.sessionId === session.sessionId
+          ? input.admittedContextSnapshot
+          : inheritContextSnapshotForSession(
+              this.store,
+              input.admittedContextSnapshot,
+              session.sessionId,
+              session.ownerId,
+            )
         : buildContextSnapshot(
             this.store,
             session.sessionId,

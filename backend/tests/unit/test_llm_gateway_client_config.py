@@ -202,6 +202,53 @@ def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
     assert legacy.calls == []
 
 
+def test_memory_l2_gateway_mode_uses_luna_auto_lane_without_direct_fallback(monkeypatch):
+    captured = {}
+    gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured['lane_id'] = lane_id
+        captured['streaming'] = streaming
+        captured['feature'] = feature
+        return gateway
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('memory_l2').invoke('promote this memory')
+
+    assert result.content == 'gateway response'
+    assert captured == {'lane_id': 'omi:auto:memory-l2', 'streaming': False, 'feature': 'memory_l2'}
+    assert len(gateway.calls) == 1
+    assert legacy.calls == []
+
+
+def test_get_llm_forwards_an_explicit_gateway_transport_timeout(monkeypatch):
+    captured = {}
+
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
+        captured.update(lane_id=lane_id, streaming=streaming, options=options, feature=feature)
+        return FakeChatModel(name="gateway", calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, "gateway")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, "get_or_create_omi_gateway_llm", fake_gateway)
+
+    clients.get_llm("memory_l2", request_timeout=20.0)
+
+    assert captured == {
+        "lane_id": "omi:auto:memory-l2",
+        "streaming": False,
+        "options": {"request_timeout": 20.0},
+        "feature": "memory_l2",
+    }
+
+
 def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypatch):
     legacy = FakeChatModel(name='legacy', calls=[])
 
@@ -223,7 +270,6 @@ def test_get_llm_feature_gateway_mode_fails_closed_on_transport_failure(monkeypa
 
 
 def test_gateway_serving_does_not_fallback_on_gateway_configuration_503():
-    from utils.llm import gateway_serving
 
     request = httpx.Request('POST', 'http://gateway/v1/chat/completions')
     response = httpx.Response(503, request=request)

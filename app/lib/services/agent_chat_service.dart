@@ -33,11 +33,22 @@ enum AgentChatEventType { textDelta, toolActivity, result, error, status }
 class AgentChatEvent {
   final AgentChatEventType type;
   final String text;
+  final String? code;
+  final String? state;
+  final bool? retryable;
 
-  AgentChatEvent(this.type, this.text);
+  AgentChatEvent(this.type, this.text, {this.code, this.state, this.retryable});
 
   static String textFrom(Map<String, dynamic> message) =>
       message['text'] as String? ?? message['content'] as String? ?? message['message'] as String? ?? '';
+
+  static AgentChatEvent fromMessage(AgentChatEventType type, Map<String, dynamic> message) => AgentChatEvent(
+        type,
+        textFrom(message),
+        code: message['code'] as String?,
+        state: message['state'] as String?,
+        retryable: message['retryable'] as bool?,
+      );
 }
 
 class AgentChatService {
@@ -48,6 +59,7 @@ class AgentChatService {
   Stopwatch? _queryStopwatch;
   bool _firstTextReceived = false;
   Timer? _responseTimer;
+  final List<AgentChatEvent> _pendingStartupEvents = [];
 
   bool get isConnected => _connected;
 
@@ -55,6 +67,9 @@ class AgentChatService {
     await initAgentLog();
     final connectSw = Stopwatch()..start();
     agentLog('connect() called');
+    // Startup events describe a specific socket. Never let an error from an
+    // earlier connection abort a query after a successful reconnect.
+    _pendingStartupEvents.clear();
 
     // Clean up any existing connection
     await _streamSubscription?.cancel();
@@ -111,7 +126,15 @@ class AgentChatService {
               return;
             }
 
-            if (_eventController == null || _eventController!.isClosed) return;
+            if (_eventController == null || _eventController!.isClosed) {
+              if (type == 'status') {
+                _pendingStartupEvents.add(AgentChatEvent.fromMessage(AgentChatEventType.status, msg));
+              } else if (type == 'error') {
+                _pendingStartupEvents.add(AgentChatEvent.fromMessage(AgentChatEventType.error, msg));
+                _connected = false;
+              }
+              return;
+            }
 
             // Reset response timeout on every incoming event
             _resetResponseTimer();
@@ -146,7 +169,7 @@ class AgentChatService {
                 agentLog('[TIMING] *** ERROR *** +${elapsed}ms');
                 _queryStopwatch?.stop();
                 _responseTimer?.cancel();
-                _eventController?.add(AgentChatEvent(AgentChatEventType.error, text));
+                _eventController?.add(AgentChatEvent.fromMessage(AgentChatEventType.error, msg));
                 _eventController?.close();
                 break;
               default:
@@ -195,6 +218,18 @@ class AgentChatService {
     _eventController?.close();
     _eventController = StreamController<AgentChatEvent>();
 
+    if (_pendingStartupEvents.isNotEmpty) {
+      final pending = List<AgentChatEvent>.of(_pendingStartupEvents);
+      _pendingStartupEvents.clear();
+      for (final event in pending) {
+        _eventController!.add(event);
+      }
+      if (pending.any((event) => event.type == AgentChatEventType.error)) {
+        _eventController!.close();
+        return _eventController!.stream;
+      }
+    }
+
     if (_channel == null || !_connected) {
       _eventController!.addError('Not connected to agent proxy');
       _eventController!.close();
@@ -215,6 +250,7 @@ class AgentChatService {
 
   Future<void> disconnect() async {
     _connected = false;
+    _pendingStartupEvents.clear();
     _responseTimer?.cancel();
     _eventController?.close();
     _eventController = null;

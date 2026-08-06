@@ -1,25 +1,21 @@
 """
-Agentic chat system using Anthropic native tool use.
+Agentic chat system with provider-specific streaming tool use.
 
 This module implements a tool-calling agent that autonomously decides which tools
-to use to gather context and answer user questions. Uses Anthropic's native
-tool use API with streaming for real-time responses.
+to use to gather context and answer user questions. Managed gateway traffic uses
+the OpenAI-compatible chat-completions contract; direct specialist traffic keeps
+Anthropic's native streaming contract.
 """
 
+import json
 import uuid
 import asyncio
 import contextvars
 import os
 from typing import List, Optional, AsyncGenerator, Any, Tuple
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.callbacks import BaseCallbackHandler
-
-try:
-    from langgraph.prebuilt import create_react_agent
-except ImportError:
-    create_react_agent = None
 
 # Context variable to store config for tools
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
@@ -67,6 +63,8 @@ from utils.retrieval.safety import (
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
+from utils.llm.usage_tracker import reset_usage_context, set_usage_context
+from utils.byok import get_byok_key
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
 from database.redis_db import get_cached_user_geolocation
@@ -76,6 +74,14 @@ from utils.conversations.location import async_get_google_maps_city
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
 import logging
+
+try:
+    from utils.llm.gateway_client import should_route_features_through_gateway
+except ImportError:
+
+    def should_route_features_through_gateway() -> bool:
+        return False
+
 
 # Import langsmith traceable if available
 try:
@@ -91,12 +97,58 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-CHAT_PROVIDER = os.getenv('CHAT_PROVIDER', 'anthropic').strip().lower()
-if CHAT_PROVIDER not in {'anthropic', 'openai'}:
-    logger.warning('Unsupported CHAT_PROVIDER=%s; falling back to anthropic', CHAT_PROVIDER)
-    CHAT_PROVIDER = 'anthropic'
-if CHAT_PROVIDER == 'openai':
-    logger.warning('CHAT_PROVIDER=openai: Anthropic-native web_search and tool_search are unavailable')
+CHAT_PROVIDER_ENV_VAR = 'CHAT_PROVIDER'
+SUPPORTED_CHAT_PROVIDERS = frozenset({'anthropic', 'openai'})
+
+
+def _configured_chat_provider() -> str:
+    """Resolve the self-hosted chat provider at the request boundary."""
+    provider = os.getenv(CHAT_PROVIDER_ENV_VAR, 'anthropic').strip().lower()
+    if provider not in SUPPORTED_CHAT_PROVIDERS:
+        logger.warning('Unsupported %s=%s; falling back to anthropic', CHAT_PROVIDER_ENV_VAR, provider)
+        return 'anthropic'
+    return provider
+
+
+class _PerplexityWebSearchToolProxy:
+    """Lazy adapter for the gateway-only web-search function tool.
+
+    Agentic unit tests intentionally load this module with a minimal LangChain
+    stub. Avoid importing the optional Perplexity tool module at import time,
+    while retaining the real LangChain tool and gateway implementation when a
+    managed request actually executes it.
+    """
+
+    name = 'perplexity_web_search_tool'
+    description = 'Search the web for current information using Perplexity AI.'
+
+    @property
+    def args_schema(self):
+        try:
+            from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
+
+            return perplexity_web_search_tool.args_schema
+        except ModuleNotFoundError as error:
+            if error.name != 'langchain_core.tools':
+                raise
+
+            class _FallbackArgsSchema:
+                @classmethod
+                def schema(cls):
+                    return {
+                        'properties': {'query': {'type': 'string'}},
+                        'required': ['query'],
+                    }
+
+            return _FallbackArgsSchema
+
+    async def ainvoke(self, tool_input, config=None):
+        from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
+
+        return await perplexity_web_search_tool.ainvoke(tool_input, config=config)
+
+
+perplexity_web_search_tool = _PerplexityWebSearchToolProxy()
 
 
 def _positive_timeout_from_env(name: str, default: float) -> float:
@@ -144,6 +196,12 @@ AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
 AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
 AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
 AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try again.'
+# Delivered when a provider safety classifier declines the turn. Retrying the same prompt would
+# be declined again, so this says the request cannot be answered rather than inviting a retry.
+AGENT_REFUSAL_MESSAGE = "I can't help with that one. Try asking me something else."
+# Delivered when a loop runs to completion without the model ever emitting text. Unlike a
+# refusal this is not a policy decision, so it does invite a retry.
+AGENT_EMPTY_ANSWER_MESSAGE = "I wasn't able to put a response together for that. Please try again."
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
@@ -371,6 +429,33 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     return schemas, registry
 
 
+def _convert_anthropic_tools_to_openai(tool_schemas: list[dict]) -> list[dict]:
+    """Convert function-shaped Anthropic tools to the chat-completions shape.
+
+    Anthropic's server-side ``web_search`` and ``tool_search_tool_regex`` entries
+    intentionally have no ``input_schema``. They are not part of the OpenAI
+    contract, so filtering them here keeps the managed lane from receiving an
+    invalid tool definition. App tools are already present in ``tool_schemas``
+    and are exposed directly instead of relying on Anthropic tool discovery.
+    """
+    openai_tools = []
+    for tool in tool_schemas:
+        input_schema = tool.get('input_schema')
+        if not isinstance(input_schema, dict):
+            continue
+        openai_tools.append(
+            {
+                'type': 'function',
+                'function': {
+                    'name': tool['name'],
+                    'description': tool.get('description', ''),
+                    'parameters': input_schema,
+                },
+            }
+        )
+    return openai_tools
+
+
 @_traceable(name="chat.tool_execution", run_type="tool")
 async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
@@ -508,6 +593,47 @@ async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list
     await callback.put_data(text)
 
 
+def _has_answer(full_response: list) -> bool:
+    """Whether anything the router would render as an answer has been delivered.
+
+    List truthiness is not the same question. A stream can emit the inter-iteration separator or
+    a whitespace-only delta and then fail, which leaves ``full_response`` non-empty while the
+    persisted reply is still blank to the reader.
+    """
+    return bool(''.join(full_response).strip())
+
+
+async def _end_with_answer_guarantee(
+    callback: AsyncStreamingCallback, full_response: list, provider: str
+) -> Optional[str]:
+    """Close the stream, guaranteeing the turn left the user something to read.
+
+    Either loop can run to completion without the model emitting any text: a content filter, an
+    empty completion, or a tool-only iteration with nothing to say. ``full_response`` is what the
+    router persists and renders, so returning here silently hands the user a blank answer and
+    records the turn as a success. Report it as the failure it is instead.
+    """
+    if _has_answer(full_response):
+        await callback.end()
+        return None
+    logger.warning('Chat agent loop finished with no answer provider=%s', provider)
+    await _put_answer_text(callback, full_response, AGENT_EMPTY_ANSWER_MESSAGE)
+    await callback.end()
+    return 'empty_answer'
+
+
+def _refusal_category(response: Any) -> str:
+    """Name the policy category behind a refusal, for logs only.
+
+    ``stop_details`` is populated only alongside ``stop_reason == "refusal"`` and is absent on
+    older provider versions, so every level is optional. The category is a fixed provider enum
+    and carries none of the request content.
+    """
+    details = getattr(response, 'stop_details', None)
+    category = getattr(details, 'category', None) if details is not None else None
+    return category if isinstance(category, str) and category else 'unspecified'
+
+
 async def _run_anthropic_agent_stream(
     system_prompt: str,
     messages: list,
@@ -624,7 +750,9 @@ async def _run_anthropic_agent_stream(
                     continue
 
                 await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
-                await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
+                # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+                # router would overwrite this apology with its own canned error.
+                await _put_answer_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
                 await callback.end()
                 return f'provider_{type(e).__name__}'
 
@@ -636,6 +764,18 @@ async def _run_anthropic_agent_stream(
                 reason=retried_reason,
                 outcome='recovered',
             )
+
+        # A safety classifier can decline the turn. The response is a normal success with an
+        # empty (or partial) content list, so the loop would otherwise exit as if the model had
+        # simply answered nothing: the router sees a blank answer, emits its generic error, and
+        # records no error at all. Say so through the normal streamed/persisted contract and
+        # report the turn as failed instead.
+        if response.stop_reason == "refusal":
+            logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
+            if not _has_answer(full_response):
+                await _put_answer_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
+            await callback.end()
+            return 'provider_refusal'
 
         # If no tool_use, we're done
         if response.stop_reason != "tool_use":
@@ -711,122 +851,264 @@ async def _run_anthropic_agent_stream(
     stats = safety_guard.get_stats()
     logger.info(f"Safety Guard final stats: {stats}")
 
-    await callback.end()
+    return await _end_with_answer_guarantee(callback, full_response, 'anthropic')
 
 
-def _messages_to_langchain(messages: List[Message], system_prompt: str) -> list:
-    result = [SystemMessage(content=system_prompt)]
-    for message in messages:
-        message_type = AIMessage if message.sender == 'ai' else HumanMessage
-        result.append(message_type(content=message.text))
-    return result
-
-
-def _coerce_tool_input_to_params(tool_input: Any) -> dict:
-    """Keep tool-call arguments visible to the safety guard."""
-    if isinstance(tool_input, dict):
-        return tool_input
-    if tool_input is None:
-        return {}
-    args = getattr(tool_input, 'args', None)
-    if isinstance(args, dict):
-        return args
-    for dumper in ('model_dump', 'dict'):
-        method = getattr(tool_input, dumper, None)
-        if callable(method):
-            try:
-                dumped = method()
-            except Exception:
-                continue
-            if isinstance(dumped, dict):
-                return dumped
-    return {'input': tool_input}
-
-
-def _chunk_text(content: Any) -> str:
-    """Extract text from both string and content-part LangChain chunks."""
+def _openai_content_text(content: Any) -> str:
+    """Extract text from an OpenAI-compatible message or message chunk."""
     if isinstance(content, str):
         return content
     if not isinstance(content, list):
         return ''
 
-    parts = []
+    text_parts = []
     for part in content:
-        if isinstance(part, str):
-            parts.append(part)
-        elif isinstance(part, dict) and part.get('type', 'text') == 'text':
+        if isinstance(part, dict):
             text = part.get('text')
-            if isinstance(text, str):
-                parts.append(text)
-    return ''.join(parts)
+        else:
+            text = getattr(part, 'text', None)
+        if isinstance(text, str):
+            text_parts.append(text)
+    return ''.join(text_parts)
+
+
+def _normalize_openai_tool_call(raw_call: dict, index: int) -> dict:
+    """Normalize LangChain/OpenAI tool-call variants to one internal shape."""
+    function = raw_call.get('function') if isinstance(raw_call.get('function'), dict) else {}
+    name = raw_call.get('name') or function.get('name')
+    if not isinstance(name, str) or not name:
+        raise ValueError('OpenAI tool call omitted a function name')
+
+    arguments = raw_call.get('args')
+    if arguments is None:
+        arguments = function.get('arguments')
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments) if arguments.strip() else {}
+        except json.JSONDecodeError as error:
+            raise ValueError('OpenAI tool call contained invalid arguments') from error
+    if not isinstance(arguments, dict):
+        arguments = {}
+
+    call_id = raw_call.get('id') or f'call_{index}'
+    return {'id': call_id, 'name': name, 'input': arguments}
+
+
+def _openai_tool_calls(chunks: list[Any]) -> list[dict]:
+    """Collect complete tool calls from streamed OpenAI-compatible chunks."""
+    tool_call_chunks = []
+    for chunk in chunks:
+        raw_chunks = getattr(chunk, 'tool_call_chunks', None) or []
+        if isinstance(raw_chunks, list):
+            tool_call_chunks.extend(raw_chunks)
+
+    if tool_call_chunks:
+        aggregated: dict[str, dict[str, Any]] = {}
+        by_index: dict[str, str] = {}
+        by_id: dict[str, str] = {}
+        for position, raw_call in enumerate(tool_call_chunks):
+            if not isinstance(raw_call, dict):
+                continue
+            raw_index = raw_call.get('index')
+            raw_id = raw_call.get('id')
+            if raw_index is not None and str(raw_index) in by_index:
+                key = by_index[str(raw_index)]
+            elif raw_id and str(raw_id) in by_id:
+                key = by_id[str(raw_id)]
+            else:
+                if raw_id:
+                    key = str(raw_id)
+                elif raw_index is not None:
+                    key = str(raw_index)
+                else:
+                    key = str(position)
+            if raw_index is not None:
+                by_index[str(raw_index)] = key
+            if raw_id:
+                by_id[str(raw_id)] = key
+            entry = aggregated.setdefault(key, {'id': raw_call.get('id'), 'name': '', 'args': ''})
+            if raw_call.get('id'):
+                entry['id'] = raw_call['id']
+            if raw_call.get('name'):
+                entry['name'] += raw_call['name']
+            arguments = raw_call.get('args')
+            if isinstance(arguments, str):
+                if isinstance(entry['args'], str):
+                    entry['args'] += arguments
+                else:
+                    entry['args'] = arguments
+            elif isinstance(arguments, dict):
+                entry['args'] = arguments
+        return [_normalize_openai_tool_call(call, index) for index, call in enumerate(aggregated.values())]
+
+    for chunk in reversed(chunks):
+        raw_tool_calls = getattr(chunk, 'tool_calls', None) or []
+        if not raw_tool_calls:
+            additional_kwargs = getattr(chunk, 'additional_kwargs', {})
+            if isinstance(additional_kwargs, dict):
+                raw_tool_calls = additional_kwargs.get('tool_calls') or []
+        if raw_tool_calls:
+            return [_normalize_openai_tool_call(call, index) for index, call in enumerate(raw_tool_calls)]
+    return []
 
 
 async def _run_openai_agent_stream(
-    agent,
+    system_prompt: str,
     messages: list,
+    tool_schemas: list,
+    tool_registry: dict,
     callback: AsyncStreamingCallback,
     full_response: list,
     safety_guard: AgentSafetyGuard,
     configurable: dict,
+    *,
+    model_feature: str = 'chat_agent',
 ) -> Optional[str]:
-    """Run the OpenAI-compatible LangGraph agent through the shared stream contract."""
-    config = RunnableConfig(configurable=configurable)
+    """Run the agent loop through an OpenAI-compatible chat-completions contract."""
     try:
-        async for event in agent.astream_events({'messages': messages}, config=config, version='v2'):
-            kind = event.get('event')
-            event_data = event.get('data', {})
-
-            if kind == 'on_chat_model_stream':
-                token = _chunk_text(getattr(event_data.get('chunk'), 'content', None))
-                if token:
-                    full_response.append(token)
-                    await callback.put_data(token)
-            elif kind == 'on_tool_start':
-                tool_name = event.get('name', 'unknown')
-                guard_params = _coerce_tool_input_to_params(event_data.get('input'))
-                try:
-                    safety_guard.validate_tool_call(tool_name, guard_params)
-                    warning = safety_guard.should_warn_user()
-                    if warning:
-                        await callback.put_thought(warning)
-                except SafetyGuardError as error:
-                    await _put_answer_text(callback, full_response, f'\n\n{error}')
-                    logger.error('Safety Guard blocked tool call: %s', error)
-                    await callback.end()
-                    return None
-
-                tool_obj = next(
-                    (tool for tool in configurable['tools'] if getattr(tool, 'name', None) == tool_name), None
-                )
-                await callback.put_thought(
-                    get_tool_display_name(tool_name, tool_obj), app_id=_extract_app_id(tool_name)
-                )
-            elif kind == 'on_tool_end':
-                tool_name = event.get('name', 'unknown')
-                raw_output = event_data.get('output', '')
-                output = str(getattr(raw_output, 'content', raw_output))
-                await _emit_calendar_status(callback, tool_name, output)
-                try:
-                    safety_guard.check_context_size(output)
-                except SafetyGuardError as error:
-                    await _put_answer_text(callback, full_response, f'\n\n{error}')
-                    logger.error('Safety Guard blocked due to context size: %s', error)
-                    await callback.end()
-                    return None
-            elif kind in {'on_tool_error', 'on_chain_error'}:
-                error = event_data.get('error')
-                logger.error('OpenAI agent event failed event=%s error_type=%s', kind, type(error).__name__)
-
-        logger.info('Safety Guard final stats: %s', safety_guard.get_stats())
-        await callback.end()
-        return None
-    except asyncio.CancelledError:
-        raise
+        chat_model = get_llm(model_feature, streaming=True)
+        chat_model = chat_model.bind(tools=tool_schemas, tool_choice='auto', max_completion_tokens=8192)
     except Exception as error:
-        await handle_llm_error_async(error, 'openai', feature='chat_agent')
+        await handle_llm_error_async(error, 'openai', feature=model_feature)
+        # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+        # router would overwrite this apology with its own canned error.
         await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
         await callback.end()
         return f'provider_{type(error).__name__}'
+
+    producer_started_at = asyncio.get_running_loop().time()
+    loop_iteration = 0
+
+    while True:
+        loop_iteration += 1
+        attempts_made = 0
+        retried_reason: Optional[str] = None
+
+        while True:
+            attempts_made += 1
+            first_text_in_iteration = True
+            text_before_attempt = len(full_response)
+            iteration_text: list[str] = []
+            chunks: list[Any] = []
+
+            try:
+                usage_token = None
+                user_id = configurable.get('user_id') if isinstance(configurable, dict) else None
+                if isinstance(user_id, str) and user_id:
+                    usage_token = set_usage_context(user_id, 'chat_agent')
+                try:
+                    async for chunk in chat_model.astream([{'role': 'system', 'content': system_prompt}, *messages]):
+                        chunks.append(chunk)
+                        text = _openai_content_text(getattr(chunk, 'content', ''))
+                        if not text:
+                            continue
+                        if first_text_in_iteration and loop_iteration > 1 and full_response:
+                            last_char = full_response[-1][-1] if full_response[-1] else ''
+                            first_char = text[0]
+                            if (
+                                last_char
+                                and first_char
+                                and last_char not in (' ', '\n')
+                                and first_char not in (' ', '\n')
+                            ):
+                                await _put_answer_text(callback, full_response, '\n\n')
+                        first_text_in_iteration = False
+                        iteration_text.append(text)
+                        await _put_answer_text(callback, full_response, text)
+                finally:
+                    if usage_token is not None:
+                        reset_usage_context(usage_token)
+                tool_calls = _openai_tool_calls(chunks)
+                break
+            except Exception as error:
+                elapsed = asyncio.get_running_loop().time() - producer_started_at
+                if should_retry_provider_error(
+                    error,
+                    attempts_made=attempts_made,
+                    max_attempts=AGENT_STREAM_PROVIDER_MAX_ATTEMPTS,
+                    text_already_streamed=len(full_response) > text_before_attempt,
+                    seconds_remaining=AGENT_STREAM_MAX_DURATION_SECONDS - elapsed,
+                    min_headroom_seconds=AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS,
+                ):
+                    retried_reason = provider_fallback_reason(error)
+                    logger.warning(
+                        'Agent stream provider call failed, retrying attempt=%d error_type=%s',
+                        attempts_made + 1,
+                        type(error).__name__,
+                    )
+                    await asyncio.sleep(AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS)
+                    continue
+
+                await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+                await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+                await callback.end()
+                return f'provider_{type(error).__name__}'
+
+        if retried_reason is not None:
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='llm_answer_retried',
+                reason=retried_reason,
+                outcome='recovered',
+            )
+
+        if not tool_calls:
+            break
+
+        tool_results = []
+        for tool_call in tool_calls:
+            try:
+                safety_guard.validate_tool_call(tool_call['name'], tool_call['input'])
+                warning = safety_guard.should_warn_user()
+                if warning:
+                    await callback.put_thought(warning)
+            except SafetyGuardError as error:
+                await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
+                logger.error('Safety Guard blocked tool call: %s', error)
+                await callback.end()
+                return None
+
+            tool_name = tool_call['name']
+            tool_obj = tool_registry.get(tool_name)
+            await callback.put_thought(get_tool_display_name(tool_name, tool_obj), app_id=_extract_app_id(tool_name))
+            try:
+                result = await _execute_tool(tool_name, tool_call['input'], tool_registry, configurable)
+            except Exception as error:
+                logger.error('Tool execution error (%s): %s', tool_name, error)
+                result = f'Error executing tool: {str(error)}'
+
+            logger.info('Tool ended: %s', tool_name)
+            await _emit_calendar_status(callback, tool_name, result)
+            try:
+                safety_guard.check_context_size(result)
+            except SafetyGuardError as error:
+                await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
+                logger.error('Safety Guard blocked due to context size: %s', error)
+                await callback.end()
+                return None
+            tool_results.append({'role': 'tool', 'tool_call_id': tool_call['id'], 'content': result})
+
+        assistant_message = {
+            'role': 'assistant',
+            'content': ''.join(iteration_text),
+            'tool_calls': [
+                {
+                    'id': tool_call['id'],
+                    'type': 'function',
+                    'function': {
+                        'name': tool_call['name'],
+                        'arguments': json.dumps(tool_call['input'], separators=(',', ':')),
+                    },
+                }
+                for tool_call in tool_calls
+            ],
+        }
+        messages.append(assistant_message)
+        messages.extend(tool_results)
+
+    logger.info('Safety Guard final stats: %s', safety_guard.get_stats())
+    return await _end_with_answer_guarantee(callback, full_response, 'openai')
 
 
 # ---------------------------------------------------------------------------
@@ -895,7 +1177,7 @@ def _consume_agent_task_exception(task: asyncio.Task) -> None:
         logger.error('Detached agent stream producer failed error_type=%s', type(error).__name__)
 
 
-@_traceable(name="chat.agentic.stream", run_type="chain")
+@_traceable(name="chat.anthropic.stream", run_type="chain")
 async def execute_agentic_chat_stream(
     uid: str,
     messages: List[Message],
@@ -928,12 +1210,19 @@ async def execute_agentic_chat_stream(
         return
 
     first_event_deadline = asyncio.get_running_loop().time() + AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
+    gateway_feature_mode = False
+    direct_openai_mode = False
     try:
         # Resolve the user's timezone once and reuse it for both the system prompt and the
         # injected datetime block, avoiding a duplicate notification_db lookup per request.
         # These helpers perform Firestore and LangSmith I/O before the producer task exists,
         # so they share the first-event deadline instead of leaving the SSE body silent.
         async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
+            direct_openai_mode = _configured_chat_provider() == 'openai'
+            # Anthropic BYOK is an explicit direct-provider choice. It must not
+            # enter the managed OpenAI-compatible lane, whose route override
+            # would otherwise attach an Anthropic key to a Luna/OpenAI route.
+            gateway_feature_mode = should_route_features_through_gateway() and not bool(get_byok_key('anthropic'))
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             system_prompt = await run_blocking(
@@ -949,10 +1238,10 @@ async def execute_agentic_chat_stream(
             except Exception as error:
                 logger.error('Could not get prompt metadata error_type=%s', type(error).__name__)
 
-            # Core tools (fixed order) — always visible to Claude
+            # Core tools (fixed order) — always available to the agent
             core_tools = list(CORE_TOOLS)
 
-            # Dynamic app tools — deferred, discovered on-demand via tool search
+            # Dynamic app tools — deferred for Anthropic; exposed directly in managed mode
             app_tools = []
             try:
                 app_tools = await run_blocking(db_executor, load_app_tools, uid)
@@ -975,20 +1264,26 @@ async def execute_agentic_chat_stream(
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
         return
 
-    # Append app tool awareness using the discovery mechanism available to the provider.
+    openai_compatible_mode = direct_openai_mode or gateway_feature_mode
+
+    # Append app tool awareness to the system prompt. Anthropic discovers deferred app tools
+    # through its server-side search tool; OpenAI-compatible providers receive those tools
+    # directly and must be told to call them by name.
     if app_tools:
         app_names = set()
         for t in app_tools:
             # Tool names are prefixed with app_id; extract the human-readable app name from description
             app_names.add(t.name)
         app_tool_names = ", ".join(sorted(app_names))
-        if CHAT_PROVIDER == 'openai':
+        if openai_compatible_mode:
             system_prompt += f"""
 
 <available_app_tools>
-You have access to additional tools from the user's connected apps. Use them when the user asks for actions or data from a matching external service.
+You have access to additional tools from the user's connected apps. Call the relevant tool directly when the user asks about an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.).
 
 Available app tool names: {app_tool_names}
+
+IMPORTANT: Always call a matching integration tool when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
 </available_app_tools>"""
         else:
             system_prompt += f"""
@@ -1009,7 +1304,28 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
-    datetime_block = current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
+    # Build the canonical tool schemas once. Direct Anthropic mode keeps its native
+    # shape; OpenAI-compatible providers use function-tool schemas.
+    tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
+    if openai_compatible_mode:
+        # Anthropic's native web_search server tool is not understood by the
+        # OpenAI-compatible providers. Expose the existing Perplexity-backed
+        # function tool and register the same object for execution; direct
+        # Anthropic mode keeps the native server tool above.
+        tool_registry = dict(tool_registry)
+        tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
+        tool_schemas = [
+            *tool_schemas,
+            _langchain_tool_to_anthropic(perplexity_web_search_tool, defer_loading=False),
+        ]
+        tool_schemas = _convert_anthropic_tools_to_openai(tool_schemas)
+
+    # Build the provider-neutral role/content message shape. The current datetime is injected
+    # into the user turn (not the system prompt) so the direct Anthropic cache prefix stays stable.
+    anthropic_messages = _messages_to_anthropic(messages)
+    anthropic_messages = _inject_current_datetime(
+        anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
+    )
 
     callback = AsyncStreamingCallback()
 
@@ -1044,22 +1360,30 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     full_response = []
     tool_usage_count = 0
 
-    if CHAT_PROVIDER == 'openai':
-        if create_react_agent is None:
-            logger.error('CHAT_PROVIDER=openai but langgraph is not installed')
-            if callback_data is not None:
-                callback_data['error'] = 'langgraph is not installed'
-            yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
-            return
-
-        # This model is intentionally resolved per request so BYOK credentials are
-        # never captured in a process-global LangGraph agent.
-        openai_agent = create_react_agent(model=get_llm('chat_graph', streaming=True), tools=configurable['tools'])
-        openai_messages = _messages_to_langchain(messages, f'{system_prompt}\n\n{datetime_block}')
+    # Start the provider-specific agent task. Direct Anthropic mode retains the
+    # native Messages contract. Managed and self-hosted OpenAI modes share the
+    # supervised OpenAI-compatible runner but resolve different model features.
+    if direct_openai_mode:
         task = asyncio.create_task(
             _run_openai_agent_stream(
-                openai_agent,
-                openai_messages,
+                system_prompt,
+                anthropic_messages,
+                tool_schemas,
+                tool_registry,
+                callback,
+                full_response,
+                safety_guard,
+                configurable,
+                model_feature='chat_graph',
+            )
+        )
+    elif gateway_feature_mode:
+        task = asyncio.create_task(
+            _run_openai_agent_stream(
+                system_prompt,
+                anthropic_messages,
+                tool_schemas,
+                tool_registry,
                 callback,
                 full_response,
                 safety_guard,
@@ -1067,10 +1391,6 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             )
         )
     else:
-        # Convert messages to Anthropic format. The current datetime is injected
-        # into the user turn so the cacheable system prefix stays byte-stable.
-        anthropic_messages = _inject_current_datetime(_messages_to_anthropic(messages), datetime_block)
-        tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
         task = asyncio.create_task(
             _run_anthropic_agent_stream(
                 system_prompt,

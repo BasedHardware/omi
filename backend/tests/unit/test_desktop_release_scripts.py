@@ -60,6 +60,32 @@ KEY_VALUE_END -->"""
     }
 
 
+def _beta_uid_continuity() -> dict:
+    return {
+        "schema_version": 1,
+        "status": "passed",
+        "firebase_auth": {
+            "project": "based-hardware",
+            "release_probe_uid": "omi-release-probe",
+            "token_claims": "production_project_verified",
+        },
+        "development_serving_reads": {
+            "python": {
+                "url": "https://api.omiapi.com/",
+                "production_authority_url": "https://api.omi.me/",
+                "operation": "production_sentinel_development_read_cleanup",
+                "status": "passed",
+            },
+            "desktop_backend": {
+                "url": "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
+                "operation": "authenticated_proxy_authority_read",
+                "status": "passed",
+            },
+        },
+        "redaction": {"customer_content_printed": False, "tokens_printed": False},
+    }
+
+
 def test_canonical_manifest_is_the_exact_immutable_object_registered_and_promoted():
     """Validation, registration, and promotion share the v1 executable contract."""
     accepted = manifest_contract.validate_manifest(_manifest())
@@ -244,8 +270,10 @@ def test_qualified_artifact_replacement_is_rejected_before_beta_or_stable_pointe
             paths[name] = path
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        proof = root / "beta-uid-continuity.json"
+        proof.write_text(json.dumps(_beta_uid_continuity()), encoding="utf-8")
         evidence = qualification_evidence.build_evidence(
-            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}, beta_uid_continuity_path=proof
         )
         paths["Omi.zip"].write_bytes(b"replacement")
         with pytest.raises(ValueError, match="Omi.zip hash differs"):
@@ -283,8 +311,14 @@ def test_qualification_evidence_accepts_the_side_by_side_beta_artifact_pair():
             paths[name] = path
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        proof = root / "beta-uid-continuity.json"
+        proof.write_text(json.dumps(_beta_uid_continuity()), encoding="utf-8")
         evidence = qualification_evidence.build_evidence(
-            release, release["tagName"], "a" * 40, {**paths, "__candidate_gate__": gate}
+            release,
+            release["tagName"],
+            "a" * 40,
+            {**paths, "__candidate_gate__": gate},
+            beta_uid_continuity_path=proof,
         )
         assert set(evidence["artifacts"]) == {"Omi.zip", "omi.dmg", "Omi.Beta.zip", "omi-beta.dmg"}
         assert evidence["artifacts"]["Omi.Beta.zip"]["signature"] == "beta-signature"
@@ -330,6 +364,8 @@ def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
             asset_args += ["--asset", f"{name}={path}"]
         gate = root / "gate.json"
         gate.write_text(json.dumps({"passed": True, "release_tag": release["tagName"], "source_sha": "a" * 40}))
+        proof = root / "beta-uid-continuity.json"
+        proof.write_text(json.dumps(_beta_uid_continuity()), encoding="utf-8")
         evidence_out = root / "evidence.json"
         result = subprocess.run(
             [
@@ -344,6 +380,8 @@ def test_qualification_evidence_cli_accepts_the_beta_artifact_pair_end_to_end():
                 "a" * 40,
                 "--candidate-gate",
                 str(gate),
+                "--beta-uid-continuity-evidence",
+                str(proof),
                 *asset_args,
                 "--evidence",
                 str(evidence_out),

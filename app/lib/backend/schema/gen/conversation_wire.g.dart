@@ -830,6 +830,34 @@ class GeneratedSyncJobStartResponse {
   }
 }
 
+class GeneratedSyncRecoveryWindowExceededResponse {
+  final String code;
+  final String detail;
+  final String? lane;
+
+  const GeneratedSyncRecoveryWindowExceededResponse({
+    required this.code,
+    required this.detail,
+    this.lane,
+  });
+
+  factory GeneratedSyncRecoveryWindowExceededResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSyncRecoveryWindowExceededResponse(
+      code: _required(_readFieldValue<String>(_readField(json, const ["code"]), "code", _readString, requiredField: true, nullable: false), "code"),
+      detail: _required(_readFieldValue<String>(_readField(json, const ["detail"]), "detail", _readString, requiredField: true, nullable: false), "detail"),
+      lane: _readFieldValue<String>(_readField(json, const ["lane"]), "lane", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'detail': detail,
+      'lane': lane,
+    };
+  }
+}
+
 class GeneratedSyncJobStatusResponse {
   final String? error;
   final int failedSegments;

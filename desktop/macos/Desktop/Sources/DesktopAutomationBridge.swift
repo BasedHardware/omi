@@ -162,14 +162,6 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var snapshotStale: Bool = false
 }
 
-struct DesktopAutomationNavigationRequest: Codable {
-  let target: String
-  let settingsSection: String?
-  let highlightedSettingId: String?
-  let activateApp: Bool?
-  let settleMs: Int?
-}
-
 struct DesktopAutomationOpenConversationRequest: Codable {
   let conversationId: String
   let showTranscript: Bool?
@@ -583,7 +575,7 @@ private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSna
   }
 }
 
-private func cachedAutomationSnapshot() async -> DesktopAutomationSnapshot {
+func cachedAutomationSnapshot() async -> DesktopAutomationSnapshot {
   var snapshot = DesktopAutomationStateStore.shared.current()
   snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
   return snapshot
@@ -840,7 +832,6 @@ final class DesktopAutomationActionRegistry {
         ]
       }
     }
-
     register(
       name: "task_capture_fixture",
       summary: "Evaluate canonical screen-capture policy facts without screenshot bytes",
@@ -1507,16 +1498,19 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "sign_out",
-      summary: "Sign out via AuthService (local Auth emulator harness only)"
-    ) { _ in
+      summary: "Sign out via AuthService (local Auth emulator harness only)",
+      params: ["accepted_account_deletion"]
+    ) { params in
       guard DesktopLocalProfile.isEnabled else {
         return ["error": "sign_out is only available with OMI_DESKTOP_LOCAL_PROFILE=1 (local Auth emulator)"]
       }
+      let acceptedAccountDeletion = boolParam(params["accepted_account_deletion"], default: false)
       guard AuthState.shared.isSignedIn else {
         return ["signed_out": "true", "was_signed_in": "false"]
       }
-      try await AuthService.shared.signOut()
+      try await AuthService.shared.signOut(acceptedAccountDeletion: acceptedAccountDeletion)
       return [
+        "accepted_account_deletion": acceptedAccountDeletion ? "true" : "false",
         "signed_out": "true",
         "was_signed_in": "true",
         "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
@@ -2092,7 +2086,8 @@ final class DesktopAutomationActionRegistry {
 
         let status = await AppleNotesReaderService.shared.connectionStatus(
           maxResults: maxResults,
-          selectedFolderPath: selectedFolderPath
+          selectedFolderPath: selectedFolderPath,
+          userInitiated: true
         )
         switch status {
         case .connected(let noteCount, _):
@@ -2487,7 +2482,8 @@ final class DesktopAutomationActionRegistry {
         let events = try await CalendarReaderService.shared.readEvents(
           daysBack: normalized.daysBack,
           daysForward: normalized.daysForward,
-          maxResults: normalized.maxResults
+          maxResults: normalized.maxResults,
+          userInitiated: true
         )
         return [
           "status": "connected",
@@ -2539,7 +2535,8 @@ final class DesktopAutomationActionRegistry {
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
           maxResults: maxResults,
-          query: query
+          query: query,
+          userInitiated: true
         )
         return [
           "status": "connected",
@@ -3125,14 +3122,15 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       do {
         let graph = try await APIClient.shared.getKnowledgeGraph()
+        let atlas = MemoryAtlasProjection(graph: graph.atlasResponse, userName: nil)
         var detail = [
           "node_count": "\(graph.nodes.count)",
           "edge_count": "\(graph.edges.count)",
+          "catalog_memory_count": "\(graph.catalogNodes?.count ?? 0)",
+          "atlas_mark_count": "\(atlas.snapshot.nodes.count)",
           "is_empty": graph.nodes.isEmpty ? "true" : "false",
         ]
-        // `label` resolves a human-typed name to the ids the inspector needs,
-        // so a cursor-free check can both drive a selection and state what it
-        // expects the panel to show.
+        // A label resolves to the ids and citations the inspector needs.
         if let query = params["label"]?.lowercased(), !query.isEmpty {
           if let match = graph.nodes.first(where: { $0.label.lowercased().contains(query) }) {
             let edges = graph.edges.filter { $0.sourceId == match.id || $0.targetId == match.id }
@@ -3981,7 +3979,7 @@ final class DesktopAutomationBridge: @unchecked Sendable {
         let payload = try JSONDecoder().decode(
           DesktopAutomationNavigationRequest.self, from: request.body)
         try await dispatchNavigation(payload)
-        let snapshot = try await waitForNavigationTarget(payload)
+        let snapshot = try await navigationSnapshot(for: payload)
         try await sleepForAutomationSettle(payload.settleMs)
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {

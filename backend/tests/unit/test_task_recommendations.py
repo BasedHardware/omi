@@ -10,6 +10,7 @@ from google.api_core.exceptions import AlreadyExists
 from pydantic import ValidationError
 
 import database.task_recommendations as recommendation_db
+from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
 from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.task_intelligence import (
@@ -1448,6 +1449,36 @@ def test_feedback_validation_keeps_three_choice_reason_taxonomy_small():
             action=TaskIntelligenceFeedbackAction.dismiss,
             reason=TaskIntelligenceFeedbackReason.not_mine,
         )
+
+
+def test_dev_deploy_smoke_uid_is_admitted_by_the_projection_store(fake_firestore):
+    """The deploy gate's uid must clear the store's cohort check, not only the route's.
+
+    Uses the shipped cohort deliberately: nothing here stubs
+    ``is_canonical_memory_user``, so dropping the smoke uid from
+    ``CANONICAL_MEMORY_USERS`` fails this test instead of the deploy lane.
+    """
+
+    fake_db = fake_firestore
+    fake_db.rows[
+        (
+            'users',
+            WHAT_MATTERS_NOW_SMOKE_UID,
+            recommendation_db.TASK_INTELLIGENCE_CONTROL_COLLECTION,
+            recommendation_db.TASK_INTELLIGENCE_CONTROL_DOCUMENT,
+        )
+    ] = TaskWorkflowControl(workflow_mode=TaskWorkflowMode.read, account_generation=0).model_dump(mode='python')
+
+    projection = recommendations.evaluate(
+        WHAT_MATTERS_NOW_SMOKE_UID,
+        EvaluationRequest(),
+        judgment=RecordedJudgment([]),
+        now=NOW,
+        firestore_client=fake_db,
+    )
+
+    assert projection.recommendations == []
+    assert any(path[1] == WHAT_MATTERS_NOW_SMOKE_UID for path in fake_db.rows)
 
 
 def test_database_module_has_attribution_join_and_no_raw_content_fields():

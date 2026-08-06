@@ -31,13 +31,6 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -253,13 +246,6 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
     when:
       changeset:
         includes:
@@ -2749,6 +2735,8 @@ workflows:
               --expected-channel beta \
               --expected-bundle-id "$BETA_BUNDLE_ID" \
               --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
+              --expected-python-api-url "https://api.omiapi.com/" \
+              --expected-desktop-api-url "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/" \
               --launch \
               --auth-storage-canary \
               --notification-callback-canary \
@@ -2928,6 +2916,7 @@ workflows:
       - build/*.zip
       - build/*.dSYM
       - build/desktop-smoke-result.json
+      - build/desktop-smoke-result-beta.json
     publishing:
       email:
         recipients:

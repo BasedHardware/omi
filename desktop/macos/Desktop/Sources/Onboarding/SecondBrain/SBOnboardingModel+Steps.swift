@@ -235,15 +235,8 @@ extension SBOnboardingModel {
       // flips to "on" when FDA is granted from the context step — its poll only
       // drives fdaState, unlike every other connector that writes back its own state.
       contextStates["files"] = "on"
-      // Apple Notes reads through the same FDA grant, so re-probe it here too —
-      // otherwise granting FDA leaves Notes showing a pointless "Connect" button.
-      if contextStates["applenotes"] != "on" {
-        Task { [weak self] in
-          if await AppleNotesReaderService.shared.connectionStatus().isConnected {
-            self?.contextStates["applenotes"] = "on"
-          }
-        }
-      }
+    // Do not read Apple Notes merely because Full Disk Access changed. The
+    // explicit Connect action owns the data read.
     case "accessibility": accState = .on
     case "automation": autoState = .on
     default: break
@@ -809,17 +802,8 @@ extension SBOnboardingModel {
     if appState.hasFullDiskAccess { contextStates["files"] = "on" }
     Task { [weak self] in
       guard let self else { return }
-      // Apple Notes rides the same Full Disk Access grant that powers Files, so a
-      // readable NoteStore should show "✓ on" up front — not a "Connect" button
-      // that would only flip to on for nothing (this precheck was missing, which
-      // made the row look fake).
-      if self.contextStates["applenotes"] != "on",
-        await AppleNotesReaderService.shared.connectionStatus().isConnected
-      {
-        self.contextStates["applenotes"] = "on"
-      }
-
-      // Do not probe browser cookies just to decorate a fresh onboarding row.
+      // Do not probe browser cookies or Apple Notes just to decorate a fresh
+      // onboarding row.
       // A functional probe without a completed import used to paint "on" even
       // though post-onboarding Home/Apps had no persisted connector state and
       // no imported data. Only re-check a connector that this account already
@@ -944,7 +928,7 @@ extension SBOnboardingModel {
         guard let self else { return }
         // Full Disk Access covers Notes when it applies; if not, grant a
         // security-scoped folder bookmark (the real, re-sign-proof connect path).
-        var status = await AppleNotesReaderService.shared.connectionStatus()
+        var status = await AppleNotesReaderService.shared.connectionStatus(userInitiated: true)
         if status.isConnected {
           self.contextStates["applenotes"] = "on"
           return
@@ -966,7 +950,10 @@ extension SBOnboardingModel {
         }
         do {
           _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: path)
-          status = await AppleNotesReaderService.shared.connectionStatus(selectedFolderPath: path)
+          status = await AppleNotesReaderService.shared.connectionStatus(
+            selectedFolderPath: path,
+            userInitiated: true
+          )
           self.contextStates["applenotes"] = status.isConnected ? "on" : "needsSignIn"
         } catch {
           self.contextStates["applenotes"] = "needsSignIn"

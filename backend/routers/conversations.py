@@ -54,7 +54,10 @@ from utils import byok
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
+    clamp_conversation_search_pagination,
+    conversation_matches_date_range,
     conversation_matches_speaker,
+    parse_exact_conversation_reference,
     search_conversations,
 )
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -361,11 +364,49 @@ def _ensure_aware(value: datetime) -> datetime:
 # comma-separated filter into an unhandled 500. ConversationStatus and the source set are both
 # tiny, so a cap of 20 can never reject a request a real client would send.
 MAX_IN_FILTER_VALUES = 20
+LEGACY_SEGMENT_INDEX_PREFIX = '#index:'
 
 
 def _reject_oversized_filter(values: List[str], field_name: str) -> None:
     if len(values) > MAX_IN_FILTER_VALUES:
         raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
+
+
+def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: List[str]) -> List[int]:
+    """Resolve assignment targets before mutating any transcript segment.
+
+    Desktop sends positional targets for legacy transcripts that were stored without
+    segment IDs. Exact IDs remain the preferred wire contract; positional targets are
+    only accepted for completed conversations because an in-progress transcript can
+    still be reordered or merged.
+    """
+    segments = conversation.transcript_segments
+    segment_indices_by_id = {segment.id: index for index, segment in enumerate(segments)}
+    resolved_indices: List[int] = []
+    unresolved_ids: List[str] = []
+    allow_legacy_indices = conversation.status == ConversationStatus.completed
+
+    for requested_id in requested_ids:
+        segment_index = segment_indices_by_id.get(requested_id)
+        if segment_index is None and allow_legacy_indices and requested_id.startswith(LEGACY_SEGMENT_INDEX_PREFIX):
+            raw_index = requested_id[len(LEGACY_SEGMENT_INDEX_PREFIX) :]
+            if raw_index.isascii() and raw_index.isdecimal():
+                candidate_index = int(raw_index)
+                if candidate_index < len(segments):
+                    segment_index = candidate_index
+
+        if segment_index is None:
+            unresolved_ids.append(requested_id)
+        elif segment_index not in resolved_indices:
+            resolved_indices.append(segment_index)
+
+    if unresolved_ids:
+        raise HTTPException(
+            status_code=409,
+            detail=f'Unable to resolve transcript segment assignment target(s): {", ".join(unresolved_ids)}',
+        )
+
+    return resolved_indices
 
 
 @router.get(
@@ -1083,23 +1124,24 @@ def assign_segments_bulk(
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
 
+    if data.assign_type not in {'is_user', 'person_id'}:
+        raise HTTPException(status_code=400, detail="Invalid assign type")
+
     value = data.value
     if value == 'null':
         value = None
 
-    segment_map = {segment.id: segment for segment in conversation.transcript_segments}
+    segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
+    resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
 
-    for segment_id in data.segment_ids:
-        if segment_id in segment_map:
-            segment = segment_map[segment_id]
-            if data.assign_type == 'is_user':
-                segment.is_user = bool(value) if value is not None else False
-                segment.person_id = None
-            elif data.assign_type == 'person_id':
-                segment.is_user = False
-                segment.person_id = value
-            else:
-                raise HTTPException(status_code=400, detail="Invalid assign type")
+    for index in segment_indices:
+        segment = conversation.transcript_segments[index]
+        if data.assign_type == 'is_user':
+            segment.is_user = bool(value) if value is not None else False
+            segment.person_id = None
+        else:
+            segment.is_user = False
+            segment.person_id = value
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
@@ -1112,7 +1154,7 @@ def assign_segments_bulk(
             uid=uid,
             person_id=value,
             conversation_id=conversation_id,
-            segment_ids=data.segment_ids,
+            segment_ids=resolved_segment_ids,
         )
 
     return conversation
@@ -1214,6 +1256,31 @@ def search_conversations_endpoint(
             end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
+
+    exact_conversation_id = parse_exact_conversation_reference(search_request.query)
+    if exact_conversation_id:
+        exact_page, exact_per_page = clamp_conversation_search_pagination(search_request.page, search_request.per_page)
+        conversations = conversations_db.get_conversations_by_id_without_photos(
+            uid,
+            [exact_conversation_id],
+            include_discarded=bool(search_request.include_discarded),
+        )
+        conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+        conversations = [
+            conversation
+            for conversation in conversations
+            if conversation_matches_speaker(conversation, search_request.speaker_id)
+            and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
+        ]
+        if exact_page != 1:
+            conversations = []
+        redact_conversations_for_list(conversations)
+        return {
+            'items': conversations[:exact_per_page],
+            'total_pages': 1,
+            'current_page': exact_page,
+            'per_page': exact_per_page,
+        }
 
     try:
         search_results = search_conversations(

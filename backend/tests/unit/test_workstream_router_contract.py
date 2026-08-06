@@ -15,6 +15,7 @@ import routers.goals as goals_router
 import routers.task_recommendations as task_recommendations_router
 import routers.workstreams as workstreams_router
 from models.goal import GoalCreate, GoalFocusRequest, GoalUpdate
+from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 from models.task_recommendation import NormalizedContextSnapshot, OpenLoopSnapshot, SnapshotReceipt
 from models.workstream import TaskOriginWorkIntent, WorkIntentReceipt, WorkstreamUpdate
 from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
@@ -249,6 +250,44 @@ def test_what_matters_now_initializes_the_dev_smoke_fixture_before_rollout(monke
         ('rollout', WHAT_MATTERS_NOW_SMOKE_UID),
         ('rollout', WHAT_MATTERS_NOW_SMOKE_UID),
     ]
+
+
+def _stub_smoke_fixture_control(monkeypatch, projection):
+    """Wire the deploy-smoke seams and leave the real entitlement resolver in place."""
+
+    monkeypatch.setattr(
+        task_recommendations_router,
+        'task_control_db',
+        SimpleNamespace(
+            ensure_development_smoke_fixture=lambda _uid: True,
+            get_task_workflow_control=lambda _uid: TaskWorkflowControl(
+                workflow_mode=TaskWorkflowMode.read, account_generation=0
+            ),
+        ),
+    )
+    monkeypatch.setattr(task_recommendations_router, '_bound_device_id', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(task_recommendations_router.recommendations, 'evaluate', lambda *_args, **_kwargs: projection)
+
+
+def test_dev_deploy_smoke_reaches_what_matters_now_through_the_real_entitlement_gate(monkeypatch):
+    sentinel_projection = object()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    _stub_smoke_fixture_control(monkeypatch, sentinel_projection)
+
+    result = task_recommendations_router.get_what_matters_now(
+        request_context=object(), device_id=None, uid=WHAT_MATTERS_NOW_SMOKE_UID
+    )
+
+    assert result is sentinel_projection
+
+
+def test_what_matters_now_stays_hidden_for_a_uid_outside_the_cohort(monkeypatch):
+    _stub_smoke_fixture_control(monkeypatch, object())
+
+    with pytest.raises(HTTPException) as error:
+        task_recommendations_router.get_what_matters_now(request_context=object(), device_id=None, uid='not-enrolled')
+
+    assert error.value.status_code == 404
 
 
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):

@@ -15,7 +15,11 @@ leases remain held through physical SQLite commit/rollback; the transition
 closes the prior `RewindDatabase` pool, configures the next owner's lazy-open
 target, and purges every cached pool/directory/encoder before it publishes one
 content-free MainActor invalidation or admits new-owner work. A suspended
-initializer may not publish a pool after its owner/generation is stale.
+initializer may not publish a pool after its owner/generation is stale. A lease
+that a queued transition superseded may still commit for the previous owner, but
+its result may never publish into a session: the fence reports that verdict, and
+callers must not infer it from whichever owner happens to be visible after the
+lease is released.
 
 Owner replacement is also a hard voice boundary. Before persisted defaults
 mutate, the transition exposes no authorized owner, terminalizes the canonical

@@ -155,6 +155,9 @@ struct MemoryGraphSceneView: NSViewRepresentable {
 
 @MainActor
 class MemoryGraphViewModel: ObservableObject {
+  typealias CanonicalGraphFetcher =
+    (RuntimeOwnerAuthorizationSnapshot) async throws -> KnowledgeGraphResponse
+
   @Published var isLoading = false
   @Published var isRebuilding = false
   @Published var isEmpty = true
@@ -182,8 +185,28 @@ class MemoryGraphViewModel: ObservableObject {
   private var hasRunEmptyBootstrap = false
   private var loadedGraphSignature: Int?
   private var sessionGeneration = 0
+  private let canonicalGraphFetcher: CanonicalGraphFetcher
+
+  private static func hasAtlasContent(_ response: KnowledgeGraphResponse) -> Bool {
+    !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true)
+  }
 
   init() {
+    canonicalGraphFetcher = { authorizationSnapshot in
+      try await APIClient.shared.getKnowledgeGraph(
+        authorizationSnapshot: authorizationSnapshot)
+    }
+    setupCamera()
+    setupLighting()
+  }
+
+  init(
+    canonicalGraphFetcher: @escaping CanonicalGraphFetcher,
+    initialGraphResponse: KnowledgeGraphResponse
+  ) {
+    self.canonicalGraphFetcher = canonicalGraphFetcher
+    graphResponse = initialGraphResponse
+    isEmpty = !Self.hasAtlasContent(initialGraphResponse)
     setupCamera()
     setupLighting()
   }
@@ -265,6 +288,18 @@ class MemoryGraphViewModel: ObservableObject {
   func prepareCanonicalAtlas() async {
     guard !isPreparing else { return }
     let generation = sessionGeneration
+    if !hasLoadedCanonicalAtlas {
+      // The shared view model may still contain a local onboarding or legacy
+      // projection. Canonical Brain Map must remain empty until a complete
+      // server graph has been fetched.
+      graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
+      canonicalAtlasProjection = nil
+      isEmpty = true
+    }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      log("Memory atlas: canonical load skipped while owner authorization is unavailable")
+      return
+    }
     isPreparing = true
     defer {
       if generation == sessionGeneration {
@@ -273,13 +308,13 @@ class MemoryGraphViewModel: ObservableObject {
     }
 
     if hasLoadedCanonicalAtlas,
-      !graphResponse.nodes.isEmpty,
+      Self.hasAtlasContent(graphResponse),
       !PollingConfig.shouldAllowActivationRefresh(lastRefresh: lastLoadedAt)
     {
       return
     }
 
-    let showSpinner = graphResponse.nodes.isEmpty
+    let showSpinner = !Self.hasAtlasContent(graphResponse)
     if showSpinner { isLoading = true }
     defer {
       if showSpinner && generation == sessionGeneration {
@@ -288,39 +323,25 @@ class MemoryGraphViewModel: ObservableObject {
     }
 
     do {
-      // Canonical users should see the authoritative server graph. The local
-      // onboarding cache is useful offline, but may contain a much smaller or
-      // older projection than the incrementally maintained canonical graph.
-      let response: KnowledgeGraphResponse
-      do {
-        response = try await APIClient.shared.getKnowledgeGraph()
-      } catch {
-        response = await KnowledgeGraphStorage.shared.loadGraph()
-        guard !response.nodes.isEmpty else { throw error }
-        log("Memory atlas: server graph unavailable, using local projection")
-        // The authoritative server graph was replaced by a smaller local
-        // projection — that is a degraded mode the desktop health telemetry
-        // must record per the fallback-telemetry contract.
-        DesktopDiagnosticsManager.shared.recordFallback(
-          area: "memory_atlas",
-          from: "server_graph",
-          to: "local_projection",
-          reason: "server_unavailable",
-          outcome: .degraded,
-          extra: ["user_visible": true]
-        )
+      let response = try await canonicalGraphFetcher(authorizationSnapshot)
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+        return
       }
       let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ownerName = givenName.isEmpty ? displayName : givenName
       let projection = await Task.detached(priority: .userInitiated) {
-        MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+        MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
       }.value
-      guard generation == sessionGeneration else { return }
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+        return
+      }
       canonicalAtlasProjection = projection
       graphResponse = response
-      isEmpty = response.nodes.isEmpty
+      isEmpty = !Self.hasAtlasContent(response)
       hasLoadedCanonicalAtlas = true
       lastLoadedAt = Date()
-      log("Memory atlas: \(response.nodes.count) nodes, \(response.edges.count) edges")
+      log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
     } catch {
       log("Failed to load memory atlas: \(error.localizedDescription)")
     }
@@ -335,6 +356,10 @@ class MemoryGraphViewModel: ObservableObject {
   @discardableResult
   func rebuildCanonicalAtlas() async -> Bool {
     let generation = sessionGeneration
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      log("Memory atlas: canonical rebuild skipped while owner authorization is unavailable")
+      return false
+    }
     isRebuilding = true
     defer {
       if generation == sessionGeneration {
@@ -343,29 +368,38 @@ class MemoryGraphViewModel: ObservableObject {
     }
 
     do {
-      _ = try await APIClient.shared.rebuildKnowledgeGraph()
+      _ = try await APIClient.shared.rebuildKnowledgeGraph(
+        authorizationSnapshot: authorizationSnapshot)
 
       // Poll for the replacement graph — the backend rebuild is async.
       let maxAttempts = 10
       for attempt in 1...maxAttempts {
         try await Task.sleep(nanoseconds: 3_000_000_000)
-        guard generation == sessionGeneration else { return false }
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return false
+        }
 
-        let response = try await APIClient.shared.getKnowledgeGraph()
-        guard generation == sessionGeneration else { return false }
+        let response = try await canonicalGraphFetcher(authorizationSnapshot)
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return false
+        }
 
-        if !response.nodes.isEmpty {
+        if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
           let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let ownerName = givenName.isEmpty ? displayName : givenName
           let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
           }.value
-          guard generation == sessionGeneration else { return false }
+          guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+            return false
+          }
           canonicalAtlasProjection = projection
           graphResponse = response
-          isEmpty = false
+          isEmpty = !Self.hasAtlasContent(response)
           hasLoadedCanonicalAtlas = true
           lastLoadedAt = Date()
-          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.nodes.count) nodes")
+          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.atlasNodes.count) nodes")
           return true
         }
       }
@@ -376,6 +410,14 @@ class MemoryGraphViewModel: ObservableObject {
       log("Failed to rebuild memory atlas: \(error.localizedDescription)")
       return false
     }
+  }
+
+  private func isCanonicalLoadCurrent(
+    generation: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> Bool {
+    guard !Task.isCancelled, generation == sessionGeneration else { return false }
+    return RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
   }
 
   func loadGraph() async {

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -19,6 +18,18 @@ import 'package:omi/utils/waveform_utils.dart';
 enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
+
+List<SyncedConversationPointer> sortSyncedConversationPointers(
+  Iterable<SyncedConversationPointer> pointers,
+) {
+  final sorted = List<SyncedConversationPointer>.from(pointers);
+  sorted.sort((a, b) {
+    final aDate = a.conversation.startedAt ?? a.conversation.createdAt;
+    final bDate = b.conversation.startedAt ?? b.conversation.createdAt;
+    return bDate.compareTo(aDate);
+  });
+  return sorted;
+}
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
@@ -153,35 +164,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// Recordings that the storage sheet's Clear All action can remove.
   int get clearableWalsCount => syncedWals.length + pendingDeletableWals.length + corruptedWals.length;
 
-  /// True while any cooldown is active, in any lane.
-  ///
-  /// Prefer [isRateLimitedForPendingUploads] for anything that decides whether the user can act:
-  /// cooldowns are per lane, and this is true even when the lane the pending work needs is free.
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
-
-  /// The upload lanes the recordings still to back up would use.
-  Set<SyncUploadLane> get pendingUploadLanes => pendingSyncUploadLanes(
-        displaySortedWals
-            .where(
-              (wal) =>
-                  wal.syncDisplayState == WalSyncDisplayState.waiting ||
-                  wal.syncDisplayState == WalSyncDisplayState.retrying ||
-                  wal.syncDisplayState == WalSyncDisplayState.failed,
-            )
-            .toList(),
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      );
-
-  /// True only when every lane the pending recordings need is in cooldown.
-  ///
-  /// The upload path gates per lane (`SyncRateLimiter.isLimitedForLane`), so a UI that gates on
-  /// the global flag hides the Sync control for work the sync layer would happily accept — a
-  /// fresh-lane cooldown stranding a backlog that uploads through backfill.
-  bool get isRateLimitedForPendingUploads => allSyncLanesLimited(
-        pendingUploadLanes,
-        SyncRateLimiter.instance.isLimitedForLane,
-        fallback: SyncRateLimiter.instance.isLimited,
-      );
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
   RateLimitReason? get rateLimitReason => SyncRateLimiter.instance.reason;
 
@@ -299,8 +282,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   int _totalWalsToProcess = 0;
   int _walsProcessedCount = 0;
   bool _isDisposed = false;
-  late bool _freshRateLimitWasActive;
-  late bool _backfillRateLimitWasActive;
+  late bool _rateLimitWasActive;
 
   // Computed properties for backward compatibility
   List<Wal> get missingWals => _allWals.where((w) => w.status == WalStatus.miss).toList();
@@ -320,9 +302,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   double get walsSyncedProgress => _syncState.progress;
   double? get syncSpeedKBps => _syncState.speedKBps;
   List<SyncedConversationPointer> get syncedConversationsPointers {
-    final sorted = List<SyncedConversationPointer>.from(_syncState.syncedConversations);
-    sorted.sort((a, b) => (b.conversation.createdAt).compareTo(a.conversation.createdAt));
-    return sorted;
+    return sortSyncedConversationPointers(_syncState.syncedConversations);
   }
 
   String? get syncError => _syncState.errorMessage;
@@ -365,8 +345,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
-    _freshRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
-    _backfillRateLimitWasActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
+    _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
     SyncRateLimiter.instance.addListener(_onRateLimiterChanged);
     initialized = _initializeProvider();
   }
@@ -387,12 +366,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _onRateLimiterChanged() {
     if (_isDisposed) return;
-    final freshActive = SyncRateLimiter.instance.isLimitedForLane('fresh');
-    final backfillActive = SyncRateLimiter.instance.isLimitedForLane('backfill');
-    final cooldownEnded =
-        (_freshRateLimitWasActive && !freshActive) || (_backfillRateLimitWasActive && !backfillActive);
-    _freshRateLimitWasActive = freshActive;
-    _backfillRateLimitWasActive = backfillActive;
+    final active = SyncRateLimiter.instance.isLimited;
+    final cooldownEnded = _rateLimitWasActive && !active;
+    _rateLimitWasActive = active;
     notifyListeners();
     if (cooldownEnded && _startBackgroundSync) {
       unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
@@ -432,12 +408,16 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       updatedConversationIds: result.updatedConversationIds,
     );
     if (_isDisposed) return;
+    // Refresh WALs *before* updating the "synced" conversation UI so we don't
+    // label recordings as synced while the reconciler is still leaving some
+    // WALs in an uploaded/pending state (issue #7240).
+    await refreshWals();
     if (conversations.isNotEmpty && !_syncState.isProcessing) {
       // Append to whatever is already shown — jobs reconcile incrementally.
       final merged = [..._syncState.syncedConversations, ...conversations];
-      _updateSyncState(_syncState.toCompleted(conversations: merged));
+      final filtered = filterFullySyncedConversations(conversations: merged, wals: _allWals);
+      _updateSyncState(_syncState.toCompleted(conversations: filtered));
     }
-    await refreshWals();
   }
 
   Future<void> _discoverPendingWals() async {
@@ -453,6 +433,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     final hadEligibleWals = missingWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
+
+    // Reconciles a persisted fair-use cooldown the server may already have
+    // lifted; without it a stale local deadline outlives the restriction.
+    // Deliberately does not gate the drain: pulling audio off the device
+    // consumes no upload quota, and the upload phases carry their own guard.
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return const RecordingTransferDrainResult.contended();
 
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
@@ -541,6 +528,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> _syncWalsDirect() async {
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
@@ -557,6 +546,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
+    await _uploadGate.prepareToUpload();
+    if (_isDisposed) return;
     _updateSyncState(_syncState.toIdle());
     final result = await _performSync(
       operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
@@ -699,9 +690,37 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       newConversationIds: result.newConversationIds,
       updatedConversationIds: result.updatedConversationIds,
     );
-    _updateSyncState(_syncState.toCompleted(conversations: conversations));
-    // Refresh WAL list so home screen cloud icon updates (clears synced WALs)
+    // Refresh WAL list so we can filter "synced" conversations to only those
+    // whose WALs have been reconciled to WalStatus.synced.
     await refreshWals();
+    final filtered = filterFullySyncedConversations(conversations: conversations, wals: _allWals);
+    _updateSyncState(_syncState.toCompleted(conversations: filtered));
+  }
+
+  /// Filters "synced" conversation pointers down to only those conversations
+  /// whose associated WALs have been fully reconciled (`WalStatus.synced`).
+  ///
+  /// This prevents UI states like "synced OK" from showing up while some
+  /// recordings are still left in an uploaded/pending state (issue #7240).
+  @visibleForTesting
+  static List<SyncedConversationPointer> filterFullySyncedConversations({
+    required List<SyncedConversationPointer> conversations,
+    required List<Wal> wals,
+  }) {
+    final byConversationId = <String, List<Wal>>{};
+    for (final wal in wals) {
+      final id = wal.conversationId;
+      if (id == null) continue;
+      (byConversationId[id] ??= <Wal>[]).add(wal);
+    }
+
+    bool isFullySynced(SyncedConversationPointer pointer) {
+      final walsForConversation = byConversationId[pointer.conversation.id] ?? const <Wal>[];
+      if (walsForConversation.isEmpty) return true; // No local WALs → nothing pending.
+      return walsForConversation.every((w) => w.status == WalStatus.synced);
+    }
+
+    return conversations.where(isFullySynced).toList();
   }
 
   // Audio playback delegate methods

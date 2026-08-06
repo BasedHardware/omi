@@ -50,6 +50,9 @@ def _ws_c_import_isolation():
     module_globals["apply_legacy_backfill_remediation_archives"] = apply_legacy_backfill_remediation_archives
     module_globals["build_legacy_backfill_remediation_plan"] = build_legacy_backfill_remediation_plan
     module_globals["classify_legacy_backfill_bucket"] = classify_legacy_backfill_bucket
+    from utils.memory.legacy_backfill_inventory import inventory_legacy_user
+
+    module_globals["inventory_legacy_user"] = inventory_legacy_user
     module_globals["is_active_legacy_row"] = is_active_legacy_row
     module_globals["legacy_backfill_memory_id"] = legacy_backfill_memory_id
     module_globals["reconcile_backfill_counts"] = reconcile_backfill_counts
@@ -491,6 +494,184 @@ def test_dry_run_writes_nothing(_trusted_account):
     assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
     assert get_non_filtered_fn(LEGACY_UID, limit=10, offset=0) == rows
     assert active_snapshot == rows
+
+
+def test_bulk_inventory_is_read_only_and_never_returns_content(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id="leg-manual", content="User keeps a private launch checklist"),
+        _legacy_row(legacy_id="leg-sensitive", content="User secret token must never be logged"),
+    ]
+    rows[0]["manually_added"] = True
+    get_non_filtered_fn, active_snapshot = _make_non_filtered_store(rows)
+    db = _PromotionFakeDb({})
+
+    report = inventory_legacy_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
+
+    assert report.source_count == 2
+    assert report.bucket_counts[LegacyBackfillBucket.manual_required_promotion.value] == 1
+    assert report.bucket_counts[LegacyBackfillBucket.hold_sensitive.value] == 1
+    assert report.admitted_candidate_count == 1
+    assert report.estimated_tokens > 0
+    serialized = json.dumps(report.__dict__)
+    assert rows[0]["content"] not in serialized
+    assert rows[1]["content"] not in serialized
+    assert db.docs == {}
+    assert active_snapshot == rows
+
+
+def test_capped_backfill_resumes_until_complete(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id=f"leg-cap-{index}", content=f"Capped fact {index}", conversation_id=f"conv-{index}")
+        for index in range(3)
+    ]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        max_rows=1,
+    )
+    second = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        max_rows=1,
+    )
+    third = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        max_rows=1,
+    )
+
+    assert [first.resumed_from_index, second.resumed_from_index, third.resumed_from_index] == [0, 1, 2]
+    assert first.completed is False
+    assert second.completed is False
+    assert third.completed is True
+    assert third.verified is True
+
+
+def test_capped_backfill_recovers_changed_source_from_missing_destinations(_trusted_account):
+    rows = [_legacy_row(legacy_id="leg-b", content="Existing fact", conversation_id="conv-b")]
+
+    def get_non_filtered(requested_uid, limit=100, offset=0, **_kwargs):
+        assert requested_uid == LEGACY_UID
+        return rows[offset : offset + limit]
+
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    inserted_before_cursor = _legacy_row(legacy_id="leg-a", content="Inserted fact", conversation_id="conv-a")
+    rows.append(inserted_before_cursor)
+    _seed_legacy_evidence(db, [inserted_before_cursor])
+    resumed = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    assert first.completed is True
+    assert resumed.written_count == 1
+    assert resumed.completed is True
+    assert resumed.verified is True
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 2
+
+
+def test_changed_source_recovery_keeps_source_indexes_and_seeds_existing_semantic_keys(_trusted_account):
+    shared_content = "Same semantic fact"
+    rows = [
+        _legacy_row(legacy_id="leg-b", content=shared_content, conversation_id="conv-shared"),
+        _legacy_row(legacy_id="leg-c", content="Pending fact", conversation_id="conv-c"),
+    ]
+
+    def get_non_filtered(requested_uid, limit=100, offset=0, **_kwargs):
+        assert requested_uid == LEGACY_UID
+        return rows[offset : offset + limit]
+
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+    assert first.completed is False
+
+    inserted_before_cursor = _legacy_row(legacy_id="leg-a", content=shared_content, conversation_id="conv-shared")
+    rows.append(inserted_before_cursor)
+    _seed_legacy_evidence(db, [inserted_before_cursor])
+
+    real_apply = backfill_user.__globals__["_apply_one_legacy_row"]
+    observed_indexes: list[int] = []
+
+    def record_source_index(**kwargs):
+        observed_indexes.append(kwargs["index"])
+        return real_apply(**kwargs)
+
+    with patch("utils.memory.legacy_backfill._apply_one_legacy_row", side_effect=record_source_index):
+        resumed = backfill_user(
+            LEGACY_UID,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered,
+            max_rows=2,
+        )
+
+    # leg-a is already semantically materialized by leg-b; only leg-c writes,
+    # and it retains index 2 from the sorted current source, not index 0 from
+    # the filtered recovery list.
+    assert observed_indexes == [2]
+    assert resumed.skipped_semantic_duplicate == 1
+    assert resumed.completed is True
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 2
+
+
+def test_continue_on_error_refreshes_control_and_retries_row(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id="leg-retry-1", content="Retry one", conversation_id="conv-retry-1"),
+        _legacy_row(legacy_id="leg-retry-2", content="Retry two", conversation_id="conv-retry-2"),
+    ]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    real_apply = backfill_user.__globals__["apply_long_term_patch_firestore"]
+    calls = {"count": 0}
+
+    def _fail_once(**kwargs):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("simulated recoverable head mismatch")
+        return real_apply(**kwargs)
+
+    with patch("utils.memory.legacy_backfill.apply_long_term_patch_firestore", side_effect=_fail_once):
+        report = backfill_user(
+            LEGACY_UID,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+            continue_on_error=True,
+        )
+
+    assert calls["count"] == 3
+    assert report.errors == []
+    assert report.completed is True
+    assert report.written_count == 2
+    assert report.verified is True
 
 
 def test_bucket_classifier_holds_noise_and_sensitive_rows():

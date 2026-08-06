@@ -83,6 +83,7 @@ struct OnboardingDataSourcesStepView: View {
         isOn: true,
         isDisabled: true,
         scanFinished: coordinator.calendarInsightsFinished,
+        scanDeferred: coordinator.calendarInsightsDeferred,
         scanFailed: coordinator.calendarInsightsFailed
       )
       listDivider
@@ -99,6 +100,7 @@ struct OnboardingDataSourcesStepView: View {
         isOn: true,
         isDisabled: true,
         scanFinished: coordinator.gmailInsightsFinished,
+        scanDeferred: coordinator.gmailInsightsDeferred,
         scanFailed: coordinator.gmailInsightsFailed
       )
       listDivider
@@ -276,6 +278,7 @@ struct OnboardingDataSourcesStepView: View {
     isOn: Bool,
     isDisabled: Bool,
     scanFinished: Bool? = nil,
+    scanDeferred: Bool = false,
     scanFailed: Bool = false,
     actionTitle: String? = nil,
     action: (() -> Void)? = nil,
@@ -284,6 +287,7 @@ struct OnboardingDataSourcesStepView: View {
     let status = OnboardingDataSourceRowStatus.resolve(
       metrics: metrics,
       scanFinished: scanFinished,
+      scanDeferred: scanDeferred,
       scanFailed: scanFailed
     )
 
@@ -351,8 +355,16 @@ struct OnboardingDataSourceRowStatus: Equatable {
   static func resolve(
     metrics: String,
     scanFinished: Bool?,
+    scanDeferred: Bool = false,
     scanFailed: Bool
   ) -> OnboardingDataSourceRowStatus {
+    if scanDeferred {
+      return OnboardingDataSourceRowStatus(
+        text: "Connect in Apps to import",
+        isError: false
+      )
+    }
+
     if scanFailed {
       return OnboardingDataSourceRowStatus(
         text: "Couldn't read - check access",

@@ -49,9 +49,66 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.queue = []
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
+
+function httpError(retryable: boolean | undefined): unknown {
+  return {
+    ok: false,
+    status: 503,
+    headers: { get: () => (retryable === undefined ? null : String(retryable)) }
+  }
+}
+
+function fetchThatAbortsWithSignal(): void {
+  h.fetch.mockImplementation((_url: string, opts: { signal: AbortSignal }) => {
+    const signal = opts.signal
+    return new Promise((_resolve, reject) => {
+      const fail = (): void => reject(signal.reason ?? new DOMException('aborted', 'AbortError'))
+      if (signal.aborted) return fail()
+      signal.addEventListener('abort', fail, { once: true })
+    })
+  })
+}
 
 describe('runTwoPhasePipeline', () => {
+  it('replays only when the backend explicitly marks the response retryable', async () => {
+    vi.useFakeTimers()
+    h.fetch
+      .mockResolvedValueOnce(httpError(true))
+      .mockResolvedValueOnce({ ok: true, json: async () => fc('no_advice', {}) })
+
+    const resultPromise = runTwoPhasePipeline(deps())
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    await expect(resultPromise).resolves.toEqual({ insight: null, sqlCount: 0 })
+    expect(h.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([false, undefined])('fails closed when backend retryable is %s', async (retryable) => {
+    h.fetch.mockResolvedValue(httpError(retryable))
+
+    await expect(runTwoPhasePipeline(deps())).rejects.toMatchObject({
+      name: 'GeminiHttpError',
+      retryable: false
+    })
+    expect(h.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed on a local timeout after dispatch', async () => {
+    vi.useFakeTimers()
+    fetchThatAbortsWithSignal()
+
+    const resultPromise = runTwoPhasePipeline(deps())
+    const assertion = expect(resultPromise).rejects.toMatchObject({ name: 'TimeoutError' })
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    await assertion
+    expect(h.fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('happy path: SQL → request_screenshot → provide_advice', async () => {
     queueResponses([
       fc('execute_sql', { query: 'SELECT id FROM rewind_frames' }),
