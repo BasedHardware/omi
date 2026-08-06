@@ -1,0 +1,47 @@
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
+  s_569f1df936cc22::t_2bfbf0f78b7cc0 31-33,35
+  s_569f1df936cc22::t_2624b93599c26b 101
+  s_569f1df936cc22::t_323edb03e751ac 84
+  s_569f1df936cc22::t_3a3b99084ca258 86
+  s_569f1df936cc22::t_e9b080d1550498 34
+  s_569f1df936cc22::t_f4aaf6c29ae66a 48,65,73,79,96,112-135,139
+  s_569f1df936cc22::t_b0fdbfb070f519 1-30,36-47,49-64,66-72,74-78,80-83,85,87-95,97-100,102-111,136-138,140
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  s_569f1df936cc22::t_73172bd03a0468 390-403
+  s_569f1df936cc22::t_9742df6b596fa3 1-389,404-626
+desktop/macos/e2e/flows/home-spine.yaml
+  s_569f1df936cc22::t_35a3929785f079 1-91
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  s_569f1df936cc22::t_312d20d0d0a97e 270-289
+  s_569f1df936cc22::t_626ef7aa268b1a 1-269,290-386
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_569f1df936cc22::t_7c61882f4c80f8 98-107,109,113-117
+  s_569f1df936cc22::t_8007810e650a68 1-18,22-28,30-97,108,110-112,118-134,162-289,292-320,323-353,367-373
+  s_569f1df936cc22::t_008da3f30116a0 135-161
+  s_569f1df936cc22::t_61a7b09100cdf5 321-322
+  s_569f1df936cc22::t_b3e62e062ed18d 354-366
+  s_569f1df936cc22::t_0c7206369f522c 290-291
+  s_569f1df936cc22::t_364423b243fc81 19-21,29
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
+  s_569f1df936cc22::t_3858f833c42eed 1-120
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
+  s_569f1df936cc22::t_ac3a43a7f167d2 1-203
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_569f1df936cc22::t_ae9218747d15a4 1-328
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "06e837e841f19a254b129643c66df587c3c8a07a",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
