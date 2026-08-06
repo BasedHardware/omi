@@ -9,9 +9,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import signal
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -169,22 +170,23 @@ def _advance_historical_graph_cursor_txn(
 def _plan_with_deadline(*, item: MemoryItem, control: MemoryControlState, llm: Any):
     """Enforce the planner deadline even if a provider client ignores its timeout.
 
-    Cloud Run runs this synchronous script in its main thread on POSIX.  The
-    signal interrupts a stuck socket/read and is handled by the existing
-    per-item error path, so the page can continue to another candidate.
+    Scheduled maintenance runs this page inside a ``db_executor`` worker
+    thread, where installing a POSIX signal timer raises ``ValueError`` —
+    which silently turned every candidate into ``planner_error`` before a
+    single provider request was made. A single-use watchdog future enforces
+    the same deadline from any thread. A call that outlives the deadline is
+    abandoned to its own transport timeout (the planner LLM is constructed
+    with ``request_timeout``), so the timed-out worker still ends on its own.
     """
-    previous_handler = signal.getsignal(signal.SIGALRM)
-
-    def _expired(_signum, _frame):
-        raise HistoricalGraphPlannerTimeout("historical graph planner deadline exceeded")
-
-    signal.signal(signal.SIGALRM, _expired)
-    signal.setitimer(signal.ITIMER_REAL, HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS)
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="historical-graph-planner")
     try:
-        return plan_historical_graph_enrichment(item=item, control=control, llm=llm)
+        future = pool.submit(plan_historical_graph_enrichment, item=item, control=control, llm=llm)
+        try:
+            return future.result(timeout=HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS)
+        except FuturesTimeoutError as exc:
+            raise HistoricalGraphPlannerTimeout("historical graph planner deadline exceeded") from exc
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous_handler)
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _arguments() -> argparse.Namespace:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -467,3 +468,34 @@ def test_historical_planner_deadline_interrupts_a_stuck_sync_call(monkeypatch: p
             control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
             llm=object(),
         )
+
+
+def test_historical_planner_deadline_enforcement_works_off_the_main_thread(monkeypatch: pytest.MonkeyPatch):
+    """The maintenance cron runs enrichment on a ``db_executor`` worker thread.
+
+    The former POSIX signal timer raises ``ValueError`` there, which turned
+    every scheduled candidate into a silent ``planner_error`` (0 committed,
+    every outcome blocked) while the CLI kept working from the main thread.
+    """
+    sentinel = object()
+    monkeypatch.setattr(historical_runner, "plan_historical_graph_enrichment", lambda **_kwargs: sentinel)
+
+    outcome: dict[str, object] = {}
+
+    def _run_off_main_thread() -> None:
+        try:
+            outcome["planned"] = historical_runner._plan_with_deadline(
+                item=_item(),
+                control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+                llm=object(),
+            )
+        except Exception as exc:  # pragma: no cover - the failure being guarded against
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=_run_off_main_thread)
+    worker.start()
+    worker.join(timeout=5)
+
+    assert not worker.is_alive(), "planner deadline wrapper hung off the main thread"
+    assert outcome.get("error") is None, f"planner raised off the main thread: {outcome.get('error')!r}"
+    assert outcome.get("planned") is sentinel
