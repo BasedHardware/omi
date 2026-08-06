@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Mare",
     "whisperModelSizeMedium": "Mediu",
     "whisperModelSizeSmall": "Mic",
-    "whisperModelSizeTiny": "Foarte mic"
+    "whisperModelSizeTiny": "Foarte mic",
+    "navTodos": "Sarcini",
+    "navHome": "Acasă",
+    "navConvos": "Conversații",
+    "navBrain": "Creier"
 }

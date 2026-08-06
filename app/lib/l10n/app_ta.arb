@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "பெரியது",
     "whisperModelSizeMedium": "நடுத்தரம்",
     "whisperModelSizeSmall": "சிறியது",
-    "whisperModelSizeTiny": "மிகச் சிறியது"
+    "whisperModelSizeTiny": "மிகச் சிறியது",
+    "navTodos": "பணிகள்",
+    "navHome": "முகப்பு",
+    "navConvos": "உரையாடல்கள்",
+    "navBrain": "மூளை"
 }

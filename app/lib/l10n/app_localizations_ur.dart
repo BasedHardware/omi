@@ -9788,4 +9788,16 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا';
+
+  @override
+  String get navTodos => 'کام';
+
+  @override
+  String get navHome => 'ہوم';
+
+  @override
+  String get navConvos => 'بات چیتیں';
+
+  @override
+  String get navBrain => 'دماغ';
 }

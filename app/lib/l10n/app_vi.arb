@@ -3197,5 +3197,9 @@
     "whisperModelSizeLarge": "Lớn",
     "whisperModelSizeMedium": "Trung bình",
     "whisperModelSizeSmall": "Nhỏ",
-    "whisperModelSizeTiny": "Rất nhỏ"
+    "whisperModelSizeTiny": "Rất nhỏ",
+    "navTodos": "Nhiệm vụ",
+    "navHome": "Trang chủ",
+    "navConvos": "Cuộc trò chuyện",
+    "navBrain": "Não"
 }

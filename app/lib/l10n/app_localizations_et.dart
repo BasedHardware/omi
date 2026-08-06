@@ -9770,4 +9770,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Sünkroonimiseks liiga vana — Omi ei saa seda vastu võtta';
+
+  @override
+  String get navTodos => 'Ülesanded';
+
+  @override
+  String get navHome => 'Avaleht';
+
+  @override
+  String get navConvos => 'Vestlused';
+
+  @override
+  String get navBrain => 'Aju';
 }

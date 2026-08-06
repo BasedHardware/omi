@@ -9801,4 +9801,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Te oud om te synchroniseren — Omi kan deze niet accepteren';
+
+  @override
+  String get navTodos => 'Taken';
+
+  @override
+  String get navHome => 'Start';
+
+  @override
+  String get navConvos => 'Gesprekken';
+
+  @override
+  String get navBrain => 'Brein';
 }

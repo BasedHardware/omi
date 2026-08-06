@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Велика",
     "whisperModelSizeMedium": "Середня",
     "whisperModelSizeSmall": "Мала",
-    "whisperModelSizeTiny": "Крихітна"
+    "whisperModelSizeTiny": "Крихітна",
+    "navTodos": "Завдання",
+    "navHome": "Головна",
+    "navConvos": "Бесіди",
+    "navBrain": "Мозок"
 }

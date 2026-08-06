@@ -11555,5 +11555,21 @@
     "@rayBanMetaMicPickerConnectError": {
         "description": "Error shown when the selected Bluetooth HFP microphone cannot connect"
     },
-    "syncStatusTooOld": "Too old to sync — Omi can't accept it"
+    "syncStatusTooOld": "Too old to sync — Omi can't accept it",
+    "navTodos": "Todos",
+    "@navTodos": {
+        "description": "Bottom navigation label for the tasks tab"
+    },
+    "navHome": "Home",
+    "@navHome": {
+        "description": "Bottom navigation label for the home tab"
+    },
+    "navConvos": "Convos",
+    "@navConvos": {
+        "description": "Bottom navigation label for the conversations tab"
+    },
+    "navBrain": "Brain",
+    "@navBrain": {
+        "description": "Bottom navigation label for the knowledge-graph tab"
+    }
 }

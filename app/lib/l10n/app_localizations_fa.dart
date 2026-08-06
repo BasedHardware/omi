@@ -9776,4 +9776,16 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'برای همگام‌سازی خیلی قدیمی است — Omi نمی‌تواند آن را بپذیرد';
+
+  @override
+  String get navTodos => 'وظایف';
+
+  @override
+  String get navHome => 'خانه';
+
+  @override
+  String get navConvos => 'گفتگوها';
+
+  @override
+  String get navBrain => 'مغز';
 }

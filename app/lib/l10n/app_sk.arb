@@ -3197,5 +3197,9 @@
     "whisperModelSizeLarge": "Veľký",
     "whisperModelSizeMedium": "Stredný",
     "whisperModelSizeSmall": "Malý",
-    "whisperModelSizeTiny": "Veľmi malý"
+    "whisperModelSizeTiny": "Veľmi malý",
+    "navTodos": "Úlohy",
+    "navHome": "Domov",
+    "navConvos": "Konverzácie",
+    "navBrain": "Mozog"
 }

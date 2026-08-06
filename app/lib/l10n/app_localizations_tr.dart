@@ -9786,4 +9786,16 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Eşitlemek için çok eski — Omi bunu kabul edemez';
+
+  @override
+  String get navTodos => 'Görevler';
+
+  @override
+  String get navHome => 'Ana Sayfa';
+
+  @override
+  String get navConvos => 'Konuşmalar';
+
+  @override
+  String get navBrain => 'Beyin';
 }

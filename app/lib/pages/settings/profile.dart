@@ -529,7 +529,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
                   title: context.l10n.memories,
-                  icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
+                  // brain now belongs to the Brain tab in the bottom nav, which
+                  // opens the graph — this entry is the saved-facts list.
+                  icon: const FaIcon(FontAwesomeIcons.listUl, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const MemoriesPage());
                   },

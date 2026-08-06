@@ -9814,4 +9814,16 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Túl régi a szinkronizáláshoz — az Omi nem tudja elfogadni';
+
+  @override
+  String get navTodos => 'Feladatok';
+
+  @override
+  String get navHome => 'Kezdőlap';
+
+  @override
+  String get navConvos => 'Beszélgetések';
+
+  @override
+  String get navBrain => 'Agy';
 }

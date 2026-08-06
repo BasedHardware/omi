@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "Голем",
     "whisperModelSizeMedium": "Среден",
     "whisperModelSizeSmall": "Мал",
-    "whisperModelSizeTiny": "Многу мал"
+    "whisperModelSizeTiny": "Многу мал",
+    "navTodos": "Задачи",
+    "navHome": "Почетна",
+    "navConvos": "Разговори",
+    "navBrain": "Мозок"
 }

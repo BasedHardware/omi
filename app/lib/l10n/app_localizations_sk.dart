@@ -9766,4 +9766,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Príliš staré na synchronizáciu — Omi ho nemôže prijať';
+
+  @override
+  String get navTodos => 'Úlohy';
+
+  @override
+  String get navHome => 'Domov';
+
+  @override
+  String get navConvos => 'Konverzácie';
+
+  @override
+  String get navBrain => 'Mozog';
 }

@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Didelis",
     "whisperModelSizeMedium": "Vidutinis",
     "whisperModelSizeSmall": "Mažas",
-    "whisperModelSizeTiny": "Mažytis"
+    "whisperModelSizeTiny": "Mažytis",
+    "navTodos": "Užduotys",
+    "navHome": "Pradžia",
+    "navConvos": "Pokalbiai",
+    "navBrain": "Smegenys"
 }

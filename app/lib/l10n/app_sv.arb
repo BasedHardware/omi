@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Stor",
     "whisperModelSizeMedium": "Mellan",
     "whisperModelSizeSmall": "Liten",
-    "whisperModelSizeTiny": "Mycket liten"
+    "whisperModelSizeTiny": "Mycket liten",
+    "navTodos": "Uppgifter",
+    "navHome": "Hem",
+    "navConvos": "Konversationer",
+    "navBrain": "Hjärna"
 }

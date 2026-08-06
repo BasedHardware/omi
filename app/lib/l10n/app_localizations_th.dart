@@ -9720,4 +9720,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'เก่าเกินกว่าจะซิงค์ — Omi รับไม่ได้';
+
+  @override
+  String get navTodos => 'งาน';
+
+  @override
+  String get navHome => 'หน้าแรก';
+
+  @override
+  String get navConvos => 'การสนทนา';
+
+  @override
+  String get navBrain => 'สมอง';
 }

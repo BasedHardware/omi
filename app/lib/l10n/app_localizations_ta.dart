@@ -9844,4 +9844,16 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ஒத்திசைக்க மிகவும் பழையது — Omi இதை ஏற்க முடியாது';
+
+  @override
+  String get navTodos => 'பணிகள்';
+
+  @override
+  String get navHome => 'முகப்பு';
+
+  @override
+  String get navConvos => 'உரையாடல்கள்';
+
+  @override
+  String get navBrain => 'மூளை';
 }

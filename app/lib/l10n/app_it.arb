@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Grande",
     "whisperModelSizeMedium": "Medio",
     "whisperModelSizeSmall": "Piccolo",
-    "whisperModelSizeTiny": "Minuscolo"
+    "whisperModelSizeTiny": "Minuscolo",
+    "navTodos": "Attività",
+    "navHome": "Home",
+    "navConvos": "Conversazioni",
+    "navBrain": "Cervello"
 }

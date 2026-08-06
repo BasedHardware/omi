@@ -9820,4 +9820,16 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Prea veche pentru sincronizare — Omi nu o poate accepta';
+
+  @override
+  String get navTodos => 'Sarcini';
+
+  @override
+  String get navHome => 'Acasă';
+
+  @override
+  String get navConvos => 'Conversații';
+
+  @override
+  String get navBrain => 'Creier';
 }

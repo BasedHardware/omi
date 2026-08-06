@@ -9773,4 +9773,16 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'For gammel til å synkroniseres — Omi kan ikke ta imot den';
+
+  @override
+  String get navTodos => 'Oppgaver';
+
+  @override
+  String get navHome => 'Hjem';
+
+  @override
+  String get navConvos => 'Samtaler';
+
+  @override
+  String get navBrain => 'Hjerne';
 }

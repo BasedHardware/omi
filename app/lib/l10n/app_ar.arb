@@ -3168,5 +3168,9 @@
     "whisperModelSizeLarge": "كبير",
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "صغير",
-    "whisperModelSizeTiny": "صغير جدًا"
+    "whisperModelSizeTiny": "صغير جدًا",
+    "navTodos": "المهام",
+    "navHome": "الرئيسية",
+    "navConvos": "المحادثات",
+    "navBrain": "الدماغ"
 }

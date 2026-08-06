@@ -9830,4 +9830,16 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Massa antic per sincronitzar — Omi no el pot acceptar';
+
+  @override
+  String get navTodos => 'Tasques';
+
+  @override
+  String get navHome => 'Inici';
+
+  @override
+  String get navConvos => 'Converses';
+
+  @override
+  String get navBrain => 'Cervell';
 }

@@ -9753,4 +9753,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'सिंक करने के लिए बहुत पुराना — Omi इसे स्वीकार नहीं कर सकता';
+
+  @override
+  String get navTodos => 'कार्य';
+
+  @override
+  String get navHome => 'होम';
+
+  @override
+  String get navConvos => 'बातचीत';
+
+  @override
+  String get navBrain => 'दिमाग';
 }

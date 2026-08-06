@@ -3170,5 +3170,9 @@
     "whisperModelSizeLarge": "Velký",
     "whisperModelSizeMedium": "Střední",
     "whisperModelSizeSmall": "Malý",
-    "whisperModelSizeTiny": "Nejmenší"
+    "whisperModelSizeTiny": "Nejmenší",
+    "navTodos": "Úkoly",
+    "navHome": "Domů",
+    "navConvos": "Konverzace",
+    "navBrain": "Mozek"
 }

@@ -9864,4 +9864,16 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Masyadong luma para i-sync — hindi ito matatanggap ng Omi';
+
+  @override
+  String get navTodos => 'Mga Gawain';
+
+  @override
+  String get navHome => 'Home';
+
+  @override
+  String get navConvos => 'Mga Conversation';
+
+  @override
+  String get navBrain => 'Utak';
 }

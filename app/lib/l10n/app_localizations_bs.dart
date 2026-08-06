@@ -9801,4 +9801,16 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Prestaro za sinkronizaciju — Omi ga ne može prihvatiti';
+
+  @override
+  String get navTodos => 'Zadaci';
+
+  @override
+  String get navHome => 'Početna';
+
+  @override
+  String get navConvos => 'Razgovori';
+
+  @override
+  String get navBrain => 'Mozak';
 }

@@ -3218,5 +3218,9 @@
     "whisperModelSizeLarge": "大型",
     "whisperModelSizeMedium": "中型",
     "whisperModelSizeSmall": "小型",
-    "whisperModelSizeTiny": "微型"
+    "whisperModelSizeTiny": "微型",
+    "navTodos": "任务",
+    "navHome": "首页",
+    "navConvos": "对话",
+    "navBrain": "大脑"
 }

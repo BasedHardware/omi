@@ -34,6 +34,7 @@ import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
@@ -162,7 +163,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           (actionItemsState as dynamic).scrollToTop();
         }
         break;
-      case 3:
+      // 3 is the Brain graph — pan/zoom, nothing to scroll.
+      case 4:
         _appsPageKey.currentState?.scrollToTop();
         break;
     }
@@ -250,6 +252,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       HomeContentPage(key: _homeContentPageKey),
       ConversationsPage(key: _conversationsPageKey),
       ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
+      // Brain tab. embedded: the host Scaffold already supplies the app bar, so
+      // the page must not build its own (with a back button that goes nowhere).
+      // trackOpenEvent: IndexedStack builds this at launch, so the open event is
+      // fired from the tab tap instead — see onTabTap below.
+      const MemoryGraphPage(embedded: true, trackOpenEvent: false),
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
@@ -284,7 +291,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           homePageIdx = 0;
           break;
         case "apps":
-          homePageIdx = 3;
+          homePageIdx = 4;
           break;
       }
     }
@@ -728,6 +735,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     final cp = context.read<ConversationProvider>();
                                     if (cp.showDailySummaries) cp.toggleDailySummaries();
                                   }
+                                  // The Brain page is built once by IndexedStack
+                                  // and never "opens", so record the open here.
+                                  if (index == 3) {
+                                    PlatformManager.instance.analytics.brainMapOpened();
+                                  }
                                   home.setIndex(index);
                                 }
                               },
@@ -818,6 +830,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
+  /// Tabs that render their own full-bleed surface and carry no app-bar chrome:
+  /// Conversations (1) and Brain (3).
+  ///
+  /// Conversations keeps its search and calendar buttons — only the device
+  /// status chip and the settings gear drop away.
+  static bool _hidesAppBarChrome(int selectedIndex) => selectedIndex == 1 || selectedIndex == 3;
+
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
@@ -826,7 +845,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const BatteryInfoWidget(),
+          // Device/battery status chip — hidden on the tabs that keep a bare
+          // app bar. See [_hidesAppBarChrome].
+          Consumer<HomeProvider>(
+            builder: (context, homeProvider, _) =>
+                _hidesAppBarChrome(homeProvider.selectedIndex) ? const SizedBox.shrink() : const BatteryInfoWidget(),
+          ),
           const SizedBox.shrink(),
           Row(
             children: [
@@ -1076,7 +1100,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               // Apps tab — Create app pull-down menu (shown only on Apps tab, left of settings)
               Consumer<HomeProvider>(
                 builder: (context, homeProvider, _) {
-                  if (homeProvider.selectedIndex != 3) return const SizedBox.shrink();
+                  if (homeProvider.selectedIndex != 4) return const SizedBox.shrink();
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: PullDownButton(
@@ -1116,30 +1140,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Settings button - always visible
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    PlatformManager.instance.analytics.pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
-                    }
-                  },
-                ),
+              // Settings button — hidden on the tabs that keep a bare app bar.
+              // See [_hidesAppBarChrome]; Settings stays reachable from Home,
+              // Tasks, and Apps.
+              Consumer<HomeProvider>(
+                builder: (context, homeProvider, _) {
+                  if (_hidesAppBarChrome(homeProvider.selectedIndex)) return const SizedBox.shrink();
+                  return Container(
+                    width: 36,
+                    height: 36,
+                    decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                      onPressed: () {
+                        HapticFeedback.mediumImpact();
+                        PlatformManager.instance.analytics.pageOpened('Settings');
+                        String language = SharedPreferencesUtil().userPrimaryLanguage;
+                        bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
+                        String transcriptModel = SharedPreferencesUtil().transcriptionModel;
+                        SettingsDrawer.show(context);
+                        if (language != SharedPreferencesUtil().userPrimaryLanguage ||
+                            hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
+                            transcriptModel != SharedPreferencesUtil().transcriptionModel) {
+                          if (context.mounted) {
+                            context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                          }
+                        }
+                      },
+                    ),
+                  );
+                },
               ),
             ],
           ),

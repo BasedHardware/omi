@@ -9826,4 +9826,16 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Премногу стар за синхронизација — Omi не може да го прифати';
+
+  @override
+  String get navTodos => 'Задачи';
+
+  @override
+  String get navHome => 'Почетна';
+
+  @override
+  String get navConvos => 'Разговори';
+
+  @override
+  String get navBrain => 'Мозок';
 }

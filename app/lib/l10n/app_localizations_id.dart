@@ -9784,4 +9784,16 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Terlalu lama untuk disinkronkan — Omi tidak dapat menerimanya';
+
+  @override
+  String get navTodos => 'Tugas';
+
+  @override
+  String get navHome => 'Beranda';
+
+  @override
+  String get navConvos => 'Percakapan';
+
+  @override
+  String get navBrain => 'Otak';
 }

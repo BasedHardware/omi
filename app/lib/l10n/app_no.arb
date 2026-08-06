@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Stor",
     "whisperModelSizeMedium": "Medium",
     "whisperModelSizeSmall": "Liten",
-    "whisperModelSizeTiny": "Veldig liten"
+    "whisperModelSizeTiny": "Veldig liten",
+    "navTodos": "Oppgaver",
+    "navHome": "Hjem",
+    "navConvos": "Samtaler",
+    "navBrain": "Hjerne"
 }

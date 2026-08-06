@@ -9714,4 +9714,16 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'قديم جدًا للمزامنة — لا يمكن لـ Omi قبوله';
+
+  @override
+  String get navTodos => 'المهام';
+
+  @override
+  String get navHome => 'الرئيسية';
+
+  @override
+  String get navConvos => 'المحادثات';
+
+  @override
+  String get navBrain => 'الدماغ';
 }

@@ -9806,4 +9806,16 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ಸಿಂಕ್ ಮಾಡಲು ತುಂಬಾ ಹಳೆಯದು — Omi ಅದನ್ನು ಸ್ವೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ';
+
+  @override
+  String get navTodos => 'ಕಾರ್ಯಗಳು';
+
+  @override
+  String get navHome => 'ಮುಖಪುಟ';
+
+  @override
+  String get navConvos => 'ಸಂವಾದಗಳು';
+
+  @override
+  String get navBrain => 'ಮೆದುಳು';
 }

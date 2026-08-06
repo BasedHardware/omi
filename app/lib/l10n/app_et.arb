@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Suur",
     "whisperModelSizeMedium": "Keskmine",
     "whisperModelSizeSmall": "Väike",
-    "whisperModelSizeTiny": "Pisike"
+    "whisperModelSizeTiny": "Pisike",
+    "navTodos": "Ülesanded",
+    "navHome": "Avaleht",
+    "navConvos": "Vestlused",
+    "navBrain": "Aju"
 }

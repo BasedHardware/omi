@@ -3288,5 +3288,9 @@
     "whisperModelSizeLarge": "Nagy",
     "whisperModelSizeMedium": "Közepes",
     "whisperModelSizeSmall": "Kicsi",
-    "whisperModelSizeTiny": "Apró"
+    "whisperModelSizeTiny": "Apró",
+    "navTodos": "Feladatok",
+    "navHome": "Kezdőlap",
+    "navConvos": "Beszélgetések",
+    "navBrain": "Agy"
 }

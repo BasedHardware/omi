@@ -9861,4 +9861,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Trop ancien pour être synchronisé — Omi ne peut pas l\'accepter';
+
+  @override
+  String get navTodos => 'Tâches';
+
+  @override
+  String get navHome => 'Accueil';
+
+  @override
+  String get navConvos => 'Conversations';
+
+  @override
+  String get navBrain => 'Cerveau';
 }

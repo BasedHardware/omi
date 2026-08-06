@@ -3227,5 +3227,9 @@
     "whisperModelSizeLarge": "Большая",
     "whisperModelSizeMedium": "Средняя",
     "whisperModelSizeSmall": "Малая",
-    "whisperModelSizeTiny": "Крошечная"
+    "whisperModelSizeTiny": "Крошечная",
+    "navTodos": "Задачи",
+    "navHome": "Главная",
+    "navConvos": "Беседы",
+    "navBrain": "Мозг"
 }

@@ -9799,4 +9799,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Terlalu lama untuk disegerakkan — Omi tidak boleh menerimanya';
+
+  @override
+  String get navTodos => 'Tugas';
+
+  @override
+  String get navHome => 'Utama';
+
+  @override
+  String get navConvos => 'Perbualan';
+
+  @override
+  String get navBrain => 'Otak';
 }

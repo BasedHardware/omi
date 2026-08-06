@@ -9774,4 +9774,16 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Příliš staré na synchronizaci — Omi ho nemůže přijmout';
+
+  @override
+  String get navTodos => 'Úkoly';
+
+  @override
+  String get navHome => 'Domů';
+
+  @override
+  String get navConvos => 'Konverzace';
+
+  @override
+  String get navBrain => 'Mozek';
 }

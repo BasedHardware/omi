@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Liels",
     "whisperModelSizeMedium": "Vidējs",
     "whisperModelSizeSmall": "Mazs",
-    "whisperModelSizeTiny": "Sīks"
+    "whisperModelSizeTiny": "Sīks",
+    "navTodos": "Uzdevumi",
+    "navHome": "Sākums",
+    "navConvos": "Sarunas",
+    "navBrain": "Smadzenes"
 }

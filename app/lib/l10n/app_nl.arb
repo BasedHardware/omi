@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Groot",
     "whisperModelSizeMedium": "Gemiddeld",
     "whisperModelSizeSmall": "Klein",
-    "whisperModelSizeTiny": "Heel klein"
+    "whisperModelSizeTiny": "Heel klein",
+    "navTodos": "Taken",
+    "navHome": "Start",
+    "navConvos": "Gesprekken",
+    "navBrain": "Brein"
 }

@@ -9791,4 +9791,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';
+
+  @override
+  String get navTodos => 'Užduotys';
+
+  @override
+  String get navHome => 'Pradžia';
+
+  @override
+  String get navConvos => 'Pokalbiai';
+
+  @override
+  String get navBrain => 'Smegenys';
 }

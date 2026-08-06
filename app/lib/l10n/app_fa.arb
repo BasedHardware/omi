@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "بزرگ",
     "whisperModelSizeMedium": "متوسط",
     "whisperModelSizeSmall": "کوچک",
-    "whisperModelSizeTiny": "خیلی کوچک"
+    "whisperModelSizeTiny": "خیلی کوچک",
+    "navTodos": "وظایف",
+    "navHome": "خانه",
+    "navConvos": "گفتگوها",
+    "navBrain": "مغز"
 }

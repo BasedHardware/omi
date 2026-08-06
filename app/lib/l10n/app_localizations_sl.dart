@@ -9802,4 +9802,16 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Prestaro za sinhronizacijo — Omi ga ne more sprejeti';
+
+  @override
+  String get navTodos => 'Naloge';
+
+  @override
+  String get navHome => 'Domov';
+
+  @override
+  String get navConvos => 'Pogovori';
+
+  @override
+  String get navBrain => 'Možgani';
 }

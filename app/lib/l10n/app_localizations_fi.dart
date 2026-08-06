@@ -9775,4 +9775,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
+
+  @override
+  String get navTodos => 'Tehtävät';
+
+  @override
+  String get navHome => 'Koti';
+
+  @override
+  String get navConvos => 'Keskustelut';
+
+  @override
+  String get navBrain => 'Aivot';
 }

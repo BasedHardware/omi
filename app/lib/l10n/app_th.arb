@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "ใหญ่",
     "whisperModelSizeMedium": "กลาง",
     "whisperModelSizeSmall": "เล็ก",
-    "whisperModelSizeTiny": "เล็กมาก"
+    "whisperModelSizeTiny": "เล็กมาก",
+    "navTodos": "งาน",
+    "navHome": "หน้าแรก",
+    "navConvos": "การสนทนา",
+    "navBrain": "สมอง"
 }

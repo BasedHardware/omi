@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "Malaki",
     "whisperModelSizeMedium": "Katamtaman",
     "whisperModelSizeSmall": "Maliit",
-    "whisperModelSizeTiny": "Napakaliit"
+    "whisperModelSizeTiny": "Napakaliit",
+    "navTodos": "Mga Gawain",
+    "navHome": "Home",
+    "navConvos": "Mga Conversation",
+    "navBrain": "Utak"
 }

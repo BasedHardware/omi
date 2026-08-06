@@ -9801,4 +9801,16 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Zbyt stare, aby zsynchronizować — Omi nie może tego przyjąć';
+
+  @override
+  String get navTodos => 'Zadania';
+
+  @override
+  String get navHome => 'Główna';
+
+  @override
+  String get navConvos => 'Rozmowy';
+
+  @override
+  String get navBrain => 'Mózg';
 }

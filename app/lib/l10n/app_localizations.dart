@@ -18224,6 +18224,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Too old to sync — Omi can\'t accept it'**
   String get syncStatusTooOld;
+
+  /// Bottom navigation label for the tasks tab
+  ///
+  /// In en, this message translates to:
+  /// **'Todos'**
+  String get navTodos;
+
+  /// Bottom navigation label for the home tab
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get navHome;
+
+  /// Bottom navigation label for the conversations tab
+  ///
+  /// In en, this message translates to:
+  /// **'Convos'**
+  String get navConvos;
+
+  /// Bottom navigation label for the knowledge-graph tab
+  ///
+  /// In en, this message translates to:
+  /// **'Brain'**
+  String get navBrain;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

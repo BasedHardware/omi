@@ -9779,4 +9779,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'För gammal för att synkas — Omi kan inte ta emot den';
+
+  @override
+  String get navTodos => 'Uppgifter';
+
+  @override
+  String get navHome => 'Hem';
+
+  @override
+  String get navConvos => 'Konversationer';
+
+  @override
+  String get navBrain => 'Hjärna';
 }

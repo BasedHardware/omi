@@ -9760,4 +9760,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'For gammel til at synkronisere — Omi kan ikke acceptere den';
+
+  @override
+  String get navTodos => 'Opgaver';
+
+  @override
+  String get navHome => 'Hjem';
+
+  @override
+  String get navConvos => 'Samtaler';
+
+  @override
+  String get navBrain => 'Hjerne';
 }

@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Suuri",
     "whisperModelSizeMedium": "Keskikokoinen",
     "whisperModelSizeSmall": "Pieni",
-    "whisperModelSizeTiny": "Pikkuruinen"
+    "whisperModelSizeTiny": "Pikkuruinen",
+    "navTodos": "Tehtävät",
+    "navHome": "Koti",
+    "navConvos": "Keskustelut",
+    "navBrain": "Aivot"
 }

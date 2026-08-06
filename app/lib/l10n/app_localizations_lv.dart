@@ -9796,4 +9796,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt';
+
+  @override
+  String get navTodos => 'Uzdevumi';
+
+  @override
+  String get navHome => 'Sākums';
+
+  @override
+  String get navConvos => 'Sarunas';
+
+  @override
+  String get navBrain => 'Smadzenes';
 }

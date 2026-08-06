@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "मोठे",
     "whisperModelSizeMedium": "मध्यम",
     "whisperModelSizeSmall": "लहान",
-    "whisperModelSizeTiny": "अतिशय लहान"
+    "whisperModelSizeTiny": "अतिशय लहान",
+    "navTodos": "कार्य",
+    "navHome": "होम",
+    "navConvos": "संभाषण",
+    "navBrain": "मेंदू"
 }

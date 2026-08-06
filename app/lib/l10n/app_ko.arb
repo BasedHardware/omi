@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "대형",
     "whisperModelSizeMedium": "중형",
     "whisperModelSizeSmall": "소형",
-    "whisperModelSizeTiny": "초소형"
+    "whisperModelSizeTiny": "초소형",
+    "navTodos": "작업",
+    "navHome": "홈",
+    "navConvos": "대화",
+    "navBrain": "브레인"
 }

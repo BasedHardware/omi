@@ -9699,4 +9699,16 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'ישן מדי לסנכרון — Omi לא יכול לקבל אותו';
+
+  @override
+  String get navTodos => 'משימות';
+
+  @override
+  String get navHome => 'בית';
+
+  @override
+  String get navConvos => 'שיחות';
+
+  @override
+  String get navBrain => 'מוח';
 }

@@ -9843,4 +9843,16 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Πολύ παλιά για συγχρονισμό — το Omi δεν μπορεί να τη δεχτεί';
+
+  @override
+  String get navTodos => 'Εργασίες';
+
+  @override
+  String get navHome => 'Αρχική';
+
+  @override
+  String get navConvos => 'Συνομιλίες';
+
+  @override
+  String get navBrain => 'Εγκέφαλος';
 }

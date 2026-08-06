@@ -9788,4 +9788,16 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Превише стара за синхронизацију — Omi не може да је прихвати';
+
+  @override
+  String get navTodos => 'Задаци';
+
+  @override
+  String get navHome => 'Почетна';
+
+  @override
+  String get navConvos => 'Разговори';
+
+  @override
+  String get navBrain => 'Мозак';
 }

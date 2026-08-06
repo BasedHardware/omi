@@ -9613,4 +9613,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => '너무 오래되어 동기화할 수 없습니다 — Omi가 받을 수 없습니다';
+
+  @override
+  String get navTodos => '작업';
+
+  @override
+  String get navHome => '홈';
+
+  @override
+  String get navConvos => '대화';
+
+  @override
+  String get navBrain => '브레인';
 }

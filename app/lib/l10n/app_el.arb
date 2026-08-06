@@ -3192,5 +3192,9 @@
     "whisperModelSizeLarge": "Μεγάλο",
     "whisperModelSizeMedium": "Μεσαίο",
     "whisperModelSizeSmall": "Μικρό",
-    "whisperModelSizeTiny": "Μικροσκοπικό"
+    "whisperModelSizeTiny": "Μικροσκοπικό",
+    "navTodos": "Εργασίες",
+    "navHome": "Αρχική",
+    "navConvos": "Συνομιλίες",
+    "navBrain": "Εγκέφαλος"
 }

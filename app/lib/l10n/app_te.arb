@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "పెద్దది",
     "whisperModelSizeMedium": "మధ్యస్థం",
     "whisperModelSizeSmall": "చిన్నది",
-    "whisperModelSizeTiny": "అతి చిన్నది"
+    "whisperModelSizeTiny": "అతి చిన్నది",
+    "navTodos": "పనులు",
+    "navHome": "హోమ్",
+    "navConvos": "సంభాషణలు",
+    "navBrain": "మెదడు"
 }

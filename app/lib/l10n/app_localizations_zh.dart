@@ -9594,4 +9594,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
+
+  @override
+  String get navTodos => '任务';
+
+  @override
+  String get navHome => '首页';
+
+  @override
+  String get navConvos => '对话';
+
+  @override
+  String get navBrain => '大脑';
 }

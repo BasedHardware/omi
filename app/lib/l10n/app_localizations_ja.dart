@@ -9612,4 +9612,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => '古すぎて同期できません — Omi は受け付けられません';
+
+  @override
+  String get navTodos => 'タスク';
+
+  @override
+  String get navHome => 'ホーム';
+
+  @override
+  String get navConvos => '会話';
+
+  @override
+  String get navBrain => 'ブレイン';
 }

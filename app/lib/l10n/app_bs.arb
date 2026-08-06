@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "Veliki",
     "whisperModelSizeMedium": "Srednji",
     "whisperModelSizeSmall": "Mali",
-    "whisperModelSizeTiny": "Sićušni"
+    "whisperModelSizeTiny": "Sićušni",
+    "navTodos": "Zadaci",
+    "navHome": "Početna",
+    "navConvos": "Razgovori",
+    "navBrain": "Mozak"
 }

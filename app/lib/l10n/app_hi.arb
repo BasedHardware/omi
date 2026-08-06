@@ -3193,5 +3193,9 @@
     "whisperModelSizeLarge": "बड़ा",
     "whisperModelSizeMedium": "मध्यम",
     "whisperModelSizeSmall": "छोटा",
-    "whisperModelSizeTiny": "अति लघु"
+    "whisperModelSizeTiny": "अति लघु",
+    "navTodos": "कार्य",
+    "navHome": "होम",
+    "navConvos": "बातचीत",
+    "navBrain": "दिमाग"
 }

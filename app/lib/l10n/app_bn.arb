@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "বড়",
     "whisperModelSizeMedium": "মাঝারি",
     "whisperModelSizeSmall": "ছোট",
-    "whisperModelSizeTiny": "অতি ছোট"
+    "whisperModelSizeTiny": "অতি ছোট",
+    "navTodos": "কাজ",
+    "navHome": "হোম",
+    "navConvos": "কথোপকথন",
+    "navBrain": "মস্তিষ্ক"
 }

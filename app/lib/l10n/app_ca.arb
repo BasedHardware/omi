@@ -3170,5 +3170,9 @@
     "whisperModelSizeLarge": "Gran",
     "whisperModelSizeMedium": "Mitjà",
     "whisperModelSizeSmall": "Petit",
-    "whisperModelSizeTiny": "Molt petit"
+    "whisperModelSizeTiny": "Molt petit",
+    "navTodos": "Tasques",
+    "navHome": "Inici",
+    "navConvos": "Converses",
+    "navBrain": "Cervell"
 }

@@ -9780,4 +9780,16 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'সিঙ্ক করার জন্য খুব পুরনো — Omi এটি গ্রহণ করতে পারে না';
+
+  @override
+  String get navTodos => 'কাজ';
+
+  @override
+  String get navHome => 'হোম';
+
+  @override
+  String get navConvos => 'কথোপকথন';
+
+  @override
+  String get navBrain => 'মস্তিষ্ক';
 }

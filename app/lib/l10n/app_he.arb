@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "גדול",
     "whisperModelSizeMedium": "בינוני",
     "whisperModelSizeSmall": "קטן",
-    "whisperModelSizeTiny": "זעיר"
+    "whisperModelSizeTiny": "זעיר",
+    "navTodos": "משימות",
+    "navHome": "בית",
+    "navConvos": "שיחות",
+    "navBrain": "מוח"
 }

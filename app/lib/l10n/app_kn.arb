@@ -10767,5 +10767,9 @@
     "whisperModelSizeLarge": "ದೊಡ್ಡದು",
     "whisperModelSizeMedium": "ಮಧ್ಯಮ",
     "whisperModelSizeSmall": "ಚಿಕ್ಕದು",
-    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು"
+    "whisperModelSizeTiny": "ಅತಿ ಚಿಕ್ಕದು",
+    "navTodos": "ಕಾರ್ಯಗಳು",
+    "navHome": "ಮುಖಪುಟ",
+    "navConvos": "ಸಂವಾದಗಳು",
+    "navBrain": "ಮೆದುಳು"
 }

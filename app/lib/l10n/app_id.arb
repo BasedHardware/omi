@@ -3234,5 +3234,9 @@
     "whisperModelSizeLarge": "Besar",
     "whisperModelSizeMedium": "Sedang",
     "whisperModelSizeSmall": "Kecil",
-    "whisperModelSizeTiny": "Sangat kecil"
+    "whisperModelSizeTiny": "Sangat kecil",
+    "navTodos": "Tugas",
+    "navHome": "Beranda",
+    "navConvos": "Percakapan",
+    "navBrain": "Otak"
 }

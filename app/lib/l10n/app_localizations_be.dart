@@ -9804,4 +9804,16 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Занадта старое для сінхранізацыі — Omi не можа яго прыняць';
+
+  @override
+  String get navTodos => 'Задачы';
+
+  @override
+  String get navHome => 'Галоўная';
+
+  @override
+  String get navConvos => 'Разнамовы';
+
+  @override
+  String get navBrain => 'Мозг';
 }

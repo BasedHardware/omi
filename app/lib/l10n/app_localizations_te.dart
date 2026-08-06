@@ -9823,4 +9823,16 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'సింక్ చేయడానికి చాలా పాతది — Omi దీన్ని అంగీకరించలేదు';
+
+  @override
+  String get navTodos => 'పనులు';
+
+  @override
+  String get navHome => 'హోమ్';
+
+  @override
+  String get navConvos => 'సంభాషణలు';
+
+  @override
+  String get navBrain => 'మెదడు';
 }

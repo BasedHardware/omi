@@ -3227,5 +3227,9 @@
     "whisperModelSizeLarge": "Büyük",
     "whisperModelSizeMedium": "Orta",
     "whisperModelSizeSmall": "Küçük",
-    "whisperModelSizeTiny": "Çok küçük"
+    "whisperModelSizeTiny": "Çok küçük",
+    "navTodos": "Görevler",
+    "navHome": "Ana Sayfa",
+    "navConvos": "Konuşmalar",
+    "navBrain": "Beyin"
 }

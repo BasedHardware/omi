@@ -9770,4 +9770,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Quá cũ để đồng bộ — Omi không thể chấp nhận';
+
+  @override
+  String get navTodos => 'Nhiệm vụ';
+
+  @override
+  String get navHome => 'Trang chủ';
+
+  @override
+  String get navConvos => 'Cuộc trò chuyện';
+
+  @override
+  String get navBrain => 'Não';
 }

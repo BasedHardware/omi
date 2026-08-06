@@ -9,9 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
-import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
@@ -88,9 +86,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               // Live capture widget — shows when device or phone mic is recording
               const SliverToBoxAdapter(child: ConversationCaptureWidget()),
 
-              // Today section — TodayTasksWidget has its own header
-              const SliverToBoxAdapter(child: TodayTasksWidget()),
-
               // Daily Recaps section — hidden entirely when not loading and empty
               if (_loadingSummaries || _recentSummaries.isNotEmpty) ...[
                 SliverToBoxAdapter(
@@ -109,37 +104,21 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               // Conversations section.
               //
               // If the user has fewer than 3 non-discarded conversations,
-              // we replace the recent-conversations preview with three
-              // big "get started" options so the home page doesn't feel
-              // empty for new users.
-              if (_nonDiscardedConversationCount(convoProvider) >= 3) ...[
-                // Mind Map section — only shown for users with enough activity.
-                SliverToBoxAdapter(
-                  child: _buildSectionHeader(
-                    context,
-                    context.l10n.mindMap,
-                    onViewAll: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
-                    ),
-                    buttonLabel: context.l10n.expand,
-                  ),
-                ),
-                SliverToBoxAdapter(child: _buildMindMapPreview(context)),
-
+              // we show three big "get started" options so the home page
+              // doesn't feel empty for new users.
+              if (_nonDiscardedConversationCount(convoProvider) >= 3)
                 // Bottom padding so content isn't hidden behind chat bar + nav
-                const SliverToBoxAdapter(child: SizedBox(height: 160)),
-              ] else if (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations)
+                const SliverToBoxAdapter(child: SizedBox(height: 160))
+              else if (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations)
                 // Hide both the recent-convos preview AND the get-started tiles
                 // while we're still fetching — otherwise users with conversations
                 // briefly see the new-user triangle UI while the network call
                 // is in flight, which looks broken.
                 const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink())
               else
-                // For new users (< 3 non-discarded convos): hide the conversations
-                // preview AND the mind map. The 3 "get started" tiles fill the
-                // remaining vertical space and sit centered between Today/Daily
-                // Recaps above and the floating chat bar below.
+                // For new users (< 3 non-discarded convos): the 3 "get started"
+                // tiles fill the remaining vertical space and sit centered
+                // between Daily Recaps above and the floating chat bar below.
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Padding(
@@ -393,35 +372,5 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${weekdays[date.weekday - 1]}, ${months[month - 1]} $day';
-  }
-
-  Widget _buildMindMapPreview(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: const SizedBox(
-            height: 180,
-            child: IgnorePointer(
-              child: MemoryGraphPage(
-                embedded: true,
-                showAppBar: false,
-                showShareButton: false,
-                trackOpenEvent: false,
-                autoRebuildIfEmpty: false,
-                hideRebuildButtonWhenEmpty: true,
-                initialZoom: 0.6,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
