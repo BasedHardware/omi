@@ -87,7 +87,7 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
             or migration.get("enabled") is not True
             or not isinstance(migration.get("allowedUids"), list)
             or not migration["allowedUids"]
-            or not all(isinstance(uid, str) and uid for uid in migration["allowedUids"])
+            or not all(isinstance(uid, str) and uid.strip() for uid in migration["allowedUids"])
             or migration.get("maxConcurrency") != 1
             or not isinstance(migration.get("soakSeconds"), int)
             or migration["soakSeconds"] < 60

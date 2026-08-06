@@ -230,6 +230,22 @@ def test_boot_image_migration_plan_is_explicit_allowlisted_and_dev_only(monkeypa
         reconciler._boot_image_migration_plan(raw, replace(RELEASE, environment="production"))
 
 
+def test_boot_image_migration_plan_rejects_whitespace_only_allowed_uids(monkeypatch):
+    raw = RELEASE.to_mapping() | {
+        "bootImageMigration": {
+            "enabled": True,
+            "allowedUids": ["  "],
+            "maxConcurrency": 1,
+            "soakSeconds": 60,
+        }
+    }
+    monkeypatch.setenv("AGENT_VM_ENVIRONMENT", "development")
+    monkeypatch.setenv("GCE_PROJECT_ID", "based-hardware-dev")
+
+    with pytest.raises(ValueError, match="allowedUids"):
+        reconciler._boot_image_migration_plan(raw, RELEASE)
+
+
 def test_boot_image_migration_replaces_only_an_already_stopped_allowlisted_vm(monkeypatch):
     class MigrationApi:
         creates: list[tuple[Any, ...]] = []
@@ -324,6 +340,50 @@ def test_boot_image_migration_replaces_only_an_already_stopped_allowlisted_vm(mo
     assert MigrationApi.labels and MigrationApi.creates and MigrationApi.waits
     assert cutovers[-1]["vmName"].startswith("omi-agent-user-m-")
     assert cutovers[-1]["authToken"] != "old-token"
+
+
+def test_migration_allowlist_owners_are_selected_outside_the_rollout_cohort(monkeypatch):
+    """An explicitly allowlisted, stopped VM that is not in the normal rollout
+    cohort must still be selected so its boot-image drift can be replaced."""
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", FakeApi)
+    monkeypatch.setattr(reconciler, "_init_firebase", lambda: None)
+    monkeypatch.setattr(reconciler, "claim_reconciler_run_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_reconciler_run_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "release_reconciler_run_lease", lambda *_args: None)
+    monkeypatch.setattr(reconciler, "_rollout_phase", lambda *_args, **_kwargs: "remainder")
+    raw_manifest = RELEASE.to_mapping() | {
+        "bootImageMigration": {
+            "enabled": True,
+            "allowedUids": ["migration-owner"],
+            "maxConcurrency": 1,
+            "soakSeconds": 60,
+        }
+    }
+
+    def fake_owners() -> list[tuple[str, dict[str, Any]]]:
+        return [
+            ("migration-owner", {"vmName": "omi-agent-migration-owner", "status": "stopped"}),
+            ("rollout-owner", {"vmName": "omi-agent-rollout-owner", "status": "stopped"}),
+        ]
+
+    captured_uids: list[str] = []
+
+    async def fake_reconcile_one(uid, vm, release, **kwargs):
+        captured_uids.append(uid)
+        return reconciler.ReconcileResult(uid, "ready", "test")
+
+    monkeypatch.setattr(reconciler, "_owners", fake_owners)
+    monkeypatch.setattr(reconciler, "reconcile_one", fake_reconcile_one)
+    monkeypatch.setattr(reconciler, "_advance_rollout", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(reconciler, "load_active_release", lambda: (RELEASE, raw_manifest))
+    monkeypatch.setenv("GCE_PROJECT_ID", "based-hardware-dev")
+    monkeypatch.setenv("AGENT_VM_ENVIRONMENT", "development")
+
+    asyncio.run(reconciler.run_reconciler())
+
+    assert "migration-owner" in captured_uids, (
+        "allowlisted migration owner must be selected even when outside the rollout cohort"
+    )
 
 
 def test_boot_image_migration_fails_closed_for_an_unverifiable_source(monkeypatch):

@@ -147,7 +147,7 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
     assert "REFUSED:" in script
     assert (
-        "compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
+        "compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop,compute.subnetworks.use,compute.subnetworks.useExternalIp"
         in script
     )
     assert "Agent VM reconciler instance scope" in script
@@ -250,6 +250,16 @@ def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(t
     refused = subprocess.run(["bash", str(script)], cwd=REPO_DIR, text=True, capture_output=True, check=False)
     assert refused.returncode == 1
     assert "REFUSED:" in refused.stderr
+
+
+def test_dev_migration_activation_verifies_bucket_project_and_previous_snapshot():
+    script = BACKEND_DIR / "scripts" / "activate-agent-vm-dev-migration.sh"
+    text = script.read_text(encoding="utf-8")
+    assert "gcloud storage buckets describe" in text
+    assert "refusing cross-environment activation" in text
+    assert "previous.json" in text
+    assert "rollback" in text or "Snapshot" in text or "snapshot" in text
+    assert "uid.strip()" in text
 
 
 def test_revoke_script_removes_all_conditional_bindings_and_verifies_absence():

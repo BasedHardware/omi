@@ -114,7 +114,7 @@ def _boot_image_migration_plan(raw: Mapping[str, Any], release: AgentVmRelease) 
     if os.getenv("GCE_PROJECT_ID", "").strip() != "based-hardware-dev":
         raise ValueError("boot-image migration requires the approved development project")
     owners = migration.get("allowedUids")
-    if not isinstance(owners, list) or not owners or not all(isinstance(uid, str) and uid for uid in owners):
+    if not isinstance(owners, list) or not owners or not all(isinstance(uid, str) and uid.strip() for uid in owners):
         raise ValueError("boot-image migration requires a non-empty allowedUids list")
     max_concurrency = migration.get("maxConcurrency", 1)
     soak_seconds = migration.get("soakSeconds", 600)
@@ -639,7 +639,6 @@ async def reconcile_one(
     dry_run: bool = False,
     missing_cleanup_grace_seconds: int | None = None,
     boot_image_migration: BootImageMigrationPlan | None = None,
-    boot_image_migration_lock: asyncio.Semaphore | None = None,
 ) -> ReconcileResult:
     vm_name = str(vm["vmName"])
     auth_token = str(vm["authToken"])
@@ -738,29 +737,16 @@ async def reconcile_one(
             # A mutable, malformed, or unreadable source is a fail-closed
             # observation, never permission to replace an instance.
             if boot_image_migration is not None and reason == "boot_image_recreate_required":
-                if boot_image_migration_lock is None:
-                    migration = await _replace_stopped_boot_image_drift(
-                        uid,
-                        vm,
-                        instance,
-                        release,
-                        boot_image_migration,
-                        owner=owner,
-                        api=api,
-                        cleanup_context=failed_candidate,
-                    )
-                else:
-                    async with boot_image_migration_lock:
-                        migration = await _replace_stopped_boot_image_drift(
-                            uid,
-                            vm,
-                            instance,
-                            release,
-                            boot_image_migration,
-                            owner=owner,
-                            api=api,
-                            cleanup_context=failed_candidate,
-                        )
+                migration = await _replace_stopped_boot_image_drift(
+                    uid,
+                    vm,
+                    instance,
+                    release,
+                    boot_image_migration,
+                    owner=owner,
+                    api=api,
+                    cleanup_context=failed_candidate,
+                )
                 if migration.state != "recreate_required":
                     return migration
             if not await _update_reconcile(
@@ -1010,6 +996,21 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
             selected = sorted(
                 _select_reconcile_owners(owners, release.release_id, target_percent), key=lambda item: item[0]
             )
+            # An explicit boot-image migration allowlist is independent of the
+            # ordinary release rollout cohort.  A stopped allowlisted VM that is
+            # not in the current cohort must still be selected so its drift can
+            # be replaced.  Rollout advancement only consumes rollout_selected
+            # results, so these extra owners never advance the rollout phase.
+            if migration_plan is not None:
+                selected_uids = {uid for uid, _ in selected}
+                migration_candidates = [
+                    (uid, vm)
+                    for uid, vm in owners
+                    if uid not in selected_uids
+                    and uid in migration_plan.allowed_uids
+                    and str(vm.get("status") or "") == "stopped"
+                ]
+                selected.extend(migration_candidates)
             # A migration plan has its own explicit maxConcurrency contract and
             # never inherits the normal release rollout's wider semaphore.
             # Every selected allowlisted owner gets a chance; the dedicated
