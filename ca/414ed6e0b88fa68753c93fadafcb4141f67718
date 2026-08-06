@@ -1,0 +1,42 @@
+desktop/lock-in/Sources/LockInApp/Views/History/DayDetail.swift
+  s_acebfdccb4f1d0::t_52f788e47a71cd 85-87
+desktop/lock-in/Sources/LockInCore/Store.swift
+  s_acebfdccb4f1d0::t_b09adc91f2e94e 242
+  s_569f1df936cc22::t_89197bed12a040 241,248,255,466,476,581-592
+desktop/lock-in/Tests/LockInAppTests/LiveVerdictTests.swift
+  s_acebfdccb4f1d0::t_afc3b26e6f238d 179-219
+desktop/lock-in/Sources/LockInApp/Model/DayWorker.swift
+  s_acebfdccb4f1d0::t_064a0f139a629c 45-48
+  s_acebfdccb4f1d0::t_7bc4311fba0621 174,179-186
+desktop/lock-in/Sources/LockInApp/Model/TodayProvider.swift
+  s_acebfdccb4f1d0::t_7122ecf01c04e5 337-347,356-360
+  s_acebfdccb4f1d0::t_0f24e9364b7f73 273-275
+desktop/lock-in/Sources/LockInCore/Models.swift
+  s_acebfdccb4f1d0::t_5ade2a05f094a1 193-198,200-202,212,221-222
+desktop/lock-in/Sources/LockInCore/Score.swift
+  s_acebfdccb4f1d0::t_f2f2254b190fb1 236,414
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ca414ed6e0b88fa68753c93fadafcb4141f67718",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
