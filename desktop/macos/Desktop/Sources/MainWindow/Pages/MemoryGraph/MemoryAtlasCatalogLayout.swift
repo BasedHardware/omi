@@ -48,13 +48,15 @@ enum MemoryAtlasCatalogLayout {
         // A memory without verified entity evidence remains present, but it is
         // a softly distributed background mark in a disk, never a rectangular
         // grid or a synthetic community.
-        result[record.id] = orphanPoint(for: record.id, in: area)
+        let point = settled(orphanPoint(for: record.id, in: area), awayFrom: occupied, spacing: spacing, in: area)
+        occupied.append(point)
+        result[record.id] = point
         continue
       }
 
       let center = weightedCenter(of: selected, positions: assertionPositions)
-      let angle = unit("\(record.id)|petal-angle") * .pi * 2
-      let radius = spacing * CGFloat(1.2 + unit("\(record.id)|petal-radius") * 3.8)
+      let angle = MemoryAtlasForceLayout.stableFraction("\(record.id)|petal-angle") * .pi * 2
+      let radius = spacing * CGFloat(1.2 + MemoryAtlasForceLayout.stableFraction("\(record.id)|petal-radius") * 3.8)
       var point = CGPoint(
         x: center.x + cos(angle) * radius,
         y: center.y + sin(angle) * radius
@@ -65,7 +67,7 @@ enum MemoryAtlasCatalogLayout {
           y: point.y + sin(angle) * spacing * 2.2
         )
       }
-      point = constrainedToDisk(point, in: area)
+      point = MemoryAtlasGeometry.constrainedToDisk(point, in: area, radiusFraction: 0.495)
       point = settled(point, awayFrom: occupied, spacing: spacing, in: area)
       occupied.append(point)
       result[record.id] = point
@@ -123,18 +125,11 @@ enum MemoryAtlasCatalogLayout {
   /// It intentionally has neither a perimeter ring nor rectangular clipping.
   private static func orphanPoint(for id: String, in area: CGRect) -> CGPoint {
     let center = CGPoint(x: area.midX, y: area.midY)
-    let radius = min(area.width, area.height) * 0.495 * sqrt(unit("\(id)|orphan-radius"))
-    let angle = unit("\(id)|orphan-angle") * .pi * 2
+    let radius =
+      min(area.width, area.height) * 0.495
+      * sqrt(MemoryAtlasForceLayout.stableFraction("\(id)|orphan-radius"))
+    let angle = MemoryAtlasForceLayout.stableFraction("\(id)|orphan-angle") * .pi * 2
     return CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
-  }
-
-  private static func constrainedToDisk(_ point: CGPoint, in area: CGRect) -> CGPoint {
-    let center = CGPoint(x: area.midX, y: area.midY)
-    let radius = min(area.width, area.height) * 0.495
-    let delta = CGPoint(x: point.x - center.x, y: point.y - center.y)
-    let length = hypot(delta.x, delta.y)
-    guard length > radius else { return point }
-    return CGPoint(x: center.x + delta.x / length * radius, y: center.y + delta.y / length * radius)
   }
 
   private static func distance(_ lhs: CGPoint, _ rhs: CGPoint) -> CGFloat {
@@ -154,20 +149,12 @@ enum MemoryAtlasCatalogLayout {
     let step = max(spacing * 1.35, 0.008)
     for attempt in 0..<8 where occupied.contains(where: { distance(point, $0) < spacing }) {
       let angle = CGFloat(attempt) * .pi * (3 - sqrt(5))
-      point = constrainedToDisk(
+      point = MemoryAtlasGeometry.constrainedToDisk(
         CGPoint(x: initial.x + cos(angle) * step, y: initial.y + sin(angle) * step),
-        in: area)
+        in: area,
+        radiusFraction: 0.495)
     }
     return point
   }
 
-  /// Stable across launches and API order; the catalogue ID is the seed.
-  private static func unit(_ text: String) -> Double {
-    var hash: UInt64 = 1_469_598_103_934_665_603
-    for byte in text.utf8 {
-      hash ^= UInt64(byte)
-      hash &*= 1_099_511_628_211
-    }
-    return Double(hash >> 11) / Double(1 << 53)
-  }
 }

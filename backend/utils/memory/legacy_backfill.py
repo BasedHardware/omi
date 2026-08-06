@@ -1586,7 +1586,9 @@ def backfill_user(
     control = _read_control_state(uid, db_client=client)
     start_index = 0
     rows_to_process = admissible_rows
+    source_indexes = list(range(len(admissible_rows)))
     recovering_changed_source = False
+    recovered_semantic_keys: set[str] = set()
     if resume and control.legacy_backfill_source_fingerprint == fingerprint:
         start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
     elif (
@@ -1601,6 +1603,11 @@ def backfill_user(
         # behind an outdated cursor.
         items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
         items_by_id = {item.memory_id: item for item in items}
+        destination_rows = [
+            row
+            for row in admissible_rows
+            if _legacy_row_has_canonical_destination(uid=uid, legacy_row=row, items_by_id=items_by_id)
+        ]
         rows_to_process = rows_missing_canonical_destinations(
             admissible_rows,
             has_destination=lambda row: _legacy_row_has_canonical_destination(
@@ -1609,6 +1616,13 @@ def backfill_user(
                 items_by_id=items_by_id,
             ),
         )
+        pending_ids = {id(row) for row in rows_to_process}
+        source_indexes = [index for index, row in enumerate(admissible_rows) if id(row) in pending_ids]
+        recovered_semantic_keys = {
+            key
+            for row in destination_rows
+            if (key := semantic_materialization_key(uid=uid, legacy_row=row)) is not None
+        }
         start_index = 0
         recovering_changed_source = True
 
@@ -1624,24 +1638,21 @@ def backfill_user(
     keyword_sync_failures = 0
     kg_extraction_failures = 0
     errors: List[str] = []
-    materialized_semantic_keys: set[str] = set()
+    materialized_semantic_keys = recovered_semantic_keys
 
     processed_index = start_index
     while processed_index < end_index:
         if stop_requested is not None and stop_requested():
             break
         legacy_row = rows_to_process[processed_index]
+        source_index = source_indexes[processed_index]
         semantic_key = semantic_materialization_key(uid=uid, legacy_row=legacy_row)
         if semantic_key is not None and semantic_key in materialized_semantic_keys:
             skipped_semantic_duplicate += 1
             processed_index += 1
             control = control.model_copy(
                 update={
-                    "legacy_backfill_processed_count": (
-                        len(admissible_rows) - len(rows_to_process) + processed_index
-                        if recovering_changed_source
-                        else processed_index
-                    ),
+                    "legacy_backfill_processed_count": (0 if recovering_changed_source else processed_index),
                     "legacy_backfill_source_fingerprint": (
                         control.legacy_backfill_source_fingerprint if recovering_changed_source else fingerprint
                     ),
@@ -1655,7 +1666,9 @@ def backfill_user(
             apply_fn=lambda latest: _apply_one_legacy_row(
                 uid=uid,
                 legacy_row=legacy_row,
-                index=processed_index,
+                # Retain the stable source position: changing it on recovery
+                # would create a second fallback evidence id for the same row.
+                index=source_index,
                 control=latest,
                 run_id=effective_run_id,
                 db_client=client,
@@ -1691,11 +1704,7 @@ def backfill_user(
         processed_index += 1
         control = control.model_copy(
             update={
-                "legacy_backfill_processed_count": (
-                    len(admissible_rows) - len(rows_to_process) + processed_index
-                    if recovering_changed_source
-                    else processed_index
-                ),
+                "legacy_backfill_processed_count": (0 if recovering_changed_source else processed_index),
                 "legacy_backfill_source_fingerprint": (
                     control.legacy_backfill_source_fingerprint if recovering_changed_source else fingerprint
                 ),

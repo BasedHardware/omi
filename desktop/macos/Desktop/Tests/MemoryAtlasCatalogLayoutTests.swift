@@ -81,6 +81,24 @@ final class MemoryAtlasCatalogLayoutTests: XCTestCase {
     }
   }
 
+  func testUnmatchedCatalogMarksSettleAwayFromEachOther() {
+    let catalog = (0..<32).map {
+      KnowledgeGraphNode(id: "memory:orphan-\($0)", label: "Orphan \($0)", nodeType: .concept)
+    }
+    let positions = MemoryAtlasCatalogLayout.positions(
+      catalog: catalog, assertions: [], communities: [:], assertionPositions: [:], ownerID: nil, area: unitArea)
+
+    let values = Array(positions.values)
+    for index in values.indices {
+      for otherIndex in values.indices where otherIndex > index {
+        XCTAssertGreaterThan(
+          hypot(values[index].x - values[otherIndex].x, values[index].y - values[otherIndex].y),
+          0.000_001,
+          "Orphans must not occupy the exact same mark")
+      }
+    }
+  }
+
   private func isInsideCircularSafeArea(_ point: CGPoint, in area: CGRect) -> Bool {
     hypot(point.x - area.midX, point.y - area.midY) <= min(area.width, area.height) / 2 + 0.000_001
   }
