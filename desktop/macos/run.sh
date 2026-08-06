@@ -1045,38 +1045,46 @@ if [ -d "$RESOURCE_BUNDLE" ]; then
 fi
 
 substep "Copying agent"
-if [ -d "$AGENT_DIR/dist" ]; then
-    mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
-    macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
-    cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
-        echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
-        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
-        exit 1
-    fi
-    macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
+if [ ! -d "$AGENT_DIR/dist" ]; then
+    echo "ERROR: built agent runtime missing at $AGENT_DIR/dist"
+    echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+    exit 1
 fi
+mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
+macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
+cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
+if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
+    echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
+    echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+    exit 1
+fi
+macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
 
-substep "Copying pi-mono-extension (for piMono harness)"
-PI_MONO_EXT_DIR="$(dirname "$0")/pi-mono-extension"
-if [ -d "$PI_MONO_EXT_DIR" ]; then
-    if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
-        substep "Installing pi-mono-extension dependencies"
-        (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
-    fi
-    mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
-    cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
-        echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
-        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
-        exit 1
-    fi
-    macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
-else
-    echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
+substep "Copying pi-mono-extension (registers the omi provider)"
+PI_MONO_EXT_DIR="$SCRIPT_DIR/pi-mono-extension"
+if [ ! -d "$PI_MONO_EXT_DIR" ]; then
+    echo "ERROR: pi-mono-extension source missing at $PI_MONO_EXT_DIR"
+    echo "       Without it the packaged runtime cannot resolve the omi provider and"
+    echo "       pi-mono exits 1 on every chat turn."
+    exit 1
 fi
+if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
+    substep "Installing pi-mono-extension dependencies"
+    (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
+fi
+mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
+cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
+    echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
+    echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+    exit 1
+fi
+macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
+
+substep "Verifying agent runtime payload"
+omi_assert_agent_runtime_payload "$APP_BUNDLE" "bundle assembly"
 
 substep "Copying .env.app"
 if [ "$LOCAL_PROFILE" = true ]; then
@@ -1179,6 +1187,10 @@ step "Installing to /Applications/..."
 rm -rf "$APP_PATH"
 ditto "$APP_BUNDLE" "$APP_PATH"
 substep "Installed to $APP_PATH"
+# The fast lane trusts the installed bundle on later launches, and it only ever
+# records the fingerprint of a bundle that passed here. Prove the copy landed
+# before that stamp makes this bundle reusable.
+omi_assert_agent_runtime_payload "$APP_PATH" "install"
 
 step "Clearing stale LaunchServices registration..."
 # Unregister first to clear any launch-disabled flag from stale entries,

@@ -55,7 +55,59 @@ test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/missing.app" "$stamp" "$ag
 mkdir -p "$TMP_ROOT/installed.app/Contents"
 test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$TMP_ROOT/missing.stamp" "$agent_changed")" = "missing_fast_fingerprint"
 test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$first")" = "fast_fingerprint_mismatch"
+
+# Matching source inputs do not prove the installed bundle still carries the
+# runtime they produced. An installed bundle whose agent payload is gone must
+# never be declared reusable — patching its executable would relaunch an app
+# that accepts chat turns and fails every one of them.
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$agent_changed")" = "incomplete_runtime_payload"
+
+install_agent_runtime_payload() {
+  local app="$1"
+  local relative
+  for relative in "${OMI_AGENT_RUNTIME_REQUIRED_FILES[@]}"; do
+    mkdir -p "$app/$(dirname "$relative")"
+    printf 'payload\n' > "$app/$relative"
+  done
+  for relative in "${OMI_AGENT_RUNTIME_REQUIRED_DIRS[@]}"; do
+    mkdir -p "$app/$relative"
+    printf 'payload\n' > "$app/$relative/.installed"
+  done
+}
+
+install_agent_runtime_payload "$TMP_ROOT/installed.app"
 test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$agent_changed")" = "reusable"
+
+# The failure this guard was written for: a build produced a bundle without
+# Contents/Resources/pi-mono-extension, so pi-mono could not resolve the `omi`
+# provider and exited 1 on every turn while chat looked healthy.
+rm -rf "$TMP_ROOT/installed.app/Contents/Resources/pi-mono-extension"
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$agent_changed")" = "incomplete_runtime_payload"
+install_agent_runtime_payload "$TMP_ROOT/installed.app"
+
+# An empty dependency tree fails at spawn exactly like a missing one.
+rm -f "$TMP_ROOT/installed.app/Contents/Resources/agent/node_modules/.installed"
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$agent_changed")" = "incomplete_runtime_payload"
+install_agent_runtime_payload "$TMP_ROOT/installed.app"
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$agent_changed")" = "reusable"
+
+# A truncated copy (zero-byte entry point) is as unusable as an absent one.
+: > "$TMP_ROOT/installed.app/Contents/Resources/agent/dist/index.js"
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$agent_changed")" = "incomplete_runtime_payload"
+install_agent_runtime_payload "$TMP_ROOT/installed.app"
+
+# The build-time assertion names every missing component and points at the
+# rebuild that repairs it, instead of letting the bundle install.
+rm -rf "$TMP_ROOT/installed.app/Contents/Resources/pi-mono-extension"
+assert_output="$TMP_ROOT/payload-assert.log"
+if omi_assert_agent_runtime_payload "$TMP_ROOT/installed.app" "install" 2>"$assert_output"; then
+  echo "payload assertion accepted a bundle with no pi-mono-extension" >&2
+  exit 1
+fi
+grep -q 'Contents/Resources/pi-mono-extension/index.ts' "$assert_output"
+grep -q 'OMI_FORCE_FULL_BUNDLE=1' "$assert_output"
+install_agent_runtime_payload "$TMP_ROOT/installed.app"
+omi_assert_agent_runtime_payload "$TMP_ROOT/installed.app" "install"
 
 # An agent's failed --fast-only probe must not tear down a running app, clean
 # build output, or start services merely to discover that the named bundle does
