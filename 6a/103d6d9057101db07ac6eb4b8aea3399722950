@@ -1,0 +1,437 @@
+.github/failure-classes/FC-agent-vm-bootstrap-contract.json
+  s_569f1df936cc22::t_bc8c12ee2c3d86 1-19
+.github/failure-classes/FC-agent-vm-public-health-unauth.json
+  s_569f1df936cc22::t_ba260f95d63b1d 1-14
+.github/failure-classes/FC-fallible-teardown-skips-required-finalizer.json
+  s_569f1df936cc22::t_968d14aabadf36 1-18
+.github/failure-classes/FC-main-thread-primitive-in-worker-context.json
+  s_569f1df936cc22::t_e997f316294490 1-13
+.github/failure-classes/FC-split-mutation-authority.json
+  s_569f1df936cc22::t_6649e128d93414 8-9
+.github/scripts/check-desktop-backend-release-policy.py
+  s_569f1df936cc22::t_480ac7e4e44102 22-37,119,163-167,203-204,206,217-225,232-257,307-308,320
+.github/scripts/extract_single_cloud_run_traffic_revision.py
+  s_569f1df936cc22::t_a8a71455828291 1-38
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_569f1df936cc22::t_2494a3574e7cf1 6,14
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_569f1df936cc22::t_5f2aa264c7de28 7,18,20
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_569f1df936cc22::t_681392cd491c58 4,8-9,20,22
+.github/scripts/test_check_desktop_backend_release_policy.py
+  s_569f1df936cc22::t_0a108f84a4b040 151-158,167-176,179-180,184-185,258-264,296-345,371-377
+.github/scripts/test_extract_single_cloud_run_traffic_revision.py
+  s_569f1df936cc22::t_319c7fe24ab89d 1-36
+.github/workflows/desktop_backend_auto_dev.yml
+  s_569f1df936cc22::t_bd4221618ca0d5 15,37,186,190-192,195-198,208-250,265,267,269-270,275-283,486-577,594,612-630
+.github/workflows/desktop_backend_prod.yml
+  s_569f1df936cc22::t_27e21dcf3e5141 43,72,270,273-275,284-333,357-365,528-628,645,663-681
+.github/workflows/desktop_backend_recover_prod.yml
+  s_569f1df936cc22::t_b51ea14227d6f8 34-36,136,172
+.github/workflows/gcp_backend_agent_proxy_auto_deploy.yml
+  s_569f1df936cc22::t_4e8e8a62dbe722 9-14,60,63-64
+app/lib/pages/conversation_capturing/page.dart
+  s_569f1df936cc22::t_ebf583ced5c2a8 36,55
+app/lib/services/capture/capture_controller.dart
+  s_569f1df936cc22::t_19ff1e75f3f60b 455
+app/lib/widgets/transcript.dart
+  s_569f1df936cc22::t_95f5011b746998 115-132,259,310-318,475,477,507-526,529,708-709,789
+app/test/widgets/transcript_test.dart
+  s_569f1df936cc22::t_e1b6ba3f4ba4a9 140-155,227,236,239-241,257-321
+backend/AGENTS.md
+  s_569f1df936cc22::t_4edb1a1d9ef7f8 26
+backend/agent-proxy/Dockerfile
+  s_569f1df936cc22::t_5eae174aaf696d 22,24-26
+backend/agent-proxy/main.py
+  s_569f1df936cc22::t_8311fce7b4ba99 5,29-30,39-46,66-70,199,212-213,215-221,227,231,259-261,313-424,685-710,719-723,725-773,779-780,782,785-790,793-804,807-835,837-841,843-856,858-871,873-879,882,1066-1069,1072,1090-1095
+backend/agent_vm/main.py
+  s_569f1df936cc22::t_d379fcc406f0f0 15,49-51,113-121,124-126,128-130,132-133,602-604,609-611
+backend/agent_vm/startup.sh
+  s_569f1df936cc22::t_ca2ae4a18cfdd8 5-35,38-63,65-71,74-76
+backend/charts/agent-proxy/dev_omi_agent_proxy_values.yaml
+  s_569f1df936cc22::t_c5129220c5fa89 48-49
+backend/charts/agent-proxy/prod_omi_agent_proxy_values.yaml
+  s_569f1df936cc22::t_844b112982292f 51-52
+backend/charts/agent-vm-firewall/firewall-rule.yaml
+  s_569f1df936cc22::t_b16e5951c00f3a 1-55
+backend/charts/agent-vm-reaper/prod_agent_vm_reaper_cronjob.yaml
+  s_569f1df936cc22::t_af90be0c7b014c 4-7,15-16,23-24
+backend/charts/monitoring/kube-prometheus-stack/prod_omi_monitoring_values.yaml
+  s_569f1df936cc22::t_bebf4e3e04b124 1-12
+backend/database/knowledge_graph.py
+  s_569f1df936cc22::t_39a5c79ef179aa 8,346-355
+backend/database/memory_collections.py
+  s_569f1df936cc22::t_5afa6c5eb38293 42-45
+backend/deploy/runtime_env.yaml
+  s_569f1df936cc22::t_319d1a9c41f2b7 907-909,933-934,1786-1788
+backend/deploy/runtime_env/_base.yaml
+  s_569f1df936cc22::t_2576d2fa8c7f93 532-533
+backend/deploy/runtime_env/dev.overlay.yaml
+  s_569f1df936cc22::t_bd31759d1a592b 445-448
+backend/deploy/runtime_env/prod.overlay.yaml
+  s_569f1df936cc22::t_4816bb950f75a3 376-377
+backend/desktop_backend.py
+  s_569f1df936cc22::t_9e5a4ce8be64c8 22,26-33,36,42-44,48,50-57
+backend/docs/mcp-analytics.md
+  s_569f1df936cc22::t_944fc66feed33d 1-23
+backend/jobs/agent_vm_reconciler.py
+  s_569f1df936cc22::t_5b74ba8fa54844 1-244,246-256,259-281,284-286,289-291,294-304,307-309,312-364,368-450,452-587,589-598,600-603,605-636,638-735
+backend/llm_gateway/routers/openai_compatible.py
+  s_569f1df936cc22::t_d7f8c5e72910a9 255-259,261-266
+backend/main.py
+  s_569f1df936cc22::t_c966bd08f7ddae 114
+backend/models/memory_promotion.py
+  s_569f1df936cc22::t_3aadfd5f069715 22,24,33,100,109,132-159,163-165,168-171,201-206,209,215-223,227-238,326-328,338-340,382-386,390-392,396-398,403-440,537-541,551-553,596,599,605,611
+backend/route_policy_manifest.yaml
+  s_569f1df936cc22::t_a06084490b9218 1643-1667
+backend/routers/agent_tools.py
+  s_569f1df936cc22::t_d99602ac2c849e 8,22,88-89,94-106
+backend/routers/conversations.py
+  s_569f1df936cc22::t_6501491dced0b7 57-58,60,1260-1284
+backend/routers/desktop_agent_vm.py
+  s_569f1df936cc22::t_6f3c8b597d7321 6-8,15,17-19,25-32,40-46,94,96,101-104,114-146,155-170,316-335,354-356,358,373-380,389-392,414,418,420,425,441-579,597,603,648,667-674,682-684,699-700,711-715,717,719,724,726,735,738,740,742-748,750-759
+backend/routers/listen/parity_capture.py
+  s_569f1df936cc22::t_c96a6033c8151c 17,96-100,108-112,118-123,137-142,145,151-156,201,204-209,214,220-225,228
+backend/routers/listen/parity_pack_export.py
+  s_569f1df936cc22::t_70ccb2dc1e1aea 21,117-122,127-132,138-143,148,154,156-160,162-167
+backend/routers/listen/parity_telemetry.py
+  s_569f1df936cc22::t_33941030cfad96 39-42,103-137
+backend/routers/listen/runtime.py
+  s_569f1df936cc22::t_3239ac6c60f48f 29,632,655-664
+backend/routers/mcp_sse.py
+  s_569f1df936cc22::t_2fb1891d34e0ba 14,88-93,757,760,764-768,774-776,859,862,903,933,936,985,988,1010,1013,1110,1113,1132,1460-1471,1474,1481-1493,1506-1530
+backend/routers/tools.py
+  s_569f1df936cc22::t_3c5108fe9285ab 61
+backend/runtime_images.json
+  s_569f1df936cc22::t_192358436deffb 91-105
+backend/scripts/agent-vm-reachability-check.sh
+  s_569f1df936cc22::t_53a9676568f7a2 1-22,25-26,29-92,95-117
+backend/scripts/agent_vm_release.py
+  s_569f1df936cc22::t_ad0db047cc3183 1-107
+backend/scripts/apply-agent-vm-bootstrap-iam.sh
+  s_569f1df936cc22::t_d3d902ba88319a 1-50
+backend/scripts/apply-agent-vm-firewall.sh
+  s_569f1df936cc22::t_34c53a68a73683 1-174
+backend/scripts/apply-agent-vm-reconciler-iam.sh
+  s_569f1df936cc22::t_4d5b349f496518 1-74
+backend/scripts/apply-agent-vm-reconciler-scheduler.sh
+  s_569f1df936cc22::t_f494a77e0413d5 1-61
+backend/scripts/chat_agent_cost_report.py
+  s_569f1df936cc22::t_6828fb055c76a0 1-447
+backend/scripts/enrich_historical_memory_graph.py
+  s_569f1df936cc22::t_866f0ccd30c930 14-16,18,34,37-40,44-193,205,242-259,275-276,278-282,284-305,341,349-352,358-361,364,370-390,398-408,410,414-423,425-427,430,432-441,443-450,452-456,475,479,481-507
+backend/scripts/revoke-agent-vm-bootstrap-stop.sh
+  s_569f1df936cc22::t_83f73542c472da 1-36
+backend/scripts/rollback-agent-vm-release.sh
+  s_569f1df936cc22::t_b9fda329e0202f 2,5-7,10-14,16-19,21-24,26-29,32-36
+backend/scripts/route_policy_inventory.py
+  s_569f1df936cc22::t_7354d714ddfaae 58,63-72,80-82,100,123
+backend/scripts/validate_agent_vm_reconciler_scheduler.py
+  s_569f1df936cc22::t_18514cdc275e81 1-105
+backend/services/agent_vm_lifecycle.py
+  s_569f1df936cc22::t_41bdca1ccc4938 1-998
+backend/testing/e2e/conftest.py
+  s_569f1df936cc22::t_fa33179203d7c0 71
+backend/testing/e2e/test_harness_guards.py
+  s_569f1df936cc22::t_a47b14b3531873 14-15,27-34
+backend/testing/workflow_contracts.json
+  s_569f1df936cc22::t_68c26bb7cd4cdf 127,134-135
+backend/tests/fast_unit_duration_allowlist.txt
+  s_569f1df936cc22::t_c44604f522c699 217
+backend/tests/unit/test_action_item_date_validation.py
+  s_569f1df936cc22::t_744008a2db0d44 298-301
+backend/tests/unit/test_agent_proxy_async_boundaries.py
+  s_569f1df936cc22::t_255fdb05a14ccd 8,147-149,152-156,159-161,163-164,166-167,169-170,172-174,225-467,622-624,638,649
+backend/tests/unit/test_agent_vm_async.py
+  s_569f1df936cc22::t_0a1cb3e4a8dae4 1,9-10,44-45,49-50,53,58
+backend/tests/unit/test_agent_vm_firebase_project_split.py
+  s_569f1df936cc22::t_c8434f80fa6f1d 1-107
+backend/tests/unit/test_agent_vm_firewall_contract.py
+  s_569f1df936cc22::t_e04417110f0c8e 1-116
+backend/tests/unit/test_agent_vm_health_auth_contract.py
+  s_569f1df936cc22::t_d26cb3d500c2a4 1-54
+backend/tests/unit/test_agent_vm_protocol.py
+  s_569f1df936cc22::t_af411a2fbf7d90 14,26,29-30,48-55
+backend/tests/unit/test_agent_vm_reaped_record_recovery.py
+  s_569f1df936cc22::t_fba9f4dfdd47d8 1,43-45,47-48,50-51,53-55,57-58,72-78,83-84,87-90,94-95
+backend/tests/unit/test_agent_vm_reconciler.py
+  s_569f1df936cc22::t_9c293c3b7ebb8d 1-201
+backend/tests/unit/test_agent_vm_reconciler_authority.py
+  s_569f1df936cc22::t_88b85e7e92d711 1-49
+backend/tests/unit/test_agent_vm_reconciler_deployment_scripts.py
+  s_569f1df936cc22::t_c1992a8512435e 1-181
+backend/tests/unit/test_agent_vm_reconciler_job.py
+  s_569f1df936cc22::t_0e01f4088ae320 1-838
+backend/tests/unit/test_agent_vm_startup.py
+  s_569f1df936cc22::t_8b74285e5a1b33 16,18,27-31,49-52,54-55,64-117
+backend/tests/unit/test_atomic_apply.py
+  s_569f1df936cc22::t_33ee86f869721c 16-22,551-650
+backend/tests/unit/test_canonical_cohort_lifecycle.py
+  s_569f1df936cc22::t_4ef6875137353e 1-253
+backend/tests/unit/test_canonical_legacy_backfill.py
+  s_569f1df936cc22::t_1358dc069a3fc7 1-282
+backend/tests/unit/test_canonical_memory_onboarding.py
+  s_569f1df936cc22::t_3f5ad9ec376778 1-156
+backend/tests/unit/test_canonical_short_term_maintenance_cron.py
+  s_569f1df936cc22::t_35848345bdfe71 8,34-44,67-211
+backend/tests/unit/test_chat_agent_cost_report.py
+  s_569f1df936cc22::t_dfb41ecb5a724e 1-287
+backend/tests/unit/test_chat_agent_provider_retry.py
+  s_569f1df936cc22::t_84a6a211c22c47 258-263,270-273,662-901
+backend/tests/unit/test_conversation_exact_reference_search.py
+  s_569f1df936cc22::t_281d5415ea6f0c 1-67
+backend/tests/unit/test_conversation_search_date_validation.py
+  s_569f1df936cc22::t_1ba09616483b64 207-212,303-336
+backend/tests/unit/test_conversation_structure_timezone.py
+  s_569f1df936cc22::t_04d6445bed817d 126-129
+backend/tests/unit/test_conversation_tool_date_range_bound.py
+  s_569f1df936cc22::t_d731710e9226bc 15,74-79,90-117
+backend/tests/unit/test_desktop_agent_vm.py
+  s_569f1df936cc22::t_79715530a81d5d 3,6,52,79,120-122,151-153,174-176,195,204,213,218,220-248,252-279,302-326,330,339,351,355-357,375-688
+backend/tests/unit/test_developer_from_segments_idempotency.py
+  s_569f1df936cc22::t_2619cb3f846472 5,8-9,340-381
+backend/tests/unit/test_env_loader.py
+  s_569f1df936cc22::t_59ce6f4c33dce4 119-121,125-127,133-134
+backend/tests/unit/test_historical_graph_enrichment.py
+  s_569f1df936cc22::t_a7c1f61c04c6f5 4-5,7,9-12,16-18,34-88,137-138,141-142,152-242,265-579
+backend/tests/unit/test_inv_mem_1_guard.py
+  s_569f1df936cc22::t_ebd78e75b53f33 57-59
+backend/tests/unit/test_kg_user_type_mismatch.py
+  s_569f1df936cc22::t_f03c521edd5ea3 198-200
+backend/tests/unit/test_knowledge_graph_canonical_pagination.py
+  s_569f1df936cc22::t_00bd5e70538210 318,321,341-372
+backend/tests/unit/test_listen_parity_capture.py
+  s_569f1df936cc22::t_74db9af49d20c8 7,152-173,344-345
+backend/tests/unit/test_listen_parity_runtime.py
+  s_569f1df936cc22::t_bc2d92ecea1d7d 1-301
+backend/tests/unit/test_llm_gateway_client_config.py
+  s_569f1df936cc22::t_70c822627053f2 230-251
+backend/tests/unit/test_llm_gateway_openai_compatible.py
+  s_569f1df936cc22::t_516f9a002cd588 8,23,162-175
+backend/tests/unit/test_mcp_tool_analytics.py
+  s_569f1df936cc22::t_c63cae3d6faea9 1-53,55-72,74-87,89-287
+backend/tests/unit/test_memory_graph_assertion_read.py
+  s_569f1df936cc22::t_20464e822e1369 12-13,17,212-214,216,219-221,224,227-229,263-325
+backend/tests/unit/test_memory_promotion_contract.py
+  s_569f1df936cc22::t_5f07bdbc935bad 12,19,26-44
+backend/tests/unit/test_monitoring_alert_rule_contract.py
+  s_569f1df936cc22::t_e4ca4191740e0a 6-7,11,104-121
+backend/tests/unit/test_process_conversation_usage_context.py
+  s_569f1df936cc22::t_812f097ab1dc2b 24-26,29-30,623-762
+backend/tests/unit/test_tools_agent_route_response_shape.py
+  s_569f1df936cc22::t_d9efae155c5f17 114-117,150,261-277
+backend/tests/unit/test_tools_router.py
+  s_569f1df936cc22::t_aab50c3eabcadc 293-294,316-319,613-645
+backend/tests/unit/test_v3_account_generation_source.py
+  s_569f1df936cc22::t_146b3b33083e65 79-87
+backend/tests/unit/test_validate_agent_vm_reconciler_scheduler.py
+  s_569f1df936cc22::t_f5682c750ae578 1-57
+backend/tests/unit/test_verify_token_admin_and_local_dev_gating.py
+  s_569f1df936cc22::t_af988c2cda0315 11,110,189-198
+backend/tests/unit/test_workflow_contracts.py
+  s_569f1df936cc22::t_13865cf2ee5d77 67,325-326
+backend/tests/unit/test_ws_c_backfill.py
+  s_569f1df936cc22::t_f0680961aa706e 561-644
+backend/utils/conversations/process_conversation.py
+  s_569f1df936cc22::t_7549b1c5754e63 76,329
+backend/utils/conversations/search.py
+  s_569f1df936cc22::t_7b5a17d79046dc 5-6,17-94,218
+backend/utils/env_loader.py
+  s_569f1df936cc22::t_217e8e0b61d5cb 107-109,113,115,179-182
+backend/utils/llm/clients.py
+  s_569f1df936cc22::t_1ba9eaba6b3d8c 1,39,54,56,62,453,520-523,525-528,600-602,606
+backend/utils/llm/conversation_processing.py
+  s_569f1df936cc22::t_6ca8871aed7337 25,1047-1051
+backend/utils/llm/gateway_error_contract.py
+  s_569f1df936cc22::t_9a02cba257137a 1-72
+backend/utils/mcp_analytics.py
+  s_569f1df936cc22::t_6abf15b7f1909d 1-249
+backend/utils/memory/canonical_cohort_lifecycle.py
+  s_569f1df936cc22::t_9038a8a7c01c73 1-264
+backend/utils/memory/canonical_graph.py
+  s_569f1df936cc22::t_560564170636a3 312,314-316,321,324-329
+backend/utils/memory/canonical_legacy_backfill.py
+  s_569f1df936cc22::t_3c2e341173044e 1-232
+backend/utils/memory/canonical_memory_onboarding.py
+  s_569f1df936cc22::t_d85cb2cd1b25da 1-160
+backend/utils/memory/canonical_short_term_maintenance_cron.py
+  s_569f1df936cc22::t_fc957bdf24ce62 30,36,41-49,65-100,113-117,172-185,292-318,321,326-327
+backend/utils/memory/graph_enrichment.py
+  s_569f1df936cc22::t_eda918e29c54cc 20-25,64-67,89-93,97-99,104-106,118-122,126-128,210,212-221,265-274,287-296,401-407,421
+backend/utils/memory/historical_graph_enrichment.py
+  s_569f1df936cc22::t_6339e141d5e582 12-13,19-24,28-30,33,36-44,54-55,58-59,69-86,111-114,117,119-132,135-136,138-140
+backend/utils/memory/legacy_backfill.py
+  s_569f1df936cc22::t_dc8e8a41327226 36-40,1411,1484,1588-1591,1598,1601-1625,1627,1629,1641,1647-1648,1655-1658,1669-1671,1707-1710,1717,1719-1725
+backend/utils/memory/legacy_backfill_bulk_support.py
+  s_569f1df936cc22::t_383f36a08454d0 9,82-90,96
+backend/utils/memory/v3/account_generation_source.py
+  s_569f1df936cc22::t_ee1eb4de203f68 68-73,84-86
+backend/utils/other/endpoints.py
+  s_569f1df936cc22::t_9401b727fb75a1 131-135
+backend/utils/retrieval/agentic.py
+  s_569f1df936cc22::t_1508a70b19876e 187-192,584-624,741-743,756-767,842,959-961,1029,1097
+backend/utils/retrieval/safety.py
+  s_569f1df936cc22::t_925e8a64f294ab 234-245
+backend/utils/retrieval/tool_services/conversations.py
+  s_569f1df936cc22::t_878a676163aacc 18-23,165-172,203-212,230-233,261,264-265
+backend/utils/retrieval/tools/conversation_tools.py
+  s_569f1df936cc22::t_a742d36e2a1a6c 19-24,325-328,372-373,375-380,403-408,443-454,457-461,474-477,488-491,533,552-553
+config/deployment-setting-classification.json
+  s_569f1df936cc22::t_348fc1d3c79e15 73,99-100
+desktop/macos/CHANGELOG.json
+  s_569f1df936cc22::t_08da4ee0f65681 12
+desktop/macos/Desktop/Sources/AgentSyncService.swift
+  s_569f1df936cc22::t_d49c1847fb1b8a 380,383
+desktop/macos/Desktop/Sources/AgentVMService.swift
+  s_569f1df936cc22::t_8b3b3a4225c669 111,151,265,267
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_569f1df936cc22::t_5a1864441a8034 3125,3129-3130,3133
+desktop/macos/Desktop/Sources/Generated/GeneratedRealtimeTools.swift
+  s_569f1df936cc22::t_f00a1155648641 357,363
+desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
+  s_569f1df936cc22::t_637e7fc23f820e 405,407-408
+desktop/macos/Desktop/Sources/Generated/GeneratedToolExecutors.swift
+  s_569f1df936cc22::t_b2659cbd996f79 49-50
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_6972d0709769fb 1746,1749
+desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  s_569f1df936cc22::t_e192cba2836b5c 12-16,58-70
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsDestinationView.swift
+  s_569f1df936cc22::t_354280c366d33d 1,3-7,9-22,24
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift
+  s_569f1df936cc22::t_a032392365e9d0 720-723,726,728,730,732,758,871-877,954-964,972-975,977,979-983,986,988-992,999,1003,1118-1119,1142-1143,1148-1167,1355-1359,1374-1378,1964,1968-1970,1973-1975,2002-2003,2198-2199,2202,3021-3046,3170-3174,3177,3183,3883,3889
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasCatalogLayout.swift
+  s_569f1df936cc22::t_779a9bb340b210 1-158
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift
+  s_569f1df936cc22::t_760651dea12a03 1416-1422,1427-1442,1444-1465,1470-1472,1494
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasGeometry.swift
+  s_569f1df936cc22::t_2dc987310d3418 1-16
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasOwnerIdentity.swift
+  s_569f1df936cc22::t_643e7792221b97 1,3-7,9,11-14,16-33
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasPresentationPolicy.swift
+  s_569f1df936cc22::t_00aea030f51b7c 1-30,33-46,48-51,53-54,56-58,60-63,66-81,84-107,109-110,112-113
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
+  s_569f1df936cc22::t_21a1e70a3b6673 101-109
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+  s_569f1df936cc22::t_fb8c4270df1399 189-192,208,310,316,330-331,333,340,388-389,391,398
+desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  s_569f1df936cc22::t_d95d2ab49da351 1241
+desktop/macos/Desktop/Sources/Services/LocalMutationAuthorization.swift
+  s_569f1df936cc22::t_bdd6628085101b 22,47-53,55,150-152,206-230,235-236
+desktop/macos/Desktop/Tests/AgentSyncBatchQueryTests.swift
+  s_569f1df936cc22::t_c1a69c80c1dfc2 12-13,44-63,205-206,228-233,272-275,364-370,379,440-442
+desktop/macos/Desktop/Tests/DesktopAutomationSecondaryActionTests.swift
+  s_569f1df936cc22::t_f38190af315c34 268,272
+desktop/macos/Desktop/Tests/KnowledgeGraphPaginationTests.swift
+  s_569f1df936cc22::t_4862de4197d5f3 453-474
+desktop/macos/Desktop/Tests/LocalMutationAuthorizationTests.swift
+  s_569f1df936cc22::t_236c9b812e0f58 291-324
+desktop/macos/Desktop/Tests/MemoryAtlasCatalogLayoutTests.swift
+  s_569f1df936cc22::t_788b324aac34e3 1-2,4,6-7,9-23,25-30,32-34,36-46,48-57,59-60,62-66,68-76,78-80,82-104
+desktop/macos/Desktop/Tests/MemoryAtlasForceLayoutTests.swift
+  s_569f1df936cc22::t_ed9e786e6e1482 541,559-562,565-567,573,581-587
+desktop/macos/Desktop/Tests/MemoryAtlasLayoutTests.swift
+  s_569f1df936cc22::t_518fa812507b86 23-76,79,82,87,92-98,102-127,140-158,240-243,483,499-525,1327-1330,1339-1340
+desktop/macos/Desktop/Tests/MemoryAtlasSnapshotCacheTests.swift
+  s_569f1df936cc22::t_e08eb00663be74 56-73
+desktop/macos/Desktop/Tests/MemoryHubSidebarRoutingTests.swift
+  s_569f1df936cc22::t_64d101d4256a19 33-52
+desktop/macos/agent/src/runtime/omi-tool-manifest.ts
+  s_569f1df936cc22::t_7d9b20fdcae75a 376-380,384,960-961,965
+desktop/macos/agent/tests/fixtures/tool-manifest.json
+  s_569f1df936cc22::t_fc0ff0a0cd826f 3658-3659,3666,3715,3717-3718,3722
+desktop/macos/agent/tests/omi-tool-manifest.test.ts
+  s_569f1df936cc22::t_615b9f49f7ecf3 204-211
+desktop/macos/changelog/releases/0.12.148.json
+  s_569f1df936cc22::t_909893b52968db 9
+desktop/macos/changelog/unreleased/20260723-agent-vm-health-auth.json
+  s_569f1df936cc22::t_6d2d7c84535358 1-2
+desktop/macos/changelog/unreleased/20260731-fix-macos-update-builds.json
+  s_569f1df936cc22::t_79a8cbfe261a15 2
+desktop/macos/changelog/unreleased/20260805-agent-vm-reconciler-retry.json
+  s_569f1df936cc22::t_84048418d2f32d 1-3
+desktop/macos/changelog/unreleased/20260805-canonical-atlas-organic-topology.json
+  s_569f1df936cc22::t_7f750ef31357c6 1-3
+desktop/macos/changelog/unreleased/20260805-canonical-atlas-owner-and-cloud.json
+  s_569f1df936cc22::t_718dedcff60901 1-3
+desktop/macos/changelog/unreleased/20260805-canonical-memory-catalog-atlas.json
+  s_569f1df936cc22::t_d3648775084c14 1-3
+desktop/macos/changelog/unreleased/20260805-conversation-id-search.json
+  s_569f1df936cc22::t_c4bb2ffedd9e4e 1-3
+desktop/macos/changelog/unreleased/20260805-owner-switch-tool-result-boundary.json
+  s_569f1df936cc22::t_2bb4389c4607dd 1-3
+desktop/macos/changelog/unreleased/20260805-restore-legacy-conversations.json
+  s_569f1df936cc22::t_cb665d08aef541 1-3
+desktop/macos/e2e/flows/memories.yaml
+  s_569f1df936cc22::t_e23b2ce6dfbedf 14,19-21,23
+desktop/macos/e2e/flows/navigation.yaml
+  s_569f1df936cc22::t_15a6b2a45c35c3 12,91-97
+desktop/windows/README.md
+  s_569f1df936cc22::t_51530e237b03c3 28-32
+desktop/windows/scripts/verify-oauth-contract.mjs
+  s_569f1df936cc22::t_6791c6c65dcf6f 1,4-5,9,13-20,24-25,51,58,61-65,67,69,74-75,78-79,81-83,85-91,93-95,108-112,118-122,130-134,139
+desktop/windows/scripts/verify-oauth-flow.mjs
+  s_569f1df936cc22::t_c7e26165d07bee 1,4,8,12,15,26-30,47,52,66-68,70,74,105-107,118
+desktop/windows/src/main/auth/omiAuth.test.ts
+  s_569f1df936cc22::t_04c1f8da388f0d 32,50,108-117
+desktop/windows/src/main/auth/omiAuth.ts
+  s_569f1df936cc22::t_3fcb5ea12e9bdb 1,7,9-11,19,32,38,52-56,74-75,101
+desktop/windows/src/main/auth/signInFlow.test.ts
+  s_569f1df936cc22::t_e7e90d2a927056 7,11-12,44,53-57,97-113
+desktop/windows/src/main/auth/signInFlow.ts
+  s_569f1df936cc22::t_9e925081b0d04c 1,5,24,33,59-62,72,102,105,108,144,167
+desktop/windows/src/main/ipc/auth.ts
+  s_569f1df936cc22::t_a10fdebd84d58b 1,3,8-9,12,16,18,34-39,45
+desktop/windows/src/preload/index.ts
+  s_569f1df936cc22::t_3343aa3d715da9 62-63,188
+desktop/windows/src/renderer/src/lib/firebase.ts
+  s_569f1df936cc22::t_8d20550a0c96d7 14,54,60-61,65
+desktop/windows/src/renderer/src/pages/Login.test.tsx
+  s_569f1df936cc22::t_663572d7378308 1-35
+desktop/windows/src/renderer/src/pages/Login.tsx
+  s_569f1df936cc22::t_ee59a3967c7611 2-4,9,14,21,27,29,35,46-56,76,79
+desktop/windows/src/shared/types.ts
+  s_569f1df936cc22::t_96017b561f5dce 949-952,1889,1893-1896
+docs/api-reference/app-client-openapi.json
+  s_569f1df936cc22::t_9b5edd125df602 25500
+docs/doc/developer/backend/canonical_memory_architecture.md
+  s_569f1df936cc22::t_a415f9e76a3ca6 96-103
+docs/product/invariants/auth-session.md
+  s_569f1df936cc22::t_143301355d1701 18-22
+docs/runbooks/agent-vm-fleet-reconciler.md
+  s_569f1df936cc22::t_980b89bfbe19e4 1-136
+docs/runbooks/canonical-legacy-backfill.md
+  s_569f1df936cc22::t_c4bfbed98417f4 33-37,44-53
+docs/runbooks/canonical-memory-rollout-flags.md
+  s_569f1df936cc22::t_3de57d789790cb 16-17,57-65
+omi/firmware/omi/CMakeLists.txt
+  s_569f1df936cc22::t_381181f1002261 30
+omi/firmware/omi/omi.conf
+  s_569f1df936cc22::t_597e01aa798b38 3,25-26,112
+omi/firmware/omi/src/lib/core/button.c
+  s_569f1df936cc22::t_66815c807f7f68 3-7,30-64,90,100,102-105,110,112-115,120,122-125,130,132-135,140,142-145,259-269,337-341
+omi/firmware/omi/src/lib/core/transport.c
+  s_569f1df936cc22::t_a853fde1592f04 49,51,1365,1367
+omi/firmware/scripts/devkit/OmiSimulator/README.md
+  s_569f1df936cc22::t_546b94bf4c0217 5
+scripts/changed-files
+  s_569f1df936cc22::t_f619df7abf93af 9-22
+scripts/test-changed-files.sh
+  s_569f1df936cc22::t_6654d099a8eb3d 2,5-36,38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6a103d6d9057101db07ac6eb4b8aea3399722950",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
