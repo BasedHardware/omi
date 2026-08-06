@@ -373,12 +373,15 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat", "realtime_voice"],
     capabilityDoc: doc(
       "Search Conversations",
-      "Semantic search across the user's past conversations.",
-      ["Use for specific topics, decisions, or events discussed in conversations."],
+      "Search the user's past conversations by topic or exact canonical ID/share link.",
+      [
+        "Use for specific topics, decisions, or events discussed in conversations.",
+        "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup.",
+      ],
     ),
     voice: {
       realtimeDescription:
-        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'). Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     },
   },
   get_memories: {
@@ -954,12 +957,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "search_conversations",
     label: "Search Conversations",
-    description: "Semantic search across conversations. Use for specific events or topics.",
-    promptSnippet: "search_conversations - Find conversations about a topic",
+    description: "Search conversations by topic or exact canonical ID/share link.",
+    promptSnippet: "search_conversations - Find conversations about a topic or exact ID/share link",
     latency: "fast network",
     inputSchema: schema(
       {
-        query: { type: "string", description: "Event or topic to search for" },
+        query: { type: "string", description: "Event/topic, canonical UUID, or https://h.omi.me/conversations/<uuid> link" },
         start_date: { type: "string" },
         end_date: { type: "string" },
         limit: { type: "number", description: "Default 5, max 20" },
