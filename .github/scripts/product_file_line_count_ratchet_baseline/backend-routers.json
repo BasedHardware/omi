@@ -3,7 +3,7 @@
     "backend/routers/apps.py": 2391,
     "backend/routers/chat.py": 1634,
     "backend/routers/developer.py": 2371,
-    "backend/routers/mcp_sse.py": 1879,
+    "backend/routers/mcp_sse.py": 1968,
     "backend/routers/sync.py": 2053,
     "backend/routers/users.py": 2086
   },
