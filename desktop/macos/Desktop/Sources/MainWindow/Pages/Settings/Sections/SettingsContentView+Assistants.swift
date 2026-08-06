@@ -126,7 +126,13 @@ extension SettingsContentView {
               Slider(
                 value: Binding(
                   get: { Double(taskIntervalSliderIndex) },
-                  set: { taskExtractionInterval = extractionIntervalOptions[Int($0)] }
+                  set: {
+                    if let step = SettingsControlMetrics.ladderValue(
+                      at: Int($0), in: extractionIntervalOptions)
+                    {
+                      taskExtractionInterval = step
+                    }
+                  }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
               .tint(Ink.accent)
@@ -137,6 +143,8 @@ extension SettingsContentView {
                   AssistantSettingsResponse(
                     task: TaskSettingsResponse(extractionInterval: newValue)))
               }
+
+              offLadderStepNote(for: taskExtractionInterval, in: extractionIntervalOptions)
             }
 
             // Minimum Confidence Slider
@@ -390,7 +398,13 @@ extension SettingsContentView {
               Slider(
                 value: Binding(
                   get: { Double(insightIntervalSliderIndex) },
-                  set: { insightExtractionInterval = extractionIntervalOptions[Int($0)] }
+                  set: {
+                    if let step = SettingsControlMetrics.ladderValue(
+                      at: Int($0), in: extractionIntervalOptions)
+                    {
+                      insightExtractionInterval = step
+                    }
+                  }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
               .tint(Ink.accent)
@@ -401,6 +415,8 @@ extension SettingsContentView {
                   AssistantSettingsResponse(
                     insight: InsightSettingsResponse(extractionInterval: newValue)))
               }
+
+              offLadderStepNote(for: insightExtractionInterval, in: extractionIntervalOptions)
             }
 
             // Minimum Confidence Slider
@@ -592,7 +608,13 @@ extension SettingsContentView {
               Slider(
                 value: Binding(
                   get: { Double(memoryIntervalSliderIndex) },
-                  set: { memoryExtractionInterval = extractionIntervalOptions[Int($0)] }
+                  set: {
+                    if let step = SettingsControlMetrics.ladderValue(
+                      at: Int($0), in: extractionIntervalOptions)
+                    {
+                      memoryExtractionInterval = step
+                    }
+                  }
                 ), in: 0...Double(extractionIntervalOptions.count - 1), step: 1
               )
               .tint(Ink.accent)
@@ -603,6 +625,8 @@ extension SettingsContentView {
                   AssistantSettingsResponse(
                     memory: MemorySettingsResponse(extractionInterval: newValue)))
               }
+
+              offLadderStepNote(for: memoryExtractionInterval, in: extractionIntervalOptions)
             }
 
             // Minimum Confidence Slider
@@ -751,7 +775,13 @@ extension SettingsContentView {
           Slider(
             value: Binding(
               get: { Double(analysisDelaySliderIndex) },
-              set: { analysisDelay = analysisDelayOptions[Int($0)] }
+              set: {
+                if let step = SettingsControlMetrics.ladderValue(
+                  at: Int($0), in: analysisDelayOptions)
+                {
+                  analysisDelay = step
+                }
+              }
             ), in: 0...Double(analysisDelayOptions.count - 1), step: 1
           )
           .tint(Ink.accent)
@@ -762,6 +792,8 @@ extension SettingsContentView {
               AssistantSettingsResponse(
                 shared: SharedAssistantSettingsResponse(analysisDelay: newValue)))
           }
+
+          offLadderStepNote(for: analysisDelay, in: analysisDelayOptions)
         }
       }
     }
@@ -985,6 +1017,86 @@ extension SettingsContentView {
 
   // MARK: - Gmail Reader Subsection
 
+  /// Re-reads every assistant control from the store that owns it.
+  ///
+  /// These cards are seeded from their singletons once, in `SettingsContentView.init`. Opening
+  /// Settings then runs `loadBackendSettings()`, which awaits `SettingsSyncManager.syncFromServer()`
+  /// — server-authoritative by design, and it rewrites exactly those singletons underneath the pane.
+  /// Nothing told the pane, so the switches, sliders and app lists kept painting the pre-sync values
+  /// until the next relaunch: a per-device answer to a per-account question. The sync manager already
+  /// announces itself with `.assistantSettingsDidSyncFromServer`; `advancedSection` subscribes, and
+  /// this is what it runs. Same shape as
+  /// `syncNotificationTogglesFromAssistantSettings()` in `SettingsContentView+NotificationsPrivacy`.
+  ///
+  /// A sync that agrees with the pane assigns nothing, so the common case does not re-enter the
+  /// `onChange` handlers above. A sync that corrects the pane does, and each handler then writes the
+  /// value the server just supplied back to the same singleton — a no-op write whose partial update
+  /// restates the server's own value, and whose telemetry sees no change to report.
+  func syncAssistantControlsFromSettings() {
+    let values = AssistantControlValues.current()
+    taskEnabled = values.taskEnabled
+    taskExtractionInterval = values.taskExtractionInterval
+    taskMinConfidence = values.taskMinConfidence
+    taskAllowedApps = values.taskAllowedApps
+    taskBrowserKeywords = values.taskBrowserKeywords
+    insightEnabled = values.insightEnabled
+    insightExtractionInterval = values.insightExtractionInterval
+    insightMinConfidence = values.insightMinConfidence
+    insightExcludedApps = values.insightExcludedApps
+    memoryEnabled = values.memoryEnabled
+    memoryExtractionInterval = values.memoryExtractionInterval
+    memoryMinConfidence = values.memoryMinConfidence
+    memoryExcludedApps = values.memoryExcludedApps
+    analysisDelay = values.analysisDelay
+  }
+
+}
+
+// MARK: - Assistant Control Projection
+
+/// Everything the three assistant cards and the analysis throttle paint, read from the stores that
+/// own them.
+///
+/// Naming the projection separately is what lets the account-sync path be asserted without standing
+/// up a SwiftUI host: a test can apply a server snapshot through `SettingsSyncManager` and compare
+/// this against it. It is deliberately only the settings `SettingsSyncManager.applyRemoteSettings`
+/// can rewrite — the task agent's chat toggle and working directory are local to this Mac and are
+/// not the account's to correct.
+struct AssistantControlValues: Equatable {
+  var taskEnabled: Bool
+  var taskExtractionInterval: TimeInterval
+  var taskMinConfidence: Double
+  var taskAllowedApps: Set<String>
+  var taskBrowserKeywords: [String]
+  var insightEnabled: Bool
+  var insightExtractionInterval: TimeInterval
+  var insightMinConfidence: Double
+  var insightExcludedApps: Set<String>
+  var memoryEnabled: Bool
+  var memoryExtractionInterval: TimeInterval
+  var memoryMinConfidence: Double
+  var memoryExcludedApps: Set<String>
+  var analysisDelay: Int
+
+  @MainActor
+  static func current() -> AssistantControlValues {
+    AssistantControlValues(
+      taskEnabled: TaskAssistantSettings.shared.isEnabled,
+      taskExtractionInterval: TaskAssistantSettings.shared.extractionInterval,
+      taskMinConfidence: TaskAssistantSettings.shared.minConfidence,
+      taskAllowedApps: TaskAssistantSettings.shared.allowedApps,
+      taskBrowserKeywords: TaskAssistantSettings.shared.browserKeywords,
+      insightEnabled: InsightAssistantSettings.shared.isEnabled,
+      insightExtractionInterval: InsightAssistantSettings.shared.extractionInterval,
+      insightMinConfidence: InsightAssistantSettings.shared.minConfidence,
+      insightExcludedApps: InsightAssistantSettings.shared.excludedApps,
+      memoryEnabled: MemoryAssistantSettings.shared.isEnabled,
+      memoryExtractionInterval: MemoryAssistantSettings.shared.extractionInterval,
+      memoryMinConfidence: MemoryAssistantSettings.shared.minConfidence,
+      memoryExcludedApps: MemoryAssistantSettings.shared.excludedApps,
+      analysisDelay: AssistantSettings.shared.analysisDelay
+    )
+  }
 }
 
 // MARK: - Rescan Files

@@ -22,6 +22,17 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xxl) {
       advancedCategoryHeader(title: "AI Setup", icon: "cpu")
       aiSetupSubsection
+      // The three assistants that read your screen, and the throttle they share. Each card carries
+      // the switch that stops its assistant — which, until this pane rendered them, no surface in the
+      // app did. `advanced.taskassistant` is also where the Tasks page's gear button deep-links.
+      advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+      taskAssistantSubsection
+      advancedCategoryHeader(title: "Insight Assistant", icon: "lightbulb.fill")
+      insightAssistantSubsection
+      advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+      memoryAssistantSubsection
+      advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+      analysisThrottleSubsection
       advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
       profileAndStatsSubsection
       advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
@@ -41,6 +52,15 @@ extension SettingsContentView {
 
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
+    }
+    // The assistant cards above are seeded from their singletons when the pane is constructed, but
+    // `loadBackendSettings()` then runs `SettingsSyncManager.syncFromServer()`, which is
+    // server-authoritative and rewrites those same singletons underneath us. Without this the
+    // switches, sliders and app lists kept painting the pre-sync values — a per-device answer to a
+    // per-account question — until the next relaunch. The sync manager already announces itself;
+    // this is the pane agreeing to listen. Same shape as the Notifications pane.
+    .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+      syncAssistantControlsFromSettings()
     }
   }
 

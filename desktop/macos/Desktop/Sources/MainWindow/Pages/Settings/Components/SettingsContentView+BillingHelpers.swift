@@ -548,20 +548,28 @@ extension SettingsContentView {
 
   // MARK: - Slider Index Helpers
 
+  // Each of these was `options.firstIndex(of: stored) ?? 0`. See
+  // `SettingsControlMetrics.nearestLadderIndex` for what that `?? 0` did to a stored value the
+  // slider does not offer, and why the handle now snaps to the nearest step instead. When it is only
+  // an approximation, `offLadderStepNote` says so under the slider.
+
   var analysisDelaySliderIndex: Int {
-    analysisDelayOptions.firstIndex(of: analysisDelay) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(of: analysisDelay, in: analysisDelayOptions)
   }
 
   var taskIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: taskExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: taskExtractionInterval, in: extractionIntervalOptions)
   }
 
   var insightIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: insightExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: insightExtractionInterval, in: extractionIntervalOptions)
   }
 
   var memoryIntervalSliderIndex: Int {
-    extractionIntervalOptions.firstIndex(of: memoryExtractionInterval) ?? 0
+    SettingsControlMetrics.nearestLadderIndex(
+      of: memoryExtractionInterval, in: extractionIntervalOptions)
   }
 
   // MARK: - Helpers

@@ -33,6 +33,49 @@ enum SettingsControlMetrics {
     return Int(round(fraction * CGFloat(stepCount - 1)))
   }
 
+  /// The rung a stepped ladder's handle must sit on to represent `value`.
+  ///
+  /// The interval and delay sliders offer a fixed list and asked `ladder.firstIndex(of: stored) ?? 0`
+  /// for the handle's position. `firstIndex` answers `nil` for anything not on the list — an interval
+  /// the account synced down, a value an older build wrote — and the `?? 0` then parked the handle on
+  /// the *first* rung while the readout beside it printed the true number. The two disagreed with no
+  /// sign that they did, and because dragging to rung 0 wrote the value the handle already claimed,
+  /// the control could not even be used to correct itself.
+  ///
+  /// Snapping to the nearest rung makes the handle an honest approximation of the stored value and
+  /// guarantees that every drag lands on a value different from the one it left. Ties go to the lower
+  /// rung. An empty ladder has no rung to name, so the answer is `0` — callers bound their slider by
+  /// the same `count`, so no such slider is drawn.
+  static func nearestLadderIndex<Value: SignedNumeric & Comparable>(
+    of value: Value, in ladder: [Value]
+  ) -> Int {
+    var nearestIndex = 0
+    var nearestDistance: Value?
+    for (index, rung) in ladder.enumerated() {
+      let distance = abs(rung - value)
+      if let best = nearestDistance, distance >= best { continue }
+      nearestDistance = distance
+      nearestIndex = index
+    }
+    return nearestIndex
+  }
+
+  /// Whether `value` is exactly one of the ladder's rungs — that is, whether the handle's position
+  /// *is* the setting or only the nearest approximation the slider can draw of it.
+  static func isOnLadder<Value: Equatable>(_ value: Value, in ladder: [Value]) -> Bool {
+    ladder.contains(value)
+  }
+
+  /// The value a drag to `rawIndex` selects, with the index clamped into the ladder.
+  ///
+  /// The call sites used to subscript the ladder directly with an index derived from a `Double`,
+  /// which is a trap waiting on any future change to the slider's bounds. Nothing on this pane is
+  /// worth crashing the app for.
+  static func ladderValue<Value>(at rawIndex: Int, in ladder: [Value]) -> Value? {
+    guard !ladder.isEmpty else { return nil }
+    return ladder[max(0, min(ladder.count - 1, rawIndex))]
+  }
+
   static func dailySummaryDate(forHour hour: Int, referenceDate: Date, calendar: Calendar = .current) -> Date {
     let normalizedHour = max(0, min(23, hour))
     return calendar.date(bySettingHour: normalizedHour, minute: 0, second: 0, of: referenceDate)
@@ -298,6 +341,24 @@ extension SettingsContentView {
     return body.modifier(
       SettingHighlightModifier(
         settingId: settingId, highlightedSettingId: $highlightedSettingId))
+  }
+
+  /// The line under a stepped slider whose stored value is not one of the steps it offers.
+  ///
+  /// These settings are account-authoritative: `SettingsSyncManager.syncFromServer()` can hand this
+  /// pane an interval or delay that is simply not on the slider. The handle then sits on the nearest
+  /// step while the readout above it states the real setting, so the two deliberately disagree.
+  /// Saying so is the honest half of that trade — silence would leave a handle that looks wrong and a
+  /// number that looks unreachable. The row is empty whenever the value is exactly on a step, which
+  /// is every value this pane itself can write.
+  @ViewBuilder
+  func offLadderStepNote<Value: Equatable>(for value: Value, in ladder: [Value]) -> some View {
+    if !SettingsControlMetrics.isOnLadder(value, in: ladder) {
+      Text("Not one of these steps — the handle shows the nearest one. Move it to choose a step.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
   }
 
   func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
