@@ -107,6 +107,12 @@ describe('currentTimePrompt', () => {
       currentTimePrompt('What day is it?', new Date('2026-07-31T02:30:45Z'), 'Not/AZone')
     ).toContain('# Current Time\n2026-07-31T02:30:45+00:00 (UTC)')
   })
+
+  it('preserves non-whole-hour timezone offsets from Intl', () => {
+    expect(
+      currentTimePrompt('What day is it?', new Date('2026-07-31T02:30:45Z'), 'Asia/Kathmandu')
+    ).toContain('# Current Time\n2026-07-31T08:15:45+05:45 (Asia/Kathmandu)')
+  })
 })
 
 describe('buildDesktopChatPersonalization', () => {

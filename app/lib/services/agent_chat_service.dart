@@ -38,6 +38,28 @@ Map<String, String> buildAgentWebSocketHeaders({required String token, String? t
   return headers;
 }
 
+Map<String, dynamic> buildAgentQueryMessage({required String prompt, String? timeZone}) {
+  final normalizedTimeZone = timeZone?.trim();
+  return {
+    'type': 'query',
+    'prompt': prompt,
+    // An explicit empty value tells the proxy to use UTC when a per-query
+    // timezone lookup fails; it must not silently reuse a stale handshake zone.
+    'time_zone': normalizedTimeZone ?? '',
+  };
+}
+
+Future<String?> _resolveLocalTimezone() async {
+  try {
+    final timeZone = await FlutterTimezone.getLocalTimezone();
+    final normalizedTimeZone = timeZone.trim();
+    return normalizedTimeZone.isEmpty ? null : normalizedTimeZone;
+  } catch (e) {
+    agentLog('Unable to resolve local timezone; agent proxy will use UTC: $e');
+    return null;
+  }
+}
+
 enum AgentChatEventType { textDelta, toolActivity, result, error, status }
 
 class AgentChatEvent {
@@ -103,12 +125,7 @@ class AgentChatService {
 
     try {
       final uri = Uri.parse(Env.agentProxyWsUrl);
-      String? timeZone;
-      try {
-        timeZone = await FlutterTimezone.getLocalTimezone();
-      } catch (e) {
-        agentLog('Unable to resolve local timezone; agent proxy will use UTC: $e');
-      }
+      final timeZone = await _resolveLocalTimezone();
       agentLog('Connecting to $uri');
       _channel = IOWebSocketChannel.connect(
         uri,
@@ -255,13 +272,21 @@ class AgentChatService {
     _queryStopwatch = Stopwatch()..start();
     _firstTextReceived = false;
     agentLog('[TIMING] === QUERY START === (${prompt.length} chars)');
-    _channel!.sink.add(jsonEncode({'type': 'query', 'prompt': prompt}));
-    agentLog('[TIMING] query sent +${_queryStopwatch!.elapsedMilliseconds}ms');
-
-    // Start response timeout — if no event arrives within 45s, connection is dead
-    _resetResponseTimer();
+    final controller = _eventController!;
+    unawaited(_sendQueryWithCurrentTimezone(prompt, controller));
 
     return _eventController!.stream;
+  }
+
+  Future<void> _sendQueryWithCurrentTimezone(String prompt, StreamController<AgentChatEvent> controller) async {
+    final timeZone = await _resolveLocalTimezone();
+    if (_eventController != controller || controller.isClosed || _channel == null || !_connected) return;
+
+    _channel!.sink.add(jsonEncode(buildAgentQueryMessage(prompt: prompt, timeZone: timeZone)));
+    agentLog('[TIMING] query sent +${_queryStopwatch?.elapsedMilliseconds ?? 0}ms');
+
+    // Start response timeout — if no event arrives within 120s, connection is dead.
+    _resetResponseTimer();
   }
 
   Future<void> disconnect() async {

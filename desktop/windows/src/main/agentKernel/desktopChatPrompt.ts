@@ -126,24 +126,19 @@ function localIsoParts(now: Date, timeZone: string): { iso: string; offset: stri
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit'
+    second: '2-digit',
+    timeZoneName: 'longOffset'
   }).formatToParts(now)
-  const at = (type: Intl.DateTimeFormatPartTypes): number =>
-    Number(parts.find((part) => part.type === type)?.value ?? 0)
-  const wallClockMs = Date.UTC(
-    at('year'),
-    at('month') - 1,
-    at('day'),
-    at('hour'),
-    at('minute'),
-    at('second')
-  )
-  const offsetMinutes = Math.round((wallClockMs - Math.floor(now.getTime() / 1000) * 1000) / 60_000)
-  const sign = offsetMinutes >= 0 ? '+' : '-'
-  const absoluteOffset = Math.abs(offsetMinutes)
-  const offset = `${sign}${pad2(Math.floor(absoluteOffset / 60))}:${pad2(absoluteOffset % 60)}`
-  const shifted = new Date(now.getTime() + offsetMinutes * 60_000)
-  return { iso: `${shifted.toISOString().slice(0, 19)}${offset}`, offset }
+  const value = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? ''
+  const offsetLabel = value('timeZoneName')
+  const offsetMatch = /^GMT(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/.exec(offsetLabel)
+  if (!offsetMatch) throw new Error(`Unsupported timezone offset: ${offsetLabel}`)
+  const offset = offsetMatch[1]
+    ? `${offsetMatch[1]}${pad2(Number(offsetMatch[2]))}:${offsetMatch[3] ?? '00'}`
+    : '+00:00'
+  const iso = `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}:${value('second')}${offset}`
+  return { iso, offset }
 }
 
 /**

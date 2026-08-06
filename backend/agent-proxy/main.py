@@ -87,6 +87,7 @@ def current_time_prompt(prompt: str, time_zone: Optional[str] = None, now: Optio
     try:
         zone = ZoneInfo(zone_name)
     except (KeyError, ValueError):
+        logger.warning("[agent-proxy] invalid client timezone; falling back to UTC")
         zone_name = "UTC"
         zone = timezone.utc
 
@@ -642,6 +643,19 @@ async def _prepare_first_query_prompt(uid: str, chat_session_id: str, prompt: st
     return _build_prompt_with_history(prompt, history)
 
 
+async def _prepare_first_query_prompt_with_fallback(
+    uid: str, chat_session_id: str, prompt: str, vm_session_active: bool
+) -> str:
+    """Keep history seeding failure isolated from per-query prompt metadata."""
+    try:
+        return await _prepare_first_query_prompt(uid, chat_session_id, prompt, vm_session_active)
+    except Exception:
+        logger.error(
+            "[agent-proxy] uid=%s failed to seed first-query history; forwarding the raw prompt", uid, exc_info=True
+        )
+        return prompt
+
+
 @app.websocket("/v1/agent/ws")
 async def agent_ws(websocket: WebSocket):
     # Validate Firebase token from Authorization header
@@ -972,6 +986,12 @@ async def agent_ws(websocket: WebSocket):
                             data = json.loads(msg)
                             if data.get('type') == 'query':
                                 prompt = data.get('prompt', '')
+                                if not isinstance(prompt, str):
+                                    # Preserve the VM's Invalid query response instead of
+                                    # coercing malformed client data into a model request.
+                                    logger.warning(f"[agent-proxy] uid={uid} rejected non-string query prompt")
+                                    await vm_ws.send(msg)
+                                    continue
                                 prompt_to_forward = prompt
                                 if not first_query_sent:
                                     first_query_sent = True
@@ -984,7 +1004,7 @@ async def agent_ws(websocket: WebSocket):
                                         logger.warning(
                                             f"[agent-proxy] uid={uid} no session_state hello before first query; seeding history"
                                         )
-                                    prompt_to_forward = await _prepare_first_query_prompt(
+                                    prompt_to_forward = await _prepare_first_query_prompt_with_fallback(
                                         uid, chat_session_id, prompt, vm_session_active
                                     )
                                     logger.info(
@@ -994,7 +1014,13 @@ async def agent_ws(websocket: WebSocket):
                                 else:
                                     # Subsequent queries: Claude session already has context
                                     logger.info(f"[agent-proxy] uid={uid} follow-up query (session has context)")
-                                data['prompt'] = current_time_prompt(prompt_to_forward, time_zone, now=_utc_now())
+                                query_time_zone = data.pop('time_zone', None)
+                                if query_time_zone is not None and not isinstance(query_time_zone, str):
+                                    query_time_zone = ''
+                                effective_time_zone = query_time_zone if query_time_zone is not None else time_zone
+                                data['prompt'] = current_time_prompt(
+                                    prompt_to_forward, effective_time_zone, now=_utc_now()
+                                )
                                 msg = json.dumps(data)
                                 # Save user message in background — no need to block VM forwarding
                                 start_background_task(

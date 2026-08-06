@@ -13,6 +13,22 @@ void main() {
     expect(buildAgentWebSocketHeaders(token: 'firebase-token'), {'Authorization': 'Bearer firebase-token'});
   });
 
+  test('agent query messages carry the current per-query timezone', () {
+    expect(buildAgentQueryMessage(prompt: 'What year is it?', timeZone: ' America/Los_Angeles '), {
+      'type': 'query',
+      'prompt': 'What year is it?',
+      'time_zone': 'America/Los_Angeles',
+    });
+  });
+
+  test('agent query messages explicitly select UTC when timezone lookup fails', () {
+    expect(buildAgentQueryMessage(prompt: 'What year is it?'), {
+      'type': 'query',
+      'prompt': 'What year is it?',
+      'time_zone': '',
+    });
+  });
+
   test('agent chat events preserve structured proxy error messages', () {
     expect(
       AgentChatEvent.textFrom({

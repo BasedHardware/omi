@@ -68,10 +68,11 @@ class _AsyncClient:
 class _AgentWebSocket:
     headers = {"authorization": "Bearer firebase-token", "x-timezone": "America/New_York"}
 
-    def __init__(self):
+    def __init__(self, query='{"type":"query","prompt":"hello"}'):
         self.accepted = False
         self.sent = []
         self.closed = []
+        self.query = query
 
     async def accept(self):
         self.accepted = True
@@ -83,7 +84,7 @@ class _AgentWebSocket:
         self.closed.append((code, reason))
 
     async def iter_text(self):
-        yield '{"type":"query","prompt":"hello"}'
+        yield self.query
 
 
 class _VMProtocol:
@@ -176,8 +177,22 @@ class _IdleVMProtocol:
 
 
 @pytest.mark.asyncio
-async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy, monkeypatch):
-    phone_ws = _AgentWebSocket()
+@pytest.mark.parametrize(
+    ("query", "expected_prompt"),
+    [
+        (
+            '{"type":"query","prompt":"hello"}',
+            "# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nhello",
+        ),
+        (
+            '{"type":"query","prompt":"hello","time_zone":"America/Los_Angeles"}',
+            "# Current Time\n2026-07-30T19:30:45-07:00 (America/Los_Angeles)\n\nhello",
+        ),
+        ('{"type":"query","prompt":123}', 123),
+    ],
+)
+async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy, monkeypatch, query, expected_prompt):
+    phone_ws = _AgentWebSocket(query)
     vm_ws = _VMProtocol()
     _ProxyHTTPClient.post_calls = 0
     real_sleep = asyncio.sleep
@@ -219,11 +234,12 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     await agent_proxy.drain_background_tasks(timeout=1.0)
 
     assert phone_ws.accepted is True
-    # Query forwarded to the VM with the proxy's authoritative current-time context.
+    # Valid queries get authoritative context; malformed prompts remain untouched
+    # so the VM can return its protocol-level Invalid query response.
     assert len(vm_ws.sent) == 1
     assert json.loads(vm_ws.sent[0]) == {
         "type": "query",
-        "prompt": "# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nhello",
+        "prompt": expected_prompt,
     }
     assert vm_ws.closed is True
     assert _ProxyHTTPClient.post_calls == 2

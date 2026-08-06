@@ -68,11 +68,14 @@ void main() {
 
   group('streaming clock-skew detection', () {
     late HttpServer server;
+    var requestCount = 0;
 
     setUp(() async {
+      requestCount = 0;
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       env.routeNextRequestTo('http://${server.address.host}:${server.port}/');
       server.listen((request) async {
+        requestCount++;
         request.response.statusCode = HttpStatus.requestTimeout;
         request.response.headers.contentType = ContentType.json;
         request.response.write(
@@ -97,7 +100,7 @@ void main() {
     }
 
     test('typed streaming requests report clock skew before returning', () async {
-      final url = '${env.apiBaseUrl!}clock-skew';
+      final url = '${env.requestBaseUrl}clock-skew';
       final eventFuture = nextClockSkewEvent();
 
       final chunks = await makeStreamingApiCall(url: url).toList();
@@ -105,13 +108,14 @@ void main() {
 
       expect(chunks, isEmpty);
       expect(event.skewMinutes, 15);
+      expect(requestCount, 1);
     });
 
     test('multipart streaming requests report clock skew before returning', () async {
       final file = File('${Directory.systemTemp.path}/omi-clock-skew-test.txt');
       await file.writeAsString('test');
       addTearDown(() => file.delete().ignore());
-      final url = '${env.apiBaseUrl!}clock-skew';
+      final url = '${env.requestBaseUrl}clock-skew';
       final eventFuture = nextClockSkewEvent();
 
       final chunks = await makeMultipartStreamingApiCall(url: url, files: [file]).toList();
@@ -119,27 +123,22 @@ void main() {
 
       expect(chunks, isEmpty);
       expect(event.skewMinutes, 15);
+      expect(requestCount, 1);
     });
   });
 }
 
 class _TestEnvFields implements EnvFields {
   String _requestBaseUrl = '';
-  var _apiBaseUrlReads = 0;
 
   void routeNextRequestTo(String baseUrl) {
     _requestBaseUrl = baseUrl;
-    _apiBaseUrlReads = 0;
   }
 
+  String get requestBaseUrl => _requestBaseUrl;
+
   @override
-  String? get apiBaseUrl {
-    _apiBaseUrlReads++;
-    // The first read builds the request URL; the second read in
-    // _isRequiredAuthCheck intentionally returns a non-matching URL so these
-    // loopback tests do not need Firebase credentials.
-    return _apiBaseUrlReads.isOdd ? _requestBaseUrl : 'https://auth-not-required.invalid/';
-  }
+  String? get apiBaseUrl => 'https://auth-not-required.invalid/';
 
   @override
   String? get googleClientId => null;

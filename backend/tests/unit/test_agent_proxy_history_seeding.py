@@ -93,3 +93,15 @@ async def test_fresh_vm_session_seeds_history(agent_proxy, monkeypatch):
     assert "<conversation_history>" in result
     assert "what did I do yesterday" in result
     assert result.endswith("hello")  # the current prompt rides after the seeded history
+
+
+@pytest.mark.asyncio
+async def test_history_failure_falls_back_to_raw_prompt_before_time_prefix(agent_proxy, monkeypatch):
+    async def fail_history(*_args, **_kwargs):
+        raise RuntimeError("Firestore unavailable")
+
+    monkeypatch.setattr(agent_proxy, "_prepare_first_query_prompt", fail_history)
+
+    result = await agent_proxy._prepare_first_query_prompt_with_fallback("uid1", "sess1", "hello", False)
+
+    assert result == "hello"
