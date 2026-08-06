@@ -229,18 +229,33 @@ WHAT THEY OWE:
 Use only what is above. If there is nothing scheduled and nothing owed, return an empty \
 string for the note.
 
+Also return each owed item in English. This is a TRANSLATION ONLY: keep every name, product \
+and number exactly as written, change nothing about what the task is, and if an item is already \
+English return it unchanged.
+
 Return only JSON, no fences:
-{{"note": "<one sentence, or empty string>"}}"""
+{{
+  "note": "<one sentence, or empty string>",
+  "owed": [{{"index": <0-based index into WHAT THEY OWE>, "english": "<the same task, in English>"}}]
+}}"""
 
 
 def build_today(uid: str, events: list, commitments: list[Commitment], calendar_ok: bool = True) -> Today:
-    """Today's shape. Deterministic apart from the one framing line."""
+    """Today's shape. Deterministic apart from the one framing line.
+
+    Action items are stored in whatever language they were captured in, so a
+    Spanish conversation puts Spanish tasks under English prose. They are
+    rendered into the edition's language, but only as a translation keyed back
+    to the original index: an item the model does not return, or returns empty,
+    keeps the text the reader actually said.
+    """
     today = Today(events=events, commitments=commitments, calendar_ok=calendar_ok)
     if today.is_clear or today.is_unknown:
         return today
 
     event_lines = '\n'.join(f'- {e.title} at {e.start or "unspecified time"}' for e in events) or '(none)'
-    owed_lines = '\n'.join(f'- {c.text}' for c in commitments[:10]) or '(none)'
+    owed = commitments[:10]
+    owed_lines = '\n'.join(f'[{i}] {c.text}' for i, c in enumerate(owed)) or '(none)'
 
     payload = ask_model(
         uid,
@@ -248,6 +263,18 @@ def build_today(uid: str, events: list, commitments: list[Commitment], calendar_
         'omi-paper-today',
     )
     today.note = clip(payload.get('note'), MAX_SUMMARY_CHARS)
+
+    for raw in payload.get('owed') or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            index = int(raw.get('index', -1))
+        except (TypeError, ValueError):
+            continue
+        english = str(raw.get('english') or '').strip()
+        if 0 <= index < len(owed) and english:
+            owed[index].text = english
+
     return today
 
 
