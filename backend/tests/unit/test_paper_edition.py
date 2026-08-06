@@ -22,7 +22,7 @@ from models.paper import (
 )
 from utils.paper.context import focus_blocks
 from utils.paper.render import render_text
-from utils.paper.sources.gmail_source import exclusion_reason
+from utils.paper.sources.gmail_source import _sender_name, exclusion_reason
 
 # ---------------------------------------------------------------------------
 # Focus time — measured, not assumed
@@ -117,6 +117,46 @@ def test_a_code_in_the_body_is_caught_even_with_an_innocent_subject():
 
 def test_automated_senders_are_excluded_by_address():
     assert exclusion_reason({'subject': 'Weekly digest', 'from': 'notifications@github.com', 'body': ''})
+
+
+@pytest.mark.parametrize(
+    'sender,subject',
+    [
+        # Every one of these was wrongly cut by a `noreply@` sender rule when the
+        # filter was first run against a real inbox. Publications overwhelmingly
+        # send bulk mail from unmonitored addresses; it is not a danger signal.
+        ('noreply@news.bloomberg.com', 'Money Stuff: SpaceX Unlocks Tomorrow'),
+        ('noreply@news.bloomberg.com', 'Gold is waking up to the Warsh Fed'),
+        ('no-reply@m.higgsfield.ai', 'Higgsfield Global Film Festival'),
+        ('access@interactive.wsj.com', 'Takeaways From the Big Election Night'),
+        ('team@info.digitalocean.com', 'Open-weight models ramp up performance'),
+        ('billg@gatesnotes.com', 'Proof of progress'),
+    ],
+)
+def test_publications_sending_from_noreply_are_not_cut(sender, subject):
+    assert exclusion_reason({'from': sender, 'subject': subject, 'body': ''}) is None
+
+
+@pytest.mark.parametrize(
+    'sender,expected',
+    [
+        ('noreply@news.bloomberg.com', 'Bloomberg'),
+        ('access@interactive.wsj.com', 'WSJ'),
+        ('team@info.digitalocean.com', 'DigitalOcean'),
+        ('investors@ycombinator.com', 'Y Combinator'),
+        ('billg@gatesnotes.com', 'Gates Notes'),
+        ('no-reply@m.higgsfield.ai', 'Higgsfield'),
+        ('newsletter@tesla.com', 'Tesla'),
+        ('The Browser <hi@thebrowser.com>', 'The Browser'),
+    ],
+)
+def test_a_publication_is_named_by_its_domain_not_its_mailbox(sender, expected):
+    """`noreply@news.bloomberg.com` is Bloomberg, not "noreply".
+
+    The sources line is what lets a reader check a story, so a story credited to
+    "noreply" or "team" is unverifiable in exactly the way the model forbids.
+    """
+    assert _sender_name(sender) == expected
 
 
 def test_a_real_newsletter_survives_the_filter():

@@ -62,14 +62,37 @@ _SUBJECT_BLOCKLIST = re.compile(
     re.IGNORECASE,
 )
 
+# Only senders that are *never* a newsletter belong here.
+#
+# `noreply@` deliberately does NOT: running this against a real inbox showed it
+# cutting Bloomberg's Money Stuff, John Authers and the Evening Briefing, which
+# all send from noreply@news.bloomberg.com. Sending bulk mail from an unmonitored
+# address is the norm for publications, not a signal of transactional mail.
+# Category is decided by subject and body instead, which is where the danger is.
 _SENDER_BLOCKLIST = re.compile(
     r'('
-    r'no[-.]?reply@|donotreply@|notifications?@github|notifications?@gitlab|'
+    r'notifications?@github\.|notifications?@gitlab\.|ci_activity@|'
     r'@stripe\.com|@paypal\.|@chase\.|@bankofamerica\.|@wellsfargo\.|@capitalone\.|'
-    r'@venmo\.|@squareup\.|@intuit\.|@digitalocean\.com|@amazonses\.'
+    r'@venmo\.|@squareup\.|@intuit\.|@amazonses\.'
     r')',
     re.IGNORECASE,
 )
+
+# Sending subdomains sit in front of the real publication name.
+_MAIL_SUBDOMAINS = {'news', 'info', 'mail', 'email', 'e', 'm', 'em', 'go', 'link', 'send', 'notifications'}
+
+# Domains whose second-level label is not what the publication is called.
+_PUBLICATION_NAMES = {
+    'ycombinator': 'Y Combinator',
+    'wsj': 'WSJ',
+    'nytimes': 'The New York Times',
+    'gatesnotes': 'Gates Notes',
+    'digitalocean': 'DigitalOcean',
+    'stockstory': 'StockStory',
+    'posthog': 'PostHog',
+    'higgsfield': 'Higgsfield',
+    'producthunt': 'Product Hunt',
+}
 
 # A body containing a bare 4-8 digit code next to code-ish words is a credential,
 # whatever the subject says.
@@ -100,12 +123,36 @@ def exclusion_reason(message: dict[str, Any]) -> str | None:
 
 
 def _sender_name(raw: str) -> str:
-    """'The Browser <hi@thebrowser.com>' -> 'The Browser'."""
+    """The publication behind a From header.
+
+    Prefers the display name. Falls back to the **domain**, never the local
+    part: a bare `noreply@news.bloomberg.com` is Bloomberg, and rendering it as
+    "noreply" makes the sources line useless. That line is what lets a reader
+    check a story, so getting it wrong breaks the rule the section rests on.
+    """
     text = str(raw or '').strip()
+
     match = re.match(r'^\s*"?([^"<]+?)"?\s*<', text)
-    if match:
+    if match and match.group(1).strip():
         return match.group(1).strip()
-    return text.split('@')[0].strip() or 'Unknown'
+
+    address = text.split('<')[-1].strip('> ')
+    if '@' not in address:
+        return text or 'Unknown'
+
+    labels = [part for part in address.split('@')[-1].lower().split('.') if part]
+    # Drop the TLD, then any sending subdomain in front of the real name.
+    if len(labels) > 1:
+        labels = labels[:-1]
+        if labels[-1] in {'co', 'com', 'org', 'net', 'ac'} and len(labels) > 1:
+            labels = labels[:-1]
+    while len(labels) > 1 and labels[0] in _MAIL_SUBDOMAINS:
+        labels = labels[1:]
+
+    name = labels[-1] if labels else ''
+    if not name:
+        return 'Unknown'
+    return _PUBLICATION_NAMES.get(name, name.replace('-', ' ').title())
 
 
 async def fetch_newsletters(
