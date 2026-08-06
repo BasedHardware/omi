@@ -117,6 +117,7 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
+from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -1173,17 +1174,13 @@ def process_segment(
             for segment in closest_memory['transcript_segments']:
                 segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
 
-            # Deduplicate: skip new segments whose timestamp range already exists in the conversation
-            # (protects against retry after partial failure returning 207)
-            existing_timestamps = {
-                (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2))
-                for s in closest_memory['transcript_segments']
-            }
-            deduped_segments = []
-            for seg in transcript_segments:
-                seg_key = (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
-                if seg_key not in existing_timestamps:
-                    deduped_segments.append(seg)
+            # Deduplicate before append. Exact absolute ranges cover 207 retries;
+            # text+slop covers live+offline / clock-offset duplicates (#4769).
+            deduped_segments = dedupe_segments_for_merge(
+                closest_memory['started_at'].timestamp(),
+                closest_memory['transcript_segments'],
+                transcript_segments,
+            )
             if not deduped_segments:
                 logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
                 with lock:
