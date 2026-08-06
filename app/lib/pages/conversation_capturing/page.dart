@@ -33,8 +33,7 @@ class ConversationCapturingPage extends StatefulWidget {
 }
 
 class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
-  static String? _preservedTranscriptSessionId;
-  static TranscriptScrollState _preservedTranscriptScrollState = TranscriptScrollState();
+  final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
@@ -53,11 +52,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   TranscriptScrollState _scrollStateFor(String sessionId) {
-    if (_preservedTranscriptSessionId != sessionId) {
-      _preservedTranscriptSessionId = sessionId;
-      _preservedTranscriptScrollState = TranscriptScrollState();
-    }
-    return _preservedTranscriptScrollState;
+    return _transcriptScrollStateStore.forSession(sessionId);
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
