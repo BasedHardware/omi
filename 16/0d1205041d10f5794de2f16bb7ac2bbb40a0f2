@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_0a7392f93c68a4 197-204
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
+  s_569f1df936cc22::t_5df4bf12719ea7 76-89
+  s_569f1df936cc22::t_b5eab9e6f24550 32-45,49
+  s_569f1df936cc22::t_b7d8f7a836e241 90-91
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_569f1df936cc22::t_4d658819fef7d8 283,288-290,292-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "160d1205041d10f5794de2f16bb7ac2bbb40a0f2",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
