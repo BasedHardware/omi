@@ -1,0 +1,84 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_89b11f8298a191 1547-1549
+  s_569f1df936cc22::t_cefc734aa9a08f 1707-1708
+  s_569f1df936cc22::t_75d42761add30d 1565-1567,1569-1590
+desktop/macos/Desktop/Tests/MemoryGraphRevisitTests.swift
+  s_569f1df936cc22::t_d21e65ad8470cf 68-69
+  s_569f1df936cc22::t_6e32471a19374f 66-67
+  s_569f1df936cc22::t_7774b8dffb4c0d 70
+  s_3f77e20307c64e::t_c8d5d425edbcf6 42-43,45-46,73
+desktop/macos/changelog/unreleased/20260806-remove-focus.json
+  s_569f1df936cc22::t_8cd21c8759aae5 1-3
+desktop/macos/changelog/unreleased/20260806-flat-top-navigation.json
+  s_569f1df936cc22::t_d4175241c68575 1,3
+  s_569f1df936cc22::t_81aca1f5ac1ab7 2
+desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  s_77f2b8dfbc2e90::t_f0fa8402f1196b 1507
+  s_77f2b8dfbc2e90::t_95d00f2ce03f12 1488
+  s_569f1df936cc22::t_610af5b3486a1b 1019
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_569f1df936cc22::t_c14610841023b8 1067
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_77f2b8dfbc2e90::t_ee602ba5af308b 60-61
+  s_569f1df936cc22::t_b8490a6dee5106 6-8,13-24,27-28,91-93,97-99,102-107,133-135,137-140
+  s_569f1df936cc22::t_afecfb99bf2040 58-59,69-72,189-195
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_569f1df936cc22::t_fd1b3e5d25a15d 149-153,156-163,167-199,202-209,211,214-215,217,220-221,224-284
+desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
+  s_77f2b8dfbc2e90::t_0e363623fd4a8c 5
+  s_569f1df936cc22::t_370fafa5ef4483 6
+docs/product/invariants/desktop-shell-feature-parity.md
+  s_569f1df936cc22::t_881cb6d27ac618 13-14,31,42-43
+desktop/macos/Desktop/Sources/FloatingControlBar/NotchSystemControlsView.swift
+  s_569f1df936cc22::t_0647bd3244db31 19-22,57-65,155
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  s_569f1df936cc22::t_cbf592191e5b49 134-149,178-179,248-258,587-588,602-603
+desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
+  s_569f1df936cc22::t_930901a1c5b0a5 1-109
+desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  s_569f1df936cc22::t_f0610208b9f59f 6-13
+desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
+  s_569f1df936cc22::t_09b6a991d9ee5d 55
+desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
+  s_569f1df936cc22::t_608c7b399a0e68 1-299
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_569f1df936cc22::t_73ba52530a9c6a 532-533
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  s_569f1df936cc22::t_410c0284c46d33 472
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
+  s_569f1df936cc22::t_a1900706fb0eef 851
+desktop/macos/Desktop/Tests/ChatFirstDestinationParityTests.swift
+  s_569f1df936cc22::t_be98258fdaa8dc 24-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9d58a1c02306f2cd10c16ccff81c7188cb8a2858",
+  "prompts": {},
+  "sessions": {
+    "s_3f77e20307c64e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a29c5160f28c7cab0",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_77f2b8dfbc2e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee514486-6295-4f97-a50c-d7caedd7bfed",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
