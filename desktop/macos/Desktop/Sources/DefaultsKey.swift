@@ -27,6 +27,10 @@ enum DefaultsKey: String {
   case authTokenExpiry = "auth_tokenExpiry"
   case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
   case authIsImpersonating = "auth_isImpersonating"
+  /// Durable local cleanup journal written only after the backend accepts an
+  /// account deletion. It survives a crash between HTTP acceptance and the
+  /// owner transition, and is cleared only after local teardown completes.
+  case acceptedAccountDeletionOwnerId = "accepted_account_deletion_owner_id"
   /// Non-prod gauntlet owner swap: synthetic kernel owner that must NOT replace
   /// `auth_userId` (that mismatch triggers AuthService.clearTokens()).
   case automationOwnerOverride = "automation_owner_override"

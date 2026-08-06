@@ -92,6 +92,8 @@ def _render_probe_workflow_run(run: str, *, deploy_profile: str | None = None) -
         '${{ steps.combined-gateway-serving.outputs.gateway_url || steps.gateway-serving.outputs.gateway_url }}': 'http://10.0.0.5',
         '${{ vars.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
         '${{ vars.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
+        '${{ env.CLOUD_RUN_VPC_NETWORK }}': 'test-network',
+        '${{ env.CLOUD_RUN_VPC_SUBNET }}': 'test-subnet',
     }
     if deploy_profile is not None:
         replacements['${{ inputs.deploy_profile }}'] = deploy_profile
@@ -135,6 +137,10 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert '/ready' in probe_command
         assert '${OMI_LLM_GATEWAY_SERVICE_TOKEN}' in probe_command
         assert 'X-Omi-Service-Caller: backend' in probe_command
+
+    deployment = (BACKEND_ROOT / 'charts/llm-gateway/templates/deployment.yaml').read_text(encoding='utf-8')
+    assert 'name: OMI_LLM_GATEWAY_BUILD_IDENTITY' in deployment
+    assert 'value: {{ required "image.tag is required" .Values.image.tag | quote }}' in deployment
 
 
 def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():
@@ -346,7 +352,12 @@ def test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
     for workflow_name in GATEWAY_DEPLOY_WORKFLOWS:
         workflow = _load_workflow(workflow_name)
         deploy = _workflow_step_with_run(workflow, 'deploy-llm-gateway.sh', workflow_name=workflow_name)
-        assert deploy['env']['LLM_GATEWAY_GSA'] == '${{ vars.LLM_GATEWAY_GSA }}'
+        expected_gsa = (
+            '${{ env.LLM_GATEWAY_GSA }}'
+            if workflow_name == 'gcp_backend_auto_dev.yml'
+            else '${{ vars.LLM_GATEWAY_GSA }}'
+        )
+        assert deploy['env']['LLM_GATEWAY_GSA'] == expected_gsa
         assert any(
             'test -n "$LLM_GATEWAY_GSA"' in str(step.get('run', '')) for step in _deploy_steps(workflow, workflow_name)
         )

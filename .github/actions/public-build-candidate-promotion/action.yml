@@ -1,5 +1,5 @@
 name: Promote public-build candidate
-description: Browser-smoke an exact no-traffic Cloud Run revision before shifting traffic.
+description: Browser-smoke an exact Cloud Run candidate before shifting traffic; existing services start with no traffic and first creates receive initial traffic.
 inputs:
   target:
     description: Canonical public-build target name.
@@ -22,7 +22,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Wait for no-traffic candidate revision
+    - name: Wait for candidate revision
       shell: bash
       run: |
         set -euo pipefail
@@ -58,7 +58,7 @@ runs:
           --format='value(status.latestCreatedRevisionName)')"
         test "$latest" = "${{ inputs.revision }}"
 
-    - name: Shift traffic to browser-accepted candidate
+    - name: Promote browser-accepted candidate
       shell: bash
       run: |
         gcloud run services update-traffic "${{ inputs.service }}" \

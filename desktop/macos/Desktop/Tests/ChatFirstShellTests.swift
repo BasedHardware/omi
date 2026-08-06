@@ -91,6 +91,20 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
+  func testEscapeReturnsToChatFromSecondaryRoutesAndRemainsUnhandledOnChat() throws {
+    let suiteName = "ChatFirstShellTests.escape-navigation.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    navigation.selectPrimary(.tasks)
+
+    XCTAssertTrue(navigation.handleEscapeNavigation())
+    XCTAssertEqual(navigation.route, .chat)
+    XCTAssertFalse(navigation.handleEscapeNavigation())
+    XCTAssertEqual(navigation.route, .chat)
+  }
+
   func testMemoryFocusRequiresTheRequestedMemoryToBeVisibleBeforeAcknowledgement() {
     let focus = ChatFirstPendingFocus.memory(id: "memory-1")
 

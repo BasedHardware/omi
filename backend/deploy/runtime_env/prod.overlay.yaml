@@ -373,5 +373,7 @@ overlay:
             value: 'false'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
             value: 'false'
+          MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
+            value: 'false'
           PINECONE_INDEX_NAME:
             value: memories-backend

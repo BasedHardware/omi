@@ -5580,6 +5580,15 @@
       },
       "CanonicalKnowledgeGraphResponse": {
         "properties": {
+          "catalog_nodes": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Catalog Nodes",
+            "type": "array"
+          },
           "edges": {
             "items": {
               "additionalProperties": true,
@@ -7344,6 +7353,8 @@
       "CreateCheckoutRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },
@@ -22053,6 +22064,8 @@
       "UpgradeSubscriptionRequest": {
         "properties": {
           "price_id": {
+            "maxLength": 255,
+            "minLength": 1,
             "title": "Price Id",
             "type": "string"
           },
@@ -25484,7 +25497,7 @@
     },
     "/v1/agent/vm-ensure": {
       "post": {
-        "description": "Check VM status; if stopped/terminated, restart it in the background.",
+        "description": "Queue a fenced reconciliation when the persisted VM is unavailable.",
         "operationId": "ensure_vm_v1_agent_vm_ensure_post",
         "parameters": [
           {

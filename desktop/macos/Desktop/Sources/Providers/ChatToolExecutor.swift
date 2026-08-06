@@ -1238,7 +1238,7 @@ class ChatToolExecutor {
     }
     let changes: Int
     do {
-      changes = try await authorization.withCommitLease {
+      changes = try await authorization.withCommitLeaseSuppressingSupersededResult {
         try await dbQueue.write { db -> Int in
           try authorization.require()
           try db.execute(sql: query, arguments: StatementArguments(parameters))

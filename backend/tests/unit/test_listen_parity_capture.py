@@ -4,7 +4,7 @@ import json
 import logging
 
 from routers.listen.parity_capture import ListenParityCapture
-from routers.listen.parity_telemetry import record_parity_capture_event
+from routers.listen.parity_telemetry import record_parity_capture_event, record_parity_capture_lifecycle
 
 
 class _TelemetryCounter:
@@ -147,6 +147,28 @@ def test_parity_capture_telemetry_is_dev_only_and_normalizes_unknown_labels(monk
     record_parity_capture_event('user-stage', 'user-outcome', 'user-reason', environ={'OMI_ENV_STAGE': 'dev'})
 
     assert counter.events == [{'stage': 'other', 'outcome': 'other', 'reason_class': 'other'}]
+
+
+def test_parity_capture_lifecycle_log_does_not_require_prometheus_or_valid_dev_stage(monkeypatch, caplog):
+    class BrokenCounter:
+        def labels(self, **_labels):
+            raise RuntimeError('metrics unavailable')
+
+    import routers.listen.parity_telemetry as parity_telemetry
+
+    monkeypatch.setattr(parity_telemetry, 'OMI_PARITY_PACK_CAPTURE_EVENTS_TOTAL', BrokenCounter())
+    caplog.set_level(logging.INFO)
+    record_parity_capture_lifecycle(
+        'admitted',
+        'rejected',
+        error_type='ConfigurationError',
+        environ={'OMI_PARITY_PACK_CAPTURE': '1'},
+    )
+
+    assert (
+        'listen_parity_capture_lifecycle boundary=admitted result=rejected error_type=ConfigurationError' in caplog.text
+    )
+    assert 'metrics unavailable' not in caplog.text
 
 
 def test_listen_capture_requires_a_restricted_absolute_root(tmp_path):
@@ -319,4 +341,6 @@ def test_export_cassette_file_emits_attempt_and_bounded_failure(tmp_path, monkey
         {'stage': 'export', 'outcome': 'attempted', 'reason_class': 'configured'},
         {'stage': 'export', 'outcome': 'failed', 'reason_class': 'upload_error'},
     ]
+    assert 'listen_parity_capture_lifecycle boundary=export result=attempted error_type=none' in caplog.text
+    assert 'listen_parity_capture_lifecycle boundary=export result=failed error_type=PermissionError' in caplog.text
     assert 'private detail' not in caplog.text

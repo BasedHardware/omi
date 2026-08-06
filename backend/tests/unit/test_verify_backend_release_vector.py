@@ -1030,11 +1030,13 @@ def test_deploy_stages_workflow_owned_control_and_validation_sources_inside_admi
     assert 'cp -a .workflow-source/.github "$workflow_source/.github"' in stage_step
     assert 'control_source="$RUNNER_TEMP/backend-deploy-control-source"' in stage_step
     assert 'cp -a .workflow-source/backend "$control_source/backend"' in stage_step
+    assert 'cp -a .workflow-source/.github "$control_source/.github"' in stage_step
     assert 'workflow_root="$GITHUB_WORKSPACE/.deploy-workflow-source"' in install_step
     assert 'cp -a "$RUNNER_TEMP/backend-deploy-workflow-source/.github" "$workflow_root/.github"' in install_step
     assert 'control_root="$GITHUB_WORKSPACE/.deploy-control"' in install_step
     assert 'control_scripts="$control_root/backend/scripts"' in install_step
     assert 'cp -a "$RUNNER_TEMP/backend-deploy-control-source/backend" "$control_root/backend"' in install_step
+    assert 'cp -a "$RUNNER_TEMP/backend-deploy-control-source/.github" "$control_root/.github"' in install_step
     assert 'DEPLOY_CONTROL_SCRIPTS=%s' in install_step
     assert 'DEPLOY_WORKFLOW_ROOT=%s' in install_step
     assert '>> "$GITHUB_ENV"' in install_step

@@ -43,6 +43,9 @@ class _DocReference:
     def update(self, data):
         self._collection._docs.setdefault(self.id, {}).update(data)
 
+    def delete(self):
+        self._collection._docs.pop(self.id, None)
+
 
 class _Query:
     def __init__(self, collection, field, expected):
@@ -169,6 +172,42 @@ def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
     assert auth_context['scopes'] == ['conversations.read', 'memories.read']
 
 
+def test_consent_transaction_creates_grant_and_code_together():
+    uid = 'atomic-consent-user'
+    scopes = ['memories.read']
+
+    grant, code = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        uid,
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256('c' * 64),
+    )
+
+    assert grant['uid'] == uid
+    code_doc = mcp_oauth.db.collection('mcp_oauth_authorization_codes').document(mcp_oauth.hash_secret(code)).get()
+    assert code_doc.to_dict()['grant_id'] == grant['id']
+
+
+def test_consent_transaction_rejects_deletion_marker_without_oauth_writes():
+    uid = 'deleting-consent-user'
+    mcp_oauth.db.collection('account_deletions').document(uid).set({'wipe_status': 'pending'})
+
+    with pytest.raises(mcp_oauth.AccountDeletionAccessBlocked):
+        mcp_oauth.create_grant_and_authorization_code_if_allowed(
+            uid,
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            mcp_oauth.MCP_RESOURCE_URL,
+            ['memories.read'],
+            mcp_oauth.pkce_s256('d' * 64),
+        )
+
+    assert all(doc['uid'] != uid for doc in mcp_oauth.db.collection('mcp_oauth_grants')._docs.values())
+    assert all(doc['uid'] != uid for doc in mcp_oauth.db.collection('mcp_oauth_authorization_codes')._docs.values())
+
+
 def test_public_client_uses_pkce_without_shared_secret():
     client = mcp_oauth.get_client('omi-mcp-public')
     assert client['token_endpoint_auth_method'] == 'none'
@@ -200,6 +239,36 @@ def test_public_client_uses_pkce_without_shared_secret():
     assert (
         mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)['uid'] == 'user-public'
     )
+
+
+def test_delete_user_oauth_credentials_removes_unconsumed_authorization_codes():
+    grant = mcp_oauth.create_or_update_grant(
+        'deleted-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    mcp_oauth.issue_authorization_code(
+        'deleted-user',
+        grant['id'],
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        ['memories.read'],
+        mcp_oauth.pkce_s256('d' * 64),
+    )
+    mcp_oauth.issue_authorization_code(
+        'other-user',
+        'other-grant',
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        ['memories.read'],
+        mcp_oauth.pkce_s256('e' * 64),
+    )
+
+    mcp_oauth.delete_user_oauth_credentials('deleted-user')
+
+    codes = mcp_oauth.db.collection('mcp_oauth_authorization_codes')._docs
+    assert all(code['uid'] != 'deleted-user' for code in codes.values())
+    assert any(code['uid'] == 'other-user' for code in codes.values())
 
 
 def test_chatgpt_prod_client_uses_public_pkce_exchange(monkeypatch):

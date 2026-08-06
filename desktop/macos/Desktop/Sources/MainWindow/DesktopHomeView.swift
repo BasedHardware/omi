@@ -1778,11 +1778,10 @@ private struct PageContentView: View {
           taskChatCoordinator: viewModelContainer.taskChatCoordinator,
           selectedIndex: $selectedTabIndex)
       case 1:
-        MemoryHubPage(
+        ConversationsDestinationView(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          memoriesViewModel: viewModelContainer.memoriesViewModel,
-          destinationRawValue: $memoryDestinationRawValue
+          memoryDestinationRawValue: $memoryDestinationRawValue
         )
       case 2:
         ChatPage(

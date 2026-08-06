@@ -13,17 +13,69 @@ import logging
 import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
+from database import users as users_db
+from database.account_deletion_policy import account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
-from utils.executors import critical_executor, run_blocking
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
 
 WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
+WS_AUTH_CODE_ACCOUNT_DELETION = 4005
+
+
+def get_user_deletion_wipe_status(uid: str) -> str | None:
+    """Read the durable deletion authority without a cache or fail-open shim."""
+    return cast(Callable[[str], str | None], users_db.get_user_deletion_wipe_status)(uid)
+
+
+def _account_deletion_status(uid: str) -> str | None:
+    """Read the uncached deletion authority, failing closed if it is unavailable."""
+    try:
+        return get_user_deletion_wipe_status(uid)
+    except Exception as error:
+        logger.error(
+            'Account-deletion auth fence unavailable for uid=%s error_type=%s',
+            uid,
+            type(error).__name__,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+        ) from error
+
+
+def enforce_account_deletion_http_access(uid: str) -> None:
+    status = _account_deletion_status(uid)
+    if account_deletion_blocks_access(status):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'code': 'account_deletion_in_progress',
+                'status': status,
+                'retryable': False,
+            },
+        )
+
+
+def enforce_account_deletion_ws_access(uid: str) -> None:
+    try:
+        status = _account_deletion_status(uid)
+    except HTTPException as error:
+        raise WebSocketException(
+            code=1013,
+            reason='Account deletion state unavailable; retry later',
+        ) from error
+    if account_deletion_blocks_access(status):
+        raise WebSocketException(
+            code=WS_AUTH_CODE_ACCOUNT_DELETION,
+            reason='Account deletion in progress',
+        )
 
 
 def get_user(uid: str) -> Any:
@@ -76,7 +128,11 @@ def verify_token(token: str) -> str:
         # main.py's firebase_admin.initialize_app branches). This keeps the
         # bypass inert the moment real credentials are present, without
         # requiring test paths to change what they already do.
-        no_real_credential = not (os.getenv('SERVICE_ACCOUNT_JSON') or os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
+        no_real_credential = not (
+            os.getenv('SERVICE_ACCOUNT_JSON')
+            or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+        )
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise
@@ -112,6 +168,8 @@ def get_current_user_uid(
     except InvalidIdTokenError as e:
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
+
+    enforce_account_deletion_http_access(uid)
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -170,6 +228,8 @@ def get_current_user_uid_no_byok_validation(
         logger.error(e)
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    enforce_account_deletion_http_access(uid)
+
     try:
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
@@ -213,6 +273,8 @@ def _verify_ws_auth(authorization: str) -> str:
         close_code, reason = _get_ws_auth_close(e)
         logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
         raise WebSocketException(code=close_code, reason=reason)
+    except WebSocketException:
+        raise
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
@@ -256,6 +318,7 @@ async def get_current_user_uid_ws_listen(
     Firestore calls are offloaded via ``run_blocking``.
     """
     uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
+    await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
@@ -275,6 +338,7 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
     Use for WebSocket endpoints that need retry-storm protection.
     """
     uid = _verify_ws_auth(authorization)
+    enforce_account_deletion_ws_access(uid)
 
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
@@ -289,7 +353,7 @@ def get_current_user_uid_ws(authorization: str = Header(None)):
     return uid
 
 
-def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
+def _verify_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     """
     Get user uid from WebSocket first-message auth.
 
@@ -324,6 +388,13 @@ def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
         raise ValueError("Missing token")
 
     return verify_token(token)
+
+
+async def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
+    """Authenticate first-message WebSocket clients without blocking the ASGI loop."""
+    uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
+    await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    return uid
 
 
 cached: Dict[str, Any] = {}

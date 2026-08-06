@@ -214,8 +214,8 @@ class AppState: ObservableObject {
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
   @Published var transcriptionServiceError: String?
-  /// Monotonically increasing counter — incremented each time a new recording starts.
-  /// Used to detect if a new recording began during the post-stop force-process delay.
+  /// Monotonically increasing counter — incremented for each recording start or stop request.
+  /// Used to prevent asynchronous work from mutating a newer recording decision.
   var recordingGeneration: UInt64 = 0
   @Published var isSavingConversation = false
   // currentTranscript is internal-only (not observed by views), so no @Published needed

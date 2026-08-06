@@ -18,6 +18,12 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY --from=builder /opt/venv /opt/venv
+COPY backend/database/__init__.py ./database/__init__.py
+COPY backend/database/_client.py ./database/_client.py
+COPY backend/database/account_deletion_policy.py ./database/account_deletion_policy.py
+COPY backend/database/document_ids.py ./database/document_ids.py
+COPY backend/database/google_credentials.py ./database/google_credentials.py
+COPY backend/services/agent_vm_lifecycle.py ./services/agent_vm_lifecycle.py
 COPY backend/utils/__init__.py ./utils/__init__.py
 COPY backend/utils/executors.py ./utils/executors.py
 COPY backend/agent-proxy/resilience.py .

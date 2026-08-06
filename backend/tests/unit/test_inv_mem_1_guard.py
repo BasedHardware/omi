@@ -54,6 +54,9 @@ _ALLOWED_MEMORY_COLLECTIONS_PROPERTIES = frozenset(
         "memory_control_state",
         # Migration checkpoint under memory_control (not a product-memory tier store).
         "legacy_canonical_backfill_checkpoint",
+        # Operational graph-enrichment sweep cursor under memory_control; it
+        # stores no product-memory records or source content.
+        "historical_graph_enrichment_cursor",
         "memory_apply_control_state",
         "memory_lineage",
         "memory_evidence",

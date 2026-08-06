@@ -104,13 +104,15 @@ def stage_env_path(stage: str, base: Path | None = None) -> Path:
     return root / stage_env_filename(stage)
 
 
-_ADC_ENV_KEYS = frozenset({"GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"})
+_AUTH_CREDENTIAL_ENV_KEYS = frozenset(
+    {"FIREBASE_AUTH_CREDENTIALS_PATH", "GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"}
+)
 
 
 def _skip_env_key_for_auth_emulator(key: str) -> bool:
-    """Do not load production ADC when the Auth emulator is active."""
+    """Do not load real Firebase credentials when the Auth emulator is active."""
 
-    if key not in _ADC_ENV_KEYS:
+    if key not in _AUTH_CREDENTIAL_ENV_KEYS:
         return False
     return bool(os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip())
 
@@ -173,5 +175,9 @@ def load_backend_env(base: Path | None = None) -> list[Path]:
         loaded.append(personal)
     elif stage is None:
         load_dotenv(personal)
+
+    if os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip():
+        for credential_key in _AUTH_CREDENTIAL_ENV_KEYS:
+            os.environ.pop(credential_key, None)
 
     return loaded
