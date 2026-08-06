@@ -532,6 +532,16 @@ final class OmiSoundController {
   /// The bed's own control. Persisted, because a user who mutes the music means it.
   static let musicEnabledDefaultsKey = "omi.onboarding.sound.musicEnabled"
 
+  /// The app's mute for one-shot cues, wherever they are fired from. Persisted, and surfaced as the
+  /// Settings ▸ General "Interface Sounds" row once the app is past onboarding.
+  ///
+  /// It lives here rather than in `OmiUISoundService` so that it is the one mute: onboarding fires
+  /// cues straight through this controller, and a user who turned Omi's sounds off and then ran
+  /// onboarding again would otherwise be told the switch had not been honoured. The bed keeps its
+  /// own control above — it is content with a visible toggle of its own inside the cinematic, and a
+  /// second switch silently overriding that one would make that toggle look broken.
+  static let effectsEnabledDefaultsKey = "omi.sound.effectsEnabled"
+
   private let output: OmiSoundOutput
   private let locator: OmiSoundAssetLocator
   private let systemUISoundsEnabled: () -> Bool
@@ -552,6 +562,15 @@ final class OmiSoundController {
     self.defaults = defaults
     // Absent means on: an install that has never seen the control still gets the bed.
     self.isMusicEnabled = defaults.object(forKey: Self.musicEnabledDefaultsKey) as? Bool ?? true
+    self.areEffectsEnabled = defaults.object(forKey: Self.effectsEnabledDefaultsKey) as? Bool ?? true
+  }
+
+  /// The app's mute. Off means no cue reaches the audio graph, chrome or content.
+  var areEffectsEnabled: Bool {
+    didSet {
+      guard areEffectsEnabled != oldValue else { return }
+      defaults.set(areEffectsEnabled, forKey: Self.effectsEnabledDefaultsKey)
+    }
   }
 
   /// The bed is content, not chrome, so this — and never the system UI-sound setting — is what
@@ -587,9 +606,10 @@ final class OmiSoundController {
   /// Which assets `prepare()` actually resolved. Read by tests; the app never branches on it.
   var availableAssets: Set<OmiSoundAsset> { available }
 
-  /// Whether `effect` is allowed to be heard right now. Chrome answers to the system setting;
-  /// everything else always plays.
+  /// Whether `effect` is allowed to be heard right now. The app's own mute silences everything;
+  /// past it, chrome answers to the system setting and content always plays.
   func allows(_ effect: OmiSoundEffect) -> Bool {
+    guard areEffectsEnabled else { return false }
     guard effect.isChrome else { return true }
     return systemUISoundsEnabled()
   }

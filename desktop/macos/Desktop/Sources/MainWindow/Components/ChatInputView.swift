@@ -270,6 +270,9 @@ struct ChatInputView: View {
     guard canSend else { return }
     guard !isSending else { return }
     let text = inputText
+    // Past both guards, so this is a message that is actually going — the return key and the send
+    // button both arrive here, and a blocked submit stays silent.
+    OmiUISound.play(.commit)
     onSend(text)
   }
 

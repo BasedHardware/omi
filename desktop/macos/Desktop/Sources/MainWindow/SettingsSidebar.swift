@@ -37,6 +37,10 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["floating bar", "chat bar"], section: .general, icon: "gearshape",
       settingId: "general.askomi"),
     SettingsSearchItem(
+      name: "Interface Sounds", subtitle: "Clicks and chimes as you move around Omi",
+      keywords: ["sound", "sounds", "audio", "click", "chime", "mute", "silence", "effects"],
+      section: .general, icon: "speaker.wave.2", settingId: "general.interfacesounds"),
+    SettingsSearchItem(
       name: "Font Size", subtitle: "Adjust text size across the app",
       keywords: ["text size", "zoom", "scale", "reset"], section: .general, icon: "gearshape",
       settingId: "general.fontsize"),

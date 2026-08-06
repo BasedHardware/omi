@@ -237,6 +237,11 @@ extension SettingsContentView {
         }
       }
 
+      // Interface Sounds
+      settingsCard(settingId: "general.interfacesounds") {
+        InterfaceSoundsRow()
+      }
+
       // Font Size
       settingsCard(settingId: "general.fontsize") {
         VStack(spacing: OmiSpacing.md) {
@@ -305,4 +310,52 @@ extension SettingsContentView {
     }
   }
 
+}
+
+/// The app's mute for its own interface sounds.
+///
+/// Its own view, and not another `@State` on `SettingsContentView`, because the value it edits does
+/// not live in this pane: `OmiUISound.isEnabled` is persisted by the sound controller, so the row
+/// only needs somewhere local to hold the last read for SwiftUI to diff against.
+///
+/// Deliberately separate from macOS's "Play user interface sound effects": that switch governs the
+/// clicks and swooshes, and this one governs everything Omi plays, including the completion chimes
+/// the system switch has no say over.
+private struct InterfaceSoundsRow: View {
+  @State private var isEnabled = OmiUISound.isEnabled
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      SettingsIconTile(symbol: "speaker.wave.2")
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Interface Sounds")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Text("Clicks and chimes as you move around Omi.")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer()
+
+      Toggle(
+        "",
+        isOn: Binding(
+          get: { isEnabled },
+          set: { newValue in
+            isEnabled = newValue
+            OmiUISound.isEnabled = newValue
+            // The confirmation is the point: turning sounds on should be audible immediately, and
+            // turning them off cannot be — `play` is already muted by the line above.
+            OmiUISound.play(.commit)
+          }
+        )
+      )
+      .toggleStyle(OmiToggleStyle())
+      .labelsHidden()
+      .frame(width: 36, height: 20)
+    }
+  }
 }

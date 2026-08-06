@@ -4,6 +4,13 @@ import Combine
 import SwiftUI
 @preconcurrency import UserNotifications
 
+/// How many permissions the last refresh found granted, so the next one can tell a grant from a
+/// re-read. `nil` until the first refresh establishes that baseline.
+///
+/// File scope rather than a stored property because `AppState` is a singleton and this extension
+/// cannot add storage to it; the value is meaningful only to `notePermissionGrants` below.
+@MainActor private var lastGrantedPermissionCount: Int?
+
 /// The AppKit lookups the accessibility probe depends on, read once on the main
 /// actor and handed to the probe as plain values so the expensive cross-process
 /// AX round trips can run off it.
@@ -94,8 +101,32 @@ extension AppState {
 
   // MARK: - Permission Status Checks
 
+  /// Permissions this refresh reads synchronously. Notification authorisation is deliberately
+  /// absent: it resolves through a completion handler, so it is never settled by the time the
+  /// refresh returns and would read as a grant arriving on the following refresh instead.
+  private var grantedPermissionCount: Int {
+    [
+      hasScreenRecordingPermission, hasMicrophonePermission, hasSystemAudioPermission,
+      hasAutomationPermission, hasAccessibilityPermission, hasFullDiskAccess,
+    ].filter { $0 }.count
+  }
+
+  /// Sounds a permission actually landing — the user left for System Settings, granted something,
+  /// and came back, which is what drives this refresh.
+  ///
+  /// The first refresh only records a baseline. At launch every flag is still at its `false`
+  /// default, so the jump to the machine's real state is a read rather than a grant, and chiming at
+  /// it would mean chiming on every cold start.
+  private func notePermissionGrants() {
+    let granted = grantedPermissionCount
+    defer { lastGrantedPermissionCount = granted }
+    guard let previous = lastGrantedPermissionCount, granted > previous else { return }
+    OmiUISound.play(.complete)
+  }
+
   /// Check and update all permission states
   func checkAllPermissions() {
+    defer { notePermissionGrants() }
     checkNotificationPermission()
     checkScreenRecordingPermission()
     checkMicrophonePermission()

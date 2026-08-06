@@ -37,6 +37,9 @@ final class WhatsNewToast: ObservableObject {
   }
 
   func present(version: String) {
+    // The card slides in from the corner unasked; the swoosh is what makes it read as arriving
+    // rather than as having been there. Suppressed with the slide itself under Reduce Motion.
+    OmiUISound.play(.reveal)
     self.version = version
   }
 

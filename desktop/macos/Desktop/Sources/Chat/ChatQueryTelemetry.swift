@@ -591,6 +591,9 @@ enum ChatVisibleTurnCompletion {
   ) async -> Bool {
     guard lifecycle.complete() else { return false }
     guard telemetryAttempt.complete(metrics: metrics) else { return false }
+    // The answer is on screen and the lifecycle guard above has already refused re-entry, so this
+    // is the one moment per turn at which the turn is visibly done.
+    OmiUISound.play(.complete)
     afterTerminal()
     return await journalCommit()
   }

@@ -92,10 +92,7 @@ struct DesktopTopBar: View {
       }
     } else {
       Button {
-        dismissMemoryDropdown()
-        OmiMotion.withGated(.easeOut(duration: 0.08)) {
-          selectedIndex = item.index
-        }
+        navigate(to: item.index)
       } label: {
         Label(item.title, systemImage: item.icon)
       }
@@ -107,10 +104,7 @@ struct DesktopTopBar: View {
   private var settingsButton: some View {
     let isActive = selectedIndex == SidebarNavItem.settings.rawValue
     return Button {
-      dismissMemoryDropdown()
-      OmiMotion.withGated(.easeOut(duration: 0.08)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      navigate(to: SidebarNavItem.settings.rawValue)
     } label: {
       Image(systemName: "gearshape")
         .scaledFont(size: OmiType.body, weight: .semibold)
@@ -129,8 +123,7 @@ struct DesktopTopBar: View {
         } else {
           let badgeCount = newCount(for: item)
           Button {
-            dismissMemoryDropdown()
-            OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
+            navigate(to: item.index)
           } label: {
             TopNavigationPill(
               icon: item.icon,
@@ -152,11 +145,17 @@ struct DesktopTopBar: View {
   }
 
   private func selectMemoryDestination(_ destination: MemoryHubDestination) {
-    dismissMemoryDropdown()
     memoryDestinationRawValue = destination.rawValue
-    OmiMotion.withGated(.easeOut(duration: 0.08)) {
-      selectedIndex = SidebarNavItem.conversations.rawValue
-    }
+    navigate(to: SidebarNavItem.conversations.rawValue)
+  }
+
+  /// Every nav press on this bar: the pills, the Memory dropdown's destinations, and the settings
+  /// gear. They were four copies of the same two lines; being one place is also what makes the cue
+  /// fire once per press instead of once per call site that remembered to fire it.
+  private func navigate(to index: Int) {
+    dismissMemoryDropdown()
+    OmiUISound.play(.navigate)
+    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
   }
 
   private func memoryNavigationItem(_ item: TopNavigationItem) -> some View {
