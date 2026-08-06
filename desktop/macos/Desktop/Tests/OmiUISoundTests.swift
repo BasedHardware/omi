@@ -47,25 +47,32 @@ private final class ManualClock: @unchecked Sendable {
 /// The class itself is nonisolated so `setUpWithError`/`tearDownWithError` stay on the hooks' own
 /// isolation; only the tests that touch the main-actor types hop.
 final class OmiUISoundTests: XCTestCase {
-  private var scratch: URL!
-  private var soundsDirectory: URL!
-  private var defaultsSuite: String!
-  private var defaults: UserDefaults!
+  // XCTest builds a fresh instance per test method, so initializing at the declaration gives each
+  // test its own scratch directory and defaults suite without a mutable, implicitly-unwrapped
+  // property that every test body would then have to trust was set.
+  private let scratch = FileManager.default.temporaryDirectory
+    .appendingPathComponent("omi-ui-sound-\(UUID().uuidString)", isDirectory: true)
+  private var soundsDirectory: URL { scratch.appendingPathComponent("Sounds", isDirectory: true) }
+  private let defaultsSuite = "omi.uisound.tests.\(UUID().uuidString)"
+
+  /// `UserDefaults(suiteName:)` is failable, and the tempting `?? .standard` would quietly write
+  /// this suite's test state into the real defaults domain. Fail the test instead.
+  private lazy var defaults: UserDefaults = {
+    guard let suite = UserDefaults(suiteName: defaultsSuite) else {
+      XCTFail("could not create UserDefaults suite \(defaultsSuite)")
+      return .standard
+    }
+    return suite
+  }()
 
   override func setUpWithError() throws {
     try super.setUpWithError()
-    scratch = FileManager.default.temporaryDirectory
-      .appendingPathComponent("omi-ui-sound-\(UUID().uuidString)", isDirectory: true)
-    soundsDirectory = scratch.appendingPathComponent("Sounds", isDirectory: true)
     try FileManager.default.createDirectory(at: soundsDirectory, withIntermediateDirectories: true)
-
-    defaultsSuite = "omi.uisound.tests.\(UUID().uuidString)"
-    defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsSuite))
   }
 
   override func tearDownWithError() throws {
-    if let scratch { try? FileManager.default.removeItem(at: scratch) }
-    if let defaultsSuite { UserDefaults.standard.removePersistentDomain(forName: defaultsSuite) }
+    try? FileManager.default.removeItem(at: scratch)
+    UserDefaults.standard.removePersistentDomain(forName: defaultsSuite)
     try super.tearDownWithError()
   }
 

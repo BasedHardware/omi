@@ -5,11 +5,13 @@ description: Top navigation bar smoke — verify all 4 tabs + Settings gear + Re
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
-  - desktop/macos/Desktop/Sources/OmiUISound.swift
+  - desktop/macos/Desktop/Sources/Sound/OmiUISound.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
   - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
 preconditions:
   - auth_ready
@@ -17,18 +19,17 @@ preconditions:
 steps:
   - id: S1
     name: Verify Home tab loads
-    do: "Verify the app is on the Home tab. Top nav bar should show 4 buttons: Home, Memory, Tasks, Apps. Right side should show Capture status, Listening status, and Settings gear icon. Home content should include chat input area and insight cards."
+    do: "Verify the app is on the search surface. The top bar shows the Omi mark, Library and Apps; the right cluster is three wordless icons with state dots (microphone, screen capture, settings). Home content is a query bar above a separate results panel."
     expect:
       interactive_count: { min: 8 }
       text_visible:
-        - Home
-        - Memory
-        - Tasks
+        - Omi
+        - Library
         - Apps
 
   - id: S2
     name: Navigate to Memory
-    do: "Click the Memory button in the top nav bar (agent-swift find text 'Memory' click). Verify Memory page loads with 3 sub-tabs: Memories, Conversations, Brain Map."
+    do: "Click the Library button in the top nav bar (agent-swift find text 'Library' click). Verify the Memory hub loads with 3 sub-tabs: Memories, Conversations, Brain Map."
     expect:
       text_visible:
         - Memories
