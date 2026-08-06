@@ -130,6 +130,84 @@ void main() {
       expect(harness.drainPasses, 1);
     });
 
+    test('screen-lock grace runs cloud drain while backgrounded without BLE discover (#7221)', () async {
+      final harness = _TransferHarness(cloudGraceDrain: true);
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      await harness.coordinator.wake(WakeTrigger.screenLockedGrace);
+      await _settle();
+
+      expect(harness.reconcilePasses, greaterThanOrEqualTo(1));
+      expect(harness.discoveryPasses, 0);
+      expect(harness.cloudGraceDrainPasses, 1);
+      expect(harness.drainPasses, 0);
+    });
+
+    test('screen-lock grace is a no-op when no cloud grace drain is configured', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setForeground(false);
+      await harness.coordinator.wake(WakeTrigger.screenLockedGrace);
+      await _settle();
+
+      expect(harness.reconcilePasses, greaterThanOrEqualTo(1));
+      expect(harness.drainPasses, 0);
+      expect(harness.cloudGraceDrainPasses, 0);
+      expect(harness.discoveryPasses, 0);
+    });
+
+    test('pending foregrounded wake beats screen-lock grace so unlock still discovers (#7221)', () async {
+      final harness = _TransferHarness(cloudGraceDrain: true);
+      addTearDown(harness.dispose);
+      final reconcileGate = Completer<void>();
+      harness.reconcileGate = reconcileGate;
+
+      harness.coordinator.setForeground(true);
+      final firstWake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      expect(harness.reconcilePasses, 1);
+
+      // While the first pass is gated, queue grace then unlock/foreground.
+      harness.coordinator.setForeground(false);
+      harness.coordinator.wake(WakeTrigger.screenLockedGrace);
+      harness.coordinator.setForeground(true);
+      harness.coordinator.wake(WakeTrigger.foregrounded);
+
+      reconcileGate.complete();
+      await firstWake;
+      await _settle();
+
+      // Second pass must be the full foreground transfer (BLE discover + drain),
+      // not another cloud-only grace pass.
+      expect(harness.discoveryPasses, greaterThanOrEqualTo(1));
+      expect(harness.drainPasses, greaterThanOrEqualTo(1));
+    });
+
+    test('pending deviceConnected wake beats screen-lock grace (#7221)', () async {
+      final harness = _TransferHarness(cloudGraceDrain: true);
+      addTearDown(harness.dispose);
+      final reconcileGate = Completer<void>();
+      harness.reconcileGate = reconcileGate;
+
+      harness.coordinator.setForeground(true);
+      final firstWake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+
+      harness.coordinator.setForeground(false);
+      harness.coordinator.wake(WakeTrigger.screenLockedGrace);
+      harness.coordinator.setForeground(true);
+      harness.coordinator.wake(WakeTrigger.deviceConnected);
+
+      reconcileGate.complete();
+      await firstWake;
+      await _settle();
+
+      expect(harness.discoveryPasses, greaterThanOrEqualTo(1));
+      expect(harness.drainPasses, greaterThanOrEqualTo(1));
+    });
+
     test('startup resumes a pending backlog once without loss or duplication', () async {
       final sharedBacklog = <String>['pending-wal'];
       final drainedWalIds = <String>[];
@@ -208,8 +286,12 @@ class _ScheduledCooldown {
 }
 
 class _TransferHarness {
-  _TransferHarness({bool autoUploadEnabled = true, List<String>? backlog, List<String>? drainedWalIds})
-      : _autoUploadEnabled = autoUploadEnabled,
+  _TransferHarness({
+    bool autoUploadEnabled = true,
+    List<String>? backlog,
+    List<String>? drainedWalIds,
+    bool cloudGraceDrain = false,
+  })  : _autoUploadEnabled = autoUploadEnabled,
         backlog = backlog ?? <String>['wal-1'],
         drainedWalIds = drainedWalIds ?? <String>[] {
     coordinator = RecordingTransferCoordinator(
@@ -217,6 +299,7 @@ class _TransferHarness {
       discover: _discover,
       refreshPending: _refreshPending,
       drain: _drain,
+      cloudGraceDrain: cloudGraceDrain ? _cloudGraceDrain : null,
       autoUploadEnabled: () => _autoUploadEnabled,
       connectivityChanges: connectivity.stream,
       initiallyConnected: true,
@@ -245,6 +328,7 @@ class _TransferHarness {
   int discoveryPasses = 0;
   int pendingRefreshes = 0;
   int drainPasses = 0;
+  int cloudGraceDrainPasses = 0;
   int _concurrentDrains = 0;
   int maximumConcurrentDrains = 0;
 
@@ -296,6 +380,15 @@ class _TransferHarness {
     } finally {
       _concurrentDrains--;
     }
+  }
+
+  Future<RecordingTransferDrainResult> _cloudGraceDrain() async {
+    cloudGraceDrainPasses++;
+    if (backlog.isEmpty) return const RecordingTransferDrainResult.skipped();
+    // Bounded grace: clear at most one backlog item to mirror maxBatches=1 in tests.
+    drainedWalIds.add(backlog.removeAt(0));
+    walState = 'uploaded';
+    return const RecordingTransferDrainResult(attempted: true, failed: false, needsReconciliation: false);
   }
 
   Future<void> dispose() async {

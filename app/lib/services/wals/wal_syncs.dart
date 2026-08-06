@@ -246,6 +246,13 @@ class WalSyncs implements IWalSync {
     await _ringSync.stop();
   }
 
+  /// Phone-disk uploads only — no BLE device drain phases (#7221 screen-lock grace).
+  Future<SyncLocalFilesResponse?> syncLocalUploadsOnly({IWalSyncProgressListener? progress, int? maxBatches}) async {
+    _isCancelled = false;
+    progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
+    return _phoneSync.syncAll(progress: progress, maxBatches: maxBatches);
+  }
+
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     _isCancelled = false;

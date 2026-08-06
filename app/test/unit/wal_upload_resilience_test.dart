@@ -474,4 +474,45 @@ void main() {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Screen-lock grace maxBatches must count every attempt (#7221 / cubic P1).
+  // -------------------------------------------------------------------------
+
+  group('maxBatches bounds attempts including failures', () {
+    test('failed uploads still consume the maxBatches budget', () async {
+      var uploadAttempts = 0;
+      sync = LocalWalSyncImpl(
+        listener,
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false}) async {
+            uploadAttempts++;
+            throw StateError('deterministic grace-pass failure');
+          },
+          fairUseStatusLoader: () async => {'stage': 'none'},
+        ),
+      );
+
+      // Distinct conversationIds → one WAL per batch so attempt count is visible.
+      final wals = <Wal>[];
+      for (var i = 0; i < 5; i++) {
+        final filename = 'grace_fail_$i.bin';
+        await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+        wals.add(_makeWal(timerStart: 9000 + i, filePath: filename)..conversationId = 'conv-$i');
+      }
+      sync.testWals = wals;
+
+      final result = await sync.syncAll(maxBatches: 3);
+
+      expect(uploadAttempts, 3, reason: 'grace budget must stop after 3 attempts even when every upload fails');
+      expect(result?.localUploadFailures, 3);
+      expect(wals.where((w) => w.status == WalStatus.miss).length, 5, reason: 'failures leave WALs retryable');
+      expect(
+        wals.where((w) => !w.isSyncing).length,
+        5,
+        reason: 'isSyncing cleared on every attempted WAL',
+      );
+    });
+  });
 }
