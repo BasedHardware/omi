@@ -109,6 +109,18 @@ def test_trusted_account_generation_reads_independent_memory_state_head_path(mon
     assert store.reads == ["users/u1/memory_state/head"]
 
 
+def test_trusted_account_generation_can_join_the_callers_store_transaction():
+    # The seam read joins a caller's transaction via the neutral ``tx`` handle (tx.get),
+    # so the trusted head and a control write can be fenced in one commit (ADR-0028). No
+    # ``document_store`` routing is installed, so passing ``tx`` is what makes the read resolve.
+    store = FakeDocumentStore()
+    store.set("users/u1/memory_state/head", _head_doc(account_generation=8))
+
+    result = store.run_transaction(lambda tx: read_memory_v3_trusted_account_generation(uid="u1", tx=tx))
+
+    assert result.account_generation == 8
+
+
 @pytest.mark.parametrize(
     "docs, reason",
     [

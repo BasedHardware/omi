@@ -8,7 +8,7 @@ added in the post-disclosure hardening pass:
   `Bearer <ADMIN_KEY><uid>` format) keep working unchanged.
 - LOCAL_DEVELOPMENT=true only falls back to uid '123' on an invalid Firebase
   token when no real Firebase credential (SERVICE_ACCOUNT_JSON /
-  GOOGLE_APPLICATION_CREDENTIALS) is configured -- so a misconfigured prod
+  GOOGLE_APPLICATION_CREDENTIALS / FIREBASE_AUTH_CREDENTIALS_PATH) is configured -- so a misconfigured prod
   deployment that accidentally sets LOCAL_DEVELOPMENT=true can't silently
   grant unauthenticated access.
 
@@ -110,6 +110,7 @@ def _clear_local_dev_env(monkeypatch):
     monkeypatch.delenv('LOCAL_DEVELOPMENT', raising=False)
     monkeypatch.delenv('SERVICE_ACCOUNT_JSON', raising=False)
     monkeypatch.delenv('GOOGLE_APPLICATION_CREDENTIALS', raising=False)
+    monkeypatch.delenv('FIREBASE_AUTH_CREDENTIALS_PATH', raising=False)
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +185,17 @@ def test_local_development_inert_when_google_application_credentials_is_set(monk
     monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
     monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/tmp/fake-service-account.json')
 
+    with pytest.raises(auth_errors.InvalidToken):
+        verify_token('any-invalid-token')
+
+
+def test_local_development_inert_when_firebase_auth_credentials_path_is_set(monkeypatch):
+    _clear_admin_env(monkeypatch)
+    _clear_local_dev_env(monkeypatch)
+    monkeypatch.setenv('LOCAL_DEVELOPMENT', 'true')
+    monkeypatch.setenv('FIREBASE_AUTH_CREDENTIALS_PATH', '/tmp/firebase-auth.json')
+
+    # The neutral auth port surfaces auth_errors.InvalidToken (ADR-0034), like every sibling here.
     with pytest.raises(auth_errors.InvalidToken):
         verify_token('any-invalid-token')
 

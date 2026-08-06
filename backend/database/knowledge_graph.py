@@ -5,7 +5,7 @@ import uuid
 from database.store import get_document_store
 
 from models.memory_contracts import deterministic_contract_id
-from models.memory_promotion import MemoryGraphAssertion
+from models.memory_promotion import PROMOTION_GRAPH_ASSERTION_V2_VERSION, MemoryGraphAssertion
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
 from .read_boundary import parse_snapshot_or_none
@@ -320,7 +320,16 @@ def assertion_matches_active_item(
         and item.get('ledger_sequence') == assertion.commit_sequence
         and item.get('subject_entity_id') == assertion.subject_entity_id
         and item.get('predicate') == assertion.predicate
-        and item.get('arguments') == assertion.arguments
+        # v1 graph assertions derive their endpoints from the canonical item's
+        # arguments, so retain the equality fence.  v2 assertions carry typed
+        # subject/object endpoints and immutable qualifiers in the assertion
+        # itself.  Older canonical rows can retain legacy item arguments after
+        # a v2 assertion is written; treating those as a v2 fence rejects a
+        # valid, otherwise fully revision- and ledger-fenced relation.
+        and (
+            assertion.schema_version == PROMOTION_GRAPH_ASSERTION_V2_VERSION
+            or item.get('arguments') == assertion.arguments
+        )
         and evidence_ids == assertion.evidence_ids
         and not sensitivity_labels.intersection(RESTRICTED_SENSITIVITY_LABELS)
         and not (isinstance(promotion, dict) and cast(Dict[str, Any], promotion).get('user_review') is False)

@@ -67,18 +67,26 @@ def _fail(*, uid: str, source_path: str, reason: V3AccountGenerationFailureReaso
     return V3TrustedAccountGenerationResult(uid=uid, source_path=source_path, read_error_reason=reason)
 
 
-def read_memory_v3_trusted_account_generation(*, uid: str) -> V3TrustedAccountGenerationResult:
+def read_memory_v3_trusted_account_generation(
+    *,
+    uid: str,
+    tx: Any | None = None,
+) -> V3TrustedAccountGenerationResult:
     """Read and validate the independent account-generation state-head source.
 
     Future `/v3` GET wiring must feed this returned generation into projection
     reads and then compare it with control/projection/cursor generations. It must
     not derive ``expected_account_generation`` from the projection state being
     verified or from the memory control decision document.
+
+    When ``tx`` (a neutral store transaction handle) is provided the read joins
+    that transaction, so a caller can fence the trusted head and its control
+    write in one commit; otherwise it is a plain point read through the port.
     """
 
     source_path = MemoryCollections(uid=uid).memory_state_head
     try:
-        data = _snapshot_data(document_store.get_document(source_path))
+        data = _snapshot_data(tx.get(source_path) if tx is not None else document_store.get_document(source_path))
     except Exception:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.READ_FAILED)
 

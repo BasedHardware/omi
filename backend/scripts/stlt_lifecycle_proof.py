@@ -148,7 +148,7 @@ def _ensure_user_control_only(db_client: Any, *, uid: str) -> list[str]:
     from scripts.enroll_canonical_memory_user import build_user_control_state
     from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
-    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid)
     if trusted.read_error_reason is not None or trusted.account_generation is None:
         raise RuntimeError(f"trusted_generation_unavailable:{trusted.read_error_reason or 'missing'}")
     generation = int(trusted.account_generation)

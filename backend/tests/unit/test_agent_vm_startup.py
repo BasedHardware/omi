@@ -15,6 +15,7 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
     for name, body in {
         "curl": "case \"$*\" in\n  *'/instance/attributes/auth-token'*) printf '%s\\n' omi-token ;;\n  *'/instance/service-accounts/default/token'*) printf '%s\\n' '{\"access_token\":\"metadata-token\"}' ;;\n  *'/project/project-id'*) printf '%s\\n' based-hardware-dev ;;\n  *'secretmanager.googleapis.com'*) printf '%s\\n' '{\"payload\":{\"data\":\"c2VjcmV0LXZhbHVl\"}}' ;;\n  *) exit 1 ;;\nesac\n",
         "docker": "printf 'docker %s\\n' \"$*\" >> \"$COMMAND_LOG\"\n",
+        "systemctl": "printf 'systemctl %s\\n' \"$*\" >> \"$COMMAND_LOG\"\ncase \"$1\" in\n  cat) exit 0 ;;\n  disable) exit 0 ;;\n  *) exit 1 ;;\nesac\n",
     }.items():
         path = bin_dir / name
         path.write_text(f"#!/bin/bash\n{body}", encoding="utf-8")
@@ -46,8 +47,12 @@ def test_startup_runs_the_published_python_runtime_with_instance_credentials(tmp
 
     commands = log.read_text(encoding="utf-8")
     assert "gcloud" not in commands
+    assert "systemctl cat omi-agent.service" in commands
+    assert "systemctl disable --now omi-agent.service" in commands
     assert "docker login --username oauth2accesstoken --password-stdin https://gcr.io" in commands
     assert "docker pull gcr.io/project/agent-vm:abcdef0" in commands
+    assert commands.index("docker container inspect omi-agent-vm") < commands.index("docker rm -f omi-agent-vm")
+    assert commands.index("docker rm -f omi-agent-vm") < commands.index("docker run --detach")
     assert "--env ANTHROPIC_API_KEY=secret-value" in commands
     assert "--env AUTH_TOKEN=omi-token" in commands
     assert "--env GEMINI_API_KEY=secret-value" in commands

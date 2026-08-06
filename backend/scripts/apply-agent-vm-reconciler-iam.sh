@@ -9,8 +9,13 @@ fi
 
 project="${AGENT_VM_RECONCILER_PROJECT:-}"
 bucket="${AGENT_VM_RECONCILER_BUCKET:-}"
-if [[ -z "$project" || -z "$bucket" ]]; then
-  echo "AGENT_VM_RECONCILER_PROJECT and AGENT_VM_RECONCILER_BUCKET are required." >&2
+deployer="${AGENT_VM_RECONCILER_DEPLOYER:-}"
+if [[ -z "$project" || -z "$bucket" || -z "$deployer" ]]; then
+  echo "AGENT_VM_RECONCILER_PROJECT, AGENT_VM_RECONCILER_BUCKET, and AGENT_VM_RECONCILER_DEPLOYER are required." >&2
+  exit 2
+fi
+if [[ ! "$deployer" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$ ]]; then
+  echo "AGENT_VM_RECONCILER_DEPLOYER must be a full Google service-account email." >&2
   exit 2
 fi
 
@@ -27,6 +32,11 @@ zone="us-central1-a"
 if ! gcloud iam service-accounts describe "$gsa" --project="$project" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$gsa_name" --project="$project" --display-name="Omi Agent VM reconciler"
 fi
+# The CI deploy identity needs actAs only on this dedicated runtime identity to
+# attach it to the Cloud Run Job. Do not grant Service Account User at project
+# scope: that would let the deployer impersonate unrelated service accounts.
+gcloud iam service-accounts add-iam-policy-binding "$gsa" --project="$project" \
+  --member="serviceAccount:${deployer}" --role=roles/iam.serviceAccountUser
 if gcloud iam roles describe "$role_id" --project="$project" >/dev/null 2>&1; then
   gcloud iam roles update "$role_id" --project="$project" --title="Omi Agent VM reconciler" --permissions="$permissions" --stage=GA
 else
@@ -49,8 +59,13 @@ gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
   --condition="title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
 gcloud projects add-iam-policy-binding "$project" \
-  --member="serviceAccount:${gsa}" --role="$operations_role"
-gcloud projects add-iam-policy-binding "$project" --member="serviceAccount:${gsa}" --role=roles/datastore.user
+  --member="serviceAccount:${gsa}" --role="$operations_role" --condition=None
+# Project IAM policies containing scoped bindings require unconditional bindings
+# to say so explicitly.  The operations and datastore roles are intentionally
+# unconditioned because neither permission supports the instance resource
+# condition used above.
+gcloud projects add-iam-policy-binding "$project" \
+  --member="serviceAccount:${gsa}" --role=roles/datastore.user --condition=None
 gcloud storage buckets add-iam-policy-binding "gs://${bucket}" --member="serviceAccount:${gsa}" --role=roles/storage.objectViewer
 
 bootstrap="omi-agent-vm-bootstrap@${project}.iam.gserviceaccount.com"

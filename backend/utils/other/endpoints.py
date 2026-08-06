@@ -129,7 +129,11 @@ def verify_token(token: str) -> str:
         # main.py's firebase_admin.initialize_app branches). This keeps the
         # bypass inert the moment real credentials are present, without
         # requiring test paths to change what they already do.
-        no_real_credential = not (os.getenv('SERVICE_ACCOUNT_JSON') or os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
+        no_real_credential = not (
+            os.getenv('SERVICE_ACCOUNT_JSON')
+            or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+        )
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise

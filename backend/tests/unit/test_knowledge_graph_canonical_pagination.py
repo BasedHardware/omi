@@ -225,13 +225,13 @@ def test_canonical_graph_filters_stale_ineligible_and_restricted_assertions(monk
     assert page.next_cursor is None
 
 
-def test_canonical_graph_separates_unlinked_canonical_memory_from_assertion_graph(monkeypatch):
-    # Boundary product change (#11089): a durable canonical memory WITH a graph assertion is a graph
-    # node/edge; one WITHOUT an assertion is surfaced separately as a catalog node. Exercised on the
-    # neutral store seam (no db_client, ADR-0028): linked seeded with its assertion, unlinked without
-    # (row second element None) — the boundary is the presence of a graph assertion, not graph_ready.
+def test_canonical_graph_returns_every_canonical_memory_as_a_catalog_record(monkeypatch):
+    # Product change #11089 (catalog every canonical atlas item), exercised on the neutral store seam
+    # (no db_client, ADR-0028): linked seeded with its assertion, unlinked without (row second element
+    # None). Every canonical memory surfaces as a catalog record; linked ones also become graph nodes.
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
     linked_item, linked_assertion = _assertion_and_item("linked", 1, updated_at=NOW.replace(minute=1))
+    linked_item._payload["content"] = "A durable canonical memory with a verified relationship."
     unlinked_updated_at = NOW.replace(minute=2)
     unlinked_item, _unlinked_assertion = _assertion_and_item("unlinked", 2, updated_at=unlinked_updated_at)
     unlinked_item._payload["content"] = "A durable canonical memory that has no inferred relationship yet."
@@ -251,6 +251,38 @@ def test_canonical_graph_separates_unlinked_canonical_memory_from_assertion_grap
             "memory_ids": ["unlinked"],
             "created_at": unlinked_updated_at,
             "updated_at": unlinked_updated_at,
+        },
+        {
+            "id": "memory:linked",
+            "label": "A durable canonical memory with a verified relationship.",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["linked"],
+            "created_at": NOW.replace(minute=1),
+            "updated_at": NOW.replace(minute=1),
+        },
+    ]
+
+
+def test_blank_canonical_content_remains_a_neutral_catalog_record(monkeypatch):
+    monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "canonical-graph-test-secret")
+    blank_updated_at = NOW.replace(minute=3)
+    blank_item, _blank_assertion = _assertion_and_item("blank", 1, updated_at=blank_updated_at)
+    blank_item._payload["content"] = " \n\t "
+    _fake_db_for([(blank_item, None)])
+
+    page = kg.get_canonical_knowledge_graph(UID, limit=10)
+
+    assert page.nodes == []
+    assert page.catalog_nodes == [
+        {
+            "id": "memory:blank",
+            "label": "Untitled canonical memory",
+            "node_type": "concept",
+            "aliases": [],
+            "memory_ids": ["blank"],
+            "created_at": blank_updated_at,
+            "updated_at": blank_updated_at,
         }
     ]
 

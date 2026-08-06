@@ -19,6 +19,22 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     return []
 
 
+def _step_block(text: str, name: str) -> str | None:
+    """Return one workflow step so its runtime contract cannot be borrowed by another."""
+    start = text.find(f"      - name: {name}\n")
+    if start < 0:
+        return None
+    # Steps are allowed to be unnamed (for example ``- uses:``), so stopping
+    # only at the next named step would let a later peer step satisfy this
+    # step's deployment contract. A step starts at this same indentation level
+    # regardless of which mapping key appears after the dash.
+    lines = text[start:].splitlines(keepends=True)
+    for index, line in enumerate(lines[1:], start=1):
+        if line.startswith("      - "):
+            return "".join(lines[:index])
+    return "".join(lines)
+
+
 def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str]:
     errors: list[str] = []
     retired_desktop_context = "./desktop/macos/" + "Backend" + "-Rust"
@@ -184,8 +200,10 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-            "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json",
+            "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+            "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
             "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
             "${{ secrets.GCP_SERVICE_ACCOUNT }}",
@@ -196,19 +214,47 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
-        if any(
-            "--remove-env-vars" in line and "GOOGLE_APPLICATION_CREDENTIALS" in line
-            for line in text.splitlines()
-        ):
-            errors.append(
-                f"{workflow}: mounted Firestore credentials must not be removed from the candidate environment"
-            )
+        desktop_block = _step_block(text, "Deploy desktop-backend to Cloud Run")
+        if desktop_block is not None:
+            for credential_env in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+                if any(line.strip().startswith(f"{credential_env}=") for line in desktop_block.splitlines()):
+                    errors.append(f"{workflow}: candidate must not set {credential_env} while using dev ADC")
+                if not any(
+                    "--remove-env-vars" in line and credential_env in line for line in desktop_block.splitlines()
+                ):
+                    errors.append(f"{workflow}: candidate must remove inherited {credential_env} for dev ADC")
         if "GCP_SERVICE_ACCOUNT:latest" in text or "GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT" in text:
             errors.append(
                 f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
             )
         if "FIREBASE_AUTH_PROJECT_ID: based-hardware-dev" in text or "FIREBASE_PROJECT_ID=based-hardware-dev" in text:
             errors.append(f"{workflow}: development serving must retain the production Firebase project")
+        dev_runtime_steps = (
+            "Deploy desktop-backend to Cloud Run",
+            "Deploy Agent VM reconciler Cloud Run Job",
+        )
+        dev_runtime_env = (
+            "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+            "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+            "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+            "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
+        )
+        for step in dev_runtime_steps:
+            block = _step_block(text, step)
+            if block is None:
+                errors.append(f"{workflow}: missing development runtime step {step!r}")
+                continue
+            for env_var in dev_runtime_env:
+                # Match complete YAML assignment lines. A comment or an
+                # unrelated value containing the text must never satisfy a
+                # required runtime project binding.
+                if not any(line.strip() == env_var for line in block.splitlines()):
+                    errors.append(f"{workflow}: {step} missing isolated development runtime env {env_var!r}")
+        if desktop_block is not None and not any(
+            line.strip() == "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json"
+            for line in desktop_block.splitlines()
+        ):
+            errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
     return errors
 
 

@@ -23,7 +23,17 @@ before acceptance, so an unaccepted candidate cannot escape the staged gate.
    Agent VM subnet and set `AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc`; it
    refuses to send the bearer token over a NAT address. A healthy
    stopped VM with no drift remains stopped so idle self-stop is preserved.
-4. Success records the observed release and clears the lease/drain fields by
+4. A provider-confirmed missing VM is recorded with `missingSince`. The
+   reconciler selects that terminal record independently of the rollout cohort
+   and deletes only its Firestore `agentVm` pointer after the configured grace
+   period, zero active session leases, no queued start/drain demand, and a
+   final account-deletion, `{vmName, zone, authToken}`, ready/stopped creation
+   outcome, owner-lease, and `missingSince` compare-and-swap all succeed. It
+   never creates a replacement;
+   the normal account provisioning path owns replacement creation. Development
+   uses a five-minute grace to exercise this exact cleanup path after each
+   merged auto-deploy. Production uses the same code with a 24-hour grace.
+5. Success records the observed release and clears the lease/drain fields by
    compare-and-swap. Three successful five-minute runs advance the rollout
    gate from sentinel (1%) to canary (5%), quarter (25%), and remainder (100%).
    Three failures quarantine that owner and stop it from being retried until an
@@ -31,8 +41,9 @@ before acceptance, so an unaccepted candidate cannot escape the staged gate.
 
 Legacy VMs with absent metadata are ordinary drift and are repaired on their
 first selected reconciliation. A missing GCE instance is recorded as `missing`
-and is left for the existing provisioning/reaper recovery path; the reconciler
-never creates a replacement without the account request path's owner claim.
+before it becomes eligible for the fenced terminal-cleanup path. The
+reconciler never creates a replacement without the account request path's
+owner claim.
 
 If the immutable `bootImage` differs from the actual boot disk source, the
 reconciler records `recreate_required` and does not stop, replace, or start the
@@ -41,9 +52,23 @@ path with the exact image reference before the fleet can converge.
 
 ## Installation order
 
-Deploy Agent Proxy with session leases first. Deploy the desktop backend and
-provision the dedicated job identity, deploy the job, then install the
-Scheduler trigger using the refuse-by-default helpers:
+Deploy Agent Proxy with session leases first. Before the desktop-backend
+deployment, provision the dedicated job identity and grant the environment's
+CI deploy service account permission to attach exactly that identity to the
+Cloud Run Job. The helper refuses to infer the deployer or grant project-wide
+Service Account User:
+
+```bash
+AGENT_VM_RECONCILER_IAM_APPLY=1 \
+AGENT_VM_RECONCILER_PROJECT=based-hardware-dev \
+AGENT_VM_RECONCILER_BUCKET=based-hardware-dev-agent \
+AGENT_VM_RECONCILER_DEPLOYER=local-development-joan@based-hardware-dev.iam.gserviceaccount.com \
+bash backend/scripts/apply-agent-vm-reconciler-iam.sh
+```
+
+Use the corresponding CI deploy service account and bucket in each environment.
+Then deploy the desktop backend (which creates or updates the Job), and install
+the Scheduler trigger only after the Agent Proxy lease check succeeds:
 
 ```bash
 AGENT_VM_RECONCILER_SCHEDULER_APPLY=1 \
@@ -59,8 +84,11 @@ when absent and grants it `roles/run.invoker` on the named Cloud Run Job. The
 job identity is provisioned per environment with
 `backend/scripts/apply-agent-vm-reconciler-iam.sh`; it receives Firestore
 read/write, bucket object-read, and condition-scoped Agent VM Compute lifecycle
-permissions. The reconciler job uses its attached identity and Application
-Default Credentials; it does not mount the desktop backend's Firebase key.
+permissions. The CI deploy identity receives `roles/iam.serviceAccountUser`
+only on that reconciler identity, so it can deploy the Job without being able
+to attach unrelated service accounts. The reconciler job uses its attached
+identity and Application Default Credentials; it does not mount the desktop
+backend's Firebase key.
 Validate the installed trigger with
 `backend/scripts/validate_agent_vm_reconciler_scheduler.py` before the first
 live execution.
@@ -80,10 +108,18 @@ current Firestore owner before issuing the exact stop operation.
 ## Recovery
 
 `retry` uses bounded exponential backoff. `deferred` means an active session
-is still present and retains the drain fence. `quarantined` requires operator
-inspection of the per-owner `agentVm.reconcile.lastError` and a new release or
-explicit state repair. The terminal reaper remains a separate, dry-run-first
-cleanup backstop for abandoned terminated instances.
+is still present and retains the drain fence. `cleanup_pending` means a
+provider-confirmed missing VM is inside its grace period; it is an expected
+successful job outcome, not a rollout failure. A missing VM with active demand
+or a live session remains visible and fails closed rather than being deleted.
+The reconciler consumes an observed start request only after it receives the
+provider 404 for that exact owner generation; the transactional timestamp fence
+preserves a newer request. That makes the impossible request terminal rather
+than leaving an uncleanable missing pointer.
+`quarantined` requires operator inspection of the per-owner
+`agentVm.reconcile.lastError` and a new release or explicit state repair. The
+terminal reaper remains a separate, dry-run-first cleanup backstop for
+abandoned terminated instances.
 
 To roll the fleet back to the previous accepted release, inspect the active
 and previous manifests, then run the refuse-by-default helper in the target

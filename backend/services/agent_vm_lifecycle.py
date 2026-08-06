@@ -238,11 +238,20 @@ def rollout_selected(uid: str, release_id: str, target_percent: int) -> bool:
     return bucket < target_percent
 
 
-def reconcile_requested(vm: Mapping[str, Any]) -> bool:
+def reconcile_requested(vm: Mapping[str, Any], now: float | None = None) -> bool:
     reconcile = vm.get("reconcile")
     if not isinstance(reconcile, Mapping):
         return False
-    return bool(reconcile.get("drainRequested")) or reconcile.get("state") in {"draining", "deferred"}
+    lease = reconcile.get("lease")
+    lease_active = isinstance(lease, Mapping) and float(lease.get("expiresAt", 0) or 0) > (
+        time.time() if now is None else now
+    )
+    return (
+        bool(reconcile.get("startRequested"))
+        or bool(reconcile.get("drainRequested"))
+        or reconcile.get("state") in {"draining", "deferred", "missing"}
+        or lease_active
+    )
 
 
 def _claim_run_lease_txn(tx: Any, lease_path: str, owner: str, now: float, ttl: int) -> bool:
@@ -312,7 +321,7 @@ def _claim_vm_lease_txn(
     vm_name: str,
     auth_token: str,
     owner: str,
-    release_id: str,
+    release_id: str | None,
     now: float,
     ttl: int,
 ) -> bool:
@@ -327,8 +336,8 @@ def _claim_vm_lease_txn(
         return False
     reconcile_raw = vm.get("reconcile")
     reconcile: dict[str, Any] = reconcile_raw if isinstance(reconcile_raw, dict) else {}
-    release_changed = bool(release_id) and reconcile.get("releaseId") != release_id
-    same_release = not release_changed
+    release_changed = release_id is not None and reconcile.get("releaseId") != release_id
+    same_release = release_id is None or not release_changed
     if reconcile.get("state") == "quarantined" and same_release:
         return False
     if float(reconcile.get("retryAt", 0) or 0) > now and same_release:
@@ -340,9 +349,10 @@ def _claim_vm_lease_txn(
     update: dict[str, Any] = {
         "agentVm.reconcile.lease": {"owner": owner, "claimedAt": now, "expiresAt": now + ttl},
         "agentVm.reconcile.state": "claimed",
-        "agentVm.reconcile.releaseId": release_id,
         "agentVm.reconcile.schemaVersion": RECONCILER_SCHEMA_VERSION,
     }
+    if release_id is not None:
+        update["agentVm.reconcile.releaseId"] = release_id
     if release_changed:
         update.update(
             {
@@ -357,7 +367,7 @@ def _claim_vm_lease_txn(
 
 
 def claim_vm_lease(
-    uid: str, vm_name: str, auth_token: str, owner: str, release_id: str = "", now: float | None = None
+    uid: str, vm_name: str, auth_token: str, owner: str, release_id: str | None = None, now: float | None = None
 ) -> bool:
     now = time.time() if now is None else now
     return bool(
@@ -403,6 +413,8 @@ def _renew_vm_lease_txn(
     lease: dict[str, Any] = lease_raw if isinstance(lease_raw, dict) else {}
     if lease.get("owner") != owner or float(lease.get("expiresAt", 0) or 0) <= now:
         return False
+    if reconcile.get("state") == "quarantined":
+        return False
     tx.update(
         user_path, {"agentVm.reconcile.lease.expiresAt": now + ttl, "agentVm.reconcile.lease.heartbeatAt": now}
     )
@@ -437,6 +449,8 @@ def _update_vm_reconcile_txn(
     fields: Mapping[str, Any],
     vm_fields: Mapping[str, Any] | None = None,
     now: float | None = None,
+    consume_start_request_at: float | None = None,
+    force_consume_start_request: bool = False,
 ) -> bool:
     now = time.time() if now is None else now
     deletion = tx.get(deletion_path)
@@ -455,12 +469,42 @@ def _update_vm_reconcile_txn(
     if lease.get("owner") != owner or float(lease.get("expiresAt", 0) or 0) <= now:
         return False
     update: dict[str, Any] = {}
-    for key, value in fields.items():
+    reconciled_fields = _reconcile_update_fields(
+        fields, reconcile, consume_start_request_at, force_consume_start_request
+    )
+    for key, value in reconciled_fields.items():
         update[f"agentVm.reconcile.{key}"] = value
     for key, value in (vm_fields or {}).items():
         update[f"agentVm.{key}"] = value
     tx.update(user_path, update)
     return True
+
+
+def _reconcile_update_fields(
+    fields: Mapping[str, Any],
+    reconcile: Mapping[str, Any],
+    consume_start_request_at: float | None,
+    force_consume_start_request: bool = False,
+) -> dict[str, Any]:
+    """Do not erase a start request that arrived after a worker's observation."""
+    result = dict(fields)
+    requested_at = reconcile.get("startRequestedAt")
+    current_request_at = float(requested_at) if isinstance(requested_at, (int, float)) else None
+    clears_start_request = (
+        result.get("startRequested") is sentinels.DELETE or result.get("startRequestedAt") is sentinels.DELETE
+    )
+    if (
+        not force_consume_start_request
+        and clears_start_request
+        and (
+            consume_start_request_at is None
+            or current_request_at is None
+            or current_request_at > consume_start_request_at
+        )
+    ):
+        result.pop("startRequested", None)
+        result.pop("startRequestedAt", None)
+    return result
 
 
 def update_vm_reconcile(
@@ -471,6 +515,8 @@ def update_vm_reconcile(
     fields: Mapping[str, Any],
     vm_fields: Mapping[str, Any] | None = None,
     now: float | None = None,
+    consume_start_request_at: float | None = None,
+    force_consume_start_request: bool = False,
 ) -> bool:
     return bool(
         _store().run_transaction(
@@ -484,6 +530,87 @@ def update_vm_reconcile(
                 fields,
                 vm_fields,
                 now,
+                consume_start_request_at,
+                force_consume_start_request,
+            )
+        )
+    )
+
+
+def _clear_missing_vm_if_current_txn(
+    tx: Any,
+    deletion_path: str,
+    user_path: str,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    owner: str,
+    expected_missing_since: float,
+    now: float,
+) -> bool:
+    """Remove one terminal VM pointer only while this worker still owns it.
+
+    A prior reconcile lease prevents a new session admission. The caller must
+    separately observe that no pre-existing session lease remains before this
+    compare-and-swap deletes the pointer.
+    """
+    deletion = tx.get(deletion_path)
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    if account_deletion_blocks_access(status):
+        return False
+    snapshot = tx.get(user_path)
+    vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    if (
+        not isinstance(vm, dict)
+        or vm.get("vmName") != vm_name
+        or (vm.get("zone") or DEFAULT_ZONE) != zone
+        or vm.get("authToken") != auth_token
+        or vm.get("status") not in {"ready", "stopped"}
+    ):
+        return False
+    reconcile_raw = vm.get("reconcile")
+    reconcile: dict[str, Any] = reconcile_raw if isinstance(reconcile_raw, dict) else {}
+    lease_raw = reconcile.get("lease")
+    lease: dict[str, Any] = lease_raw if isinstance(lease_raw, dict) else {}
+    if (
+        reconcile.get("state") != "claimed"
+        or lease.get("owner") != owner
+        or float(lease.get("expiresAt", 0) or 0) <= now
+        or bool(reconcile.get("startRequested"))
+        or bool(reconcile.get("drainRequested"))
+    ):
+        return False
+    missing_since = reconcile.get("missingSince")
+    if not isinstance(missing_since, (int, float)) or float(missing_since) != expected_missing_since:
+        return False
+    tx.update(user_path, {"agentVm": sentinels.DELETE})
+    return True
+
+
+def clear_missing_vm_if_current(
+    uid: str,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    owner: str,
+    expected_missing_since: float,
+    now: float | None = None,
+) -> bool:
+    """Delete a proven-abandoned missing VM record with deletion and owner fences."""
+    now = time.time() if now is None else now
+    return bool(
+        _store().run_transaction(
+            lambda tx: _clear_missing_vm_if_current_txn(
+                tx,
+                f"account_deletions/{uid}",
+                f"users/{uid}",
+                vm_name,
+                zone,
+                auth_token,
+                owner,
+                expected_missing_since,
+                now,
             )
         )
     )
@@ -492,9 +619,54 @@ def update_vm_reconcile(
 def clear_vm_reconcile_lease_fields() -> dict[str, Any]:
     return {
         "lease": sentinels.DELETE,
+        "startRequested": sentinels.DELETE,
+        "startRequestedAt": sentinels.DELETE,
         "drainRequested": sentinels.DELETE,
         "drainRequestedAt": sentinels.DELETE,
     }
+
+
+def _request_vm_start_txn(
+    tx: Any,
+    deletion_path: str,
+    user_path: str,
+    expected_vm_name: str,
+    expected_auth_token: str,
+    now: float,
+) -> bool:
+    deletion = tx.get(deletion_path)
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    if account_deletion_blocks_access(status):
+        return False
+    snapshot = tx.get(user_path)
+    vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    if not isinstance(vm, dict) or vm.get("vmName") != expected_vm_name or vm.get("authToken") != expected_auth_token:
+        return False
+    tx.update(
+        user_path,
+        {
+            "agentVm.reconcile.startRequested": True,
+            "agentVm.reconcile.startRequestedAt": now,
+        },
+    )
+    return True
+
+
+def request_vm_start(uid: str, vm_name: str, auth_token: str, now: float | None = None) -> bool:
+    now = time.time() if now is None else now
+    return bool(
+        _store().run_transaction(
+            lambda tx: _request_vm_start_txn(
+                tx,
+                f"account_deletions/{uid}",
+                f"users/{uid}",
+                vm_name,
+                auth_token,
+                now,
+            )
+        )
+    )
 
 
 def _claim_session_lease_txn(
@@ -517,7 +689,7 @@ def _claim_session_lease_txn(
     vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if not isinstance(vm, dict) or vm.get("vmName") != vm_name or vm.get("authToken") != auth_token:
         return False
-    if reconcile_requested(vm):
+    if reconcile_requested(vm, now):
         return False
     tx.set(
         lease_path,
@@ -785,6 +957,7 @@ __all__ = [
     "claim_reconciler_run_lease",
     "claim_session_lease",
     "claim_vm_lease",
+    "clear_missing_vm_if_current",
     "clear_vm_reconcile_lease_fields",
     "drift_reasons",
     "expected_release_metadata",
@@ -792,6 +965,7 @@ __all__ = [
     "reconcile_requested",
     "release_manifest_bytes",
     "release_reconciler_run_lease",
+    "request_vm_start",
     "renew_reconciler_run_lease",
     "renew_vm_lease",
     "release_session_lease",
