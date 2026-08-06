@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeAskBarControls.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/HomePresentationTokens.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/HomeStagePresentation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeSuggestionsStore.swift

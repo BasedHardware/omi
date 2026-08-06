@@ -234,3 +234,53 @@ final class ChatTranscriptWindowTests: XCTestCase {
     XCTAssertFalse(ChatTranscriptWindow.allowsLoadingEarlier(for: atLimit))
   }
 }
+
+/// Home's ask bar is the app's primary composer and shipped missing two of the
+/// three controls the other composers carry: no microphone at all, and a Send
+/// button that only existed once you had already typed. Before the first
+/// keystroke the bar rendered a paperclip and a Connect chip — a chat box with
+/// no visible way to chat.
+final class HomeAskBarControlsTests: XCTestCase {
+  private func primary(
+    isSending: Bool = false,
+    isStopping: Bool = false,
+    hasText: Bool = false,
+    isFocused: Bool = false
+  ) -> HomeAskBarPrimaryAction {
+    HomeAskBarControls.resolve(
+      isSending: isSending, isStopping: isStopping, hasText: hasText, isFocused: isFocused
+    ).primary
+  }
+
+  func testSendIsOnScreenInEveryStateThatIsNotAlreadySending() {
+    // The regression: focused-and-empty used to resolve to a fourth branch that
+    // rendered nothing, so clicking into the bar made the only action vanish.
+    XCTAssertEqual(primary(hasText: false, isFocused: true), .send(isArmed: false))
+    XCTAssertEqual(primary(hasText: false, isFocused: false), .send(isArmed: false))
+    XCTAssertEqual(primary(hasText: true, isFocused: true), .send(isArmed: true))
+    XCTAssertEqual(primary(hasText: true, isFocused: false), .send(isArmed: true))
+  }
+
+  func testAnInFlightTurnReplacesSendWithStopRatherThanNothing() {
+    XCTAssertEqual(primary(isSending: true), .stop(isStopping: false))
+    XCTAssertEqual(primary(isSending: true, isStopping: true), .stop(isStopping: true))
+    // Text typed while a reply streams still shows Stop: one slot, one turn.
+    XCTAssertEqual(primary(isSending: true, hasText: true), .stop(isStopping: false))
+  }
+
+  func testConnectOnlyHoldsTheSlotWhileTheBarIsAtRest() {
+    let resting = HomeAskBarControls.resolve(
+      isSending: false, isStopping: false, hasText: false, isFocused: false)
+    XCTAssertTrue(resting.showsConnect)
+
+    for engaged in [
+      HomeAskBarControls.resolve(isSending: false, isStopping: false, hasText: true, isFocused: false),
+      HomeAskBarControls.resolve(isSending: false, isStopping: false, hasText: false, isFocused: true),
+      HomeAskBarControls.resolve(isSending: true, isStopping: false, hasText: false, isFocused: false),
+    ] {
+      XCTAssertFalse(
+        engaged.showsConnect,
+        "Connect must yield the slot once the bar is engaged so Send is the only capsule.")
+    }
+  }
+}

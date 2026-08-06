@@ -632,7 +632,6 @@ struct DashboardPage: View {
         },
         onOpenAgentRef: FloatingControlBarManager.shared.openAgentChatFromTimeline(ref:completion:),
         chatFirstRichBlockContext: chatFirstRichBlockContext,
-        contentColumnWidth: 760,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1142,8 +1141,6 @@ struct DashboardPage: View {
         chatFirstRichBlockContext: chatFirstRichBlockContext,
         verticalContentPadding: OmiSpacing.sm,
         trailingContentPadding: OmiSpacing.md,
-        contentColumnWidth: 760,
-        timelineTrailingInset: 0,
         welcomeContent: { dashboardChatWelcome }
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1308,7 +1305,10 @@ struct DashboardPage: View {
     let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return min(availableWidth, Self.homeAskBarMinWidth) }
     let measuredTextWidth = (text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 15)]).width
-    let chromeWidth: CGFloat = 210
+    // Paperclip + mic + Send/Connect + the bar's own padding. The mic joined the
+    // leading cluster after this was first measured; a stale value here crops the
+    // typed text instead of growing the bar.
+    let chromeWidth: CGFloat = 252
     return min(availableWidth, max(Self.homeAskBarMinWidth, measuredTextWidth + chromeWidth))
   }
 
@@ -2325,6 +2325,10 @@ struct HomeAskBar: View {
         .disabled(attachments.count >= kMaxChatAttachments)
         .help("Attach files")
 
+        // Same trigger the composer and floating bar already click, so Home
+        // enters the one PushToTalkManager turn instead of a second mic path.
+        PushToTalkMicButton(diameter: 34)
+
         // Auto-growing input: `axis: .vertical` + `lineLimit(1...6)` grow the pill
         // as text wraps (scrolls past six lines). Return submits, Shift+Return
         // newlines — via onKeyPress, since a vertical field would otherwise insert
@@ -2349,7 +2353,14 @@ struct HomeAskBar: View {
           return .handled
         }
 
-        actionButton
+        HomeAskBarTrailingControls(
+          controls: HomeAskBarControls.resolve(
+            isSending: isSending, isStopping: isStopping, hasText: hasText, isFocused: isFocused),
+          isConnectActive: isConnectActive,
+          onSend: handleSubmit,
+          onStop: onStop,
+          onConnect: onConnect
+        )
       }
       .padding(.leading, OmiSpacing.lg)
       .padding(.trailing, OmiSpacing.sm)
@@ -2419,120 +2430,6 @@ struct HomeAskBar: View {
     }
   }
 
-  @ViewBuilder
-  private var actionButton: some View {
-    switch actionMode {
-    case .stop:
-      stopButton
-    case .send:
-      sendButton
-    case .connect:
-      connectButton
-    case .none:
-      EmptyView()
-    }
-  }
-
-  private var actionMode: HomeAskBarActionMode {
-    if isSending { return .stop }
-    if canSend { return .send }
-    if isFocused { return .none }
-    return .connect
-  }
-
-  private var sendButton: some View {
-    Button(action: handleSubmit) {
-      ZStack {
-        Circle()
-          .fill(HomeAskBarPalette.primaryFill)
-
-        Image(systemName: "arrow.up")
-          .scaledFont(size: OmiType.body, weight: .bold)
-          .foregroundStyle(HomeAskBarPalette.primaryLabel)
-      }
-      .frame(width: 34, height: 34)
-      .contentShape(Circle())
-    }
-    .buttonStyle(.plain)
-    .help("Send")
-    .accessibilityLabel("Send message")
-  }
-
-  // Same weight as Send, because it is the same slot: a filled disc that turns into a wash the
-  // moment a turn starts is a button that disappears exactly when it becomes the only one.
-  private var stopButton: some View {
-    Button(action: onStop) {
-      ZStack {
-        Circle()
-          .fill(HomeAskBarPalette.primaryFill)
-
-        if isStopping {
-          ProgressView()
-            .controlSize(.small)
-            .scaleEffect(0.6)
-        } else {
-          Image(systemName: "square.fill")
-            .scaledFont(size: OmiType.micro, weight: .bold)
-            .foregroundStyle(HomeAskBarPalette.primaryLabel)
-        }
-      }
-      .frame(width: 34, height: 34)
-      .contentShape(Circle())
-    }
-    .buttonStyle(.plain)
-    .disabled(isStopping)
-    .help("Stop")
-    .accessibilityLabel("Stop response")
-  }
-
-  private var connectButton: some View {
-    HomeAskBarConnectButton(isActive: isConnectActive, action: onConnect)
-  }
-}
-
-private enum HomeAskBarActionMode: Equatable {
-  case connect
-  case send
-  case stop
-  case none
-}
-
-struct HomeAskBarConnectButton: View {
-  let isActive: Bool
-  let action: () -> Void
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "link")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-
-        Text("Connect")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-      }
-      .foregroundStyle(isActive ? HomeAskBarPalette.primaryLabel : HomeAskBarPalette.secondaryLabel)
-      .padding(.horizontal, OmiSpacing.md)
-      .frame(height: 34)
-      .background(
-        Capsule(style: .continuous)
-          .fill(
-            isActive
-              ? HomeAskBarPalette.primaryFill
-              : HomeAskBarPalette.secondaryFill(isHovering: isHovering))
-      )
-      .overlay(
-        Capsule(style: .continuous)
-          .stroke(isActive ? Color.clear : HomePalette.hairline, lineWidth: 1)
-      )
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .help("Connect data & use omi anywhere")
-    .accessibilityLabel(isActive ? "Close connect" : "Connect")
-  }
 }
 
 /// One knows-list row: leading kind icon, single-line text, and either a
