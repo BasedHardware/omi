@@ -86,7 +86,7 @@ enum ShellSummonPlacement {
     return number.map { "\($0.uint32Value)" }
   }
 
-  private static func centered(_ size: NSSize, in visibleFrame: NSRect) -> NSRect {
+  static func centered(_ size: NSSize, in visibleFrame: NSRect) -> NSRect {
     let fitted = NSSize(
       width: min(size.width, visibleFrame.width),
       height: min(size.height, visibleFrame.height))
@@ -209,7 +209,7 @@ enum ShellSummon {
     applyPresentation(to: window)
     if window.isMiniaturized { window.deminiaturize(nil) }
 
-    let cursorScreen = screenUnderCursor()
+    let cursorScreen = activeScreen()
     let repositions =
       alwaysPlace
       || ShellSummonPlacement.shouldReposition(
@@ -313,13 +313,27 @@ enum ShellSummon {
 
   // MARK: - Private
 
+  /// Centred on the screen, at the size it was last left.
+  ///
+  /// A remembered *position* is not restored. Following the cursor onto an idle second display and
+  /// then restoring a frame from some earlier session put the shell somewhere the user was not
+  /// looking, on a desktop with nothing behind it to blur — which reads as a black window rather
+  /// than as glass. Centring is the placement a summoned surface can never get wrong: it is where
+  /// the eye already is. Size still persists, because a shell the user widened should stay wide.
   private static func landingFrame(on screen: NSScreen) -> NSRect {
-    ShellSummonPlacement.frame(remembered: rememberedFrame(on: screen), visibleFrame: screen.visibleFrame)
+    let remembered = rememberedFrame(on: screen)
+    let size = ShellSummonPlacement.frame(
+      remembered: remembered, visibleFrame: screen.visibleFrame
+    ).size
+    return ShellSummonPlacement.centered(size, in: screen.visibleFrame)
   }
 
-  private static func screenUnderCursor() -> NSScreen? {
-    let location = NSEvent.mouseLocation
-    return NSScreen.screens.first { $0.frame.contains(location) }
+  /// The screen the user is working on: the key window's, then the frontmost app's, then the one
+  /// carrying the menu bar. Deliberately **not** the cursor's — a pointer parked on an idle display
+  /// is not where the user is looking, and that is exactly how the shell ended up alone on an empty
+  /// second display.
+  private static func activeScreen() -> NSScreen? {
+    NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
   }
 
   private static func registerEscapeRoute(on window: NSWindow) {
