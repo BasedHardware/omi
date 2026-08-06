@@ -904,6 +904,9 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
+            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
+              category: memory_rollout
+              value: 'true'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -927,6 +930,8 @@ environments:
               value: 'true'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
+              value: '25'
       workflow_files:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml
@@ -1776,6 +1781,9 @@ environments:
               category: memory_rollout
               value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+              category: memory_rollout
+              value: 'false'
+            MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
               value: 'false'
             OMI_ENV_STAGE:

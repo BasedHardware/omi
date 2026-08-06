@@ -26,7 +26,7 @@ from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import extract_byok_from_websocket, get_byok_keys, set_byok_keys
 from utils.client_device import resolve_client_device_from_headers
-from utils.executors import db_executor, run_blocking, start_background_task
+from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils.fair_use import (
     FAIR_USE_CHECK_INTERVAL_SECONDS,
     FAIR_USE_ENABLED,
@@ -629,7 +629,7 @@ class ListenSessionRuntime:
                 )
             self.send_event(MessageServiceStatusEvent(status='ready'))
             result = await self.task_supervisor.supervise(receive_task=receive_task)
-            logger.info('Listen supervisor exited reason=%s task=%s', result.reason, result.task_name)
+            logger.info('Listen supervisor exited reason=%s', result.reason)
             if result.reason in {'crash', 'lifetime_done'}:
                 self.state.live_transcription_failed = True
             if receive_task.done() and not receive_task.cancelled():
@@ -652,6 +652,16 @@ class ListenSessionRuntime:
             await self._teardown()
 
     async def _teardown(self) -> None:
+        try:
+            await self._teardown_components()
+        finally:
+            if not self.request.owner_persistence_blocked.is_set():
+                try:
+                    await run_blocking(storage_executor, self.parity_capture.persist)
+                except Exception as error:
+                    logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
+
+    async def _teardown_components(self) -> None:
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
         owner_persistence_blocked = self.request.owner_persistence_blocked.is_set()
@@ -725,10 +735,6 @@ class ListenSessionRuntime:
             self.onboarding_handler.cleanup()
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-            try:
-                self.parity_capture.persist()
-            except Exception as error:
-                logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()

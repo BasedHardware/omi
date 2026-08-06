@@ -488,7 +488,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
-    await captureProvider?.onRecordingDeviceDisconnected();
     captureProvider?.updateRecordingDevice(null);
 
     // Batch mode: the native writer finalizes the in-progress recording on

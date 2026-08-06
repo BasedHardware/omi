@@ -186,6 +186,10 @@ class MemoryGraphViewModel: ObservableObject {
   private var sessionGeneration = 0
   private let canonicalGraphFetcher: CanonicalGraphFetcher
 
+  private static func hasAtlasContent(_ response: KnowledgeGraphResponse) -> Bool {
+    !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true)
+  }
+
   init() {
     canonicalGraphFetcher = { authorizationSnapshot in
       try await APIClient.shared.getKnowledgeGraph(
@@ -201,7 +205,7 @@ class MemoryGraphViewModel: ObservableObject {
   ) {
     self.canonicalGraphFetcher = canonicalGraphFetcher
     graphResponse = initialGraphResponse
-    isEmpty = initialGraphResponse.nodes.isEmpty
+    isEmpty = !Self.hasAtlasContent(initialGraphResponse)
     setupCamera()
     setupLighting()
   }
@@ -303,13 +307,13 @@ class MemoryGraphViewModel: ObservableObject {
     }
 
     if hasLoadedCanonicalAtlas,
-      !graphResponse.nodes.isEmpty,
+      Self.hasAtlasContent(graphResponse),
       !PollingConfig.shouldAllowActivationRefresh(lastRefresh: lastLoadedAt)
     {
       return
     }
 
-    let showSpinner = graphResponse.nodes.isEmpty
+    let showSpinner = !Self.hasAtlasContent(graphResponse)
     if showSpinner { isLoading = true }
     defer {
       if showSpinner && generation == sessionGeneration {
@@ -323,15 +327,17 @@ class MemoryGraphViewModel: ObservableObject {
         return
       }
       let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ownerName = givenName.isEmpty ? displayName : givenName
       let projection = await Task.detached(priority: .userInitiated) {
-        MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
+        MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
       }.value
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return
       }
       canonicalAtlasProjection = projection
       graphResponse = response
-      isEmpty = response.atlasNodes.isEmpty
+      isEmpty = !Self.hasAtlasContent(response)
       hasLoadedCanonicalAtlas = true
       lastLoadedAt = Date()
       log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
@@ -379,15 +385,17 @@ class MemoryGraphViewModel: ObservableObject {
 
         if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
           let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let ownerName = givenName.isEmpty ? displayName : givenName
           let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response.atlasResponse, userName: givenName.isEmpty ? nil : givenName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return false
           }
           canonicalAtlasProjection = projection
           graphResponse = response
-          isEmpty = response.atlasNodes.isEmpty
+          isEmpty = !Self.hasAtlasContent(response)
           hasLoadedCanonicalAtlas = true
           lastLoadedAt = Date()
           log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.atlasNodes.count) nodes")

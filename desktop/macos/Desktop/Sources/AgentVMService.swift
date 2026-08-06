@@ -108,7 +108,7 @@ actor AgentVMService {
       }
       if let status, status.status == "provisioning" || status.status == "stopped" {
         if let result = await pollUntilReady(
-          maxAttempts: 30,
+          maxAttempts: 75,
           intervalSeconds: 5,
           ownerID: ownerID,
           generation: generation),
@@ -148,7 +148,7 @@ actor AgentVMService {
     if vmIP == nil || provisionResult.agentStatus == "provisioning" {
       log("AgentVMService: Waiting for VM to be ready...")
       let pollResult = await pollUntilReady(
-        maxAttempts: 30,
+        maxAttempts: 75,
         intervalSeconds: 5,
         ownerID: ownerID,
         generation: generation)
@@ -262,8 +262,9 @@ actor AgentVMService {
 
   /// Check if the VM needs a database upload by hitting its /health endpoint.
   private func checkVMNeedsDatabase(vmIP: String, authToken: String) async -> Bool {
-    guard let healthURL = URL(string: "http://\(vmIP):8080/health") else { return true }
+    guard let healthURL = URL(string: "http://\(vmIP):8080/health?token=\(authToken)") else { return true }
     var request = URLRequest(url: healthURL)
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 10
 
     do {

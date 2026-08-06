@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsDestinationView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
@@ -87,3 +88,10 @@ steps:
     expect:
       text_visible:
         - Home
+
+  - id: S9
+    name: Verify legacy Home Conversations tab
+    do: "In Settings > Advanced, enable Use old Home design, return to Home, and verify the left sidebar shows Conversations as a separate destination from Memories. Click Conversations."
+    expect:
+      text_visible:
+        - Conversations
