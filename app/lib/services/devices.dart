@@ -16,7 +16,7 @@ import 'package:omi/utils/mutex.dart';
 
 enum DeviceServiceStatus { init, ready, scanning, stop }
 
-enum DeviceConnectionState { connected, connecting, disconnected }
+enum DeviceConnectionState { connected, connecting, disconnected, reconnecting }
 
 /// Feature flags for Omi device capabilities
 /// Must match the firmware definitions in features.h

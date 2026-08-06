@@ -627,7 +627,11 @@ extension OmiBleManager: CBCentralManagerDelegate {
             incrementFailToConnectCount(uuid: uuid)
         }
 
-        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
+        flutterApi?.onPeripheralDisconnected(
+            peripheralUuid: uuid,
+            error: pairingLost ? "pairing_lost" : error?.localizedDescription,
+            willAutoReconnect: !isManual && !pairingLost && everConnected.contains(uuid)
+        ) { _ in }
 
         // Retry previously-connected peripherals — otherwise a failed connect silently
         // drops the user. iOS queues this at the chipset level; it's free while waiting.
@@ -666,7 +670,11 @@ extension OmiBleManager: CBCentralManagerDelegate {
         }
         connectionStartTimes.removeValue(forKey: uuid)
 
-        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
+        flutterApi?.onPeripheralDisconnected(
+            peripheralUuid: uuid,
+            error: pairingLost ? "pairing_lost" : error?.localizedDescription,
+            willAutoReconnect: !isManual && !pairingLost
+        ) { _ in }
 
         // Auto-reconnect unless manually disconnected
         if !isManual, !pairingLost {

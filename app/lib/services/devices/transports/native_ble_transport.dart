@@ -231,7 +231,7 @@ class NativeBleTransport extends DeviceTransport {
   /// Track which characteristics were subscribed so we can re-subscribe on reconnect.
   final Set<String> _activeSubscriptionKeys = {};
 
-  void _handleConnectionState(bool connected, String? error) {
+  void _handleConnectionState(bool connected, String? error, bool willAutoReconnect) {
     if (!connected) {
       // Guard against double-fire (didDisconnect + didFailToConnect both invoke this).
       // On the 2nd call _streamControllers is already empty; overwriting _activeSubscriptionKeys
@@ -243,7 +243,8 @@ class NativeBleTransport extends DeviceTransport {
 
       _closeAllStreams();
       _services = [];
-      _updateState(DeviceTransportState.disconnected);
+      // Native auto-reconnect scheduled → reconnecting (hold capture). Otherwise final disconnect.
+      _updateState(willAutoReconnect ? DeviceTransportState.reconnecting : DeviceTransportState.disconnected);
 
       // Fail pending completer
       if (_deviceReadyCompleter != null && !_deviceReadyCompleter!.isCompleted) {

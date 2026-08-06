@@ -6,8 +6,11 @@ import 'package:omi/utils/logger.dart';
 /// Callback signature for characteristic value updates.
 typedef CharacteristicValueCallback = void Function(String serviceUuid, String characteristicUuid, Uint8List value);
 
-/// Callback signature for connection state changes
-typedef ConnectionStateCallback = void Function(bool connected, String? error);
+/// Callback signature for connection state changes.
+///
+/// [willAutoReconnect] is only meaningful when [connected] is false: native has
+/// scheduled (or will schedule) auto-reconnect, so Dart should hold capture.
+typedef ConnectionStateCallback = void Function(bool connected, String? error, bool willAutoReconnect);
 
 /// Callback signature for device ready (connected + services + bonded + MTU done).
 typedef DeviceReadyCallback = void Function(List<BleService> services);
@@ -84,9 +87,9 @@ class BleBridge implements BleFlutterApi {
   }
 
   @override
-  void onPeripheralDisconnected(String peripheralUuid, String? error) {
+  void onPeripheralDisconnected(String peripheralUuid, String? error, bool willAutoReconnect) {
     final key = peripheralUuid.toUpperCase();
-    _disconnectCallbacks[key]?.call(false, error);
+    _disconnectCallbacks[key]?.call(false, error, willAutoReconnect);
     if (error == 'pairing_lost') pairingLostCallback?.call();
   }
 

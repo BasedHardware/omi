@@ -236,7 +236,10 @@ abstract class BleFlutterApi {
 
   void onDeviceReady(String peripheralUuid, List<BleService> services);
 
-  void onPeripheralDisconnected(String peripheralUuid, String? error);
+  /// [willAutoReconnect] is true when native has scheduled (or will schedule)
+  /// auto-reconnect for this peripheral — Dart must hold capture open and only
+  /// clear connection UI/WAL until reconnect resolves or a final disconnect arrives.
+  void onPeripheralDisconnected(String peripheralUuid, String? error, bool willAutoReconnect);
 
   void onCharacteristicValueUpdated(
     String peripheralUuid,

@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:fake_async/fake_async.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +10,6 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:omi/utils/ble_disconnect_grace.dart';
 
 class _TestConnectivityPlatform extends ConnectivityPlatform {
   @override
@@ -357,78 +353,86 @@ void main() {
     });
   });
 
-  group('ble disconnect capture grace (#6678)', () {
-    test('real disconnect runs teardown even while isConnected stays true until teardown', () {
-      fakeAsync((async) {
-        final device = BtDevice(
-          id: 'AA:AA:AA:AA:AA:99',
+  group('native reconnecting vs final disconnect (#6678)', () {
+    BtDevice makeDevice(String id) => BtDevice(
+          id: id,
           name: 'Omi',
           type: DeviceType.omi,
           rssi: -50,
           firmwareRevision: '3.0.20',
         );
 
-        final provider = _TestDeviceProvider();
-        addTearDown(provider.dispose);
+    test('reconnecting clears connection but holds capture', () {
+      final device = makeDevice('AA:AA:AA:AA:AA:99');
+      final provider = DeviceProvider();
+      addTearDown(provider.dispose);
 
-        provider.connectedDevice = device;
-        provider.pairedDevice = device;
-        provider.setIsConnected(true);
+      provider.connectedDevice = device;
+      provider.pairedDevice = device;
+      provider.setIsConnected(true);
+      provider.debugCaptureReleaseCount = 0;
 
-        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.reconnecting);
 
-        final grace = bleDisconnectCaptureGrace(isAndroid: Platform.isAndroid);
-        async.elapse(grace + const Duration(milliseconds: 1));
-
-        expect(provider.disconnectCallCount, 1);
-        expect(provider.isConnected, isFalse);
-      });
+      expect(provider.debugCaptureHeldForReconnect, isTrue);
+      expect(provider.isConnected, isFalse);
+      expect(provider.debugCaptureReleaseCount, 0, reason: 'capture must stay open while native retries');
     });
 
-    test('reconnect cancels scheduled teardown before grace elapses', () {
-      fakeAsync((async) {
-        final device = BtDevice(
-          id: 'AA:AA:AA:AA:AA:98',
-          name: 'Omi',
-          type: DeviceType.omi,
-          rssi: -50,
-          firmwareRevision: '3.0.20',
-        );
+    test('connected after reconnecting clears hold without releasing capture', () {
+      final device = makeDevice('AA:AA:AA:AA:AA:98');
+      final provider = DeviceProvider();
+      addTearDown(provider.dispose);
 
-        final provider = _TestDeviceProvider();
-        addTearDown(provider.dispose);
+      provider.connectedDevice = device;
+      provider.pairedDevice = device;
+      provider.setIsConnected(true);
+      provider.debugCaptureReleaseCount = 0;
 
-        provider.connectedDevice = device;
-        provider.pairedDevice = device;
-        provider.setIsConnected(true);
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.reconnecting);
+      expect(provider.debugCaptureHeldForReconnect, isTrue);
 
-        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.connected);
+      expect(provider.debugCaptureHeldForReconnect, isFalse);
+      expect(provider.debugCaptureReleaseCount, 0, reason: 'successful reconnect must not tear down capture');
+    });
 
-        final grace = bleDisconnectCaptureGrace(isAndroid: Platform.isAndroid);
-        async.elapse(grace - const Duration(milliseconds: 10));
+    test('final disconnected releases capture', () {
+      final device = makeDevice('AA:AA:AA:AA:AA:97');
+      final provider = DeviceProvider();
+      addTearDown(provider.dispose);
 
-        // Simulate reconnect just before the grace window ends. We should cancel
-        // the disconnect debouncer and not invoke capture teardown.
-        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.connected);
+      provider.connectedDevice = device;
+      provider.pairedDevice = device;
+      provider.setIsConnected(true);
+      provider.debugCaptureReleaseCount = 0;
 
-        async.elapse(const Duration(milliseconds: 20)); // total crosses the grace boundary
-        expect(provider.disconnectCallCount, 0);
-      });
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+
+      expect(provider.debugCaptureHeldForReconnect, isFalse);
+      expect(provider.isConnected, isFalse);
+      expect(provider.debugCaptureReleaseCount, 1);
+    });
+
+    test('reconnecting then final disconnected releases capture once', () {
+      final device = makeDevice('AA:AA:AA:AA:AA:96');
+      final provider = DeviceProvider();
+      addTearDown(provider.dispose);
+
+      provider.connectedDevice = device;
+      provider.pairedDevice = device;
+      provider.setIsConnected(true);
+      provider.debugCaptureReleaseCount = 0;
+
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.reconnecting);
+      expect(provider.debugCaptureReleaseCount, 0);
+
+      // connectedDevice is already null from immediate effects; final still releases via hold flag.
+      provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.disconnected);
+      expect(provider.debugCaptureReleaseCount, 1);
+      expect(provider.debugCaptureHeldForReconnect, isFalse);
     });
   });
-}
-
-class _TestDeviceProvider extends DeviceProvider {
-  int disconnectCallCount = 0;
-
-  _TestDeviceProvider();
-
-  @override
-  void onDeviceDisconnected() async {
-    disconnectCallCount++;
-    // Keep the flag update behavior simple for this unit test.
-    setIsConnected(false);
-  }
 }
 
 class _TestAnalyticsAdapter implements AnalyticsAdapter {

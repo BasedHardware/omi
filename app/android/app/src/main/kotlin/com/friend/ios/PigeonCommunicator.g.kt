@@ -1320,12 +1320,17 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
       } 
     }
   }
-  fun onPeripheralDisconnected(peripheralUuidArg: String, errorArg: String?, callback: (Result<Unit>) -> Unit)
+  /**
+   * [willAutoReconnect] is true when native has scheduled (or will schedule)
+   * auto-reconnect for this peripheral — Dart must hold capture open and only
+   * clear connection UI/WAL until reconnect resolves or a final disconnect arrives.
+   */
+  fun onPeripheralDisconnected(peripheralUuidArg: String, errorArg: String?, willAutoReconnectArg: Boolean, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDisconnected$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(peripheralUuidArg, errorArg)) {
+    channel.send(listOf(peripheralUuidArg, errorArg, willAutoReconnectArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

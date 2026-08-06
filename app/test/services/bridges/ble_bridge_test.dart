@@ -8,9 +8,27 @@ void main() {
     bridge.pairingLostCallback = () => notifications++;
     addTearDown(() => bridge.pairingLostCallback = null);
 
-    bridge.onPeripheralDisconnected('device', 'gatt_status_133');
-    bridge.onPeripheralDisconnected('device', 'pairing_lost');
+    bridge.onPeripheralDisconnected('device', 'gatt_status_133', true);
+    bridge.onPeripheralDisconnected('device', 'pairing_lost', false);
 
     expect(notifications, 1);
+  });
+
+  test('forwards willAutoReconnect to the connection-state callback (#6678)', () {
+    final bridge = BleBridge.instance;
+    bool? seenWillAutoReconnect;
+    bridge.registerPeripheral(
+      peripheralUuid: 'AA:BB',
+      onConnectionState: (connected, error, willAutoReconnect) {
+        seenWillAutoReconnect = willAutoReconnect;
+      },
+    );
+    addTearDown(() => bridge.unregisterPeripheral('AA:BB'));
+
+    bridge.onPeripheralDisconnected('AA:BB', 'gatt_status_133', true);
+    expect(seenWillAutoReconnect, isTrue);
+
+    bridge.onPeripheralDisconnected('AA:BB', 'unmanaged', false);
+    expect(seenWillAutoReconnect, isFalse);
   });
 }

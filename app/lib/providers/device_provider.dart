@@ -23,7 +23,6 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
-import 'package:omi/utils/ble_disconnect_grace.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/firmware_update_check_session.dart';
@@ -89,15 +88,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => _latestOmiGlassFirmwareDetails;
 
   Timer? _discoveryTimer;
-  // Tracks the moment we first observed a BLE disconnect. This is independent
-  // from `isConnected` which is only flipped to false inside
-  // `onDeviceDisconnected()` (so using `isConnected` inside the debouncer
-  // callback creates a circular dependency).
-  DateTime? _disconnectStartedAt;
-  // Must exceed native auto-reconnect windows (Android 3s / iOS ~200ms) so
-  // short RF blips do not tear down live capture and spawn conversation shards
-  // (#6678). Reconnect cancels this debouncer before side-effects run.
-  final Debouncer _disconnectDebouncer = Debouncer(delay: bleDisconnectCaptureGrace(isAndroid: Platform.isAndroid));
+  // True while native reported willAutoReconnect — connection UI/WAL are cleared
+  // but capture stays open until reconnect succeeds or a final disconnect arrives (#6678).
+  bool _captureHeldForReconnect = false;
+
+  @visibleForTesting
+  bool get debugCaptureHeldForReconnect => _captureHeldForReconnect;
+
+  @visibleForTesting
+  int debugCaptureReleaseCount = 0;
+
   final Debouncer _connectDebouncer = Debouncer(delay: const Duration(milliseconds: 100));
 
   void Function(BtDevice device)? onDeviceConnected;
@@ -467,11 +467,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     isConnected = value;
     if (isConnected) {
       _discoveryTimer?.cancel();
-      // Reconnect cancels the disconnect grace path. We clear the disconnect
-      // marker before cancelling so any in-flight timer callback becomes a
-      // no-op even if it wins a narrow cancel race.
-      _disconnectStartedAt = null;
-      _disconnectDebouncer.cancel();
+      // Successful reconnect cancels any capture hold from a prior RF blip (#6678).
+      _captureHeldForReconnect = false;
     }
     notifyListeners();
   }
@@ -485,14 +482,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
     _discoveryTimer?.cancel();
-    _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
 
-  void onDeviceDisconnected() async {
-    Logger.debug('onDisconnected inside: $connectedDevice');
+  /// Connection UI / WAL / charging — always applied on disconnect (including
+  /// while native auto-reconnect is pending). Does not touch capture.
+  void _applyImmediateDisconnectSideEffects() {
+    Logger.debug('immediate disconnect side-effects: $connectedDevice');
     _havingNewFirmware = false;
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
@@ -502,6 +500,27 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     setIsConnected(false);
     updateConnectingStatus(false);
 
+    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
+    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
+
+    try {
+      PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
+      PlatformManager.instance.analytics.deviceDisconnected();
+      BatteryWidgetService().updateBatteryInfo(
+        deviceName: SharedPreferencesUtil().deviceName,
+        batteryLevel: -1,
+        deviceType: 'omi',
+        isConnected: false,
+      );
+    } catch (e) {
+      // Crashlytics/analytics may be unavailable in hermetic tests.
+      Logger.debug('disconnect telemetry skipped: $e');
+    }
+  }
+
+  /// Ends live capture after a *final* disconnect (or after reconnect gave up).
+  void _releaseHeldCapture() {
+    debugCaptureReleaseCount++;
     captureProvider?.updateRecordingDevice(null);
 
     // Batch mode: the native writer finalizes the in-progress recording on
@@ -511,22 +530,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       localRecordingsProvider?.refresh();
     });
 
-    // Wals
-    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
-    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
-
-    PlatformManager.instance.crashReporter.logInfo('Omi Device Disconnected');
-
-    PlatformManager.instance.analytics.deviceDisconnected();
-    BatteryWidgetService().updateBatteryInfo(
-      deviceName: SharedPreferencesUtil().deviceName,
-      batteryLevel: -1,
-      deviceType: 'omi',
-      isConnected: false,
-    );
-
-    // Notify interactive device onboarding of disconnect
     captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
+  }
+
+  void onDeviceDisconnected() async {
+    _applyImmediateDisconnectSideEffects();
+    _releaseHeldCapture();
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -984,29 +993,32 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     Logger.debug("provider > device connection state changed...$deviceId...$state...${connectedDevice?.id}");
     switch (state) {
       case DeviceConnectionState.connected:
-        _disconnectStartedAt = null;
-        _disconnectDebouncer.cancel();
+        _captureHeldForReconnect = false;
         _connectDebouncer.run(() => _handleDeviceConnected(deviceId));
         break;
       case DeviceConnectionState.connecting:
         break;
+      case DeviceConnectionState.reconnecting:
+        _connectDebouncer.cancel();
+        // Native will auto-reconnect: clear connection UI/WAL immediately but
+        // hold capture so RF blips do not spawn conversation shards (#6678).
+        if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+          _captureHeldForReconnect = true;
+          _applyImmediateDisconnectSideEffects();
+        }
+        break;
       case DeviceConnectionState.disconnected:
         _connectDebouncer.cancel();
-        // Check if this is the paired device or currently connected device
-        // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
-        if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
-          // Grace delay exceeds native auto-reconnect. Reconnect cancels the
-          // debouncer; stillDisconnected guards the residual fire/cancel race
-          // so we do not tear down capture after a successful reconnect (#6678).
-          _disconnectStartedAt = DateTime.now();
-          _disconnectDebouncer.run(() {
-            final stillDisconnected = _disconnectStartedAt != null;
-            if (!shouldApplyDisconnectCaptureSideEffects(stillDisconnected: stillDisconnected)) {
-              return;
-            }
-            _disconnectStartedAt = null;
+        // Paired/connected check, OR we already cleared connectedDevice while
+        // holding capture for a prior reconnecting event.
+        if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id || _captureHeldForReconnect) {
+          if (_captureHeldForReconnect) {
+            // Reconnect gave up — release capture only (immediate effects already applied).
+            _captureHeldForReconnect = false;
+            _releaseHeldCapture();
+          } else {
             onDeviceDisconnected();
-          });
+          }
         }
         break;
     }

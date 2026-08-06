@@ -1208,7 +1208,10 @@ protocol BleFlutterApiProtocol {
   func onBluetoothStateChanged(state stateArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPeripheralDiscovered(peripheral peripheralArg: BlePeripheral, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onDeviceReady(peripheralUuid peripheralUuidArg: String, services servicesArg: [BleService], completion: @escaping (Result<Void, PigeonError>) -> Void)
-  func onPeripheralDisconnected(peripheralUuid peripheralUuidArg: String, error errorArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// [willAutoReconnect] is true when native has scheduled (or will schedule)
+  /// auto-reconnect for this peripheral — Dart must hold capture open and only
+  /// clear connection UI/WAL until reconnect resolves or a final disconnect arrives.
+  func onPeripheralDisconnected(peripheralUuid peripheralUuidArg: String, error errorArg: String?, willAutoReconnect willAutoReconnectArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onCharacteristicValueUpdated(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onRssiUpdate(peripheralUuid peripheralUuidArg: String, rssi rssiArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onStateRestored(peripheralUuids peripheralUuidsArg: [String], completion: @escaping (Result<Void, PigeonError>) -> Void)
@@ -1280,10 +1283,13 @@ class BleFlutterApi: BleFlutterApiProtocol {
       }
     }
   }
-  func onPeripheralDisconnected(peripheralUuid peripheralUuidArg: String, error errorArg: String?, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+  /// [willAutoReconnect] is true when native has scheduled (or will schedule)
+  /// auto-reconnect for this peripheral — Dart must hold capture open and only
+  /// clear connection UI/WAL until reconnect resolves or a final disconnect arrives.
+  func onPeripheralDisconnected(peripheralUuid peripheralUuidArg: String, error errorArg: String?, willAutoReconnect willAutoReconnectArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onPeripheralDisconnected\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
-    channel.sendMessage([peripheralUuidArg, errorArg] as [Any?]) { response in
+    channel.sendMessage([peripheralUuidArg, errorArg, willAutoReconnectArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

@@ -386,7 +386,7 @@ class OmiBleForegroundService : Service() {
         persistDisconnectEvent(addr, 0, isManual = true, eventType = "disconnect")
 
         bleManager.mainHandler.post {
-            bleManager.flutterApi?.onPeripheralDisconnected(addr, "unmanaged") {}
+            bleManager.flutterApi?.onPeripheralDisconnected(addr, "unmanaged", false) {}
         }
 
         stopSelf()
@@ -412,7 +412,7 @@ class OmiBleForegroundService : Service() {
             } catch (e: SecurityException) {
                 Log.e(TAG, "connectToDevice($source): BLUETOOTH_CONNECT permission denied for $addr")
                 bleManager.mainHandler.post {
-                    bleManager.flutterApi?.onPeripheralDisconnected(addr, "permission_denied") {}
+                    bleManager.flutterApi?.onPeripheralDisconnected(addr, "permission_denied", false) {}
                 }
                 return
             }
@@ -527,12 +527,23 @@ class OmiBleForegroundService : Service() {
             }
         }
 
+        // Same predicates as handleRetryLogic — tell Dart whether auto-reconnect will run
+        // so capture can be held without guessing a timeout (#6678).
+        val willAutoReconnect = willScheduleAutoReconnect(addr, status)
         bleManager.mainHandler.post {
-            bleManager.flutterApi?.onPeripheralDisconnected(addr, error) {}
+            bleManager.flutterApi?.onPeripheralDisconnected(addr, error, willAutoReconnect) {}
         }
 
         updateNotification("Disconnected")
         handleRetryLogic(addr, status)
+    }
+
+    /** Mirrors [handleRetryLogic] early-return gates without scheduling. */
+    private fun willScheduleAutoReconnect(address: String, status: Int): Boolean {
+        val addr = address.uppercase()
+        if (managedDevices[addr] == null) return false
+        if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return false
+        return true
     }
 
     private fun handleRetryLogic(address: String, status: Int) {
@@ -609,7 +620,7 @@ class OmiBleForegroundService : Service() {
                         bleManager.closeGatt(addr)
                         managed.currentGattHash = null
                         bleManager.mainHandler.post {
-                            bleManager.flutterApi?.onPeripheralDisconnected(addr, "bluetooth_off") {}
+                            bleManager.flutterApi?.onPeripheralDisconnected(addr, "bluetooth_off", false) {}
                         }
                     }
                 }
@@ -741,7 +752,7 @@ class OmiBleForegroundService : Service() {
             bleManager.disconnectGatt(addr)
             bleManager.closeGatt(addr)
             bleManager.mainHandler.post {
-                bleManager.flutterApi?.onPeripheralDisconnected(addr, "service_destroyed") {}
+                bleManager.flutterApi?.onPeripheralDisconnected(addr, "service_destroyed", false) {}
             }
         }
         managedDevices.clear()
