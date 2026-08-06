@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Tests/ShellGlassChromeTests.swift
+  s_569f1df936cc22::t_b7d36d6dabf4fa 110,119-120
+  s_569f1df936cc22::t_bf10f639d90aa9 55,57-74,76-78,82-104,107-109
+desktop/macos/changelog/unreleased/20260806-shell-chrome-on-the-desktop.json
+  s_569f1df936cc22::t_0e944716530a95 1-3
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_569f1df936cc22::t_cc1074dfeaf067 1-79
+desktop/macos/Desktop/Sources/MainWindow/GlassShellChrome.swift
+  s_569f1df936cc22::t_a13b2cfd519fc8 36-38,40-46
+  s_569f1df936cc22::t_1c542c1e8b1900 9-12
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_569f1df936cc22::t_f8c5159e790a8a 1-147
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_569f1df936cc22::t_6210a0321e28b5 619
+  s_569f1df936cc22::t_525caaa7e2b067 1098
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1e9c85f3807fd970fa41ea3f264622165e1089e7",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
