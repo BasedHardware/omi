@@ -1,0 +1,34 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_75d42761add30d 1565-1567,1569-1590
+  s_569f1df936cc22::t_854275659519ab 197-205
+  s_569f1df936cc22::t_71a05c4769ae71 1280-1286
+  s_569f1df936cc22::t_89b11f8298a191 1547-1549
+  s_569f1df936cc22::t_cefc734aa9a08f 1707-1708
+desktop/macos/Desktop/Tests/SBPostOnboardingGuidanceWiringTests.swift
+  s_569f1df936cc22::t_0f8abea38fb0f0 139-181
+desktop/macos/Desktop/Sources/Onboarding/OnboardingPromptSuggestions.swift
+  s_569f1df936cc22::t_a489c02be0991f 37-52
+desktop/macos/Desktop/Tests/MemoryHubSidebarRoutingTests.swift
+  s_569f1df936cc22::t_24863ffb520d4f 34-53
+desktop/macos/changelog/unreleased/20260806-reachable-post-onboarding-guidance.json
+  s_569f1df936cc22::t_cea205f901efba 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_569f1df936cc22::t_e980214e9afa81 488-491
+  s_569f1df936cc22::t_c14610841023b8 1067
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e2c1746d857c6a6953a1eb5ab65056198e600d1b",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
