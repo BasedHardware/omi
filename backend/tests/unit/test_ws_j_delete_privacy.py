@@ -366,18 +366,18 @@ def _fence_reader_from(db):
     call through the fake's backing dict so the fence still honours the doc seeded by
     ``_mark_account_deletion_fenced`` — keeping the negative path (no active fence → refusal) real.
     """
-    from database.account_deletion_projection_fence import (
-        ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES,
-        AccountDeletionProjectionFence,
-    )
+    from database.account_deletion_policy import account_deletion_blocks_access
+    from database.account_deletion_projection_fence import AccountDeletionProjectionFence
 
     def _read(uid, **_):
         payload = db.docs.get(f"account_deletions/{uid}") or {}
         raw_status = payload.get("wipe_status")
         status = raw_status.strip() if isinstance(raw_status, str) and raw_status.strip() else None
+        # Mirror read_account_deletion_projection_fence exactly: the fence blocks unless the status
+        # explicitly restores access (open-ended policy, not a finite status set).
         return AccountDeletionProjectionFence(
             status=status,
-            blocks_projection_writes=status in ACCOUNT_DELETION_PROJECTION_FENCE_STATUSES,
+            blocks_projection_writes=account_deletion_blocks_access(status),
         )
 
     return _read
