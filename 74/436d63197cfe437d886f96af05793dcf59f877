@@ -1,0 +1,48 @@
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_bad3aafedefab6 1-136
+  s_569f1df936cc22::t_914fa1ff3b3e3f 137
+desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
+  s_569f1df936cc22::t_8d93ec2114b8e5 3-4
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_0c5c1419fa8823 1736,1794
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_569f1df936cc22::t_b8490a6dee5106 4-21,32-35,58,68,73,81-85,103,105,122-123,125-133,137-138,140,143,151,153,163-191,194-204,207-209,211,216-222,225,233,235,239,244-246,249,252-253,259,262,264-265,267-268,270,278,282,286-288,293,296,300-302,306,316-355,357-364,367-387,391,536-538,540-541,554-556,609-610,624,636
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
+  s_569f1df936cc22::t_fb18bfccaf3b73 1-61
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
+  s_569f1df936cc22::t_ef25c71f9d8763 1-159
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  s_569f1df936cc22::t_7d30ab06b7d2c5 1-116
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  s_569f1df936cc22::t_042fbfd9226287 1-186
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_53c84466834a7a 1-197
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  s_569f1df936cc22::t_96ae2745723b42 1-200
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  s_569f1df936cc22::t_3c52cece1d20c3 1-20,24-26,28-101,114-131,142-143,146-148,151-153,156-160,162-166,169,173-181,184,187,189-191,195
+desktop/macos/Desktop/Tests/MemoryGraphRevisitTests.swift
+  s_569f1df936cc22::t_d0026d7160b2ef 93,98
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_569f1df936cc22::t_fd1b3e5d25a15d 149-152,155,158-168,171-178,181-193,196-199
+desktop/macos/e2e/flows/capture-lifecycle.yaml
+  s_569f1df936cc22::t_ec6f5c7f081de6 70
+desktop/macos/e2e/flows/home.yaml
+  s_569f1df936cc22::t_b82ecd11a6287e 11-15,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "74436d63197cfe437d886f96af05793dcf59f877",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
