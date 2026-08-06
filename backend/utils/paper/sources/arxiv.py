@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 from datetime import date
 
 from models.paper import PaperItem, SourceHealth
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,9 @@ def fetch_papers(queries: list[str], since: date, limit: int = 40) -> tuple[list
             with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:  # noqa: S310 — fixed host
                 root = ET.fromstring(response.read())
         except Exception as e:  # noqa: BLE001 — one bad query must not kill the brief
-            logger.warning('paper: arxiv query %r failed: %s', query, e)
+            # The query is a learned interest topic derived from private
+            # conversations, so it does not go to the log either.
+            logger.warning('paper: an arxiv query failed: %s', sanitize(str(e)))
             failures.append(query)
             continue
 

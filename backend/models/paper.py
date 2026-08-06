@@ -147,13 +147,27 @@ class Commitment(BaseModel):
 
 
 class Today(BaseModel):
+    """What is on the reader today.
+
+    ``calendar_ok`` exists so the section can tell "nothing scheduled" apart
+    from "we could not read the calendar". Printing the first when the second
+    is true is a false claim about the reader's day, which is worse than
+    omitting the section.
+    """
+
     events: list[CalendarEntry] = Field(default_factory=list)
     commitments: list[Commitment] = Field(default_factory=list)
     note: str = ''  # one line on the shape of the day
+    calendar_ok: bool = True
 
     @property
     def is_clear(self) -> bool:
-        return not self.events and not self.commitments
+        """Genuinely nothing on, as opposed to nothing we could read."""
+        return self.calendar_ok and not self.events and not self.commitments
+
+    @property
+    def is_unknown(self) -> bool:
+        return not self.calendar_ok and not self.events and not self.commitments
 
 
 # ---------------------------------------------------------------------------

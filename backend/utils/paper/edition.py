@@ -16,7 +16,7 @@ import logging
 from datetime import date, timedelta
 
 from models.paper import Commitment, Edition, EditionTier, SourceHealth
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.retrieval.tools.integration_base import (
     get_access_token_checked,
@@ -33,7 +33,7 @@ from .sources.gmail_source import GOOGLE_INTEGRATION_KEY, fetch_newsletters
 
 logger = logging.getLogger(__name__)
 
-MAX_COMMITMENTS = 8
+MAX_COMMITMENTS = 5
 MAX_NEWSLETTER_STORIES = 12
 MAX_PAPERS = 3
 
@@ -55,17 +55,67 @@ def _google_access(uid: str) -> tuple[dict | None, str | None]:
     return integration, token
 
 
-def _commitments_from(context: context_mod.DayContext) -> list[Commitment]:
-    """Open action items, most urgent first."""
-    out: list[Commitment] = []
+# An item this far past due is not a task any more, it is a note to self that
+# never got closed. Printing a dozen of them turns Today into a graveyard.
+STALE_AFTER_DAYS = 21
+
+# Due inside this window is the actual reason to read a section called Today.
+IMMINENT_DAYS = 7
+
+
+def _commitment_rank(item: dict, today: date, yesterday: date) -> tuple[int, str] | None:
+    """Sort key for one open action item, or None when it should not print.
+
+    Ranked by what makes it worth reading this morning, not by whichever due
+    date is oldest. Sorting ascending by due date surfaced eight items a month
+    overdue and buried everything created yesterday, which is exactly backwards
+    for a daily paper.
+    """
+    due = str(item.get('due_at') or item.get('due_date') or '')[:10]
+    created = str(item.get('created_at') or '')[:10]
+
+    if created and created >= yesterday.isoformat():
+        return (0, due or created)  # came out of yesterday, still warm
+    if due and today.isoformat() <= due <= (today + timedelta(days=IMMINENT_DAYS)).isoformat():
+        return (1, due)  # due today or this week
+    if due and (today - timedelta(days=STALE_AFTER_DAYS)).isoformat() <= due < today.isoformat():
+        return (2, due)  # overdue, but recently enough to still be real
+    if due:
+        return None  # older than three weeks: a graveyard entry
+    if created and created >= (today - timedelta(days=STALE_AFTER_DAYS)).isoformat():
+        return (3, created)  # no due date, but recent
+    return None
+
+
+def _commitments_from(context: context_mod.DayContext, today: date) -> list[Commitment]:
+    """Open action items worth putting in front of the reader this morning."""
+    yesterday = today - timedelta(days=1)
+    ranked: list[tuple[tuple[int, str], Commitment]] = []
     for item in context.commitments:
         text = str(item.get('description') or item.get('title') or '').strip()
         if not text:
             continue
-        due = item.get('due_at') or item.get('due_date') or ''
-        out.append(Commitment(text=text, due=str(due or '')[:10], source='action_item'))
-    out.sort(key=lambda c: (not c.due, c.due))
-    return out[:MAX_COMMITMENTS]
+        rank = _commitment_rank(item, today, yesterday)
+        if rank is None:
+            continue
+        due = str(item.get('due_at') or item.get('due_date') or '')[:10]
+        ranked.append((rank, Commitment(text=text, due=due, source='action_item')))
+
+    ranked.sort(key=lambda pair: pair[0])
+    return [commitment for _, commitment in ranked[:MAX_COMMITMENTS]]
+
+
+def _unpack(result: object, arity: int, failure: SourceHealth) -> tuple:
+    """A gathered source result, or empty values plus a failed health record.
+
+    Sources return `(items, health)` or `(items, held_back, health)`. When one
+    raises, the section is emptied and the failure is reported rather than
+    disappearing into a quiet-looking page.
+    """
+    if isinstance(result, BaseException):
+        logger.warning('paper: a source raised: %s', sanitize(str(result)))
+        return tuple([[]] * (arity - 1)) + (failure,)
+    return tuple(result)  # type: ignore[arg-type]
 
 
 async def build_edition(
@@ -89,14 +139,14 @@ async def build_edition(
     day_context = await run_blocking(db_executor, context_mod.gather, uid, yesterday_date)
     edition.source_health.extend(day_context.health)
 
-    edition.yesterday = await run_blocking(db_executor, write_yesterday, uid, day_context)
+    edition.yesterday = await run_blocking(llm_executor, write_yesterday, uid, day_context)
 
     if tier is not EditionTier.EDITION:
         return edition
 
     integration, access_token = await run_blocking(db_executor, _google_access, uid)
 
-    profile = await run_blocking(db_executor, interests_mod.get_profile, uid, target_date)
+    profile = await run_blocking(llm_executor, interests_mod.get_profile, uid, target_date)
     edition.source_health.append(
         SourceHealth(
             source='interest profile',
@@ -113,36 +163,52 @@ async def build_edition(
     calendar_task = fetch_today(integration, access_token, target_date)
     web_task = web_candidates(profile)
 
-    (newsletter_messages, held_back, gmail_health), (events, calendar_health), (news, web_health) = (
-        await asyncio.gather(
-            newsletters_task,
-            calendar_task,
-            web_task,
-        )
+    # return_exceptions keeps the promise in this module's docstring: one source
+    # raising costs its section, not the edition. Without it the first exception
+    # propagates and the whole request 500s.
+    results = await asyncio.gather(newsletters_task, calendar_task, web_task, return_exceptions=True)
+
+    newsletter_messages, held_back, gmail_health = _unpack(
+        results[0], 3, SourceHealth(source='gmail', ok=False, note='gmail read raised')
     )
+    events, calendar_health = _unpack(
+        results[1], 2, SourceHealth(source='calendar', ok=False, note='calendar read raised')
+    )
+    news, web_health = _unpack(results[2], 2, SourceHealth(source='web', ok=False, note='web search raised'))
     edition.source_health.extend([gmail_health, calendar_health, web_health])
     edition.held_back.extend(held_back)
 
-    candidates, arxiv_health = await run_blocking(db_executor, paper_candidates, profile, target_date)
+    candidates, arxiv_health = await run_blocking(llm_executor, paper_candidates, profile, target_date)
     edition.source_health.append(arxiv_health)
 
-    edition.today = await run_blocking(db_executor, build_today, uid, events, _commitments_from(day_context))
+    edition.today = await run_blocking(
+        llm_executor, build_today, uid, events, _commitments_from(day_context, target_date), calendar_health.ok
+    )
     edition.newsletters = await run_blocking(
-        db_executor,
+        llm_executor,
         cluster_newsletters,
         uid,
         newsletter_messages,
         profile,
         MAX_NEWSLETTER_STORIES,
     )
-    edition.for_you = await run_blocking(db_executor, rank_for_you, uid, candidates, news, profile, MAX_PAPERS)
+    edition.for_you = await run_blocking(llm_executor, rank_for_you, uid, candidates, news, profile, MAX_PAPERS)
 
     try:
-        edition.photo = await run_blocking(db_executor, photo_mod.make_photo, uid, day_context)
+        edition.photo = await run_blocking(llm_executor, photo_mod.make_photo, uid, day_context)
+        edition.source_health.append(
+            SourceHealth(
+                source='photo',
+                ok=True,
+                kept=1 if edition.photo else 0,
+                note='' if edition.photo else 'no groundable moment in the day',
+            )
+        )
     except Exception as e:  # noqa: BLE001 — the photo never blocks the edition.
         logger.warning('paper: photo step failed: %s', sanitize(str(e)))
+        edition.source_health.append(SourceHealth(source='photo', ok=False, note=sanitize(str(e))[:200]))
 
-    edition.cover = await run_blocking(db_executor, write_cover, uid, _cover_contents(edition))
+    edition.cover = await run_blocking(llm_executor, write_cover, uid, _cover_contents(edition))
     return edition
 
 

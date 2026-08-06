@@ -29,6 +29,11 @@ MAX_SAMPLE_GAP_MINUTES = 5
 # A stretch shorter than this is noise — an app that flashed past, not focus.
 MIN_BLOCK_MINUTES = 5
 
+# Below this the capture covered so little of the day that printing it as
+# "where the time went" misleads. A six-minute browser block beside a day
+# holding hours of recorded conversation reads as the day's focus, and is not.
+MIN_TRACKED_MINUTES = 30
+
 # How many apps reach the page. Beyond this it stops being a summary.
 MAX_FOCUS_BLOCKS = 6
 
@@ -163,11 +168,33 @@ def _read_conversations(uid: str, day: date, context: DayContext) -> None:
         context.health.append(SourceHealth(source='conversations', ok=False, note=sanitize(str(e))[:200]))
 
 
+def screen_day_window(day: date) -> tuple[str, str]:
+    """Date-prefix bounds for one day of screen activity.
+
+    Screen rows are queried by **string** comparison on a stored timestamp, and
+    the stored format is ISO-8601 (``2026-08-02T02:32:46Z``). Passing datetimes
+    makes the caller format bounds as ``2026-08-02 23:59:59.999``; because
+    ``'T' > ' '``, every row on the requested day sorts above that end bound and
+    a single-day query returns nothing at all.
+
+    Date prefixes avoid the separator entirely: every same-day timestamp starts
+    with the day, and the exclusive next-day bound is above all of them in
+    either format. This is why the focus section has data instead of silently
+    reporting a day with no capture.
+    """
+    return day.isoformat(), (day + timedelta(days=1)).isoformat()
+
+
 def _read_screen(uid: str, day: date, context: DayContext) -> None:
-    start, end = day_bounds(day)
+    start, end = screen_day_window(day)
     try:
         rows = screen_activity_db.get_screen_activity(uid, start_date=start, end_date=end, limit=5000)
-        context.focus = focus_blocks(rows or [])
+        measured = focus_blocks(rows or [])
+        # Thin capture is reported as thin rather than printed as the day's
+        # focus. Six minutes of browser next to hours of recorded conversation
+        # is not where the time went, and saying so would mislead.
+        tracked = sum(block.minutes for block in measured)
+        context.focus = measured if tracked >= MIN_TRACKED_MINUTES else []
         context.screen_titles = [
             str(row.get('windowTitle') or '') for row in (rows or []) if str(row.get('windowTitle') or '').strip()
         ][:200]
@@ -177,7 +204,11 @@ def _read_screen(uid: str, day: date, context: DayContext) -> None:
                 ok=True,
                 fetched=len(rows or []),
                 kept=len(context.focus),
-                note='' if rows else 'no screen activity captured for this day',
+                note=(
+                    'no screen activity captured for this day'
+                    if not rows
+                    else ('' if context.focus else f'only {tracked} min captured, too thin to report focus')
+                ),
             )
         )
     except Exception as e:  # noqa: BLE001
@@ -223,8 +254,17 @@ def record_lines(context: DayContext, limit: int = 40) -> list[str]:
 
     This is the only text the editorial prompts are allowed to use. Keeping the
     flattening here means there is one definition of what the model can see.
+
+    Each source gets a reserved slice rather than the list being truncated at
+    the tail. Appending summary, then conversations, then focus and cutting at
+    ``limit`` meant that on the busiest days — the ones with the most signal —
+    the focus lines were always the ones dropped, so the prompt was told nothing
+    about where the time actually went.
     """
-    lines: list[str] = []
+    summary_lines: list[str] = []
+    conversation_lines: list[str] = []
+    focus_lines: list[str] = []
+    lines = summary_lines
     summary = context.summary or {}
 
     if summary.get('headline'):
@@ -258,10 +298,13 @@ def record_lines(context: DayContext, limit: int = 40) -> list[str]:
         title = structured.get('title') or ''
         overview = structured.get('overview') or ''
         if title or overview:
-            lines.append(f"- Talked about {title}: {overview}".strip())
+            conversation_lines.append(f"- Talked about {title}: {overview}".strip())
 
     for block in context.focus:
         detail = f" ({block.detail})" if block.detail else ''
-        lines.append(f"- Screen: {block.label} for {block.minutes} min{detail}")
+        focus_lines.append(f"- Screen: {block.label} for {block.minutes} min{detail}")
 
-    return lines[:limit]
+    focus_budget = min(len(focus_lines), MAX_FOCUS_BLOCKS)
+    conversation_budget = min(len(conversation_lines), 12)
+    summary_budget = max(limit - focus_budget - conversation_budget, 0)
+    return summary_lines[:summary_budget] + conversation_lines[:conversation_budget] + focus_lines[:focus_budget]

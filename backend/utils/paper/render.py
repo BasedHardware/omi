@@ -74,6 +74,7 @@ def render_html(edition: Edition, reader_name: str = '') -> str:
         edition=edition,
         reader_name=reader_name,
         dateline=_dateline(edition.date),
+        arxiv_health=next((h for h in edition.source_health if h.source.lower() == 'arxiv'), None),
     )
 
 
@@ -119,6 +120,8 @@ def render_text(edition: Edition, reader_name: str = '') -> str:
     if edition.cover.thesis:
         lines.append('')
         lines.extend(_wrap(edition.cover.thesis))
+        if edition.cover.standfirst:
+            lines.extend(_wrap(edition.cover.standfirst))
 
     yesterday = edition.yesterday
     if yesterday:
@@ -148,6 +151,9 @@ def render_text(edition: Edition, reader_name: str = '') -> str:
         for commitment in today.commitments:
             due = f' (due {commitment.due})' if commitment.due else ''
             lines.extend(_wrap(f'[ ] {commitment.text}{due}'))
+    elif today and today.is_unknown:
+        lines.extend(_heading('Today'))
+        lines.extend(_wrap('Calendar unavailable.'))
     elif today:
         lines.extend(_heading('Today'))
         lines.extend(_wrap('Nothing scheduled.'))
@@ -159,9 +165,18 @@ def render_text(edition: Edition, reader_name: str = '') -> str:
             names = ', '.join(source.name for source in story.sources)
             if names:
                 lines.extend(_wrap(f'({names})', indent='  '))
+            # The tie to this reader is the only thing separating the section
+            # from a feed reader, so it prints here as well as in the HTML.
+            if story.why:
+                lines.extend(_wrap(story.why, indent='  '))
 
     for_you = edition.for_you
-    if not for_you.is_empty:
+    searched = next((h for h in edition.source_health if h.source.lower() == 'arxiv'), None)
+    if for_you.is_empty and searched and searched.ok and searched.fetched:
+        # Silence cannot be told apart from "never ran". State the count.
+        lines.extend(_heading('For you'))
+        lines.extend(_wrap(f'Nothing cleared the bar. {searched.fetched} entries scanned.'))
+    elif not for_you.is_empty:
         lines.extend(_heading('For you'))
         for item in for_you.papers:
             lines.extend(_wrap(item.title))
@@ -172,16 +187,26 @@ def render_text(edition: Edition, reader_name: str = '') -> str:
             lines.append('')
         for tool in for_you.tools:
             lines.extend(_wrap(f'- {tool.name}: {tool.what}'))
+        for line in for_you.news:
+            if not line.claim.is_printable:
+                continue
+            lines.extend(_wrap(f'- {line.claim.text}'))
+            names = ', '.join(source.name for source in line.claim.sources)
+            if names:
+                lines.extend(_wrap(f'({names})', indent='  '))
 
     if edition.photo and edition.photo.is_printable:
         lines.extend(_heading('Yesterday, drawn'))
         lines.extend(_wrap(edition.photo.caption or edition.photo.moment))
 
-    degraded = edition.degraded_sources
-    if degraded:
+    if edition.source_health:
         lines.extend(_heading('Sources'))
-        for health in degraded:
-            note = f': {health.note}' if health.note else ''
-            lines.extend(_wrap(f'- {health.source} unavailable{note}'))
+        for health in edition.source_health:
+            if not health.ok:
+                note = f': {health.note}' if health.note else ''
+                lines.extend(_wrap(f'- {health.source} unavailable{note}'))
+                continue
+            detail = f'{health.kept} of {health.fetched}' if health.fetched else (health.note or 'nothing found')
+            lines.extend(_wrap(f'- {health.source} ok, {detail}'))
 
     return '\n'.join(lines).rstrip() + '\n'

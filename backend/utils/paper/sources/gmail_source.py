@@ -12,7 +12,7 @@ decides the design: rules first, model only on what survives.
 
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from models.paper import HeldBack, SourceHealth
@@ -28,9 +28,9 @@ MAX_BODY_CHARS = 2000
 # Queries that between them cover bulk mail without touching the primary inbox,
 # where personal correspondence lives. The edition never reads personal mail.
 QUERIES = (
-    'newer_than:{days}d category:updates',
-    'newer_than:{days}d category:promotions',
-    'newer_than:{days}d category:forums',
+    'after:{after} before:{before} category:updates',
+    'after:{after} before:{before} category:promotions',
+    'after:{after} before:{before} category:forums',
 )
 
 # ---------------------------------------------------------------------------
@@ -44,17 +44,25 @@ QUERIES = (
 _SUBJECT_BLOCKLIST = re.compile(
     # The trailing \b cannot follow a literal ending in punctuation, so patterns
     # like "invitation:" are held in their own alternative outside the group.
-    r'(?:\binvitation\s*:|\b('
-    r'verification\s+code|verify\s+your|confirm\s+your\s+(email|account)|'
-    r'security\s+(code|alert)|one[-\s]?time\s+(code|password|passcode)|otp|2fa|'
-    r'two[-\s]?factor|magic\s+link|sign[-\s]?in\s+(code|link)|login\s+code|'
-    r'password\s+(reset|changed)|reset\s+your\s+password|'
-    r'authentication\s+code|access\s+code|'
+    r'(?:\binvitation\s*:|\bcode\s*[:#]|\b('
+    # Credentials. Providers phrase these a dozen ways and every one of them is
+    # a subject that carries the secret in the subject line itself.
+    r'(verification|security|confirmation|login|log-in|sign-in|signin|single[-\s]?use|'
+    r'temporary|recovery|activation|authentication|access|one[-\s]?time|passcode|pass)\s*code|'
+    r'your(?:\s+\w+){0,3}\s+code\b|code\s+is|otp|2fa|two[-\s]?factor|'
+    r'verify\s+your|confirm\s+your\s+(email|account|identity)|confirm\s+it.?s\s+you|'
+    r'magic\s+link|(sign|log)[-\s]?in\s+(to|link|request|attempt)|login\s+link|'
+    r'password\s+(reset|changed)|reset\s+your\s+password|(reset|recover|recovery)\s+(instructions|link)|'
+    r'unusual\s+(sign[-\s]?in|activity|login)|security\s+alert|'
+    # Money. Worthless a day later, and private.
     r'your\s+(receipt|order|invoice|refund)|order\s+(confirmed|confirmation|shipped)|'
-    r'payment\s+(received|failed|due|declined)|invoice\s+\#?\d|'
-    r'statement\s+(is\s+)?(ready|available)|account\s+statement|'
-    r'balance|overdraft|transaction\s+alert|card\s+(ending|was\s+used)|'
+    r'payment\s+(received|failed|due|declined|sent|of|to)|you\s+(sent|received)|'
+    r'invoice\s+\#?[\w-]*\d|statement\s+(is\s+)?(ready|available)|account\s+statement|'
+    r'balance|available\s+(funds|balance)|account\s+value|deposit|withdraw(al)?|net\s+pay|'
+    r'payout|payroll|purchase\s+(approved|declined)|overdraft|transaction\s+alert|'
+    r'card\s+(ending|was\s+used)|process\s+your\s+card|'
     r'subscription\s+(renew|renewed|renewal|expiring)|billing|'
+    # Machine noise.
     r'build\s+(failed|passed|succeeded)|ci\s+(failed|passed)|'
     r'pull\s+request|workflow\s+run|deployment\s+(failed|succeeded)|'
     r'calendar\s+invite|has\s+(accepted|declined)\s+your\s+invitation'
@@ -69,12 +77,15 @@ _SUBJECT_BLOCKLIST = re.compile(
 # all send from noreply@news.bloomberg.com. Sending bulk mail from an unmonitored
 # address is the norm for publications, not a signal of transactional mail.
 # Category is decided by subject and body instead, which is where the danger is.
+#
+# Anchored on `(?:^|[@.])` rather than `@`, because banks send from a sending
+# subdomain: `alerts@notify.wellsfargo.com` never matches a bare `@wellsfargo.`.
 _SENDER_BLOCKLIST = re.compile(
-    r'('
-    r'notifications?@github\.|notifications?@gitlab\.|ci_activity@|'
-    r'@stripe\.com|@paypal\.|@chase\.|@bankofamerica\.|@wellsfargo\.|@capitalone\.|'
-    r'@venmo\.|@squareup\.|@intuit\.|@amazonses\.'
-    r')',
+    r'(?:^|[@.])(?:'
+    r'stripe\.com|paypal\.|chase\.|bankofamerica\.|wellsfargo\.|capitalone\.|'
+    r'venmo\.|squareup\.|intuit\.|amazonses\.|zellepay\.|coinbase\.|robinhood\.|'
+    r'fidelity\.|schwab\.|americanexpress\.|citi\.|discover\.|revolut\.|wise\.com|gusto\.'
+    r')|notifications?@(github|gitlab)\.|ci_activity@',
     re.IGNORECASE,
 )
 
@@ -94,31 +105,74 @@ _PUBLICATION_NAMES = {
     'producthunt': 'Product Hunt',
 }
 
-# A body containing a bare 4-8 digit code next to code-ish words is a credential,
-# whatever the subject says.
-_CODE_IN_BODY = re.compile(
-    r'\b(code|otp|passcode|pin)\b[^\n]{0,40}?\b\d{4,8}\b|\b\d{4,8}\b[^\n]{0,40}?\bis\s+your\b',
+# A credential anywhere in the scanned text, however the template lays it out.
+#
+# `[\s\S]` rather than `[^\n]` because every real provider puts the code on its
+# own line ("Security code:\n\n7391042"), and the digit run allows separators
+# because Slack sends `034-928`, Apple sends `483 920` and Google sends
+# `G-123 456`. A `\d{4,8}` run bounded by \b matches none of those.
+_CREDENTIAL = re.compile(
+    r'\b(?:code|otp|passcode|pin|token|password)\b[\s\S]{0,60}?\b\d[\d\s\-]{2,10}\d\b'
+    r'|\b\d[\d\s\-]{2,10}\d\b[\s\S]{0,60}?\b(?:is\s+your|to\s+(?:continue|verify|sign))\b'
+    r'|\b\d[\d\s\-]{2,10}\d\b[\s\S]{0,40}?\b(?:code|otp|passcode|pin)\b'
+    r'|https?://\S{0,120}?(?:token|magic|otp|one[-_]?time|reset|recover|verify|confirm|auth)\S{0,40}=',
     re.IGNORECASE,
 )
+
+# An amount tied to an account identifier. Deliberately NOT bare currency: real
+# newsletters are full of dollar figures (Money Stuff, StockStory), and cutting
+# on `$` alone would delete the best mail in the inbox. It is the pairing with
+# an account, card or routing number that makes it the reader's own money.
+_FINANCIAL_DETAIL = re.compile(
+    r'\b(?:account|card|acct)\b[\s\S]{0,40}?\b(?:ending|number|no\.?)\b'
+    r'|\brouting\b[\s\S]{0,20}?\d{6,}'
+    r'|\b(?:available|current|remaining)\s+(?:balance|funds)\b'
+    r'|\b(?:account\s+value|net\s+pay|direct\s+deposit)\b',
+    re.IGNORECASE,
+)
+
+
+def scanned_text(message: dict[str, Any]) -> str:
+    """Every field of a message that can reach a prompt.
+
+    Checking `body` alone was a no-op on most real mail. `parse_gmail_message`
+    only decodes a body for single-part text/plain or a top-level text part, so
+    HTML-only and multipart/related messages — the dominant transactional
+    shapes — parse to an empty body. Meanwhile the clustering prompt is handed
+    `snippet`, which Gmail always populates with the stripped opening text, i.e.
+    exactly the line the code sits on. The filter must read what the model reads.
+    """
+    return '\n'.join(
+        part
+        for part in (
+            str(message.get('subject') or ''),
+            str(message.get('snippet') or ''),
+            str(message.get('body') or '')[:MAX_BODY_CHARS],
+        )
+        if part
+    )
 
 
 def exclusion_reason(message: dict[str, Any]) -> str | None:
     """Why this message must never be printed, or None if it may proceed.
 
-    Checked against subject, sender and body. Returns the reason so the cut can
-    be shown in Held Back — the reader sees that mail was excluded without
-    seeing its contents.
+    The category rules read the subject, because a body full of dollar figures
+    is a normal newsletter and cutting on that would delete the best mail in the
+    inbox. The credential and account-detail rules read **everything the model
+    will be shown**, because that is where the secret actually sits.
     """
     subject = str(message.get('subject') or '')
     sender = str(message.get('from') or '')
-    body = str(message.get('body') or '')[:MAX_BODY_CHARS]
+    scanned = scanned_text(message)
 
     if _SUBJECT_BLOCKLIST.search(subject):
         return 'transactional, security or billing mail'
     if _SENDER_BLOCKLIST.search(sender):
         return 'automated sender on the exclusion list'
-    if _CODE_IN_BODY.search(body):
-        return 'contains what looks like a one-time code'
+    if _CREDENTIAL.search(scanned):
+        return 'contains what looks like a one-time code or sign-in link'
+    if _FINANCIAL_DETAIL.search(scanned):
+        return 'contains account or balance detail'
     return None
 
 
@@ -162,7 +216,10 @@ async def fetch_newsletters(
     day: date,
     days: int = 1,
 ) -> tuple[list[dict[str, Any]], list[HeldBack], SourceHealth]:
-    """Read the last ``days`` of bulk mail, minus everything excluded.
+    """Read ``day``'s bulk mail, minus everything excluded.
+
+    The window is bounded by date rather than `newer_than:`, so a historic
+    edition prints the mail of the day it reports on instead of this morning's.
 
     Returns the survivors, the held-back entries describing what was cut, and
     the source health for this run.
@@ -170,16 +227,21 @@ async def fetch_newsletters(
     if not integration or not access_token:
         return [], [], SourceHealth(source='gmail', ok=False, note='Google account not connected')
 
+    after = (day - timedelta(days=max(0, days - 1))).strftime('%Y/%m/%d')
+    before = (day + timedelta(days=1)).strftime('%Y/%m/%d')
+
     seen_ids: set[str] = set()
     parsed: list[dict[str, Any]] = []
     fetched = 0
+    failures: list[str] = []
 
     for template in QUERIES:
-        query = template.format(days=max(1, days))
+        query = template.format(after=after, before=before)
         try:
             raw = await get_gmail_messages(access_token, query=query, max_results=MAX_MESSAGES)
         except Exception as e:  # noqa: BLE001 — one query failing must not lose the section.
             logger.warning('paper: gmail query %r failed: %s', query, sanitize(str(e)))
+            failures.append(query)
             continue
         fetched += len(raw or [])
         for message in raw or []:
@@ -191,6 +253,16 @@ async def fetch_newsletters(
                 parsed.append(parse_gmail_message(message))
             except Exception as e:  # noqa: BLE001
                 logger.info('paper: could not parse a gmail message: %s', sanitize(str(e)))
+
+    if len(failures) == len(QUERIES):
+        # Every query failed. Reporting this as a quiet mailbox is the exact
+        # failure the design exists to prevent: two weeks of a dead token would
+        # look identical to two weeks with no newsletters.
+        return (
+            [],
+            [],
+            SourceHealth(source='gmail', ok=False, fetched=0, kept=0, note='every Gmail query failed'),
+        )
 
     if fetched == 0 and not parsed:
         return (
@@ -215,10 +287,11 @@ async def fetch_newsletters(
         for reason, count in sorted(cut_reasons.items(), key=lambda pair: -pair[1])
     ]
 
+    partial = f'{len(failures)} of {len(QUERIES)} Gmail queries failed' if failures else ''
     return (
         kept,
         held_back,
-        SourceHealth(source='gmail', ok=True, fetched=fetched, kept=len(kept)),
+        SourceHealth(source='gmail', ok=True, fetched=fetched, kept=len(kept), note=partial),
     )
 
 

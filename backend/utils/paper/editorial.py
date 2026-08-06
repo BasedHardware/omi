@@ -49,9 +49,12 @@ MAX_SUMMARY_CHARS = 300
 MAX_WHY_CHARS = 400
 
 _STYLE = (
+    'Address the reader as "you" throughout. Never name them or write about them in the '
+    'third person; they are the only subject of this paper. '
     'Write short, simple, conversational sentences. Say each thing once. Plain words. '
-    'No preamble, no motivational language, no emoji, no second-person coaching. '
-    'No em dashes, semicolons or ellipses.'
+    'No preamble, no motivational language, no emoji, no coaching. '
+    'No em dashes, semicolons or ellipses. '
+    'Write in English even when the source record is in another language.'
 )
 
 
@@ -80,12 +83,63 @@ def ask_model(uid: str, prompt: str, cache_key: str) -> dict:
         return {}
 
 
+def _looks_truncated(text: str) -> bool:
+    """A preview that stops mid-sentence rather than at a full stop."""
+    stripped = text.rstrip()
+    return bool(stripped) and stripped[-1] not in '.!?"\u201d)'
+
+
+_DANGLING = {
+    'and',
+    'or',
+    'but',
+    'the',
+    'a',
+    'an',
+    'to',
+    'of',
+    'in',
+    'on',
+    'for',
+    'with',
+    'that',
+    'which',
+    'as',
+    'at',
+    'by',
+    'from',
+    'is',
+    'was',
+    'are',
+    'were',
+    'its',
+}
+
+
 def clip(text: object, limit: int) -> str:
-    """Trim to a ceiling on a word boundary."""
+    """Trim to a ceiling, ending somewhere a person would stop.
+
+    Cutting at a word boundary alone produced lines ending "transcription,
+    memory and." The ceiling is a hard constraint, so trailing connectives get
+    dropped rather than printed.
+    """
     value = str(text or '').strip()
     if len(value) <= limit:
         return value
-    return value[:limit].rsplit(' ', 1)[0].rstrip(',.;:') + '.'
+
+    window = value[:limit]
+    # Prefer ending at the last complete sentence inside the budget.
+    for stop in ('. ', '? ', '! '):
+        cut = window.rfind(stop)
+        if cut > limit // 2:
+            return window[: cut + 1].strip()
+
+    words = window.rsplit(' ', 1)[0].split()
+    while words and words[-1].strip(',.;:').lower() in _DANGLING:
+        words.pop()
+    if not words:
+        return window.strip()
+    return ' '.join(words).rstrip(',.;:') + '.'
 
 
 def clip_words(text: object, limit: int) -> str:
@@ -179,10 +233,10 @@ Return only JSON, no fences:
 {{"note": "<one sentence, or empty string>"}}"""
 
 
-def build_today(uid: str, events: list, commitments: list[Commitment]) -> Today:
+def build_today(uid: str, events: list, commitments: list[Commitment], calendar_ok: bool = True) -> Today:
     """Today's shape. Deterministic apart from the one framing line."""
-    today = Today(events=events, commitments=commitments)
-    if today.is_clear:
+    today = Today(events=events, commitments=commitments, calendar_ok=calendar_ok)
+    if today.is_clear or today.is_unknown:
         return today
 
     event_lines = '\n'.join(f'- {e.title} at {e.start or "unspecified time"}' for e in events) or '(none)'
@@ -211,7 +265,15 @@ MESSAGES:
 {rubric}
 
 HARD RULE: every story must come from the messages above. Do not add context you know from \
-elsewhere. Do not invent numbers. If a message is pure advertising with no information, drop it.
+elsewhere. Do not invent numbers.
+
+Previews are truncated. Where you see [PREVIEW CUT OFF HERE] the sentence is incomplete and you \
+MUST NOT finish it, guess the missing object, or state what the sentence was going to say. Write \
+only the part that is actually there, or drop the story. Completing a cut-off sentence is the \
+worst thing you can do here.
+
+Drop anything that is pure advertising, a transactional notification, or has no information beyond \
+restating its own subject line.
 
 {style}
 
@@ -221,12 +283,13 @@ Return only JSON, no fences:
     {{
       "summary": "<one sentence. What happened.>",
       "publications": ["<publication names from the messages that covered it>"],
-      "why": "<one short clause on why it matters to this reader, or empty string>"
+      "why": "<one short clause on why it matters to THIS reader specifically>"
     }}
   ]
 }}
 
-Most significant first. At most {limit} stories."""
+Most significant first. At most {limit} stories. If you cannot say why a story matters to this \
+reader, leave it out entirely rather than returning it with an empty reason."""
 
 
 def cluster_newsletters(uid: str, messages: list[dict], profile, limit: int = 12) -> list[NewsletterStory]:
@@ -238,7 +301,13 @@ def cluster_newsletters(uid: str, messages: list[dict], profile, limit: int = 12
     for message in messages[:40]:
         publication = str(message.get('publication') or 'Unknown')
         subject = str(message.get('subject') or '')
-        snippet = str(message.get('snippet') or str(message.get('body') or ''))[:400]
+        full = str(message.get('snippet') or str(message.get('body') or ''))
+        snippet = full[:400]
+        # Gmail previews stop mid-sentence. Marking the cut is what stops the
+        # model finishing the thought: a preview ending "SpaceX announced it
+        # will exclusively use" became "...use its hardware" in a real run.
+        if len(full) > len(snippet) or _looks_truncated(snippet):
+            snippet = snippet.rstrip() + ' [PREVIEW CUT OFF HERE]'
         rendered.append(f'[{publication}] {subject}\n{snippet}')
 
     rubric = rubric_text(profile)
@@ -253,19 +322,28 @@ def cluster_newsletters(uid: str, messages: list[dict], profile, limit: int = 12
         'omi-paper-newsletters',
     )
 
+    # The sources line is what lets a reader check a story, so it may only name
+    # publications that actually sent mail. Without this the model can invent a
+    # byline, and an injected message can supply its own — the model is being
+    # handed attacker-authored subjects and snippets by construction.
+    known = {str(m.get('publication') or '').casefold(): str(m.get('publication') or '') for m in messages}
+
     stories: list[NewsletterStory] = []
     for raw in (payload.get('stories') or [])[:limit]:
         if not isinstance(raw, dict):
             continue
         summary = clip(raw.get('summary'), MAX_SUMMARY_CHARS)
-        publications = [str(p).strip() for p in (raw.get('publications') or []) if str(p).strip()]
+        named = [str(p).strip() for p in (raw.get('publications') or []) if str(p).strip()]
+        verified = [known[name.casefold()] for name in named if name.casefold() in known]
         story = NewsletterStory(
             summary=summary,
-            sources=[SourceRef(name=name) for name in publications[:6]],
+            sources=[SourceRef(name=name) for name in dict.fromkeys(verified)][:6],
             why=clip(raw.get('why'), MAX_SUMMARY_CHARS),
         )
-        # A story with no publication behind it cannot be checked, so it is not printed.
-        if story.is_printable:
+        # Two hard drops. No publication means the story cannot be checked. No
+        # reason means the model could not connect it to this reader, which is
+        # the definition of filler in a paper whose whole claim is relevance.
+        if story.is_printable and story.why:
             stories.append(story)
     return stories
 
@@ -326,6 +404,7 @@ def rank_for_you(
     )
 
     picked: list[PaperItem] = []
+    seen: set[int] = set()
     for raw in (payload.get('picks') or [])[:limit]:
         if not isinstance(raw, dict):
             continue
@@ -333,8 +412,10 @@ def rank_for_you(
             index = int(raw.get('index', -1))
         except (TypeError, ValueError):
             continue
-        if not 0 <= index < len(candidates):
+        # A repeated index would print the same paper twice.
+        if not 0 <= index < len(candidates) or index in seen:
             continue
+        seen.add(index)
         base = candidates[index]
         picked.append(
             base.model_copy(

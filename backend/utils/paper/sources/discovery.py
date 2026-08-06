@@ -50,6 +50,7 @@ async def web_candidates(profile: InterestProfile) -> tuple[list[NewsLine], Sour
 
     lines: list[NewsLine] = []
     attempted = 0
+    failed = 0
 
     for interest in profile.interests[:MAX_SEARCH_TOPICS]:
         attempted += 1
@@ -59,10 +60,14 @@ async def web_candidates(profile: InterestProfile) -> tuple[list[NewsLine], Sour
             # directly raises at runtime rather than searching.
             result = await perplexity_web_search_tool.ainvoke({'query': query})
         except Exception as e:  # noqa: BLE001
-            logger.warning('paper: web search failed for %r: %s', interest.topic, sanitize(str(e)))
+            logger.warning('paper: a web search failed: %s', sanitize(str(e)))
+            failed += 1
             continue
         text = (result or '').strip()
+        # The gateway returns a plain "Error: ..." string rather than raising, so
+        # this string check is the only signal that web search is down at all.
         if not text or text.lower().startswith('error'):
+            failed += 1
             continue
         lines.append(
             NewsLine(
@@ -75,10 +80,11 @@ async def web_candidates(profile: InterestProfile) -> tuple[list[NewsLine], Sour
             )
         )
 
+    every_search_failed = attempted > 0 and failed == attempted
     return lines, SourceHealth(
         source='web',
-        ok=True,
+        ok=not every_search_failed,
         fetched=attempted,
         kept=len(lines),
-        note='' if lines else 'no usable web results',
+        note='every web search failed' if every_search_failed else '',
     )

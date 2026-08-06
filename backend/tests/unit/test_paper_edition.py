@@ -20,7 +20,7 @@ from models.paper import (
     SourceRef,
     Yesterday,
 )
-from utils.paper.context import focus_blocks
+from utils.paper.context import focus_blocks, screen_day_window
 from utils.paper.render import render_text
 from utils.paper.sources.gmail_source import _sender_name, exclusion_reason
 
@@ -72,6 +72,33 @@ def test_apps_touched_briefly_are_not_focus():
     assert [b.label for b in blocks] == ['Cursor']
 
 
+@pytest.mark.parametrize(
+    'stored',
+    [
+        '2026-08-02T02:32:46Z',  # the format the live account actually stores
+        '2026-08-02T23:59:00Z',
+        '2026-08-02 02:32:46.000',  # the format the db docstring claims
+        '2026-08-02 23:59:59.999',
+    ],
+)
+def test_the_screen_day_window_selects_real_stored_timestamps(stored):
+    """Screen rows are filtered by string comparison, so the bounds must sort correctly.
+
+    Formatting a day as `2026-08-02 23:59:59.999` puts the end bound *below*
+    every `2026-08-02T...Z` row, because 'T' > ' '. A single-day query then
+    returns nothing and the focus section looks like a day with no capture.
+    Caught by running against the real account, where the day had 5,000 rows.
+    """
+    start, end = screen_day_window(date(2026, 8, 2))
+    assert start <= stored <= end
+
+
+@pytest.mark.parametrize('stored', ['2026-08-03T00:00:01Z', '2026-08-01T23:59:59Z', '2026-08-03 00:00:01.000'])
+def test_the_screen_day_window_excludes_adjacent_days(stored):
+    start, end = screen_day_window(date(2026, 8, 2))
+    assert not (start <= stored <= end)
+
+
 def test_unparseable_timestamps_are_skipped_not_fatal():
     blocks = focus_blocks(
         [
@@ -112,7 +139,59 @@ def test_a_code_in_the_body_is_caught_even_with_an_innocent_subject():
         'from': 'hello@startup.com',
         'body': 'Thanks for joining. Your code is 903114 and expires in 10 minutes.',
     }
-    assert exclusion_reason(message) == 'contains what looks like a one-time code'
+    assert exclusion_reason(message) == 'contains what looks like a one-time code or sign-in link'
+
+
+# Real provider message shapes. Every one of these reached the model before the
+# filter was rewritten: the credential check read `body`, but `parse_gmail_message`
+# leaves `body` empty for HTML-only and multipart/related mail — the dominant
+# transactional shapes — while the clustering prompt is handed `snippet`.
+@pytest.mark.parametrize(
+    'case,sender,subject,body,snippet',
+    [
+        ('code in snippet, innocent subject', 'hello@startup.com', 'Welcome aboard', '', '483920 Your login code.'),
+        ('hyphenated code', 'feedback@slack.com', 'Slack confirmation code: 034-928', '', ''),
+        ('code on its own line', 'a@microsoft.com', 'Your single-use code', 'Security code:\n\n7391042', ''),
+        ('spaced code', 'noreply@email.apple.com', 'Notice', 'Your code is 483 920', ''),
+        ('google G- code', 'no-reply@accounts.google.com', 'Notice', 'G-123 456 is your code', ''),
+        ('brand between your and code', 'noreply@uber.com', "Here's your Uber code", '', ''),
+        ('apple id code', 'noreply@email.apple.com', 'Your Apple ID code', '', ''),
+        ('magic link', 'no-reply@substack.com', 'Sign in', 'https://x.co/sign-in?token=eyJhbGciOi', ''),
+        ('login link subject', 'team@makenotion.com', 'Your Notion login link', '', ''),
+        ('unusual sign-in', 'no-reply@accounts.google.com', 'Action required: unusual sign-in attempt', '', ''),
+        ('confirm identity', 'no-reply@coinbase.com', "Confirm it's you", '', ''),
+        ('reset instructions', 'no-reply@figma.com', 'Reset instructions', '', ''),
+        ('recovery link', 'no-reply@vercel.com', 'Recovery link for your account', '', ''),
+        ('bank sending subdomain', 'x@ealerts.bankofamerica.com', 'A notice', '', ''),
+        ('wells fargo subdomain', 'alerts@notify.wellsfargo.com', 'Your available funds', '', ''),
+        (
+            'account ending + amount',
+            'x@b.com',
+            'A deposit',
+            'A deposit of $4,812.55 to your account ending in 4021.',
+            '',
+        ),
+        ('card ending', 'x@b.com', 'Purchase approved', '$529.99 charged to card ending in 8817', ''),
+        ('routing number', 'billing@acme.com', 'Invoice INV-00421', 'routing 021000021 account 8829104471', ''),
+        ('money sent', 'x@b.com', 'You sent $1,200.00 to Jane Doe', '', ''),
+        ('card declined', 'info@mailer.netflix.com', "We couldn't process your card", '', ''),
+    ],
+)
+def test_credentials_and_account_detail_never_reach_the_page(case, sender, subject, body, snippet):
+    assert exclusion_reason({'from': sender, 'subject': subject, 'body': body, 'snippet': snippet}), case
+
+
+def test_the_filter_reads_every_field_the_model_is_shown():
+    """`body` alone was a no-op on the mail that matters.
+
+    HTML-only and multipart/related messages parse to an empty body, so the
+    credential check scanned nothing while the prompt received the snippet that
+    carried the code.
+    """
+    from utils.paper.sources.gmail_source import scanned_text
+
+    scanned = scanned_text({'subject': 'Hi', 'snippet': 'code 123456', 'body': ''})
+    assert 'code 123456' in scanned
 
 
 def test_automated_senders_are_excluded_by_address():

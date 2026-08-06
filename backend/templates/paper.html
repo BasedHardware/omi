@@ -129,7 +129,9 @@
 {% if edition.today %}
 <section>
   <h2>Today</h2>
-  {% if edition.today.is_clear %}
+  {% if edition.today.is_unknown %}
+  <p class="empty">Calendar unavailable.</p>
+  {% elif edition.today.is_clear %}
   <p class="empty">Nothing scheduled.</p>
   {% else %}
     {% if edition.today.note %}<p>{{ edition.today.note }}</p>{% endif %}
@@ -169,6 +171,13 @@
 </section>
 {% endif %}
 
+{% if edition.for_you.is_empty and arxiv_health and arxiv_health.ok and arxiv_health.fetched %}
+<section>
+  <h2>For you</h2>
+  <p class="empty">Nothing cleared the bar. {{ arxiv_health.fetched }} entries scanned.</p>
+</section>
+{% endif %}
+
 {% if not edition.for_you.is_empty %}
 <section>
   <h2>For you</h2>
@@ -189,6 +198,19 @@
     {% endfor %}
   </ul>
   {% endif %}
+
+  {% if edition.for_you.news %}
+  <ul>
+    {% for line in edition.for_you.news %}
+    {% if line.claim.is_printable %}
+    <li>
+      {{ line.claim.text }}
+      <span class="story-sources">({{ line.claim.sources | map(attribute='name') | join(', ') }})</span>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ul>
+  {% endif %}
 </section>
 {% endif %}
 
@@ -202,12 +224,16 @@
 </section>
 {% endif %}
 
-{% if edition.degraded_sources %}
+{% if edition.source_health %}
 <section class="degraded">
   <h2>Sources</h2>
   <ul>
-    {% for health in edition.degraded_sources %}
+    {% for health in edition.source_health %}
+    {% if health.ok %}
+    <li>{{ health.source }} ok, {% if health.fetched %}{{ health.kept }} of {{ health.fetched }}{% else %}{{ health.note or 'nothing found' }}{% endif %}</li>
+    {% else %}
     <li>{{ health.source }} unavailable{% if health.note %} — {{ health.note }}{% endif %}</li>
+    {% endif %}
     {% endfor %}
   </ul>
 </section>
