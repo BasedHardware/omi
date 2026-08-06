@@ -307,6 +307,9 @@ class MemoriesViewModel: ObservableObject {
   /// Cached filtered and sorted memories - only recomputed when inputs change
   @Published private(set) var filteredMemories: [ServerMemory] = []
 
+  /// Guardrailed only — no search term, no tags. See `MemoryPageProjection.guardrailed`.
+  @Published private(set) var streamMemories: [ServerMemory] = []
+
   /// Cached tag counts - only recomputed when memories change
   @Published private(set) var tagCounts: [MemoryTag: Int] = [:]
 
@@ -842,6 +845,14 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Recompute filtered memories when search/tags/layer change
+  /// The guardrails, bound to this page's state. One definition, two readers, so they cannot drift.
+  private func guardrailed(_ values: [ServerMemory]) -> [ServerMemory] {
+    MemoryPageProjection.guardrailed(
+      values, allowedLayers: activeLayerFilter, thisDeviceOnly: filterThisDeviceOnly,
+      deviceScopeSupported: deviceScopeSupported,
+      matchesThisDevice: { ClientDeviceService.shared.memoryMatchesThisDevice($0) })
+  }
+
   private func recomputeFilteredMemories() {
     // Must match the isInFilteredMode property so pagination routing is
     // consistent. Layer-only views and device-scoped views are excluded from
@@ -870,22 +881,11 @@ class MemoriesViewModel: ObservableObject {
       result = memories
     }
 
-    // Guardrail: Archive is never part of the default list unless the user explicitly selects Archive.
-    if let allowedLayers = activeLayerFilter {
-      let allowedTiers = Set(allowedLayers)
-      result = result.filter { allowedTiers.contains($0.tier) }
-    }
-
-    // A canonical response has already been filtered server-side and its
-    // provenance is authoritative. Legacy rows cannot identify their capture
-    // device, so keeping them visible is the only honest fallback; filtering
-    // them client-side would turn the list into a misleading empty state.
-    if filterThisDeviceOnly && deviceScopeSupported {
-      result = result.filter { ClientDeviceService.shared.memoryMatchesThisDevice($0) }
-    }
+    result = guardrailed(result)
 
     // Sort by date (newest first)
     result.sort { $0.createdAt > $1.createdAt }
+    streamMemories = guardrailed(memories).sorted { $0.createdAt > $1.createdAt }
 
     if isInFilteredMode {
       // Store full results for pagination, apply display cap

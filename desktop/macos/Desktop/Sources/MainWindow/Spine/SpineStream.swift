@@ -122,12 +122,12 @@ struct SpineStream: View {
       ingest()
     }
     .onReceive(appState.$conversations) { _ in ingest() }
-    .onReceive(memoriesViewModel.$memories) { _ in ingest() }
+    .onReceive(memoriesViewModel.$streamMemories) { _ in ingest() }
     .onChange(of: request) { _, newValue in store.apply(request: newValue) }
   }
 
   private func ingest() {
-    store.ingest(conversations: appState.conversations, memories: memoriesViewModel.memories)
+    store.ingest(conversations: appState.conversations, memories: memoriesViewModel.streamMemories)
     store.apply(request: request)
   }
 
@@ -283,9 +283,17 @@ struct SpineDayHeader: View {
     .padding(.leading, SpineMetrics.gutterWidth)
     .frame(height: SpineMetrics.dayHeaderHeight, alignment: .leading)
     .frame(maxWidth: .infinity, alignment: .leading)
-    // Pinned headers have content sliding under them, so the header needs a ground of its own or the
-    // rows read straight through it. The panel's own scrim, not a new colour.
-    .background(Ink.surface.opacity(0.9))
+    // Pinned headers have rows sliding under them, so the header has to occlude — and **a wash
+    // cannot occlude.** The first attempt painted `Ink.surface` at 0.9, which on the light-pinned
+    // panel is a hard white slab: it read as paint laid over the glass rather than as chrome
+    // belonging to it, and it is the same class of bug as any literal that only looks right against
+    // one ground.
+    //
+    // A material is the vocabulary for exactly this — it occludes by frosting what is behind it,
+    // so the header stays part of the same glass the panel is made of whatever scrolls under it.
+    // `Ink.separator` under it, because a rule between blocks is what this is (`Ink.hairline` is
+    // for the outline of something you press).
+    .background(.regularMaterial)
     .overlay(alignment: .bottom) { Rectangle().fill(Ink.separator).frame(height: 1) }
   }
 }

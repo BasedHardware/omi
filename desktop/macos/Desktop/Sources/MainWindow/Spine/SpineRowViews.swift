@@ -235,7 +235,11 @@ struct SpineMomentsRow: View {
           }
         }
         .padding(.vertical, 2)
+        // The strip runs past the panel's edge, and a tile sliced off square reads as a layout
+        // overflow rather than as "there is more this way".
+        .padding(.trailing, SpineStripFade.width)
       }
+      .mask(SpineStripFade())
       // A strip that shows eight of a hundred and eighty-four and says nothing about it is a strip
       // that lies about the day.
       if total > moments.count {
@@ -247,6 +251,39 @@ struct SpineMomentsRow: View {
     }
     .padding(.top, 7)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// The mask that turns a clipped strip into a strip with more to the right of it.
+///
+/// The same technique the Rewind results panel already uses for its bottom edge
+/// (`RewindSearchScrollFade`), turned on its side — deliberately the same idea rather than a second
+/// opinion. **A mask and not an overlay, because the panel is glass**: there is no opaque colour to
+/// fade a gradient *to*, and painting one would put a grey band down the frosting. Fading the
+/// content's own alpha lets the sliced tile dissolve into the glass the panel is made of.
+///
+/// Applied unconditionally, for the reason `glassScrollFade` documents: a conditional modifier
+/// changes the scroll view's identity every time the strip grows past one screenful, which throws
+/// away the scroll position mid-scroll.
+struct SpineStripFade: View {
+  /// How much of the trailing edge dissolves. Wide enough to read as a fade rather than as a soft
+  /// crop, narrow enough that it never eats a whole tile.
+  static let width: CGFloat = 28
+
+  var body: some View {
+    GeometryReader { proxy in
+      let full = max(proxy.size.width, 1)
+      // Clamped so a strip narrower than the fade cannot invert the gradient.
+      let start = min(max((full - Self.width) / full, 0), 1)
+      LinearGradient(
+        stops: [
+          .init(color: .black, location: 0),
+          .init(color: .black, location: start),
+          .init(color: .clear, location: 1),
+        ],
+        startPoint: .leading,
+        endPoint: .trailing)
+    }
   }
 }
 
