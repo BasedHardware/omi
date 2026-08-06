@@ -354,6 +354,8 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
+  let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
   /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).

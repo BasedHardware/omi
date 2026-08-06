@@ -181,6 +181,7 @@ extension AppState {
 
       isTranscribing = true
       recordingGeneration &+= 1
+      preferredMicrophoneReconnectMonitor.start(observing: self)
       AssistantSettings.shared.transcriptionEnabled = true
       audioSource = effectiveSource
       currentTranscript = ""
@@ -855,6 +856,7 @@ extension AppState {
   /// instead of relying on the user's current in-progress pointer.
   @discardableResult
   func stopTranscription() -> Task<Void, Never>? {
+    preferredMicrophoneReconnectMonitor.stop()
     recordingGeneration &+= 1
     // On-device path: await both Parakeet tail flushes before clearing state so the
     // last words persist to the current conversation.
@@ -1298,6 +1300,7 @@ extension AppState {
     localSystemService = nil
     sttSession.endRecording()
 
+    preferredMicrophoneReconnectMonitor.stop()
     isTranscribing = false
   }
 
