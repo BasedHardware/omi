@@ -76,8 +76,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   final AppReviewService _appReviewService = AppReviewService();
   ConversationTab selectedTab = ConversationTab.summary;
 
-  // Callback to seek audio to transcript segment
-  Future<void> Function(double)? _seekToSegmentCallback;
+  // Callback to seek audio to transcript segment (start, end) in wall seconds
+  Future<void> Function(double start, double end)? _seekToSegmentCallback;
   bool _isSharing = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
@@ -1058,9 +1058,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       _controller!.animateTo(0);
                                     }
 
-                                    // Seek to segment using callback
+                                    // Seek to segment using callback (start + end for bounded play)
                                     if (_seekToSegmentCallback != null) {
-                                      await _seekToSegmentCallback!(segment.start);
+                                      await _seekToSegmentCallback!(segment.start, segment.end);
                                       HapticFeedback.lightImpact();
                                     }
                                   },
