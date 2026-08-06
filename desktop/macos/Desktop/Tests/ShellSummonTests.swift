@@ -196,6 +196,7 @@ final class ShellSummonTests: XCTestCase {
       "the retired window still owns the shell's Escape route; the visible one has none")
   }
 
+  @MainActor
   private func makeShellWindow() -> NSWindow {
     NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 960, height: 700),
