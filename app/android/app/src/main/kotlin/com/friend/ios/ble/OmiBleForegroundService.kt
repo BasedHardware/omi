@@ -46,9 +46,9 @@ class OmiBleForegroundService : Service() {
         private const val STABILITY_TIMER_MS = 60_000L
         private const val RECONNECT_DELAY_MS = 3_000L
         private const val COMPANION_RATE_LIMIT_MS = 15_000L
-        private const val PREFS_NAME = "ble_config"
-        private const val PREFS_KEY = "managed_device"
-        private const val PREFS_USER_DISCONNECTED = "user_disconnected"
+        const val PREFS_NAME = "ble_config"
+        const val PREFS_KEY = "managed_device"
+        const val PREFS_USER_DISCONNECTED = "user_disconnected"
         private const val DFU_SERVICE_UUID = "00001530-1212-efde-1523-785feabcd123"
         private const val PREFS_DIAGNOSTICS = "ble_diagnostics"
         private const val KEY_DISCONNECT_HISTORY = "disconnect_history"
@@ -369,27 +369,41 @@ class OmiBleForegroundService : Service() {
 
     fun unmanageDevice(address: String) {
         val addr = address.uppercase()
-        val managed = managedDevices.remove(addr) ?: return
+        val managed = managedDevices.remove(addr)
+        val plan = BleUnmanagePolicy.plan(managedEntryPresent = managed != null)
 
-        Log.i(TAG, "unmanageDevice: $addr")
+        // Never early-return when the map entry is missing (#5361): GATT may still
+        // be live while Dart has already flipped UI to disconnected.
+        Log.i(TAG, "unmanageDevice: $addr (managedEntry=${managed != null})")
 
-        managed.pendingReconnect?.let { handler.removeCallbacks(it) }
-        managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
+        if (plan.cancelManagedTimers) {
+            managed?.pendingReconnect?.let { handler.removeCallbacks(it) }
+            managed?.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
+        }
 
-        bleManager.disconnectGatt(addr)
-        bleManager.closeGatt(addr)
+        if (plan.tearDownGatt) {
+            bleManager.disconnectGatt(addr)
+            bleManager.closeGatt(addr)
+        }
 
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
-            .putBoolean(PREFS_USER_DISCONNECTED, true)
-            .apply()
+        if (plan.markUserDisconnected || plan.clearManagedDevicePref) {
+            val editor = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+            if (plan.markUserDisconnected) editor.putBoolean(PREFS_USER_DISCONNECTED, true)
+            if (plan.clearManagedDevicePref) editor.remove(PREFS_KEY)
+            editor.apply()
+        }
 
         persistDisconnectEvent(addr, 0, isManual = true, eventType = "disconnect")
 
-        bleManager.mainHandler.post {
-            bleManager.flutterApi?.onPeripheralDisconnected(addr, "unmanaged") {}
+        if (plan.notifyFlutterDisconnected) {
+            bleManager.mainHandler.post {
+                bleManager.flutterApi?.onPeripheralDisconnected(addr, "unmanaged") {}
+            }
         }
 
-        stopSelf()
+        if (plan.stopService) {
+            stopSelf()
+        }
     }
 
     // ── Connection ──
