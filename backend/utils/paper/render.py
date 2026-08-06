@@ -9,6 +9,7 @@ rather than a rewrite.
 import pathlib
 import textwrap
 from datetime import date
+from typing import Any, cast
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -59,9 +60,12 @@ def _hours(minutes: int) -> str:
     return f'{hours}h' if rest == 0 else f'{hours}h {rest}m'
 
 
-_env.filters['dateline'] = _dateline
-_env.filters['clock'] = _clock
-_env.filters['hours'] = _hours
+# Jinja types `filters` as a union of every builtin filter signature, so a plain
+# assignment does not type-check against it. The dict is genuinely str -> callable.
+_filters = cast('dict[str, Any]', _env.filters)
+_filters['dateline'] = _dateline
+_filters['clock'] = _clock
+_filters['hours'] = _hours
 
 
 def render_html(edition: Edition, reader_name: str = '') -> str:

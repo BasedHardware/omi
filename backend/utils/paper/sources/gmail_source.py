@@ -12,7 +12,7 @@ decides the design: rules first, model only on what survives.
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 from models.paper import HeldBack, SourceHealth

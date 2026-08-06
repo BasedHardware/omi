@@ -55,7 +55,9 @@ async def web_candidates(profile: InterestProfile) -> tuple[list[NewsLine], Sour
         attempted += 1
         query = f'latest news and newly shipped tools in the last 3 days about {interest.topic}'
         try:
-            result = await perplexity_web_search_tool(query)
+            # A @tool-decorated BaseTool, not a plain coroutine — calling it
+            # directly raises at runtime rather than searching.
+            result = await perplexity_web_search_tool.ainvoke({'query': query})
         except Exception as e:  # noqa: BLE001
             logger.warning('paper: web search failed for %r: %s', interest.topic, sanitize(str(e)))
             continue

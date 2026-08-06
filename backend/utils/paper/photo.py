@@ -18,7 +18,7 @@ from models.paper import Photo
 from utils.llm.gateway_client import generate_image_via_gateway
 from utils.log_sanitizer import sanitize
 
-from .editorial import _ask, _clip
+from .editorial import ask_model, clip
 from .context import DayContext, record_lines
 
 logger = logging.getLogger(__name__)
@@ -58,14 +58,14 @@ def make_photo(uid: str, context: DayContext) -> Photo | None:
     if not lines:
         return None
 
-    payload = _ask(
+    payload = ask_model(
         uid,
         _MOMENT_PROMPT.format(day=context.day.isoformat(), record='\n'.join(lines)),
         'omi-paper-photo',
     )
 
-    moment = _clip(payload.get('moment'), 160)
-    scene = _clip(payload.get('scene'), 600)
+    moment = clip(payload.get('moment'), 160)
+    scene = clip(payload.get('scene'), 600)
     if not moment or not scene:
         logger.info('paper: no groundable moment for the photo, omitting')
         return None
@@ -94,7 +94,7 @@ def make_photo(uid: str, context: DayContext) -> Photo | None:
 
     return Photo(
         moment=moment,
-        caption=_clip(payload.get('caption'), 200),
+        caption=clip(payload.get('caption'), 200),
         prompt=prompt,
         image_b64=image_b64,
     )

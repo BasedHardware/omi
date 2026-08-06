@@ -57,7 +57,7 @@ class DayContext:
         return not any([self.summary, self.conversations, self.focus, self.commitments])
 
 
-def _day_bounds(day: date) -> tuple[datetime, datetime]:
+def day_bounds(day: date) -> tuple[datetime, datetime]:
     """UTC start and end of ``day``.
 
     Stored timestamps are UTC, so the window is built in UTC. Per-user timezone
@@ -141,7 +141,7 @@ def _read_summary(uid: str, day: date, context: DayContext) -> None:
 
 
 def _read_conversations(uid: str, day: date, context: DayContext) -> None:
-    start, end = _day_bounds(day)
+    start, end = day_bounds(day)
     try:
         rows = conversations_db.get_conversations(
             uid,
@@ -164,7 +164,7 @@ def _read_conversations(uid: str, day: date, context: DayContext) -> None:
 
 
 def _read_screen(uid: str, day: date, context: DayContext) -> None:
-    start, end = _day_bounds(day)
+    start, end = day_bounds(day)
     try:
         rows = screen_activity_db.get_screen_activity(uid, start_date=start, end_date=end, limit=5000)
         context.focus = focus_blocks(rows or [])

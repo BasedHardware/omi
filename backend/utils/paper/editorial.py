@@ -64,7 +64,7 @@ def _parse(raw: str) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _ask(uid: str, prompt: str, cache_key: str) -> dict:
+def ask_model(uid: str, prompt: str, cache_key: str) -> dict:
     """One model call, returning {} on any failure.
 
     Callers degrade to stored text rather than raising: a partial edition still
@@ -80,7 +80,7 @@ def _ask(uid: str, prompt: str, cache_key: str) -> dict:
         return {}
 
 
-def _clip(text: object, limit: int) -> str:
+def clip(text: object, limit: int) -> str:
     """Trim to a ceiling on a word boundary."""
     value = str(text or '').strip()
     if len(value) <= limit:
@@ -88,7 +88,7 @@ def _clip(text: object, limit: int) -> str:
     return value[:limit].rsplit(' ', 1)[0].rstrip(',.;:') + '.'
 
 
-def _clip_words(text: object, limit: int) -> str:
+def clip_words(text: object, limit: int) -> str:
     words = str(text or '').strip().split()
     return ' '.join(words[:limit])
 
@@ -124,7 +124,7 @@ def write_yesterday(uid: str, context: DayContext) -> Yesterday | None:
         return None
 
     summary = context.summary or {}
-    payload = _ask(
+    payload = ask_model(
         uid,
         _YESTERDAY_PROMPT.format(
             day=context.day.isoformat(),
@@ -135,8 +135,8 @@ def write_yesterday(uid: str, context: DayContext) -> Yesterday | None:
         'omi-paper-yesterday',
     )
 
-    headline = _clip_words(payload.get('headline'), MAX_HEADLINE_WORDS) or str(summary.get('headline') or '').strip()
-    story = _clip(payload.get('story'), MAX_STORY_CHARS) or str(summary.get('overview') or '').strip()
+    headline = clip_words(payload.get('headline'), MAX_HEADLINE_WORDS) or str(summary.get('headline') or '').strip()
+    story = clip(payload.get('story'), MAX_STORY_CHARS) or str(summary.get('overview') or '').strip()
     if not headline and not story and not context.focus:
         return None
 
@@ -153,7 +153,7 @@ def write_yesterday(uid: str, context: DayContext) -> Yesterday | None:
         story=story,
         focus=context.focus,
         decisions=decisions,
-        unacted=_clip(payload.get('unacted'), MAX_SUMMARY_CHARS),
+        unacted=clip(payload.get('unacted'), MAX_SUMMARY_CHARS),
         source_date=context.day.isoformat(),
     )
 
@@ -188,12 +188,12 @@ def build_today(uid: str, events: list, commitments: list[Commitment]) -> Today:
     event_lines = '\n'.join(f'- {e.title} at {e.start or "unspecified time"}' for e in events) or '(none)'
     owed_lines = '\n'.join(f'- {c.text}' for c in commitments[:10]) or '(none)'
 
-    payload = _ask(
+    payload = ask_model(
         uid,
         _TODAY_PROMPT.format(events=event_lines, commitments=owed_lines, style=_STYLE),
         'omi-paper-today',
     )
-    today.note = _clip(payload.get('note'), MAX_SUMMARY_CHARS)
+    today.note = clip(payload.get('note'), MAX_SUMMARY_CHARS)
     return today
 
 
@@ -242,7 +242,7 @@ def cluster_newsletters(uid: str, messages: list[dict], profile, limit: int = 12
         rendered.append(f'[{publication}] {subject}\n{snippet}')
 
     rubric = rubric_text(profile)
-    payload = _ask(
+    payload = ask_model(
         uid,
         _NEWSLETTER_PROMPT.format(
             messages='\n\n'.join(rendered),
@@ -257,12 +257,12 @@ def cluster_newsletters(uid: str, messages: list[dict], profile, limit: int = 12
     for raw in (payload.get('stories') or [])[:limit]:
         if not isinstance(raw, dict):
             continue
-        summary = _clip(raw.get('summary'), MAX_SUMMARY_CHARS)
+        summary = clip(raw.get('summary'), MAX_SUMMARY_CHARS)
         publications = [str(p).strip() for p in (raw.get('publications') or []) if str(p).strip()]
         story = NewsletterStory(
             summary=summary,
             sources=[SourceRef(name=name) for name in publications[:6]],
-            why=_clip(raw.get('why'), MAX_SUMMARY_CHARS),
+            why=clip(raw.get('why'), MAX_SUMMARY_CHARS),
         )
         # A story with no publication behind it cannot be checked, so it is not printed.
         if story.is_printable:
@@ -319,7 +319,7 @@ def rank_for_you(
     rendered = '\n\n'.join(
         f'[{index}] {item.title}\n{item.what_it_says or ""}'.strip() for index, item in enumerate(candidates[:30])
     )
-    payload = _ask(
+    payload = ask_model(
         uid,
         _RANK_PROMPT.format(rubric=rubric, candidates=rendered, limit=limit, style=_STYLE),
         'omi-paper-rank',
@@ -339,9 +339,9 @@ def rank_for_you(
         picked.append(
             base.model_copy(
                 update={
-                    'what_it_says': _clip(raw.get('what_it_says'), MAX_WHY_CHARS) or base.what_it_says,
-                    'why_it_matters': _clip(raw.get('why_it_matters'), MAX_WHY_CHARS),
-                    'experiment': _clip(raw.get('experiment'), MAX_SUMMARY_CHARS),
+                    'what_it_says': clip(raw.get('what_it_says'), MAX_WHY_CHARS) or base.what_it_says,
+                    'why_it_matters': clip(raw.get('why_it_matters'), MAX_WHY_CHARS),
+                    'experiment': clip(raw.get('experiment'), MAX_SUMMARY_CHARS),
                 }
             )
         )
@@ -372,13 +372,13 @@ Use only what is above. Return only JSON, no fences:
 def write_cover(uid: str, contents: list[str]) -> Cover:
     if not contents:
         return Cover()
-    payload = _ask(
+    payload = ask_model(
         uid,
         _COVER_PROMPT.format(contents='\n'.join(f'- {line}' for line in contents[:20]), style=_STYLE),
         'omi-paper-cover',
     )
     return Cover(
-        thesis=_clip(payload.get('thesis'), MAX_SUMMARY_CHARS),
-        emphasis=_clip_words(payload.get('emphasis'), 2),
-        standfirst=_clip(payload.get('standfirst'), MAX_SUMMARY_CHARS),
+        thesis=clip(payload.get('thesis'), MAX_SUMMARY_CHARS),
+        emphasis=clip_words(payload.get('emphasis'), 2),
+        standfirst=clip(payload.get('standfirst'), MAX_SUMMARY_CHARS),
     )

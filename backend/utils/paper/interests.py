@@ -27,7 +27,7 @@ from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.log_sanitizer import sanitize
 
-from .context import DayContext, _day_bounds
+from .context import DayContext, day_bounds
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +123,8 @@ def _window_record(uid: str, day: date) -> tuple[list[str], int]:
         if had_content:
             days_with_data += 1
 
-    start_dt, _ = _day_bounds(start)
-    _, end_dt = _day_bounds(day)
+    start_dt, _ = day_bounds(start)
+    _, end_dt = day_bounds(day)
     try:
         conversations = conversations_db.get_conversations(uid, limit=80, start_date=start_dt, end_date=end_dt)
     except Exception as e:  # noqa: BLE001
