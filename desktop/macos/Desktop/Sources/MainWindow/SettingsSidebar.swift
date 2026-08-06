@@ -21,7 +21,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
-      section: .general, icon: "gearshape", settingId: "general.rewind"),
+      section: .general, icon: "gearshape", settingId: "general.screencapture"),
     SettingsSearchItem(
       name: "System Audio", subtitle: "When to record audio from other apps",
       keywords: [
@@ -47,7 +47,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Reset Window Size", subtitle: "Restore the default window dimensions",
       keywords: ["resize", "window", "default size"], section: .general, icon: "gearshape",
-      settingId: "general.resetwindow"),
+      settingId: "general.fontsize"),
 
     // Rewind
     SettingsSearchItem(
@@ -57,11 +57,11 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Screen Capture", subtitle: "Toggle screen capture on or off",
       keywords: ["screen capture", "screenshot", "monitor", "recording", "rewind"],
-      section: .rewind, icon: "rectangle.dashed.badge.record", settingId: "rewind.screencapture"),
+      section: .general, icon: "rectangle.dashed.badge.record", settingId: "general.screencapture"),
     SettingsSearchItem(
       name: "Audio Recording", subtitle: "Toggle audio recording and transcription",
-      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .rewind,
-      icon: "mic.fill", settingId: "rewind.audiorecording"),
+      keywords: ["audio", "microphone", "recording", "transcription", "mic"], section: .general,
+      icon: "mic.fill", settingId: "general.audiorecording"),
     SettingsSearchItem(
       name: "Storage", subtitle: "View frame count and disk usage",
       keywords: ["frames", "storage", "disk", "space", "gb"], section: .rewind,
@@ -83,7 +83,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Transcription Settings", subtitle: "Configure speech-to-text options",
       keywords: ["language", "vocabulary", "speech"], section: .transcription, icon: "waveform",
-      settingId: "transcription.settings"),
+      settingId: "transcription.languagemode"),
     SettingsSearchItem(
       name: "Language Mode", subtitle: "Choose single or multi-language transcription",
       keywords: ["language", "multilingual", "single language"], section: .transcription,
@@ -150,7 +150,7 @@ struct SettingsSearchItem: Identifiable {
     SettingsSearchItem(
       name: "Private Cloud Sync", subtitle: "Sync your data securely to your private cloud storage",
       keywords: ["cloud", "sync", "private cloud"], section: .privacy, icon: "lock.shield",
-      settingId: "privacy.cloudsync"),
+      settingId: "privacy.storerecordings"),
     SettingsSearchItem(
       name: "Encryption", subtitle: "Server-side encryption for your data",
       keywords: ["encrypt", "security", "end to end"], section: .privacy, icon: "lock.shield",
