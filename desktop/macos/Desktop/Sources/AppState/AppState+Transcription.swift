@@ -855,9 +855,9 @@ extension AppState {
   /// instead of relying on the user's current in-progress pointer.
   @discardableResult
   func stopTranscription() -> Task<Void, Never>? {
-    preferredMicrophoneReconnectMonitor.stop(); recordingGeneration &+= 1
-    // On-device path: await both Parakeet tail flushes before clearing state so the
-    // last words persist to the current conversation.
+    preferredMicrophoneReconnectMonitor.stop()
+    recordingGeneration &+= 1
+    // On-device path: await both Parakeet tail flushes before clearing state so the last words persist to the current conversation.
     if sttSession.useLocalSTT {
       let mic = localMicService
       let sys = localSystemService
