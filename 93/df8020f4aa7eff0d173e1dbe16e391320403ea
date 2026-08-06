@@ -1,0 +1,36 @@
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_569f1df936cc22::t_ff8c7973528e1f 98-101
+  s_569f1df936cc22::t_1ad0766cf244ec 102-108,146,169,195,214,246,283,346,430,461,480,484,511,532,577
+  s_569f1df936cc22::t_94d2c774eb1b40 1-97,109-145,147-168,170-194,196-213,215-245,247-282,284-345,347-429,431-460,462-479,481-483,485-510,512-531,533-576,578-609
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPlaybackChrome.swift
+  s_569f1df936cc22::t_c2cb500a625304 101,106,127-144,211,221,223,240,248,276,294,317,335,364,373,377
+  s_569f1df936cc22::t_79382fb9e8c783 22-37,45,52,61,68,107,115,149,158,180,224,252,257,284,301,318,342,381
+  s_569f1df936cc22::t_98342a7f878b13 6,74,187-195
+  s_569f1df936cc22::t_a960f51cbe5c96 66
+  s_569f1df936cc22::t_eb37ac01d94cfd 1-5,7-21,38-44,46-51,53-60,62-65,67,69-73,75-100,102-105,108-114,116-126,145-148,150-157,159-179,181-186,196-210,212-220,222,225-239,241-247,249-251,253-256,258-275,277-283,285-293,295-300,302-316,319-334,336-341,343-363,365-372,374-376,378-380,382
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_569f1df936cc22::t_ccf78d68bed2c0 23,27,53-56,82
+  s_569f1df936cc22::t_2d24c0978c0ad7 1-22,24-26,28-52,57-81,83-180
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-rewind.json
+  s_569f1df936cc22::t_8ab09438cdae60 5
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_569f1df936cc22::t_c751847ff920df 18,365-366,460,462-466,468-486,540-541,543-554,557,560-580,618-631,655-665,668-670,672-679,681-684,688-693
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift
+  s_569f1df936cc22::t_66c73c2942d684 1-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "93df8020f4aa7eff0d173e1dbe16e391320403ea",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
