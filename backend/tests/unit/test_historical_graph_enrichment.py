@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -467,3 +468,112 @@ def test_historical_planner_deadline_interrupts_a_stuck_sync_call(monkeypatch: p
             control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
             llm=object(),
         )
+
+
+def test_historical_planner_deadline_enforcement_works_off_the_main_thread(monkeypatch: pytest.MonkeyPatch):
+    """The maintenance cron runs enrichment on a ``db_executor`` worker thread.
+
+    The former POSIX signal timer raises ``ValueError`` there, which turned
+    every scheduled candidate into a silent ``planner_error`` (0 committed,
+    every outcome blocked) while the CLI kept working from the main thread.
+    """
+    sentinel = object()
+    monkeypatch.setattr(historical_runner, "plan_historical_graph_enrichment", lambda **_kwargs: sentinel)
+
+    outcome: dict[str, object] = {}
+
+    def _run_off_main_thread() -> None:
+        try:
+            outcome["planned"] = historical_runner._plan_with_deadline(
+                item=_item(),
+                control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+                llm=object(),
+            )
+        except Exception as exc:  # pragma: no cover - the failure being guarded against
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=_run_off_main_thread)
+    worker.start()
+    worker.join(timeout=5)
+
+    assert not worker.is_alive(), "planner deadline wrapper hung off the main thread"
+    assert outcome.get("error") is None, f"planner raised off the main thread: {outcome.get('error')!r}"
+    assert outcome.get("planned") is sentinel
+
+
+def test_historical_planner_deadline_fires_off_the_main_thread(monkeypatch: pytest.MonkeyPatch):
+    """The timeout branch must also work in the worker-thread context the
+    maintenance cron uses — not only when the planner returns promptly."""
+    monkeypatch.setattr(historical_runner, "HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS", 0.01)
+    release = threading.Event()
+    monkeypatch.setattr(historical_runner, "plan_historical_graph_enrichment", lambda **_kwargs: release.wait(5))
+
+    outcome: dict[str, object] = {}
+
+    def _run_off_main_thread() -> None:
+        try:
+            historical_runner._plan_with_deadline(
+                item=_item(),
+                control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+                llm=object(),
+            )
+            outcome["error"] = AssertionError("deadline never fired")
+        except historical_runner.HistoricalGraphPlannerTimeout:
+            outcome["timed_out"] = True
+        except Exception as exc:  # pragma: no cover - the failure being guarded against
+            outcome["error"] = exc
+
+    worker = threading.Thread(target=_run_off_main_thread)
+    worker.start()
+    worker.join(timeout=5)
+    release.set()
+
+    assert not worker.is_alive(), "planner deadline wrapper hung off the main thread"
+    assert outcome.get("error") is None, f"unexpected outcome off the main thread: {outcome.get('error')!r}"
+    assert outcome.get("timed_out") is True
+
+
+def test_consecutive_planner_timeouts_stop_the_page_without_advancing_the_cursor(monkeypatch: pytest.MonkeyPatch):
+    """Each timed-out planner call abandons a worker on the shared executor;
+    a page must stop stacking them once the planner is clearly down, and the
+    unexamined rows must be retried by a later run from the same cursor."""
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    items = [_item(memory_id=f"mem_{index}") for index in range(5)]
+    cursor_store = _CursorStore()
+    examined: list[str] = []
+
+    monkeypatch.setattr(historical_runner, "_control", lambda *_args, **_kwargs: control)
+    monkeypatch.setattr(
+        historical_runner,
+        "_candidate_page",
+        lambda *_args, **_kwargs: historical_runner.HistoricalGraphCandidatePage(
+            items=items, last_scanned=items[-1], exhausted=False
+        ),
+    )
+
+    def _always_times_out(*, item: MemoryItem, **_kwargs: object):
+        examined.append(item.memory_id)
+        raise historical_runner.HistoricalGraphPlannerTimeout("historical graph planner deadline exceeded")
+
+    monkeypatch.setattr(historical_runner, "_plan_with_deadline", _always_times_out)
+
+    report = run_enrichment(
+        uid="u1",
+        firestore_project="test",
+        limit=5,
+        scan_limit=5,
+        apply=True,
+        confirm_uid="u1",
+        structured_only=False,
+        apply_limit=5,
+        db_client=object(),
+        llm=object(),
+        cursor_store=cursor_store,
+    )
+
+    assert report["outcomes"] == {
+        "planner_error": historical_runner.PLANNER_CONSECUTIVE_TIMEOUT_LIMIT,
+        "planner_timeout_circuit_break": 1,
+    }
+    assert examined == ["mem_0", "mem_1", "mem_2"]
+    assert cursor_store.advances == []
