@@ -1577,7 +1577,6 @@ public enum OmiAPI {
     case phone
     case phone_call
     case desktop
-    case web
     case openglass
     case screenpipe
     case workflow

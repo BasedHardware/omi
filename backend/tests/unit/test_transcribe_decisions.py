@@ -224,10 +224,12 @@ def test_cross_source_in_progress_must_not_attach():
     assert should_attach_to_existing_in_progress(existing_source='omi', request_source='web') is False
     assert should_attach_to_existing_in_progress(existing_source='web', request_source='desktop') is False
     assert should_attach_to_existing_in_progress(existing_source=None, request_source='') is True
+    # source=web is not a ConversationSource member → unknown (same as create persistence).
     assert normalize_listen_source('Web') == 'unknown'
     assert normalize_listen_source(None) == 'omi'
-    assert normalize_listen_source('web') == 'web'
-    assert should_attach_to_existing_in_progress(existing_source='unknown', request_source='Web') is True
+    assert normalize_listen_source('web') == 'unknown'
+    assert should_attach_to_existing_in_progress(existing_source='unknown', request_source='web') is True
+    assert should_attach_to_existing_in_progress(existing_source='omi', request_source='unknown') is False
 
 
 def test_recording_session_identity_retries_and_rollovers_are_distinct():

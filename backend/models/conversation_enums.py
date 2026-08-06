@@ -50,7 +50,6 @@ class ConversationSource(str, Enum):
     phone = 'phone'
     phone_call = 'phone_call'
     desktop = 'desktop'
-    web = 'web'
     openglass = 'openglass'
     screenpipe = 'screenpipe'
     workflow = 'workflow'
