@@ -1,13 +1,28 @@
-import { age, dateline, isEmptyEdition, silence, type Edition } from '@/lib/edition';
+import {
+  clock,
+  dateline,
+  degradedSources,
+  hours,
+  isEmptyEdition,
+  isForYouEmpty,
+  isPhotoPrintable,
+  isTodayClear,
+  type Edition,
+} from '@/lib/edition';
 
 /**
  * One day's paper, printed.
  *
- * Block order is fixed — lede, open loops, counterpoint, the desk, the margin — and
- * every block is skipped when it is absent rather than filled with something. The
- * markup follows `backend/templates/paper.html`; the two render the same edition.
+ * Section order is fixed — yesterday, today, newsletters, for you, the photo —
+ * and every section is skipped when it is absent rather than filled with
+ * something. The markup follows `backend/templates/paper.html`; the two render
+ * the same edition.
  */
 export function EditionView({ edition }: { edition: Edition }) {
+  const today = edition.today;
+  const forYou = edition.for_you;
+  const degraded = degradedSources(edition);
+
   return (
     <>
       <p className="dateline">
@@ -15,53 +30,186 @@ export function EditionView({ edition }: { edition: Edition }) {
         {edition.issue_number ? ` · No. ${edition.issue_number}` : ''}
       </p>
 
-      {edition.lede && (
+      {edition.cover?.thesis && (
         <div className="lede">
-          <h1>{edition.lede.headline}</h1>
-          {edition.lede.body && <p>{edition.lede.body}</p>}
+          <p>{edition.cover.thesis}</p>
+          {edition.cover.standfirst && (
+            <p className="standfirst">{edition.cover.standfirst}</p>
+          )}
         </div>
       )}
 
-      {!!edition.open_loops?.length && (
+      {edition.yesterday && (
         <section>
-          <h2>Open Loops</h2>
-          {edition.open_loops.map((loop, i) => (
-            <div className="loop" key={`${loop.question}-${i}`}>
-              <p>{loop.question}</p>
-              <span className="stamp">{age(loop.days_open ?? 0)}</span>
+          <h2>Yesterday</h2>
+          {edition.yesterday.headline && <h1>{edition.yesterday.headline}</h1>}
+          {edition.yesterday.story && <p>{edition.yesterday.story}</p>}
+
+          {!!edition.yesterday.focus?.length && (
+            <div className="focus">
+              {edition.yesterday.focus.map((block, i) => (
+                <span key={`${block.label}-${i}`} className="stamp">
+                  {block.label} {hours(block.minutes ?? 0)}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {!!edition.yesterday.decisions?.length && (
+            <ul>
+              {edition.yesterday.decisions.map((decision, i) => (
+                <li key={`${decision}-${i}`}>{decision}</li>
+              ))}
+            </ul>
+          )}
+
+          {edition.yesterday.unacted && (
+            <p>
+              <span className="stamp">Still open</span>
+              <br />
+              {edition.yesterday.unacted}
+            </p>
+          )}
+        </section>
+      )}
+
+      {today && (
+        <section>
+          <h2>Today</h2>
+          {isTodayClear(today) ? (
+            <p className="quiet">Nothing scheduled.</p>
+          ) : (
+            <>
+              {today.note && <p>{today.note}</p>}
+              {!!today.events?.length && (
+                <ul className="agenda">
+                  {today.events.map((event, i) => (
+                    <li key={`${event.title}-${i}`}>
+                      <time>{clock(event.start)}</time>
+                      <span>
+                        {event.title}
+                        {!!event.attendees?.length && (
+                          <span className="sources">
+                            {' '}
+                            with {event.attendees.join(', ')}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {!!today.commitments?.length && (
+                <ul>
+                  {today.commitments.map((commitment, i) => (
+                    <li key={`${commitment.text}-${i}`}>
+                      {commitment.text}
+                      {commitment.due && (
+                        <span className="sources"> due {commitment.due}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {!!edition.newsletters?.length && (
+        <section>
+          <h2>Newsletters</h2>
+          <ul>
+            {edition.newsletters.map((story, i) => (
+              <li key={`${story.summary}-${i}`}>
+                {story.summary}
+                {!!story.sources?.length && (
+                  <span className="sources">
+                    {' '}
+                    ({story.sources.map((source) => source.name).join(', ')})
+                  </span>
+                )}
+                {story.why && (
+                  <>
+                    <br />
+                    <span className="why">{story.why}</span>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!isForYouEmpty(forYou) && (
+        <section>
+          <h2>For you</h2>
+          {forYou?.papers?.map((item, i) => (
+            <div key={`${item.title}-${i}`}>
+              <h3>
+                {item.url ? (
+                  <a href={item.url} rel="noreferrer noopener" target="_blank">
+                    {item.title}
+                  </a>
+                ) : (
+                  item.title
+                )}
+              </h3>
+              {(item.identifier || item.authors) && (
+                <p className="stamp">
+                  {item.identifier}
+                  {item.authors ? ` · ${item.authors}` : ''}
+                </p>
+              )}
+              {item.what_it_says && <p>{item.what_it_says}</p>}
+              {item.why_it_matters && <p className="why">{item.why_it_matters}</p>}
+              {item.experiment && (
+                <p>
+                  <span className="stamp">Try</span>
+                  <br />
+                  {item.experiment}
+                </p>
+              )}
             </div>
           ))}
+          {!!forYou?.tools?.length && (
+            <ul>
+              {forYou.tools.map((tool, i) => (
+                <li key={`${tool.name}-${i}`}>
+                  <b>{tool.name}</b> {tool.what}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
-      {edition.counterpoint && (
+      {isPhotoPrintable(edition.photo) && (
         <section>
-          <h2>Counterpoint</h2>
-          <span className="stamp">
-            Your position, {edition.counterpoint.days_asserted ?? 0} separate days
-          </span>
-          <blockquote>{edition.counterpoint.position}</blockquote>
-          <p>{edition.counterpoint.argument}</p>
+          <h2>Yesterday, drawn</h2>
+          <figure>
+            {/* A data URI, so next/image would add a proxy hop for no benefit. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt={edition.photo?.moment ?? ''}
+              src={`data:image/png;base64,${edition.photo?.image_b64}`}
+            />
+            <figcaption>{edition.photo?.caption || edition.photo?.moment}</figcaption>
+          </figure>
         </section>
       )}
 
-      {!!edition.desk?.length && (
-        <section>
-          <h2>The Desk</h2>
-          {edition.desk.map((item, i) => (
-            <div className="desk-item" key={`${item.name}-${i}`}>
-              <p className="desk-name">{item.name}</p>
-              <span className="stamp">{silence(item.days_since ?? 0)}</span>
-              {item.context && <p>{item.context}</p>}
-            </div>
-          ))}
-        </section>
-      )}
-
-      {edition.margin && (
-        <section>
-          <h2>The Margin</h2>
-          <p className="margin-note">{edition.margin.insight}</p>
+      {/* A source that failed is printed. Silent degradation reads as a quiet day. */}
+      {!!degraded.length && (
+        <section className="degraded">
+          <h2>Sources</h2>
+          <ul>
+            {degraded.map((health, i) => (
+              <li key={`${health.source}-${i}`}>
+                {health.source} unavailable{health.note ? ` — ${health.note}` : ''}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

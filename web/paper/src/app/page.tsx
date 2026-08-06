@@ -1,9 +1,9 @@
 const BLOCKS = [
-  ['The Lede', 'The one thing that actually mattered.'],
-  ['Open Loops', 'Questions you raised and never answered.'],
-  ['Counterpoint', 'The best argument against you.'],
-  ['The Desk', 'Someone you mentioned, then dropped.'],
-  ['The Margin', 'One thing you learned.'],
+  ['Yesterday', 'Where the day went, and what you decided.'],
+  ['Today', 'What is on you, before anyone asks.'],
+  ['Newsletters', 'Everything you subscribed to, one line per story.'],
+  ['For you', 'The papers and tools that move what you are working on.'],
+  ['The photo', 'One moment from yesterday, drawn.'],
 ];
 
 const SIGNUP =
@@ -58,8 +58,9 @@ export default function Home() {
         <span className="label">Price</span>
         <p className="stat">$12 a month.</p>
         <p className="fine">
-          The free tier prints the lede. Paying reads your whole record — the loops, the
-          counterpoints, the people. Cancel whenever; there is no lifetime plan.
+          The free tier prints yesterday. Paying reads the outside world through your own
+          context — your newsletters, your papers, your day ahead. Cancel whenever; there
+          is no lifetime plan.
         </p>
         <div className="actions">
           <a className="cta" href={SIGNUP}>

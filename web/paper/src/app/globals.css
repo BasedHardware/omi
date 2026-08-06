@@ -222,17 +222,55 @@ section {
   text-wrap: balance;
 }
 
-.lede p,
-.loop p {
-  text-wrap: pretty;
-}
-
 .lede p {
+  text-wrap: pretty;
   margin-top: 1.5rem;
 }
 
-.loop + .loop {
-  margin-top: 1.75rem;
+.standfirst {
+  color: var(--meta);
+}
+
+/* Where the day actually went, set as furniture rather than prose. */
+.focus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: 1rem 0;
+}
+
+.focus .stamp {
+  display: inline-block;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+/* Today's agenda: the time column is tabular so the hours line up. */
+.agenda {
+  list-style: none;
+  padding: 0;
+}
+
+.agenda li {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.agenda time {
+  min-width: 3.5rem;
+  color: var(--meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The publications behind a story. This is what makes a line checkable. */
+.sources {
+  color: var(--meta);
+  font-size: 0.875rem;
+}
+
+/* The bridge to the reader's own work — the only place the accent appears in prose. */
+.why {
+  color: var(--accent);
 }
 
 /* Furniture again — the age of a thing is stated in the second voice, not in prose. */
@@ -250,26 +288,26 @@ section {
   margin-top: 0.75rem;
 }
 
-/* The one place the paper raises its voice: your own words, quoted back at you.
-   Also the only appearance of the accent. */
-.edition blockquote {
-  margin: 1.1rem 0 1.4rem;
-  padding-left: 1.2rem;
-  border-left: 3px solid var(--accent);
-  color: var(--ink-strong);
-  font-style: italic;
+/* The drawn moment. Full measure, caption in the quiet voice. */
+.edition figure {
+  margin: 0;
 }
 
-.desk-item + .desk-item {
-  margin-top: 1.75rem;
+.edition figure img {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
-.desk-name {
-  color: var(--ink-strong);
+.edition figcaption {
+  margin-top: 0.5rem;
+  color: var(--meta);
+  font-size: 0.875rem;
 }
 
-.margin-note {
-  font-style: italic;
+/* What failed this run. Printed, because silent degradation reads as a quiet day. */
+.degraded li {
+  color: var(--meta);
 }
 
 /* ---- the hard stop ---- */
