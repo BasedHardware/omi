@@ -499,6 +499,9 @@ class TestSegmentDeduplication:
         assert (
             'not deduped_segments' in func_body or 'if not deduped_segments' in func_body
         ), "Must handle case where all segments are duplicates"
+        assert (
+            'store_partial_merge_survivor_audio(' in func_body
+        ), "Partial dedupe must store sliced private-cloud audio for survivors"
 
     def test_dedupe_helper_uses_rounding(self):
         """Shared helper must round timestamps for reliable comparison."""
@@ -625,6 +628,49 @@ class TestSegmentDeduplication:
         deduped = dedupe_segments_for_merge(conv_start, existing, incoming)
         assert len(deduped) == 1
         assert deduped[0]['text'] == 'yeah'
+
+
+class TestMergeSurvivorAudio:
+    """Private-cloud slices for partial merge survivors (#4769 David CR)."""
+
+    def test_pcm16_16k_slice_is_sample_aligned(self):
+        from utils.sync.merge_audio import pcm16_16k_slice
+
+        pcm = b'\x00\x01' * 16000  # 1 second
+        sliced = pcm16_16k_slice(pcm, 0.25, 0.75)
+        assert len(sliced) == 16000  # 0.5s * 32000 B/s
+        assert len(sliced) % 2 == 0
+
+    def test_store_partial_uploads_one_chunk_per_survivor(self):
+        from unittest.mock import patch
+
+        from utils.sync import merge_audio
+
+        survivors = [
+            {'start': 1.0, 'end': 2.0, 'timestamp': 1700000001.0, 'text': 'kept line'},
+        ]
+        pcm = b'\x00\x01' * 16000 * 3  # 3 seconds
+        expected_slice = pcm[32000:64000]
+
+        with patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm), patch(
+            'utils.other.storage.upload_audio_chunk'
+        ) as mock_upload:
+            merge_audio.store_partial_merge_survivor_audio(
+                uid='uid',
+                conversation_id='conv',
+                file_timestamp=1700000000.0,
+                audio_bytes=b'wav',
+                data_protection_level='standard',
+                survivors=survivors,
+            )
+
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args.args
+        assert args[0] == expected_slice
+        assert args[1] == 'uid'
+        assert args[2] == 'conv'
+        assert args[3] == 1700000001.0
+        assert args[4] == 'standard'
 
 
 # ---------------------------------------------------------------------------
@@ -1107,6 +1153,94 @@ class TestProcessSegmentReal:
             process_segment(f'/tmp/{int(wal_ts)}.wav', 'uid', response, lock, errors, ConversationSource.omi, False)
 
         mock_update.assert_not_called()
+        assert len(errors) == 0
+        assert 'conv-live' in response['updated_memories']
+
+    def test_partial_dedupe_private_cloud_stores_survivor_slices(self):
+        """#4769 David CR: mixed chunk keeps audio for new lines without full WAV."""
+        process_segment = self._import_process_segment()
+
+        response = {'updated_memories': set(), 'new_memories': set()}
+        errors = []
+        lock = threading.Lock()
+
+        # Same absolute timebase as the conversation: first line is an exact
+        # absolute duplicate (207-style), second line is genuinely new.
+        dup_seg = MagicMock()
+        dup_seg.end = 5.0
+        dup_seg.model_dump.return_value = {
+            'start': 0.0,
+            'end': 5.0,
+            'text': 'already on the conversation from earlier upload',
+            'speaker': 'SPEAKER_00',
+        }
+        new_seg = MagicMock()
+        new_seg.end = 10.0
+        new_seg.model_dump.return_value = {
+            'start': 5.0,
+            'end': 10.0,
+            'text': 'and then this brand new sentence arrives here',
+            'speaker': 'SPEAKER_00',
+        }
+
+        from datetime import datetime, timezone
+
+        conv_start = 1700000000.0
+        existing_conv = {
+            'id': 'conv-live',
+            'started_at': MagicMock(timestamp=MagicMock(return_value=conv_start)),
+            'finished_at': datetime.fromtimestamp(conv_start + 5.0, tz=timezone.utc),
+            'transcript_segments': [
+                {
+                    'start': 0.0,
+                    'end': 5.0,
+                    'text': 'already on the conversation from earlier upload',
+                    'speaker': 'SPEAKER_00',
+                },
+            ],
+            'discarded': False,
+        }
+
+        with patch('utils.sync.pipeline.prerecorded', return_value=([{'text': 'hello'}], 'en')), patch(
+            'utils.sync.pipeline.postprocess_words', return_value=[dup_seg, new_seg]
+        ), patch('utils.sync.pipeline.get_timestamp_from_path', return_value=conv_start), patch(
+            'utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=existing_conv
+        ), patch(
+            'utils.sync.pipeline.update_conversation_segments'
+        ) as mock_update, patch(
+            'utils.sync.pipeline.delete_syncing_temporal_file'
+        ), patch(
+            'utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='https://fake'
+        ), patch(
+            'utils.sync.pipeline._download_audio_bytes', return_value=b'fake-wav'
+        ), patch(
+            'utils.sync.pipeline._store_sync_audio_chunk'
+        ) as mock_full_store, patch(
+            'utils.sync.pipeline.store_partial_merge_survivor_audio'
+        ) as mock_partial_store, patch(
+            'utils.sync.pipeline.time.sleep'
+        ):
+            from models.conversation_enums import ConversationSource
+
+            process_segment(
+                f'/tmp/{int(conv_start)}.wav',
+                'uid',
+                response,
+                lock,
+                errors,
+                ConversationSource.omi,
+                False,
+                private_cloud_sync_enabled=True,
+            )
+
+        mock_update.assert_called_once()
+        mock_full_store.assert_not_called()
+        mock_partial_store.assert_called_once()
+        survivors = mock_partial_store.call_args.kwargs['survivors']
+        assert len(survivors) == 1
+        assert survivors[0]['text'] == 'and then this brand new sentence arrives here'
+        assert survivors[0]['start'] == 5.0
+        assert survivors[0]['end'] == 10.0
         assert len(errors) == 0
         assert 'conv-live' in response['updated_memories']
 
