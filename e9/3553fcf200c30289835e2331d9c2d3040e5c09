@@ -1,0 +1,27 @@
+desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchLayout.swift
+  s_569f1df936cc22::t_154b7f6683ed10 70-79
+  s_569f1df936cc22::t_be4f5718b2eaf5 103-104
+  s_569f1df936cc22::t_c53dbb05b1bbf8 86,89
+desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
+  s_569f1df936cc22::t_733a73d9c8d36c 51,311-312
+  s_569f1df936cc22::t_64848566041f95 49-50,52-56
+  s_569f1df936cc22::t_f61fc8ca10a2ea 280-310
+  s_569f1df936cc22::t_ec68d9963ae611 34-36
+  s_569f1df936cc22::t_271f2150051484 313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e93553fcf200c30289835e2331d9c2d3040e5c09",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
