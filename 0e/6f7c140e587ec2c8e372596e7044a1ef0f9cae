@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_569f1df936cc22::t_07055bf55c9291 68,70
+  s_569f1df936cc22::t_1fd214e8365e6b 47
+  s_569f1df936cc22::t_33c21289ea1ffb 130-143
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_569f1df936cc22::t_528f116713b462 331,339,363-378,384-389
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "0e6f7c140e587ec2c8e372596e7044a1ef0f9cae",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
