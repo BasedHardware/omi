@@ -11,7 +11,6 @@ import json
 import os
 import sys
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -32,6 +31,7 @@ from database.firestore_index_registry import CANONICAL_MEMORY_ATLAS_READ_QUERY 
 from models.memory_apply import ApplyStatus, MemoryControlState  # noqa: E402
 from models.memory_promotion import PromotionGraphPlan  # noqa: E402
 from models.product_memory import MemoryItem  # noqa: E402
+from utils.executors import llm_executor, submit_with_context  # noqa: E402
 from utils.llm.clients import get_llm  # noqa: E402
 from utils.memory.graph_enrichment import prepare_graph_enrichment  # noqa: E402
 from utils.memory.historical_graph_enrichment import (  # noqa: E402
@@ -42,6 +42,11 @@ from utils.memory.historical_graph_enrichment import (  # noqa: E402
 MAX_PAGE_SIZE = 25
 MAX_STRUCTURED_SCAN_SIZE = 1250
 HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS = 20.0
+# A timed-out planner call is abandoned to its transport timeout while it
+# occupies one shared-executor slot. Consecutive misses mean the planner is
+# down, not that one item is pathological: stop the page instead of stacking
+# abandoned workers, and let a later run retry from the same cursor.
+PLANNER_CONSECUTIVE_TIMEOUT_LIMIT = 3
 
 
 class HistoricalGraphPlannerTimeout(TimeoutError):
@@ -173,20 +178,19 @@ def _plan_with_deadline(*, item: MemoryItem, control: MemoryControlState, llm: A
     Scheduled maintenance runs this page inside a ``db_executor`` worker
     thread, where installing a POSIX signal timer raises ``ValueError`` —
     which silently turned every candidate into ``planner_error`` before a
-    single provider request was made. A single-use watchdog future enforces
-    the same deadline from any thread. A call that outlives the deadline is
-    abandoned to its own transport timeout (the planner LLM is constructed
-    with ``request_timeout``), so the timed-out worker still ends on its own.
+    single provider request was made. A watchdog future on the shared LLM
+    executor enforces the same deadline from any thread and carries the
+    caller's contextvars, so gateway usage stays attributed to the user. A
+    call that outlives the deadline is abandoned to its own transport timeout
+    (the planner LLM is constructed with ``request_timeout``); the page's
+    consecutive-timeout breaker keeps abandoned workers bounded.
     """
-    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="historical-graph-planner")
+    future = submit_with_context(llm_executor, plan_historical_graph_enrichment, item=item, control=control, llm=llm)
     try:
-        future = pool.submit(plan_historical_graph_enrichment, item=item, control=control, llm=llm)
-        try:
-            return future.result(timeout=HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS)
-        except FuturesTimeoutError as exc:
-            raise HistoricalGraphPlannerTimeout("historical graph planner deadline exceeded") from exc
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+        return future.result(timeout=HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS)
+    except FuturesTimeoutError as exc:
+        future.cancel()
+        raise HistoricalGraphPlannerTimeout("historical graph planner deadline exceeded") from exc
 
 
 def _arguments() -> argparse.Namespace:
@@ -357,6 +361,7 @@ def run_enrichment(
         llm = get_llm("memory_l2", request_timeout=HISTORICAL_GRAPH_PLANNER_TIMEOUT_SECONDS)
     report: Counter[str] = Counter()
     applied = 0
+    consecutive_planner_timeouts = 0
     if not apply:
         control = _control(uid, db_client=db_client)
         for item in _candidates(
@@ -368,6 +373,13 @@ def run_enrichment(
                     if structured_only
                     else _plan_with_deadline(item=item, control=control, llm=llm)
                 )
+            except HistoricalGraphPlannerTimeout:
+                report["planner_error"] += 1
+                consecutive_planner_timeouts += 1
+                if consecutive_planner_timeouts >= PLANNER_CONSECUTIVE_TIMEOUT_LIMIT:
+                    report["planner_timeout_circuit_break"] += 1
+                    break
+                continue
             # The planner is an external dependency. A transient transport or
             # provider failure must not make a bounded page fail closed for all
             # of a user's remaining historical memories; leave this item
@@ -375,6 +387,7 @@ def run_enrichment(
             except Exception:
                 report["planner_error"] += 1
                 continue
+            consecutive_planner_timeouts = 0
             if planned is None:
                 report["not_structured"] += 1
             elif planned.status == "ready" and planned.operation is not None:
@@ -416,12 +429,25 @@ def run_enrichment(
                     if structured_only
                     else _plan_with_deadline(item=item, control=control, llm=llm)
                 )
+            except HistoricalGraphPlannerTimeout:
+                # A planner that misses several deadlines in a row is down,
+                # not unlucky. Stop the page without advancing the cursor so
+                # a later run retries these rows and abandoned workers on the
+                # shared executor stay bounded.
+                report["planner_error"] += 1
+                consecutive_planner_timeouts += 1
+                if consecutive_planner_timeouts >= PLANNER_CONSECUTIVE_TIMEOUT_LIMIT:
+                    report["planner_timeout_circuit_break"] += 1
+                    completed_page = False
+                    break
+                continue
             # A failed planner is still an examined row. Advancing past it lets
             # a later candidate in this page make progress; a subsequent full
             # cursor rotation retries the failure without starving older rows.
             except Exception:
                 report["planner_error"] += 1
                 continue
+            consecutive_planner_timeouts = 0
             if planned is None:
                 report["not_structured"] += 1
                 continue
