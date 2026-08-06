@@ -21,6 +21,17 @@ const entailmentStrategy = "span-entailment";
 const renderStrategy = "retrieval-node-summary";
 type GlmStrategy = typeof entityStrategy | typeof mentionStrategy | typeof scopeStrategy | typeof boundaryStrategy | typeof groundedStrategy | typeof identityStrategy | typeof identityVerifyStrategy | typeof namingCheckStrategy | typeof selfReferenceStrategy | typeof predicateStrategy | typeof composeStrategy | typeof entailmentStrategy | typeof renderStrategy;
 
+/** Dream-path strategies: fail faster than extract — hung identity was burning 5min×retries per chunk. */
+const DREAM_TIMEOUT_STRATEGIES: ReadonlySet<string> = new Set([
+  identityStrategy, identityVerifyStrategy, namingCheckStrategy, selfReferenceStrategy,
+  predicateStrategy, boundaryStrategy, scopeStrategy,
+]);
+const timeoutMsFor = (strategy: string): number => {
+  const dream = Number(process.env.OMI_GLM_DREAM_TIMEOUT_MS ?? 90_000);
+  const general = Number(process.env.OMI_GLM_TIMEOUT_MS ?? 300_000);
+  return DREAM_TIMEOUT_STRATEGIES.has(strategy) ? dream : general;
+};
+
 /** Transient transport + malformed model JSON: ask again instead of repairing the answer. */
 const retryableGlmError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
@@ -235,10 +246,10 @@ const promptForBoundary = (input: BoundaryInput): string => JSON.stringify({
   output_contract: { decision: "accept_ltm|abstain", risk_markers: ["string (optional)"] },
   rules: [
     "Return JSON only, with exactly the output_contract shape and no Markdown or prose.",
-    "This is a durability judgment for long-term memory, not a length threshold. Prefer accept_ltm for durable owner/self facts (preferences, habits, relationships, standing biography) whose referents survive outside this session — including first-person facts like 'I don't use GCP' or 'I keep journals in Obsidian'.",
+    "This is a durability judgment for long-term memory, not a length threshold. Prefer accept_ltm for durable owner/self facts whose referents survive outside this session: preferences, habits, relationships, standing biography, tools/systems the owner reports running or using, and ongoing work/products — including first-person facts like 'I don't use GCP', 'I keep journals in Obsidian', or 'I run Hermes on a Mac mini'.",
     "Return decision=abstain for session residue: finished micro-tasks, transient logistics, 'I like this plan', ambient bystander chatter that is not standing knowledge about the owner, or facts whose referents/roles/time are missing from the excerpts.",
     "Only ambiguity_markers one_off or hedged are strong abstain signals. Ignore other marker names; do not invent abstain reasons from pronouns or self-reference.",
-    "Abstaining on a self-contained durable fact discards a real memory permanently — same severity as admitting sludge. When unsure between standing knowledge and session residue, abstain.",
+    "Abstaining on a self-contained durable owner fact discards a real memory permanently — same severity as admitting sludge. When unsure whether a first-person fact is standing self-knowledge vs session residue, prefer accept_ltm if the excerpts state a clear ongoing tool, habit, preference, relationship, or work fact; otherwise abstain.",
     "risk_markers is optional. Omit the field when unused. Never return empty strings inside risk_markers.",
   ],
 }, null, 2);
@@ -627,7 +638,7 @@ export const EDGES = {
   [entityStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForEntity(input as EntityResolutionRequest), parse: (content, input) => parseEntityProposal(content, input as EntityResolutionRequest) },
   [mentionStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForMention(input as MentionDetectionRequest), parse: (content, input) => parseMentionResponse(content, input as MentionDetectionRequest) },
   [scopeStrategy]: { versions: new Set(["v2"]), prompt: (input) => promptForScope(input as ScopeRoleRequest), parse: (content, input) => parseScopeResponse(content, input as ScopeRoleRequest) },
-  [boundaryStrategy]: { versions: new Set(["v3"]), prompt: (input) => promptForBoundary(input as BoundaryInput), parse: (content) => parseBoundaryResponse(content) },
+  [boundaryStrategy]: { versions: new Set(["v4"]), prompt: (input) => promptForBoundary(input as BoundaryInput), parse: (content) => parseBoundaryResponse(content) },
   [groundedStrategy]: { versions: null, prompt: (input) => typeof (input as { prompt?: unknown }).prompt === "string" ? (input as { prompt: string }).prompt : JSON.stringify(input), parse: (content) => parseGroundedResponse(content) },
   [identityStrategy]: { versions: new Set(["dream-identity-v1"]), prompt: (input) => promptForIdentityAdjudication(input as { profiles?: readonly ReferentProfile[] }), parse: (content, input) => parseIdentityAdjudication(content, input as { profiles?: readonly ReferentProfile[] }) },
   [identityVerifyStrategy]: { versions: new Set(["dream-identity-verify-v2"]), prompt: (input) => promptForIdentityVerification(input as { who?: string | null; profiles?: readonly ReferentProfile[] }), parse: (content) => parseIdentityVerification(content) },
@@ -669,9 +680,9 @@ export class GlmModel implements ModelPort {
           method: "POST",
           headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
           body: JSON.stringify({ model: this.model, temperature: 0, thinking: { type: "disabled" }, response_format: { type: "json_object" }, messages: [{ role: "user", content }] }),
-          // A hung request must become an ERROR the caller's fail-closed/retry
-          // paths can see, never a dream cycle stalled forever on one socket.
-          signal: AbortSignal.timeout(300_000),
+          // Dream strategies use a shorter timeout (OMI_GLM_DREAM_TIMEOUT_MS, default 90s);
+          // extract/compose keep OMI_GLM_TIMEOUT_MS (default 300s).
+          signal: AbortSignal.timeout(timeoutMsFor(strategy)),
         });
         if (!response.ok) throw new Error(`GLM chat completion failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
         const payload = await response.json();

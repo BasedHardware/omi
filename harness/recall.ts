@@ -22,19 +22,18 @@ export interface RecallRequest {
   as_of?: string;
   account_timezone?: string;
   model_version?: string;
-  /** Override log dir. Default: tracked `benchmark/recall-logs/` (skipped for `:memory:` unless set / OMI_RECALL_LOG_DIR). */
+  /** Override log dir. Default: `recall-logs/` beside the db file (skipped for `:memory:` unless set / OMI_RECALL_LOG_DIR). */
   log_dir?: string;
 }
 
-/** Tracked dogfood eval log dir (private repo). Not under `.private/` so it can ride git history. */
-export const defaultRecallLogDir = join(dirname(new URL(import.meta.url).pathname), "../../benchmark/recall-logs");
-
-/** Versioned JSONL path for one recall model_version. Null when there is nowhere durable to write. */
+/** Versioned JSONL path for one recall model_version. Null when there is nowhere durable to write.
+ * Default sits beside the db so logs inherit the run dir's privacy: recall answers quote real
+ * personal data and must never land in a tracked path. */
 export const recallLogPath = (db: Database, model_version: string, log_dir?: string): string | null => {
   const dir = log_dir ?? process.env.OMI_RECALL_LOG_DIR ?? (() => {
     const file = db.filename;
     if (!file || file === ":memory:") return null;
-    return defaultRecallLogDir;
+    return join(dirname(file), "recall-logs");
   })();
   return dir ? join(dir, `${model_version}.jsonl`) : null;
 };

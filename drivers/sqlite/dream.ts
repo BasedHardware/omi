@@ -171,7 +171,20 @@ const supportFor = (snapshot: GraphSnapshot, mention: Mention): import("../../co
   return claim && evidence ? { support_ref: `support:${mention.mention_id}:${claim.revision_id}`, owner_account_id: snapshot.owner_account_id, claim_revision_id: claim.revision_id, evidence_ref: evidence.revision_id, source_independence_key: evidence.evidence.source_independence_key, support_origin: "independent" } : null;
 };
 
-export const runSqliteDreamCycle = async (input: { db: Database; ledger: SqliteLedger; owner_account_id: string; stm_items: readonly DurableStmItem[]; stm_mentions: readonly Mention[]; model: ModelPort; cycle_id: string; trigger_kind: "volume" | "idle" | "end_of_stream"; model_version?: string; max_reprojection_claims?: number }): Promise<DreamCycleReport> => {
+export const runSqliteDreamCycle = async (input: {
+  db: Database;
+  ledger: SqliteLedger;
+  owner_account_id: string;
+  stm_items: readonly DurableStmItem[];
+  stm_mentions: readonly Mention[];
+  model: ModelPort;
+  cycle_id: string;
+  trigger_kind: "volume" | "idle" | "end_of_stream";
+  model_version?: string;
+  max_reprojection_claims?: number;
+  /** When false, skip full-graph identity/predicate adjudication + merge (promotion only). */
+  adjudicate_identity?: boolean;
+}): Promise<DreamCycleReport> => {
   const state = new SqliteDreamStore(input.db);
   const versions = versionsFor(input.model_version ?? DEFAULT_DREAM_MODEL_VERSION);
     const before = input.ledger.snapshot(input.owner_account_id);
@@ -187,9 +200,16 @@ export const runSqliteDreamCycle = async (input: { db: Database; ledger: SqliteL
     // Blocked + batched: each adjudication call stays under a fixed payload
     // budget, so the prompt no longer grows with the whole ledger (the first
     // real corpus run lost its later cycles to exactly that).
-    const proposal = await invokeBlockedIdentityAdjudication(input.model, { mentions: (before.mentions ?? []).map((item) => item.mention), claims: before.claims, evidence: before.evidence ?? [], events: before.events ?? [] });
-    const predicateAssertions = await invokePredicateAlignment(input.model, (before.predicates ?? []).map((item) => item.predicate), String(before.graph_generation ?? 0));
-    const gate = runDreamCycle({ cycle_id: input.cycle_id, facts, previous_split_keys: contradictions.map((item) => `${item.entity_id}:${item.claim_revision_ids.join(":")}`), proposals: [{ proposal_id: proposal.partition_hash, partition_hash: proposal.partition_hash, prior_partition_hash: state.priorPartitions(input.owner_account_id).includes(proposal.partition_hash) ? proposal.partition_hash : undefined, new_evidence: true }] });
+    // Chunked promotion reuses one adjudication per trigger: later chunks set
+    // adjudicate_identity=false so we do not re-pay full-graph identity each slice.
+    const adjudicate = input.adjudicate_identity !== false;
+    const proposal = adjudicate
+      ? await invokeBlockedIdentityAdjudication(input.model, { mentions: (before.mentions ?? []).map((item) => item.mention), claims: before.claims, evidence: before.evidence ?? [], events: before.events ?? [] })
+      : { partition_hash: `partition:deferred:${input.cycle_id}`, same_groups: [] as string[][], same_group_who: [] as (string | null)[], same_group_kind: [] as (string | null)[], same_group_lane: [] as ("verified" | "recurrence" | "producer")[], uncertain_pairs: [] as [string, string][], rejected_same_groups: [] };
+    const predicateAssertions = adjudicate
+      ? await invokePredicateAlignment(input.model, (before.predicates ?? []).map((item) => item.predicate), String(before.graph_generation ?? 0))
+      : [];
+    const gate = runDreamCycle({ cycle_id: input.cycle_id, facts, previous_split_keys: contradictions.map((item) => `${item.entity_id}:${item.claim_revision_ids.join(":")}`), proposals: adjudicate ? [{ proposal_id: proposal.partition_hash, partition_hash: proposal.partition_hash, prior_partition_hash: state.priorPartitions(input.owner_account_id).includes(proposal.partition_hash) ? proposal.partition_hash : undefined, new_evidence: true }] : [] });
     // Promotion is content-gated (sufficiency → subject/trust → boundary →
     // durable scope) and intentionally not identity-gated: unresolved
     // source-local arguments become canonical inputs for the next merge cycle.

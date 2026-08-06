@@ -76,15 +76,90 @@ test("a run whose tail never trips a trigger ends with an end_of_stream flush an
   // existed this run consolidated NOTHING.
   const path = dbPath("omi-flush-");
   const result = await runPipeline([fixture, "--db", path, "--batch", "7"]);
-  expect(result.dream_cycles).toBe(1);
+  // chunk promote + trailing identity-merge
+  expect(result.dream_cycles).toBe(2);
   expect(result.dream_failures).toEqual([]);
   const db = new Database(path);
   const cycles = db.query("SELECT cycle_id, trigger_kind FROM dream_cycles ORDER BY cycle_id").all() as { cycle_id: string; trigger_kind: string }[];
-  expect(cycles).toEqual([{ cycle_id: "cycle:1:end-of-stream", trigger_kind: "end_of_stream" }]);
+  expect(cycles).toEqual([
+    { cycle_id: "cycle:1:end-of-stream:chunk-1", trigger_kind: "end_of_stream" },
+    { cycle_id: "cycle:2:end-of-stream:identity-merge", trigger_kind: "end_of_stream" },
+  ]);
   const stm = new SqliteStmStore(db);
   expect(stm.unconsumed()).toEqual([]);
   // Consumed items stay visible to resume bookkeeping; only the live frontier drains.
   expect(stm.all().length).toBeGreaterThan(0);
+});
+
+test("dream promotion chunks a large frontier into bounded cycles", async () => {
+  const path = dbPath("omi-chunk-");
+  const batch = 10;
+  const result = await runPipeline([fixture, "--db", path, "--batch", "7"], { dreamPromotionBatch: batch });
+  expect(result.stm_items).toBeGreaterThan(3 * batch);
+  const promoteChunks = Math.ceil(result.stm_items / batch);
+  // promote chunks + one trailing identity-merge
+  expect(result.dream_cycles).toBe(promoteChunks + 1);
+  expect(result.dream_cycles).toBeGreaterThanOrEqual(3);
+  expect(result.dream_failures).toEqual([]);
+  const cycles = new Database(path).query("SELECT cycle_id FROM dream_cycles ORDER BY cycle_id").all() as { cycle_id: string }[];
+  expect(cycles.some((row) => /:chunk-\d+$/.test(row.cycle_id))).toBe(true);
+  expect(cycles.some((row) => row.cycle_id.endsWith(":identity-merge"))).toBe(true);
+  expect(cycles.length).toBe(result.dream_cycles);
+  expect(new SqliteStmStore(new Database(path)).unconsumed()).toEqual([]);
+});
+
+test("chunked dream runs full-graph identity only at open and close of a trigger", async () => {
+  const path = dbPath("omi-identity-once-");
+  let identityAdjudications = 0;
+  const batch = 10;
+  const result = await runPipeline([fixture, "--db", path, "--batch", "7"], {
+    dreamPromotionBatch: batch,
+    selectDreamModel: (hermetic) => ({
+      live: false,
+      model: {
+        invoke: async (request) => {
+          if (request.strategy === "identity-adjudication") identityAdjudications += 1;
+          return hermetic.invoke(request);
+        },
+        render: (request) => hermetic.render(request),
+        compose: (request) => hermetic.compose(request),
+      },
+    }),
+  });
+  const promoteChunks = Math.ceil(result.stm_items / batch);
+  expect(promoteChunks).toBeGreaterThan(1);
+  // Without the optimization this would be ~promoteChunks (plus merge internals).
+  // With it: opening chunk + trailing merge only (fixture may still call 0 times
+  // if blocked adjudication finds no multi-profile clusters — accept ≤2).
+  expect(identityAdjudications).toBeLessThanOrEqual(2);
+  expect(result.dream_cycles).toBe(promoteChunks + 1);
+});
+
+test("a failed dream chunk retries once then continues draining other items", async () => {
+  const path = dbPath("omi-dream-retry-");
+  let dreamInvokes = 0;
+  const result = await runPipeline([fixture, "--db", path, "--batch", "7"], {
+    dreamPromotionBatch: 10,
+    selectDreamModel: (hermetic) => ({
+      live: false,
+      model: {
+        invoke: async (request) => {
+          dreamInvokes += 1;
+          // Fail the first model call of the first chunk; identity errors are
+          // swallowed into rejected groups, so use a strategy that bubbles.
+          if (dreamInvokes === 1) throw new Error("timeout simulating provider");
+          return hermetic.invoke(request);
+        },
+        render: (request) => hermetic.render(request),
+        compose: (request) => hermetic.compose(request),
+      },
+    }),
+  });
+  expect(result.dream_failures.length).toBe(1);
+  expect(result.dream_failures[0]!.reason).toMatch(/timeout/);
+  expect(dreamInvokes).toBeGreaterThanOrEqual(2);
+  expect(new SqliteStmStore(new Database(path)).unconsumed()).toEqual([]);
+  expect(result.dream_cycles).toBeGreaterThanOrEqual(3);
 });
 
 test("mid-run cycles drain the STM frontier so every item is consolidated exactly once", async () => {

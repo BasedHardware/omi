@@ -155,10 +155,15 @@ const withRetry = async <T>(label: string, run: () => Promise<T>, attempts = 3):
   }
 };
 
+/** Max STM items per dream cycle — large frontiers timed out when passed whole. */
+export const DREAM_PROMOTION_BATCH = 64;
+
 export interface RunPipelineResult { digest: string; model_calls: number; sessions: number; stm_items: number; sessions_resumed: number; dream_cycles: number; dream_failures: readonly { cycle: number; reason: string }[]; quality_findings: readonly QualityFinding[]; }
 export interface RunPipelineDependencies {
   selectModel?: (input: { session_id: string; hermetic_seed: unknown }) => ModelSelection;
   selectDreamModel?: (hermetic: Parameters<typeof selectDreamModel>[1]) => ModelSelection;
+  /** Test override only — production uses DREAM_PROMOTION_BATCH. */
+  dreamPromotionBatch?: number;
 }
 
 const option = (options: readonly string[], name: string): string | undefined => {
@@ -210,8 +215,10 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
   const backfillSessions = new Set(pending.filter((session) => ledger.findCommitByIdempotencyKey(`stage-a-ingest:${corpus.owner_account_id}:${session.session_id}`) !== null).map((session) => session.session_id));
   if (backfillSessions.size) console.error(`backfilling extraction for ${backfillSessions.size} previously ingested session(s)`);
 
+  const promotionBatch = dependencies.dreamPromotionBatch ?? DREAM_PROMOTION_BATCH;
+  if (!Number.isInteger(promotionBatch) || promotionBatch < 1) throw new Error("dreamPromotionBatch must be a positive integer");
+
   const dreamOnce = async (triggerKind: "volume" | "idle" | "end_of_stream", windowLabel: string): Promise<void> => {
-    cycleCounter += 1;
     const hermetic = {
       async invoke(request: { strategy: string; input: unknown }) {
         if (request.strategy === "predicate-alignment") return { assertions: [] };
@@ -230,23 +237,65 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
     // Provenance must name the model that actually adjudicated this cycle:
     // live GLM runs stamp the live model id, hermetic runs stamp the fake.
     const modelVersion = selection.live ? (process.env.OMI_BENCH_OPENAI_MODEL ?? "glm-4.7") : "deterministic-fake-v1";
-    // A consolidation failure costs you consolidation, not the extraction run.
-    // Dream is the experimental half; committed memories must not be discarded
-    // because one merge could not satisfy the ledger.
-    let deferredIds: readonly string[] = [];
-    try {
-      const report = await runSqliteDreamCycle({ db, ledger, owner_account_id: corpus.owner_account_id, stm_items: stm.unconsumed(), stm_mentions: stm.mentions(), model: selection.model, cycle_id: `cycle:${cycleCounter}:${windowLabel}`, trigger_kind: triggerKind, model_version: modelVersion });
-      deferredIds = report.deferred;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      dreamFailures.push({ cycle: cycleCounter, reason });
-      console.error(`dream cycle ${cycleCounter} failed: ${reason}`);
+    // Chunk the frontier so one timeout cannot strand the whole unconsumed set.
+    // Double-failed slice ids stay unconsumed but are skipped for this trigger
+    // so the loop cannot spin forever on the same N items.
+    // Full-graph identity runs on the first successful chunk and once more at
+    // the end (merge newly promoted claims); middle chunks are promote-only.
+    const failedIds = new Set<string>();
+    let chunk = 0;
+    let identityOpen = true;
+    let promotedAny = false;
+    const runChunk = async (cycleId: string, slice: readonly DurableStmItem[], adjudicate_identity: boolean): Promise<{ ok: boolean; deferredIds: readonly string[] }> => {
+      let deferredIds: readonly string[] = [];
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        const attemptCycleId = attempt === 1 ? cycleId : `${cycleId}:retry`;
+        try {
+          const report = await runSqliteDreamCycle({
+            db, ledger, owner_account_id: corpus.owner_account_id,
+            stm_items: slice, stm_mentions: stm.mentions(),
+            model: selection.model, cycle_id: attemptCycleId, trigger_kind: triggerKind, model_version: modelVersion,
+            adjudicate_identity,
+          });
+          return { ok: true, deferredIds: report.deferred };
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          dreamFailures.push({ cycle: cycleCounter, reason });
+          console.error(`dream cycle ${cycleCounter} failed (attempt ${attempt}/2): ${reason}`);
+          if (attempt >= 2) break;
+          await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
+        }
+      }
+      return { ok: false, deferredIds };
+    };
+    while (true) {
+      const frontier = stm.unconsumed().filter((item) => !failedIds.has(item.id));
+      if (!frontier.length) break;
+      const slice = frontier.slice(0, promotionBatch);
+      chunk += 1;
+      cycleCounter += 1;
+      const cycleId = `cycle:${cycleCounter}:${windowLabel}:chunk-${chunk}`;
+      const adjudicate = identityOpen;
+      const { ok, deferredIds } = await runChunk(cycleId, slice, adjudicate);
+      dreamCycles += 1;
+      if (!ok) {
+        for (const item of slice) failedIds.add(item.id);
+        continue;
+      }
+      if (adjudicate) identityOpen = false;
+      promotedAny = true;
+      const deferred = new Set(deferredIds);
+      stm.consume(slice.filter((item) => ledger.isProvisionalConsumed(item.claim.claim_revision_id) || deferred.has(item.id)).map((item) => item.id));
+      parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? parent;
     }
-    dreamCycles += 1;
-    // DRAIN: ledger consumed markers cover admits + deferred commits; report.deferred
-    // also covers crash-recovery skips that already had an idempotency commit.
-    const deferred = new Set(deferredIds);
-    stm.consume(stm.unconsumed().filter((item) => ledger.isProvisionalConsumed(item.claim.claim_revision_id) || deferred.has(item.id)).map((item) => item.id));
+    // Trailing identity/merge over claims promoted in this trigger (empty STM).
+    if (promotedAny) {
+      cycleCounter += 1;
+      const mergeId = `cycle:${cycleCounter}:${windowLabel}:identity-merge`;
+      const { ok } = await runChunk(mergeId, [], true);
+      dreamCycles += 1;
+      if (ok) parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? parent;
+    }
     lastTriggerTokens = stm.unconsumed().reduce((sum, item) => sum + item.bytes, 0);
     parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? parent;
   };

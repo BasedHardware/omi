@@ -50,7 +50,7 @@ test("GLM dispatches entity plus all three placement strategies with determinist
   await expect(model.invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: "entity:alice" }, scope: { locality: "durable", scope_ref: "project:atlas" } });
   // The stated risk survives the parse: an edge whose only diagnostic is
   // discarded reports an outcome nobody can review.
-  await expect(model.invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).resolves.toEqual({ decision: "accept_ltm", risk_markers: ["complete_referents"] });
+  await expect(model.invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).resolves.toEqual({ decision: "accept_ltm", risk_markers: ["complete_referents"] });
 
   expect(provider.calls).toHaveLength(4);
   for (const call of provider.calls as { temperature: number; thinking: { type: string }; response_format: { type: string }; messages: { content: string }[] }[]) {
@@ -72,14 +72,14 @@ test("GLM placement parsers reject malformed model output instead of repairing i
   // only reads scope.locality (D-d).
   await expect(modelFor(bad('{"bindings":{"subject":"c9"},"scope_ref":"project:atlas","confidently_placed":true}')).invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: null }, scope: { locality: "durable", scope_ref: "project:atlas" } });
   await expect(modelFor(bad('{"bindings":{"subject":"null"},"scope_ref":"project:atlas","confidently_placed":false}')).invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: null }, scope: { locality: "durable", scope_ref: "project:atlas" } });
-  await expect(modelFor(bad('{not json}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).rejects.toThrow("was not JSON");
-  await expect(modelFor(bad('{"decision":"abstain","risk_markers":[""]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).rejects.toThrow("risk_markers must be an array of non-empty strings");
+  await expect(modelFor(bad('{not json}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).rejects.toThrow("was not JSON");
+  await expect(modelFor(bad('{"decision":"abstain","risk_markers":[""]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).rejects.toThrow("risk_markers must be an array of non-empty strings");
 });
 
 test("GLM retries a malformed boundary judgment and accepts a later valid response", async () => {
   const boundaryRequest = buildUnitBoundaryRequest(claim(), evidenceFor(claim()));
   const provider = fixtureProvider('{"decision":"abstain","risk_markers":[""]}', '{"decision":"abstain","risk_markers":["missing_time"]}');
-  await expect(modelFor(provider).invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
+  await expect(modelFor(provider).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
   expect(provider.calls).toHaveLength(2);
   const retryPrompt = (provider.calls[1] as { messages: { content: string }[] }).messages[0]!.content;
   expect(retryPrompt).toContain("previous answer was rejected");
@@ -100,7 +100,7 @@ test("GLM placement abstentions parse without becoming placement approvals, and 
   const model = modelFor(provider);
   await expect(model.invoke({ strategy: "mention-local-handle", version: "v1", input: mentionRequest })).resolves.toEqual({ mentions: [] });
   await expect(model.invoke({ strategy: "scope-role-binding", version: "v2", input: scopeRequest })).resolves.toEqual({ bindings: { subject: "entity:alice" }, scope: null });
-  await expect(model.invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
+  await expect(model.invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest })).resolves.toEqual({ decision: "abstain", reason: "missing_time", risk_markers: ["missing_time"] });
   await expect(model.invoke({ strategy: "not-a-real-edge", version: "v1", input: {} })).rejects.toThrow("does not support strategy");
 });
 
@@ -249,7 +249,7 @@ test("the boundary edge is asked about a readable fact, not about our bookkeepin
   const provisional: ProvisionalClaim = { ...claim("p-boundary"), arguments: [{ slot_id: "subject", role: "subject", surface: "Alice", value: { kind: "source_local_ref", ref: "source-local:s1:e:p-boundary:0:5" } }], context_packet: { version: "stage-a-context-v1", referent_refs: ["source-local:s1:e:p-boundary:0:5"], topic_refs: ["predicate:4c1e8a0d6b2f9c3e5a7d1b0f2e4c6a8d"] } };
   const provider = fixtureProvider('{"decision":"accept_ltm"}');
   const source = [{ ...evidenceFor(provisional)[0]!, excerpt: "Alice works on atlas", range: { start: 0, end: 20 } }];
-  await modelFor(provider).invoke({ strategy: "stm-ltm-unit-boundary", version: "v3", input: buildUnitBoundaryRequest(provisional, source) });
+  await modelFor(provider).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: buildUnitBoundaryRequest(provisional, source) });
   const prompt = (provider.calls[0] as { messages: { content: string }[] }).messages[0]!.content;
   for (const id of ["source-local:", "predicate:4c1e", "context_packet", "p-boundary"]) expect(prompt).not.toContain(id);
   expect(prompt).toContain("Alice works on atlas");
