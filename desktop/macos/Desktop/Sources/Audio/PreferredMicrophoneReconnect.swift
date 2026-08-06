@@ -7,11 +7,17 @@ enum PreferredMicrophoneReconnectPolicy {
   /// Restart capture when the preferred UID resolves to a live device that is
   /// not the one currently open (typical: open fell back to system default
   /// while glasses were offline; glasses reconnect).
+  ///
+  /// Requires `isCaptureLive` so a device-list flap during HAL startup cannot
+  /// restart while `activeDeviceID` is already assigned but `stopCapture()` is
+  /// still a no-op (`isCapturing == false`).
   static func shouldReapplyPreferredMicrophone(
     preferredUID: String,
     resolvedPreferredDeviceID: AudioDeviceID?,
-    activeCaptureDeviceID: AudioDeviceID?
+    activeCaptureDeviceID: AudioDeviceID?,
+    isCaptureLive: Bool
   ) -> Bool {
+    guard isCaptureLive else { return false }
     guard !preferredUID.isEmpty, let resolved = resolvedPreferredDeviceID else { return false }
     guard let active = activeCaptureDeviceID, active != kAudioObjectUnknown else {
       // Capture not open yet — startMicCaptureIfNeeded will resolve preferred.
@@ -93,12 +99,15 @@ final class PreferredMicrophoneReconnectMonitor {
     guard !preferredUID.isEmpty else { return }
 
     let resolved = await AudioCaptureService.resolvePreferredMicrophone()
-    let activeID = appState.audioCaptureService?.activeDeviceID
+    // Snapshot live capture only — `activeDeviceID` is assigned mid-HAL start
+    // before `capturing` flips true; restarting then races the original start.
+    let capture = appState.audioCaptureService
     guard
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: preferredUID,
         resolvedPreferredDeviceID: resolved?.id,
-        activeCaptureDeviceID: activeID
+        activeCaptureDeviceID: capture?.activeDeviceID,
+        isCaptureLive: capture?.capturing == true
       )
     else { return }
 

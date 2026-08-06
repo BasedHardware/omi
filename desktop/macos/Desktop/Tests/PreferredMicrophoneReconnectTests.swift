@@ -9,7 +9,8 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: "glasses-uid",
         resolvedPreferredDeviceID: 42,
-        activeCaptureDeviceID: 7
+        activeCaptureDeviceID: 7,
+        isCaptureLive: true
       ))
   }
 
@@ -18,7 +19,8 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: "glasses-uid",
         resolvedPreferredDeviceID: 42,
-        activeCaptureDeviceID: 42
+        activeCaptureDeviceID: 42,
+        isCaptureLive: true
       ))
   }
 
@@ -27,7 +29,8 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: "glasses-uid",
         resolvedPreferredDeviceID: nil,
-        activeCaptureDeviceID: 7
+        activeCaptureDeviceID: 7,
+        isCaptureLive: true
       ))
   }
 
@@ -36,7 +39,8 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: "",
         resolvedPreferredDeviceID: 42,
-        activeCaptureDeviceID: 7
+        activeCaptureDeviceID: 7,
+        isCaptureLive: true
       ))
   }
 
@@ -45,13 +49,26 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: "glasses-uid",
         resolvedPreferredDeviceID: 42,
-        activeCaptureDeviceID: kAudioObjectUnknown
+        activeCaptureDeviceID: kAudioObjectUnknown,
+        isCaptureLive: true
       ))
     XCTAssertFalse(
       PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
         preferredUID: "glasses-uid",
         resolvedPreferredDeviceID: 42,
-        activeCaptureDeviceID: nil
+        activeCaptureDeviceID: nil,
+        isCaptureLive: true
+      ))
+  }
+
+  func testDoesNotRestartWhileCaptureIsStartingOrStopped() {
+    // deviceID can be assigned before isCapturing flips true during HAL startup.
+    XCTAssertFalse(
+      PreferredMicrophoneReconnectPolicy.shouldReapplyPreferredMicrophone(
+        preferredUID: "glasses-uid",
+        resolvedPreferredDeviceID: 42,
+        activeCaptureDeviceID: 7,
+        isCaptureLive: false
       ))
   }
 
@@ -59,7 +76,8 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
     let transcriptionURL = sourcesRoot()
       .appendingPathComponent("AppState/AppState+Transcription.swift")
     let appStateURL = sourcesRoot().appendingPathComponent("AppState.swift")
-    let monitorURL = sourcesRoot().appendingPathComponent("PreferredMicrophoneReconnect.swift")
+    let monitorURL = sourcesRoot()
+      .appendingPathComponent("Audio/PreferredMicrophoneReconnect.swift")
     // omi-test-quality: source-inspection -- static contract: live transcription observes device reconnect
     let transcription = try String(contentsOf: transcriptionURL, encoding: .utf8)
     let appState = try String(contentsOf: appStateURL, encoding: .utf8)
@@ -71,6 +89,8 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
     XCTAssertTrue(transcription.contains("preferredMicrophoneReconnectMonitor.stop()"))
     XCTAssertTrue(monitor.contains("kAudioHardwarePropertyDevices"))
     XCTAssertTrue(monitor.contains("prepareTranscriptionRestartAfterSettingsChange"))
+    XCTAssertTrue(monitor.contains("isCaptureLive"))
+    XCTAssertTrue(monitor.contains("capturing"))
   }
 
   private func sourcesRoot() -> URL {
