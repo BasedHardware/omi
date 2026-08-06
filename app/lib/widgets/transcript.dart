@@ -112,6 +112,24 @@ class TranscriptScrollState {
   }
 }
 
+/// Owns live-transcript scroll intent for one mounted page.
+///
+/// A new page gets a fresh store and therefore starts at the live edge. The
+/// same page can still reuse its position when its transcript switches between
+/// the text-only and photo timeline layouts.
+class TranscriptScrollStateStore {
+  String? _sessionId;
+  TranscriptScrollState _state = TranscriptScrollState();
+
+  TranscriptScrollState forSession(String sessionId) {
+    if (_sessionId != sessionId) {
+      _sessionId = sessionId;
+      _state = TranscriptScrollState();
+    }
+    return _state;
+  }
+}
+
 class _TranscriptWidgetState extends State<TranscriptWidget> {
   // Cache for person data to avoid repeated lookups
   final Map<String?, Person?> _personCache = {};
@@ -238,7 +256,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         widget.segments.length != oldWidget.segments.length ||
         widget.leadingItems.length != oldWidget.leadingItems.length ||
         widget.layoutIdentity != oldWidget.layoutIdentity;
-    final shouldFollow = widget.scrollState?.isAtBottom ?? !_userHasScrolled;
+    final shouldFollow = !_userHasScrolled;
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
     _syncSegmentKeys();
@@ -289,6 +307,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final currentScroll = _scrollController.offset;
     final distanceFromBottom = _scrollController.position.maxScrollExtent - currentScroll;
     final isAtBottom = distanceFromBottom <= 24;
+    if (!_isAutoScrolling && !_isRestoringAnchor && !_pendingAnchorRestore) {
+      // Record the reader's intent on the first pixel of a drag. A live update
+      // can arrive before Flutter emits the corresponding idle notification.
+      final wasUserHasScrolled = _userHasScrolled;
+      _userHasScrolled = !isAtBottom;
+      if (isAtBottom && wasUserHasScrolled) {
+        widget.scrollState?.update(offset: currentScroll, isAtBottom: true, layoutIdentity: widget.layoutIdentity);
+      }
+    }
     _setIsAtBottom(isAtBottom);
   }
 
@@ -445,8 +472,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     }
   }
 
-  Future<void> _scrollToBottomGently({bool animated = true}) {
+  Future<void> _scrollToBottomGently({bool animated = true, bool force = false}) {
     if (!_scrollController.hasClients) return Future.value();
+    if (!force && widget.followLatest && _userHasScrolled) return Future.value();
     _followAgain = true;
     final activeFollow = _activeFollow;
     if (activeFollow != null) return activeFollow;
@@ -476,9 +504,29 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     return false;
   }
 
+  bool _onScrollUpdate(ScrollUpdateNotification notification) {
+    if (notification.depth != 0 || notification.dragDetails == null) return false;
+    if (_isRestoringAnchor || _pendingAnchorRestore) return false;
+
+    _isUserScrolling = true;
+    if (_isAutoScrolling) {
+      _userInterruptedAutoScroll = true;
+      _followAgain = false;
+      _isAutoScrolling = false;
+    }
+    _captureCurrentPosition();
+    return false;
+  }
+
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) return _onScrollUpdate(notification);
+    if (notification is UserScrollNotification) return _onUserScroll(notification);
+    return false;
+  }
+
   bool _onScrollMetrics(ScrollMetricsNotification notification) {
     if (!widget.followLatest || _isAutoScrolling) return false;
-    final shouldFollow = widget.scrollState?.isAtBottom ?? !_userHasScrolled;
+    final shouldFollow = !_userHasScrolled;
     if (shouldFollow && notification.metrics.extentAfter > 0.5) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToBottomGently(animated: false);
@@ -657,8 +705,8 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final searchBarHeight = widget.searchQuery.isNotEmpty ? 100.0 : 0.0;
     final transcriptList = NotificationListener<ScrollMetricsNotification>(
       onNotification: _onScrollMetrics,
-      child: NotificationListener<UserScrollNotification>(
-        onNotification: _onUserScroll,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: () {
@@ -738,7 +786,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       tooltip: context.l10n.jumpToLatestMessage,
                       backgroundColor: const Color(0xFF35343B),
                       foregroundColor: Colors.white,
-                      onPressed: () => _scrollToBottomGently(),
+                      onPressed: () => _scrollToBottomGently(force: true),
                       child: const Icon(Icons.keyboard_arrow_down_rounded),
                     ),
                   ),
