@@ -29,9 +29,6 @@ permissions="compute.disks.create,compute.disks.get,compute.images.useReadOnly,c
 subnetwork_role_id="omiAgentVmReconcilerSubnetwork"
 subnetwork_role="projects/${project}/roles/${subnetwork_role_id}"
 subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"
-network_role_id="omiAgentVmReconcilerNetwork"
-network_role="projects/${project}/roles/${network_role_id}"
-network_permissions="compute.networks.use"
 operations_permissions="compute.globalOperations.get,compute.zoneOperations.get"
 zone="us-central1-a"
 region="${zone%-*}"
@@ -53,11 +50,6 @@ if gcloud iam roles describe "$subnetwork_role_id" --project="$project" >/dev/nu
   gcloud iam roles update "$subnetwork_role_id" --project="$project" --title="Omi Agent VM reconciler subnet" --permissions="$subnetwork_permissions" --stage=GA
 else
   gcloud iam roles create "$subnetwork_role_id" --project="$project" --title="Omi Agent VM reconciler subnet" --permissions="$subnetwork_permissions" --stage=GA
-fi
-if gcloud iam roles describe "$network_role_id" --project="$project" >/dev/null 2>&1; then
-  gcloud iam roles update "$network_role_id" --project="$project" --title="Omi Agent VM reconciler network" --permissions="$network_permissions" --stage=GA
-else
-  gcloud iam roles create "$network_role_id" --project="$project" --title="Omi Agent VM reconciler network" --permissions="$network_permissions" --stage=GA
 fi
 if gcloud iam roles describe "$operations_role_id" --project="$project" >/dev/null 2>&1; then
   gcloud iam roles update "$operations_role_id" --project="$project" --title="Omi Agent VM reconciler operation polling" --permissions="$operations_permissions" --stage=GA
@@ -87,11 +79,6 @@ gcloud projects add-iam-policy-binding "$project" \
 # to a Subnetwork resource.
 gcloud compute networks subnets add-iam-policy-binding default --project="$project" --region="$region" \
   --member="serviceAccount:${gsa}" --role="$subnetwork_role"
-# The replacement body also names the VPC network explicitly so its relationship
-# with the selected subnet is checked by Compute Engine.  Bind network use only
-# on that exact default network.
-gcloud compute networks add-iam-policy-binding default --project="$project" \
-  --member="serviceAccount:${gsa}" --role="$network_role"
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$operations_role" --condition=None
 # Project IAM policies containing scoped bindings require unconditional bindings

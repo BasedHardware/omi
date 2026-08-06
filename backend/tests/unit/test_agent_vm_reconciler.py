@@ -181,7 +181,7 @@ async def test_metadata_repair_can_restore_the_owner_fenced_auth_token():
 
 
 @pytest.mark.asyncio
-async def test_boot_image_replacement_preserves_the_explicit_vpc_subnet_and_required_create_fields():
+async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet_and_required_create_fields():
     captured = {}
 
     class Client(GceAgentVmClient):
@@ -212,7 +212,6 @@ async def test_boot_image_replacement_preserves_the_explicit_vpc_subnet_and_requ
     assert captured["url"].endswith("/zones/us-central1-a/instances")
     assert body["networkInterfaces"] == [
         {
-            "network": "projects/based-hardware-dev/global/networks/default",
             "subnetwork": "projects/based-hardware-dev/regions/us-central1/subnetworks/default",
             "accessConfigs": [{"type": "ONE_TO_ONE_NAT", "name": "External NAT"}],
         }
