@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  s_569f1df936cc22::t_533ba5d4b49314 166-169
+  s_569f1df936cc22::t_385a4e53e04603 155-165,170-173
+desktop/macos/changelog/unreleased/20260806-settings-notification-toggles-follow-account.json
+  s_569f1df936cc22::t_a129e92f3ef52a 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4c8308301a2a4090c4b7d9bb39cf498600094665",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
