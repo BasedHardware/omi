@@ -189,6 +189,17 @@ void _checkClockSkewResponse(http.Response response) {
   ClockSkewDetector.instance.checkResponse(response);
 }
 
+Future<http.Response> _materializeErrorResponse(http.StreamedResponse response) async {
+  try {
+    return await http.Response.fromStream(response);
+  } catch (e) {
+    // Preserve the quota/error sentinel even when the provider resets a
+    // truncated response before the body can be read.
+    Logger.debug('Failed to materialize streaming error response: ${e.runtimeType}');
+    return http.Response('{}', response.statusCode, reasonPhrase: response.reasonPhrase, headers: response.headers);
+  }
+}
+
 Future<void> _handleAuthUnavailable(
   AuthTokenUnavailableException exception, {
   required bool expireTerminalSession,
@@ -575,10 +586,14 @@ Stream<String> makeStreamingApiCall({
     }
 
     if (streamedResponse.statusCode != 200) {
-      Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
-      if (streamedResponse.statusCode == 402) {
+      // Materialize error responses so clock-skew detection sees the JSON body;
+      // streamed responses previously bypassed _checkClockSkewResponse().
+      final errorResponse = await _materializeErrorResponse(streamedResponse);
+      _checkClockSkewResponse(errorResponse);
+      Logger.error('Streaming request failed: ${errorResponse.statusCode}');
+      if (errorResponse.statusCode == 402) {
         try {
-          var body = await streamedResponse.stream.bytesToString();
+          final body = errorResponse.body;
           yield 'error:402:$body';
         } catch (_) {
           yield 'error:402:{}';
@@ -665,10 +680,14 @@ Stream<String> makeMultipartStreamingApiCall({
     }
 
     if (response.statusCode != 200) {
-      Logger.error('Multipart streaming request failed: ${response.statusCode}');
-      if (response.statusCode == 402) {
+      // Materialize error responses so clock-skew detection sees the JSON body;
+      // streamed responses previously bypassed _checkClockSkewResponse().
+      final errorResponse = await _materializeErrorResponse(response);
+      _checkClockSkewResponse(errorResponse);
+      Logger.error('Multipart streaming request failed: ${errorResponse.statusCode}');
+      if (errorResponse.statusCode == 402) {
         try {
-          var body = await response.stream.bytesToString();
+          final body = errorResponse.body;
           yield 'error:402:$body';
         } catch (_) {
           yield 'error:402:{}';

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildDesktopChatSystemPrompt, buildDesktopChatPersonalization } from './desktopChatPrompt'
+import {
+  buildDesktopChatSystemPrompt,
+  buildDesktopChatPersonalization,
+  currentTimePrompt
+} from './desktopChatPrompt'
 
 describe('buildDesktopChatSystemPrompt', () => {
   it('carries the <initiative> block that routes long/coding work to spawn_agent', () => {
@@ -47,6 +51,9 @@ describe('buildDesktopChatSystemPrompt', () => {
     expect(prompt).toContain("You're a mentor, not a yes-man")
     expect(prompt).toContain('<critical_accuracy_rules>')
     expect(prompt).toContain('never from plausible invention')
+    expect(prompt).toContain(
+      "The # Current Time block prefixed to each request is Omi's authoritative clock"
+    )
   })
 
   it('interpolates a name when provided, else reads as "the user"', () => {
@@ -84,6 +91,27 @@ describe('buildDesktopChatSystemPrompt', () => {
     expect(prompt).not.toContain('<user_facts>')
     expect(prompt).not.toContain('<user_tasks>')
     expect(prompt).not.toContain('<ai_user_profile>')
+  })
+})
+
+describe('currentTimePrompt', () => {
+  it('renders one explicit local instant and timezone, matching macOS chat', () => {
+    const date = new Date('2026-07-31T02:30:45Z')
+    expect(currentTimePrompt('What day is it?', date, 'America/New_York')).toBe(
+      '# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nWhat day is it?'
+    )
+  })
+
+  it('falls back to UTC when the host timezone identifier is invalid', () => {
+    expect(
+      currentTimePrompt('What day is it?', new Date('2026-07-31T02:30:45Z'), 'Not/AZone')
+    ).toContain('# Current Time\n2026-07-31T02:30:45+00:00 (UTC)')
+  })
+
+  it('preserves non-whole-hour timezone offsets from Intl', () => {
+    expect(
+      currentTimePrompt('What day is it?', new Date('2026-07-31T02:30:45Z'), 'Asia/Kathmandu')
+    ).toContain('# Current Time\n2026-07-31T08:15:45+05:45 (Asia/Kathmandu)')
   })
 })
 
