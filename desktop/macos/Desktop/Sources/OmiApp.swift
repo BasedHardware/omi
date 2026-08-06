@@ -616,7 +616,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
         if Self.isMainOmiWindow(window) {
           foundOmiWindow = true
-          ShellGlassGround.dress(window)  // Transparent, light-pinned, and given its one ground.
+          ShellWindowChrome.dress(window)  // Transparent, buttonless. No ground: panels float.
           // Ensure fullscreen always creates a dedicated Space
           window.collectionBehavior.insert(.fullScreenPrimary)
           if shouldSuppressMainWindow {
@@ -1095,7 +1095,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           window.center()
         }
         window.makeKeyAndOrderFront(nil)
-        ShellGlassGround.dress(window)  // Re-asserted: a summon can outlive the launch pass.
+        ShellWindowChrome.dress(window)  // Re-asserted: a summon can outlive the launch pass.
         return true
       }
     }

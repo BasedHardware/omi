@@ -6,10 +6,10 @@
 //  - `Components/GlassContentChrome.swift` owns what a **page hosted inside the panel** may draw on
 //    it: the card, the row, the chip, the field, the scroll fade. Every one of those is a wash on the
 //    ground rather than a surface of its own.
-//  - **This file owns the ground's terms** — the style it wears and the clearance the hidden title bar
-//    demands — plus the nav pill / icon button the top bar and the sidebar are built out of. The
-//    ground itself is `ShellGlassGround`, and it is AppKit's: a SwiftUI background is laid out inside
-//    the hosting view's safe area and so cannot reach the title bar band. See that file.
+//  - **This file owns the shell's own terms** — the clearance the hidden title bar demands — plus the
+//    nav pill / icon button the top bar and the sidebar are built out of. The window itself has no
+//    ground at all: `ShellWindowChrome` makes it transparent and every surface grounds itself, so what
+//    is behind a panel is the user's wallpaper. See that file.
 //
 //  Nothing here restates a number from `InkGlass` — the material, the scrim, the 22 pt corner and the
 //  ambient shadow live there and are reached through `inkGlassPanel`. What is here is the handful of
@@ -31,22 +31,19 @@ import SwiftUI
 
 /// The shell's own numbers and state colours.
 enum GlassShell {
-  /// The style the window's ground wears.
-  ///
-  /// `fullBleed` and not `floating`: this is an ordinary titled window, whose frame already owns the
-  /// corner and the shadow (`WindowGlass.drawsSystemShadow`). Naming the style rather than passing
-  /// `0` and `nil` at the call site is what makes "exactly one shadow per window, never zero and
-  /// never two" a claim a test can hold.
-  static let groundStyle: InkGlassStyle = .fullBleed
-
   /// Vertical clearance the content keeps under a hidden title bar.
   ///
-  /// `.hiddenTitleBar` gives the window `fullSizeContentView`, which puts the traffic lights *over*
-  /// the content view. 32 pt is the height AppKit adds to a content rect to make a titled window's
-  /// frame rect, which is exactly the band the lights sit in — a **measurement**, checked against
+  /// `.hiddenTitleBar` gives the window `fullSizeContentView`, which lays a real — if transparent —
+  /// title bar *over* the content view. 32 pt is the height AppKit adds to a content rect to make a
+  /// titled window's frame rect, which is exactly that band — a **measurement**, checked against
   /// `NSWindow.frameRect(forContentRect:styleMask:)` by `ShellGlassChromeTests`, so the guard fails
-  /// rather than the layout if a future macOS changes it. Content that starts above this line is
-  /// content with three coloured circles punched through it.
+  /// rather than the layout if a future macOS changes it.
+  ///
+  /// It used to be the band the traffic lights sat in. `ShellWindowChrome` hides those, and the band
+  /// still has to stay empty for a better reason: **it is the window's drag handle.** A title bar,
+  /// even an invisible one, takes the mouse before the content under it does — so a control drawn up
+  /// there is a control that cannot be clicked, and a bar drawn up there is a window that cannot be
+  /// dragged from the one place every macOS user reaches for first.
   ///
   /// It is a *reserved band* and not a leading inset: the top bar centres its lane, so a leading
   /// inset moves the whole bar off centre and still collides at the minimum window width.

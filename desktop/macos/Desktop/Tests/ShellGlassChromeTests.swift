@@ -52,35 +52,62 @@ final class ShellGlassChromeTests: XCTestCase {
     XCTAssertEqual(window.titlebarSeparatorStyle, .none)
   }
 
-  /// Exactly one shadow per window — never zero, never two.
+  /// Exactly one shadow per object — never zero, never two.
   ///
-  /// A titled window's frame draws the shadow, so the ground inside it must not draw a second one;
-  /// a floating panel is the inverse. Asserting the *pairing* rather than each half is the point:
-  /// either one alone is a coherent-looking mistake.
-  func testTheShellGroundAndTheWindowFrameAgreeOnWhoDrawsTheShadow() {
-    XCTAssertTrue(
-      WindowGlass.drawsSystemShadow(.titled),
-      "the main window is titled; AppKit's frame shadow is the only correct one")
-    XCTAssertNil(
-      GlassShell.groundStyle.shadow,
-      "the ground must not cast a second shadow inside a window that already has one")
+  /// **This used to be a claim about the window's ground and it is now a claim about its panels.** The
+  /// shell had a full-bleed `InkGlassView` as its `contentView`, so the window frame was the panel's
+  /// edge and AppKit's frame shadow was the only correct one. There is no ground any more: the window
+  /// is transparent and each surface is a floating object that casts the one ambient shadow itself.
+  ///
+  /// Asserting the *pairing* rather than each half is still the point — either alone is a
+  /// coherent-looking mistake. Measured on the running app (`win_on`/`win_off` capture differencing,
+  /// signed delta across the window frame edge = 0.00 at every sampled row and column; the darkening
+  /// at a panel's edge peaks at alpha 0.114, which is one `.ambient` at 0.24 and not two), AppKit
+  /// draws nothing at all for a window whose content is transparent there, so the objects' own
+  /// shadows are the only ones on screen.
+  func testEveryShellSurfaceCastsExactlyOneShadowAndTheWindowAddsNone() {
+    XCTAssertNotNil(
+      TopNavigationLayoutMetrics.barShadow,
+      "the top bar is a floating object over the desktop; it owns its shadow")
+    XCTAssertEqual(
+      TopNavigationLayoutMetrics.barShadow, .ambient,
+      "one shadow for every floating object, or two surfaces on one lane read as two materials")
 
-    // The inverse, so the pairing is a rule rather than a coincidence of one case.
-    XCTAssertFalse(WindowGlass.drawsSystemShadow(.floating))
+    // The inverse, so the pairing is a rule rather than a coincidence of one case: a surface that
+    // *is* the inside of a window frame draws none of its own.
+    XCTAssertNil(InkGlassStyle.fullBleed.shadow)
     XCTAssertNotNil(InkGlassStyle.floating.shadow)
   }
 
-  /// The ground fills the window rather than floating in it: square, and inset by nothing.
-  func testTheShellGroundIsFullBleed() {
-    XCTAssertEqual(GlassShell.groundStyle, .fullBleed)
-    XCTAssertEqual(GlassShell.groundStyle.cornerRadius, 0)
-    XCTAssertEqual(GlassShell.groundStyle.inset, 0)
+  /// The bar wears the panels' glass, not a third opinion about it.
+  ///
+  /// The corner is the one place this drifts silently: a bar cut to its own radius still renders, it
+  /// just stops being the same object as the two panels under it. Both sides delegate to
+  /// `InkGlass.cornerRadius`, so this fails the moment either restates a literal.
+  func testTheTopBarWearsTheSameCornerAsThePanelsBelowIt() {
+    XCTAssertEqual(
+      TopNavigationLayoutMetrics.barCornerRadius, QueryShellLayout.panelCornerRadius,
+      "the bar and Home's panels must be cut to one corner")
+    XCTAssertEqual(
+      TopNavigationLayoutMetrics.barCornerRadius, PageGlassLaneLayout.cornerRadius,
+      "…and so must every other destination's panel")
+    XCTAssertEqual(TopNavigationLayoutMetrics.barCornerRadius, InkGlass.cornerRadius)
   }
 
-  /// `.hiddenTitleBar` puts the traffic lights over the content view, so the shell reserves a band
-  /// for them. The number is AppKit's own, not a guess — a hand-tuned constant is exactly what drifts
-  /// when a future macOS changes the title bar height.
-  func testTitlebarClearanceCoversTheTrafficLights() {
+  /// A 22 pt corner on a 44 pt bar is a capsule, not a rounded rectangle. The bar has to be visibly
+  /// taller than twice its radius or it stops being the same *shape* as the panels it sits above.
+  func testTheTopBarIsTallerThanACapsuleOfItsOwnCorner() {
+    XCTAssertGreaterThan(
+      TopNavigationLayoutMetrics.barHeight, TopNavigationLayoutMetrics.barCornerRadius * 2,
+      "at exactly twice the corner the bar degenerates into a pill")
+    // …and still tall enough for the 32 pt icon buttons plus air on both sides.
+    XCTAssertGreaterThanOrEqual(TopNavigationLayoutMetrics.barHeight, 32 + OmiSpacing.sm * 2)
+  }
+
+  /// `.hiddenTitleBar` lays a transparent title bar over the content view, so the shell reserves a
+  /// band for it. The number is AppKit's own, not a guess — a hand-tuned constant is exactly what
+  /// drifts when a future macOS changes the title bar height.
+  func testTitlebarClearanceCoversTheWindowsDragBand() {
     let content = NSRect(x: 0, y: 0, width: 640, height: 480)
     let frame = NSWindow.frameRect(
       forContentRect: content, styleMask: [.titled, .closable, .resizable])
@@ -89,7 +116,8 @@ final class ShellGlassChromeTests: XCTestCase {
     XCTAssertGreaterThan(titlebarHeight, 0, "a titled window has a title bar to clear")
     XCTAssertGreaterThanOrEqual(
       GlassShell.titlebarClearance, titlebarHeight,
-      "content starting above the traffic lights renders under three coloured circles")
+      "the title bar takes the mouse before the content under it: a bar drawn into this band is a bar "
+        + "you cannot click and a window you cannot drag from its top edge")
   }
 
   // MARK: - Shell controls
