@@ -87,9 +87,10 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("private static let homeAskBarMinWidth: CGFloat = 560"))
     XCTAssertTrue(source.contains("private static let homeStagePanelMaxWidth: CGFloat = 1280"))
     XCTAssertTrue(source.contains("private func homeStageSideInset(for stageWidth: CGFloat) -> CGFloat"))
-    XCTAssertTrue(source.contains("private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat"))
-    XCTAssertTrue(source.contains("(text as NSString).size(withAttributes: attributes).width"))
-    XCTAssertTrue(source.contains("private func homeHubStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View"))
+    XCTAssertTrue(source.contains("private func homeHubAskBarWidth(for stageWidth: CGFloat, draft: String) -> CGFloat"))
+    XCTAssertTrue(
+      source.contains("(text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 15)]).width"))
+    XCTAssertTrue(source.contains("private func homeHubStage(stageWidth: CGFloat) -> some View"))
     XCTAssertTrue(source.contains("private var homeHubHeadline: some View"))
     XCTAssertFalse(source.contains(".frame(width: 304)"))
     XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeAskBarMaxWidth)"))
