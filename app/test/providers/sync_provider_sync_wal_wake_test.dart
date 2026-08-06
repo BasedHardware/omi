@@ -91,16 +91,15 @@ void main() {
     await provider.syncWal(wal);
 
     expect(syncs.syncWalCalls, 1);
-    expect(
-        wakes,
-        [
-          WakeTrigger.cooldownElapsed,
-        ],
-        reason: 'successful syncWal must wake coordinator so uploaded WALs reconcile');
+    expect(wakes, [
+      WakeTrigger.cooldownElapsed,
+    ], reason: 'successful syncWal must wake coordinator so uploaded WALs reconcile');
     provider.dispose();
   });
 
-  test('partial localUploadFailures still complete then surface error', () async {
+  test('partial localUploadFailures re-arm recovery without SyncStatus.error', () async {
+    // Regression #4587: leave/background aborts paint as localUploadFailures;
+    // schema says those WALs stay miss and must soft-retry, not red-error.
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
@@ -127,10 +126,13 @@ void main() {
 
     await provider.syncWal(wal);
 
-    expect(provider.syncState.hasError, isTrue);
-    expect(provider.syncError, contains('Upload failed'));
-    // Still wakes — successful HTTP return with partial failures may include uploads.
-    expect(wakes, [WakeTrigger.cooldownElapsed]);
+    expect(provider.syncState.hasError, isFalse);
+    expect(provider.syncState.isIdle, isTrue);
+    expect(
+      wakes.where((w) => w == WakeTrigger.cooldownElapsed).length,
+      greaterThanOrEqualTo(1),
+      reason: 'localUploadFailures must re-arm coordinator cooldown wake',
+    );
     provider.dispose();
   });
 

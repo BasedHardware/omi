@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -19,9 +20,7 @@ enum WalStatusFilter { pending, synced, corrupted }
 
 enum WalDisplayFilter { all, pending, synced }
 
-List<SyncedConversationPointer> sortSyncedConversationPointers(
-  Iterable<SyncedConversationPointer> pointers,
-) {
+List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedConversationPointer> pointers) {
   final sorted = List<SyncedConversationPointer>.from(pointers);
   sorted.sort((a, b) {
     final aDate = a.conversation.startedAt ?? a.conversation.createdAt;
@@ -214,10 +213,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// exhausted), the file is unreadable, or the server permanently refused it
   /// for being too old. Surfaced explicitly so a failure is never mistaken for
   /// a recording that simply hasn't synced yet.
-  int get needsAttentionWalsCount => _countWhere((s) =>
-      s == WalSyncDisplayState.failed ||
-      s == WalSyncDisplayState.corrupted ||
-      s == WalSyncDisplayState.outsideRecoveryWindow);
+  int get needsAttentionWalsCount => _countWhere(
+    (s) =>
+        s == WalSyncDisplayState.failed ||
+        s == WalSyncDisplayState.corrupted ||
+        s == WalSyncDisplayState.outsideRecoveryWindow,
+  );
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -337,12 +338,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function(LocalWalSyncImpl phone)? waitForWalReady,
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
-  })  : _walServiceOverride = walService,
-        _uploadGate = uploadGate ?? SyncUploadGate.instance,
-        _startBackgroundSync = startBackgroundSync,
-        _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
-        _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
-        _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
+  }) : _walServiceOverride = walService,
+       _uploadGate = uploadGate ?? SyncUploadGate.instance,
+       _startBackgroundSync = startBackgroundSync,
+       _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
+       _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
+       _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)) {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -612,11 +613,28 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         _updateSyncState(_syncState.toCompleted(conversations: []));
       }
 
+      // Client-side upload aborts (leave/background mid-multipart, #4587) leave
+      // WALs as `miss`. Schema requires re-arming recovery — not SyncStatus.error.
       if ((result?.localUploadFailures ?? 0) > 0) {
-        _updateSyncState(_syncState.toError(message: 'Upload failed. Check your connection and try again'));
+        DebugLogManager.logWarning(
+          'SyncProvider: $context had ${result!.localUploadFailures} local upload failure(s); re-arming recovery',
+        );
+        _updateSyncState(_syncState.toIdle());
+        if (_startBackgroundSync) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
       }
       return result;
     } catch (e) {
+      if (isTransientNetworkError(e)) {
+        DebugLogManager.logWarning('SyncProvider: $context hit transient network error; re-arming recovery: $e');
+        _updateSyncState(_syncState.toIdle());
+        if (_startBackgroundSync) {
+          unawaited(_wakeTransfer(WakeTrigger.cooldownElapsed));
+        }
+        if (rethrowOnError) rethrow;
+        return null;
+      }
       final errorMessage = _formatSyncError(e, failedWal);
       Logger.debug('SyncProvider: Error in $context: $errorMessage');
       DebugLogManager.logError(e, null, 'SyncProvider: $context failed: $errorMessage', {
