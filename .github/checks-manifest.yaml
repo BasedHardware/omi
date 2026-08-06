@@ -455,6 +455,11 @@ checks:
     triggers: [".github/scripts/observe-codemagic-tag-build.py", ".github/scripts/test_observe_codemagic_tag_build.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-155 requires exactly one observed native Codemagic tag build; missing, duplicate, and unobservable candidates fail closed with durable evidence"
+  - id: desktop-codemagic-preview-build-observer
+    command: ["python3", ".github/scripts/test_observe_codemagic_preview_build.py"]
+    triggers: [".github/scripts/observe-codemagic-preview-build.py", ".github/scripts/test_observe_codemagic_preview_build.py", ".github/workflows/desktop_publish_preview.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10145 requires the preview dispatcher to poll Codemagic to a terminal status; silent green after dispatch is not proof the preview published"
   - id: desktop-codemagic-tag-intake-cli
     command: ["python3", ".github/scripts/check-codemagic-tag-intake.py", "--help"]
     triggers: [".github/scripts/check-codemagic-tag-intake.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
