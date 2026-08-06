@@ -194,6 +194,14 @@ struct QueryShellHome: View {
   }
 
   private func loadScreenCount() async {
+    // Rewind's pool opens asynchronously after launch, and this is a `.task` that runs once — so an
+    // ask that lands before it is open under-reports the archive by its entire size for the rest of
+    // the session. That is what made the corner read "390 results · of 147 captured": 147 was the
+    // conversations and memories alone, with the whole screen archive counted as nothing.
+    guard await SpineScreenIndex.poolWhenReady() != nil else {
+      screenCount = 0
+      return
+    }
     screenCount = (try? await RewindDatabase.shared.getScreenshotCount()) ?? 0
   }
 }
