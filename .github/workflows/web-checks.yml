@@ -75,6 +75,7 @@ jobs:
         run: |
           npm ci
           npm run lint
+          npm run lint:format -- --check
 
   build:
     name: Build

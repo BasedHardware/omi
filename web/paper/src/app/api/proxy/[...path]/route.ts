@@ -25,7 +25,9 @@ export async function GET(
   }
 
   const searchParams = request.nextUrl.searchParams.toString();
-  const url = `${API_BASE_URL}/${path.join('/')}${searchParams ? `?${searchParams}` : ''}`;
+  const url = `${API_BASE_URL}/${path.join('/')}${
+    searchParams ? `?${searchParams}` : ''
+  }`;
 
   try {
     const response = await fetch(url, {

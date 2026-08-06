@@ -13,8 +13,8 @@
   --rule-strong: #131313;
   --accent: #f09000;
 
-  --serif:
-    'Iowan Old Style', 'New York', Charter, Athelas, 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+  --serif: 'Iowan Old Style', 'New York', Charter, Athelas, 'Palatino Linotype', Palatino,
+    'Book Antiqua', Georgia, serif;
   --mono: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
 }
 

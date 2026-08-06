@@ -38,9 +38,9 @@ const firebaseConfig = {
  */
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
-  firebaseConfig.authDomain &&
-  firebaseConfig.projectId &&
-  firebaseConfig.appId,
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.appId,
 );
 
 export const MISSING_CONFIG_MESSAGE =
