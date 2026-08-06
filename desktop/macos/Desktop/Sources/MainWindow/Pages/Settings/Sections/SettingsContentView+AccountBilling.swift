@@ -9,34 +9,41 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xl) {
       settingsCard(settingId: "account.account") {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
-          HStack(spacing: OmiSpacing.lg) {
-            Image(systemName: "person.circle.fill")
-              .scaledFont(size: OmiType.hero)
-              .foregroundColor(Ink.secondary)
+          // `account.signout` is its own search result ("Sign Out / sign out of
+          // your omi account"), so it needs its own anchor. Without one the
+          // search jump selected the pane and then scrolled to nothing.
+          settingsGroup(settingId: "account.signout") {
+            HStack(spacing: OmiSpacing.lg) {
+              Image(systemName: "person.circle.fill")
+                .scaledFont(size: OmiType.hero)
+                .foregroundColor(Ink.secondary)
 
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-              Text(AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName)
+              VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+                Text(
+                  AuthService.shared.displayName.isEmpty ? "User" : AuthService.shared.displayName
+                )
                 .scaledFont(size: OmiType.subheading, weight: .semibold)
                 .foregroundColor(Ink.primary)
 
-              if let email = AuthState.shared.userEmail {
-                Text(email)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
+                if let email = AuthState.shared.userEmail {
+                  Text(email)
+                    .scaledFont(size: OmiType.body)
+                    .foregroundColor(Ink.secondary)
+                }
               }
-            }
 
-            Spacer()
+              Spacer()
 
-            Button("Sign Out") {
-              appState.stopTranscription()
-              ProactiveAssistantsPlugin.shared.stopMonitoring()
-              Task {
-                try? await AuthService.shared.signOut()
+              Button("Sign Out") {
+                appState.stopTranscription()
+                ProactiveAssistantsPlugin.shared.stopMonitoring()
+                Task {
+                  try? await AuthService.shared.signOut()
+                }
               }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+              .disabled(isDeletingAccount)
             }
-            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-            .disabled(isDeletingAccount)
           }
 
           GlassSeparator()
@@ -547,10 +554,16 @@ extension SettingsContentView {
 
   // MARK: - Chat Usage Quota Card
 
+  // Anchored on `planusage.overview` ("Plan and Usage — subscription status and
+  // usage limits"), not on `planusage.current`. Both cards carried
+  // `planusage.current`, which put two views with the same SwiftUI `.id` in one
+  // scroll container: the deep link was ambiguous and the search flash fired on
+  // both. `planusage.overview` had no anchor at all, and this — the card that
+  // shows the usage against the limit — is what that search result promises.
   @ViewBuilder
   var chatUsageQuotaCard: some View {
     if let quota = chatUsageQuota {
-      settingsCard(settingId: "planusage.current") {
+      settingsCard(settingId: "planusage.overview") {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
           HStack {
             Text("Usage this month")
@@ -601,7 +614,7 @@ extension SettingsContentView {
         }
       }
     } else if isLoadingChatUsage {
-      settingsCard(settingId: "planusage.current") {
+      settingsCard(settingId: "planusage.overview") {
         HStack {
           ProgressView().controlSize(.small)
           Text("Loading usage…")
