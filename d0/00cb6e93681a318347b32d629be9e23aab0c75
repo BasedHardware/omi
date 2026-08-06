@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Tests/BYOKIncompleteHintTests.swift
+  s_569f1df936cc22::t_28808ee4d1bf25 19-82
+desktop/macos/e2e/flows/home.yaml
+  s_569f1df936cc22::t_73471646303d86 16
+  s_569f1df936cc22::t_5f7a6675c66545 30-31,33-45
+  s_569f1df936cc22::t_1fc26e3d57ce87 9
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
+  s_569f1df936cc22::t_9860dadd4ca1fc 180-187,190
+  s_569f1df936cc22::t_ae0ead904dc47f 17-48
+  s_569f1df936cc22::t_5f9a63b3d7bc94 109-123
+  s_569f1df936cc22::t_20a93a3460d615 194-237,239-247,250-254,258-260,263-270,272-273
+desktop/macos/e2e/flows/memories.yaml
+  s_569f1df936cc22::t_d08eaef7185095 9
+desktop/macos/e2e/flows/navigation.yaml
+  s_569f1df936cc22::t_9c9ccdebd45b39 4,28,32,36,55,57-58,138,158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d000cb6e93681a318347b32d629be9e23aab0c75",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
