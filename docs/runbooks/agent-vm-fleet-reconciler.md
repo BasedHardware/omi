@@ -50,6 +50,64 @@ reconciler records `recreate_required` and does not stop, replace, or start the
 VM. An operator must recreate that dev/prod VM through the owner provisioning
 path with the exact image reference before the fleet can converge.
 
+## Development-only boot-image replacement
+
+Ordinary release rollout is never permission to replace a VM. A manifest may
+carry a separate `bootImageMigration` object only for a deliberately selected
+development owner:
+
+```json
+{
+  "bootImageMigration": {
+    "enabled": true,
+    "allowedUids": ["development-only-owner"],
+    "maxConcurrency": 1,
+    "soakSeconds": 600
+  }
+}
+```
+
+The job rejects this object outside development, requires a non-empty explicit
+allowlist, and only considers an already stopped owner with no session/start or
+drain demand. It journals a deterministic replacement candidate, verifies its
+private authenticated health and release identity, then atomically cuts the
+owner pointer over. The predecessor remains stopped and labelled during the
+soak window, then the same migration journal deletes it only after its numeric
+instance ID, label, active pointer, account-deletion, and lease fences still
+match. Candidate health retries reuse the journaled name and bearer token; a
+candidate that exhausts the normal retry budget is identity-fenced deleted
+before the owner record is quarantined. Production replacement is hard-disabled
+in code.
+
+Generate the opt-in manifest with the checked-in renderer; do not hand-edit a
+manifest after it receives `manifestSha256`:
+
+```bash
+python3 backend/scripts/agent_vm_release.py \
+  --output /tmp/agent-vm-migration.json \
+  --environment development \
+  --source-sha "$SOURCE_SHA" --image-digest "$IMAGE_DIGEST" \
+  --startup-uri "$STARTUP_URI" --startup-sha256 "$STARTUP_SHA256" \
+  --boot-image "$BOOT_IMAGE" --service-account "$SERVICE_ACCOUNT" \
+  --boot-image-migration-allowed-uid development-only-owner \
+  --boot-image-migration-soak-seconds 600
+```
+
+Activate it only with the checked-in dev-only, generation-guarded control:
+
+```bash
+AGENT_VM_MIGRATION_APPLY=1 \
+  AGENT_VM_MIGRATION_PROJECT=based-hardware-dev \
+  AGENT_VM_MIGRATION_BUCKET=based-hardware-dev-agent \
+  AGENT_VM_MIGRATION_MANIFEST=/tmp/agent-vm-migration.json \
+  bash backend/scripts/activate-agent-vm-dev-migration.sh
+```
+
+It refuses any other project, uploads a content-addressed immutable artifact,
+uses the current active-pointer generation for the compare-and-swap, and reads
+the activated generation back byte-for-byte. The next normal release manifest
+omits this flag, so migration cannot persist accidentally.
+
 ## Installation order
 
 Deploy Agent Proxy with session leases first. Before the desktop-backend

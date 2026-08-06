@@ -25,7 +25,7 @@ role_id="omiAgentVmReconciler"
 role="projects/${project}/roles/${role_id}"
 operations_role_id="omiAgentVmReconcilerOperations"
 operations_role="projects/${project}/roles/${operations_role_id}"
-permissions="compute.disks.get,compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
+permissions="compute.disks.create,compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
 operations_permissions="compute.globalOperations.get,compute.zoneOperations.get"
 zone="us-central1-a"
 
@@ -58,6 +58,12 @@ gcloud projects add-iam-policy-binding "$project" \
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
   --condition="title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
+# An explicit dev migration may create a replacement only from the immutable
+# Agent VM image family.  Image use is evaluated against the Image resource,
+# not the instance/disk scopes above.
+gcloud projects add-iam-policy-binding "$project" \
+  --member="serviceAccount:${gsa}" --role="$role" \
+  --condition="title=Agent VM reconciler image scope,description=Immutable omi-agent images only,expression=resource.type == 'compute.googleapis.com/Image' && resource.name.startsWith('projects/${project}/global/images/omi-agent-')"
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$operations_role" --condition=None
 # Project IAM policies containing scoped bindings require unconditional bindings

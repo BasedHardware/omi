@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 import uuid
 from dataclasses import dataclass
@@ -35,14 +36,21 @@ from services.agent_vm_lifecycle import (
     AgentVmRelease,
     GceAgentVmClient,
     active_session_count,
+    begin_boot_image_migration,
+    claim_boot_image_migration_retirement,
     claim_reconciler_run_lease,
     claim_vm_lease,
     clear_missing_vm_if_current,
     clear_vm_reconcile_lease_fields,
+    complete_boot_image_migration,
+    cutover_boot_image_migration,
     drift_reasons,
+    mark_boot_image_migration_candidate_deleted,
+    recover_missing_boot_image_candidate,
     release_reconciler_run_lease,
     renew_reconciler_run_lease,
     renew_vm_lease,
+    record_boot_image_candidate,
     retry_delay_seconds,
     rollout_selected,
     update_vm_reconcile,
@@ -67,6 +75,7 @@ FAILED_JOB_STATES = {"retry", "quarantined", "missing", "stale", "recreate_requi
 DEFAULT_MISSING_CLEANUP_GRACE_SECONDS = 24 * 60 * 60
 MIN_MISSING_CLEANUP_GRACE_SECONDS = 60
 _IMMUTABLE_BOOT_IMAGE = re.compile(r"^projects/[^/]+/global/images/[^/]+$")
+_MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
 
 
 @dataclass(frozen=True)
@@ -74,6 +83,59 @@ class ReconcileResult:
     uid: str
     state: str
     detail: str = ""
+
+
+@dataclass(frozen=True)
+class BootImageMigrationPlan:
+    """An explicit, dev-only plan for replacing stopped boot-image-drift VMs.
+
+    This plan deliberately does not inherit the normal release rollout.  A
+    release publication must never become a destructive migration merely
+    because it happens to carry a new immutable boot image.
+    """
+
+    allowed_uids: frozenset[str]
+    max_concurrency: int
+    soak_seconds: int
+
+
+def _boot_image_migration_plan(raw: Mapping[str, Any], release: AgentVmRelease) -> BootImageMigrationPlan | None:
+    """Return a safe replacement plan, or ``None`` when migration is disabled.
+
+    The plan lives in a separately named manifest section and is accepted only
+    for development.  Production is hard-disabled in code even if a manifest
+    is malformed or accidentally promoted with this section present.
+    """
+    migration = raw.get("bootImageMigration")
+    if not isinstance(migration, Mapping) or migration.get("enabled") is not True:
+        return None
+    if release.environment != "development" or os.getenv("AGENT_VM_ENVIRONMENT", "").strip() != "development":
+        raise ValueError("boot-image migration is development-only")
+    if os.getenv("GCE_PROJECT_ID", "").strip() != "based-hardware-dev":
+        raise ValueError("boot-image migration requires the approved development project")
+    owners = migration.get("allowedUids")
+    if not isinstance(owners, list) or not owners or not all(isinstance(uid, str) and uid for uid in owners):
+        raise ValueError("boot-image migration requires a non-empty allowedUids list")
+    max_concurrency = migration.get("maxConcurrency", 1)
+    soak_seconds = migration.get("soakSeconds", 600)
+    if not isinstance(max_concurrency, int) or max_concurrency != 1:
+        raise ValueError("boot-image migration maxConcurrency must be exactly 1")
+    if not isinstance(soak_seconds, int) or soak_seconds < 60:
+        raise ValueError("boot-image migration soakSeconds must be at least 60")
+    return BootImageMigrationPlan(frozenset(owners), max_concurrency, soak_seconds)
+
+
+def _boot_image_migration_id(uid: str, vm_name: str, instance_id: str, release_id: str) -> str:
+    return hashlib.sha256(f"{uid}:{vm_name}:{instance_id}:{release_id}".encode()).hexdigest()[:24]
+
+
+def _boot_image_candidate_name(vm_name: str, migration_id: str) -> str:
+    if not _MIGRATION_ID.fullmatch(migration_id):
+        raise ValueError("boot-image migration id is invalid")
+    suffix = f"-m-{migration_id[:12]}"
+    # GCE names are limited to 63 characters and the predecessor identity is
+    # also recorded independently in the durable migration journal.
+    return f"{vm_name[: 63 - len(suffix)]}{suffix}"
 
 
 def _init_firebase() -> None:
@@ -341,6 +403,208 @@ async def _boot_image_drift(
     return None
 
 
+async def _replace_stopped_boot_image_drift(
+    uid: str,
+    vm: Mapping[str, Any],
+    instance: Mapping[str, Any],
+    release: AgentVmRelease,
+    plan: BootImageMigrationPlan,
+    *,
+    owner: str,
+    api: GceAgentVmClient,
+    cleanup_context: dict[str, str] | None = None,
+) -> ReconcileResult:
+    """Create and cut over a stopped, explicitly allowlisted predecessor.
+
+    Old instances are tagged before candidate creation and deliberately remain
+    stopped after cutover.  A later reconciliation may retire that immutable,
+    ID-fenced predecessor after its soak period; a failed candidate never
+    changes the active owner pointer.
+    """
+    vm_name = str(vm["vmName"])
+    zone = str(vm.get("zone") or DEFAULT_ZONE)
+    auth_token = str(vm["authToken"])
+    if uid not in plan.allowed_uids:
+        return ReconcileResult(uid, "recreate_required", "boot-image migration is not allowlisted for this owner")
+    if str(instance.get("status") or "") not in {"TERMINATED", "STOPPED"} or vm.get("status") != "stopped":
+        return ReconcileResult(uid, "recreate_required", "boot-image migration requires an already stopped VM")
+    active = await asyncio.to_thread(active_session_count, uid, vm_name)
+    if active:
+        return ReconcileResult(uid, "recreate_required", f"{active} active session(s) block boot-image migration")
+    old_instance_id = str(instance.get("id") or "")
+    if not old_instance_id:
+        return ReconcileResult(uid, "recreate_required", "predecessor instance identity is unavailable")
+    migration_id = _boot_image_migration_id(uid, vm_name, old_instance_id, release.release_id)
+    candidate_name = _boot_image_candidate_name(vm_name, migration_id)
+    candidate_token = secrets.token_urlsafe(32)
+    migration = {
+        "migrationId": migration_id,
+        "oldVmName": vm_name,
+        "oldZone": zone,
+        "oldAuthToken": auth_token,
+        "oldInstanceId": old_instance_id,
+        "candidateVmName": candidate_name,
+        "candidateAuthToken": candidate_token,
+        "targetRelease": release.release_id,
+        "targetBootImage": release.boot_image,
+        "soakSeconds": plan.soak_seconds,
+    }
+    journal = await asyncio.to_thread(
+        begin_boot_image_migration, uid, vm_name, zone, auth_token, owner, migration_id, migration
+    )
+    if journal is None:
+        return ReconcileResult(uid, "stale", "boot-image migration claim fence changed")
+    candidate_token = journal.get("candidateAuthToken") if isinstance(journal.get("candidateAuthToken"), str) else ""
+    if not candidate_token:
+        raise RuntimeError("boot-image migration journal has no candidate token")
+    await api.set_migration_labels(vm_name, instance, migration_id)
+    candidate = await api.get_instance(candidate_name)
+    if candidate is None:
+        if not await asyncio.to_thread(
+            recover_missing_boot_image_candidate, uid, vm_name, zone, auth_token, owner, migration_id
+        ):
+            return ReconcileResult(uid, "stale", "missing candidate recovery fence changed")
+        await api.create_replacement(candidate_name, instance, release, candidate_token, migration_id)
+        candidate = await api.get_instance(candidate_name)
+    if candidate is None or str(candidate.get("id") or "") == "":
+        raise RuntimeError("replacement candidate is unavailable")
+    labels = candidate.get("labels")
+    service_accounts = candidate.get("serviceAccounts")
+    first_service_account = service_accounts[0] if isinstance(service_accounts, list) and service_accounts else None
+    candidate_service_account = (
+        first_service_account.get("email") if isinstance(first_service_account, Mapping) else None
+    )
+    if (
+        not isinstance(labels, Mapping)
+        or labels.get("omi-agent-migration") != migration_id
+        or labels.get("omi-agent-predecessor") != old_instance_id
+        or candidate_service_account != release.service_account
+    ):
+        raise RuntimeError("replacement candidate identity is ambiguous")
+    candidate_boot_drift = await _boot_image_drift(api, candidate, release)
+    if candidate_boot_drift:
+        raise RuntimeError("replacement candidate boot image does not match the pinned release")
+    candidate_id = str(candidate["id"])
+    if cleanup_context is not None:
+        cleanup_context.update({"vmName": candidate_name, "instanceId": candidate_id, "migrationId": migration_id})
+    if not await asyncio.to_thread(
+        record_boot_image_candidate, uid, vm_name, zone, auth_token, owner, migration_id, candidate_id
+    ):
+        return ReconcileResult(uid, "stale", "boot-image candidate journal fence changed")
+    private_ip = api.private_instance_ip(candidate)
+    if not private_ip:
+        raise RuntimeError("replacement candidate has no usable private IP")
+    await api.wait_for_runtime(private_ip, candidate_token, release)
+    # The lifecycle lease blocks new proxy admission.  Recheck pre-existing
+    # sessions immediately before the irreversible pointer swap.
+    if await asyncio.to_thread(active_session_count, uid, vm_name):
+        return ReconcileResult(uid, "deferred", "session appeared before boot-image cutover")
+    candidate_vm = {
+        "vmName": candidate_name,
+        "zone": zone,
+        "status": "ready",
+        "authToken": candidate_token,
+        "instanceId": candidate_id,
+        "privateIp": private_ip,
+        **({"ip": api.instance_ip(candidate)} if api.instance_ip(candidate) else {}),
+        "reconcile": {
+            "state": "ready",
+            "releaseId": release.release_id,
+            "observedRelease": release.release_id,
+            "observedImageDigest": release.image_digest,
+            "observedStartupSha256": release.startup_sha256,
+            "migration": {
+                **migration,
+                "candidateInstanceId": candidate_id,
+                "cutoverAt": time.time(),
+                "cutoverPending": True,
+            },
+        },
+    }
+    if not await asyncio.to_thread(
+        cutover_boot_image_migration, uid, vm_name, zone, auth_token, owner, migration_id, candidate_vm
+    ):
+        return ReconcileResult(uid, "stale", "boot-image cutover fence changed; predecessor remains active")
+    if cleanup_context is not None:
+        cleanup_context.clear()
+    return ReconcileResult(uid, "migrated", f"cut over to {candidate_name}; predecessor retained for soak")
+
+
+async def _retire_soaked_boot_image_predecessor(
+    uid: str,
+    vm: Mapping[str, Any],
+    *,
+    owner: str,
+    api: GceAgentVmClient,
+) -> ReconcileResult | None:
+    """Retire a migrated predecessor only after its durable soak deadline.
+
+    This is deliberately a separate recovery-safe phase: once the candidate
+    is active, deletion is guarded by both the predecessor GCE numeric ID and
+    migration label.  If a worker crashes after deletion, the next run sees a
+    404 as success and can complete the Firestore journal.
+    """
+    reconcile = vm.get("reconcile")
+    migration = reconcile.get("migration") if isinstance(reconcile, Mapping) else None
+    if not isinstance(migration, Mapping):
+        return None
+    migration_id = migration.get("migrationId")
+    old_vm_name = migration.get("oldVmName")
+    old_instance_id = migration.get("oldInstanceId")
+    candidate_id = migration.get("candidateInstanceId")
+    if not (
+        isinstance(migration_id, str)
+        and _MIGRATION_ID.fullmatch(migration_id)
+        and isinstance(old_vm_name, str)
+        and old_vm_name
+        and isinstance(old_instance_id, str)
+        and old_instance_id
+        and isinstance(candidate_id, str)
+        and candidate_id == str(vm.get("instanceId") or "")
+    ):
+        return ReconcileResult(uid, "retry", "migration retirement record is incomplete")
+    # A lease for the predecessor must have expired before deleting it. New
+    # sessions can only bind to the candidate after the pointer cutover.
+    if await asyncio.to_thread(active_session_count, uid, old_vm_name):
+        return ReconcileResult(uid, "soaking", "predecessor still has an active session lease")
+    vm_name = str(vm["vmName"])
+    zone = str(vm.get("zone") or DEFAULT_ZONE)
+    auth_token = str(vm["authToken"])
+    retirement = await asyncio.to_thread(
+        claim_boot_image_migration_retirement,
+        uid,
+        vm_name,
+        zone,
+        auth_token,
+        owner,
+        migration_id,
+        candidate_id,
+    )
+    if retirement is None:
+        return ReconcileResult(uid, "stale", "migration retirement fence changed")
+    if retirement.get("state") == "soaking":
+        return ReconcileResult(uid, "soaking", "replacement candidate is within its journaled soak")
+    claimed_old_vm_name = retirement.get("oldVmName")
+    claimed_old_instance_id = retirement.get("oldInstanceId")
+    if not isinstance(claimed_old_vm_name, str) or not isinstance(claimed_old_instance_id, str):
+        return ReconcileResult(uid, "stale", "migration retirement predecessor identity is incomplete")
+    if not await api.delete_replacement(claimed_old_vm_name, claimed_old_instance_id, migration_id):
+        return ReconcileResult(uid, "stale", "predecessor identity fence changed before retirement")
+    completed = await asyncio.to_thread(
+        complete_boot_image_migration,
+        uid,
+        vm_name,
+        zone,
+        auth_token,
+        owner,
+        migration_id,
+        candidate_id,
+    )
+    if not completed:
+        return ReconcileResult(uid, "stale", "predecessor retired; migration completion fence changed")
+    return ReconcileResult(uid, "retired", f"retired soaked predecessor {old_vm_name}")
+
+
 async def _update_reconcile(
     uid: str,
     vm_name: str,
@@ -374,6 +638,8 @@ async def reconcile_one(
     project: str,
     dry_run: bool = False,
     missing_cleanup_grace_seconds: int | None = None,
+    boot_image_migration: BootImageMigrationPlan | None = None,
+    boot_image_migration_lock: asyncio.Semaphore | None = None,
 ) -> ReconcileResult:
     vm_name = str(vm["vmName"])
     auth_token = str(vm["authToken"])
@@ -408,6 +674,7 @@ async def reconcile_one(
     missing_cleanup_grace_seconds = (
         _missing_cleanup_grace_seconds() if missing_cleanup_grace_seconds is None else missing_cleanup_grace_seconds
     )
+    failed_candidate: dict[str, str] = {}
     try:
         instance = await api.get_instance(vm_name)
         if instance is None:
@@ -468,6 +735,34 @@ async def reconcile_one(
         boot_drift = await _boot_image_drift(api, instance, release)
         if boot_drift:
             reason, actual = boot_drift
+            # A mutable, malformed, or unreadable source is a fail-closed
+            # observation, never permission to replace an instance.
+            if boot_image_migration is not None and reason == "boot_image_recreate_required":
+                if boot_image_migration_lock is None:
+                    migration = await _replace_stopped_boot_image_drift(
+                        uid,
+                        vm,
+                        instance,
+                        release,
+                        boot_image_migration,
+                        owner=owner,
+                        api=api,
+                        cleanup_context=failed_candidate,
+                    )
+                else:
+                    async with boot_image_migration_lock:
+                        migration = await _replace_stopped_boot_image_drift(
+                            uid,
+                            vm,
+                            instance,
+                            release,
+                            boot_image_migration,
+                            owner=owner,
+                            api=api,
+                            cleanup_context=failed_candidate,
+                        )
+                if migration.state != "recreate_required":
+                    return migration
             if not await _update_reconcile(
                 uid,
                 vm_name,
@@ -490,6 +785,10 @@ async def reconcile_one(
                 "recreate_required",
                 f"{reason}; operator must recreate VM from exact immutable image {release.boot_image}",
             )
+        if boot_image_migration is not None:
+            retirement = await _retire_soaked_boot_image_predecessor(uid, vm, owner=owner, api=api)
+            if retirement is not None:
+                return retirement
         reasons = drift_reasons(instance, release)
         if str(instance.get("status")) == "RUNNING":
             private_ip = api.private_instance_ip(instance)
@@ -618,6 +917,31 @@ async def reconcile_one(
         )
         retry_at = time.time() + retry_delay_seconds(retry_count)
         retry_state = "quarantined" if retry_count >= 3 else "retry"
+        if retry_state == "quarantined" and failed_candidate:
+            try:
+                deleted = await api.delete_replacement(
+                    failed_candidate["vmName"],
+                    failed_candidate["instanceId"],
+                    failed_candidate["migrationId"],
+                )
+                if not deleted:
+                    logger.warning("Agent VM migration candidate cleanup fence changed for uid=%s", uid)
+                elif not await asyncio.to_thread(
+                    mark_boot_image_migration_candidate_deleted,
+                    uid,
+                    vm_name,
+                    zone,
+                    auth_token,
+                    owner,
+                    failed_candidate["migrationId"],
+                    failed_candidate["instanceId"],
+                ):
+                    logger.warning("Agent VM migration candidate journal fence changed after cleanup for uid=%s", uid)
+            except Exception:
+                # Quarantine still protects the predecessor pointer. Record the
+                # provider cleanup failure without allowing it to hide the
+                # original candidate-readiness failure.
+                logger.exception("Agent VM migration candidate cleanup failed for uid=%s", uid)
         if not await _update_reconcile(
             uid,
             vm_name,
@@ -649,6 +973,9 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
     project = os.getenv("GCE_PROJECT_ID")
     if not project:
         raise RuntimeError("GCE_PROJECT_ID is required for Agent VM reconciliation")
+    # Validate before owner discovery so an accidentally promoted migration
+    # section cannot look harmless just because this run has no matching VMs.
+    migration_plan = _boot_image_migration_plan(raw_manifest, release)
     missing_cleanup_grace_seconds = _missing_cleanup_grace_seconds()
     owner = f"{os.getenv('K_REVISION', 'local')}:{uuid.uuid4().hex}"
     if not dry_run and not await asyncio.to_thread(claim_reconciler_run_lease, environment, owner):
@@ -680,20 +1007,41 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
             target_percent, max_concurrency = _rollout_spec(raw_manifest, phase)
             owners = await asyncio.to_thread(_owners)
             rollout_selected = _select_rollout_owners(owners, release.release_id, target_percent)
-            selected = _select_reconcile_owners(owners, release.release_id, target_percent)
+            selected = sorted(
+                _select_reconcile_owners(owners, release.release_id, target_percent), key=lambda item: item[0]
+            )
+            # A migration plan has its own explicit maxConcurrency contract and
+            # never inherits the normal release rollout's wider semaphore.
+            # Every selected allowlisted owner gets a chance; the dedicated
+            # lock serializes potentially long candidate readiness checks.
+            migration_lock = asyncio.Semaphore(migration_plan.max_concurrency) if migration_plan is not None else None
             semaphore = asyncio.Semaphore(max_concurrency)
 
             async def one(uid: str, vm: dict[str, Any]) -> ReconcileResult:
-                async with semaphore:
-                    return await reconcile_one(
-                        uid,
-                        vm,
-                        release,
-                        owner=owner,
-                        project=project,
-                        dry_run=dry_run,
-                        missing_cleanup_grace_seconds=missing_cleanup_grace_seconds,
-                    )
+                migration_for_owner = (
+                    migration_plan if migration_plan is not None and uid in migration_plan.allowed_uids else None
+                )
+
+                async def reconcile() -> ReconcileResult:
+                    async with semaphore:
+                        return await reconcile_one(
+                            uid,
+                            vm,
+                            release,
+                            owner=owner,
+                            project=project,
+                            dry_run=dry_run,
+                            missing_cleanup_grace_seconds=missing_cleanup_grace_seconds,
+                            boot_image_migration=migration_for_owner,
+                        )
+
+                # Do not claim an owner VM lease until this migration has the
+                # one permitted slot. A health wait can last minutes; claiming
+                # first would make queued owner leases expire before mutation.
+                if migration_for_owner is not None and migration_lock is not None:
+                    async with migration_lock:
+                        return await reconcile()
+                return await reconcile()
 
             results = await asyncio.gather(*(one(uid, vm) for uid, vm in selected))
             if lease_lost.is_set() and not dry_run:

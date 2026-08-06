@@ -41,6 +41,18 @@ def render_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "maxConcurrency": args.max_concurrency,
         },
     }
+    # Replacement is deliberately a separately selected artifact, not an
+    # automatic consequence of publishing a newer boot image.  The runtime
+    # rejects this section outside development as a second independent fence.
+    if args.boot_image_migration_allowed_uid:
+        if args.environment != "development":
+            raise ValueError("boot-image migration manifests may only target development")
+        values["bootImageMigration"] = {
+            "enabled": True,
+            "allowedUids": sorted(set(args.boot_image_migration_allowed_uid)),
+            "maxConcurrency": 1,
+            "soakSeconds": args.boot_image_migration_soak_seconds,
+        }
     validate_manifest(values)
     values["manifestSha256"] = hashlib.sha256(canonical_bytes(values)).hexdigest()
     return values
@@ -66,6 +78,21 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
         raise ValueError("startupSha256 must be a lowercase SHA-256 digest")
     if not SERVICE_ACCOUNT.fullmatch(str(payload["serviceAccount"])):
         raise ValueError("serviceAccount must be a Google service-account email")
+    migration = payload.get("bootImageMigration")
+    if migration is not None:
+        if payload.get("environment") != "development":
+            raise ValueError("bootImageMigration is development-only")
+        if (
+            not isinstance(migration, Mapping)
+            or migration.get("enabled") is not True
+            or not isinstance(migration.get("allowedUids"), list)
+            or not migration["allowedUids"]
+            or not all(isinstance(uid, str) and uid for uid in migration["allowedUids"])
+            or migration.get("maxConcurrency") != 1
+            or not isinstance(migration.get("soakSeconds"), int)
+            or migration["soakSeconds"] < 60
+        ):
+            raise ValueError("bootImageMigration must be an explicit development allowlist with a safe soak")
     if "manifestSha256" in payload:
         unsigned = dict(payload)
         declared = unsigned.pop("manifestSha256")
@@ -88,6 +115,13 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--rollout-target-percent", type=int, default=100)
     command.add_argument("--max-concurrency", type=int, default=5)
     command.add_argument("--rollout-phase", choices=("sentinel", "canary", "quarter", "remainder"), default="remainder")
+    command.add_argument(
+        "--boot-image-migration-allowed-uid",
+        action="append",
+        default=[],
+        help="Development-only explicit migration allowlist; repeat for each owner.",
+    )
+    command.add_argument("--boot-image-migration-soak-seconds", type=int, default=600)
     return command
 
 
@@ -97,6 +131,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("rollout target must be between 0 and 100")
     if not 1 <= args.max_concurrency <= 50:
         raise SystemExit("max concurrency must be between 1 and 50")
+    if args.boot_image_migration_soak_seconds < 60:
+        raise SystemExit("boot-image migration soak must be at least 60 seconds")
     payload = render_manifest(args)
     args.output.write_bytes(canonical_bytes(payload))
     print(json.dumps({"manifestSha256": payload["manifestSha256"], "sourceSha": args.source_sha}))
