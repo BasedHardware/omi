@@ -16,6 +16,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryVisibilityGuardrails.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
 preconditions:
   - auth_ready
