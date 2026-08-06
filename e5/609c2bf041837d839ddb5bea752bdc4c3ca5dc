@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
+  s_569f1df936cc22::t_869f8d8f1a3ad1 104-110,112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e5609c2bf041837d839ddb5bea752bdc4c3ca5dc",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
