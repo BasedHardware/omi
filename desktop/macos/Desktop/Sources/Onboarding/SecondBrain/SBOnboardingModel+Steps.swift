@@ -405,12 +405,17 @@ extension SBOnboardingModel {
 extension SBOnboardingModel {
   /// Open-Omi options (tap to open the window).
   var openShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
+    // ⌃⌘O first because it is the one chord here that costs the user nothing. Whatever is picked is
+    // registered with `RegisterEventHotKey`, and a Carbon hotkey does not lose to the frontmost app
+    // — it **preempts** it and consumes the key. Measured, not assumed: a probe holding a Carbon ⌘O
+    // fired while another app was frontmost, and that app's own key-down monitor never saw the
+    // event. So picking ⌘O does not fail (the comment this replaced had that backwards, citing a
+    // `GlobalShortcutManager.registerCommandO` that no longer exists) — it takes ⌘O away from every
+    // app on the Mac for as long as Omi runs. ⌃⌘O collides with nothing, and is already the app's
+    // own always-on summon chord (`registerSummonHotkey`). ⌘O stays offered, with its price named.
     [
-      // ⌘O is registered as its own always-on Carbon hotkey (GlobalShortcutManager
-      // .registerCommandO), so it reliably summons Omi globally — the natural,
-      // expected "open" chord. Offer it first. (⌘J was dropped: onboarding testers
-      // read it as arbitrary/random with no mnemonic, unlike ⌘O = "open".)
-      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "press to set"),
+      ("ctrlCmdO", ShortcutSettings.askOmiControlCommandOShortcut, "press to set"),
+      ("cmdO", ShortcutSettings.askOmiCommandOShortcut, "replaces File ▸ Open"),
       ("cmdReturn", ShortcutSettings.askOmiCommandReturnShortcut, "press to set"),
     ]
   }
@@ -449,6 +454,7 @@ extension SBOnboardingModel {
       shortcutPicked = true
       shortcutPressed = false
       shortcutRecording = false
+      shortcutNeedsModifier = false
       pendingModifierOnlyShortcut = nil
       shortcutTokens = rememberedSelection.displayTokens
       chosenShortcut = rememberedSelection
@@ -569,6 +575,7 @@ extension SBOnboardingModel {
     shortcutPicked = false
     shortcutPressed = false
     shortcutRecording = true
+    shortcutNeedsModifier = false
     pendingModifierOnlyShortcut = nil
   }
 
@@ -587,18 +594,40 @@ extension SBOnboardingModel {
       )
       return true
     }
-    guard
-      let shortcut = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
-        event,
-        allowModifierOnly: isTalk
-      ),
-      Self.acceptsRecordedChord(shortcut)
-    else {
+    let recorded = ShortcutSettings.KeyboardShortcut.fromRecordingEvent(
+      event,
+      allowModifierOnly: isTalk
+    )
+    switch Self.decideRecordedChord(recorded) {
+    case .ignore:
       return event.type == .flagsChanged
+    case .refuseBareKey:
+      // The refusal the copy now names. Saying it is the whole fix: silently dropping the key made
+      // the step look broken to anyone who took "press any key" literally.
+      shortcutNeedsModifier = true
+      return true
+    case .accept(let shortcut):
+      shortcutNeedsModifier = false
+      pendingModifierOnlyShortcut = nil
+      pickShortcut(shortcut, isTalk: isTalk)
+      return true
     }
-    pendingModifierOnlyShortcut = nil
-    pickShortcut(shortcut, isTalk: isTalk)
-    return true
+  }
+
+  /// What recording should do with the chord it just saw, as a value.
+  ///
+  /// A value rather than a `guard` inside the monitor so the refusal is something a test can drive
+  /// and assert: the bug here was never *which* chords are refused, it was that the refusal produced
+  /// no observable effect at all.
+  enum RecordedChordDecision: Equatable {
+    case accept(ShortcutSettings.KeyboardShortcut)
+    case refuseBareKey
+    case ignore
+  }
+
+  static func decideRecordedChord(_ recorded: ShortcutSettings.KeyboardShortcut?) -> RecordedChordDecision {
+    guard let recorded else { return .ignore }
+    return acceptsRecordedChord(recorded) ? .accept(recorded) : .refuseBareKey
   }
 
   /// Which events may set the chord.

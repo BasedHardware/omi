@@ -151,11 +151,19 @@ class GlobalShortcutManager: @unchecked Sendable {
 
   /// Registers ⌃⌘O as a dedicated global Carbon hotkey that summons Omi (fronts the
   /// app + opens chat), independent of the user-configurable Ask-Omi shortcut. A
-  /// Carbon hotkey fires system-wide without any extra permission. ⌃⌘O is chosen to
-  /// dodge two collisions: bare ⌘O is File ▸ Open in every app (the frontmost app's
-  /// menu swallows it), and any Option-based combo clashes with push-to-talk (Option
-  /// held = talk). ⌃⌘O uses neither, so it fires cleanly.
+  /// Carbon hotkey fires system-wide without any extra permission.
+  ///
+  /// ⌃⌘O is chosen because it collides with nothing. Note what the collision *is*: a Carbon hotkey
+  /// is not swallowed by the frontmost app's menu, it preempts it. Measured — a probe holding a
+  /// Carbon ⌘O fired while another app was frontmost, and that app's own key-down monitor never
+  /// received the event. So a chord registered here is taken away from every other app on the Mac
+  /// for as long as Omi runs, which is exactly why ⌘O (File ▸ Open everywhere) is a poor default and
+  /// why any Option-based combo is worse still (Option held = push-to-talk).
   private func registerSummonHotkey() {
+    // The Ask-Omi shortcut is registered first and may be this same chord — onboarding offers ⌃⌘O.
+    // Both ids run `openOmiFromShortcut`, so the second registration would add nothing and fail with
+    // `eventHotKeyExistsErr`, reporting a hard hotkey-registration incident for a chord that is
+    // working perfectly.
     if let ref = hotKeyRefs.removeValue(forKey: .summonOmi) {
       _ = unregisterHotKey(ref)
     }
@@ -173,6 +181,11 @@ class GlobalShortcutManager: @unchecked Sendable {
     }
   }
 
+  /// The chord `registerSummonHotkey` holds unconditionally, expressed once so the Ask-Omi path can
+  /// recognise it rather than restating ⌃⌘O in a second place that could drift.
+  @MainActor
+  static var summonShortcut: ShortcutSettings.KeyboardShortcut { ShortcutSettings.askOmiControlCommandOShortcut }
+
   func setRegistrationSuspended(_ suspended: Bool) {
     isRegistrationSuspended = suspended
     if suspended {
@@ -188,8 +201,11 @@ class GlobalShortcutManager: @unchecked Sendable {
     if let ref = hotKeyRefs.removeValue(forKey: .askOmi) {
       _ = unregisterHotKey(ref)
     }
-    let (askOmiEnabled, askOmiShortcut) = MainActor.assumeIsolated {
-      (ShortcutSettings.shared.askOmiEnabled, ShortcutSettings.shared.askOmiShortcut)
+    let (askOmiEnabled, askOmiShortcut, isSummonChord) = MainActor.assumeIsolated {
+      (
+        ShortcutSettings.shared.askOmiEnabled, ShortcutSettings.shared.askOmiShortcut,
+        ShortcutSettings.shared.askOmiShortcut == Self.summonShortcut
+      )
     }
     guard askOmiEnabled else {
       logger("GlobalShortcutManager: Ask Omi shortcut is disabled")
@@ -197,6 +213,14 @@ class GlobalShortcutManager: @unchecked Sendable {
     }
     guard askOmiShortcut.supportsGlobalHotKey, let keyCode = askOmiShortcut.keyCode else {
       logger("GlobalShortcutManager: Ask Omi shortcut is not a registerable hotkey")
+      return
+    }
+    // Onboarding now offers ⌃⌘O — the chord `registerSummonHotkey` already holds unconditionally,
+    // routed to the same `openOmiFromShortcut`. Registering it twice cannot add behaviour, and the
+    // second attempt fails with `eventHotKeyExistsErr`, which `registerHotKey` reports as a hard
+    // hotkey-registration incident for a chord that is working perfectly.
+    guard !isSummonChord else {
+      logger("GlobalShortcutManager: Ask Omi shortcut is the summon hotkey; already registered")
       return
     }
     let outcome = registerHotKey(keyCode: Int(keyCode), modifiers: askOmiShortcut.carbonModifiers, id: .askOmi)

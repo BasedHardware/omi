@@ -127,6 +127,11 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
   @Published var shortcutRecording = false
+  /// Set when the user pressed a bare key while recording. `acceptsRecordedChord` refuses it — a
+  /// bare `L` bound as a **global** hotkey makes every `L` typed anywhere open Omi — and the refusal
+  /// used to be silent, so the step simply stopped responding with nothing said. Cleared the moment
+  /// a valid chord arrives or the stage re-arms.
+  @Published var shortcutNeedsModifier = false
   /// The chosen shortcut + which mechanism it uses (key hotkey vs modifier-hold).
   var chosenShortcut: ShortcutSettings.KeyboardShortcut?
   var chosenShortcutIsPTT = false
@@ -291,7 +296,16 @@ final class SBOnboardingModel: ObservableObject {
     case .systemAudio:
       return "Now system audio, so I hear the other side too: Zoom, Meet, calls."
     case .screen:
-      return "Let me see your screen, so I can help with whatever you're looking at."
+      // Says what granting this actually starts. `complete()` turns
+      // `screenAnalysisEnabled` on unconditionally, and Rewind then captures every few seconds for
+      // as long as the app runs — the single most consequential thing the product does, and the app
+      // used to state it in exactly one place the user reaches days later (Rewind's empty state).
+      // "Every few seconds" rather than a number: the interval is a setting
+      // (`RewindSettings.captureInterval`, 3s by default, tripled on battery). "The pictures" rather
+      // than "it": the images do stay on this Mac, but `ScreenActivitySyncService` syncs their OCR
+      // text and embeddings to the backend, so an unqualified "it stays on this Mac" would be false.
+      return
+        "Let me see your screen. I'll take a picture every few seconds so you can scrub back to anything you saw — that's Rewind. The pictures stay on this Mac, and you can turn it off anytime in the top bar."
     case .files:
       return
         "Let me read your files, so I can point to your real documents. Read-only, it stays on this Mac, and you can turn it off anytime."
@@ -299,10 +313,12 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Accessibility, so I can use your shortcut and click and type for you."
     case .automation:
       return "Turn on Automation, so I can help with tasks in the apps you choose."
+    // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
+    // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
-      return "How do you want to open me? Press any key or choose one of these."
+      return "How do you want to open me? Choose one, or press your own — it needs ⌘, ⌃ or ⌥."
     case .shortcutTalk:
-      return "And to talk to me hands-free? Press any key or choose one of these."
+      return "And to talk to me hands-free? Choose one, or hold your own modifier key."
     case .screenDemo:
       return "Here's the fun part."
     case .agents:

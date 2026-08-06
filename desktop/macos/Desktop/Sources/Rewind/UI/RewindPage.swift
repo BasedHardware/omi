@@ -919,10 +919,15 @@ struct RewindPage: View {
           .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(Ink.primary)
 
-        Text("Screenshots will appear here as you use your Mac.\nRewind captures your screen every second.")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-          .multilineTextAlignment(.center)
+        // "Every second" was never the interval: `RewindSettings.captureInterval` defaults to 3s and
+        // `effectiveCaptureInterval` triples it on battery. Both this line and the onboarding
+        // disclosure now say the same true thing.
+        Text(
+          "Screenshots will appear here as you use your Mac.\nRewind captures your screen every few seconds."
+        )
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
+        .multilineTextAlignment(.center)
 
         HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "lightbulb.fill")

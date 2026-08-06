@@ -179,6 +179,80 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertFalse(PostOnboardingPromptSuggestions.shouldArmPopup())
   }
 
+  // MARK: - The orientation cue describes the window the user actually has
+
+  /// The cue used to read "I live in your menu bar. Closing this window doesn't stop me." Both
+  /// halves of the second sentence were wrong: the window has no close button (`ShellWindowChrome`
+  /// hides all three traffic lights), and completing onboarding turns the shell into a `.summoned`
+  /// panel with `hidesOnDeactivate = true`. So the first click into another app made the whole
+  /// window disappear, having just been told the opposite about a control that isn't there.
+  func testTheMenuBarCuePreparesTheUserForTheWindowDisappearing() throws {
+    let cues = SBPostOnboardingGuidance.orientationCues(
+      openShortcutTokens: ["⌃", "⌘", "O"], talkShortcutTokens: [], setup: SBSetupSnapshot())
+    let menubar = try XCTUnwrap(cues.first { $0.id == "menubar" })
+
+    XCTAssertFalse(
+      menubar.title.lowercased().contains("clos"),
+      "there is no close button on this window, and describing one is how the old cue went stale")
+    XCTAssertTrue(
+      menubar.title.lowercased().contains("menu bar"),
+      "the always-available way back must be named — the chord cue is conditional, this one is not")
+  }
+
+  /// Whatever chord the user actually picked, never a hardcoded one.
+  func testTheOpenCueCarriesTheUsersOwnChord() throws {
+    let cues = SBPostOnboardingGuidance.orientationCues(
+      openShortcutTokens: ["⌘", "J"], talkShortcutTokens: [], setup: SBSetupSnapshot())
+
+    XCTAssertEqual(try XCTUnwrap(cues.first { $0.id == "open" }).keys, ["⌘", "J"])
+  }
+
+  /// A user who set no chord gets no chord cue, so the menu-bar sentence is then the *only* thing
+  /// standing between them and a window that has vanished with no explanation.
+  func testWithNoChordTheMenuBarCueIsStillTheWayBack() {
+    let cues = SBPostOnboardingGuidance.orientationCues(
+      openShortcutTokens: [], talkShortcutTokens: [], setup: SBSetupSnapshot())
+
+    XCTAssertNil(cues.first { $0.id == "open" })
+    XCTAssertTrue(cues.contains { $0.id == "menubar" && $0.title.lowercased().contains("menu bar") })
+  }
+
+  // MARK: - The screen step discloses what granting it starts
+
+  /// `complete()` sets `screenAnalysisEnabled = true` unconditionally and Rewind then captures for
+  /// as long as the app runs. The step used to say only "so I can help with whatever you're looking
+  /// at", which reads as an on-demand glance; the app stated the truth once, in Rewind's own empty
+  /// state, which a user reaches days later. These assertions are on the disclosure's substance
+  /// rather than its wording: it must say that capture is ongoing, name the feature so the archive
+  /// is findable, and say it can be turned off.
+  func testTheScreenStepSaysCaptureIsOngoingNamedAndReversible() {
+    let model = makeModel()
+
+    let message = model.message(for: .screen).lowercased()
+
+    XCTAssertTrue(message.contains("every few seconds"), "an on-demand reading of this step is the whole bug")
+    XCTAssertTrue(message.contains("rewind"), "the archive is unfindable if the step never names it")
+    XCTAssertTrue(message.contains("turn it off"), "a capability this consequential must be presented as reversible")
+  }
+
+  /// The local claim is scoped to the images on purpose: `RewindStorage` keeps them under
+  /// Application Support and nothing uploads them, but `ScreenActivitySyncService` does sync their
+  /// OCR text and embeddings to the backend. An unqualified "it stays on this Mac" would be false,
+  /// and a false reassurance here is worse than none.
+  func testTheScreenStepDoesNotClaimEverythingStaysLocal() {
+    let model = makeModel()
+
+    let message = model.message(for: .screen)
+
+    XCTAssertFalse(message.contains("Nothing leaves"))
+    XCTAssertFalse(message.contains("stays private"))
+    if message.contains("stay on this Mac") {
+      XCTAssertTrue(
+        message.contains("pictures stay on this Mac"),
+        "only the images are local; the claim has to name what it covers")
+    }
+  }
+
   // MARK: - Ordering: saved before anything reads it
 
   func testOpenerStartersAreBuiltFromTheGuidanceSavedInTheSameHandoff() throws {

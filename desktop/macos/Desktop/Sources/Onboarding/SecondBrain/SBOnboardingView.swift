@@ -622,10 +622,18 @@ struct SBOnboardingView: View {
         .buttonStyle(.plain)
       }
       if model.shortcutRecording {
-        Text("Press the shortcut you want to use.")
-          .inkStyle(InkType.rowCopy, color: Ink.primary)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 6)
+        // A bare key is refused (`acceptsRecordedChord`) because a global bare `L` would make every
+        // `L` typed anywhere open Omi. The refusal used to be silent, so the step looked broken to
+        // anyone who pressed one; this is the refusal said out loud, in place of the instruction it
+        // has just answered.
+        Text(
+          model.shortcutNeedsModifier
+            ? "That one's on its own — add ⌘, ⌃ or ⌥ to it."
+            : "Press the shortcut you want to use."
+        )
+        .inkStyle(InkType.rowCopy, color: Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 6)
       } else if model.shortcutPicked {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 6) {
