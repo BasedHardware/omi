@@ -16,6 +16,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasIslands.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasRenderPlanCache.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasCatalogLayout.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasGeometry.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift

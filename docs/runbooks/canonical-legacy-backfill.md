@@ -30,8 +30,11 @@ The bulk worker stores its server-owned checkpoint at
 `not_started`, `inventory_done`, `enrolled`, `processing`, `staged`, and
 `read_ready`; a governor or operator pause uses `paused`, while isolated failures
 use `failed`. Re-entry is idempotent. A capped run resumes from the existing
-single-user apply checkpoint, and a failed run restarts deterministic staging so
-successful rows are skipped and failed rows can be retried.
+single-user apply checkpoint. If the active legacy source changes while that
+checkpoint is in progress, staging reconciles deterministic canonical
+destinations and spends the next bounded page only on still-missing rows, so a
+new ID before an old positional cursor cannot cause loss or starvation. Failed
+rows can be retried without modifying legacy data.
 
 `read_ready` means enrollment and staging reconciled for that UID. It does not
 change `MEMORY_MODE`, add the UID to `CANONICAL_MEMORY_USERS`, grant default
@@ -42,7 +45,9 @@ For a code-whitelisted user on an enabled maintenance deployment, the scheduler
 owns the same bounded progression: it creates only the known inert onboarding
 state, advances only that exact state to write, and invokes this checkpointed
 page. At terminal staging it reconciles only a scheduler-owned write control to
-the trusted state-head generation and permits graph enrichment for that user.
+the trusted state-head generation. Graph enrichment is separately permitted for
+already-active canonical Long-term items by its per-item proof fences, so it
+does not wait for unrelated source rows to finish staging.
 Existing write/read controls are preserved; malformed or manually altered
 controls fail closed. The scheduler does not perform the later read cutover.
 

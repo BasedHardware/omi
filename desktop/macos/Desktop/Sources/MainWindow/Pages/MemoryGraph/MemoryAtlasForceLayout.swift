@@ -1424,11 +1424,9 @@ enum MemoryAtlasForceLayout {
   }
 
   /// Entities with no relationships at all. They carry no spatial information,
-  /// so scattering them through the middle would have the map assert structure
-  /// that is not there. A faint outer halo says what is true: present, not
-  /// connected to anything yet.
-  /// Use a circular peripheral field: a rectangular rim is a rendering artefact,
-  /// while a hollow ring separates loose memories too far from the real graph.
+  /// so their subdued placement must not imply a semantic community. A circular
+  /// peripheral field preserves that honesty without creating a rectangular rim
+  /// or a hollow ring around the connected graph.
   static func haloPositions(groups: [[String]], area: CGRect) -> [String: CGPoint] {
     guard !groups.isEmpty else { return [:] }
 
@@ -1440,8 +1438,8 @@ enum MemoryAtlasForceLayout {
       // the peripheral field instead of turning the catalog into a hollow ring.
       let wobble = (stableFraction("halo-\(group.first ?? "")") - 0.5) * 0.11
       let angle = Double(offset) * goldenAngle + wobble
-      let innerRadius = baseRadius * 0.40
-      let outerRadius = baseRadius * (1.0 + haloClearance + 0.16)
+      let innerRadius = baseRadius * 0.12
+      let outerRadius = baseRadius * 0.96
       let radialFraction = stableFraction("depth-\(group.first ?? "")")
       let reach = sqrt(
         innerRadius * innerRadius + (outerRadius * outerRadius - innerRadius * innerRadius) * radialFraction)
@@ -1454,11 +1452,11 @@ enum MemoryAtlasForceLayout {
         let memberAngle =
           stableFraction(id) * 2 * .pi + Double(memberIndex) * 2.399_963_229_728_653
         let radius = group.count == 1 ? 0 : clump * (0.6 + 0.4 * stableFraction("r-\(id)"))
-        positions[id] = clamp(
+        positions[id] = MemoryAtlasGeometry.constrainedToDisk(
           CGPoint(
             x: seat.x + CGFloat(cos(memberAngle) * radius),
             y: seat.y + CGFloat(sin(memberAngle) * radius)),
-          to: CGRect(x: 0.02, y: 0.04, width: 0.96, height: 0.92))
+          in: area)
       }
     }
     return positions
@@ -1480,6 +1478,7 @@ enum MemoryAtlasForceLayout {
       x: min(max(point.x, rect.minX), rect.maxX),
       y: min(max(point.y, rect.minY), rect.maxY))
   }
+
 }
 
 // MARK: - Barnes–Hut

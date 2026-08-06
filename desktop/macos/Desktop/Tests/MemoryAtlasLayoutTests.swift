@@ -43,6 +43,36 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(snapshot.nodeByID["user"]?.normalizedPosition, MemoryAtlasCluster.starCenter)
   }
 
+  func testAccountNameOnNonPersonCannotReplaceTheAccountHolder() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "user", label: "The User", nodeType: .concept),
+        KnowledgeGraphNode(id: "named-memory", label: "David", nodeType: .concept),
+      ],
+      edges: []
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(snapshot.anchorNodeID, "user")
+    XCTAssertEqual(snapshot.nodeByID["user"]?.node.label, "David")
+  }
+
+  func testSyntheticAuthenticatedOwnerCentersCatalogOnlyAtlasWithoutEdges() throws {
+    let graph = KnowledgeGraphResponse(
+      nodes: [],
+      edges: [],
+      catalogNodes: [KnowledgeGraphNode(id: "memory:one", label: "A memory", nodeType: .concept)]
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+
+    XCTAssertEqual(snapshot.anchorNodeID, "atlas-owner")
+    XCTAssertEqual(snapshot.nodeByID["atlas-owner"]?.node.label, "David")
+    XCTAssertEqual(snapshot.nodeByID["atlas-owner"]?.normalizedPosition, MemoryAtlasCluster.starCenter)
+    XCTAssertTrue(snapshot.edges.isEmpty)
+  }
+
   func testCatalogNodesEnterAtlasAsNeutralUnconnectedMarks() throws {
     let assertionNodes = [
       KnowledgeGraphNode(id: "david", label: "David", nodeType: .person),
@@ -120,7 +150,8 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let first = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
     let second = MemoryAtlasLayoutEngine.makeSnapshot(graph: response, userName: "David")
 
-    XCTAssertEqual(first.nodes.count, catalog.count)
+    XCTAssertEqual(first.nodes.count, catalog.count + 1, "The authenticated owner remains the visual center")
+    XCTAssertEqual(first.anchorNodeID, "atlas-owner")
     XCTAssertTrue(first.nodes.allSatisfy { $0.cluster == nil && $0.degree == 0 })
     XCTAssertTrue(first.edges.isEmpty)
     XCTAssertTrue(first.activeClusters.isEmpty)
@@ -206,9 +237,10 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     // Before the fix this atlas occupied roughly the top third of the canvas.
     XCTAssertGreaterThan(verticalSpread, 0.5)
     XCTAssertGreaterThan(horizontalSpread, 0.25)
-    // Still inside the clamped drawing area.
-    XCTAssertGreaterThanOrEqual(ys.min() ?? 0, 0.08)
-    XCTAssertLessThanOrEqual(ys.max() ?? 1, 0.92)
+    // A high-density graph uses the expanded circular canvas instead of the
+    // former inset square, while remaining in normalized bounds.
+    XCTAssertGreaterThanOrEqual(ys.min() ?? 0, 0)
+    XCTAssertLessThanOrEqual(ys.max() ?? 1, 1)
   }
 
   func testOnlyTypesWithEntitiesGetAConstellation() {
@@ -471,10 +503,10 @@ final class MemoryAtlasLayoutTests: XCTestCase {
         orphan.normalizedPosition.y - david.normalizedPosition.y),
       0.05,
       "A neutral mark must not obscure the account holder")
-    // Still inside the existing clamp bounds.
-    XCTAssertGreaterThanOrEqual(orphan.normalizedPosition.x, 0.04)
-    XCTAssertLessThanOrEqual(orphan.normalizedPosition.x, 0.96)
-    XCTAssertLessThanOrEqual(orphan.normalizedPosition.y, 0.92)
+    // Isolates fill a circular peripheral field, not a rectangular rim.
+    XCTAssertLessThanOrEqual(
+      hypot(orphan.normalizedPosition.x - 0.5, orphan.normalizedPosition.y - 0.5),
+      0.44 + 0.000_001)
   }
 
   func testLeafAndIsolatePlacementIsDeterministicAcrossRepeatedSnapshots() {

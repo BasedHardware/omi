@@ -33,7 +33,11 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import extraction_memory_id
-from utils.memory.legacy_backfill_bulk_support import apply_with_control_refresh, fetch_active_legacy_rows
+from utils.memory.legacy_backfill_bulk_support import (
+    apply_with_control_refresh,
+    fetch_active_legacy_rows,
+    rows_missing_canonical_destinations,
+)
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.required_promotion import (
@@ -1261,46 +1265,6 @@ def _legacy_row_has_canonical_destination(
     return live_item is not None and _is_active_processed_canonical_item(live_item)
 
 
-def _legacy_row_has_any_canonical_destination(
-    *,
-    uid: str,
-    legacy_row: LegacyRow,
-    items_by_id: Dict[str, MemoryItem],
-) -> bool:
-    legacy_id = _row_str(legacy_row, "id")
-    content = _row_content(legacy_row)
-    if not content:
-        return False
-
-    backfill_id = legacy_backfill_memory_id(uid=uid, legacy_memory_id=legacy_id)
-    backfill_item = items_by_id.get(backfill_id)
-    if backfill_item is not None and _is_active_backfill_destination(backfill_item):
-        return True
-
-    live_id = live_extraction_memory_id_for_legacy_row(uid=uid, legacy_row=legacy_row)
-    if live_id is None:
-        return False
-    live_item = items_by_id.get(live_id)
-    return live_item is not None and _is_active_processed_canonical_item(live_item)
-
-
-def _count_any_destination_backfill_items(
-    uid: str,
-    legacy_rows: Sequence[LegacyRow],
-    *,
-    db_client: Any,
-) -> int:
-    if not legacy_rows:
-        return 0
-    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
-    items_by_id = {item.memory_id: item for item in items}
-    return sum(
-        1
-        for row in legacy_rows
-        if _legacy_row_has_any_canonical_destination(uid=uid, legacy_row=row, items_by_id=items_by_id)
-    )
-
-
 def _count_destination_backfill_items(
     uid: str,
     legacy_rows: Sequence[LegacyRow],
@@ -1444,7 +1408,7 @@ def backfill_user_bucketed(
             skipped_bucket_not_writable=len(selected_rows),
         )
 
-    destination_count = _count_any_destination_backfill_items(uid, selected_rows, db_client=client)
+    destination_count = _count_destination_backfill_items(uid, selected_rows, db_client=client)
     if dry_run:
         return BackfillReport(
             uid=uid,
@@ -1517,7 +1481,7 @@ def backfill_user_bucketed(
             errors.append(f"{safe_legacy_id}: {sanitize(exc)}")
             break
 
-    destination_count = _count_any_destination_backfill_items(uid, selected_rows, db_client=client)
+    destination_count = _count_destination_backfill_items(uid, selected_rows, db_client=client)
     verified = destination_count == len(selected_rows)
     return BackfillReport(
         uid=uid,
@@ -1621,18 +1585,34 @@ def backfill_user(
 
     control = _read_control_state(uid, db_client=client)
     start_index = 0
+    rows_to_process = admissible_rows
+    recovering_changed_source = False
     if resume and control.legacy_backfill_source_fingerprint == fingerprint:
         start_index = min(control.legacy_backfill_processed_count, len(admissible_rows))
     elif (
         resume and control.legacy_backfill_processed_count and control.legacy_backfill_source_fingerprint != fingerprint
     ):
         logger.warning(
-            "legacy backfill source set changed for %s (fingerprint mismatch); restarting from 0",
+            "legacy backfill source set changed for %s (fingerprint mismatch); reconciling pending destinations",
             uid,
         )
+        # A changed source invalidates positional progress. Reconcile against
+        # idempotent destinations instead, so newly inserted IDs cannot starve
+        # behind an outdated cursor.
+        items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+        items_by_id = {item.memory_id: item for item in items}
+        rows_to_process = rows_missing_canonical_destinations(
+            admissible_rows,
+            has_destination=lambda row: _legacy_row_has_canonical_destination(
+                uid=uid,
+                legacy_row=row,
+                items_by_id=items_by_id,
+            ),
+        )
         start_index = 0
+        recovering_changed_source = True
 
-    end_index = len(admissible_rows)
+    end_index = len(rows_to_process)
     if max_rows is not None:
         end_index = min(end_index, start_index + max(0, max_rows))
     intended_count = max(0, end_index - start_index)
@@ -1650,15 +1630,21 @@ def backfill_user(
     while processed_index < end_index:
         if stop_requested is not None and stop_requested():
             break
-        legacy_row = admissible_rows[processed_index]
+        legacy_row = rows_to_process[processed_index]
         semantic_key = semantic_materialization_key(uid=uid, legacy_row=legacy_row)
         if semantic_key is not None and semantic_key in materialized_semantic_keys:
             skipped_semantic_duplicate += 1
             processed_index += 1
             control = control.model_copy(
                 update={
-                    "legacy_backfill_processed_count": processed_index,
-                    "legacy_backfill_source_fingerprint": fingerprint,
+                    "legacy_backfill_processed_count": (
+                        len(admissible_rows) - len(rows_to_process) + processed_index
+                        if recovering_changed_source
+                        else processed_index
+                    ),
+                    "legacy_backfill_source_fingerprint": (
+                        control.legacy_backfill_source_fingerprint if recovering_changed_source else fingerprint
+                    ),
                     "updated_at": datetime.now(timezone.utc),
                 }
             )
@@ -1705,17 +1691,29 @@ def backfill_user(
         processed_index += 1
         control = control.model_copy(
             update={
-                "legacy_backfill_processed_count": processed_index,
-                "legacy_backfill_source_fingerprint": fingerprint,
+                "legacy_backfill_processed_count": (
+                    len(admissible_rows) - len(rows_to_process) + processed_index
+                    if recovering_changed_source
+                    else processed_index
+                ),
+                "legacy_backfill_source_fingerprint": (
+                    control.legacy_backfill_source_fingerprint if recovering_changed_source else fingerprint
+                ),
                 "updated_at": datetime.now(timezone.utc),
             }
         )
         _persist_control_state(control, db_client=client)
 
         if batch_size > 0 and (processed_index - start_index) % max(1, batch_size) == 0:
-            logger.debug("legacy backfill checkpoint for %s at %s/%s", uid, processed_index, len(admissible_rows))
+            logger.debug("legacy backfill checkpoint for %s at %s/%s", uid, processed_index, len(rows_to_process))
 
-    completed = processed_index >= len(admissible_rows) and not errors
+    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
+    # Semantic duplicate rows are intentionally handled as completed work even
+    # when they share another row's canonical destination, preserving the
+    # established single-source completion contract. The changed-source path
+    # still reaches this point only after every currently missing destination
+    # has been examined.
+    completed = processed_index >= len(rows_to_process) and not errors
     if completed:
         control = control.model_copy(
             update={
@@ -1726,8 +1724,6 @@ def backfill_user(
             }
         )
         _persist_control_state(control, db_client=client)
-
-    _, destination_count, verified, discrepancy = reconcile_backfill_counts(uid, admissible_rows, db_client=client)
 
     return BackfillReport(
         uid=uid,

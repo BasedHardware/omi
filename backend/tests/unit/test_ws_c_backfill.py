@@ -558,6 +558,40 @@ def test_capped_backfill_resumes_until_complete(_trusted_account):
     assert third.verified is True
 
 
+def test_capped_backfill_recovers_changed_source_from_missing_destinations(_trusted_account):
+    rows = [_legacy_row(legacy_id="leg-b", content="Existing fact", conversation_id="conv-b")]
+
+    def get_non_filtered(requested_uid, limit=100, offset=0, **_kwargs):
+        assert requested_uid == LEGACY_UID
+        return rows[offset : offset + limit]
+
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    inserted_before_cursor = _legacy_row(legacy_id="leg-a", content="Inserted fact", conversation_id="conv-a")
+    rows.append(inserted_before_cursor)
+    _seed_legacy_evidence(db, [inserted_before_cursor])
+    resumed = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    assert first.completed is True
+    assert resumed.written_count == 1
+    assert resumed.completed is True
+    assert resumed.verified is True
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 2
+
+
 def test_continue_on_error_refreshes_control_and_retries_row(_trusted_account):
     rows = [
         _legacy_row(legacy_id="leg-retry-1", content="Retry one", conversation_id="conv-retry-1"),
