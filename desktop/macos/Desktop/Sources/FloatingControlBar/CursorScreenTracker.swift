@@ -24,6 +24,13 @@ final class CursorScreenTracker {
   /// Whether the poll is running right now.
   var isTracking: Bool { timer != nil }
 
+  /// How many timer sources this tracker has ever created.
+  ///
+  /// The thing that can actually go wrong here is `sync()` stacking a second timer on an already
+  /// armed tracker, which doubles the wake-up rate. That is a fact about arming, so a test can read
+  /// it directly instead of counting ticks inside a sleep and inferring the duplicate from a rate.
+  private(set) var timersArmed = 0
+
   /// Adopts `onTick` as the poll body and arms for the current layout.
   func start(onTick: @escaping @MainActor () -> Void) {
     self.onTick = onTick
@@ -44,5 +51,6 @@ final class CursorScreenTracker {
     source.setEventHandler { MainActor.assumeIsolated { onTick() } }
     source.resume()
     timer = source
+    timersArmed += 1
   }
 }

@@ -252,6 +252,7 @@ final class MemoryGraphRevisitTests: XCTestCase {
       testsURL
       .deletingLastPathComponent()
       .appendingPathComponent(relativePath)
+    // omi-test-quality: source-inspection -- static contract: which token a call site names is a source fact; a rendered view cannot report it.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

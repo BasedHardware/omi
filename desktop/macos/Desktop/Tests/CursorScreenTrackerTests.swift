@@ -41,19 +41,35 @@ final class CursorScreenTrackerTests: XCTestCase {
     XCTAssertFalse(tracker.isTracking)
   }
 
-  func testResyncingWhileArmedKeepsOneTimer() async {
+  func testResyncingWhileArmedKeepsOneTimer() {
     let tracker = CursorScreenTracker(screenCount: { 2 })
     let counter = TickCounter()
     tracker.start { counter.bump() }
     tracker.sync()
     tracker.sync()
-    XCTAssertTrue(tracker.isTracking)
 
-    // Two stacked timers would tick at twice the rate. One ~250 ms poll fires at most twice in
-    // 400 ms (the schedule starts immediately), so a third tick means a duplicate timer.
-    try? await Task.sleep(for: .milliseconds(400))
-    XCTAssertLessThanOrEqual(counter.count, 2)
-    XCTAssertGreaterThanOrEqual(counter.count, 1)
+    // This used to sleep 400 ms and assert the tick count landed in [1, 2], inferring a duplicate
+    // timer from a doubled rate. That reads a wall clock to answer a question about arming, and on
+    // a loaded CI machine a ~250 ms poll's tick count in a fixed window is not reliable. Arming is
+    // the fact under test, so assert it: three arm attempts, one timer.
+    XCTAssertTrue(tracker.isTracking)
+    XCTAssertEqual(tracker.timersArmed, 1)
+  }
+
+  func testDisarmingAndRearmingCreatesANewTimer() {
+    var screens = 2
+    let tracker = CursorScreenTracker(screenCount: { screens })
+    tracker.start {}
+    XCTAssertEqual(tracker.timersArmed, 1)
+
+    screens = 1
+    tracker.sync()
+    XCTAssertFalse(tracker.isTracking)
+
+    screens = 2
+    tracker.sync()
+    XCTAssertTrue(tracker.isTracking)
+    XCTAssertEqual(tracker.timersArmed, 2, "re-arming after a genuine disarm must build a new timer")
   }
 }
 

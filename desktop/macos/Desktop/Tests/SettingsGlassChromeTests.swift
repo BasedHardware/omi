@@ -173,6 +173,7 @@ final class SettingsGlassChromeTests: XCTestCase {
       let url = sourcesDir.appendingPathComponent(relative)
       // A missing file must fail loudly rather than pass vacuously: a scan over zero files is the
       // shape these checks fail in, and it looks exactly like success.
+      // omi-test-quality: source-inspection -- static contract: which token a call site names is a source fact; a rendered view cannot report it.
       let source = try String(contentsOf: url, encoding: .utf8)
       return (relative, source)
     }

@@ -212,6 +212,7 @@ final class RewindVideoFrameCursorTests: XCTestCase {
 
     for (index, color) in Self.frameColors.enumerated() {
       while !input.isReadyForMoreMediaData {
+        // omi-test-quality: wall-clock-wait -- AVAssetWriterInput back-pressure exposes no await to park on; the alternative hands the write loop to AVFoundation's own queue.
         try await Task.sleep(nanoseconds: 10_000_000)
       }
       let buffer = try Self.makePixelBuffer(width: width, height: height, color: color, adaptor: adaptor)
