@@ -1433,21 +1433,36 @@ enum MemoryAtlasForceLayout {
     var positions: [String: CGPoint] = [:]
     let baseRadius = Double(min(area.width, area.height)) * 0.5
     let goldenAngle = Double.pi * (3 - sqrt(5))
+    let clump = Double(min(area.width, area.height)) * 0.016
+    let seatClearance = max(baseRadius * 0.05, clump * 2.8)
+    var occupiedSeats: [CGPoint] = []
     for (offset, group) in groups.enumerated() {
       // Golden-angle seats avoid ruled rows. A uniform-area radial sample fills
       // the peripheral field instead of turning the catalog into a hollow ring.
-      let wobble = (stableFraction("halo-\(group.first ?? "")") - 0.5) * 0.11
-      let angle = Double(offset) * goldenAngle + wobble
+      let seed = group.sorted().first ?? ""
       let innerRadius = baseRadius * 0.12
       let outerRadius = baseRadius * 0.96
-      let radialFraction = stableFraction("depth-\(group.first ?? "")")
-      let reach = sqrt(
-        innerRadius * innerRadius + (outerRadius * outerRadius - innerRadius * innerRadius) * radialFraction)
-      let seat = CGPoint(
-        x: area.midX + CGFloat(cos(angle) * reach),
-        y: area.midY + CGFloat(sin(angle) * reach))
+      var seat = CGPoint.zero
+      for attempt in 0..<24 {
+        // Re-seed only on collision. The first candidate retains the familiar
+        // golden-angle field, while later candidates remain deterministic and
+        // fill the disk instead of creating a new ring or grid.
+        let sequence = Double(offset + attempt * groups.count)
+        let wobble = (stableFraction("halo-\(seed)-\(attempt)") - 0.5) * 0.11
+        let angle = sequence * goldenAngle + wobble
+        let radialFraction = stableFraction("depth-\(seed)-\(attempt)")
+        let reach = sqrt(
+          innerRadius * innerRadius + (outerRadius * outerRadius - innerRadius * innerRadius) * radialFraction)
+        let candidate = CGPoint(
+          x: area.midX + CGFloat(cos(angle) * reach),
+          y: area.midY + CGFloat(sin(angle) * reach))
+        seat = candidate
+        if !occupiedSeats.contains(where: { hypot($0.x - candidate.x, $0.y - candidate.y) < seatClearance }) {
+          break
+        }
+      }
+      occupiedSeats.append(seat)
 
-      let clump = Double(min(area.width, area.height)) * 0.016
       for (memberIndex, id) in group.sorted().enumerated() {
         let memberAngle =
           stableFraction(id) * 2 * .pi + Double(memberIndex) * 2.399_963_229_728_653

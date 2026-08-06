@@ -509,6 +509,22 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       0.44 + 0.000_001)
   }
 
+  func testDisconnectedIslandSeatsDoNotStack() {
+    let groups = (0..<18).map { ["island-\($0)"] }
+    let positions = MemoryAtlasForceLayout.haloPositions(groups: groups, area: CGRect(x: 0, y: 0, width: 1, height: 1))
+    let seats = groups.compactMap { positions[$0[0]] }
+
+    XCTAssertEqual(seats.count, groups.count)
+    for index in seats.indices {
+      for otherIndex in seats.indices where otherIndex > index {
+        XCTAssertGreaterThan(
+          hypot(seats[index].x - seats[otherIndex].x, seats[index].y - seats[otherIndex].y),
+          0.049,
+          "Disconnected island seats must not overlap")
+      }
+    }
+  }
+
   func testLeafAndIsolatePlacementIsDeterministicAcrossRepeatedSnapshots() {
     let graph = KnowledgeGraphResponse(
       nodes: [
