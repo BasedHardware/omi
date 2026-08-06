@@ -25,9 +25,13 @@ role_id="omiAgentVmReconciler"
 role="projects/${project}/roles/${role_id}"
 operations_role_id="omiAgentVmReconcilerOperations"
 operations_role="projects/${project}/roles/${operations_role_id}"
-permissions="compute.disks.create,compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop,compute.subnetworks.use,compute.subnetworks.useExternalIp"
+permissions="compute.disks.create,compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
+subnetwork_role_id="omiAgentVmReconcilerSubnetwork"
+subnetwork_role="projects/${project}/roles/${subnetwork_role_id}"
+subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"
 operations_permissions="compute.globalOperations.get,compute.zoneOperations.get"
 zone="us-central1-a"
+region="${zone%-*}"
 
 if ! gcloud iam service-accounts describe "$gsa" --project="$project" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$gsa_name" --project="$project" --display-name="Omi Agent VM reconciler"
@@ -41,6 +45,11 @@ if gcloud iam roles describe "$role_id" --project="$project" >/dev/null 2>&1; th
   gcloud iam roles update "$role_id" --project="$project" --title="Omi Agent VM reconciler" --permissions="$permissions" --stage=GA
 else
   gcloud iam roles create "$role_id" --project="$project" --title="Omi Agent VM reconciler" --permissions="$permissions" --stage=GA
+fi
+if gcloud iam roles describe "$subnetwork_role_id" --project="$project" >/dev/null 2>&1; then
+  gcloud iam roles update "$subnetwork_role_id" --project="$project" --title="Omi Agent VM reconciler subnet" --permissions="$subnetwork_permissions" --stage=GA
+else
+  gcloud iam roles create "$subnetwork_role_id" --project="$project" --title="Omi Agent VM reconciler subnet" --permissions="$subnetwork_permissions" --stage=GA
 fi
 if gcloud iam roles describe "$operations_role_id" --project="$project" >/dev/null 2>&1; then
   gcloud iam roles update "$operations_role_id" --project="$project" --title="Omi Agent VM reconciler operation polling" --permissions="$operations_permissions" --stage=GA
@@ -64,6 +73,12 @@ gcloud projects add-iam-policy-binding "$project" \
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
   --condition="title=Agent VM reconciler image scope,description=Immutable omi-agent images only,expression=resource.type == 'compute.googleapis.com/Image' && resource.name.startsWith('projects/${project}/global/images/omi-agent-')"
+# Replacement VMs preserve the predecessor's default subnet and external NAT.
+# Bind the two network permissions directly on that subnetwork: Compute IAM
+# Conditions do not make the project-level instance/disk/image bindings apply
+# to a Subnetwork resource.
+gcloud compute networks subnets add-iam-policy-binding default --project="$project" --region="$region" \
+  --member="serviceAccount:${gsa}" --role="$subnetwork_role"
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$operations_role" --condition=None
 # Project IAM policies containing scoped bindings require unconditional bindings
