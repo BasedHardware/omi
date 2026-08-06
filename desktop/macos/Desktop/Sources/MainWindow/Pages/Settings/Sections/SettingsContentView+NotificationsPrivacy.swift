@@ -51,23 +51,6 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Focus Notifications", subtitle: "Show notification on focus changes",
-              settingId: "notifications.focus"
-            ) {
-              Toggle("", isOn: $focusNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: focusNotificationsEnabled) { _, newValue in
-                  FocusAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      focus: FocusSettingsResponse(notificationsEnabled: newValue)))
-                }
-            }
-
-            GlassSeparator()
-
-            settingRow(
               title: "Task Notifications",
               subtitle: "Allow interruptions when a task needs attention",
               settingId: "notifications.task"
@@ -169,6 +152,25 @@ extension SettingsContentView {
       }
 
     }
+    // These three toggles are seeded from their local singletons when the pane is constructed,
+    // but `loadBackendSettings()` then runs `SettingsSyncManager.syncFromServer()`, which is
+    // server-authoritative and rewrites those same singletons underneath us. Without this the
+    // switches kept painting the pre-sync values — a per-device answer to a per-account
+    // question — until the next relaunch. The sync manager already announces itself; this is
+    // the pane agreeing to listen.
+    .onReceive(NotificationCenter.default.publisher(for: .assistantSettingsDidSyncFromServer)) { _ in
+      syncNotificationTogglesFromAssistantSettings()
+    }
+  }
+
+  /// Re-reads the assistant notification toggles from their stores. A sync that agrees with the
+  /// pane assigns nothing, so the common case does not re-enter the `onChange` handlers above; a
+  /// sync that corrects the pane does, and the resulting partial update restates the value the
+  /// server just supplied, which is idempotent.
+  func syncNotificationTogglesFromAssistantSettings() {
+    taskNotificationsEnabled = TaskAssistantSettings.shared.notificationsEnabled
+    insightNotificationsEnabled = InsightAssistantSettings.shared.notificationsEnabled
+    memoryNotificationsEnabled = MemoryAssistantSettings.shared.notificationsEnabled
   }
 
   // MARK: - Privacy Section
