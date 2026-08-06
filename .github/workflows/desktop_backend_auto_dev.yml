@@ -509,6 +509,7 @@ jobs:
             AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
             AGENT_VM_ACTIVE_RELEASE_URI=${{ steps.agent-vm-release.outputs.active_manifest_uri }}
             AGENT_VM_RECONCILER_MAX_CONCURRENCY=5
+            AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS=300
 
       - name: Save previous Agent VM release pointer
         if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''

@@ -247,7 +247,7 @@ def reconcile_requested(vm: Mapping[str, Any], now: float | None = None) -> bool
     return (
         bool(reconcile.get("startRequested"))
         or bool(reconcile.get("drainRequested"))
-        or reconcile.get("state") in {"draining", "deferred"}
+        or reconcile.get("state") in {"draining", "deferred", "missing"}
         or lease_active
     )
 
@@ -547,6 +547,85 @@ def update_vm_reconcile(
             now,
             consume_start_request_at,
             force_consume_start_request,
+        )
+    )
+
+
+@transactional
+def _clear_missing_vm_if_current_txn(
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    owner: str,
+    expected_missing_since: float,
+    now: float,
+) -> bool:
+    """Remove one terminal VM pointer only while this worker still owns it.
+
+    A prior reconcile lease prevents a new session admission. The caller must
+    separately observe that no pre-existing session lease remains before this
+    compare-and-swap deletes the pointer.
+    """
+    deletion = deletion_ref.get(transaction=transaction)
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    if account_deletion_blocks_access(status):
+        return False
+    snapshot = user_ref.get(transaction=transaction)
+    vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    if (
+        not isinstance(vm, dict)
+        or vm.get("vmName") != vm_name
+        or (vm.get("zone") or DEFAULT_ZONE) != zone
+        or vm.get("authToken") != auth_token
+        or vm.get("status") not in {"ready", "stopped"}
+    ):
+        return False
+    reconcile_raw = vm.get("reconcile")
+    reconcile: dict[str, Any] = reconcile_raw if isinstance(reconcile_raw, dict) else {}
+    lease_raw = reconcile.get("lease")
+    lease: dict[str, Any] = lease_raw if isinstance(lease_raw, dict) else {}
+    if (
+        reconcile.get("state") != "claimed"
+        or lease.get("owner") != owner
+        or float(lease.get("expiresAt", 0) or 0) <= now
+        or bool(reconcile.get("startRequested"))
+        or bool(reconcile.get("drainRequested"))
+    ):
+        return False
+    missing_since = reconcile.get("missingSince")
+    if not isinstance(missing_since, (int, float)) or float(missing_since) != expected_missing_since:
+        return False
+    transaction.update(user_ref, {"agentVm": DELETE_FIELD})
+    return True
+
+
+def clear_missing_vm_if_current(
+    uid: str,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    owner: str,
+    expected_missing_since: float,
+    now: float | None = None,
+) -> bool:
+    """Delete a proven-abandoned missing VM record with deletion and owner fences."""
+    now = time.time() if now is None else now
+    client = get_firestore_client()
+    return bool(
+        _clear_missing_vm_if_current_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            client.collection("users").document(uid),
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            expected_missing_since,
+            now,
         )
     )
 
@@ -898,6 +977,7 @@ __all__ = [
     "claim_reconciler_run_lease",
     "claim_session_lease",
     "claim_vm_lease",
+    "clear_missing_vm_if_current",
     "clear_vm_reconcile_lease_fields",
     "drift_reasons",
     "expected_release_metadata",

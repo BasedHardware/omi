@@ -15,7 +15,7 @@ import google.auth.transport.requests
 import google.oauth2.id_token
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from google.cloud.firestore import DELETE_FIELD, transactional
+from google.cloud.firestore import transactional
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -272,28 +272,6 @@ def _set_vm_if_current(
         status,
         ip,
         zone,
-    )
-
-
-@transactional
-def _delete_vm_if_current_txn(transaction, user_ref, expected_vm_name: str, expected_auth_token: str) -> bool:
-    snapshot = user_ref.get(transaction=transaction)
-    current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
-    if not isinstance(current, dict):
-        return False
-    if current.get("vmName") != expected_vm_name or current.get("authToken") != expected_auth_token:
-        return False
-    transaction.update(user_ref, {"agentVm": DELETE_FIELD})
-    return True
-
-
-def _delete_vm_if_current(uid: str, expected_vm_name: str, expected_auth_token: str) -> bool:
-    client = get_firestore_client()
-    return _delete_vm_if_current_txn(
-        client.transaction(),
-        client.collection("users").document(uid),
-        expected_vm_name,
-        expected_auth_token,
     )
 
 
@@ -718,7 +696,7 @@ async def get_agent_status(
     vm = await run_blocking(db_executor, _get_vm, uid)
     if not vm:
         return None
-    if _reconcile_lease_active(vm):
+    if _reconcile_in_progress(vm):
         return _response(_updating_vm(vm))
     status = str(vm.get("status") or "provisioning")
     if status not in {"ready", "error", "stopped"}:
@@ -730,14 +708,11 @@ async def get_agent_status(
         logger.warning("Agent VM status check failed for uid=%s: %s", uid, exc)
         return _response(vm)
     if gce_status == "NOT_FOUND":
-        deleted = await run_blocking(
-            db_executor,
-            _delete_vm_if_current,
-            uid,
-            str(vm["vmName"]),
-            str(vm.get("authToken") or ""),
-        )
-        return None if deleted else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
+        # A provider 404 is a reconciler-owned terminal transition. Do not
+        # erase the owner pointer from a request path: it may be a late create
+        # or a session-protected record, and the reconciler has the complete
+        # deletion, demand, session, and grace-period fences.
+        return _response(_updating_vm(vm))
     if gce_status in {"TERMINATED", "STOPPED"}:
         requested = await run_blocking(
             db_executor,

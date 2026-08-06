@@ -276,7 +276,7 @@ async def test_provision_reports_updating_without_overriding_a_reconciler_reques
 
 
 @pytest.mark.asyncio
-async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch):
+async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkeypatch):
     vm = {
         "vmName": "omi-agent-stale",
         "zone": "us-central1-a",
@@ -285,7 +285,6 @@ async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch
         "status": "ready",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    clears = []
 
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -297,12 +296,34 @@ async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
-    monkeypatch.setattr(desktop_agent_vm, "_delete_vm_if_current", lambda *args: clears.append(args) or True)
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
-    assert response is None
-    assert clears == [("uid", "omi-agent-stale", "old-token")]
+    assert response.status == "updating"
+    assert response.ip is None
+
+
+@pytest.mark.asyncio
+async def test_status_does_not_probe_a_missing_record_while_reconciler_cleanup_is_pending(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-missing",
+        "zone": "us-central1-a",
+        "authToken": "current-token",
+        "status": "ready",
+        "reconcile": {"state": "missing", "missingSince": time.time() - 60},
+    }
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *_args: pytest.fail("reconciler owns missing records"))
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response.status == "updating"
+    assert response.ip is None
 
 
 @pytest.mark.asyncio
