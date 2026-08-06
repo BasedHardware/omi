@@ -101,14 +101,15 @@ extension AppState {
 
   // MARK: - Permission Status Checks
 
-  /// Permissions this refresh reads synchronously. Notification authorisation is deliberately
-  /// absent: it resolves through a completion handler, so it is never settled by the time the
-  /// refresh returns and would read as a grant arriving on the following refresh instead.
+  /// The two permissions this refresh reads directly out of TCC, on every call, in every build.
+  ///
+  /// Everything else is excluded because it cannot tell a grant from a late read. Notification
+  /// authorisation resolves through a completion handler; system audio is only marked granted once
+  /// capture happens to be running; and automation, accessibility and full-disk access are skipped
+  /// entirely under `usesLazyDevPermissions`, so their flags settle on some later path. Each of
+  /// those would surface as a permission "arriving" one refresh after the fact.
   private var grantedPermissionCount: Int {
-    [
-      hasScreenRecordingPermission, hasMicrophonePermission, hasSystemAudioPermission,
-      hasAutomationPermission, hasAccessibilityPermission, hasFullDiskAccess,
-    ].filter { $0 }.count
+    [hasScreenRecordingPermission, hasMicrophonePermission].filter { $0 }.count
   }
 
   /// Sounds a permission actually landing — the user left for System Settings, granted something,
