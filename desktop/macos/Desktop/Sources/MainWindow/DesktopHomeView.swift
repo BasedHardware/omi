@@ -1733,7 +1733,7 @@ private struct PageContentView: View {
     Group {
       switch selectedIndex {
       case 0:
-        DashboardPage(
+        QueryShellHome(
           viewModel: viewModelContainer.dashboardViewModel,
           homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
@@ -1791,7 +1791,7 @@ private struct PageContentView: View {
       case 12:
         HelpPage()
       default:
-        DashboardPage(
+        QueryShellHome(
           viewModel: viewModelContainer.dashboardViewModel,
           homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,

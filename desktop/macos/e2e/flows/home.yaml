@@ -8,13 +8,18 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopWindowLayoutPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
 preconditions:
   - auth_ready
 
 steps:
   - id: S1
     name: Verify Home tab is active
-    do: "Verify the app shows the Home tab. Top nav bar should have Home, Memory, Tasks, Apps buttons. Home should be the active/selected tab."
+    do: "Verify the app opens on the search surface. The top bar shows the Omi mark, Library and Apps on the left and three wordless icons (microphone, screen capture, settings) on the right. Below it, a query bar with the placeholder 'Search what you've seen and heard…' sits above a separate results panel with a visible gap between them."
     expect:
       interactive_count: { min: 6 }
       text_visible:

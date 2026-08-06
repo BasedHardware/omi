@@ -90,12 +90,12 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertFalse(state.isPresented)
   }
 
-  func testMemoryDropdownPillsUseAnOpaqueOmiSurface() throws {
+  func testLibraryDropdownPillsUseAnOpaqueOmiSurface() throws {
     // omi-test-quality: source-inspection -- static visual contract: dropdown rows must
     // occlude the page beneath them while retaining Omi's neutral pill styling.
     let source = try source(at: "Sources/MainWindow/DesktopTopBar.swift")
     let dropdownRowSource =
-      source.components(separatedBy: "private struct MemoryDropdownRow").last ?? ""
+      source.components(separatedBy: "private struct LibraryDropdownRow").last ?? ""
 
     // The contract is occlusion plus neutral pill styling, not the identity of the tokens
     // that produce it. The row now draws through the shell's shared pill background; the

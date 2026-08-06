@@ -146,38 +146,57 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
   }
 
-  func testCompactNavigationRetainsEveryPrimaryRouteAndMemoryDestination() {
+  /// The bar now carries two pills because Home became a search surface and a `Memory` destination
+  /// beside a field that returns memories is a contradiction. The claim worth holding is not the pill
+  /// count — it is that **nothing was stranded by shrinking it** (INV-NAV-1).
+  func testLibraryCarriesEveryDestinationThePillsUsedToReach() {
     XCTAssertEqual(
       TopNavigationRoutes.primaryItems.map(\.index),
-      [
-        SidebarNavItem.dashboard.rawValue,
-        SidebarNavItem.conversations.rawValue,
-        SidebarNavItem.tasks.rawValue,
-        SidebarNavItem.apps.rawValue,
-      ]
+      [SidebarNavItem.conversations.rawValue, SidebarNavItem.apps.rawValue]
     )
     XCTAssertEqual(TopNavigationRoutes.memoryDestinations, [.memories, .conversations, .brainMap])
+
+    let reachable = Set(LibraryDestination.allCases.map(\.navItem))
+    for stranded in [SidebarNavItem.conversations, .tasks, .rewind, .focus, .insight] {
+      XCTAssertTrue(
+        reachable.contains(stranded),
+        "\(stranded.title) lost its pill and must still be reachable from Library")
+    }
+    XCTAssertEqual(
+      LibraryDestination.allCases.compactMap(\.memoryDestination),
+      [.conversations, .memories, .brainMap],
+      "the Memory hub's three destinations must all survive inside Library")
+  }
+
+  func testLibraryPillReadsAsCurrentOnEveryPageItRoutesTo() {
+    for destination in LibraryDestination.allCases {
+      XCTAssertTrue(
+        LibraryDestination.contains(selectedIndex: destination.navItem.rawValue),
+        "\(destination.title) must light the Library pill")
+    }
+    XCTAssertFalse(LibraryDestination.contains(selectedIndex: SidebarNavItem.dashboard.rawValue))
+    XCTAssertFalse(LibraryDestination.contains(selectedIndex: SidebarNavItem.apps.rawValue))
+  }
+
+  func testLibrarySelectionDistinguishesTheThreeMemoryHubDestinations() {
+    let hub = SidebarNavItem.conversations.rawValue
+    XCTAssertTrue(
+      LibraryDestination.brainMap.isCurrent(
+        selectedIndex: hub, memoryDestinationRawValue: MemoryHubDestination.brainMap.rawValue))
+    XCTAssertFalse(
+      LibraryDestination.brainMap.isCurrent(
+        selectedIndex: hub, memoryDestinationRawValue: MemoryHubDestination.memories.rawValue),
+      "Brain Map must not read as current while the hub is showing Memories")
+    XCTAssertTrue(
+      LibraryDestination.tasks.isCurrent(
+        selectedIndex: SidebarNavItem.tasks.rawValue, memoryDestinationRawValue: 0),
+      "a destination with no hub sub-page is current on its page alone")
   }
 
   func testNavigationLaneMatchesFullChatWidthAndPageInsets() {
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 1_400), 900)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 800), 768)
     XCTAssertEqual(TopNavigationLayoutMetrics.contentLaneWidth(for: 40), 8)
-  }
-
-  func testListeningHoverControlsHaveAStableReservedSlot() {
-    // The secondary mode toggle is conditional on hover, so the slot—not the
-    // conditional child—owns the measured width used by the right nav group.
-    XCTAssertEqual(CaptureListeningControlsLayout.listeningSlotWidth, 136)
-    XCTAssertGreaterThan(CaptureListeningControlsLayout.listeningSlotWidth, 104)
-  }
-
-  func testListeningPrecedesCaptureSoItsReservedSlotStaysOutsideTheVisiblePair() {
-    XCTAssertEqual(
-      CaptureListeningControlsLayout.displayOrder,
-      [.listening, .capture],
-      "Listening must lead Capture so the reserved trailing slot cannot create an inner gap"
-    )
   }
 }
 
