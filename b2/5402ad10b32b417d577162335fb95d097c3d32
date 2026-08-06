@@ -1,0 +1,27 @@
+web/paper/src/lib/edition.ts
+  s_814cfc8af23811::t_f55a268507348f 4-10,13-37,41-46,49-52,55-78,80-82,85-119,126-148,154-158,162-166,195-200,203-206
+web/paper/src/app/today/EditionView.tsx
+  s_814cfc8af23811::t_d0b946bd9174e7 1-11,16-19,22-25,33,35-38,42,44-54,56-115,119,121-140,144,146-172,175-183,187,189-204
+  s_814cfc8af23811::t_136f5e523daafe 205-212
+web/paper/src/app/globals.css
+  s_814cfc8af23811::t_117932667d4611 291-293,296-299,302-305,308-310
+  s_814cfc8af23811::t_0f6a711084442b 225,227,230-231,234-273
+web/paper/src/app/page.tsx
+  s_814cfc8af23811::t_f3074234b0a651 2-6,61-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b25402ad10b32b417d577162335fb95d097c3d32",
+  "prompts": {},
+  "sessions": {
+    "s_814cfc8af23811": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1fcdb13-5b42-47d9-a8ea-d2da9669b2be",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
