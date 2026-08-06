@@ -1,0 +1,27 @@
+desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
+  s_569f1df936cc22::t_c98b559248f6b6 49-56
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_569f1df936cc22::t_ac4b040b551430 173
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
+  s_569f1df936cc22::t_1f6a4226099fd6 29-31,54-59,69-73,81-87,145-190
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_b9e84b668d6728 121-122
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_2722001f5e9ef9 130-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8044a75922d7df293757eb46ac789b63fa100f16",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
