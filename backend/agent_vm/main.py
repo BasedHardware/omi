@@ -1,13 +1,10 @@
 import asyncio
 import base64
 import copy
-import hashlib
-import hmac
 import json
 import os
 import re
 import sqlite3
-import sys
 import threading
 import time
 import zlib
@@ -15,10 +12,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 SYNC_TABLES = frozenset(
@@ -50,7 +46,9 @@ class Runtime:
         self.backend_tools: list[dict[str, Any]] = []
         self.started_at = time.monotonic()
         self.last_activity_at = time.monotonic()
-        self.current_version: str | None = None
+        self.release_id = os.environ.get("AGENT_VM_RELEASE_ID", "")
+        self.image_digest = os.environ.get("AGENT_VM_IMAGE_DIGEST", "")
+        self.startup_sha256 = os.environ.get("AGENT_VM_STARTUP_SHA256", "")
         self.lock = threading.RLock()
 
     def open_database(self) -> bool:
@@ -112,83 +110,27 @@ async def metadata(path: str) -> str:
 
 
 async def stop_instance() -> None:
-    try:
-        name, zone, token = await asyncio.gather(
-            metadata("instance/name"),
-            metadata("instance/zone"),
-            metadata("instance/service-accounts/default/token"),
-        )
-        access_token = json.loads(token)["access_token"]
-        async with httpx.AsyncClient(timeout=15) as client:
-            await client.post(
-                f"https://compute.googleapis.com/compute/v1/{zone}/instances/{name}/stop",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-    except (httpx.HTTPError, KeyError, json.JSONDecodeError):
+    """Ask the backend stop broker to stop this exact VM.
+
+    The VM identity token is verified by the backend against the Compute Engine
+    instance claims and the Firestore owner record.  Agent VMs therefore do not
+    need ``compute.instances.stop`` in their runtime service account.
+    """
+    audience = os.environ.get("AGENT_VM_STOP_AUDIENCE", "").strip()
+    backend_url = runtime.backend_url.rstrip("/")
+    if not audience or not backend_url:
         return
-
-
-def validate_signed_update_manifest(manifest_bytes: bytes, signature: bytes, source: bytes) -> dict[str, str]:
-    """Validate the signed, content-addressed update artifact before execution."""
     try:
-        public_key = base64.b64decode(os.environ["AGENT_UPDATE_ED25519_PUBLIC_KEY"], validate=True)
-        Ed25519PublicKey.from_public_bytes(public_key).verify(signature, manifest_bytes)
-        manifest = json.loads(manifest_bytes)
-        path = manifest["path"]
-        version = manifest["version"]
-        expected_sha256 = manifest["sha256"]
-    except (KeyError, TypeError, ValueError, InvalidSignature, json.JSONDecodeError):
-        raise ValueError("invalid signed Agent VM update manifest") from None
-
-    if (
-        not isinstance(path, str)
-        or not isinstance(version, str)
-        or not version
-        or not isinstance(expected_sha256, str)
-        or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256)
-        or Path(path).is_absolute()
-        or ".." in Path(path).parts
-        or not hmac.compare_digest(hashlib.sha256(source).hexdigest(), expected_sha256)
-    ):
-        raise ValueError("invalid signed Agent VM update artifact")
-    return {"path": path, "version": version}
-
-
-async def check_update() -> None:
-    base = os.environ.get("AGENT_GCS_BASE", "https://storage.googleapis.com/based-hardware-agent")
-    manifest_path = os.environ.get("AGENT_UPDATE_MANIFEST_PATH", "manifest.json")
-    signature_path = f"{manifest_path}.sig"
-    try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            manifest_response, signature_response = await asyncio.gather(
-                client.get(f"{base}/{manifest_path}"),
-                client.get(f"{base}/{signature_path}"),
-            )
-            manifest_response.raise_for_status()
-            signature_response.raise_for_status()
-            untrusted_manifest = json.loads(manifest_response.content)
-            path = untrusted_manifest.get("path") if isinstance(untrusted_manifest, dict) else None
-            if not isinstance(path, str) or Path(path).is_absolute() or ".." in Path(path).parts:
-                return
-            source_response = await client.get(f"{base}/{path}")
-            source_response.raise_for_status()
-        update = validate_signed_update_manifest(
-            manifest_response.content,
-            base64.b64decode(signature_response.content, validate=True),
-            source_response.content,
+        identity = await metadata(
+            "instance/service-accounts/default/identity" f"?audience={quote(audience, safe='')}&format=full"
         )
-        if runtime.current_version is None:
-            runtime.current_version = update["version"]
-            return
-        if update["version"] == runtime.current_version:
-            return
-        target = Path(__file__).resolve()
-        temporary = target.with_suffix(".updating")
-        temporary.write_bytes(source_response.content)
-        temporary.replace(target)
-        runtime.current_version = update["version"]
-        os.execv(sys.executable, [sys.executable, *sys.argv])
-    except (httpx.HTTPError, OSError, ValueError, json.JSONDecodeError):
+        async with httpx.AsyncClient(timeout=15) as client:
+            response = await client.post(
+                f"{backend_url}/v2/agent/vm/stop-self",
+                headers={"Authorization": f"Bearer {identity}"},
+            )
+            response.raise_for_status()
+    except (httpx.HTTPError, OSError):
         return
 
 
@@ -197,7 +139,6 @@ async def runtime_maintenance() -> None:
         await asyncio.sleep(300)
         if time.monotonic() - runtime.last_activity_at >= 1800:
             await stop_instance()
-        await check_update()
 
 
 def quoted(value: str) -> str:
@@ -665,6 +606,9 @@ async def health(request: Request) -> dict[str, Any]:
         "status": "ok",
         "uptime": round(time.monotonic() - runtime.started_at),
         "databaseReady": runtime.db is not None,
+        "release": runtime.release_id,
+        "imageDigest": runtime.image_digest,
+        "startupSha256": runtime.startup_sha256,
     }
 
 

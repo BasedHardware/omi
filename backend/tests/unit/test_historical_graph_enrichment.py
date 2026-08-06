@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from models.memory_apply import ApplyStatus, MemoryControlState, memory_content_hash
+from models.memory_promotion import PROMOTION_GRAPH_PLAN_V2_VERSION, canonical_graph_entity_id
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.graph_enrichment import GraphEnrichmentStatus
 from utils.memory.historical_graph_enrichment import plan_historical_graph_enrichment
@@ -132,10 +133,12 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
         llm=_Planner(
             {
                 "eligible": True,
-                "subject_entity_id": "user",
+                "subject_label": "user",
+                "subject_node_type": "person",
                 "predicate": "prefers_update_style",
                 "object_label": "concise updates",
-                "arguments": {"style": "concise"},
+                "object_node_type": "concept",
+                "qualifiers": {"style": "concise"},
             }
         ),
     )
@@ -145,7 +148,97 @@ def test_historical_graph_planner_builds_a_fenced_plan_for_source_grounded_outpu
     assert planned.patch_payload["expected_content_hash"] == _item().content_hash
     assert planned.patch_payload["evidence_ids"] == ["ev1"]
     assert planned.patch_payload["subject_entity_id"] == "user"
-    assert planned.patch_payload["arguments"]["object"]["label"] == "concise updates"
+    graph_plan = planned.patch_payload["promotion_audit"]["graph_plan"]
+    assert graph_plan["schema_version"] == PROMOTION_GRAPH_PLAN_V2_VERSION
+    assert graph_plan["object"] == {
+        "entity_id": canonical_graph_entity_id("concise updates"),
+        "label": "concise updates",
+        "node_type": "concept",
+    }
+    assert graph_plan["qualifiers"] == {"style": "concise"}
+
+
+@pytest.mark.parametrize(
+    ("content", "subject_label", "object_label"),
+    [
+        ("I prefer concise updates.", "I", "concise updates"),
+        ("I’m a concise communicator.", "I'm", "concise communicator"),
+        ("I’ve chosen concise updates.", "I've", "concise updates"),
+        ("I’d choose concise updates.", "I'd", "concise updates"),
+        ("I’ll choose concise updates.", "I'll", "concise updates"),
+        ("I prefer concise updates.", "user", "concise updates"),
+    ],
+)
+def test_historical_graph_planner_normalizes_direct_first_person_subjects_to_user(
+    content: str, subject_label: str, object_label: str
+):
+    planned = plan_historical_graph_enrichment(
+        item=_item(content=content),
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+        llm=_Planner(
+            {
+                "eligible": True,
+                "subject_label": subject_label,
+                "subject_node_type": "person",
+                "predicate": "prefers_update_style",
+                "object_label": object_label,
+                "object_node_type": "concept",
+            }
+        ),
+    )
+
+    assert planned.status == GraphEnrichmentStatus.ready
+    assert planned.patch_payload["subject_entity_id"] == "user"
+    graph_plan = planned.patch_payload["promotion_audit"]["graph_plan"]
+    assert graph_plan["subject"] == {"entity_id": "user", "label": "user", "node_type": "person"}
+
+
+@pytest.mark.parametrize(
+    ("content", "subject_label", "object_label"),
+    [
+        ("The superuser prefers concise updates.", "user", "concise updates"),
+        ("Iceland prefers concise updates.", "I", "concise updates"),
+        ("The user prefers inconcisely.", "user", "concise"),
+    ],
+)
+def test_historical_graph_planner_rejects_partial_evidence_tokens(content: str, subject_label: str, object_label: str):
+    planned = plan_historical_graph_enrichment(
+        item=_item(content=content),
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+        llm=_Planner(
+            {
+                "eligible": True,
+                "subject_label": subject_label,
+                "subject_node_type": "person",
+                "predicate": "prefers_update_style",
+                "object_label": object_label,
+                "object_node_type": "concept",
+            }
+        ),
+    )
+
+    assert planned.status == GraphEnrichmentStatus.blocked
+    assert planned.block_code == "not_source_grounded"
+
+
+def test_historical_graph_planner_blocks_an_endpoint_label_not_supported_by_the_memory_text():
+    planned = plan_historical_graph_enrichment(
+        item=_item(),
+        control=MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2),
+        llm=_Planner(
+            {
+                "eligible": True,
+                "subject_label": "user",
+                "subject_node_type": "person",
+                "predicate": "prefers_update_style",
+                "object_label": "weekly updates",
+                "object_node_type": "concept",
+            }
+        ),
+    )
+
+    assert planned.status == GraphEnrichmentStatus.blocked
+    assert planned.block_code == "not_source_grounded"
 
 
 def test_historical_graph_planner_blocks_when_no_source_grounded_fact_exists():
@@ -175,7 +268,7 @@ def test_replan_candidates_exclude_current_planner_version():
         graph_ready=True,
         promotion={
             "graph_enrichment": True,
-            "graph_enrichment_planner_version": "canonical_historical_graph_enrichment.v2",
+            "graph_enrichment_planner_version": "canonical_historical_graph_enrichment.v3",
         },
     )
     legacy = _item(
@@ -207,19 +300,21 @@ def test_historical_runner_allows_a_bounded_scan_for_unenriched_candidates():
         )
 
 
-def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_candidate(
+def test_historical_runner_holds_the_external_planner_to_the_item_limit_even_with_a_larger_scan(
     monkeypatch: pytest.MonkeyPatch,
 ):
     control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
     failing = _item(memory_id="mem_failing")
-    ready = _item(memory_id="mem_ready")
+    later = _item(memory_id="mem_later")
     cursor_store = _CursorStore()
     planner = _Planner(
         {
             "eligible": True,
-            "subject_entity_id": "user",
+            "subject_label": "user",
+            "subject_node_type": "person",
             "predicate": "prefers_update_style",
             "object_label": "concise updates",
+            "object_node_type": "concept",
         }
     )
 
@@ -228,7 +323,7 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
         historical_runner,
         "_candidate_page",
         lambda *_args, **_kwargs: historical_runner.HistoricalGraphCandidatePage(
-            items=[failing, ready], last_scanned=ready, exhausted=False
+            items=[failing, later], last_scanned=later, exhausted=False
         ),
     )
 
@@ -258,8 +353,8 @@ def test_historical_runner_skips_a_transient_planner_error_and_commits_a_later_c
         cursor_store=cursor_store,
     )
 
-    assert report["outcomes"] == {"committed": 1, "cursor_advanced": 1, "planner_error": 1}
-    assert cursor_store.advances == [(0, "mem_ready")]
+    assert report["outcomes"] == {"cursor_advanced": 1, "planner_error": 1}
+    assert cursor_store.advances == [(0, "mem_failing")]
 
 
 def test_historical_runner_rotates_cursor_past_a_bounded_scan_window(monkeypatch: pytest.MonkeyPatch):

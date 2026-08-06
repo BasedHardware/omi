@@ -5,7 +5,7 @@ import json
 import threading
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import firebase_admin
 import pytest
@@ -144,45 +144,34 @@ class _ProxyHTTPClient:
         return _Response()
 
 
-@pytest.mark.asyncio
-async def test_gce_status_refreshes_credentials_off_the_event_loop(agent_proxy, monkeypatch):
-    event_loop_thread = threading.get_ident()
-    credential_thread = None
-    client = _AsyncClient()
-    executor_calls = []
-    shared_run_blocking = agent_proxy.run_blocking
-
-    def refresh_credentials():
-        nonlocal credential_thread
-        credential_thread = threading.get_ident()
-        return "test-token"
-
-    async def tracking_run_blocking(executor, func, *args, **kwargs):
-        executor_calls.append(executor)
-        return await shared_run_blocking(executor, func, *args, **kwargs)
-
-    monkeypatch.setattr(agent_proxy, "_get_gce_access_token", refresh_credentials)
-    monkeypatch.setattr(agent_proxy, "run_blocking", tracking_run_blocking)
-    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", lambda: client)
-
-    status = await agent_proxy._check_gce_status("omi-agent-test", "us-central1-a")
-
-    assert status == "RUNNING"
-    assert credential_thread is not None
-    assert credential_thread != event_loop_thread
-    assert executor_calls == [agent_proxy.critical_executor]
-    assert client.headers == {"Authorization": "Bearer test-token"}
+class _HealthyProxyHTTPClient(_ProxyHTTPClient):
+    async def post(self, _url, **_kwargs):
+        return _Response()
 
 
-@pytest.mark.asyncio
-async def test_gce_credential_refresh_failure_still_propagates(agent_proxy, monkeypatch):
-    def refresh_credentials():
-        raise RuntimeError("credential refresh failed")
+class _IdleAgentWebSocket(_AgentWebSocket):
+    async def iter_text(self):
+        await asyncio.Event().wait()
+        if False:
+            yield ""
 
-    monkeypatch.setattr(agent_proxy, "_get_gce_access_token", refresh_credentials)
 
-    with pytest.raises(RuntimeError, match="credential refresh failed"):
-        await agent_proxy._check_gce_status("omi-agent-test", "us-central1-a")
+class _IdleVMProtocol:
+    def __init__(self):
+        self.closed = False
+
+    async def send(self, _message):
+        return None
+
+    async def close(self):
+        self.closed = True
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await asyncio.Event().wait()
+        raise StopAsyncIteration
 
 
 @pytest.mark.asyncio
@@ -231,6 +220,249 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     assert _ProxyHTTPClient.post_calls == 2
     assert phone_ws.closed == [(1000, "Session ended")]
     assert any(args[1:3] == ("full answer tail", "ai") for args in saved_messages)
+
+
+@pytest.mark.asyncio
+async def test_session_admission_queues_recovery_when_a_lifecycle_lease_wins(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    ensure_running = AsyncMock(return_value={})
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "stopped", "ip": None, "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: False)
+    monkeypatch.setattr(agent_proxy, "_ensure_vm_running", ensure_running)
+
+    await agent_proxy.agent_ws(websocket)
+
+    ensure_running.assert_awaited_once()
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+
+
+@pytest.mark.asyncio
+async def test_existing_reconciler_lease_queues_recovery_before_rejecting_socket(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    ensure_running = AsyncMock(return_value={})
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "running", "ip": "10.0.0.5", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "reconcile_requested", lambda _vm: True)
+    monkeypatch.setattr(agent_proxy, "_ensure_vm_running", ensure_running)
+
+    await agent_proxy.agent_ws(websocket)
+
+    ensure_running.assert_awaited_once()
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+
+
+@pytest.mark.asyncio
+async def test_existing_reconciler_lease_still_returns_typed_error_when_demand_write_fails(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def unavailable(_uid, _vm):
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "running", "ip": "10.0.0.5", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "reconcile_requested", lambda _vm: True)
+    monkeypatch.setattr(agent_proxy, "_ensure_vm_running", unavailable)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert websocket.accepted is True
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+
+
+@pytest.mark.asyncio
+async def test_claimed_session_lease_is_released_when_setup_raises(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    released = []
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: True)
+    monkeypatch.setattr(agent_proxy, "release_session_lease", lambda uid, lease_id: released.append((uid, lease_id)))
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", MagicMock(side_effect=RuntimeError("setup failed")))
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _HealthyProxyHTTPClient)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert len(released) == 1
+    assert released[0][0] == "user-1"
+
+
+@pytest.mark.asyncio
+async def test_transient_lease_heartbeat_error_retries_then_confirmed_loss_drains_session(agent_proxy, monkeypatch):
+    websocket = _IdleAgentWebSocket()
+    vm_ws = _IdleVMProtocol()
+    heartbeat_results = iter([RuntimeError("firestore unavailable"), False])
+    heartbeat_calls = []
+    released = []
+    real_sleep = asyncio.sleep
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def connect(*_args, **_kwargs):
+        return vm_ws
+
+    async def task_controlled_sleep(_seconds):
+        task = asyncio.current_task()
+        if task is not None and task.get_name().endswith(":lease-heartbeat"):
+            await real_sleep(0)
+            return
+        await asyncio.Event().wait()
+
+    def heartbeat(uid, lease_id):
+        heartbeat_calls.append((uid, lease_id))
+        result = next(heartbeat_results)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: True)
+    monkeypatch.setattr(agent_proxy, "heartbeat_session_lease", heartbeat)
+    monkeypatch.setattr(agent_proxy, "release_session_lease", lambda uid, lease_id: released.append((uid, lease_id)))
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _HealthyProxyHTTPClient)
+    monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
+    monkeypatch.setattr(agent_proxy.asyncio, "sleep", task_controlled_sleep)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert len(heartbeat_calls) == 2
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+    assert vm_ws.closed is True
+    assert len(released) == 1
+
+
+@pytest.mark.asyncio
+async def test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires(agent_proxy, monkeypatch):
+    """If the heartbeat errors persistently beyond the lease TTL, the session
+    must close rather than keep the WebSocket open while the Firestore record
+    can expire invisibly to the reconciler."""
+    websocket = _IdleAgentWebSocket()
+    vm_ws = _IdleVMProtocol()
+    heartbeat_calls = []
+    released = []
+    real_sleep = asyncio.sleep
+
+    async def direct_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    async def connect(*_args, **_kwargs):
+        return vm_ws
+
+    heartbeat_count = 0
+
+    async def task_controlled_sleep(seconds):
+        nonlocal heartbeat_count
+        task = asyncio.current_task()
+        if task is not None and task.get_name().endswith(":lease-heartbeat"):
+            heartbeat_count += 1
+            # Simulate elapsed time exceeding the TTL on the second heartbeat
+            # iteration so the fail-closed guard triggers.
+            if heartbeat_count >= 2:
+                monkeypatch.setattr(agent_proxy.time, "monotonic", lambda: float(heartbeat_count * 100))
+            await real_sleep(0)
+            return
+        await asyncio.Event().wait()
+
+    def heartbeat(uid, lease_id):
+        heartbeat_calls.append((uid, lease_id))
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(agent_proxy, "AGENT_VM_SESSION_LEASES_ENABLED", True)
+    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(agent_proxy, "_verify_id_token", lambda _token: {"uid": "user-1"})
+    monkeypatch.setattr(agent_proxy, "_get_account_deletion_status", lambda _uid: None)
+    monkeypatch.setattr(
+        agent_proxy,
+        "_get_user_context",
+        lambda _uid: (
+            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            "standard",
+        ),
+    )
+    monkeypatch.setattr(agent_proxy, "claim_session_lease", lambda *_args: True)
+    monkeypatch.setattr(agent_proxy, "heartbeat_session_lease", heartbeat)
+    monkeypatch.setattr(agent_proxy, "release_session_lease", lambda uid, lease_id: released.append((uid, lease_id)))
+    monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
+    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", _HealthyProxyHTTPClient)
+    monkeypatch.setattr(agent_proxy.websockets, "connect", connect)
+    monkeypatch.setattr(agent_proxy.asyncio, "sleep", task_controlled_sleep)
+
+    await agent_proxy.agent_ws(websocket)
+
+    assert len(heartbeat_calls) >= 2
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is draining")]
+    assert vm_ws.closed is True
 
 
 @pytest.mark.asyncio
@@ -387,28 +619,9 @@ def test_agent_proxy_image_packages_the_shared_executor_boundary():
     assert dockerfile.index(package_copy) < dockerfile.index(entrypoint_copy)
 
 
-def test_static_all_async_gce_refreshes_use_the_critical_executor():
-    tree = ast.parse((AGENT_PROXY_DIR / "main.py").read_text(encoding="utf-8"))
-    direct_refresh_calls = []
-    wrapped_refresh_calls = []
-
-    for function in (node for node in tree.body if isinstance(node, ast.AsyncFunctionDef)):
-        for call in (node for node in ast.walk(function) if isinstance(node, ast.Call)):
-            if isinstance(call.func, ast.Name) and call.func.id == "_get_gce_access_token":
-                direct_refresh_calls.append(call)
-            if not isinstance(call.func, ast.Name) or call.func.id != "run_blocking" or len(call.args) < 2:
-                continue
-            executor, target = call.args[:2]
-            if (
-                isinstance(executor, ast.Name)
-                and executor.id == "critical_executor"
-                and isinstance(target, ast.Name)
-                and target.id == "_get_gce_access_token"
-            ):
-                wrapped_refresh_calls.append(call)
-
-    assert direct_refresh_calls == []
-    assert len(wrapped_refresh_calls) == 6
+def test_agent_proxy_has_no_direct_compute_control_plane_path():
+    source = (AGENT_PROXY_DIR / "main.py").read_text(encoding="utf-8")
+    assert "compute.googleapis.com" not in source
 
 
 def test_static_agent_proxy_uses_managed_blocking_and_named_lifetime_tasks():
@@ -422,14 +635,7 @@ def test_static_agent_proxy_uses_managed_blocking_and_named_lifetime_tasks():
         assert any(keyword.arg == "name" for keyword in call.keywords)
 
 
-def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
-    """The placeholder is truthy, so persisting it passed every `if ip:` reader.
-
-    A stored placeholder satisfied the `status == "ready" and vm_ip` fast path,
-    failed the health probe, and drove `_ensure_vm_running(health_failed=True)`
-    into hard-resetting a healthy VM — which wrote the same placeholder back.
-    No writer repaired the field, so the user never recovered.
-    """
+def test_unresolved_vm_ip_is_not_treated_as_dialable(agent_proxy):
     assert not agent_proxy._is_usable_vm_ip(agent_proxy.UNRESOLVED_VM_IP)
     assert not agent_proxy._is_usable_vm_ip("")
     assert not agent_proxy._is_usable_vm_ip(None)
@@ -438,60 +644,9 @@ def test_unresolved_vm_ip_is_never_persisted_as_a_dialable_address(agent_proxy):
     # The placeholder is truthy — this is the property that made it dangerous.
     assert bool(agent_proxy.UNRESOLVED_VM_IP)
 
-    with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", agent_proxy.UNRESOLVED_VM_IP, "ready")
-    with pytest.raises(ValueError):
-        agent_proxy._update_firestore_vm("uid-1", "vm-1", "token-1", None, "ready")
-
-
-@pytest.mark.asyncio
-async def test_running_vm_resolves_ip_without_starting_again(agent_proxy, monkeypatch):
-    class Response:
-        status_code = 200
-
-        def json(self):
-            return {
-                "status": "RUNNING",
-                "networkInterfaces": [{"accessConfigs": [{"natIP": "34.121.9.4"}]}],
-            }
-
-    class Client:
-        def __init__(self):
-            self.post_calls = 0
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, _exc_type, _exc, _traceback):
-            return False
-
-        async def get(self, _url, *, headers):
-            assert headers == {"Authorization": "Bearer test-token"}
-            return Response()
-
-        async def post(self, *_args, **_kwargs):
-            self.post_calls += 1
-            return Response()
-
-    client = Client()
-
-    async def direct_run_blocking(_executor, func, *args, **kwargs):
-        return func(*args, **kwargs)
-
-    monkeypatch.setattr(agent_proxy, "_get_gce_access_token", lambda: "test-token")
-    monkeypatch.setattr(agent_proxy, "run_blocking", direct_run_blocking)
-    monkeypatch.setattr(agent_proxy.httpx, "AsyncClient", lambda **_kwargs: client)
-
-    assert await agent_proxy._start_vm_and_wait("omi-agent-test", "us-central1-a") == "34.121.9.4"
-    assert client.post_calls == 0
-
 
 def test_agent_proxy_never_assigns_the_unresolved_ip_placeholder():
-    """`_start_vm_and_wait` must raise rather than return a sentinel address.
-
-    Both callers already route an exception to `status: "error"`, so raising
-    reuses the existing failure path instead of inventing a second one.
-    """
+    """Only the named legacy sentinel may use the string ``unknown``."""
     source = (AGENT_PROXY_DIR / "main.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
 

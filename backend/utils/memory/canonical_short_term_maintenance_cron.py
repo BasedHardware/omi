@@ -27,6 +27,7 @@ from utils.memory.canonical_required_processing import (
     ProcessedRequiredMemory,
     invoke_required_memory_processor,
 )
+from utils.memory.canonical_cohort_lifecycle import run_canonical_cohort_lifecycle
 from utils.memory.memory_system import list_canonical_cohort_uids
 from utils.memory.short_term_promotion import (
     CanonicalShortTermMaintenanceReport,
@@ -111,6 +112,9 @@ class CanonicalShortTermMaintenanceCronSummary:
     outbox_ack_failures_total: int = 0
     graph_enriched_total: int = 0
     graph_enrichment_blocked_total: int = 0
+    lifecycle_write_enrolled_total: int = 0
+    lifecycle_backfill_read_ready_total: int = 0
+    lifecycle_generation_reconciled_total: int = 0
     errors: list[str] = field(default_factory=_empty_errors)
 
 
@@ -164,8 +168,17 @@ def run_canonical_short_term_maintenance_for_cohort(
 
     client = db_client if db_client is not None else default_db_client
     uids = list_canonical_cohort_uids()
-
     summary = CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=len(uids))
+    try:
+        lifecycle = run_canonical_cohort_lifecycle(db_client=client)
+    except Exception as exc:
+        message = f"canonical_cohort_lifecycle:{type(exc).__name__}"
+        logger.warning("canonical_short_term_maintenance_cron: %s", message)
+        summary.errors.append(message)
+    else:
+        summary.lifecycle_write_enrolled_total = len(lifecycle.write_enrolled_uids)
+        summary.lifecycle_backfill_read_ready_total = lifecycle.backfill.summary.read_ready_count
+        summary.lifecycle_generation_reconciled_total = len(lifecycle.generation_reconciled_uids)
     logger.info(
         "canonical_short_term_maintenance_cron: start run_id=%s user_count=%d",
         effective_run_id,

@@ -9,6 +9,11 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   case conversations
   case brainMap
 
+  enum Presentation: Equatable {
+    case standaloneConversations
+    case memoryHub
+  }
+
   var id: Int { rawValue }
 
   var title: String {
@@ -49,6 +54,19 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
       memoryDestinationRawValue = destination.rawValue
     }
     selectedIndex = item.rawValue
+  }
+
+  /// The legacy sidebar has separate Conversations and Memories destinations.
+  /// The modern top bar uses the same rail index as a Memory hub, so keep that
+  /// shared index from replacing the old standalone Conversations page.
+  static func presentation(
+    for sidebarItem: SidebarNavItem,
+    useLegacyHomeDesign: Bool
+  ) -> Presentation {
+    if useLegacyHomeDesign, sidebarItem == .conversations {
+      return .standaloneConversations
+    }
+    return .memoryHub
   }
 }
 

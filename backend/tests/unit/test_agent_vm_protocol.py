@@ -1,6 +1,4 @@
 import asyncio
-import base64
-import hashlib
 import importlib
 import json
 import os
@@ -9,13 +7,11 @@ import sys
 import types
 from pathlib import Path
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICE = ROOT / "agent_vm"
+STARTUP = SERVICE / "startup.sh"
 
 
 def load_app(tmp_path: Path):
@@ -25,34 +21,6 @@ def load_app(tmp_path: Path):
     sys.modules.pop("main", None)
     module = importlib.import_module("main")
     return module.app, module
-
-
-def test_signed_update_manifest_requires_valid_signature_and_content_hash(tmp_path: Path, monkeypatch) -> None:
-    _, module = load_app(tmp_path)
-    source = b"print('verified update')\n"
-    manifest = json.dumps(
-        {
-            "path": "main.py",
-            "sha256": hashlib.sha256(source).hexdigest(),
-            "version": "2026.07.28.1",
-        },
-        separators=(",", ":"),
-    ).encode()
-    signing_key = Ed25519PrivateKey.generate()
-    monkeypatch.setenv(
-        "AGENT_UPDATE_ED25519_PUBLIC_KEY",
-        base64.b64encode(
-            signing_key.public_key().public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw,
-            )
-        ).decode(),
-    )
-
-    assert module.validate_signed_update_manifest(manifest, signing_key.sign(manifest), source) == {
-        "path": "main.py",
-        "version": "2026.07.28.1",
-    }
 
 
 def test_health_requires_vm_token_and_reports_database_state(tmp_path: Path) -> None:
@@ -75,6 +43,14 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/sync", json={"table": "screenshots", "rows": [{"id": "1"}]}).status_code == 401
         assert client.post("/auth?token=test-token", json={}).status_code == 400
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
+
+
+def test_startup_preserves_the_runtime_backend_default_when_override_is_empty():
+    source = STARTUP.read_text(encoding="utf-8")
+
+    assert 'if [[ -n "$backend_url" ]]; then' in source
+    assert 'backend_env=(--env "BACKEND_URL=$backend_url")' in source
+    assert '--env BACKEND_URL="$backend_url"' not in source
 
 
 def test_websocket_prewarm_query_and_stop_use_one_connection_session(tmp_path: Path, monkeypatch) -> None:

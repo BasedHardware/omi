@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from pathlib import Path
 
 import httpx
@@ -191,7 +192,7 @@ def test_instance_address_parser_never_returns_unknown_placeholder():
 
 
 @pytest.mark.asyncio
-async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
+async def test_status_requests_reconciler_start_for_stopped_vm(monkeypatch):
     vm = {
         "vmName": "omi-agent-user",
         "zone": "us-central1-a",
@@ -200,7 +201,7 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
         "status": "ready",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    writes = []
+    requests = []
 
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -209,20 +210,73 @@ async def test_status_restarts_stopped_vm_and_returns_provisioning(monkeypatch):
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *args: _stopped_instance())
-    monkeypatch.setattr(desktop_agent_vm, "_service_account", lambda: "service-account")
-    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: writes.append(args) or True)
+    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
     tasks = BackgroundTasks()
 
     response = await desktop_agent_vm.get_agent_status(tasks, "user")
 
-    assert response.status == "provisioning"
+    assert response.status == "updating"
     assert response.ip is None
-    assert writes[0][3] == "provisioning"
-    assert len(tasks.tasks) == 1
+    assert requests == [("user", "omi-agent-user", "omi-token")]
+    assert not tasks.tasks
 
 
 @pytest.mark.asyncio
-async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch):
+async def test_status_does_not_restart_a_vm_while_the_reconciler_lease_is_active(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-user",
+        "zone": "us-central1-a",
+        "ip": "1.2.3.4",
+        "authToken": "omi-token",
+        "status": "ready",
+        "createdAt": "2026-07-26T00:00:00Z",
+        "reconcile": {"lease": {"owner": "reconciler", "expiresAt": time.time() + 60}},
+    }
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *_args: pytest.fail("status must not inspect GCE"))
+
+    tasks = BackgroundTasks()
+    response = await desktop_agent_vm.get_agent_status(tasks, "user")
+
+    assert response.status == "updating"
+    assert response.ip is None
+    assert not tasks.tasks
+
+
+@pytest.mark.asyncio
+async def test_provision_reports_updating_without_overriding_a_reconciler_request(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-user",
+        "authToken": "omi-token",
+        "status": "ready",
+        "reconcile": {"startRequested": True},
+    }
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_claim_vm_if_allowed", lambda *_args: (vm, False))
+    monkeypatch.setattr(desktop_agent_vm, "_agent_disabled", lambda: False)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda _project: "image")
+    monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
+    monkeypatch.setattr(desktop_agent_vm, "_service_account", lambda: "service-account")
+
+    response = await desktop_agent_vm.provision_agent_vm(BackgroundTasks(), "user")
+
+    assert response.status == "exists"
+    assert response.agent_status == "updating"
+    assert response.ip is None
+
+
+@pytest.mark.asyncio
+async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkeypatch):
     vm = {
         "vmName": "omi-agent-stale",
         "zone": "us-central1-a",
@@ -231,7 +285,6 @@ async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch
         "status": "ready",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    clears = []
 
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -243,16 +296,38 @@ async def test_status_clears_stale_gce_pointer_with_current_vm_fence(monkeypatch
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
-    monkeypatch.setattr(desktop_agent_vm, "_delete_vm_if_current", lambda *args: clears.append(args) or True)
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
-    assert response is None
-    assert clears == [("uid", "omi-agent-stale", "old-token")]
+    assert response.status == "updating"
+    assert response.ip is None
 
 
 @pytest.mark.asyncio
-async def test_status_deletes_running_vm_without_usable_ip_and_cas_clears_pointer(monkeypatch):
+async def test_status_does_not_probe_a_missing_record_while_reconciler_cleanup_is_pending(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-missing",
+        "zone": "us-central1-a",
+        "authToken": "current-token",
+        "status": "ready",
+        "reconcile": {"state": "missing", "missingSince": time.time() - 60},
+    }
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *_args: pytest.fail("reconciler owns missing records"))
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response.status == "updating"
+    assert response.ip is None
+
+
+@pytest.mark.asyncio
+async def test_status_defers_running_vm_without_usable_ip_to_reconciler(monkeypatch):
     vm = {
         "vmName": "omi-agent-unreachable",
         "zone": "us-central1-a",
@@ -261,8 +336,7 @@ async def test_status_deletes_running_vm_without_usable_ip_and_cas_clears_pointe
         "status": "error",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    gce_deletes = []
-    pointer_clears = []
+    requests = []
 
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -270,25 +344,17 @@ async def test_status_deletes_running_vm_without_usable_ip_and_cas_clears_pointe
     async def running_without_ip(*_args):
         return "RUNNING", {"networkInterfaces": []}
 
-    async def delete_vm(*args):
-        gce_deletes.append(args)
-
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", running_without_ip)
-    monkeypatch.setattr(desktop_agent_vm, "_delete_vm", delete_vm)
-    monkeypatch.setattr(
-        desktop_agent_vm,
-        "_delete_vm_if_current",
-        lambda *args: pointer_clears.append(args) or True,
-    )
+    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
-    assert response is None
-    assert gce_deletes == [("project", "omi-agent-unreachable", "us-central1-a")]
-    assert pointer_clears == [("uid", "omi-agent-unreachable", "current-token")]
+    assert response.status == "updating"
+    assert response.ip is None
+    assert requests == [("uid", "omi-agent-unreachable", "current-token")]
 
 
 @pytest.mark.asyncio
@@ -325,6 +391,11 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
     monkeypatch.setattr(desktop_agent_vm, "_operation", fake_operation)
     monkeypatch.setattr(desktop_agent_vm, "_instance", fake_instance)
     monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", lambda *_args: _async_result(None))
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
 
     ip = await desktop_agent_vm._create_vm(
         "project",
@@ -345,74 +416,251 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
     ]
 
 
-@pytest.mark.asyncio
-async def test_restart_sets_bootstrap_identity_and_waits_for_health(monkeypatch):
+def test_stop_broker_rejects_identity_from_the_wrong_project_or_service_account(monkeypatch):
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+
+    with pytest.raises(ValueError, match="outside the broker scope"):
+        desktop_agent_vm._compute_identity_fields(
+            {
+                "email": "runtime@project.iam.gserviceaccount.com",
+                "email_verified": True,
+                "google": {
+                    "compute_engine": {
+                        "project_id": "other-project",
+                        "instance_name": "omi-agent-user",
+                        "instance_id": "123456789",
+                        "zone": "us-central1-a",
+                    }
+                },
+            }
+        )
+
+    with pytest.raises(ValueError, match="runtime identity"):
+        desktop_agent_vm._compute_identity_fields(
+            {
+                "email": "other@project.iam.gserviceaccount.com",
+                "email_verified": True,
+                "google": {
+                    "compute_engine": {
+                        "project_id": "project",
+                        "instance_name": "omi-agent-user",
+                        "instance_id": "123456789",
+                        "zone": "us-central1-a",
+                    }
+                },
+            }
+        )
+
+
+def test_stop_broker_reads_the_full_nested_compute_identity(monkeypatch):
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+
+    assert desktop_agent_vm._compute_identity_fields(
+        {
+            "email": "runtime@project.iam.gserviceaccount.com",
+            "email_verified": True,
+            "google": {
+                "compute_engine": {
+                    "project_id": "project",
+                    "instance_name": "omi-agent-user",
+                    "instance_id": 123456789,
+                    "zone": "us-central1-a",
+                    "instance_creation_timestamp": 1785900000,
+                }
+            },
+        }
+    ) == ("project", "us-central1-a", "omi-agent-user", "runtime@project.iam.gserviceaccount.com", "123456789")
+
+
+def test_stop_broker_owner_lookup_is_a_bounded_indexed_query(monkeypatch):
     calls = []
+    snapshot = type(
+        "Snapshot",
+        (),
+        {
+            "id": "uid",
+            "to_dict": lambda self: {"agentVm": {"vmName": "omi-agent-user", "zone": "us-central1-a"}},
+        },
+    )()
 
-    async def set_service_account(*args):
-        calls.append(("service-account", args))
+    class Query:
+        def where(self, *, filter):
+            calls.append(("where", filter.field_path, filter.op_string, filter.value))
+            return self
 
-    async def start_vm(*args):
-        calls.append(("start", args))
-        return "203.0.113.10"
+        def limit(self, count):
+            calls.append(("limit", count))
+            return self
 
-    async def wait_for_ready(*args):
-        calls.append(("health", args))
+        def stream(self):
+            return iter([snapshot])
 
-    async def run_blocking(_, function, *args):
+    class Firestore:
+        def collection(self, name):
+            calls.append(("collection", name))
+            return Query()
+
+    monkeypatch.setattr(desktop_agent_vm, "get_firestore_client", Firestore)
+
+    uid, vm = desktop_agent_vm._find_vm_owner("omi-agent-user") or (None, None)
+
+    assert uid == "uid"
+    assert vm["vmName"] == "omi-agent-user"
+    assert calls == [
+        ("collection", "users"),
+        ("where", "agentVm.vmName", "==", "omi-agent-user"),
+        ("limit", 2),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stop_broker_binds_token_zone_and_instance_id_to_owner_and_runtime(monkeypatch):
+    class Request:
+        headers = {"authorization": "Bearer identity-token"}
+        client = None
+
+    claims = {
+        "email": "runtime@project.iam.gserviceaccount.com",
+        "email_verified": True,
+        "google": {
+            "compute_engine": {
+                "project_id": "project",
+                "instance_name": "omi-agent-user",
+                "instance_id": "123456789",
+                "zone": "us-central1-a",
+            }
+        },
+    }
+
+    async def direct_run_blocking(_executor, function, *args):
         return function(*args)
 
-    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_agent_vm, "_set_service_account", set_service_account)
-    monkeypatch.setattr(desktop_agent_vm, "_start_vm", start_vm)
-    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", wait_for_ready)
-    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: calls.append(("ready", args)))
-
-    await desktop_agent_vm._restart_background(
-        "uid",
-        "project",
-        {"vmName": "omi-agent-user", "zone": "zone", "authToken": "omi-token"},
-        "agent-bootstrap@example.iam.gserviceaccount.com",
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_stop_broker_rate_allowed", lambda _request: True)
+    monkeypatch.setattr(desktop_agent_vm, "_verify_agent_vm_identity", lambda _token: claims)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_find_vm_owner",
+        lambda _name: (
+            "uid",
+            {"vmName": "omi-agent-user", "zone": "us-central1-b", "authToken": "owner-token"},
+        ),
     )
 
-    assert [name for name, _ in calls] == ["service-account", "start", "health", "ready"]
+    with pytest.raises(HTTPException, match="zone does not match") as zone_error:
+        await desktop_agent_vm.stop_self(Request())
+    assert zone_error.value.status_code == 403
+
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_find_vm_owner",
+        lambda _name: (
+            "uid",
+            {"vmName": "omi-agent-user", "zone": "us-central1-a", "authToken": "owner-token"},
+        ),
+    )
+    monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: True)
+    monkeypatch.setattr(desktop_agent_vm, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(desktop_agent_vm, "update_vm_reconcile", lambda *_args: True)
+
+    async def wrong_instance(*_args):
+        return "RUNNING", {"id": "987654321", "name": "omi-agent-user"}
+
+    monkeypatch.setattr(desktop_agent_vm, "_instance", wrong_instance)
+    with pytest.raises(HTTPException, match="runtime identity does not match") as instance_error:
+        await desktop_agent_vm.stop_self(Request())
+    assert instance_error.value.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_rebootstrap_stops_legacy_running_vm_before_identity_migration(monkeypatch):
-    calls = []
+async def test_stop_broker_never_stops_a_vm_while_reconciliation_is_requested(monkeypatch):
+    class Request:
+        headers = {"authorization": "Bearer identity-token"}
+        client = None
 
-    async def stop_vm(*args):
-        calls.append(("stop", args))
+    claims = {
+        "email": "runtime@project.iam.gserviceaccount.com",
+        "email_verified": True,
+        "google": {
+            "compute_engine": {
+                "project_id": "project",
+                "instance_name": "omi-agent-user",
+                "instance_id": "123456789",
+                "zone": "us-central1-a",
+            }
+        },
+    }
 
-    async def set_service_account(*args):
-        calls.append(("service-account", args))
-
-    async def start_vm(*args):
-        calls.append(("start", args))
-        return "203.0.113.10"
-
-    async def wait_for_ready(*args):
-        calls.append(("health", args))
-
-    async def run_blocking(_, function, *args):
+    async def direct_run_blocking(_executor, function, *args):
         return function(*args)
 
-    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_agent_vm, "_stop_vm", stop_vm)
-    monkeypatch.setattr(desktop_agent_vm, "_set_service_account", set_service_account)
-    monkeypatch.setattr(desktop_agent_vm, "_start_vm", start_vm)
-    monkeypatch.setattr(desktop_agent_vm, "_wait_for_vm_ready", wait_for_ready)
-    monkeypatch.setattr(desktop_agent_vm, "_set_vm_if_current", lambda *args: calls.append(("ready", args)))
-
-    await desktop_agent_vm._rebootstrap_background(
-        "uid",
-        "project",
-        {"vmName": "omi-agent-user", "zone": "zone", "authToken": "omi-token"},
-        "agent-bootstrap@example.iam.gserviceaccount.com",
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", direct_run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_stop_broker_rate_allowed", lambda _request: True)
+    monkeypatch.setattr(desktop_agent_vm, "_verify_agent_vm_identity", lambda _token: claims)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setenv("GCE_RUNTIME_SERVICE_ACCOUNT", "runtime@project.iam.gserviceaccount.com")
+    monkeypatch.setattr(
+        desktop_agent_vm,
+        "_find_vm_owner",
+        lambda _name: (
+            "uid",
+            {
+                "vmName": "omi-agent-user",
+                "zone": "us-central1-a",
+                "authToken": "owner-token",
+                "reconcile": {"startRequested": True},
+            },
+        ),
+    )
+    monkeypatch.setattr(desktop_agent_vm, "_vm_lifecycle_allowed", lambda *_args: True)
+    monkeypatch.setattr(
+        desktop_agent_vm, "_instance", lambda *_args: pytest.fail("stop must defer before provider access")
     )
 
-    assert [name for name, _ in calls] == ["stop", "service-account", "start", "health", "ready"]
+    assert await desktop_agent_vm.stop_self(Request()) == {"status": "updating", "vmName": "omi-agent-user"}
+
+
+def test_stop_broker_rate_limit_is_bounded(monkeypatch):
+    class Client:
+        host = "198.51.100.10"
+
+    class Request:
+        client = Client()
+
+    desktop_agent_vm._stop_broker_attempts.clear()
+    monkeypatch.setattr(desktop_agent_vm, "_STOP_BROKER_RATE_LIMIT", 2)
+    assert desktop_agent_vm._stop_broker_rate_allowed(Request())
+    assert desktop_agent_vm._stop_broker_rate_allowed(Request())
+    assert not desktop_agent_vm._stop_broker_rate_allowed(Request())
+
+
+def test_new_vm_startup_metadata_contains_release_checksum_and_boot_image(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_STARTUP_URI", "https://storage.googleapis.com/bucket/releases/a/startup.sh")
+    monkeypatch.setenv("AGENT_VM_STARTUP_SHA256", "c" * 64)
+    monkeypatch.setenv("AGENT_VM_RELEASE_ID", "a" * 40)
+    monkeypatch.setenv("AGENT_VM_IMAGE_DIGEST", "gcr.io/project/agent-vm@sha256:" + "b" * 64)
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
+
+    metadata = desktop_agent_vm._agent_vm_startup_metadata("bucket")
+
+    assert "sha256sum /tmp/omi-startup.sh" in metadata["startup-script"]
+    assert metadata["omi-agent-startup-sha256"] == "c" * 64
+    assert metadata["omi-agent-boot-image"].endswith("/omi-agent-20260805")
+
+
+def test_new_vm_requires_an_immutable_boot_image_and_complete_release_contract(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/family/omi-agent")
+    with pytest.raises(RuntimeError, match="exact immutable image"):
+        desktop_agent_vm._source_image("project")
+
+    monkeypatch.setenv("AGENT_VM_BOOT_IMAGE", "projects/project/global/images/omi-agent-20260805")
+    monkeypatch.delenv("AGENT_VM_STARTUP_SHA256", raising=False)
+    with pytest.raises(RuntimeError, match="complete immutable release contract"):
+        desktop_agent_vm._agent_vm_startup_metadata("bucket")
 
 
 @pytest.mark.asyncio
