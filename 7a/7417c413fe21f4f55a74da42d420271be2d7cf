@@ -1,0 +1,49 @@
+desktop/lock-in/Sources/LockInApp/Model/TodayProvider.swift
+  s_acebfdccb4f1d0::t_b71591b499affe 32-35
+desktop/lock-in/Sources/LockInScoring/ModelScorer.swift
+  s_acebfdccb4f1d0::t_686e86b3037d12 328-329
+  s_acebfdccb4f1d0::t_e6a374a6f02848 342-344
+  s_acebfdccb4f1d0::t_2744720e07fd6e 83-111,147
+  s_acebfdccb4f1d0::t_9b392c26690c26 290-310,319-320
+  s_acebfdccb4f1d0::t_cb219bf36ab788 341
+  s_acebfdccb4f1d0::t_ae1df3431c9076 50-57,66-70
+  s_acebfdccb4f1d0::t_d1e8a785b1ceeb 146
+desktop/lock-in/Sources/LockInCore/Models.swift
+  s_acebfdccb4f1d0::t_b7b02445fc2849 158-170
+desktop/lock-in/Sources/LockInScoring/ActivityLegibility.swift
+  s_acebfdccb4f1d0::t_cf279d56dea3e9 1-74
+desktop/lock-in/Sources/LockInApp/Model/DayWorker.swift
+  s_acebfdccb4f1d0::t_c4bdd11516cb86 111,136,139-143,165,189,223,226-229,239,251-252
+desktop/lock-in/Sources/LockInApp/Views/ScoreDetail/ScoreDetailModel.swift
+  s_acebfdccb4f1d0::t_8798b0bad16721 71
+desktop/lock-in/Sources/LockInCore/Score.swift
+  s_acebfdccb4f1d0::t_1ebc8754eb10ee 191-192,195,202-210,212,221,235-236,270,275
+desktop/lock-in/Sources/LockInScoring/RulesScorer.swift
+  s_acebfdccb4f1d0::t_6026ca4f706e3e 91,97,101-111,258-273
+desktop/lock-in/Sources/LockInScoring/Scorer.swift
+  s_acebfdccb4f1d0::t_9c240a5b42dd0b 86-92,104-106
+desktop/lock-in/Tests/LockInAppTests/TodayLoopTests.swift
+  s_acebfdccb4f1d0::t_533181686f4b32 281-311,323
+desktop/lock-in/Tests/LockInCoreTests/ScoreTests.swift
+  s_acebfdccb4f1d0::t_8c9f21a6d59a6b 40-111
+desktop/lock-in/Tests/LockInScoringTests/RulesScorerTests.swift
+  s_acebfdccb4f1d0::t_c313a97897d942 25-34,57,79,94-95,105,118,121,134,151,153,164,180,184,202,205,221,224,242,244
+desktop/lock-in/Tests/LockInScoringTests/ScorerTests.swift
+  s_acebfdccb4f1d0::t_2c092b266115cc 29,168-292,306-307,320-323,342-345,354-365,367-371,373-382,386-392,394-408,425-431,434-548,555,557-560,562,565-578,587-591,593-604,607-617
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7a7417c413fe21f4f55a74da42d420271be2d7cf",
+  "prompts": {},
+  "sessions": {
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
