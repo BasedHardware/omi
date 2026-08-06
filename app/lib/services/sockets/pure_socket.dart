@@ -58,9 +58,11 @@ class PureSocket implements IPureSocket {
 
   String url;
   final SocketHeadersProvider _headersProvider;
+  final Map<String, String> _extraHeaders;
 
-  PureSocket(this.url, {SocketHeadersProvider? headersProvider})
-      : _headersProvider = headersProvider ?? (() => buildHeaders(requireAuthCheck: true));
+  PureSocket(this.url, {SocketHeadersProvider? headersProvider, Map<String, String> extraHeaders = const {}})
+      : _headersProvider = headersProvider ?? (() async => buildHeaders(requireAuthCheck: true)),
+        _extraHeaders = Map.unmodifiable(extraHeaders);
 
   @override
   void setListener(IPureSocketListener listener) {
@@ -76,7 +78,7 @@ class PureSocket implements IPureSocket {
     Logger.debug("request wss $url");
     final Map<String, String> headers;
     try {
-      headers = await _headersProvider();
+      headers = {...await _headersProvider(), ..._extraHeaders};
     } on AuthTokenUnavailableException catch (e) {
       Logger.debug('[Socket] Connect blocked before send: ${e.result.runtimeType}');
       _status = PureSocketStatus.notConnected;

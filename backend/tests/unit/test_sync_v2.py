@@ -1325,6 +1325,7 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -1367,6 +1368,12 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         # Keep the outcome contract real; the coordinator tests exercise its
         # enum values while every heavyweight provider dependency stays stubbed.
@@ -3030,6 +3037,7 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.geolocation',
             'models.sync_contract',
             'models.sync_audio',
             'models.transcript_segment',
@@ -3072,6 +3080,12 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         saved_modules['utils'] = prior_utils
         saved_modules['utils.sync'] = prior_utils_sync

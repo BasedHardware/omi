@@ -67,6 +67,7 @@ ALLOWED_COMPONENTS = frozenset(
         'silent_mic',
         'firestore_read',
         'agent_tools',
+        'conversation_finalization',
         'other',
     }
 )

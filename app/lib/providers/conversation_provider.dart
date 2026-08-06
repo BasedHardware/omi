@@ -93,6 +93,14 @@ class ConversationProvider extends ChangeNotifier {
   bool get isAwaitingInitialFetchRetry => _initialFetchRetryTimer?.isActive ?? false;
   bool get hasActiveSearch => previousQuery.isNotEmpty || selectedSpeakerId != null;
 
+  /// The exact ordered set currently rendered by the conversation groups.
+  ///
+  /// Consumers that mirror the list (for example the map) must use this
+  /// boundary instead of [conversations], because grouping already applies
+  /// text/speaker search and every client-side visibility filter.
+  List<ServerConversation> get displayedConversations =>
+      List<ServerConversation>.unmodifiable(groupedConversations.values.expand((group) => group));
+
   final ConversationListFetcher? _conversationListFetcher;
   final DailySummariesChecker? _dailySummariesChecker;
   final ConversationSearchFetcher _conversationSearchFetcher;

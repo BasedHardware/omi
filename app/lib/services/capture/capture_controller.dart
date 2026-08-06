@@ -18,6 +18,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -29,6 +30,7 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
@@ -71,6 +73,8 @@ class CaptureController extends ChangeNotifier
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
 
   final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
+  Geolocation? _sessionGeolocation;
+  int _sessionGeolocationGeneration = 0;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -666,6 +670,7 @@ class CaptureController extends ChangeNotifier
           force: force,
           source: source,
           customSttConfig: effectiveConfig,
+          geolocation: _sessionGeolocation,
         );
     if (_socket == null) {
       _startKeepAliveServices();
@@ -1069,16 +1074,19 @@ class CaptureController extends ChangeNotifier
 
     await SharedPreferencesUtil().saveString(
       'nativeBleStreamConfig',
-      jsonEncode({
-        'deviceId': device.id,
-        'codec': codec.toString(),
-        'sampleRate': mapCodecToSampleRate(codec),
-        'source': _getConversationSourceFromDevice(),
-        'apiBaseUrl': Env.apiBaseUrl ?? 'https://api.omiapi.com/',
-        'serviceUuid': audioTarget.key,
-        'characteristicUuid': audioTarget.value,
-        'deviceType': device.type.name,
-      }),
+      jsonEncode(
+        buildNativeBleStreamConfig(
+          deviceId: device.id,
+          codec: codec.toString(),
+          sampleRate: mapCodecToSampleRate(codec),
+          source: _getConversationSourceFromDevice(),
+          apiBaseUrl: Env.apiBaseUrl ?? 'https://api.omiapi.com/',
+          serviceUuid: audioTarget.key,
+          characteristicUuid: audioTarget.value,
+          deviceType: device.type.name,
+          geolocation: _sessionGeolocation,
+        ),
+      ),
     );
     // Batch (offline) capture: tell the native writer where to store .bin files
     // and ensure the native realtime socket is disabled while batch mode is on
@@ -1326,11 +1334,29 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<void> _captureSessionLocation() async {
+    final generation = ++_sessionGeolocationGeneration;
+    // Do not let a prior session's snapshot cover the interval while the new
+    // capture is waiting on the location service.
+    _sessionGeolocation = null;
+    _wal.getSyncs().phone.setSessionGeolocation(null);
+    final geolocation = await _conversationLocationCapture.captureAndUpload();
+    if (generation != _sessionGeolocationGeneration) return;
+    _sessionGeolocation = geolocation;
+    _wal.getSyncs().phone.setSessionGeolocation(geolocation);
+  }
+
+  void _clearSessionLocation() {
+    _sessionGeolocationGeneration++;
+    _sessionGeolocation = null;
+    _wal.getSyncs().phone.setSessionGeolocation(null);
+  }
+
   streamRecording() async {
-    // The backend snapshots its cached location when finalizing a conversation.
-    // Complete this bounded update before any live or batch capture path can
-    // create/finalize that conversation.
-    await _conversationLocationCapture.captureAndUpload();
+    // Drain any tail from the preceding phone session before replacing its
+    // location. A stale session snapshot must never be applied to a later WAL.
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+    _clearSessionLocation();
 
     // Mode is fixed for the whole session at start. On iOS and Android the phone
     // mic can capture Transcribe Later (batch) audio: explicitly when the user
@@ -1350,9 +1376,15 @@ class CaptureController extends ChangeNotifier
     final micPermission = await Permission.microphone.request();
     if (!micPermission.isGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic');
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       return;
     }
+
+    // Capture only after microphone permission is granted. This keeps a
+    // denied microphone request from uploading a location for a recording that
+    // never started.
+    await _captureSessionLocation();
 
     // prepare
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
@@ -1400,6 +1432,7 @@ class CaptureController extends ChangeNotifier
       Logger.error('[CaptureProvider] phone mic start failed: $e\n$st');
       _activeSource = null;
       _phoneMicWalActive = false;
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       await _socket?.stop(reason: 'phone mic start failed');
     }
@@ -1415,6 +1448,7 @@ class CaptureController extends ChangeNotifier
       _endOfflineSession();
       await _cleanupCurrentState();
       _phoneMicBatchActive = false;
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       return;
     }
@@ -1434,6 +1468,8 @@ class CaptureController extends ChangeNotifier
     await _cleanupCurrentState(disableNativeBackground: true);
     _micInterrupted = false;
     ServiceManager.instance().phoneMic.stop();
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+    _clearSessionLocation();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
   }
@@ -1447,17 +1483,29 @@ class CaptureController extends ChangeNotifier
     final micPermission = await Permission.microphone.request();
     if (!micPermission.isGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
+      _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
       return;
     }
 
     await _cleanupCurrentState();
 
+    // The compatibility upload is intentionally best-effort, but the snapshot
+    // still belongs to this recording session and must be captured after the
+    // permission gate above.
+    await _captureSessionLocation();
+
     // batchAudioDir may never have been written if batch was chosen via the
     // offline auto-switch (setBatchMode was never called with batch on).
     final docs = await getApplicationDocumentsDirectory();
     await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
     await SharedPreferencesUtil().saveBool('phoneBatchAuto', auto);
+    final geolocation = _sessionGeolocation;
+    if (geolocation == null) {
+      await SharedPreferencesUtil().remove('phoneBatchGeolocation');
+    } else {
+      await SharedPreferencesUtil().saveString('phoneBatchGeolocation', jsonEncode(geolocation.toJson()));
+    }
     if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
     if (SharedPreferencesUtil().batchCutRequested) SharedPreferencesUtil().batchCutRequested = false;
 
@@ -1484,6 +1532,7 @@ class CaptureController extends ChangeNotifier
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
       _phoneMicBatchActive = false;
+      _clearSessionLocation();
       _endOfflineSession();
       updateRecordingState(RecordingState.stop);
     }
@@ -1527,7 +1576,11 @@ class CaptureController extends ChangeNotifier
 
     // Ensure even very short device recordings have a location in Redis before
     // the backend is able to finalize their conversation.
-    await _conversationLocationCapture.captureAndUpload();
+    // Drain the old session's in-memory WAL tail before replacing its location
+    // snapshot; otherwise those frames could be flushed under the next session's
+    // location.
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+    await _captureSessionLocation();
 
     await _resetStateVariables();
     await _resetState();
@@ -1539,6 +1592,8 @@ class CaptureController extends ChangeNotifier
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
     await _cleanupCurrentState(disableNativeBackground: true);
+    await _wal.getSyncs().phone.finalizeCurrentSession();
+    _clearSessionLocation();
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
@@ -1888,6 +1943,7 @@ class CaptureController extends ChangeNotifier
     // Force-drain tail buffer before clearing state
     final phoneSync = _wal.getSyncs().phone;
     await phoneSync.finalizeCurrentSession();
+    _clearSessionLocation();
 
     _resetStateVariables();
     externalActions.addProcessingConversation(
@@ -1920,6 +1976,7 @@ class CaptureController extends ChangeNotifier
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
   /// Called from synchronous onMessageEventReceived — fire-and-forget async.
   Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
+    final locationGeneration = _sessionGeolocationGeneration;
     try {
       final phoneSync = _wal.getSyncs().phone;
       await phoneSync.finalizeCurrentSession();
@@ -1928,6 +1985,10 @@ class CaptureController extends ChangeNotifier
       }
     } catch (e) {
       Logger.debug('_finalizeAndStampSession error: $e');
+    } finally {
+      if (locationGeneration == _sessionGeolocationGeneration) {
+        _clearSessionLocation();
+      }
     }
   }
 

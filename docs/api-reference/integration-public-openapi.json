@@ -846,6 +846,18 @@
       },
       "Geolocation": {
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -856,6 +868,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [

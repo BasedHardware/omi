@@ -566,6 +566,7 @@ _STUB_MODULES = [
     'models',
     'models.conversation',
     'models.conversation_enums',
+    'models.geolocation',
     'models.sync_audio',
     'models.transcript_segment',
     'database._client',
@@ -620,6 +621,12 @@ class TestProcessSegmentReal:
         for mod_name in _STUB_MODULES:
             sys.modules[mod_name] = ModuleType(mod_name)
         sys.modules['models'].__path__ = []
+
+        class _Geolocation:
+            def model_dump(self):
+                return {}
+
+        sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()

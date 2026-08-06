@@ -568,6 +568,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   bool claimLiveCapture = false,
+  Geolocation? geolocation,
 }) async {
   String? captureManifest;
   if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
@@ -580,7 +581,10 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   var response = await makeMultipartApiCall(
     url: url,
     files: files,
-    headers: {if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest},
+    headers: {
+      if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
+      if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+    },
     onUploadProgress: onUploadProgress,
   );
 
