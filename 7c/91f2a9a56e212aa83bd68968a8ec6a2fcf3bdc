@@ -1,0 +1,44 @@
+desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
+  s_569f1df936cc22::t_e7eaa857f98f50 22-24,26-30
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_569f1df936cc22::t_d514b24872c004 102-106,109
+  s_569f1df936cc22::t_ff309473d0069f 762,764
+  s_569f1df936cc22::t_0fde7ec3696e31 1071-1074,1076
+  s_569f1df936cc22::t_adf08d3228a89b 612-613,615-617,619-624,626
+  s_569f1df936cc22::t_328ca444677e0a 1228-1233
+  s_569f1df936cc22::t_26f060002df81c 1533
+  s_569f1df936cc22::t_430c5b69fd8a08 120-122,124,131
+  s_569f1df936cc22::t_f47cd1b707e1cc 625
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_569f1df936cc22::t_d7f999d74fe0ac 120-195
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_569f1df936cc22::t_e5ea1931028a01 2,36-51,62-72,85-113,116-121,127-129
+desktop/macos/Desktop/Sources/Theme/WindowGlass.swift
+  s_569f1df936cc22::t_afe49d7d1f941b 71
+  s_569f1df936cc22::t_3fae0ffa439f94 44-53
+desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
+  s_569f1df936cc22::t_e71773bc6c96ab 221,223-233
+  s_569f1df936cc22::t_a0ec61070c28f9 193-198,200,206-211
+  s_569f1df936cc22::t_1c84a8f5272d94 1-140,143-178,180-192,199,201-205,212-220,222,234-268,277-280,282,285-324
+  s_569f1df936cc22::t_ea1b1d624dca4a 179
+  s_569f1df936cc22::t_f65e4368a83e78 141-142
+  s_569f1df936cc22::t_2c92433e0a647e 269-276,281,283-284
+desktop/macos/Desktop/Tests/ShellSummonTests.swift
+  s_569f1df936cc22::t_b9b813de01ba25 1-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "7c91f2a9a56e212aa83bd68968a8ec6a2fcf3bdc",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
