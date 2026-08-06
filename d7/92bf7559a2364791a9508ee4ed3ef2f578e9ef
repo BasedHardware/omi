@@ -1,0 +1,28 @@
+desktop/macos/e2e/flows/navigation.yaml
+  s_569f1df936cc22::t_3afba08e417b1a 12
+desktop/macos/Desktop/Sources/MainWindow/PageGlassLane.swift
+  s_569f1df936cc22::t_284d467680e0a4 1-129
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_5ae91f5d88b253 1417-1432
+  s_569f1df936cc22::t_bdd61383d69375 1353,1355-1359,1361-1363,1367-1383,1386
+desktop/macos/Desktop/Tests/PageGlassLaneTests.swift
+  s_569f1df936cc22::t_b95df4983ac6b0 1-159
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_569f1df936cc22::t_dfb42fd6fa3d02 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d792bf7559a2364791a9508ee4ed3ef2f578e9ef",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
