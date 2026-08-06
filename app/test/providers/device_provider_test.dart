@@ -1,6 +1,7 @@
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:fake_async/fake_async.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -395,6 +396,34 @@ void main() {
       provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.connected);
       expect(provider.debugCaptureHeldForReconnect, isFalse);
       expect(provider.debugCaptureReleaseCount, 0, reason: 'successful reconnect must not tear down capture');
+    });
+
+    test('reconnecting then connected cancels any disconnect-capture teardown race (fakeAsync)', () {
+      fakeAsync((async) {
+        final device = makeDevice('AA:AA:AA:AA:AA:99');
+        final provider = DeviceProvider();
+        addTearDown(provider.dispose);
+
+        provider.connectedDevice = device;
+        provider.pairedDevice = device;
+        provider.setIsConnected(true);
+        provider.debugCaptureReleaseCount = 0;
+
+        // Native observes disconnect-with-auto-reconnect → we enter hold mode.
+        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.reconnecting);
+        expect(provider.debugCaptureHeldForReconnect, isTrue);
+        expect(provider.debugCaptureReleaseCount, 0);
+
+        // Native reports connected before any final-disconnect path should release capture.
+        provider.onDeviceConnectionStateChanged(device.id, DeviceConnectionState.connected);
+        expect(provider.debugCaptureHeldForReconnect, isFalse);
+        expect(provider.debugCaptureReleaseCount, 0, reason: 'capture teardown must stay cancelled');
+
+        // The provider delays some connected work via _connectDebouncer; we advance
+        // past it to ensure no delayed disconnect-capture teardown is triggered.
+        async.elapse(const Duration(milliseconds: 150));
+        expect(provider.debugCaptureReleaseCount, 0, reason: 'disconnect-capture side-effects must not run');
+      });
     });
 
     test('final disconnected releases capture', () {
