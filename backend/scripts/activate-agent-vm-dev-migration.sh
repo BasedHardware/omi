@@ -14,14 +14,23 @@ if [[ "$project" != "based-hardware-dev" || -z "$bucket" || ! -f "$manifest" ]];
   echo "AGENT_VM_MIGRATION_PROJECT=based-hardware-dev, AGENT_VM_MIGRATION_BUCKET, and an existing AGENT_VM_MIGRATION_MANIFEST are required." >&2
   exit 2
 fi
+if [[ ! "$bucket" =~ ^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$ ]]; then
+  echo "AGENT_VM_MIGRATION_BUCKET must be a valid bucket name." >&2
+  exit 2
+fi
 
 # Verify the destination bucket actually belongs to the development project
 # so a cross-environment value cannot poison a production manifest pointer.
-bucket_project="$(
-  gcloud storage buckets describe "gs://${bucket}" --format='value(project)' 2>/dev/null || true
+project_number="$(gcloud projects describe "$project" --format='value(projectNumber)' 2>/dev/null || true)"
+bucket_project_number="$(
+  curl --fail --silent --show-error \
+    -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+    "https://storage.googleapis.com/storage/v1/b/${bucket}?fields=projectNumber" \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin).get("projectNumber", ""))' \
+    2>/dev/null || true
 )"
-if [[ "$bucket_project" != "$project" ]]; then
-  echo "ERROR: bucket gs://${bucket} is owned by '${bucket_project:-unknown}', not '${project}'; refusing cross-environment activation." >&2
+if [[ ! "$project_number" =~ ^[0-9]+$ || "$bucket_project_number" != "$project_number" ]]; then
+  echo "ERROR: bucket gs://${bucket} belongs to project number '${bucket_project_number:-unknown}', not development project '${project_number:-unknown}'; refusing cross-environment activation." >&2
   exit 2
 fi
 

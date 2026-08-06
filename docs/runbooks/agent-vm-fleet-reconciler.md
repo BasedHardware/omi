@@ -147,6 +147,10 @@ only on that reconciler identity, so it can deploy the Job without being able
 to attach unrelated service accounts. The reconciler job uses its attached
 identity and Application Default Credentials; it does not mount the desktop
 backend's Firebase key.
+Replacement additionally preserves the default Agent VM subnet and its
+external NAT, so the installer creates a two-permission subnet role and binds
+it directly to that exact regional subnet; it does not grant project-wide
+network access.
 Validate the installed trigger with
 `backend/scripts/validate_agent_vm_reconciler_scheduler.py` before the first
 live execution.
