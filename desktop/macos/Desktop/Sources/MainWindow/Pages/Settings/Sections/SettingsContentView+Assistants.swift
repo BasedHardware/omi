@@ -857,8 +857,10 @@ extension SettingsContentView {
 
           Spacer()
 
+          // Same card shape, same trailing slot, same kind of preference as the two rows it sits
+          // between — an AppKit checkbox here is a second switch vocabulary in one stack.
           Toggle("", isOn: $useLegacyHomeDesign)
-            .toggleStyle(.checkbox)
+            .toggleStyle(OmiToggleStyle())
             .labelsHidden()
         }
       }
@@ -934,41 +936,8 @@ extension SettingsContentView {
 
       // Rescan Files
       settingsCard(settingId: "advanced.troubleshooting.rescanfiles") {
-        HStack(spacing: OmiSpacing.lg) {
-          Image(systemName: "folder.badge.gearshape")
-            .scaledFont(size: OmiType.subheading)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 24, height: 24)
-
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Rescan Files")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-
-            Text("Re-index your files and update your AI profile")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-          }
-
-          Spacer()
-
-          Button(action: { showRescanFilesAlert = true }) {
-            Text("Rescan")
-          }
-          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
-        }
+        RescanFilesRow(showConfirmation: $showRescanFilesAlert)
       }
-      .alert("Rescan Files?", isPresented: $showRescanFilesAlert) {
-        Button("Cancel", role: .cancel) {}
-        Button("Rescan") {
-          NotificationCenter.default.post(name: .triggerFileIndexing, object: nil)
-        }
-      } message: {
-        Text(
-          "This will re-scan your files and update your AI profile with the latest information about your projects and interests."
-        )
-      }
-
     }
   }
 
@@ -1016,4 +985,93 @@ extension SettingsContentView {
 
   // MARK: - Gmail Reader Subsection
 
+}
+
+// MARK: - Rescan Files
+
+/// What the Rescan Files row is allowed to claim, and the sentence it shows for it.
+///
+/// The row used to promise it would "update your AI profile", then post a notification whose only
+/// listener runs `FileIndexerService.backgroundRescan()` — an incremental re-index of file
+/// *metadata* that never touches the profile. (Regenerating the profile is the Advanced page's own
+/// separate button.) It also gave no sign it had done anything: press Rescan, and every pixel on
+/// the row stayed exactly as it was, whether the scan ran, finished, or never started. Claim and
+/// evidence live here together so neither can drift without the other.
+enum FileRescanState: Equatable {
+  case idle
+  case scanning
+  case finished(indexedFiles: Int)
+
+  var subtitle: String {
+    switch self {
+    case .idle:
+      return "Re-index the files in your standard folders"
+    case .scanning:
+      return "Re-indexing files…"
+    case .finished(let indexedFiles):
+      // A zero is not evidence of an empty Mac: `getIndexedFileCount()` also answers 0 when the
+      // local database could not be opened, so the count is only stated when there is one.
+      guard indexedFiles > 0 else { return "Re-index finished" }
+      return "Re-indexed — \(indexedFiles) file\(indexedFiles == 1 ? "" : "s") in the index"
+    }
+  }
+}
+
+/// Settings ▸ Advanced ▸ Troubleshooting ▸ Rescan Files.
+///
+/// A view of its own because the progress it now reports is per-row transient state, and
+/// `SettingsContentView` is one struct shared by every settings section — its stored properties are
+/// the wrong place for a flag that only this row can be in.
+struct RescanFilesRow: View {
+  @Binding var showConfirmation: Bool
+  @State private var state: FileRescanState = .idle
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.lg) {
+      Image(systemName: "folder.badge.gearshape")
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(Ink.secondary)
+        .frame(width: 24, height: 24)
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Rescan Files")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(Ink.primary)
+
+        Text(state.subtitle)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer()
+
+      if state == .scanning {
+        ProgressView()
+          .controlSize(.small)
+      } else {
+        Button(action: { showConfirmation = true }) {
+          Text("Rescan")
+        }
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+      }
+    }
+    .alert("Rescan Files?", isPresented: $showConfirmation) {
+      Button("Cancel", role: .cancel) {}
+      Button("Rescan") { rescan() }
+    } message: {
+      Text(
+        "Omi re-reads the names, sizes and folders of the files in your standard folders so recent "
+          + "ones are searchable. File contents are not read."
+      )
+    }
+  }
+
+  private func rescan() {
+    state = .scanning
+    Task {
+      await FileIndexerService.shared.backgroundRescan()
+      let indexed = await FileIndexerService.shared.getIndexedFileCount()
+      state = .finished(indexedFiles: indexed)
+    }
+  }
 }

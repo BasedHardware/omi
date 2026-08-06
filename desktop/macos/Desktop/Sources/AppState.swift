@@ -882,8 +882,6 @@ extension Notification.Name {
     "desktopAutomationShowConversationTranscriptRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
-  /// Posted from Settings to trigger the file indexing sheet
-  static let triggerFileIndexing = Notification.Name("triggerFileIndexing")
   /// Posted from menu bar to toggle transcription (userInfo: ["enabled": Bool])
   static let toggleTranscriptionRequested = Notification.Name("toggleTranscriptionRequested")
 }

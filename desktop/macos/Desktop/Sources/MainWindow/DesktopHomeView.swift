@@ -363,15 +363,6 @@ struct DesktopHomeView: View {
           await FileIndexerService.shared.backgroundRescan()
         }
       }
-      .onReceive(NotificationCenter.default.publisher(for: .triggerFileIndexing)) { _ in
-        // Background rescan — no loading screen needed
-        Task {
-          log(
-            "DesktopHomeView: File indexing triggered from settings, running background rescan"
-          )
-          await FileIndexerService.shared.backgroundRescan()
-        }
-      }
   }
 
   var body: some View {
