@@ -136,6 +136,49 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(PostOnboardingPromptSuggestions.shouldShowPopup)
   }
 
+  // MARK: - The shell can arm the popup from what onboarding saved
+
+  /// The second half of this stranding. Once `save(_:)` had a live caller the guidance was still
+  /// invisible, because the only thing that armed the popup was `DashboardPage.onAppear` — and
+  /// `DashboardPage` is Home only behind `useLegacyHomeDesign`, which is off by default. Onboarding
+  /// wrote the array and set the flag; nothing on the shipped Home read either.
+  ///
+  /// `shouldArmPopup()` is the condition as a value, so the shell can ask it from wherever the
+  /// overlay lives and a page that stops being Home cannot take the trigger with it.
+  func testFinishingOnboardingLeavesThePopupArmedForTheShell() {
+    let model = makeConfiguredModel()
+    XCTAssertFalse(
+      PostOnboardingPromptSuggestions.shouldArmPopup(),
+      "Precondition: nothing to show before onboarding saves anything")
+
+    model.skip()
+
+    XCTAssertTrue(
+      PostOnboardingPromptSuggestions.shouldArmPopup(),
+      "A user who just finished setup must be offered a next step on the Home they actually have")
+  }
+
+  func testDismissingTheGuidanceDisarmsItForGood() {
+    let model = makeConfiguredModel()
+    model.skip()
+    XCTAssertTrue(PostOnboardingPromptSuggestions.shouldArmPopup())
+
+    // What the popup's dismiss handler persists.
+    PostOnboardingPromptSuggestions.shouldShowPopup = false
+    PostOnboardingPromptSuggestions.isDismissed = true
+
+    XCTAssertFalse(PostOnboardingPromptSuggestions.shouldArmPopup())
+  }
+
+  /// The flag alone must never raise an empty popup — that is the shape the first half of this bug
+  /// shipped in, and it renders as a titled card with nothing in it.
+  func testTheFlagAloneDoesNotArmAnEmptyPopup() {
+    PostOnboardingPromptSuggestions.shouldShowPopup = true
+
+    XCTAssertTrue(PostOnboardingPromptSuggestions.suggestions().isEmpty, "Precondition")
+    XCTAssertFalse(PostOnboardingPromptSuggestions.shouldArmPopup())
+  }
+
   // MARK: - Ordering: saved before anything reads it
 
   func testOpenerStartersAreBuiltFromTheGuidanceSavedInTheSameHandoff() throws {

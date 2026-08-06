@@ -486,9 +486,10 @@ struct DashboardPage: View {
   private func applyHomeLifecycleCore<Content: View>(to content: Content) -> some View {
     content
       .onAppear {
-        if PostOnboardingPromptSuggestions.shouldShowPopup && !postOnboardingSuggestions.isEmpty {
-          NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
-        }
+        // The "try asking" popup is armed by the shell that owns its overlay
+        // (`DesktopHomeView`), not from here: this page is only Home behind
+        // `useLegacyHomeDesign`, and while it held the only trigger the popup
+        // could not fire on the default Home at all.
         syncCaptureState()
         autoOpenChatForExistingHistoryIfNeeded()
         // Post-onboarding, the resting hub is shown by default — open the chat

@@ -194,6 +194,15 @@ struct DesktopHomeView: View {
       }
       .onAppear {
         log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
+
+        // Post-onboarding guidance. The popup's overlay is this view's
+        // (`mainContentWithOverlays`), so arming it is this view's job too. While the only trigger
+        // was `DashboardPage.onAppear`, the default Home — which is no longer `DashboardPage` —
+        // never fired it, and a user who had just finished setup was handed a silent app.
+        if PostOnboardingPromptSuggestions.shouldArmPopup() {
+          showTryAskingPopup = true
+        }
+
         updatePolicyManager.refresh(force: true)
         // Check all permissions on launch
         appState.checkAllPermissions()
@@ -1270,6 +1279,13 @@ struct DesktopHomeView: View {
         if let rawValue = notification.userInfo?["rawValue"] as? Int,
           let item = SidebarNavItem(rawValue: rawValue)
         {
+          // A caller that names a hub view has to select it, not just open the hub. `⌘2` is
+          // labelled "Conversations" and the hub's remembered view defaults to Memories, so
+          // without this the menu item lands you somewhere it did not name. The two automation
+          // routes below already did this by hand; the menu and keyboard path did not.
+          if let destination = MemoryHubDestination.destination(for: item) {
+            memoryDestinationRawValue = destination.rawValue
+          }
           navigateToLegacyDestination(item)
         }
       }
