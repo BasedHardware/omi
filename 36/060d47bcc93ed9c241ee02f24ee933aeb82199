@@ -1,0 +1,43 @@
+desktop/macos/changelog/unreleased/20260806-chat-transcript-rhythm.json
+  s_569f1df936cc22::t_55adf187217528 1-3
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_21e4338eee1a77 147-148
+  s_569f1df936cc22::t_1894ca09d9eeb1 132-146,149-151,153-154
+desktop/macos/Desktop/Tests/DesktopChatDriftGuardTests.swift
+  s_569f1df936cc22::t_fbdb925b0920e4 40-44,50,53-57,59-78,80-81
+  s_569f1df936cc22::t_b42554a1ea5ea5 92-98
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_569f1df936cc22::t_09deae6cc9bbb4 3931
+desktop/macos/Desktop/Tests/HomeRedesignRegressionTests.swift
+  s_569f1df936cc22::t_0a06361a99adae 96-180
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_569f1df936cc22::t_74905ec207b78f 311,487
+  s_569f1df936cc22::t_5831cae2ca3641 469
+  s_569f1df936cc22::t_d527f3d4c1d75c 170-178,308,312,315-316,319-324,348-350,465-468,473-480,483,485-486,491-492,495-496
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-floatingcontrolbar.json
+  s_569f1df936cc22::t_1bd15428d5f10a 5
+desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
+  s_569f1df936cc22::t_d528b61ad8ef24 6-24
+desktop/macos/Desktop/Sources/Chat/ChatOmiMark.swift
+  s_569f1df936cc22::t_1eb392fbe6475d 49-52,57-65
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
+  s_569f1df936cc22::t_076c47804db1b6 29-32,34-129
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
+  s_569f1df936cc22::t_5ac517977f3db4 96-105,107-109,112-123,127,358-361,368-372,399-407,427-432,922
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "36060d47bcc93ed9c241ee02f24ee933aeb82199",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
