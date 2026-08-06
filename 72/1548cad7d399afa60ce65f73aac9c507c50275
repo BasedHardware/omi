@@ -1,0 +1,33 @@
+.github/workflows/web-checks.yml
+  s_814cfc8af23811::t_a3788a1d383eb3 78
+web/paper/eslint.config.mjs
+  s_814cfc8af23811::t_2cd559c625b123 1-3,11-14
+web/paper/package-lock.json
+  s_814cfc8af23811::t_56b4230daa5eb0 12,22-23,1174-1176,1186,1192,1196-1198,1208,1214-1233,1237-1239,1253-1255,1269-1271,1285-1287,1301-1303,1317-1319,1333-1335,1349-1351,1365-1367,1381-1383,1397-1399,1409,1415,1419-1421,1431,1437,1441-1443,1453,1459,1463-1465,1475,1481,1485-1487,1497,1503,1507-1509,1519,1525,1529-1531,1541,1547,1551-1553,1563,1569,1573-1591,1595,1598,1601,1608-1610,1620,1627-1629,1639,1646-1648,1658,1737-1739,1743-1745,1749,1753-1784,1786-1788,1802-1804,1818-1820,1834-1836,1850-1852,1866-1868,1882-1884,1898-1900,3997-3999,4003,5966-5968,5971,5975,5985-5993,6019-6021,6038-6040,6375-6390,6758-6760,6764,6766,6769,6775-6804
+web/paper/package.json
+  s_814cfc8af23811::t_96cc02c1222393 9-10,14,24-25
+web/paper/postcss.config.mjs
+  s_814cfc8af23811::t_de82b97ec2b8d7 3
+web/paper/src/app/api/proxy/[...path]/route.ts
+  s_814cfc8af23811::t_64a900b7939c85 28-30
+web/paper/src/app/globals.css
+  s_814cfc8af23811::t_128083c5df8add 16-17
+web/paper/src/lib/firebase.ts
+  s_814cfc8af23811::t_1e37988f4bb823 41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "721548cad7d399afa60ce65f73aac9c507c50275",
+  "prompts": {},
+  "sessions": {
+    "s_814cfc8af23811": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1fcdb13-5b42-47d9-a8ea-d2da9669b2be",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
