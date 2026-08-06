@@ -2,7 +2,8 @@
 
 > One page. Once a day. Built from what you lived, not what you clicked.
 
-Framed against `FOUNDER-GUIDELINES.md`. Engineering detail lives in `ARCHITECTURE.md`.
+Framed against `FOUNDER-GUIDELINES.md`. Engineering detail lives in the module docstrings
+under `backend/utils/paper/`, starting with the package `__init__.py`.
 
 ---
 
@@ -67,15 +68,28 @@ Neither reads a life.
 
 ## The edition
 
-Five blocks. Hard stop. This is the whole product and it does not grow.
+Five sections. Hard stop. This is the whole product and it does not grow.
 
-| Block | What it is | Source |
+| Section | What it is | Source |
 |---|---|---|
-| **The Lede** | The one thing that actually mattered. Headline + three sentences. | Day's dominant thread |
-| **Open Loops** | Questions you raised and never resolved — carried across days until closed. | Unresolved questions, aged |
-| **Counterpoint** | The strongest argument against something you asserted one-sidedly. | Stance ledger |
-| **The Desk** | A person you mentioned and haven't followed up with. | People + last-mention decay |
-| **The Margin** | One thing you learned, printed back as fact. | Knowledge nuggets |
+| **Yesterday** | Where the day went, what you decided, and the idea you raised and dropped. | Conversations + screen activity + daily summary |
+| **Today** | What is actually on you, before anyone asks. | Google Calendar + open action items |
+| **Newsletters** | Everything you subscribed to, deduplicated to one line per story. | Gmail bulk mail |
+| **For you** | The papers and tools that move what you are working on. | arXiv + web, ranked against the interest profile |
+| **The photo** | One real moment from yesterday, drawn. | The day's own record |
+
+**Context is the ranking function, not the content.** Every personalization system reads
+stated preference — topics you typed, links you clicked. The interest profile is derived
+from what you actually discussed and had on screen, so the queries move when your work
+moves and nobody edits a config file. That is the whole difference from a feed reader.
+
+**No source, no print.** Anything asserted about the outside world carries where it came
+from, enforced in the types rather than asked for in a prompt. A photo with no real moment
+behind it is decoration, and decoration presented as memory is a fabrication.
+
+**A dead source costs one section, never the edition.** Every run reports per-source
+health and prints what failed, because a paper that has quietly had no Gmail for a
+fortnight looks exactly like a paper about a quiet fortnight.
 
 Then: `END OF EDITION`. The rule at the bottom is a feature.
 
@@ -91,10 +105,11 @@ Per guideline 2: named, native, and unremovable.
 2. **The issue number is the streak.** `NO. 47` means forty-seven editions. It is a streak
    counter that is also just what newspapers have always printed. Cannot be removed without
    the newspaper stopping being a newspaper. No badges, no confetti, no points.
-3. **Counterpoint is a little confrontational.** It argues with you. That is fun in a way
-   a summary never is, and it is the section people will screenshot.
+3. **The photo makes it an object.** One drawn moment from a real day, captioned with the
+   thing it depicts. It is the part people screenshot, and it is the reason the page reads
+   as a paper rather than a report.
 
-**The shareable unit** is the masthead + your headline — screenshot-native by construction,
+**The shareable unit** is the masthead + your headline + the photo — screenshot-native by construction,
 which is the distribution mechanism. Nobody screenshots a dashboard.
 
 ## Pricing
@@ -103,11 +118,11 @@ Gate on **personalization depth**, not volume or feature count.
 
 | | Free — *The Brief* | Paid — *The Edition* |
 |---|---|---|
-| The Lede | ✅ | ✅ |
-| Open Loops | — | ✅ |
-| Counterpoint | — | ✅ |
-| The Desk | — | ✅ |
-| The Margin | — | ✅ |
+| Yesterday | ✅ | ✅ |
+| Today | — | ✅ |
+| Newsletters | — | ✅ |
+| For you | — | ✅ |
+| The photo | — | ✅ |
 | Longitudinal view tracking | — | ✅ |
 
 **$12/mo, or $96/yr.** No lifetime plan (guideline 6). Priced for mindshare, which is
@@ -126,7 +141,7 @@ One primary CTA site-wide. No competing asks.
   real editions available contain personal data, and a fabricated one would violate the
   never-fabricate rule on the marketing surface as much as in the product.)
 - **Paywall moment:** after the third free edition, on the page itself:
-  `Your Open Loops are ready. →` — the ask arrives as content, not as an interstitial.
+  `Today's edition is ready. →` — the ask arrives as content, not as an interstitial.
 
 Rejected: "Get started" (says nothing), "Sign up free" (leads with the transaction),
 "Learn more" (an admission the page failed).
@@ -152,7 +167,7 @@ rewrite. That is the only concession made to unbuilt hardware.
 | Risk | Severity | Mitigation |
 |---|---|---|
 | **Print logistics** — paper, supply, delivery | High, real | Deferred to step 3–4. Also the moat: nobody clones this in a weekend. |
-| **Cold start** — a new user has no history, so Counterpoint and Open Loops are empty | High | Blocks are omitted, never faked. Edition is honestly short until there's signal. Never fabricate. |
+| **Cold start** — a new user has no history, so the interest profile is unusable and For you is empty | High | Sections are omitted, never faked. The edition is honestly short until there is signal, and the profile reports itself unusable rather than ranking against a guess. |
 | **Creepiness** — the paper knows too much | Medium | Print only what the user said. Every claim traces to a conversation. No inference presented as fact. |
 | **Ambient capture dependency** | Medium | Real constraint, and also filter 4 — it's why this isn't cloneable. |
 
