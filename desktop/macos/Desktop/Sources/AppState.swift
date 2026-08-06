@@ -209,7 +209,16 @@ class AppState: ObservableObject {
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
   // Transcription state
-  @Published var isTranscribing = false
+  @Published var isTranscribing = false {
+    didSet {
+      // Preferred-mic reconnect must track live Listening even when Settings is closed (#10921).
+      if isTranscribing {
+        preferredMicrophoneReconnectMonitor.start(observing: self)
+      } else {
+        preferredMicrophoneReconnectMonitor.stop()
+      }
+    }
+  }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.

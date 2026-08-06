@@ -66,7 +66,8 @@ final class PreferredMicrophoneReconnectTests: XCTestCase {
     let monitor = try String(contentsOf: monitorURL, encoding: .utf8)
 
     XCTAssertTrue(appState.contains("preferredMicrophoneReconnectMonitor"))
-    XCTAssertTrue(transcription.contains("preferredMicrophoneReconnectMonitor.start(observing: self)"))
+    XCTAssertTrue(appState.contains("preferredMicrophoneReconnectMonitor.start(observing: self)"))
+    XCTAssertTrue(appState.contains("didSet"))
     XCTAssertTrue(transcription.contains("preferredMicrophoneReconnectMonitor.stop()"))
     XCTAssertTrue(monitor.contains("kAudioHardwarePropertyDevices"))
     XCTAssertTrue(monitor.contains("prepareTranscriptionRestartAfterSettingsChange"))
