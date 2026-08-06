@@ -191,7 +191,9 @@ final class SpineCompositionTests: XCTestCase {
 
     XCTAssertEqual(composed[0].momentCount, 1204)
     XCTAssertEqual(composed[0].conversationCount, 1)
-    XCTAssertEqual(composed[0].subtitle, "1,204 moments · 1 conversation")
+    XCTAssertEqual(composed[0].memoryCount, 1)
+    // Every kind the day holds, because this line is the whole of the day once it is folded shut.
+    XCTAssertEqual(composed[0].subtitle, "1,204 moments · 1 conversation · 1 memory")
 
     let soloed = SpineComposer.filter(composed, kind: .memories, query: "")
     XCTAssertEqual(
@@ -349,6 +351,78 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertEqual(SpineFormat.duration(489), "8m 9s")
     XCTAssertEqual(SpineFormat.duration(42), "42s")
     XCTAssertEqual(SpineFormat.duration(3_855), "1h 04m")
+  }
+
+  // MARK: - A memory's repeated half
+
+  /// The generated shape the spine actually receives, four times in a row.
+  func testAMemoryStatesItsCategoryOnceAndItsSentenceOnce() {
+    let copy = SpineFormat.memoryCopy(
+      "Focused on Omi App: Archit is reviewing the Omi app interface, which shows a timeline.")
+    XCTAssertEqual(copy.label, "Focused on Omi App")
+    XCTAssertEqual(copy.body, "Archit is reviewing the Omi app interface, which shows a timeline.")
+  }
+
+  /// The split moves words; it never loses them. Label and body together are the whole memory less
+  /// the colon that already separated them.
+  func testTheSplitKeepsEveryWordOfTheMemory() {
+    let text = "Focused on Omi Memories: Archit prefers spacious layouts."
+    let copy = SpineFormat.memoryCopy(text)
+    let rejoined = [copy.label, copy.body].compactMap { $0 }.joined(separator: ": ")
+    XCTAssertEqual(rejoined, text)
+  }
+
+  /// A sentence that merely contains a colon is still a sentence. Each of these is a real memory the
+  /// split would otherwise fold in half.
+  func testASentenceThatMerelyContainsAColonIsLeftWhole() {
+    for text in [
+      "Standup is at 12:30 every weekday.",
+      "Archit bookmarked https://omi.me for later.",
+      "He asked Dr. Kim: whether the results were in.",
+      "Archit spent the morning on a long stretch of unbroken work before the call: mostly reading.",
+      "Whatever follows is missing here:",
+    ] {
+      let copy = SpineFormat.memoryCopy(text)
+      XCTAssertNil(copy.label, "“\(text)” is a sentence, not a labelled memory")
+      XCTAssertEqual(copy.body, text)
+    }
+  }
+
+  // MARK: - Folding a day
+
+  /// The failure this is keyed against: the spine pages older days in as you scroll, so a set keyed
+  /// by position folds a different day the moment a page lands.
+  func testFoldingIsKeyedByTheDayAndSurvivesAnEarlierPageLanding() {
+    var collapse = SpineDayCollapse()
+    let today = calendar.startOfDay(for: date(6, 12))
+    let yesterday = calendar.startOfDay(for: date(5, 12))
+
+    collapse.toggle(today)
+    XCTAssertTrue(collapse.contains(today))
+    XCTAssertFalse(collapse.contains(yesterday))
+
+    // A page of older days lands: today is still the folded one.
+    let older = (1...4).map { calendar.startOfDay(for: date($0, 12)) }
+    for day in older { XCTAssertFalse(collapse.contains(day)) }
+    XCTAssertTrue(collapse.contains(today))
+
+    collapse.toggle(today)
+    XCTAssertFalse(collapse.contains(today))
+    XCTAssertTrue(collapse.isEmpty)
+  }
+
+  /// The footer loads a page the moment it appears, so "every day is folded" has to be a state the
+  /// stream can ask about rather than infer.
+  func testEveryDayFoldedIsOnlyTrueWhenItIs() {
+    var collapse = SpineDayCollapse()
+    let days = [date(6, 0), date(5, 0)].map { calendar.startOfDay(for: $0) }
+
+    XCTAssertFalse(collapse.containsEvery(days))
+    collapse.toggle(days[0])
+    XCTAssertFalse(collapse.containsEvery(days))
+    collapse.toggle(days[1])
+    XCTAssertTrue(collapse.containsEvery(days))
+    XCTAssertFalse(collapse.containsEvery([]), "no days is not every day")
   }
 
   // MARK: - The rail's direction

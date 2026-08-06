@@ -15,6 +15,12 @@
 //  Two type rungs only. Every one of these rows sits on glass, so `Ink.tertiary` is unavailable and
 //  anything that is not `Ink.primary` is `Ink.secondary`.
 //
+//  **Air is the other half of the grid.** Rows used to sit seven points apart while `prose` set its
+//  own lines six points apart, so two consecutive memories were closer to each other than a memory
+//  was to itself and the column read as one grey wall. The rhythm now lives in `SpineMetrics` as
+//  three values with one rule between them — a moment is far from the moment above it, an attached
+//  row is close to what it came out of, and prose is set to a measure rather than to the panel.
+//
 
 import AppKit
 import OmiTheme
@@ -36,6 +42,46 @@ enum SpineMetrics {
   static let thumbnailHeight: CGFloat = 74
   /// The sticky day header's height, so the scroll reader knows what "visible" means.
   static let dayHeaderHeight: CGFloat = 34
+
+  // MARK: The vertical rhythm
+
+  /// The air above a row that is its own moment on the clock.
+  ///
+  /// **The number that matters is not this one, it is its ratio to the leading inside a paragraph.**
+  /// `prose` sets its lines about 6 pt apart, and every row used to sit 7 pt from the one above it —
+  /// so four memories at four different minutes were four paragraphs' worth of lines with no gap
+  /// between them, and the eye had nothing to group by. This is over three times the line gap, which
+  /// is what makes four moments read as four things.
+  ///
+  /// One gap, applied once, at the top of the row: the row owns the air above it and nothing else
+  /// adds any, so the rhythm is a value rather than a sum of paddings scattered across four views.
+  static let rowGap: CGFloat = OmiSpacing.xl
+  /// The air above a row that belongs to the conversation above it. Deliberately much smaller than
+  /// `rowGap` — proximity is the only thing that says a memory came out of *that* conversation, and
+  /// an attached row set as far off as an unattached one has stopped being attached to anything.
+  static let attachedGap: CGFloat = OmiSpacing.sm
+  /// Between two memories inside one row: more than the leading, less than `rowGap`. They are
+  /// separate memories, but they all came out of one conversation.
+  static let memoryGap: CGFloat = OmiSpacing.md
+
+  /// Where the clock sits inside a row, measured from the top of that row's content, so the timestamp
+  /// lands on the first line of whatever the row turned out to be.
+  ///
+  /// A card row (a conversation, the brain map) starts with its own padding before any type; an
+  /// inline row (memories, a strip of frames) starts with the type itself. **These two are the whole
+  /// of the gutter/rail correspondence**: get one wrong and the hour rail keeps tracking the right
+  /// row while the times printed beside it drift off their content.
+  static let cardGutterInset: CGFloat = 16
+  static let inlineGutterInset: CGFloat = 3
+
+  /// The measure a memory's sentence is set to.
+  ///
+  /// The panel is far wider than a paragraph wants to be. `InkLayout.contentMaxWidth` is the width
+  /// `prose` was sized against — a little over sixty characters a line — and it is deliberately the
+  /// existing token rather than a second opinion about how wide reading gets. **Only the prose column
+  /// is capped**: the filmstrip, the conversation card and the brain map are not paragraphs and take
+  /// the full lane.
+  static let proseMaxWidth: CGFloat = InkLayout.contentMaxWidth
 }
 
 // MARK: - The row
@@ -55,13 +101,29 @@ struct SpineRowView: View {
   /// the moment it is soloed it needs one, because there is no longer anything above it to inherit.
   private var showsTimestamp: Bool { !row.isAttached }
 
+  /// True while this row is a child of the conversation above it — which decides both how far it
+  /// indents and how much air it gets, because those are the same statement made twice.
+  private var isNested: Bool { row.isAttached && showsIndent }
+
+  /// A card row starts with its own padding before any type; an inline row starts with the type.
+  /// The gutter has to know which, or the clock stops landing on the content it is timing.
+  private var gutterInset: CGFloat {
+    switch row.content {
+    case .conversation, .brainMap: return SpineMetrics.cardGutterInset
+    case .memories, .moments: return SpineMetrics.inlineGutterInset
+    }
+  }
+
   var body: some View {
     HStack(alignment: .top, spacing: 0) {
       gutter
       content
-        .padding(.leading, SpineMetrics.gutterGap + (row.isAttached && showsIndent ? SpineMetrics.attachmentIndent : 0))
+        .padding(.leading, SpineMetrics.gutterGap + (isNested ? SpineMetrics.attachmentIndent : 0))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+    // The whole rhythm, in one place. Every row's content view draws from its own top edge, so the
+    // gutter and the content it times are offset by the same amount and cannot drift apart.
+    .padding(.top, isNested ? SpineMetrics.attachedGap : SpineMetrics.rowGap)
   }
 
   private var gutter: some View {
@@ -85,7 +147,7 @@ struct SpineRowView: View {
             .frame(width: 5, height: 5)
             .offset(x: 3)
         }
-        .padding(.top, row.kind == .conversations ? 24 : 10)
+        .padding(.top, gutterInset)
       }
     }
     .frame(width: SpineMetrics.gutterWidth, alignment: .trailing)
@@ -144,7 +206,6 @@ struct SpineConversationRow: View {
     .padding(.horizontal, 15)
     .padding(.vertical, 12)
     .glassRow(isHovering ? .hover : .rest, cornerRadius: InkGlass.cornerRadius)
-    .padding(.top, 8)
     .contentShape(Rectangle())
     .onTapGesture(perform: onOpen)
     .onHover { hovering in
@@ -192,28 +253,59 @@ struct SpineMemoriesRow: View {
   let showsTimestamps: Bool
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
+    VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
       ForEach(memories) { memory in
-        HStack(alignment: .top, spacing: 9) {
-          Rectangle()
-            .fill(Ink.secondary)
-            .frame(width: 6, height: 1)
-            .padding(.top, 10)
-          VStack(alignment: .leading, spacing: 1) {
-            Text(memory.text)
-              .inkStyle(.prose, color: Ink.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-              .multilineTextAlignment(.leading)
-            if showsTimestamps && memories.count > 1 {
-              Text(SpineFormat.time(memory.timestamp))
-                .inkStyle(.statusLabel, color: Ink.secondary)
-            }
-          }
-        }
+        SpineMemoryLine(memory: memory, showsTimestamp: showsTimestamps && memories.count > 1)
       }
     }
-    .padding(.top, 7)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// One memory: what kind of memory it is, quietly, over the sentence that is actually about it.
+///
+/// The split is `SpineFormat.memoryCopy`'s decision and its doc comment is where the reasoning lives.
+/// What this view adds is the presentation: the repeated half at the small role, the sentence at the
+/// reading role, and the whole thing set to one measure rather than to the width of the panel.
+private struct SpineMemoryLine: View {
+  let memory: SpineMemory
+  let showsTimestamp: Bool
+
+  private var copy: SpineMemoryCopy { SpineFormat.memoryCopy(memory.text) }
+
+  /// The dash sits on the optical centre of whichever line it is beside — derived from the role's own
+  /// metrics rather than nudged by hand, so a memory with a label and one without both line up.
+  private var dashInset: CGFloat {
+    (copy.label == nil ? InkType.prose : InkType.statusLabel).naturalLineHeight / 2
+  }
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 9) {
+      Rectangle()
+        .fill(Ink.secondary)
+        .frame(width: 6, height: 1)
+        .padding(.top, dashInset)
+      VStack(alignment: .leading, spacing: 2) {
+        // Never line-limited: this is the user's own copy moved, not abbreviated, and a label that
+        // truncates would be the one thing this split is not allowed to do.
+        if let label = copy.label {
+          Text(label)
+            .inkStyle(.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        Text(copy.body)
+          .inkStyle(.prose, color: Ink.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .multilineTextAlignment(.leading)
+        if showsTimestamp {
+          Text(SpineFormat.time(memory.timestamp))
+            .inkStyle(.statusLabel, color: Ink.secondary)
+        }
+      }
+      .frame(maxWidth: SpineMetrics.proseMaxWidth, alignment: .leading)
+    }
+    // Two runs of one sentence: read as one utterance, not as a label and then a fragment.
+    .accessibilityElement(children: .combine)
   }
 }
 
@@ -228,6 +320,17 @@ struct SpineMomentsRow: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
+      // A strip that shows eight of a hundred and eighty-four and says nothing about it is a strip
+      // that lies about the day — but **the count is the strip's caption and it has to look like
+      // one.** Under the tiles it landed in the same column as the tiles' own captions, one line
+      // below them and one line above the next row: a line belonging to neither thing it sat
+      // between. Above the tiles it is unambiguously theirs, and it lands on the timestamp beside it.
+      if total > moments.count {
+        Text(
+          "\(SpineFormat.number(moments.count)) of \(SpineFormat.plural(total, "moment", "moments"))"
+        )
+        .inkStyle(.statusLabel, color: Ink.secondary)
+      }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 9) {
           ForEach(moments) { moment in
@@ -240,16 +343,7 @@ struct SpineMomentsRow: View {
         .padding(.trailing, SpineStripFade.width)
       }
       .mask(SpineStripFade())
-      // A strip that shows eight of a hundred and eighty-four and says nothing about it is a strip
-      // that lies about the day.
-      if total > moments.count {
-        Text(
-          "\(SpineFormat.number(moments.count)) of \(SpineFormat.plural(total, "moment", "moments"))"
-        )
-        .inkStyle(.statusLabel, color: Ink.secondary)
-      }
     }
-    .padding(.top, 7)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
@@ -387,8 +481,9 @@ struct SpineBrainMapRow: View {
       .glassRow(isHovering ? .hover : .rest, cornerRadius: InkGlass.cornerRadius)
     }
     .buttonStyle(.plain)
-    .padding(.top, 10)
-    .padding(.bottom, 12)
+    // The one bottom gap in the spine: the map is the last row of its day, and without it the day
+    // ends flush against the next day's pinned header.
+    .padding(.bottom, SpineMetrics.rowGap)
     .onHover { isHovering = $0 }
     .accessibilityLabel(Text("\(map.headline). \(map.detail)"))
   }

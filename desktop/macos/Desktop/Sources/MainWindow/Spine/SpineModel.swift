@@ -98,6 +98,25 @@ struct SpineMemory: Identifiable, Equatable, Sendable {
   let conversationID: String?
 }
 
+/// A memory's text, split where it repeats.
+///
+/// Memories are generated, and generated copy runs to a template: four in a row arrive as
+/// "Focused on Omi App: …", "Focused on Omi: …", "Focused on Omi App: …", "Focused on Omi Memories: …".
+/// Set as one sentence in the largest reading role the spine owns, the half that is the *same* every
+/// time is the loudest thing on the surface, and the half that is actually this memory is what the eye
+/// gets to last.
+///
+/// So the repeated half is presented as a quiet label over the sentence rather than as its opening
+/// words. **Nothing is hidden and nothing is truncated:** `label` and `body` together are the whole
+/// text less the colon that already separated them, and a memory with no such prefix keeps its
+/// sentence whole and has no label at all.
+struct SpineMemoryCopy: Equatable, Sendable {
+  /// The words before the colon, or nil when the text is a plain sentence.
+  let label: String?
+  /// The rest of it — and the whole of it when there is no label.
+  let body: String
+}
+
 /// A conversation plus the two counts the row states about it.
 struct SpineConversation: Identifiable, Equatable {
   let conversation: ServerConversation
@@ -206,13 +225,28 @@ struct SpineDay: Identifiable, Equatable {
   let conversationCount: Int
   let rows: [SpineRow]
 
-  /// "1,204 moments · 4 conversations". Zero clauses are dropped for the same reason as on a row.
+  /// How many memories the day holds. Counted off the rows rather than carried alongside them, so it
+  /// cannot drift from what is actually drawn.
+  var memoryCount: Int {
+    rows.reduce(0) { total, row in
+      if case .memories(let memories) = row.content { return total + memories.count }
+      return total
+    }
+  }
+
+  /// "1,204 moments · 4 conversations · 9 memories". Zero clauses are dropped for the same reason as
+  /// on a row.
+  ///
+  /// **This line is the whole of a collapsed day.** With the rows folded away it is the only thing
+  /// saying what is behind the header, so it names every kind the day holds — a day that hides nine
+  /// memories and says nothing about them reads as a day that produced none.
   var subtitle: String {
     var parts: [String] = []
     if momentCount > 0 { parts.append(SpineFormat.plural(momentCount, "moment", "moments")) }
     if conversationCount > 0 {
       parts.append(SpineFormat.plural(conversationCount, "conversation", "conversations"))
     }
+    if memoryCount > 0 { parts.append(SpineFormat.plural(memoryCount, "memory", "memories")) }
     return parts.joined(separator: " · ")
   }
 
@@ -228,6 +262,41 @@ struct SpineDay: Identifiable, Equatable {
       case .moments(_, let count): return total + count
       case .brainMap: return total
       }
+    }
+  }
+}
+
+// MARK: - Folded days
+
+/// Which days are folded shut, as a value.
+///
+/// **Keyed by the day's own identity, never by its position.** The spine pages older days in as you
+/// scroll, so a set keyed by index folds a *different* day the moment a page lands — the day you
+/// collapsed reopens and the one above it closes, which reads as the list rearranging itself.
+///
+/// **Session-only, deliberately.** A day found silently collapsed on the next launch is
+/// indistinguishable from a day whose capture failed, and this surface is the one place a user checks
+/// whether Omi recorded anything at all. Folding is a thing you do while reading, not a preference.
+struct SpineDayCollapse: Equatable {
+  private var folded: Set<Date> = []
+
+  init() {}
+
+  var isEmpty: Bool { folded.isEmpty }
+
+  func contains(_ dayID: Date) -> Bool { folded.contains(dayID) }
+
+  /// True when every day given is folded — the state where the spine is a list of headers and there
+  /// is nothing below them to have reached the end of.
+  func containsEvery(_ dayIDs: [Date]) -> Bool {
+    !dayIDs.isEmpty && dayIDs.allSatisfy(folded.contains)
+  }
+
+  mutating func toggle(_ dayID: Date) {
+    if folded.contains(dayID) {
+      folded.remove(dayID)
+    } else {
+      folded.insert(dayID)
     }
   }
 }
@@ -575,6 +644,39 @@ enum SpineFormat {
   }
 
   static func time(_ date: Date) -> String { timeFormatter.string(from: date) }
+
+  /// The longest prefix that still reads as a category rather than as the first clause of a sentence.
+  /// Past this, splitting stops being a label and becomes a fold through the middle of the copy.
+  static let maximumMemoryLabelCharacters = 48
+
+  /// Splits a memory into its repeated category and the sentence that is actually about this memory.
+  ///
+  /// Deliberately conservative — a memory that is merely *a sentence containing a colon* keeps its
+  /// sentence. Three things have to be true before the split happens, and each of them is a real
+  /// memory this would otherwise mangle:
+  ///
+  /// - **A space after the colon.** `12:56` and `https://omi.me` both carry one and neither is a
+  ///   category; a separator between a label and a sentence is always followed by a space.
+  /// - **No sentence punctuation in the prefix.** "He asked Dr. Kim: …" is a sentence with a quote in
+  ///   it, not a labelled one.
+  /// - **A prefix under `maximumMemoryLabelCharacters`, and a body left over.** A long prefix is a
+  ///   clause, and a memory that is *only* a prefix has nothing to be a label for.
+  static func memoryCopy(_ text: String) -> SpineMemoryCopy {
+    let whole = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let colon = whole.firstIndex(of: ":") else { return SpineMemoryCopy(label: nil, body: whole) }
+    let label = whole[whole.startIndex..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
+    let rest = whole[whole.index(after: colon)...]
+    let body = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard rest.first?.isWhitespace == true,
+      !label.isEmpty,
+      !body.isEmpty,
+      label.count <= maximumMemoryLabelCharacters,
+      !label.contains(where: { ".?!".contains($0) })
+    else {
+      return SpineMemoryCopy(label: nil, body: whole)
+    }
+    return SpineMemoryCopy(label: label, body: body)
+  }
 
   /// "Wednesday 6 August" — and "Today" / "Yesterday" for the two days a date is the wrong answer
   /// for, because nobody reads their own morning as a date.

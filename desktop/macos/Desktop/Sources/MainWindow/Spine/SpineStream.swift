@@ -10,6 +10,12 @@
 //  the conversation dominant and the memories and frames it produced indented beneath it — and an hour
 //  rail beside it running the same direction the list does.
 //
+//  A day can be **folded shut** from its own header. Folding is presentation and never a filter: the
+//  rows stay composed, stay counted in `queryShellMatchCount`, and come back in the same place. The
+//  two things it does move are the hour rail — which tracks the topmost visible *row* and therefore
+//  cannot see a folded day at all — and the load-more footer, which must not page the account away
+//  behind a screen that is nothing but headers. Both are handled below.
+//
 //  **What it deliberately does not own is any page's job.** Opening a conversation hands it to
 //  Conversations, which keeps search, filters, folders, starring, merge, edit, delete, refresh,
 //  pagination and full-row selection (INV-NAV-1); the brain map hands off to the graph; a frame hands
@@ -19,6 +25,7 @@
 //  Brand: `Ink` semantics only, two rungs (glass) (INV-UI-1).
 //
 
+import AppKit
 import Combine
 import OmiTheme
 import SwiftUI
@@ -96,12 +103,15 @@ struct SpineStream: View {
 
   @StateObject private var store = SpineStore()
   @State private var viewport = SpineViewport()
+  /// Which days are folded shut. Lives with the view rather than with the store because it is a
+  /// reading position, not data: it is worth exactly as long as this list is on screen.
+  @State private var collapse = SpineDayCollapse()
 
   var body: some View {
     GeometryReader { proxy in
       HStack(spacing: 0) {
         if proxy.size.width >= SpineLayout.railBreakpoint {
-          SpineRailColumn(store: store, viewport: viewport)
+          SpineRailColumn(store: store, viewport: viewport, collapse: collapse)
           Rectangle().fill(Ink.separator).frame(width: 1)
         }
         Group {
@@ -138,19 +148,27 @@ struct SpineStream: View {
       LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
         ForEach(store.days) { day in
           Section {
-            ForEach(day.rows) { row in
-              SpineRowView(
-                row: row,
-                showsIndent: store.kind == .everything,
-                onOpenConversation: { onOpenConversation($0.id) },
-                onToggleStar: toggleStar,
-                onOpenMoment: { _ in onOpenRewind() },
-                onOpenBrainMap: onOpenBrainMap
-              )
-              .background(anchor(for: row, in: day))
+            // Folding is presentation, never a filter: the rows are still composed, still counted by
+            // `queryShellMatchCount`, and still in the same chronological place when they come back.
+            if !collapse.contains(day.id) {
+              ForEach(day.rows) { row in
+                SpineRowView(
+                  row: row,
+                  showsIndent: store.kind == .everything,
+                  onOpenConversation: { onOpenConversation($0.id) },
+                  onToggleStar: toggleStar,
+                  onOpenMoment: { _ in onOpenRewind() },
+                  onOpenBrainMap: onOpenBrainMap
+                )
+                .background(anchor(for: row, in: day))
+              }
             }
           } header: {
-            SpineDayHeader(day: day)
+            SpineDayHeader(
+              day: day,
+              isCollapsed: collapse.contains(day.id),
+              onToggle: { toggleCollapse(day) }
+            )
           }
         }
         footer
@@ -185,13 +203,27 @@ struct SpineStream: View {
   /// The end of the loaded stream. Only offered when there is genuinely another page behind it and
   /// nothing is narrowing the view — paging deeper to satisfy a filter would fetch the account one
   /// page at a time to answer a question the server already answers.
+  ///
+  /// It also withdraws while every loaded day is folded shut. The footer loads a page the *moment it
+  /// appears*, and a spine of nothing but headers puts it on screen immediately — which would page
+  /// the account away behind a surface with nothing on it to have reached the end of.
   @ViewBuilder
   private var footer: some View {
-    if appState.canLoadMoreConversations, !request.isFiltering {
+    if appState.canLoadMoreConversations, !request.isFiltering,
+      !collapse.containsEvery(store.days.map(\.id))
+    {
       SpineLoadMoreFooter(isLoading: appState.isLoadingConversations) {
         await appState.loadMoreConversations()
       }
     }
+  }
+
+  /// Folds one day shut, or opens it again.
+  ///
+  /// Animated through the gate rather than with a raw `withAnimation`, so Reduce Motion gets the
+  /// instant version instead of a list of hundreds of rows sliding away.
+  private func toggleCollapse(_ day: SpineDay) {
+    OmiMotion.withGated(.easeOut(duration: InkMotion.stepTransition)) { collapse.toggle(day.id) }
   }
 
   private func toggleStar(_ conversation: ServerConversation) {
@@ -244,16 +276,33 @@ struct SpineStream: View {
 private struct SpineRailColumn: View {
   @ObservedObject var store: SpineStore
   @ObservedObject var viewport: SpineViewport
+  let collapse: SpineDayCollapse
 
-  /// Before anything has been scrolled the rail describes the newest day, which is what is on screen.
-  private var dayID: Date? { viewport.dayID ?? store.days.first?.id }
+  /// The day the rail describes.
+  ///
+  /// Normally the one the list reported, which comes from the topmost visible *row*. **A folded day
+  /// has no rows**, so it can never be reported again — but it can still be the last thing reported
+  /// before it was folded, and a rail describing a day whose rows are all hidden is a rail pointing
+  /// at nothing. So a reported day that has since folded is dropped in favour of the first day still
+  /// open, and only when every day is folded does it fall back to the newest one.
+  private var dayID: Date? {
+    if let reported = viewport.dayID, !collapse.contains(reported) { return reported }
+    return store.days.first { !collapse.contains($0.id) }?.id ?? store.days.first?.id
+  }
 
   private var day: SpineDay? { store.days.first { $0.id == dayID } }
+
+  /// The hour marker belongs to the day the list actually reported. Carrying it onto a day chosen by
+  /// the fallback above would light up an hour on a rail for a day nobody is reading.
+  private var currentHour: Int? {
+    guard let dayID, dayID == viewport.dayID else { return nil }
+    return viewport.hour
+  }
 
   var body: some View {
     SpineHourRail(
       density: dayID.map(store.density(for:)) ?? Array(repeating: 0, count: 24),
-      currentHour: viewport.hour,
+      currentHour: currentHour,
       momentCount: dayID.map(store.momentCount(for:)) ?? 0,
       dayTitle: day?.title ?? "",
       conversationCount: day?.conversationCount ?? 0
@@ -265,24 +314,50 @@ private struct SpineRailColumn: View {
 
 /// The one place in this system where uppercase and positive tracking are justified: a header pinned
 /// over moving content has to read as chrome rather than as the first line of the day.
+///
+/// It is also the day's **disclosure**. The whole band is the target rather than the chevron alone —
+/// an 11 pt glyph is a small thing to hit repeatedly, and nothing in this header is selectable text,
+/// so there is nothing for a click to be taking away. The chevron on the trailing edge is what says
+/// the band is a control at all; the count beside the title is what makes a folded day still worth
+/// having on screen.
 struct SpineDayHeader: View {
   let day: SpineDay
+  let isCollapsed: Bool
+  let onToggle: () -> Void
+
+  @State private var isHovering = false
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 10) {
-      Text(day.title.uppercased())
-        .font(.system(size: 11, weight: .semibold))
-        .tracking(1.0)
-        .foregroundStyle(Ink.primary)
-      Text(day.subtitle)
-        .scaledFont(size: OmiType.caption, weight: .regular)
-        .foregroundStyle(Ink.secondary)
-        .lineLimit(1)
-      Spacer(minLength: 0)
+    Button(action: onToggle) {
+      HStack(spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+          Text(day.title.uppercased())
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(1.0)
+            .foregroundStyle(Ink.primary)
+          Text(day.subtitle)
+            .scaledFont(size: OmiType.caption, weight: .regular)
+            .foregroundStyle(Ink.secondary)
+            .lineLimit(1)
+        }
+        Spacer(minLength: OmiSpacing.sm)
+        SpineDayDisclosure(isCollapsed: isCollapsed, isHighlighted: isHovering)
+      }
+      .padding(.horizontal, 12)
+      .frame(height: SpineMetrics.dayHeaderHeight, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
     }
-    .padding(.horizontal, 12)
-    .frame(height: SpineMetrics.dayHeaderHeight, alignment: .leading)
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .buttonStyle(.plain)
+    .onHover { hovering in
+      isHovering = hovering
+      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityLabel(Text(isCollapsed ? "Expand \(day.title)" : "Collapse \(day.title)"))
+    .accessibilityValue(Text(day.subtitle))
+    .help(isCollapsed ? "Show this day" : "Hide this day")
     // Pinned headers have rows sliding under them, so the header has to occlude — and **a wash
     // cannot occlude.** The first attempt painted `Ink.surface` at 0.9, which on the light-pinned
     // panel is a hard white slab running edge to edge: it read as paint laid over the glass rather
@@ -301,6 +376,28 @@ struct SpineDayHeader: View {
         .strokeBorder(Ink.separator, lineWidth: 1)
     )
     .padding(.bottom, 4)
+  }
+}
+
+/// The chevron on the header's trailing edge: down for an open day, turned a quarter for a folded one.
+///
+/// It **turns** rather than swapping glyph, because the rotation is the thing that says the two states
+/// are the same control. Weight rather than colour on hover, like everything else here — and the
+/// rotation animates through the gate so Reduce Motion gets the state and not the spin.
+private struct SpineDayDisclosure: View {
+  let isCollapsed: Bool
+  let isHighlighted: Bool
+
+  var body: some View {
+    Image(systemName: "chevron.down")
+      .font(.system(size: 11, weight: .semibold))
+      .foregroundStyle(isHighlighted ? Ink.primary : Ink.secondary)
+      .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+      // Sized inside the header's own band, so a target big enough to hit without aiming never makes
+      // the header taller than the scroll reader's `dayHeaderHeight` says it is.
+      .frame(width: 24, height: 24)
+      .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.stepTransition)), value: isCollapsed)
+      .accessibilityHidden(true)
   }
 }
 
