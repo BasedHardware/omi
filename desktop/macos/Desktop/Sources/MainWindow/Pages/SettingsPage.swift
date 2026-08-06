@@ -12,6 +12,42 @@ struct SettingsPage: View {
   var chatProvider: ChatProvider? = nil
 
   var body: some View {
+    Group {
+      if let page = selectedSection.presentedPage {
+        // A section that presents a whole established page mounts it directly. Not inside the
+        // shared scroll view: `PermissionsPage` owns a `ScrollView` of its own and `HelpPage` is a
+        // web view that has to fill the pane, so nesting either one inside this page's scroller
+        // gives the pane two scrollbars and collapses the web view to nothing. Both already draw
+        // their own pane heading and `SettingsGlassMetrics.pane*` padding, so the shared header is
+        // skipped too rather than stacked on top of theirs.
+        presentedPage(page)
+      } else {
+        sectionScrollView
+      }
+    }
+    // Deliberately no background: the window wears the glass, and the glass owns the ground. A fill
+    // here — even a faint one — is a second ground painted over the material, which is how a
+    // translucent window ends up looking opaque.
+    .onAppear {
+      AnalyticsManager.shared.settingsPageOpened()
+    }
+  }
+
+  /// The established page a presenting section mounts. One `switch`, so a new presenting section
+  /// cannot compile without naming the page it presents.
+  @ViewBuilder
+  private func presentedPage(_ page: ShellDestination) -> some View {
+    switch page {
+    case .permissions:
+      PermissionsPage(appState: appState)
+    case .help:
+      HelpPage()
+    default:
+      EmptyView()
+    }
+  }
+
+  private var sectionScrollView: some View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
@@ -51,12 +87,6 @@ struct SettingsPage: View {
           }
         }
       }
-    }
-    // Deliberately no background: the window wears the glass, and the glass owns the ground. A fill
-    // here — even a faint one — is a second ground painted over the material, which is how a
-    // translucent window ends up looking opaque.
-    .onAppear {
-      AnalyticsManager.shared.settingsPageOpened()
     }
   }
 }
@@ -272,7 +302,16 @@ struct SettingsContentView: View {
 
   let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
   let analysisDelayOptions = [0, 10, 20, 30, 60, 300]  // seconds: instant, 10s, 20s, 30s, 1 min, 5 min
-  let extractionIntervalOptions: [Double] = [10.0, 600.0, 3600.0]  // 10s, 10min, 1hr
+  // 10s, 1min, 5min, 10min, 30min, 1hr. Three rungs — 10s, 10min, 1hr — was not a ladder: the gap
+  // from "ten seconds" to "ten minutes" is the whole usable range of this setting, and any value in
+  // between (the default 600 aside) had no position at all, which is what made an off-list value
+  // land the handle on rung 0. The endpoints are unchanged so no stored setting moves.
+  //
+  // There is deliberately no zero here. This slider answers "how often", and a frequency has no off
+  // position — the card's own switch above it is the off switch, and it is the one that stops the
+  // model calls. A `0` would also have to mean "never" to three assistant loops that read it as
+  // "immediately", which is the opposite of what the number says.
+  let extractionIntervalOptions: [Double] = [10.0, 60.0, 300.0, 600.0, 1800.0, 3600.0]
   let hourOptions = Array(0...23)
   let frequencyOptions = [
     (0, "Off"),
@@ -341,6 +380,29 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case about = "About"
+    /// The two established pages that had no door. Both were only ever written by the sidebar the
+    /// glass shell stopped rendering, so `PermissionsPage` and `HelpPage` kept working with nothing
+    /// on screen that reached them. They are sections rather than a new pill because they were
+    /// already dressed as settings panes — both lay themselves out in `SettingsGlassMetrics.pane*`
+    /// padding and the settings card corner — and because the bar's gear already promises
+    /// "permissions, capture, account". See `presentedPage`.
+    case permissions = "Permissions"
+    case help = "Help"
+
+    /// The established page this section presents *whole*, instead of a column of settings rows.
+    ///
+    /// This is the value `ShellDestination.unreachable()` checks, and the reason a row here is a
+    /// door rather than a second version of the page (INV-NAV-1): the section mounts the same
+    /// `PermissionsPage` / `HelpPage` the shell's own route does, never a trimmed copy of it.
+    /// `SettingsPage` reads it to skip the shared scroll view and pane heading, which those two
+    /// pages already carry themselves.
+    var presentedPage: ShellDestination? {
+      switch self {
+      case .permissions: return .permissions
+      case .help: return .help
+      default: return nil
+      }
+    }
 
     /// Label shown in the settings sidebar and page header. Merged sections
     /// (Account + Plan and Usage, Notifications + Privacy) share one nav item,
@@ -559,6 +621,11 @@ struct SettingsContentView: View {
           advancedSection
         case .about:
           aboutSection
+        case .permissions, .help:
+          // Presenting sections never reach here — `SettingsPage` mounts the whole page they
+          // present before it builds this pane. Listed explicitly rather than under a `default`
+          // so a new section still has to say what it renders.
+          EmptyView()
         }
       }
       .id(selectedSection)

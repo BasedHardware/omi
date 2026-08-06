@@ -53,6 +53,8 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   case tasks
   case rewind
   case insights
+  case permissions
+  case help
 
   /// The one mechanism that reaches a destination. Not a description of the UI — a claim about
   /// reachability that `ShellDestination.unreachable` checks.
@@ -62,6 +64,14 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     /// One of the Memory hub's own three views, selected by the hub's switcher on the hub's page.
     /// The bar reaches the hub itself with the `Library` pill.
     case memoryHubView
+    /// A row in the Settings section list, which the bar's gear opens.
+    ///
+    /// This case exists because two pages had `nil` for an answer. `PermissionsPage` and `HelpPage`
+    /// render correctly and always did; their only writers were the sidebar the glass shell stopped
+    /// rendering, so they became pages with no door — and the gear's own tooltip has been promising
+    /// "permissions" the whole time. The row mounts the same page the shell's route does, so this
+    /// is a way in rather than a second, smaller version of it (INV-NAV-1).
+    case settingsSidebar
   }
 
   var id: Int { rawValue }
@@ -75,6 +85,8 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .tasks: return "Tasks"
     case .rewind: return "Rewind"
     case .insights: return "Insights"
+    case .permissions: return "Permissions"
+    case .help: return "Help"
     }
   }
 
@@ -86,6 +98,8 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .tasks: return .tasks
     case .rewind: return .rewind
     case .insights: return .insight
+    case .permissions: return .permissions
+    case .help: return .help
     }
   }
 
@@ -95,13 +109,23 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .conversations: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
-    case .home, .tasks, .rewind, .insights: return nil
+    case .home, .tasks, .rewind, .insights, .permissions, .help: return nil
+    }
+  }
+
+  /// The Settings row that opens this page, for the two the Settings list owns.
+  var settingsSection: SettingsContentView.SettingsSection? {
+    switch self {
+    case .permissions: return .permissions
+    case .help: return .help
+    case .home, .conversations, .memories, .brainMap, .tasks, .rewind, .insights: return nil
     }
   }
 
   var reach: Reach {
     switch self {
     case .conversations, .memories, .brainMap: return .memoryHubView
+    case .permissions, .help: return .settingsSidebar
     case .home, .tasks, .rewind, .insights: return .topBar
     }
   }
@@ -109,11 +133,17 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   /// Every destination whose `reach` is not actually wired up — empty, or INV-NAV-1 is broken.
   ///
   /// A `topBar` destination must have a pill; a `memoryHubView` must be one of the hub's own views
-  /// *and* the hub itself must have a pill.
+  /// *and* the hub itself must have a pill; a `settingsSidebar` destination must be a row the
+  /// Settings list actually shows, that row must mount the whole page rather than a summary of it,
+  /// *and* the bar must still carry the gear that opens Settings.
   static func unreachable(
-    fromBarItems barItems: [TopNavigationItem] = TopNavigationRoutes.primaryItems
+    fromBarItems barItems: [TopNavigationItem] = TopNavigationRoutes.primaryItems,
+    persistentItems: [TopNavigationItem] = TopNavigationRoutes.persistentItems,
+    settingsSidebarSections: [SettingsContentView.SettingsSection] = SettingsSidebarRoutes
+      .visibleSections
   ) -> [ShellDestination] {
     let barTargets = Set(barItems.map(\.index))
+    let persistentTargets = Set(persistentItems.map(\.index))
     return allCases.filter { destination in
       switch destination.reach {
       case .topBar:
@@ -123,6 +153,12 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
           MemoryHubDestination.allCases.contains(hubView)
         else { return true }
         return !barTargets.contains(SidebarNavItem.conversations.rawValue)
+      case .settingsSidebar:
+        guard let section = destination.settingsSection,
+          settingsSidebarSections.contains(section),
+          section.presentedPage == destination
+        else { return true }
+        return !persistentTargets.contains(SidebarNavItem.settings.rawValue)
       }
     }
   }
@@ -178,6 +214,18 @@ enum TopNavigationRoutes {
     TopNavigationItem(
       index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill",
       tooltip: "Apps — connectors, imports and exports"),
+  ]
+
+  /// **The controls pinned to the lane's trailing edge that are navigation**, as opposed to the two
+  /// capture toggles beside them. Today that is the settings gear.
+  ///
+  /// It is a value for the same reason `primaryItems` is: `Permissions` and `Help` are reached
+  /// through Settings, so "the gear is still there" is part of whether those pages have a door at
+  /// all, and `ShellDestination.unreachable()` has to be able to ask.
+  static let persistentItems = [
+    TopNavigationItem(
+      index: SidebarNavItem.settings.rawValue, title: "Settings", icon: "gearshape",
+      tooltip: "Settings — permissions, capture, account (⌘,)")
   ]
 
   static let memoryDestinations = MemoryHubDestination.allCases

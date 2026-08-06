@@ -192,6 +192,51 @@ final class TopNavigationBarLayoutTests: XCTestCase {
 
   }
 
+  /// **The two pages that had no door.** `PermissionsPage` and `HelpPage` render correctly and
+  /// always did — their only writers were the sidebar the glass shell stopped rendering, so the app
+  /// reached a state where it notified the user about support replies they could not open and told
+  /// them to fix permissions on a page nothing led to.
+  ///
+  /// Their door is a row in the Settings list, which the bar's gear opens. Three things have to
+  /// hold together for that to be a door at all, so all three are asserted here: the row is in the
+  /// list, the row mounts the **whole** page rather than a summary of it (INV-NAV-1 in the other
+  /// direction), and the gear that opens Settings is still on the bar.
+  func testTheStrandedUtilityPagesAreReachedThroughTheSettingsList() {
+    for destination in [ShellDestination.permissions, .help] {
+      XCTAssertEqual(destination.reach, .settingsSidebar)
+      guard let section = destination.settingsSection else {
+        return XCTFail("\(destination.title) names no Settings row")
+      }
+      XCTAssertTrue(
+        SettingsSidebarRoutes.visibleSections.contains(section),
+        "\(destination.title) has a section but the Settings list does not show it")
+      XCTAssertEqual(
+        section.presentedPage, destination,
+        "the \(section.rawValue) row must mount the page itself, not a reduced copy of it")
+    }
+
+    XCTAssertEqual(
+      TopNavigationRoutes.persistentItems.map(\.index), [SidebarNavItem.settings.rawValue],
+      "the gear is the only way into Settings, and both stranded pages now live behind it")
+    XCTAssertTrue(
+      TopNavigationRoutes.persistentItems.contains { $0.tooltip.lowercased().contains("permission") },
+      "the gear has promised permissions all along — now it has to be telling the truth")
+  }
+
+  /// The trailing cluster is measured by `testTheFlatDestinationRowFitsTheNarrowestWindow…` as a
+  /// constant, so a second persistent control would shrink the pill row without that test noticing.
+  /// Tie the constant to the real list.
+  func testTheSettingsControlWidthStillMatchesTheNumberOfPersistentControls() {
+    XCTAssertEqual(
+      TopNavigationLayoutMetrics.settingsControlWidth,
+      CGFloat(TopNavigationRoutes.persistentItems.count) * 32,
+      """
+      the pinned trailing width no longer matches the controls actually rendered, so the narrowest\
+      -window layout test is measuring a row the bar does not build
+      """
+    )
+  }
+
   /// A destination whose `reach` points at a page the bar does not have a pill for is exactly the
   /// stranding INV-NAV-1 forbids, so the checker has to *see* it rather than pass vacuously.
   func testTheReachabilityCheckerCatchesADestinationWhosePillWasRemoved() {
@@ -209,6 +254,22 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       Set(ShellDestination.unreachable(fromBarItems: barWithoutLibrary)),
       [.conversations, .memories, .brainMap],
       "without the Library pill the hub's three views have no way in")
+  }
+
+  /// The same negative proof for the Settings list, because that is how `PermissionsPage` and
+  /// `HelpPage` got stranded in the first place: the surface that wrote to them stopped rendering
+  /// and nothing said so. Both ways of losing the door have to be visible to the checker — the row
+  /// disappearing, and the gear that opens the list disappearing.
+  func testTheReachabilityCheckerCatchesAPageWhoseSettingsDoorWasRemoved() {
+    let listWithoutHelp = SettingsSidebarRoutes.visibleSections.filter { $0 != .help }
+    XCTAssertEqual(
+      ShellDestination.unreachable(settingsSidebarSections: listWithoutHelp), [.help],
+      "Help lost its Settings row and nothing noticed")
+
+    XCTAssertEqual(
+      Set(ShellDestination.unreachable(persistentItems: [])),
+      [.permissions, .help],
+      "without the gear there is no way into Settings, so both pages behind it are stranded")
   }
 
   func testLibraryPillReadsAsCurrentOnEveryHubView() {

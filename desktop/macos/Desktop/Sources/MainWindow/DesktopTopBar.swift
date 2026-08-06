@@ -117,17 +117,24 @@ struct DesktopTopBar: View {
   }
 
   /// Gear that opens Settings, wordless like the two capture controls beside it. The tooltip carries
-  /// the sentence the label used to.
+  /// the sentence the label used to — and now it is true: `Permissions` is a row in the list this
+  /// opens, where before the gear promised a surface Settings did not have.
+  ///
+  /// Built from `TopNavigationRoutes.persistentItems` rather than from literals here, so the gear
+  /// the user presses and the gear `ShellDestination.unreachable()` checks are the same one.
+  @ViewBuilder
   private var settingsButton: some View {
-    ShellStatusIconButton(
-      systemImage: "gearshape",
-      tooltip: "Settings — permissions, capture, account (⌘,)",
-      state: .inactive,
-      showsDot: false,
-      isSelected: selectedIndex == SidebarNavItem.settings.rawValue,
-      action: { navigate(to: SidebarNavItem.settings.rawValue) }
-    )
-    .accessibilityIdentifier("shell-status-settings")
+    ForEach(TopNavigationRoutes.persistentItems) { item in
+      ShellStatusIconButton(
+        systemImage: item.icon,
+        tooltip: item.tooltip,
+        state: .inactive,
+        showsDot: false,
+        isSelected: selectedIndex == item.index,
+        action: { navigate(to: item.index) }
+      )
+      .accessibilityIdentifier("shell-status-settings")
+    }
   }
 
   /// Every nav press on this bar: the brand, the pills and the settings gear. They were four copies of

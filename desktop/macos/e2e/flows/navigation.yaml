@@ -19,6 +19,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
   - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/HelpPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
 preconditions:
   - auth_ready
 
@@ -90,6 +93,23 @@ steps:
       text_visible:
         - Settings
         - General
+
+  - id: S5a
+    name: Reach Permissions and Help from the Settings list
+    do: >-
+      In Settings, the section list ends with two rows the glass shell previously had no way to
+      open at all: Permissions and Help. Click Permissions and verify the real permissions page
+      loads — Microphone, Screen Recording, System Audio and Notifications, each with its status
+      word and, where the permission is denied or stale, its reset/recovery steps. Then click Help
+      and verify the founder support thread loads in the pane. If unread founder replies are
+      waiting, the Help row carries their count as a badge before you open it, and the badge is
+      gone after.
+    expect:
+      text_visible:
+        - Permissions
+        - Help
+        - Microphone
+        - Screen Recording
 
   - id: S6
     name: Return to Home from Settings
