@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchLayout.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindSurfaceLayout.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/AppIconView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift

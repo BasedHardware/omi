@@ -98,38 +98,46 @@ struct RewindPage: View {
       } else if let error = viewModel.errorMessage {
         errorView(error)
       } else {
-        // Main content with persistent search field
-        VStack(spacing: 0) {
-          if isTranscriptExpanded {
-            // Expanded transcript + notes view replaces timeline
-            expandedTranscriptView
-          } else {
-            // Recovery banner (if database was recovered from corruption)
-            if viewModel.showRecoveryBanner {
-              recoveryBanner
-            }
-
-            // Unified top bar - search field is always here
-            unifiedTopBar
-
-            // Content area changes based on mode
-            if isInSearchMode {
-              if viewModel.screenshots.isEmpty {
-                noSearchResultsView
-              } else if searchViewMode == .timeline {
-                timelineWithSearch
-              } else {
-                fullScreenResultsView
-              }
-            } else if viewModel.screenshots.isEmpty {
-              emptyState
+        // Two objects on the desktop: a header on the shared lane, and a player wide enough to scrub.
+        // Every width is `RewindSurfaceLayout`'s — see that file for why they are not the same lane.
+        GeometryReader { proxy in
+          let header = RewindSurfaceLayout.headerWidth(for: proxy.size.width)
+          let player = RewindSurfaceLayout.playerWidth(for: proxy.size.width)
+          VStack(spacing: 0) {
+            if isTranscriptExpanded {
+              // Expanded transcript + notes view replaces timeline
+              expandedTranscriptView.rewindPlayerPanel(width: player)
             } else {
-              // Normal timeline view (without top bar, since we have unified one)
-              timelineContentBody
+              // Recovery banner (if database was recovered from corruption)
+              if viewModel.showRecoveryBanner {
+                recoveryBanner.rewindHeaderPanel(width: header)
+              }
+
+              // Unified top bar - search field is always here
+              unifiedTopBar.rewindHeaderPanel(width: header)
+
+              // Content area changes based on mode
+              if isInSearchMode {
+                if viewModel.screenshots.isEmpty {
+                  noSearchResultsView.rewindPlayerPanel(width: player)
+                } else if searchViewMode == .timeline {
+                  timelineWithSearch.rewindPlayerPanel(width: player)
+                } else {
+                  // Already two panels of its own, with its own gap under the bar.
+                  fullScreenResultsView
+                }
+              } else if viewModel.screenshots.isEmpty {
+                emptyState.rewindPlayerPanel(width: player)
+              } else {
+                // Normal timeline view (without top bar, since we have unified one)
+                timelineContentBody.rewindPlayerPanel(width: player)
+              }
             }
           }
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.top, RewindSurfaceLayout.topGap)
+        .padding(.bottom, RewindSurfaceLayout.bottomGap)
       }
     }
     .glassContent()
@@ -440,7 +448,6 @@ struct RewindPage: View {
     }
     .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, OmiSpacing.md)
-    .overlay(alignment: .bottom) { GlassSeparator() }
   }
 
   // MARK: - Timeline Content Body (without top bar)
