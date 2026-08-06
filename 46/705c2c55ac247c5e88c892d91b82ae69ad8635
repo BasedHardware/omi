@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
+  s_569f1df936cc22::t_d63d565cf48f48 57-69
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  s_569f1df936cc22::t_1bcbf2bb1da177 28-31,42,49-53,56,68,71,88-99
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  s_569f1df936cc22::t_08caab70dd5a51 108,113-117,135
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_14468a9f5e8b87 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "46705c2c55ac247c5e88c892d91b82ae69ad8635",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
