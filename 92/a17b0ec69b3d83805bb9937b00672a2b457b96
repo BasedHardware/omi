@@ -1,0 +1,43 @@
+desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
+  s_569f1df936cc22::t_e94dd63bac66fe 4-37,39
+  s_569f1df936cc22::t_5117824d51a4e3 222
+  s_569f1df936cc22::t_06e808fd80d4d4 53-54
+desktop/macos/changelog/unreleased/20260806-permissions-and-help-reachable.json
+  s_569f1df936cc22::t_d9b3e35cffe853 1-3
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  s_569f1df936cc22::t_97b59e950c9ad2 306
+  s_569f1df936cc22::t_4dfb0675088b16 242-243,245-248
+  s_569f1df936cc22::t_815df9b9f91add 285-305,307-311,319-327
+  s_814cfc8af23811::t_67dcdb0d8c34c3 328
+desktop/macos/Desktop/Tests/CrispManagerLifecycleTests.swift
+  s_569f1df936cc22::t_7480b9fa2e238c 177-210,212-214,216-221,223-240
+  s_569f1df936cc22::t_8dc0b9701a9092 242-252
+  s_569f1df936cc22::t_27e70f2df4141c 211,215,222
+  s_569f1df936cc22::t_5ec9921114a566 241
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_3b5e6c1238deb1 1278-1285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "92a17b0ec69b3d83805bb9937b00672a2b457b96",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_814cfc8af23811": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1fcdb13-5b42-47d9-a8ea-d2da9669b2be",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
