@@ -140,6 +140,13 @@ enum ShellSummon {
   private static var observers: [NSObjectProtocol] = []
   /// Whether a summon has ever put the shell on screen. The gate on restoring it for the user.
   private static var hasBeenShown = false
+  /// Which window the Escape route and the frame observers are currently bound to.
+  ///
+  /// Both are per-window — `WindowEscapeKeyMonitor` matches on window identity and the notification
+  /// observers are registered with the window as their `object` — and `⌘W` does not retire the shell,
+  /// it retires *this* window; the next summon asks the scene for a new one. Binding once and never
+  /// checking would leave Escape and the frame memory wired to a window nobody can see again.
+  private static weak var boundWindow: NSWindow?
 
   // MARK: - Finding the shell
 
@@ -175,8 +182,8 @@ enum ShellSummon {
   /// route to match. Idempotent, and cheap enough to call from a defaults observer.
   static func applyPresentation(to window: NSWindow) {
     let presentation = presentation()
+    if boundWindow !== window { rebind(to: window) }
     knownShellWindow = window
-    startObserving(shell: window)
     ShellWindowChrome.dress(window, as: presentation)
     appliedPresentation = presentation
     if presentation == .summoned {
@@ -264,18 +271,25 @@ enum ShellSummon {
     return ShellFrameMemory.read(from: stored, displayKey: key)
   }
 
-  // MARK: - Launch wiring
+  // MARK: - Per-window attachments
 
-  /// Called once, the first time the shell is dressed. Everything after that is driven by the
-  /// notifications registered here.
+  /// Move every per-window attachment onto `window`, dropping whatever the previous one had.
   ///
-  /// The move/resize observers are scoped to the shell window itself rather than filtered inside the
+  /// Called whenever the shell window changes identity, which is not only at launch: `⌘W` closes
+  /// *this* window and the next summon asks the scene for a new one. Attachments that stayed bound to
+  /// the closed window would silently stop working — Escape would dismiss nothing and the frame the
+  /// user chose would never be remembered — and neither failure has any runtime signal.
+  ///
+  /// The move/resize observers are scoped to the window itself rather than filtered inside the
   /// callback: an observer block delivered on the main queue is still a non-isolated closure, so
   /// reading an `NSWindow` out of the notification would be a `sending` race. Passing the window as
   /// the observed object keeps the filtering in `NotificationCenter`, where it is free and safe.
-  static func startObserving(shell window: NSWindow) {
-    guard observers.isEmpty else { return }
+  private static func rebind(to window: NSWindow) {
     let center = NotificationCenter.default
+    for observer in observers { center.removeObserver(observer) }
+    observers.removeAll()
+    unregisterEscapeRoute()
+    boundWindow = window
     for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
       observers.append(
         center.addObserver(forName: name, object: window, queue: .main) { _ in

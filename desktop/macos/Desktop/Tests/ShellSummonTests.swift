@@ -176,6 +176,34 @@ final class ShellSummonTests: XCTestCase {
     XCTAssertFalse(shellDismissed, "the shell swallowed an Escape that belonged to the page")
   }
 
+  /// **`⌘W` does not retire the shell, it retires a window.** The next summon asks the scene for a
+  /// new one, and every per-window attachment has to come with it. A route left on the closed window
+  /// would make Escape dismiss nothing and the user's chosen frame never be remembered — neither of
+  /// which has any runtime signal, so only a test catches it.
+  ///
+  /// Asserted from the closed window's side because that half is true in both presentations: an
+  /// anchored shell has no Escape route at all, and a summoned one must have moved it.
+  @MainActor
+  func testReplacingTheShellWindowLeavesNothingBoundToTheClosedOne() {
+    let closed = makeShellWindow()
+    let replacement = makeShellWindow()
+
+    ShellSummon.applyPresentation(to: closed)
+    ShellSummon.applyPresentation(to: replacement)
+
+    XCTAssertFalse(
+      WindowEscapeKeyMonitor.shared.dispatchEscape(in: closed),
+      "the retired window still owns the shell's Escape route; the visible one has none")
+  }
+
+  private func makeShellWindow() -> NSWindow {
+    NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 960, height: 700),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+      backing: .buffered,
+      defer: true)
+  }
+
   /// …and when the page declines it — you are already Home — the shell gets it. This is the pair that
   /// matters: either half alone describes a different product.
   @MainActor
