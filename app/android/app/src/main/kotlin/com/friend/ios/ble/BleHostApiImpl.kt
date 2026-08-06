@@ -7,7 +7,6 @@ import com.friend.ios.BleHostApi
 
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -54,21 +53,8 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
     override fun unmanageDevice(uuid: String) {
         Log.i(TAG, "unmanageDevice: $uuid")
-        val service = OmiBleForegroundService.instance
-        if (service != null) {
-            service.unmanageDevice(uuid)
-            return
-        }
-        // Service not running — still tear down any live GATT and record user
-        // disconnect intent so companion / sticky restart cannot revive (#5361).
-        bleManager.disconnectGatt(uuid)
-        bleManager.closeGatt(uuid)
-        val context = getActivity()?.applicationContext ?: return
-        context.getSharedPreferences(OmiBleForegroundService.PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(OmiBleForegroundService.PREFS_USER_DISCONNECTED, true)
-            .remove(OmiBleForegroundService.PREFS_KEY)
-            .apply()
+        OmiBleForegroundService.instance?.unmanageDevice(uuid)
+            ?: bleManager.closeGatt(uuid) // Fallback if service not running
     }
 
     // ── Bonding ──
