@@ -1,8 +1,10 @@
 {
   "files": {
+    "backend/services/agent_vm_lifecycle.py": 1682,
     "backend/testing/listen_pusher_stack/run.py": 1790
   },
   "raise_justifications": {
+    "backend/services/agent_vm_lifecycle.py": "#11164's lifecycle owner now keeps the migration journal's account-deletion, lease, pointer, GCE identity, and missing-candidate retry fences alongside the existing Agent VM transitions; splitting those transaction primitives would duplicate the safety boundary.",
     "backend/testing/listen_pusher_stack/run.py": "#10577 keeps the operation-scoped persistence-fault controls beside the real listener/Pusher/Firestore assertions they qualify. +79 for #9809: the cloud-orphan-recovery scenario stays in the existing end-to-end listener/Pusher gauntlet rather than forking a second harness."
   },
   "threshold": 1500
