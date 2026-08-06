@@ -134,36 +134,38 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
     # postprocess path silently drops extracted tasks. Mirror
     # ``api_key_metadata._coerce_utc_datetime`` / ``mcp_action_items.parse_due_at``:
     # parse strings tolerantly, attach UTC to naive values, drop only malformed
-    # strings (do not 500 the whole create/update).
+    # / out-of-range values (ValueError or OverflowError from UTC normalization)
+    # so a single bad field cannot 500 the whole create/update or batch.
     for date_field in ('created_at', 'updated_at', 'due_at', 'completed_at'):
         value = action_item_data.get(date_field)
         if value is None or value == '':
             if date_field in action_item_data and value == '':
                 action_item_data.pop(date_field, None)
             continue
-        parsed: Optional[datetime] = None
-        if isinstance(value, datetime):
-            parsed = value
-        elif isinstance(value, str):
-            try:
+        try:
+            if isinstance(value, datetime):
+                parsed = value
+            elif isinstance(value, str):
                 parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError:
-                logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
+            else:
+                logger.warning(
+                    "Dropping non-datetime %s type=%s on action item write",
+                    date_field,
+                    type(value).__name__,
+                )
                 action_item_data.pop(date_field, None)
                 continue
-        else:
-            logger.warning(
-                "Dropping non-datetime %s type=%s on action item write",
-                date_field,
-                type(value).__name__,
-            )
+
+            # OverflowError: boundary aware values whose offset conversion leaves
+            # Python's datetime range (same tolerance as api_key_metadata).
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
+        except (OverflowError, ValueError):
+            logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
             action_item_data.pop(date_field, None)
             continue
-
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        else:
-            parsed = parsed.astimezone(timezone.utc)
         action_item_data[date_field] = parsed
 
     return action_item_data
