@@ -218,7 +218,9 @@ struct ChatErrorCard: View {
       case .nodeMissing:
         return "Cause: node binary not found on PATH."
       case .runtimeMissing:
-        return "Cause: bridge script missing on disk."
+        // Covers both a missing bridge script and a bundle whose agent runtime
+        // payload (e.g. pi-mono-extension) never made it into the install.
+        return "Cause: the local AI runtime is missing files on disk."
       case .crashed:
         return "Cause: bridge process exited."
       case .failedToStart(let failure):

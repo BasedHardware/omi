@@ -15,6 +15,7 @@ enum AgentErrorCode: String, CaseIterable, Sendable {
   case connectionFailed = "connection_failed"
   case payloadTooLarge = "payload_too_large"
   case runtimeCrashed = "runtime_crashed"
+  case runtimeInstallIncomplete = "runtime_install_incomplete"
   case toolSchemaRejected = "tool_schema_rejected"
   case providerRateLimited = "provider_rate_limited"
   case providerOverloaded = "provider_overloaded"
@@ -33,6 +34,14 @@ struct ClassifiedAgentError: Equatable, Sendable {
 }
 
 enum AgentErrorClassifier {
+  /// Single copy for an install whose agent runtime payload is incomplete.
+  /// Owned here because this classifier is also the round-trip target: surfaces
+  /// re-classify already-classified messages, so the phrase in the copy has to
+  /// be the same phrase the rule matches.
+  static let runtimeInstallIncompleteMessage =
+    "Omi's local AI runtime is not installed correctly, so chat can't start. "
+    + "Reinstall or update Omi to repair it."
+
   // ponytail: ordered substring rules over the observed error corpus; a rule
   // table beats ML until the corpus outgrows it. First match wins.
   static func classify(_ rawMessage: String) -> ClassifiedAgentError {
@@ -69,6 +78,24 @@ enum AgentErrorClassifier {
         code: .agentModeUnavailable,
         userMessage:
           "This agent isn't available in your current setup. Open Settings → check your agent mode/provider, then try again.",
+        retryable: false)
+    }
+
+    // A bundle that shipped without its agent runtime payload fails identically
+    // on every turn, so "the AI engine restarted, try again" is the wrong copy —
+    // that phrasing produced retry loops against a permanently broken install.
+    // Matched before the generic "process exited" rule below, which pi-mono's
+    // own rejection string (`pi-mono process exited (code 1)`) would otherwise
+    // claim. Also recognizes this classifier's own output so surfaces that
+    // re-classify an already-classified message stay on the same code.
+    if lower.contains("local ai runtime is not installed correctly")
+      || lower.contains("extension path does not exist")
+      || lower.contains("failed to load extension")
+      || (lower.contains("unknown provider") && lower.contains("omi"))
+    {
+      return ClassifiedAgentError(
+        code: .runtimeInstallIncomplete,
+        userMessage: runtimeInstallIncompleteMessage,
         retryable: false)
     }
 

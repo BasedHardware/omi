@@ -6,6 +6,30 @@ import XCTest
 /// observed 30-day chat_agent_error corpus that motivated it.
 final class AgentErrorClassifierTests: XCTestCase {
 
+  /// A missing runtime payload fails identically on every turn. It must not be
+  /// classed as a crash ("the AI engine restarted, try again") — that copy is a
+  /// retry loop against a permanently broken install.
+  func testAMissingRuntimeExtensionIsNotClassedAsARetryableCrash() {
+    for raw in [
+      "Failed to load extension \"/Applications/omi-live.app/Contents/Resources/pi-mono-extension/index.ts\": Extension path does not exist",
+      "Unknown provider \"omi\". Use --list-models to see available providers/models.",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .runtimeInstallIncomplete, raw)
+      XCTAssertFalse(classified.retryable, raw)
+      XCTAssertFalse(classified.userMessage.lowercased().contains("try again"), raw)
+      XCTAssertTrue(classified.userMessage.lowercased().contains("reinstall"), raw)
+    }
+  }
+
+  /// A runtime that really did crash stays retryable — the incomplete-payload
+  /// rule must not swallow the ordinary crash bucket it is ordered ahead of.
+  func testAnOrdinaryRuntimeExitStaysRetryable() {
+    let classified = AgentErrorClassifier.classify("pi-mono process exited (code 1)")
+    XCTAssertEqual(classified.code, .runtimeCrashed)
+    XCTAssertTrue(classified.retryable)
+  }
+
   func testBillingExhaustionIsNotRetryableAndNamesTheFix() {
     let classified = AgentErrorClassifier.classify(
       "400 Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."
