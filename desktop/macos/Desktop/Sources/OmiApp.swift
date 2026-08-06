@@ -99,11 +99,14 @@ struct OMIApp: App {
 
   static let launchMode = LaunchMode.fromCommandLine()
 
-  private var windowTitle: String {
-    Self.windowTitle(
+  /// The shell window's title for *this* build. Static because `ShellSummon` identifies the shell by
+  /// exact title — several auxiliary windows also begin with "Omi", and dressing one of those as the
+  /// summonable shell would float and auto-hide it.
+  static var currentWindowTitle: String {
+    windowTitle(
       displayName: AppBuild.displayName,
       version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
-      launchMode: Self.launchMode,
+      launchMode: launchMode,
       isNonProduction: AppBuild.isNonProduction)
   }
 
@@ -114,16 +117,18 @@ struct OMIApp: App {
     return version.isEmpty ? title : "\(title) v\(version)"
   }
 
-  /// Window size based on launch mode
+  /// Size the shell first comes up at. The summoned shell is a panel you call over your work, not an
+  /// app you switch to, so it matches `ShellSummonPlacement.defaultSize` rather than the old
+  /// managed-window 1200×800. Rewind mode is still a window and keeps its own.
   private var defaultWindowSize: CGSize {
-    Self.launchMode == .rewind ? CGSize(width: 1000, height: 700) : CGSize(width: 1200, height: 800)
+    Self.launchMode == .rewind ? CGSize(width: 1000, height: 700) : ShellSummonPlacement.defaultSize
   }
 
   var body: some Scene {
     let _ = Self.registerOpenMainWindowHandler(openWindow)
 
     // Main desktop window - same view for both modes, sidebar hidden in rewind mode
-    return Window(windowTitle, id: "main") {
+    return Window(Self.currentWindowTitle, id: "main") {
       DesktopHomeView()
         .environmentObject(appState)
         .withFontScaling()
@@ -604,32 +609,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     startSentryHeartbeat()
     startForegroundTracking()
 
-    // Apply initial main-window policy after SwiftUI has created the window.
+    // Dress and place the shell once SwiftUI has created it. `ShellSummon` owns both from here on:
+    // transparent, buttonless, summoned or anchored, and remembered per display.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      let shouldSuppressMainWindow = restoreMainWindowAfterUpdateRelaunch == false
-      if !shouldSuppressMainWindow {
+      guard let window = ShellSummon.shellWindow() else {
+        log("AppDelegate: WARNING - shell window not found after launch")
+        return
+      }
+      ShellSummon.applyPresentation(to: window)
+      if restoreMainWindowAfterUpdateRelaunch == false {
+        window.orderOut(nil)
+        log("AppDelegate: Shell suppressed after background update relaunch")
+      } else {
         NSApp.activate()
-      }
-      var foundOmiWindow = false
-      for window in NSApp.windows {
-        log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
-        if Self.isMainOmiWindow(window) {
-          foundOmiWindow = true
-          ShellWindowChrome.dress(window)  // Transparent, buttonless. No ground: panels float.
-          // Ensure fullscreen always creates a dedicated Space
-          window.collectionBehavior.insert(.fullScreenPrimary)
-          if shouldSuppressMainWindow {
-            window.orderOut(nil)
-            log("AppDelegate: Main window suppressed after background update relaunch")
-          } else {
-            window.makeKeyAndOrderFront(nil)
-            log("AppDelegate: Main window shown on launch")
-          }
-        }
-      }
-      if !foundOmiWindow {
-        log("AppDelegate: WARNING - 'Omi' window not found!")
+        ShellSummon.summon(alwaysPlace: true)
+        log("AppDelegate: Shell summoned on launch")
       }
     }
 
@@ -765,15 +759,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         log("AppDelegate: [HOTKEY] Rewind hotkey MATCHED (Ctrl+Option+R)")
         DispatchQueue.main.async {
           log("AppDelegate: [HOTKEY] Activating app and posting notification")
-          // Bring app to front
+          // Bring app to front and summon the shell onto the display the cursor is on.
           NSApp.activate()
-          // Find and show main window
-          for window in NSApp.windows {
-            if window.title.hasPrefix("Omi") {
-              window.makeKeyAndOrderFront(nil)
-              break
-            }
-          }
+          ShellSummon.summon()
           // Post notification to navigate to Rewind
           NotificationCenter.default.post(name: .navigateToRewind, object: nil)
           log("AppDelegate: [HOTKEY] Posted navigateToRewind notification")
@@ -1080,26 +1068,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     }
   }
 
+  /// A summon can come from any Space and any display, and can outlive the launch pass that dressed
+  /// the window, so `ShellSummon` re-dresses it, pulls it to the active Space, un-minimises it, and
+  /// lands it on the display under the cursor. `false` means SwiftUI has not built the window yet —
+  /// the caller's signal to ask the scene for one and try again.
   @MainActor private func revealMainWindowIfAvailable() -> Bool {
-    for window in NSApp.windows {
-      let isRealAppWindow = window.frame.width > 300 && window.frame.height > 200
-      let isMenuBarPopover = window.title.hasPrefix("Item-")
-      if isRealAppWindow && !isMenuBarPopover {
-        // A summon can come from any Space/desktop, so pull the window to whichever
-        // desktop is active as the app activates (openMainAppWindow triggers a real
-        // LaunchServices activation). Also un-minimize and nudge it on-screen if it
-        // drifted off a disconnected display.
-        window.collectionBehavior.insert(.moveToActiveSpace)
-        if window.isMiniaturized { window.deminiaturize(nil) }
-        if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
-          window.center()
-        }
-        window.makeKeyAndOrderFront(nil)
-        ShellWindowChrome.dress(window)  // Re-asserted: a summon can outlive the launch pass.
-        return true
-      }
-    }
-    return false
+    ShellSummon.summon()
   }
 
   @MainActor @objc private func checkForUpdates() {
@@ -1251,17 +1225,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    // Always try to show the main Omi window when dock icon is clicked
-    for window in sender.windows where window.title.hasPrefix("Omi") {
-      if window.isMiniaturized {
-        window.deminiaturize(nil)
-      }
-      window.makeKeyAndOrderFront(nil)
-      sender.activate(ignoringOtherApps: true)
-      log("AppDelegate: Restored Omi window from dock click (wasVisible=\(flag))")
-      return false
-    }
-    return true
+    // The Dock icon is the guaranteed way back to a shell that puts itself away whenever you click
+    // off it — the reason `LSUIElement` stays false. Route it through the same summon as the hotkey.
+    guard MainActor.assumeIsolated({ ShellSummon.summon() }) else { return true }
+    sender.activate(ignoringOtherApps: true)
+    log("AppDelegate: Summoned the shell from a dock click (wasVisible=\(flag))")
+    return false
   }
 
   /// Publish only token-free local diagnostics for a running named dev bundle.
@@ -1561,6 +1530,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
+    MainActor.assumeIsolated { ShellSummon.restoreOnActivationIfNeeded() }
     guard didScheduleInitialSettingsSync else {
       scheduleInitialSettingsSync()
       return

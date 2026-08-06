@@ -41,6 +41,16 @@ package enum WindowGlass {
     /// An ordinary titled window whose *inside* is glass (`InkGlassStyle.fullBleed`). The window frame
     /// already owns the corner and the shadow.
     case titled
+    /// A **summoned** surface: the shell. It is the only kind that is both — a titled window (⌘W and
+    /// ⌘M route from the style mask, and the transparent title bar is one of the shell's two drag
+    /// handles) whose inside is *not* one slab of glass but several panels floating with the desktop
+    /// between them.
+    ///
+    /// That combination is why it cannot reuse `.titled`. A titled window's frame *is* the panel's
+    /// edge, so AppKit's shadow is the right one. The shell's frame is a transparent rectangle
+    /// noticeably larger than anything drawn inside it, so AppKit's shadow traces empty air — the
+    /// same defect `.floating` exists to avoid, arriving by a different route.
+    case summoned
   }
 
   /// **Whether AppKit draws the window's own shadow**, which is the one property the two kinds disagree
@@ -58,7 +68,7 @@ package enum WindowGlass {
   package static func drawsSystemShadow(_ kind: Kind) -> Bool { kind == .titled }
 
   /// Whether the window has a title bar that has to be got out of the glass's way.
-  package static func hasTitlebar(_ kind: Kind) -> Bool { kind == .titled }
+  package static func hasTitlebar(_ kind: Kind) -> Bool { kind != .floating }
 
   /// Puts a window into the state the glass needs, and nothing else.
   ///

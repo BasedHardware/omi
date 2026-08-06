@@ -1,5 +1,5 @@
 //
-//  ShellWindowChrome.swift — what the main window is, now that it has no ground.
+//  ShellWindowChrome.swift — what the main window is, now that it has no ground and is summoned.
 //
 //  This file replaces `ShellGlassGround`, and the reason it replaces it rather than extends it is the
 //  whole shape of the shell.
@@ -33,7 +33,22 @@
 //    `GlassShell.titlebarClearance` and draws nothing in it. `isMovableByWindowBackground` adds the
 //    second: on a window that is mostly desktop, the parts that are not a control drag it too, which is
 //    how the bar this file's chrome sits in becomes a drag handle without any view knowing it is one.
-//    Controls, text fields and scroll views consume their own drags and are unaffected.
+//    Controls, text fields and scroll views consume their own drags and are unaffected. Views that own
+//    their own drags opt out with `mouseDownCanMoveWindow` (see `RewindTrackNSView`).
+//
+//  ## The two presentations, and why there are two
+//
+//  A surface with no ground and no chrome is not a managed application window any more; it is a thing
+//  you summon. `.summoned` says so to AppKit — floating level so it comes up over whatever you were
+//  reading, and `hidesOnDeactivate` so clicking away puts it back. `ShellSummon` owns where it lands.
+//
+//  `.anchored` is the same window before the user has an account and a completed setup. It is not a
+//  style choice: a first run sends people to System Settings for microphone, screen recording and
+//  accessibility, and every one of those trips deactivates this app. A `hidesOnDeactivate` window
+//  vanishes on the way out, and a half-finished setup that disappears when you go to grant the thing
+//  it just asked for is a first run nobody completes. So the shell only becomes summonable once
+//  `ShellSummon` can see a signed-in, onboarded user — and `dress` is idempotent so the switch is a
+//  re-dress, not a rebuild.
 //
 //  Brand: nothing here picks a colour at all (INV-UI-1).
 //
@@ -44,6 +59,17 @@ import OmiTheme
 /// The main window's chrome: transparent, light-pinned, and without the system's window buttons.
 @MainActor
 enum ShellWindowChrome {
+  /// Whether the shell is a thing you summon, or a window that stays where you left it.
+  ///
+  /// Behavioural, not cosmetic — the two differ only in the AppKit properties that decide whether the
+  /// window survives losing focus. See this file's header for why a first run needs the second.
+  enum Presentation: Equatable, CaseIterable, Sendable {
+    /// Steady state: floats over other apps, and hides itself the moment you click away.
+    case summoned
+    /// Onboarding, sign-in and permission-granting: an ordinary window that stays put.
+    case anchored
+  }
+
   /// The style-mask bits `⌘W` and `⌘M` are routed by.
   ///
   /// Named rather than written inline because the whole safety argument for hiding the buttons is that
@@ -56,18 +82,51 @@ enum ShellWindowChrome {
     .closeButton, .miniaturizeButton, .zoomButton,
   ]
 
+  /// Which glass a presentation wears. Pure, so the pairing is a claim a test can hold without a
+  /// window: a summoned shell must never be dressed as `.titled`, whose system shadow would trace the
+  /// transparent rectangle around its panels.
+  static func glassKind(for presentation: Presentation) -> WindowGlass.Kind {
+    presentation == .summoned ? .summoned : .titled
+  }
+
+  /// How the window joins Spaces.
+  ///
+  /// A summoned surface is `.fullScreenAuxiliary` — it comes up *over* whatever app is full-screen,
+  /// which is the whole point of summoning it. An anchored one is `.fullScreenPrimary` so onboarding
+  /// can take a Space of its own. The two are mutually exclusive, so a re-dress must subtract the
+  /// other rather than only add its own; a window that accumulated both loses full-screen entirely.
+  static func collectionBehavior(
+    for presentation: Presentation,
+    current: NSWindow.CollectionBehavior
+  ) -> NSWindow.CollectionBehavior {
+    var behavior = current
+    behavior.insert(.moveToActiveSpace)
+    if presentation == .summoned {
+      behavior.remove(.fullScreenPrimary)
+      behavior.insert(.fullScreenAuxiliary)
+    } else {
+      behavior.remove(.fullScreenAuxiliary)
+      behavior.insert(.fullScreenPrimary)
+    }
+    return behavior
+  }
+
   /// Puts the window into the state the shell needs, and nothing else.
   ///
-  /// Idempotent, because both call sites run more than once: launch applies it, and a summon re-applies
-  /// it to a window that may have outlived the launch pass. Every step here is a property assignment,
-  /// so a second pass re-asserts rather than accumulating.
-  static func dress(_ window: NSWindow) {
-    WindowGlass.wear(window, as: .titled)
+  /// Idempotent, because all three call sites run more than once: launch applies it, a summon
+  /// re-applies it to a window that may have outlived the launch pass, and completing onboarding
+  /// re-applies it to switch presentations. Every step here is a property assignment, so a second pass
+  /// re-asserts rather than accumulating.
+  static func dress(_ window: NSWindow, as presentation: Presentation = .summoned) {
+    WindowGlass.wear(window, as: glassKind(for: presentation))
     // Before hiding the buttons, never after: a window that lost the bits would otherwise spend the
     // window between the two calls with no way to be closed at all.
     window.styleMask.formUnion(keyboardWindowCommands)
     hideStandardButtons(in: window)
     window.isMovableByWindowBackground = true
+    window.level = presentation == .summoned ? .floating : .normal
+    window.hidesOnDeactivate = presentation == .summoned
+    window.collectionBehavior = collectionBehavior(for: presentation, current: window.collectionBehavior)
   }
 
   /// Split from `dress` so a test can drive it against a real `NSWindow` and read the buttons back.

@@ -117,6 +117,82 @@ final class ShellWindowChromeTests: XCTestCase {
       "the transparent title bar is the second drag handle; a borderless window loses it")
   }
 
+  // MARK: - Summoned vs anchored
+
+  /// A summoned shell behaves like the thing it is: it comes up over whatever you were reading, and
+  /// clicking off it puts it back. `hidesOnDeactivate` is the whole click-outside dismissal — there is
+  /// no click monitor anywhere, deliberately, because AppKit already owns this.
+  func testASummonedShellFloatsOverOtherAppsAndPutsItselfAwayWhenYouClickOff() {
+    let window = makeWindow()
+
+    ShellWindowChrome.dress(window, as: .summoned)
+
+    XCTAssertEqual(window.level, .floating, "a summoned surface that sinks behind the app you called it over")
+    XCTAssertTrue(window.hidesOnDeactivate, "clicking away is the only dismissal that needs no affordance")
+    XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
+    XCTAssertTrue(window.collectionBehavior.contains(.moveToActiveSpace))
+  }
+
+  /// **The first-run guard.** Onboarding sends people to System Settings for microphone, screen
+  /// recording and accessibility, and every trip deactivates this app. A shell that auto-hid would
+  /// vanish on the way out to grant the thing it just asked for, so before there is an account and a
+  /// finished setup the same window is an ordinary one.
+  func testAnAnchoredShellStaysUpSoAPermissionTripCannotStrandOnboarding() {
+    let window = makeWindow()
+    ShellWindowChrome.dress(window, as: .summoned)
+
+    ShellWindowChrome.dress(window, as: .anchored)
+
+    XCTAssertFalse(window.hidesOnDeactivate, "onboarding disappears the moment the user grants a permission")
+    XCTAssertEqual(window.level, .normal)
+    XCTAssertTrue(window.collectionBehavior.contains(.fullScreenPrimary))
+  }
+
+  /// The two Space behaviours are mutually exclusive, and `dress` runs repeatedly on one window as the
+  /// user finishes onboarding. A pass that only ever *added* its own would leave both set, which AppKit
+  /// resolves by giving the window neither.
+  func testSwitchingPresentationsNeverLeavesBothFullScreenBehavioursSet() {
+    let window = makeWindow()
+
+    ShellWindowChrome.dress(window, as: .anchored)
+    ShellWindowChrome.dress(window, as: .summoned)
+
+    XCTAssertFalse(
+      window.collectionBehavior.contains(.fullScreenPrimary),
+      "a window carrying both full-screen behaviours loses full-screen entirely")
+    XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
+  }
+
+  /// The summoned shell wears its own glass, not the titled window's. The difference is one property
+  /// and it is visible: AppKit's frame shadow on a window that is a transparent rectangle around
+  /// several inset panels draws a hard edge around empty air.
+  func testTheSummonedShellWearsGlassThatLeavesTheShadowToItsPanels() {
+    XCTAssertEqual(ShellWindowChrome.glassKind(for: .summoned), .summoned)
+    XCTAssertEqual(ShellWindowChrome.glassKind(for: .anchored), .titled)
+    XCTAssertFalse(
+      WindowGlass.drawsSystemShadow(.summoned),
+      "the panels inside draw their own ambient shadow; AppKit's would trace the transparent frame")
+    XCTAssertTrue(
+      WindowGlass.hasTitlebar(.summoned),
+      "the transparent title bar is one of the shell's two drag handles, and ⌘W routes from the mask")
+  }
+
+  /// Neither presentation may drop the keyboard close/minimise route or the drag handles — the
+  /// buttons are hidden in both, so those are the only affordances left.
+  func testBothPresentationsKeepTheKeyboardCommandsAndTheDragHandles() {
+    for presentation in ShellWindowChrome.Presentation.allCases {
+      let window = makeWindow()
+      window.styleMask.subtract(ShellWindowChrome.keyboardWindowCommands)
+
+      ShellWindowChrome.dress(window, as: presentation)
+
+      XCTAssertTrue(
+        window.styleMask.isSuperset(of: ShellWindowChrome.keyboardWindowCommands),
+        "\(presentation) has no ⌘W or ⌘M and no buttons either")
+      XCTAssertTrue(window.isMovableByWindowBackground, "\(presentation) cannot be dragged anywhere")
+    }
+  }
+
   // MARK: - Idempotence
 
   /// Launch dresses the window and a summon re-dresses it. A second pass must re-assert, never

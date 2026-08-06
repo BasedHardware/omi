@@ -1,0 +1,324 @@
+//
+//  ShellSummon.swift — where the shell lands when you call it, and where it goes when you don't.
+//
+//  `ShellWindowChrome` says *what* the shell is: transparent, buttonless, floating, hiding itself the
+//  moment it loses focus. This says *where*, and it is a separate file because "where" is the half
+//  that is per-display state rather than per-window properties.
+//
+//  ## Why per-display, and not one remembered frame
+//
+//  One remembered frame is the naive implementation and it is wrong on exactly the setup most people
+//  have. Summon the shell on the laptop, put it where you want it; summon it later on the 5K and it
+//  arrives at laptop coordinates — off the edge, or covering the thing you summoned it to look at.
+//  Clamping into the new screen "fixes" it by throwing the placement away, so the shell drifts to a
+//  different spot every time you switch displays and never settles anywhere.
+//
+//  So the frame is remembered against the display it was left on, the way the surfaces this shell is
+//  modelled on do it. A summon reads the display under the *cursor* — not the key window's, not
+//  `NSScreen.main`'s — because the cursor is where the user is looking, and it is the only signal
+//  available when the app is not even active.
+//
+//  ## What a summon does not do
+//
+//  It does not move a shell you are already using. Repositioning on every route into this function
+//  would make the notch's "Continue in Omi" and a Dock click yank the window across the desktop for
+//  no reason. `shouldReposition` is the whole rule: land it if it is not up, or if you called it from
+//  a different display than the one it is on.
+//
+//  ## Dismissal
+//
+//  Two ways out, and neither is a button. Clicking away is `hidesOnDeactivate`, which AppKit does for
+//  us. Escape is `WindowEscapeKeyMonitor` at `.shell` — the lowest priority there is, so it fires only
+//  after every modal, editor, page and navigation handler has declined it. Escape on a page still goes
+//  Home; Escape on Home, where nothing else wants it, puts the shell away.
+//
+//  Brand: nothing here picks a colour (INV-UI-1).
+//
+
+import AppKit
+import Foundation
+
+/// The geometry half, with no window and no defaults in it, so every placement decision is a claim a
+/// hermetic test can hold. Multi-display placement is the part that breaks in the field and the part
+/// that is impossible to exercise on a single-screen CI runner, so none of it may live inside AppKit
+/// callbacks.
+enum ShellSummonPlacement {
+  /// The size a shell that has never been placed on this display arrives at.
+  ///
+  /// Deliberately smaller than the old managed-window default: a surface you summon over your work
+  /// should read as a panel you called up, not as an application you switched to. It stays above
+  /// `DesktopWindowLayoutPolicy.minimumContentSize`, which is the floor the destinations lay out to.
+  static let defaultSize = NSSize(width: 960, height: 700)
+
+  /// Where the shell lands on a given display.
+  ///
+  /// A remembered frame wins, shrunk and nudged until it fits — a display can get smaller (resolution
+  /// change, a scaled mode, a menu bar appearing) and a frame restored past the edge is a shell with
+  /// its query field off-screen. With nothing remembered it is centred, which is where a summoned
+  /// surface belongs the first time you ask for it.
+  static func frame(remembered: NSRect?, visibleFrame: NSRect, defaultSize: NSSize = defaultSize) -> NSRect {
+    guard let remembered, remembered.width > 1, remembered.height > 1 else {
+      return centered(defaultSize, in: visibleFrame)
+    }
+    let size = NSSize(
+      width: min(remembered.width, visibleFrame.width),
+      height: min(remembered.height, visibleFrame.height))
+    return clamped(NSRect(origin: remembered.origin, size: size), into: visibleFrame)
+  }
+
+  /// Whether this summon should place the window at all.
+  ///
+  /// `false` is the interesting answer: a shell already up on the display you are on is a shell you
+  /// are already using, and moving it would be the app fighting the user.
+  static func shouldReposition(isVisible: Bool, windowDisplayKey: String?, cursorDisplayKey: String?) -> Bool {
+    guard isVisible else { return true }
+    guard let cursorDisplayKey, let windowDisplayKey else { return false }
+    return windowDisplayKey != cursorDisplayKey
+  }
+
+  /// The stable per-display identity frames are filed under.
+  ///
+  /// `CGDirectDisplayID` rather than an index into `NSScreen.screens`, because that array reorders
+  /// when a display sleeps, wakes or is unplugged — which is precisely the moment the remembered
+  /// frame is about to be read.
+  static func displayKey(for screen: NSScreen) -> String? {
+    let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+    return number.map { "\($0.uint32Value)" }
+  }
+
+  private static func centered(_ size: NSSize, in visibleFrame: NSRect) -> NSRect {
+    let fitted = NSSize(
+      width: min(size.width, visibleFrame.width),
+      height: min(size.height, visibleFrame.height))
+    return NSRect(
+      x: visibleFrame.midX - fitted.width / 2,
+      y: visibleFrame.midY - fitted.height / 2,
+      width: fitted.width,
+      height: fitted.height)
+  }
+
+  private static func clamped(_ rect: NSRect, into visibleFrame: NSRect) -> NSRect {
+    var frame = rect
+    frame.origin.x = min(max(frame.origin.x, visibleFrame.minX), visibleFrame.maxX - frame.width)
+    frame.origin.y = min(max(frame.origin.y, visibleFrame.minY), visibleFrame.maxY - frame.height)
+    return frame
+  }
+}
+
+/// The remembered frames, as a value.
+///
+/// Split from the coordinator so the encode/decode round trip — the part that silently loses a
+/// display's placement when it goes wrong — is testable without `UserDefaults`.
+enum ShellFrameMemory {
+  /// The defaults key. Named for what it holds rather than for the window, because the window is now
+  /// a panel and the next rename should not orphan everybody's placements.
+  static let defaultsKey = "ShellPanelFrameByDisplayID"
+
+  static func read(from stored: [String: String], displayKey: String) -> NSRect? {
+    guard let raw = stored[displayKey] else { return nil }
+    let rect = NSRectFromString(raw)
+    return rect.width > 1 && rect.height > 1 ? rect : nil
+  }
+
+  static func written(_ frame: NSRect, forDisplay displayKey: String, into stored: [String: String])
+    -> [String: String]
+  {
+    var updated = stored
+    updated[displayKey] = NSStringFromRect(frame)
+    return updated
+  }
+}
+
+/// Summoning, dismissing, and remembering — the live half, which owns the one shell window.
+@MainActor
+enum ShellSummon {
+  /// The shell window, once something has identified it. Weak: the window outlives nothing here, and
+  /// a strong reference would keep a closed window alive past its scene.
+  private static weak var knownShellWindow: NSWindow?
+  private static var appliedPresentation: ShellWindowChrome.Presentation?
+  private static var escapeRegistration: UUID?
+  private static var observers: [NSObjectProtocol] = []
+  /// Whether a summon has ever put the shell on screen. The gate on restoring it for the user.
+  private static var hasBeenShown = false
+
+  // MARK: - Finding the shell
+
+  /// Whether this window is the shell and not one of the app's auxiliary windows.
+  ///
+  /// The exact title first, because several auxiliary windows (the chat lab, the prompt editors) also
+  /// begin with "Omi" and dressing one of those as the shell would float and auto-hide it. The loose
+  /// test is the fallback for a build whose title has drifted from `OMIApp.currentWindowTitle`, where
+  /// wrongly identifying nothing is worse than occasionally identifying a large window.
+  static func isShellWindow(_ window: NSWindow) -> Bool {
+    if window.title == OMIApp.currentWindowTitle { return true }
+    guard !window.title.hasPrefix("Item-"), window.title.lowercased().hasPrefix("omi") else { return false }
+    return window.frame.width > 300 && window.frame.height > 200
+  }
+
+  static func shellWindow() -> NSWindow? {
+    if let known = knownShellWindow, NSApp.windows.contains(where: { $0 === known }) { return known }
+    let found = NSApp.windows.first(where: isShellWindow)
+    knownShellWindow = found
+    return found
+  }
+
+  // MARK: - Presentation
+
+  /// Summonable only once there is an account and a finished setup. See `ShellWindowChrome`'s header
+  /// for why a first run may not auto-hide.
+  static func presentation() -> ShellWindowChrome.Presentation {
+    let onboarded = UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+    return onboarded && AuthState.shared.isSignedIn ? .summoned : .anchored
+  }
+
+  /// Dress the window for the presentation it should currently have, and attach or detach the Escape
+  /// route to match. Idempotent, and cheap enough to call from a defaults observer.
+  static func applyPresentation(to window: NSWindow) {
+    let presentation = presentation()
+    knownShellWindow = window
+    startObserving(shell: window)
+    ShellWindowChrome.dress(window, as: presentation)
+    appliedPresentation = presentation
+    if presentation == .summoned {
+      registerEscapeRoute(on: window)
+    } else {
+      unregisterEscapeRoute()
+    }
+  }
+
+  // MARK: - Summon / dismiss
+
+  /// Bring the shell up, landing it on the display under the cursor when it is not already there.
+  /// Returns `false` when there is no shell window yet, which is the caller's signal to create one.
+  ///
+  /// `alwaysPlace` is for launch only. SwiftUI restores the scene's saved frame before this runs, so
+  /// a window that is already on screen at the size it had as a managed application window would
+  /// never be re-landed by the ordinary rule — and the first launch after the shell became a panel is
+  /// exactly when it must be. It still reads the remembered placement first, so it only recentres a
+  /// display that has never held the panel.
+  @discardableResult
+  static func summon(alwaysPlace: Bool = false) -> Bool {
+    guard let window = shellWindow() else { return false }
+    applyPresentation(to: window)
+    if window.isMiniaturized { window.deminiaturize(nil) }
+
+    let cursorScreen = screenUnderCursor()
+    let repositions =
+      alwaysPlace
+      || ShellSummonPlacement.shouldReposition(
+        isVisible: window.isVisible,
+        windowDisplayKey: window.screen.flatMap(ShellSummonPlacement.displayKey(for:)),
+        cursorDisplayKey: cursorScreen.flatMap(ShellSummonPlacement.displayKey(for:)))
+
+    if appliedPresentation == .summoned, repositions, let screen = cursorScreen ?? window.screen {
+      window.setFrame(landingFrame(on: screen), display: true)
+    } else if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
+      // Anchored, or nothing to land on: the window may still be stranded on a display that went away.
+      window.center()
+    }
+
+    window.makeKeyAndOrderFront(nil)
+    hasBeenShown = true
+    return true
+  }
+
+  /// Bring the shell back when the user activates Omi with no shell on screen — a ⌘-Tab, a click on
+  /// the app in Mission Control, anything that is not the Dock icon (which has its own delegate hook).
+  ///
+  /// Without this, dismissing with Escape and then ⌘-Tabbing back lands you in an app with no windows
+  /// and no obvious way to ask for one. Gated on the shell having been shown at least once, because
+  /// the background update relaunch deliberately starts with it ordered out and must stay that way.
+  static func restoreOnActivationIfNeeded() {
+    guard hasBeenShown, let window = shellWindow(), !window.isVisible else { return }
+    summon()
+  }
+
+  /// Put the shell away and hand focus back to whatever the user was doing.
+  ///
+  /// Only deactivates when this really was the last thing the app was showing — the feedback window,
+  /// the chat lab and the prompt editors are ordinary windows, and dropping the app out from under
+  /// one of them because the shell closed would be a bug of its own.
+  static func dismiss() {
+    guard let window = shellWindow(), window.isVisible else { return }
+    rememberFrame(of: window)
+    window.orderOut(nil)
+    let othersVisible = NSApp.windows.contains { other in
+      other !== window && other.isVisible && other.canBecomeKey && !(other is NSPanel)
+    }
+    if !othersVisible { NSApp.deactivate() }
+  }
+
+  // MARK: - Frame memory
+
+  static func rememberFrame(of window: NSWindow) {
+    guard let screen = window.screen, let key = ShellSummonPlacement.displayKey(for: screen) else { return }
+    let stored = UserDefaults.standard.dictionary(forKey: ShellFrameMemory.defaultsKey) as? [String: String] ?? [:]
+    UserDefaults.standard.set(
+      ShellFrameMemory.written(window.frame, forDisplay: key, into: stored),
+      forKey: ShellFrameMemory.defaultsKey)
+  }
+
+  static func rememberedFrame(on screen: NSScreen) -> NSRect? {
+    guard let key = ShellSummonPlacement.displayKey(for: screen) else { return nil }
+    let stored = UserDefaults.standard.dictionary(forKey: ShellFrameMemory.defaultsKey) as? [String: String] ?? [:]
+    return ShellFrameMemory.read(from: stored, displayKey: key)
+  }
+
+  // MARK: - Launch wiring
+
+  /// Called once, the first time the shell is dressed. Everything after that is driven by the
+  /// notifications registered here.
+  ///
+  /// The move/resize observers are scoped to the shell window itself rather than filtered inside the
+  /// callback: an observer block delivered on the main queue is still a non-isolated closure, so
+  /// reading an `NSWindow` out of the notification would be a `sending` race. Passing the window as
+  /// the observed object keeps the filtering in `NotificationCenter`, where it is free and safe.
+  static func startObserving(shell window: NSWindow) {
+    guard observers.isEmpty else { return }
+    let center = NotificationCenter.default
+    for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification] {
+      observers.append(
+        center.addObserver(forName: name, object: window, queue: .main) { _ in
+          MainActor.assumeIsolated {
+            guard let shell = shellWindow() else { return }
+            rememberFrame(of: shell)
+          }
+        })
+    }
+    // Onboarding completion and sign-out are both `UserDefaults` writes, so this is the one signal
+    // that covers the switch in either direction. Re-dressing only on a real change keeps it off the
+    // hot path of every other `@AppStorage` write in the app.
+    observers.append(
+      center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
+        MainActor.assumeIsolated {
+          guard let window = shellWindow(), presentation() != appliedPresentation else { return }
+          applyPresentation(to: window)
+        }
+      })
+  }
+
+  // MARK: - Private
+
+  private static func landingFrame(on screen: NSScreen) -> NSRect {
+    ShellSummonPlacement.frame(remembered: rememberedFrame(on: screen), visibleFrame: screen.visibleFrame)
+  }
+
+  private static func screenUnderCursor() -> NSScreen? {
+    let location = NSEvent.mouseLocation
+    return NSScreen.screens.first { $0.frame.contains(location) }
+  }
+
+  private static func registerEscapeRoute(on window: NSWindow) {
+    guard escapeRegistration == nil else { return }
+    escapeRegistration = WindowEscapeKeyMonitor.shared.register(window: window, priority: .shell) {
+      dismiss()
+      return true
+    }
+  }
+
+  private static func unregisterEscapeRoute() {
+    guard let registration = escapeRegistration else { return }
+    WindowEscapeKeyMonitor.shared.unregister(registration)
+    escapeRegistration = nil
+  }
+}
