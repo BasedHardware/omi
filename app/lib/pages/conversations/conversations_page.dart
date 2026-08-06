@@ -337,7 +337,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 SliverToBoxAdapter(
                   child: Builder(
                     builder: (context) => Padding(
-                      padding: const EdgeInsets.only(left: 24, right: 16, top: 16, bottom: 8),
+                      // Tight top gap — the search button moved out of the app
+                      // bar into the chips row, so this section rides up.
+                      padding: const EdgeInsets.only(left: 24, right: 16, top: 4, bottom: 8),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,

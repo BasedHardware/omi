@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -179,7 +180,8 @@ class _FolderTabsState extends State<FolderTabs> {
               children: tabs,
             ),
           ),
-          // Fixed add button
+          // Fixed trailing buttons
+          _SearchButton(),
           _AddFolderButton(),
         ],
       ),
@@ -267,6 +269,40 @@ class _FolderTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Search toggle, sitting inline with the folder chips rather than in the
+/// shared home app bar.
+class _SearchButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Consumer2<HomeProvider, ConversationProvider>(
+      builder: (context, homeProvider, convoProvider, _) {
+        // Same rule the app-bar button used: while a query is active the search
+        // field itself is on screen, so the toggle stays hidden.
+        if (convoProvider.previousQuery.isNotEmpty) return const SizedBox.shrink();
+        final isActive = homeProvider.showConvoSearchBar;
+        return Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: GestureDetector(
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              homeProvider.toggleConvoSearchBar();
+            },
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isActive ? Colors.white.withValues(alpha: 0.18) : Colors.grey.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.search, size: 18, color: isActive ? Colors.white : Colors.grey[400]),
+            ),
+          ),
+        );
+      },
     );
   }
 }

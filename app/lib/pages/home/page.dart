@@ -11,7 +11,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 import 'package:upgrader/upgrader.dart';
 
 import 'package:omi/backend/http/api/agents.dart';
@@ -33,14 +32,13 @@ import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/home/widgets/home_hero.dart';
+import 'package:omi/pages/memories/brain_page.dart';
 import 'package:omi/pages/memories/page.dart';
-import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
-import 'package:omi/pages/apps/add_app.dart';
-import 'package:omi/pages/apps/add_mcp_server_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
@@ -133,6 +131,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
+
+  // The Home hero's entrance plays once per launch. HomeHero is mounted and
+  // unmounted by the tab switch, so without this it would replay every time the
+  // user came back to Home. Not setState — nothing needs to rebuild on it.
+  bool _heroEntrancePlayed = false;
 
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
@@ -252,11 +255,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       HomeContentPage(key: _homeContentPageKey),
       ConversationsPage(key: _conversationsPageKey),
       ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
-      // Brain tab. embedded: the host Scaffold already supplies the app bar, so
-      // the page must not build its own (with a back button that goes nowhere).
-      // trackOpenEvent: IndexedStack builds this at launch, so the open event is
-      // fired from the tab tap instead — see onTabTap below.
-      const MemoryGraphPage(embedded: true, trackOpenEvent: false),
+      // Brain tab. BrainPage frames the graph as a contained section on its own
+      // surface; it passes embedded/trackOpenEvent through to MemoryGraphPage
+      // (the host Scaffold supplies the app bar, and IndexedStack builds this at
+      // launch so the open event fires from the tab tap instead — see onTabTap).
+      const BrainPage(),
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
@@ -745,7 +748,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               },
                             ),
                             if (home.selectedIndex == 0)
-                              Positioned(left: 16, right: 16, bottom: 78, child: _buildChatBar(context)),
+                              // The headline and the chat bar are the Home hero.
+                              // The box stops short of the bottom nav so the pair
+                              // centres in the space the user reads as the page,
+                              // not in the full body including nav chrome.
+                              Positioned(
+                                left: 24,
+                                right: 24,
+                                top: 0,
+                                bottom: 96,
+                                child: Center(
+                                  child: HomeHero(
+                                    animate: !_heroEntrancePlayed,
+                                    onEntranceComplete: () => _heroEntrancePlayed = true,
+                                    chatBar: _buildChatBar(context),
+                                  ),
+                                ),
+                              ),
                           ],
                         );
                       },
@@ -780,19 +799,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           color: const Color(0xFF1F1F25),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: const Color(0xFF35343B), width: 1),
+          // Only a soft drop shadow. The bar used to float at the bottom of a
+          // scrolling page and carried two large upward-offset scrims to darken
+          // content passing underneath; centred beneath the headline those
+          // scrims painted over its last line and greyed it out.
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.65),
-              blurRadius: 60,
-              spreadRadius: 14,
-              offset: const Offset(0, -16),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 32,
-              spreadRadius: 6,
-              offset: const Offset(0, -8),
-            ),
             BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 2)),
           ],
         ),
@@ -801,7 +812,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             const SizedBox(width: 18),
             const Expanded(
               child: Text(
-                'Ask Omi anything about your life...',
+                'Ask Omi',
                 style: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -831,15 +842,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   /// Tabs that render their own full-bleed surface and carry no app-bar chrome:
-  /// Conversations (1) and Brain (3).
+  /// Conversations (1), Brain (3) and Apps (4).
   ///
-  /// Conversations keeps its search and calendar buttons — only the device
-  /// status chip and the settings gear drop away.
-  static bool _hidesAppBarChrome(int selectedIndex) => selectedIndex == 1 || selectedIndex == 3;
+  /// Conversations keeps its calendar button — only the device status chip and
+  /// the settings gear drop away. Apps carries its own overflow menu next to
+  /// the search field, so it needs neither.
+  static bool _hidesAppBarChrome(int selectedIndex) => selectedIndex == 1 || selectedIndex == 3 || selectedIndex == 4;
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
+    // Tabs in [_hidesAppBarChrome] render no app bar content of their own, and
+    // the two Conversations buttons are conditional. When nothing is showing,
+    // a full-height bar leaves an empty band above the page's own headline —
+    // so collapse it to zero rather than reserve space for nothing.
+    final selectedIndex = context.watch<HomeProvider>().selectedIndex;
+    final showsSyncButton = selectedIndex == 1 &&
+        (context.watch<DeviceProvider>().pairedDevice != null ||
+            context.watch<SyncProvider>().missingWalsOnDevice.isNotEmpty);
+    final showsCalendarButton = selectedIndex == 1 && context.watch<ConversationProvider>().selectedDate != null;
+    final isBarEmpty = _hidesAppBarChrome(selectedIndex) && !showsSyncButton && !showsCalendarButton;
+
     return AppBar(
       automaticallyImplyLeading: false,
+      toolbarHeight: isBarEmpty ? 0 : kToolbarHeight,
       backgroundColor: Theme.of(context).colorScheme.surface,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -898,41 +922,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   return const SizedBox.shrink();
                 },
               ),
-              // Search and Calendar buttons - only on home page
+              // Calendar button - only on the Conversations tab. Search now
+              // lives inline with the folder chips (see FolderTabs).
               Consumer2<HomeProvider, ConversationProvider>(
                 builder: (context, homeProvider, convoProvider, _) {
-                  // Only show search and calendar buttons on Conversations tab (index 1)
                   if (homeProvider.selectedIndex != 1) {
                     return const SizedBox.shrink();
                   }
 
-                  // Hide search button if there's an active search query
-                  bool shouldShowSearchButton = convoProvider.previousQuery.isEmpty;
                   return Row(
                     children: [
-                      // Search button - show when no active search, clicking closes search bar
-                      if (shouldShowSearchButton)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: homeProvider.showConvoSearchBar
-                                ? Colors.deepPurple.withValues(alpha: 0.5)
-                                : const Color(0xFF1F1F25),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.search, size: 18, color: Colors.white70),
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              homeProvider.toggleConvoSearchBar();
-                            },
-                          ),
-                        ),
                       // Calendar button - only show when date filter is active
                       if (convoProvider.selectedDate != null) ...[
-                        const SizedBox(width: 8),
                         Container(
                           width: 36,
                           height: 36,
@@ -1097,49 +1098,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Apps tab — Create app pull-down menu (shown only on Apps tab, left of settings)
-              Consumer<HomeProvider>(
-                builder: (context, homeProvider, _) {
-                  if (homeProvider.selectedIndex != 4) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: PullDownButton(
-                      itemBuilder: (context) => [
-                        PullDownMenuItem(
-                          title: context.l10n.createAnApp,
-                          subtitle: context.l10n.createAndShareYourApp,
-                          iconWidget: const Icon(Icons.apps, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Submit App');
-                            routeToPage(context, const AddAppPage());
-                          },
-                        ),
-                        PullDownMenuItem(
-                          title: context.l10n.addMcpServer,
-                          subtitle: context.l10n.connectExternalAiTools,
-                          iconWidget: const Icon(Icons.cable, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
-                            routeToPage(context, const AddMcpServerPage());
-                          },
-                        ),
-                      ],
-                      buttonBuilder: (context, showMenu) => GestureDetector(
-                        onTap: () {
-                          HapticFeedback.mediumImpact();
-                          showMenu();
-                        },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                          child: const Icon(Icons.add, size: 18, color: Colors.white70),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+              // The Apps tab's create menu now lives in the overflow menu
+              // beside its search field — see _AppsOverflowMenu.
               // Settings button — hidden on the tabs that keep a bare app bar.
               // See [_hidesAppBarChrome]; Settings stays reachable from Home,
               // Tasks, and Apps.
