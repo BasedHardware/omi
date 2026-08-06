@@ -1275,6 +1275,14 @@ struct DesktopHomeView: View {
           if let destination = MemoryHubDestination.destination(for: item) {
             memoryDestinationRawValue = destination.rawValue
           }
+          // Settings owns pages now, not only preference rows, so a caller that names Settings can
+          // name the row it means (`SupportThreadRoute`). Without it a "Help from Founder" banner
+          // could only drop the user on whichever section they last had open.
+          if let sectionRaw = notification.userInfo?["settingsSection"] as? String,
+            let section = SettingsContentView.SettingsSection.automationMatch(sectionRaw)
+          {
+            selectedSettingsSection = section
+          }
           navigateToLegacyDestination(item)
         }
       }
