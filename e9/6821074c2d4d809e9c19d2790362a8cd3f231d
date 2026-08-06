@@ -1,0 +1,62 @@
+desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingSound.swift
+  s_7376119f6fe147::t_beaa00431d65ff 535-544,565-573,609-610,612
+desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  s_569f1df936cc22::t_136b38aa0c5ea7 40-42
+  s_569f1df936cc22::t_8cb2cc0def9828 39
+desktop/macos/Desktop/Tests/OmiUISoundTests.swift
+  s_569f1df936cc22::t_470b1b3556c21e 1-281
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
+  s_569f1df936cc22::t_26fefe70e25e17 240-244,314-360
+  s_569f1df936cc22::t_ffb9e18d3bca70 361
+desktop/macos/Desktop/Sources/OmiUISound.swift
+  s_569f1df936cc22::t_65e03ca3be1ef0 1-153
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
+  s_569f1df936cc22::t_2f85cd025c45cf 273-275
+desktop/macos/Desktop/Sources/Chat/ChatQueryTelemetry.swift
+  s_569f1df936cc22::t_e8d005c0ad33bf 594-596
+desktop/macos/Desktop/Sources/AppState/AppState+TrialPaywall.swift
+  s_569f1df936cc22::t_d89ef3dc7893bf 11-13
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_569f1df936cc22::t_28067d85482723 95,107,126,149-158
+desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
+  s_569f1df936cc22::t_13fe7b7c34d292 411,420-431
+  s_569f1df936cc22::t_0ab68f7af2102a 432-433
+desktop/macos/Desktop/Sources/AppState/AppState+Permissions.swift
+  s_569f1df936cc22::t_9c0e2390276408 7-13,104-126,129
+desktop/macos/e2e/flows/navigation.yaml
+  s_569f1df936cc22::t_c927a8859516a4 8
+desktop/macos/Desktop/Sources/WhatsNewToast.swift
+  s_ea0d5328b1c6a1::t_2f658c622d356c 40-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e96821074c2d4d809e9c19d2790362a8cd3f231d",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_7376119f6fe147": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a939a9c180c61479e",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_ea0d5328b1c6a1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a06945a9aa5d39a48",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
