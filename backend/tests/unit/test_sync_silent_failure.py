@@ -642,7 +642,8 @@ class TestMergeSurvivorAudio:
         assert len(sliced) % 2 == 0
 
     def test_store_partial_uploads_one_chunk_per_survivor(self):
-        from unittest.mock import patch
+        from types import ModuleType
+        from unittest.mock import MagicMock, patch
 
         from utils.sync import merge_audio
 
@@ -652,9 +653,19 @@ class TestMergeSurvivorAudio:
         pcm = b'\x00\x01' * 16000 * 3  # 3 seconds
         expected_slice = pcm[32000:64000]
 
-        with patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm), patch(
-            'utils.other.storage.upload_audio_chunk'
-        ) as mock_upload:
+        # Avoid importing the real utils.other.storage (slow) in a timing-guarded
+        # unit test; stub it via sys.modules so store_partial_merge_survivor_audio's
+        # local import resolves instantly.
+        import sys
+
+        mock_upload = MagicMock()
+        mock_storage = ModuleType('utils.other.storage')
+        mock_storage.upload_audio_chunk = mock_upload
+
+        with (
+            patch.object(merge_audio, '_wav_bytes_to_pcm16_16k', return_value=pcm),
+            patch.dict(sys.modules, {'utils.other.storage': mock_storage}),
+        ):
             merge_audio.store_partial_merge_survivor_audio(
                 uid='uid',
                 conversation_id='conv',
