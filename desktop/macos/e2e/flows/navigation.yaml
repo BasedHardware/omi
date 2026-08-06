@@ -1,7 +1,7 @@
 version: 2
 name: navigation
 tier: manual
-description: Top navigation bar smoke — verify all 4 tabs + Settings gear + Rewind overlay load correctly (v0.12.119+ redesign)
+description: Top navigation bar smoke — the flat destination row (Library, Tasks, Rewind, Focus, Apps), the Memory hub's own three-way switcher, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
@@ -12,7 +12,10 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/PageGlassLane.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsDestinationView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
   - desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
   - desktop/macos/Desktop/Sources/MainWindow/EscapeKeyHandler.swift
@@ -22,22 +25,42 @@ preconditions:
 steps:
   - id: S1
     name: Verify Home tab loads
-    do: "Verify the app is on the search surface. The top bar shows the Omi mark, Library and Apps; the right cluster is three wordless icons with state dots (microphone, screen capture, settings). Home content is a query bar above a separate results panel."
+    do: "Verify the app is on the search surface. The top bar shows the Omi mark then a flat row of destinations — Library, Tasks, Rewind, Focus, Apps — with nothing that opens a menu; the right cluster is three wordless icons with state dots (microphone, screen capture, settings). Home content is a query bar above a separate results panel."
     expect:
       interactive_count: { min: 8 }
       text_visible:
         - Omi
         - Library
+        - Tasks
+        - Rewind
+        - Focus
         - Apps
 
   - id: S2
-    name: Navigate to Memory
-    do: "Click the Library button in the top nav bar (agent-swift find text 'Library' click). Verify the Memory hub loads with 3 sub-tabs: Memories, Conversations, Brain Map."
+    name: Navigate to the Memory hub and move between its three views
+    do: >-
+      Click the Library button in the top nav bar (agent-swift find text 'Library' click).
+      Verify the Memory hub loads and that the hub's own switcher — Conversations,
+      Memories, Brain Map — is visible on the page itself, not in the top bar. Click
+      each of the three and confirm the page changes: the conversations list, the
+      memories list, then the Brain Map. No menu opens at any point, and nothing opens
+      on hover.
     expect:
       text_visible:
         - Memories
         - Conversations
         - Brain Map
+
+  - id: S2b
+    name: Navigate to Focus and reach Insights on its page
+    do: >-
+      Click the Focus button in the top nav bar. Verify the Focus page loads showing
+      the Focus segment first, with an Insights segment beside it, and that clicking
+      Insights shows the insights list.
+    expect:
+      text_visible:
+        - Focus
+        - Insights
 
   - id: S2a
     name: Return Home with Escape
@@ -78,8 +101,8 @@ steps:
         - Home
 
   - id: S7
-    name: Open Rewind via View menu
-    do: "Open Rewind via View menu (agent-swift press on View > Rewind menu item, or use keyboard shortcut ⌘⌥R). Verify Rewind overlay appears with search bar, date picker, and either timeline content or 'Screen Recording Permission Required' gate."
+    name: Open Rewind from the bar
+    do: "Click the Rewind button in the top nav bar (agent-swift find text 'Rewind' click); the View menu item and ⌘⌥R must still reach the same place. Verify Rewind appears with search bar, date picker, and either timeline content or 'Screen Recording Permission Required' gate."
     expect:
       text_visible:
         - Rewind
@@ -116,4 +139,25 @@ steps:
       text_visible:
         - Omi
         - Library
+        - Tasks
+        - Apps
+
+  - id: S11
+    name: Summon and dismiss the shell like a popup
+    do: >-
+      The shell is a summoned panel, not a managed window. From Home, press Escape and
+      confirm the whole shell disappears (capture the desktop with screencapture -x -o —
+      the wallpaper is uncovered) while the menu-bar icon is still there. Press ⌃⌘O and
+      confirm it comes back on the display the pointer is on. Click into the query field,
+      type a few characters, press Escape, and confirm the shell dismisses from the text
+      field too. Summon again, click on another application, and confirm the shell puts
+      itself away with no close button pressed. Summon once more, drag it somewhere
+      deliberate, dismiss, re-summon, and confirm it returns exactly where you left it —
+      and on a second display, that each display keeps its own placement. Finally open the
+      menu-bar icon and confirm both Open Omi and Quit still work.
+    expect:
+      text_visible:
+        - Omi
+        - Library
+        - Tasks
         - Apps
