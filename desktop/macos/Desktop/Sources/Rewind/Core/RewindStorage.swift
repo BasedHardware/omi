@@ -841,6 +841,13 @@ actor RewindStorage {
     // Invalidate cache entries for this chunk (we can't iterate NSCache, so just clear relevant entries by rebuilding)
     // The cache will naturally evict old entries
 
+    // The parked reader does hold this file open, so retire it rather than let a deleted chunk keep
+    // its bytes on disk until the next unrelated scrub happens to displace the cursor.
+    if frameCursor?.videoPath == relativePath {
+      frameCursor?.cancel()
+      frameCursor = nil
+    }
+
     if fileManager.fileExists(atPath: fullPath.path) {
       try fileManager.removeItem(at: fullPath)
       log("RewindStorage: Deleted video chunk \(relativePath)")
