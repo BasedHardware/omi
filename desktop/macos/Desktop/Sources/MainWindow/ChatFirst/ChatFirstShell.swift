@@ -131,13 +131,22 @@ struct ChatFirstShell: View {
       }
       .onDisappear { automationRuntime.unregisterChatPage() }
     case .conversations:
-      ChatFirstConversationsHost(
-        navigation: navigation,
-        appState: appState,
-        chatProvider: viewModelContainer.chatProvider,
-        automationRuntime: automationRuntime,
-        explicitSelectionGeneration: conversationsSelectionGeneration
-      )
+      // This route is one of the Memory hub's three views, so it wears the hub's switcher too —
+      // otherwise landing here would strand Memories and Brain Map behind a route change nothing
+      // on screen offers (INV-NAV-1).
+      VStack(spacing: 0) {
+        MemoryHubSwitcher(selection: .conversations, onSelect: selectHubDestination)
+          .padding(.top, 22)
+          .padding(.horizontal, 28)
+          .padding(.bottom, 4)
+        ChatFirstConversationsHost(
+          navigation: navigation,
+          appState: appState,
+          chatProvider: viewModelContainer.chatProvider,
+          automationRuntime: automationRuntime,
+          explicitSelectionGeneration: conversationsSelectionGeneration
+        )
+      }
       .accessibilityIdentifier("chat-first-route-conversations")
       .onAppear { navigation.markRouteVisible(.conversations) }
     case .tasks:
@@ -166,7 +175,8 @@ struct ChatFirstShell: View {
         appState: appState,
         viewModelContainer: viewModelContainer,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
-        destinationRawValue: $memoryDestinationRawValue
+        destinationRawValue: $memoryDestinationRawValue,
+        onSelectDestination: selectHubDestination
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -235,6 +245,17 @@ struct ChatFirstShell: View {
     )
   }
 
+  /// Applying a Memory hub selection here moves **both** halves of this shell's state: the persisted
+  /// hub destination and the typed route that decides which host is mounted. Writing only the first
+  /// leaves the shell rendering Conversations while it believes it is on Memories.
+  private func selectHubDestination(_ destination: MemoryHubDestination) {
+    memoryDestinationRawValue = destination.rawValue
+    if destination == .conversations {
+      conversationsSelectionGeneration &+= 1
+    }
+    navigation.selectPrimary(MemoryHubSelectionPolicy.chatFirstRoute(for: destination))
+  }
+
   private func syncMemoryDestination(for route: ChatFirstRoute) {
     if route == .memories, case .memory = navigation.pendingFocus {
       memoryDestinationRawValue = MemoryHubDestination.memories.rawValue
@@ -268,8 +289,6 @@ struct ChatFirstShell: View {
         },
         selectedIndex: legacySelectionBinding
       )
-    case .focus:
-      FocusPage()
     case .insight:
       InsightPage()
     case .rewind:
@@ -318,7 +337,6 @@ struct ChatFirstShell: View {
     case .more(let page):
       switch page {
       case .dashboard: return .dashboard
-      case .focus: return .focus
       case .insight: return .insight
       case .rewind: return .rewind
       case .apps: return .apps
@@ -566,6 +584,8 @@ enum ChatFirstModernNavigationPolicy {
       case .apps: return SidebarNavItem.apps.rawValue
       case .settings: return SidebarNavItem.settings.rawValue
       case .rewind: return SidebarNavItem.rewind.rawValue
+      // Insights is a segment of the Focus page, so both light the same pill.
+      case .insight: return SidebarNavItem.insight.rawValue
       default: return SidebarNavItem.dashboard.rawValue
       }
     }
@@ -579,6 +599,8 @@ enum ChatFirstModernNavigationPolicy {
     case .apps: return .more(.apps)
     case .settings: return .more(.settings)
     case .rewind: return .more(.rewind)
+    // The bar carries `Insights` as a flat pill now; without this it pressed and nothing happened.
+    case .insight: return .more(.insight)
     default: return nil
     }
   }

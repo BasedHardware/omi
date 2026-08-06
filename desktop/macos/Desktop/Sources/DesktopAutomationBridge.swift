@@ -3406,13 +3406,11 @@ final class DesktopAutomationActionRegistry {
       summary: "Return safe Advanced settings booleans (never raw BYOK keys)",
       params: []
     ) { _ in
-      let focus = FocusAssistantSettings.shared
       let task = TaskAssistantSettings.shared
       let insight = InsightAssistantSettings.shared
       let memory = MemoryAssistantSettings.shared
       let assistant = AssistantSettings.shared
       return [
-        "focus_enabled": focus.isEnabled ? "true" : "false",
         "task_enabled": task.isEnabled ? "true" : "false",
         "task_chat_agent_enabled": TaskAgentSettings.shared.isChatEnabled ? "true" : "false",
         "insight_enabled": insight.isEnabled ? "true" : "false",

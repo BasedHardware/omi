@@ -149,13 +149,9 @@ struct SettingsContentView: View {
   // Log export state
 
   // Focus Assistant states
-  @State var focusEnabled: Bool
-  @State var cooldownInterval: Int
   @State var glowOverlayEnabled: Bool
   @State var analysisDelay: Int
-  @State var focusNotificationsEnabled: Bool
   @State var liveSuggestionsEnabled: Bool
-  @State var focusExcludedApps: Set<String>
 
   // Task Assistant states
   @State var taskEnabled: Bool
@@ -474,14 +470,9 @@ struct SettingsContentView: View {
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
     _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
     _isTranscribing = State(initialValue: appState.isTranscribing)
-    _focusEnabled = State(initialValue: FocusAssistantSettings.shared.isEnabled)
-    _cooldownInterval = State(initialValue: FocusAssistantSettings.shared.cooldownInterval)
     _glowOverlayEnabled = State(initialValue: settings.glowOverlayEnabled)
     _analysisDelay = State(initialValue: settings.analysisDelay)
-    _focusNotificationsEnabled = State(
-      initialValue: FocusAssistantSettings.shared.notificationsEnabled)
     _liveSuggestionsEnabled = State(initialValue: SuggestionAssistantSettings.shared.isEnabled)
-    _focusExcludedApps = State(initialValue: FocusAssistantSettings.shared.excludedApps)
     _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
     _taskChatAgentEnabled = State(initialValue: TaskAgentSettings.shared.isChatEnabled)
     _taskAgentWorkingDirectory = State(initialValue: TaskAgentSettings.shared.workingDirectory)

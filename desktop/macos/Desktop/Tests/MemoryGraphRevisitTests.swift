@@ -39,9 +39,11 @@ final class MemoryGraphRevisitTests: XCTestCase {
       MemoryHubDestination.allCases,
       [.memories, .conversations, .brainMap]
     )
+    // Storage identity and reading order are different lists, and only one of them may be reordered
+    // freely: `allCases` is pinned by the persisted raw values above.
     XCTAssertEqual(
-      MemoryHubDestination.dropdownDestinations,
-      [.conversations, .brainMap]
+      MemoryHubDestination.switcherOrder,
+      [.conversations, .memories, .brainMap]
     )
     XCTAssertEqual(MemoryHubDestination.memories.title, "Memories")
     XCTAssertEqual(MemoryHubDestination.conversations.title, "Conversations")
@@ -61,78 +63,14 @@ final class MemoryGraphRevisitTests: XCTestCase {
     XCTAssertNil(MemoryHubDestination.destination(for: .tasks))
   }
 
-  func testMemoryDropdownRejectsStaleHoverAndKeepsPointerTransitOpen() throws {
-    var state = MemoryDropdownInteractionState()
-
-    let staleOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
-    XCTAssertNil(state.hoverChanged(false, in: .anchor))
-    XCTAssertFalse(state.apply(staleOpen))
-    XCTAssertFalse(state.isPresented)
-
-    let activeOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
-    XCTAssertTrue(state.apply(activeOpen))
-    XCTAssertTrue(state.isPresented)
-
-    let pendingClose = try XCTUnwrap(state.hoverChanged(false, in: .anchor))
-    XCTAssertNil(state.hoverChanged(true, in: .dropdown))
-    XCTAssertFalse(state.apply(pendingClose))
-    XCTAssertTrue(state.isPresented)
-  }
-
-  func testMemoryDropdownDismissesAfterNavigation() throws {
-    var state = MemoryDropdownInteractionState()
-
-    let pendingOpen = try XCTUnwrap(state.hoverChanged(true, in: .anchor))
-    XCTAssertTrue(state.apply(pendingOpen))
-    XCTAssertTrue(state.isPresented)
-
-    state.dismiss()
-    XCTAssertFalse(state.isPresented)
-  }
-
-  func testLibraryDropdownPillsUseAnOpaqueOmiSurface() throws {
-    // omi-test-quality: source-inspection -- static visual contract: dropdown rows must
-    // occlude the page beneath them while retaining Omi's neutral pill styling.
-    let source = try source(at: "Sources/MainWindow/DesktopTopBar.swift")
-    let dropdownRowSource =
-      source.components(separatedBy: "private struct LibraryDropdownRow").last ?? ""
-
-    // The contract is occlusion plus neutral pill styling, not the identity of the tokens
-    // that produce it. The row now draws through the shell's shared pill background; the
-    // named-token assertions this replaced pinned the retired dark palette, which the glass
-    // conversion deleted, so they asserted the implementation rather than the contract.
-    XCTAssertTrue(dropdownRowSource.contains("GlassPillBackground"))
-    XCTAssertTrue(dropdownRowSource.contains("Ink."))
-    XCTAssertFalse(dropdownRowSource.contains(": Color.clear"))
-  }
-
-  func testTopNavigationUsesCompactPillWidthsAndTightSpacing() {
+  /// The hover menu these three tests used to cover is gone, and so is
+  /// `MemoryDropdownInteractionState` — its hover-generation machinery had no other caller. The
+  /// Memory hub's three destinations are now selected by the hub's own switcher; that contract is
+  /// held behaviorally by `MemoryHubSwitcherTests` and `TopNavigationBarLayoutTests`.
+  func testTopNavigationUsesCompactPillSpacing() {
     XCTAssertEqual(TopNavigationPillMetrics.itemSpacing, 4)
     XCTAssertEqual(TopNavigationPillMetrics.horizontalPadding, 12)
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.dashboard.rawValue),
-      88
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.conversations.rawValue),
-      128
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.tasks.rawValue),
-      84
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(for: SidebarNavItem.apps.rawValue),
-      80
-    )
-    XCTAssertEqual(
-      TopNavigationPillMetrics.width(
-        for: SidebarNavItem.tasks.rawValue,
-        badgeCount: 93
-      ),
-      122,
-      "badged pills must grow instead of clipping their count"
-    )
+    XCTAssertEqual(TopNavigationPillMetrics.height, 30)
   }
 
   func testMemoryHubUsesReadableWidthUntilTheActiveTranscriptOpens() {

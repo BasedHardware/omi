@@ -73,12 +73,6 @@ enum ViewExporter {
       ),
 
       (
-        "05-focus",
-        { AnyView(FocusPage()) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
         "06-insight",
         { AnyView(InsightPage()) },
         CGSize(width: 900, height: 700)
@@ -218,7 +212,6 @@ enum ViewExporter {
       ("Chat", "bubble.left.and.bubble.right.fill", 2),
       ("Memories", "brain", 3),
       ("Tasks", "checklist", 4),
-      ("Focus", "eye.fill", 5),
       ("Advice", "lightbulb.fill", 6),
       ("Rewind", "clock.arrow.circlepath", 7),
       ("Apps", "puzzlepiece.fill", 8),
@@ -332,7 +325,6 @@ enum ViewExporter {
               chatProvider: cp))
         }
       ),
-      ("full-focus", 5, { AnyView(FocusPage()) }),
       ("full-insight", 6, { AnyView(InsightPage()) }),
       ("full-rewind", 7, { AnyView(RewindPage()) }),
       ("full-apps", 8, { AnyView(AppsPage(appProvider: AppProvider())) }),

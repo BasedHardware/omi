@@ -10,7 +10,6 @@ struct SidebarView: View {
   @ObservedObject var appState: AppState
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var insightStorage = InsightStorage.shared
-  @ObservedObject private var focusStorage = FocusStorage.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
   @ObservedObject private var crispManager = CrispManager.shared
 
@@ -30,7 +29,6 @@ struct SidebarView: View {
   @State private var isRewindPageLoading = false
   @State private var isConversationsPageLoading = false
   @State private var isTasksPageLoading = false
-  @State private var isFocusPageLoading = false
   @State private var isInsightPageLoading = false
   @State private var isAppsPageLoading = false
 
@@ -59,12 +57,6 @@ struct SidebarView: View {
       return SidebarNavItem.mainItems
     }
     return SidebarNavItem.mainItems.filter { $0.requiredTier <= tier }
-  }
-
-  /// Color for focus status indicator (green = focused, orange = distracted, nil = no status)
-  private var focusStatusColor: Color? {
-    guard let status = focusStorage.currentStatus else { return nil }
-    return status == .focused ? Color.green : Color.orange
   }
 
   var body: some View {
@@ -159,7 +151,6 @@ struct SidebarView: View {
                   isCollapsed: isCollapsed,
                   iconWidth: iconWidth,
                   badge: item == .insight ? insightStorage.unreadCount : 0,
-                  statusColor: item == .focus ? focusStatusColor : nil,
                   isLoading: pageLoadingState(for: item),
                   isLocked: locked,
                   lockTooltip: locked ? "Unlocks at Tier \(item.requiredTier)" : nil,
@@ -329,9 +320,6 @@ struct SidebarView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .tasksPageDidLoad)) { _ in
       isTasksPageLoading = false
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .focusPageDidLoad)) { _ in
-      isFocusPageLoading = false
     }
     .onReceive(NotificationCenter.default.publisher(for: .insightPageDidLoad)) { _ in
       isInsightPageLoading = false
@@ -954,7 +942,6 @@ struct SidebarView: View {
   private func pageLoadingState(for item: SidebarNavItem) -> Bool {
     switch item {
     case .tasks: return isTasksPageLoading
-    case .focus: return isFocusPageLoading
     case .insight: return isInsightPageLoading
     case .apps: return isAppsPageLoading
     default: return false
@@ -964,7 +951,6 @@ struct SidebarView: View {
   private func setPageLoading(for item: SidebarNavItem, loading: Bool) {
     switch item {
     case .tasks: isTasksPageLoading = loading
-    case .focus: isFocusPageLoading = loading
     case .insight: isInsightPageLoading = loading
     case .apps: isAppsPageLoading = loading
     default: break
@@ -1030,7 +1016,7 @@ struct NavItemView: View {
           }
         }
 
-        // Status indicator when collapsed (for Focus, hidden when locked)
+        // Status indicator when collapsed, hidden when locked
         if isCollapsed, let color = statusColor, !isLocked {
           Circle()
             .fill(color)
@@ -1499,7 +1485,7 @@ enum OmiDeviceImage {
 
 /// The thin, always-present left navigation rail for the redesigned app shell.
 /// Lives beside every page (not just Home) so you can move between Home, the
-/// memory/task surfaces, Focus, Insights, Rewind, and Apps without bouncing
+/// memory/task surfaces, Insights, Rewind, and Apps without bouncing
 /// back through Home. Settings sits at the foot. Styled with the SB ink system
 /// so it matches the sign-in / onboarding aesthetic.
 struct AppNavRail: View {
@@ -1518,7 +1504,7 @@ struct AppNavRail: View {
 
   /// Simplified, merged navigation: "Memory" folds in Conversations + Memories,
   /// Rewind moved off the rail (it opens from a right-click on Capture), and
-  /// Insights/Focus are hidden from navigation. Each entry drives selectedIndex.
+  /// Insights is hidden from navigation. Each entry drives selectedIndex.
   private var items: [RailItem] {
     [
       RailItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),

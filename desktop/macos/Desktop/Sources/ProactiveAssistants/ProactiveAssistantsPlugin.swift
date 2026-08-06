@@ -31,10 +31,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   private var screenCaptureService: ScreenCaptureService?
   private var windowMonitor: WindowMonitor?
-  private var focusAssistant: FocusAssistant?
-
-  /// Public read-only accessor for memory diagnostics
-  var currentFocusAssistant: FocusAssistant? { focusAssistant }
   private var taskAssistant: TaskAssistant?
   private var insightAssistant: InsightAssistant?
   private var memoryAssistant: MemoryAssistant?
@@ -50,7 +46,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var currentAppBundleID: String?
   private var currentWindowID: CGWindowID?
   private var currentWindowTitle: String?
-  private var lastStatus: FocusStatus?
   private var frameCount = 0
   private(set) var screenCaptureHealth: ScreenCaptureHealth = .stopped
 
@@ -207,8 +202,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   private func enableAssistant(identifier: String, enabled: Bool) {
     switch identifier {
-    case "focus":
-      FocusAssistantSettings.shared.isEnabled = enabled
     case "task-extraction":
       TaskAssistantSettings.shared.isEnabled = enabled
     case "insight":
@@ -305,34 +298,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     screenCaptureService = ScreenCaptureService()
 
     do {
-      focusAssistant = try FocusAssistant(
-        onAlert: { [weak self] message in
-          Task { @MainActor in
-            self?.sendEvent(type: "alert", data: ["message": message])
-          }
-        },
-        onStatusChange: { [weak self] status in
-          Task { @MainActor in
-            self?.lastStatus = status
-            self?.sendEvent(type: "statusChange", data: ["status": status.rawValue])
-          }
-        },
-        onRefocus: {
-          Task { @MainActor in
-            OverlayService.shared.showGlowAroundActiveWindow(colorMode: .focused)
-          }
-        },
-        onDistraction: {
-          Task { @MainActor in
-            OverlayService.shared.showGlowAroundActiveWindow(colorMode: .distracted)
-          }
-        }
-      )
-
-      if let focus = focusAssistant {
-        AssistantCoordinator.shared.register(focus)
-      }
-
       taskAssistant = try TaskAssistant()
 
       if let task = taskAssistant {
@@ -373,8 +338,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     let (appName, _, _) = WindowMonitor.getActiveWindowInfoStatic()
     if let appName = appName {
       currentApp = appName
-      // Update FocusStorage with initial detected app
-      FocusStorage.shared.updateDetectedApp(appName)
       AssistantCoordinator.shared.notifyAppSwitch(newApp: appName)
     }
 
@@ -490,11 +453,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     windowMonitor?.stop()
     windowMonitor = nil
 
-    if let focus = focusAssistant {
-      Task {
-        await focus.stop()
-      }
-    }
     if let task = taskAssistant {
       Task {
         await task.stop()
@@ -514,7 +472,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
     _ = RewindShutdownFlush.flush(timeout: 5, context: "ProactiveAssistantsPlugin")
 
-    focusAssistant = nil
     taskAssistant = nil
     insightAssistant = nil
     memoryAssistant = nil
@@ -530,12 +487,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     currentApp = nil
     currentWindowID = nil
     currentWindowTitle = nil
-    lastStatus = nil
     frameCount = 0
     setScreenCaptureHealth(.stopped)
-
-    // Clear FocusStorage real-time state
-    FocusStorage.shared.clearRealtimeStatus()
 
     // Report resources after stopping
     ResourceMonitor.shared.reportResourcesNow(context: "after_monitoring_stop")
@@ -576,8 +529,8 @@ public class ProactiveAssistantsPlugin: NSObject {
   }
 
   /// Get current monitoring status
-  var currentStatus: (isMonitoring: Bool, currentApp: String?, lastStatus: FocusStatus?) {
-    return (isMonitoring, currentApp, lastStatus)
+  var currentStatus: (isMonitoring: Bool, currentApp: String?) {
+    return (isMonitoring, currentApp)
   }
 
   private func handleCaptureTargetUnavailable() {
@@ -620,9 +573,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     currentWindowTitle = nil  // Reset window title on app switch
     applyHeartbeatForApp()
 
-    // Update FocusStorage immediately with detected app (before analysis)
-    FocusStorage.shared.updateDetectedApp(appName)
-
     // Notify all assistants
     AssistantCoordinator.shared.notifyAppSwitch(newApp: appName)
 
@@ -639,22 +589,16 @@ public class ProactiveAssistantsPlugin: NSObject {
       AssistantCoordinator.shared.clearAllPendingWork()
       log("App switch detected, starting \(delaySeconds)s analysis delay")
 
-      // Update FocusStorage with delay end time
-      let delayEndTime = Date().addingTimeInterval(TimeInterval(delaySeconds))
-      FocusStorage.shared.updateDelayEndTime(delayEndTime)
-
       analysisDelayTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(delaySeconds), repeats: false) {
         [weak self] _ in
         Task { @MainActor in
           self?.isInDelayPeriod = false
           self?.analysisDelayTimer = nil
-          FocusStorage.shared.updateDelayEndTime(nil)
           log("Analysis delay ended, resuming frame processing")
         }
       }
     } else {
       isInDelayPeriod = false
-      FocusStorage.shared.updateDelayEndTime(nil)
       // Request a debounced capture on the next poll instead of capturing
       // immediately on every app-switch notification.
       captureTrigger.requestAppSwitchCapture(app: appName, at: Date())
@@ -787,15 +731,11 @@ public class ProactiveAssistantsPlugin: NSObject {
           log("Context switch detected, starting \(delaySeconds)s analysis delay")
 
           analysisDelayTimer?.invalidate()
-          let delayEndTime = Date().addingTimeInterval(TimeInterval(delaySeconds))
-          FocusStorage.shared.updateDelayEndTime(delayEndTime)
-
           analysisDelayTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(delaySeconds), repeats: false) {
             [weak self] _ in
             Task { @MainActor in
               self?.isInDelayPeriod = false
               self?.analysisDelayTimer = nil
-              FocusStorage.shared.updateDelayEndTime(nil)
               log("Analysis delay ended, resuming frame processing")
             }
           }
@@ -1120,10 +1060,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         [weak self] payload in
         self?.handleInsightTestNotification(payload)
       },
-      ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.focus")) {
-        [weak self] payload in
-        self?.handleFocusTestNotification(payload)
-      },
       ProactiveTestNotificationObserver(name: NSNotification.Name("com.omi.test.notification")) {
         [weak self] payload in
         self?.handleNotificationTestNotification(payload)
@@ -1134,7 +1070,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
     testNotificationObservers = observers
     log("InsightTestCLI: Notification observer registered")
-    log("FocusTestCLI: Notification observer registered")
     log("NotificationTestCLI: Notification observer registered")
   }
 
@@ -1144,15 +1079,6 @@ public class ProactiveAssistantsPlugin: NSObject {
       let count = payload["count"].flatMap { Int($0) } ?? 10
       log("InsightTestCLI: Received test trigger (hours=\(hours), count=\(count))")
       await InsightTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
-    }
-  }
-
-  private func handleFocusTestNotification(_ payload: ProactiveTestNotificationPayload) {
-    Task { @MainActor in
-      let hours = payload["hours"].flatMap { Double($0) } ?? 1.0
-      let count = payload["count"].flatMap { Int($0) } ?? 20
-      log("FocusTestCLI: Received test trigger (hours=\(hours), count=\(count))")
-      await FocusTestRunner.runCLITest(lookbackHours: hours, maxScreenshots: count)
     }
   }
 
@@ -1677,5 +1603,4 @@ extension Notification.Name {
 
 // MARK: - Backward Compatibility Alias
 
-typealias FocusPlugin = ProactiveAssistantsPlugin
 typealias MonitoringService = ProactiveAssistantsPlugin

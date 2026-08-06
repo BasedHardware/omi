@@ -146,51 +146,142 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     )
   }
 
-  /// The bar now carries two pills because Home became a search surface and a `Memory` destination
-  /// beside a field that returns memories is a contradiction. The claim worth holding is not the pill
-  /// count — it is that **nothing was stranded by shrinking it** (INV-NAV-1).
-  func testLibraryCarriesEveryDestinationThePillsUsedToReach() {
+  /// The bar carries six flat pills and no menu. The claim worth holding is not the pill count —
+  /// it is that **nothing was stranded when the menu was deleted** (INV-NAV-1). `reach` names the one
+  /// mechanism responsible for each destination, so this fails the moment a pill is removed without
+  /// the destination being moved somewhere that exists.
+  func testEveryShellDestinationIsStillReachableWithoutAMenu() {
     XCTAssertEqual(
       TopNavigationRoutes.primaryItems.map(\.index),
-      [SidebarNavItem.conversations.rawValue, SidebarNavItem.apps.rawValue]
+      [
+        SidebarNavItem.dashboard.rawValue,
+        SidebarNavItem.conversations.rawValue,
+        SidebarNavItem.tasks.rawValue,
+        SidebarNavItem.rewind.rawValue,
+        SidebarNavItem.insight.rawValue,
+        SidebarNavItem.apps.rawValue,
+      ]
     )
     XCTAssertEqual(TopNavigationRoutes.memoryDestinations, [.memories, .conversations, .brainMap])
 
-    let reachable = Set(LibraryDestination.allCases.map(\.navItem))
-    for stranded in [SidebarNavItem.conversations, .tasks, .rewind, .focus, .insight] {
-      XCTAssertTrue(
-        reachable.contains(stranded),
-        "\(stranded.title) lost its pill and must still be reachable from Library")
+    // No pill may instruct the user how to operate it. The retired menu's tooltip read "hover for
+    // conversations, memories, tasks, Rewind", which is chrome apologising for itself.
+    for item in TopNavigationRoutes.primaryItems {
+      XCTAssertFalse(
+        item.tooltip.lowercased().contains("hover"),
+        "\(item.title) still tells the user to hover")
+      XCTAssertFalse(item.tooltip.isEmpty)
+    }
+
+    XCTAssertEqual(
+      ShellDestination.unreachable(), [],
+      "a destination lost the only mechanism that reached it")
+
+    // The three the retired menu owned are the hub's own views, and the hub itself has a pill.
+    XCTAssertEqual(
+      ShellDestination.allCases.filter { $0.reach == .memoryHubView }.compactMap(\.memoryDestination),
+      [.conversations, .memories, .brainMap])
+    XCTAssertEqual(ShellDestination.insights.navItem, .insight)
+    // Home is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
+    // animates while Omi is answering.
+    XCTAssertEqual(ShellDestination.home.navItem, .dashboard)
+    XCTAssertEqual(ShellDestination.home.reach, .topBar)
+    XCTAssertEqual(
+      TopNavigationRoutes.primaryItems.first?.icon, "magnifyingglass",
+      "Home must not spend the Omi mark on a static nav glyph")
+
+  }
+
+  /// A destination whose `reach` points at a page the bar does not have a pill for is exactly the
+  /// stranding INV-NAV-1 forbids, so the checker has to *see* it rather than pass vacuously.
+  func testTheReachabilityCheckerCatchesADestinationWhosePillWasRemoved() {
+    let barWithoutInsights = TopNavigationRoutes.primaryItems.filter {
+      $0.index != SidebarNavItem.insight.rawValue
     }
     XCTAssertEqual(
-      LibraryDestination.allCases.compactMap(\.memoryDestination),
+      ShellDestination.unreachable(fromBarItems: barWithoutInsights), [.insights],
+      "Insights lost its pill and nothing noticed")
+
+    let barWithoutLibrary = TopNavigationRoutes.primaryItems.filter {
+      $0.index != SidebarNavItem.conversations.rawValue
+    }
+    XCTAssertEqual(
+      Set(ShellDestination.unreachable(fromBarItems: barWithoutLibrary)),
       [.conversations, .memories, .brainMap],
-      "the Memory hub's three destinations must all survive inside Library")
+      "without the Library pill the hub's three views have no way in")
   }
 
-  func testLibraryPillReadsAsCurrentOnEveryPageItRoutesTo() {
-    for destination in LibraryDestination.allCases {
+  func testLibraryPillReadsAsCurrentOnEveryHubView() {
+    for destination in ShellDestination.allCases where destination.reach == .memoryHubView {
       XCTAssertTrue(
-        LibraryDestination.contains(selectedIndex: destination.navItem.rawValue),
+        ShellDestination.isHubPage(selectedIndex: destination.navItem.rawValue),
         "\(destination.title) must light the Library pill")
     }
-    XCTAssertFalse(LibraryDestination.contains(selectedIndex: SidebarNavItem.dashboard.rawValue))
-    XCTAssertFalse(LibraryDestination.contains(selectedIndex: SidebarNavItem.apps.rawValue))
+    XCTAssertFalse(ShellDestination.isHubPage(selectedIndex: SidebarNavItem.dashboard.rawValue))
+    XCTAssertFalse(ShellDestination.isHubPage(selectedIndex: SidebarNavItem.apps.rawValue))
   }
 
-  func testLibrarySelectionDistinguishesTheThreeMemoryHubDestinations() {
-    let hub = SidebarNavItem.conversations.rawValue
-    XCTAssertTrue(
-      LibraryDestination.brainMap.isCurrent(
-        selectedIndex: hub, memoryDestinationRawValue: MemoryHubDestination.brainMap.rawValue))
-    XCTAssertFalse(
-      LibraryDestination.brainMap.isCurrent(
-        selectedIndex: hub, memoryDestinationRawValue: MemoryHubDestination.memories.rawValue),
-      "Brain Map must not read as current while the hub is showing Memories")
-    XCTAssertTrue(
-      LibraryDestination.tasks.isCurrent(
-        selectedIndex: SidebarNavItem.tasks.rawValue, memoryDestinationRawValue: 0),
-      "a destination with no hub sub-page is current on its page alone")
+  /// The badge used to be one number on `Library` covering conversations, memories *and* tasks,
+  /// because Tasks lived inside the menu. Tasks has its own pill now, so a task counted on `Library`
+  /// would point at the wrong page.
+  func testNewItemCountsAreCarriedByThePillThatOwnsThem() {
+    let badges = TopNavigationDestinationBadges(library: 4, tasks: 7)
+    XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.conversations.rawValue), 4)
+    XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.tasks.rawValue), 7)
+    XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.apps.rawValue), 0)
+    XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.rewind.rawValue), 0)
+    XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.insight.rawValue), 0)
+  }
+
+  /// **The reason the flat row is allowed to exist.** A row of five named pills is only better than
+  /// a menu if it actually fits — otherwise it silently becomes the compact `Navigate` menu, which is
+  /// the same disclosure with a worse label.
+  ///
+  /// Hosts the *real* row — real labels, real icons — beside the real trailing-control widths at the
+  /// narrowest window `DesktopWindowLayoutPolicy` allows, with a two-digit badge on both pills that
+  /// can carry one. `ViewThatFits` picking the compact alternative is the failure.
+  func testTheFlatDestinationRowFitsTheNarrowestWindowWithoutTheCompactFallback() {
+    let lane = TopNavigationLayoutMetrics.contentLaneWidth(for: DesktopWindowLayoutPolicy.width)
+    let inset = TopNavigationLayoutMetrics.barContentInset
+    let recorder = TopNavigationLayoutRecorder()
+    let host = NSHostingView(
+      rootView: TopNavigationBarLayout(
+        expandedNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .expanded) {
+            TopNavigationDestinationRow(
+              selectedIndex: SidebarNavItem.dashboard.rawValue,
+              badges: TopNavigationDestinationBadges(library: 99, tasks: 99),
+              onSelect: { _ in }
+            )
+          }
+        },
+        compactNavigation: {
+          TopNavigationLayoutProbe(recorder: recorder, slot: .compact) {
+            Color.clear.frame(width: 68, height: 32)
+          }
+        },
+        persistentControls: {
+          Color.clear.frame(
+            width: TopNavigationLayoutMetrics.persistentControlsWidth, height: 32)
+        },
+        settings: {
+          Color.clear.frame(width: TopNavigationLayoutMetrics.settingsControlWidth, height: 32)
+        }
+      )
+      .padding(.horizontal, inset)
+      .frame(width: lane, height: TopNavigationLayoutMetrics.barHeight)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: lane, height: TopNavigationLayoutMetrics.barHeight)
+    host.layoutSubtreeIfNeeded()
+
+    XCTAssertNil(
+      recorder.frame(of: .compact),
+      "the flat destination row overflowed the narrowest window and fell back to a menu")
+    guard let navigation = recorder.frame(of: .expanded) else {
+      return XCTFail("the expanded destination row was never placed")
+    }
+    XCTAssertGreaterThan(navigation.width, 0)
+    XCTAssertLessThanOrEqual(navigation.width, lane - inset * 2)
   }
 
   func testNavigationLaneMatchesFullChatWidthAndPageInsets() {

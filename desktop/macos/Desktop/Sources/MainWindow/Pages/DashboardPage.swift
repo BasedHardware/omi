@@ -229,7 +229,6 @@ struct DashboardPage: View {
   var onOpenPrimaryChat: (() -> Void)? = nil
   @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
-  @ObservedObject private var focusStorage = FocusStorage.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
   /// Learned insights ("things about you") — surfaced in the home hub's rotating
   /// knows-list alongside tasks and asks, not just on the Insights page.
@@ -903,7 +902,6 @@ struct DashboardPage: View {
     switch kind {
     case .task: return "circle"
     case .insight: return "lightbulb"
-    case .focus: return "eye"
     case .question: return "bubble.left"
     }
   }
@@ -974,9 +972,6 @@ struct DashboardPage: View {
   /// A composed, high-agency nudge for the tip slot when there's no server
   /// insight — one thing you can hand Omi with a tap (it prefills the chat).
   private var homeActionTip: String? {
-    if focusStorage.currentStatus == .distracted {
-      return "Help me get back on track"
-    }
     let openCount =
       homeKnowsTaskCandidates
       .filter { !dismissedKnowsTaskIDs.contains($0.id) }
@@ -1002,28 +997,6 @@ struct DashboardPage: View {
     default: tail = "\(openCount) things need you."
     }
 
-    var lead: String?
-    if let status = focusStorage.currentStatus {
-      let rawApp = focusStorage.currentApp ?? focusStorage.detectedAppName
-      let appName = rawApp?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let namedApp: String? = {
-        guard let appName, !appName.isEmpty,
-          !appName.lowercased().contains("unknown")
-        else { return nil }
-        return appName
-      }()
-      if status == .focused, let namedApp {
-        lead = "Deep in \(namedApp) today"
-      } else if status == .focused {
-        lead = "Heads-down today"
-      } else if status == .distracted {
-        lead = "A scattered stretch just now"
-      }
-    }
-
-    if let lead {
-      return "\(lead) — \(tail)"
-    }
     return tail.prefix(1).uppercased() + tail.dropFirst()
   }
 
@@ -1073,8 +1046,6 @@ struct DashboardPage: View {
           await intelligenceStore.recordPrimaryAction(recommendation)
         }
       }
-    case .focus:
-      navigate(to: .focus)
     case .question:
       // Prefill the ask bar so you can glance it over and edit before sending,
       // rather than firing the suggestion blindly.
@@ -1093,7 +1064,7 @@ struct DashboardPage: View {
         else { return }
         Task { await intelligenceStore.dismiss(recommendation, reason: reason) }
       }
-    case .focus, .question:
+    case .question:
       return nil
     }
   }
@@ -2449,7 +2420,6 @@ private struct HomeKnowsRowView: View {
     switch row.kind {
     case .task: return "circle"
     case .insight: return "lightbulb"
-    case .focus: return "eye"
     case .question: return "bubble.left"
     }
   }

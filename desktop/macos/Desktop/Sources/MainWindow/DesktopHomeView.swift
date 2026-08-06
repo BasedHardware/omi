@@ -841,8 +841,6 @@ struct DesktopHomeView: View {
       return .memories
     case "tasks":
       return .tasks
-    case "focus":
-      return .focus
     case "insight":
       return .insight
     case "rewind":
@@ -1537,36 +1535,6 @@ private struct PageChromeButton: View {
 /// Isolated page content switch — does NOT observe AppState or ViewModelContainer
 /// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
 /// AppState properties (conversations, permissions, etc.) change.
-/// A minimal SB-styled segmented toggle used to fold two related surfaces into
-/// one tab (Conversations/Memories, Focus/Insights).
-private struct HubSegmentedControl: View {
-  let segments: [String]
-  @Binding var selection: Int
-
-  var body: some View {
-    HStack(spacing: 4) {
-      ForEach(Array(segments.enumerated()), id: \.offset) { index, segment in
-        Button {
-          OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) { selection = index }
-        } label: {
-          Text(segment)
-            .inkStyle(.rowCopy, color: selection == index ? Ink.primary : Ink.secondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 6)
-            // A capsule, like every other selectable chip in this system.
-            .background(GlassPillBackground(isSelected: selection == index, isHovering: false))
-        }
-        .buttonStyle(.plain)
-      }
-    }
-    .padding(4)
-    .background(
-      Capsule(style: .continuous).fill(Ink.rowFill)
-    )
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-}
-
 struct MemoryHubPage: View {
   let appState: AppState
   let viewModelContainer: ViewModelContainer
@@ -1576,6 +1544,9 @@ struct MemoryHubPage: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
   @Binding var destinationRawValue: Int
+  /// How this shell applies a hub selection. The modern shell only has to write the persisted
+  /// destination; the chat-first shell also moves its own typed route, so it passes its own.
+  var onSelectDestination: ((MemoryHubDestination) -> Void)? = nil
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -1591,7 +1562,32 @@ struct MemoryHubPage: View {
     )
   }
 
+  /// The hub wears its own switcher. It used to live in the top bar's `Library` hover menu, which
+  /// made the window's chrome responsible for one page's three views — and made Brain Map reachable
+  /// only by hovering. A page's tabs belong to the page (INV-NAV-1: same destinations, same owner).
   var body: some View {
+    VStack(spacing: 0) {
+      MemoryHubSwitcher(selection: destination, onSelect: select)
+        .padding(.top, 22)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 4)
+      hubContent
+    }
+  }
+
+  private func select(_ next: MemoryHubDestination) {
+    OmiUISound.play(.navigate)
+    OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) {
+      if let onSelectDestination {
+        onSelectDestination(next)
+      } else {
+        destinationRawValue = next.rawValue
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var hubContent: some View {
     switch destination {
     case .memories:
       adaptiveContent(
@@ -1697,26 +1693,6 @@ struct MemoryHubPage: View {
   }
 }
 
-/// "Focus" tab — Focus + Insights folded into one surface.
-private struct FocusHubPage: View {
-  @State private var segment = 0
-
-  var body: some View {
-    VStack(spacing: 0) {
-      HubSegmentedControl(segments: ["Insights", "Focus"], selection: $segment)
-        .padding(.top, 22)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 4)
-
-      if segment == 0 {
-        InsightPage()
-      } else {
-        FocusPage()
-      }
-    }
-  }
-}
-
 private struct PageContentView: View {
   let selectedIndex: Int
   let appState: AppState
@@ -1728,8 +1704,8 @@ private struct PageContentView: View {
 
   /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
   /// content in a centered, width-capped column so wide monitors get calm
-  /// gutters instead of a full-bleed stretch — matching the Focus/Insights
-  /// pages, which already self-constrain. Pages paint a clear background, so the
+  /// gutters instead of a full-bleed stretch — matching the Insights
+  /// page, which already self-constrains. Pages paint a clear background, so the
   /// gutters show the shell surface seamlessly.
   @ViewBuilder
   private func constrainedListPage<V: View>(_ page: V) -> some View {
@@ -1779,8 +1755,6 @@ private struct PageContentView: View {
             viewModel: viewModelContainer.tasksViewModel,
             chatCoordinator: viewModelContainer.taskChatCoordinator,
             chatProvider: viewModelContainer.chatProvider))
-      case 5:
-        FocusHubPage()
       case 6:
         InsightPage()
       case 7:

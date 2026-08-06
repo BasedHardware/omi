@@ -13,47 +13,17 @@ private struct UNCompletionHandlerBox: @unchecked Sendable {
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
-  case focusLost
-  case focusRegained
   case none
 
   var unSound: UNNotificationSound? {
     switch self {
     case .default:
       return .default
-    case .focusLost, .focusRegained:
-      // Custom sounds are played manually via NSSound (see playCustomSound)
-      // because UNNotificationSound(named:) can't find SPM-bundled resources.
-      return nil
     case .none:
       return nil
     }
   }
 
-  /// Play the custom sound manually from the SPM resource bundle.
-  func playCustomSound() {
-    let filename: String
-    switch self {
-    case .focusLost:
-      filename = "focus-lost"
-    case .focusRegained:
-      filename = "focus-regained"
-    default:
-      return
-    }
-
-    guard let url = Bundle.resourceBundle.url(forResource: filename, withExtension: "aiff") else {
-      log("NotificationSound: Could not find \(filename).aiff in bundle")
-      return
-    }
-
-    guard let sound = NSSound(contentsOf: url, byReference: true) else {
-      log("NotificationSound: Could not load sound from \(url)")
-      return
-    }
-
-    sound.play()
-  }
 }
 
 @MainActor
@@ -499,8 +469,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         authorizationSnapshot: authorizationSnapshot
       ),
       taskNotificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
-      focusSuppressed: FocusStorage.shared.currentStatus == .focused
-        || ProactiveTaskInterruptionSettings.isFocusSuppressed,
+      focusSuppressed: ProactiveTaskInterruptionSettings.isFocusSuppressed,
       snoozed: FloatingControlBarManager.shared.isSnoozed,
       now: now,
       calendar: calendar
@@ -606,9 +575,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       assistantId: assistantId,
       authorizationSnapshot: authorizationSnapshot
     )
-
-    // Play custom sound manually (SPM resources aren't found by UNNotificationSound)
-    sound.playCustomSound()
 
     print("[\(assistantId)] Sending notification: \(title) - \(message)")
     UserNotificationCallbackBridge.add(request) { [weak self] result in

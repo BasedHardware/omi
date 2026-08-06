@@ -10,6 +10,8 @@
 - Preserve the selected Memory destination while the shell transitions routes, including Brain Map.
 - Resolve Brain Map through `MemoryGraphPresentationMode`: canonical-lifecycle users receive the canonical atlas and other established users receive the legacy graph.
 - Present top-bar menus above the active page in every shell.
+- Keep every destination in `ShellDestination` reachable by the mechanism its `reach` names — a top-bar pill, the Memory hub's own switcher, or a segment of a page a pill reaches. `ShellDestination.unreachable()` must stay empty.
+- Give both shells the same way into the Memory hub's three views. A route that renders one hub view must offer the other two on the page, not only through window chrome.
 
 ## MUST NOT
 
@@ -26,6 +28,7 @@
 
 ## Guard tests
 
+- `desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift`
 - `desktop/macos/Desktop/Tests/ChatFirstDestinationParityTests.swift`
 - `desktop/macos/Desktop/Tests/ChatFirstShellTests.swift`
 - `desktop/macos/Desktop/Tests/MemoryHubBrainMapRoutingTests.swift`
@@ -36,6 +39,8 @@
 
 - `desktop/macos/Desktop/Sources/MainWindow/ChatFirst/**`
 - `desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift`
+- `desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift`
+- `desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift`
 - `desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift`
 - `desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift`
 - `desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift`

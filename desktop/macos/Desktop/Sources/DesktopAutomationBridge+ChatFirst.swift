@@ -107,7 +107,6 @@ extension DesktopAutomationBridge {
     case "conversations": return "Conversations"
     case "memories": return "Memories"
     case "tasks": return "Tasks"
-    case "focus": return "Focus"
     case "insight": return "Insights"
     case "rewind": return "Rewind"
     case "apps", "integrations": return "Apps"

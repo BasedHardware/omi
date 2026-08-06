@@ -11,18 +11,15 @@ import SwiftUI
 struct NotchSystemControlsView: View {
   let progress: CGFloat
 
-  @ObservedObject private var focusStorage = FocusStorage.shared
   @ObservedObject private var shortcuts = ShortcutSettings.shared
   /// Toggle state lives in UserDefaults and plugin state rather than in an observable, so
   /// it is sampled when the surface opens and after each toggle instead of being bound.
   @State private var screenCaptureOn = false
   @State private var audioRecordingOn = false
-
-  private var currentAppName: String? {
-    let name = focusStorage.detectedAppName ?? focusStorage.currentApp
-    guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-    return name
-  }
+  /// The frontmost app the capture loop is currently on. Sampled with the toggles rather than
+  /// observed: it used to be read off the retired Focus feature's storage, and the plugin that
+  /// actually drives capture is the honest owner of "what Omi is looking at".
+  @State private var currentAppName: String?
 
   var body: some View {
     VStack(alignment: .trailing, spacing: OmiSpacing.xs) {
@@ -57,8 +54,15 @@ struct NotchSystemControlsView: View {
     }
   }
 
-  /// What Omi is currently looking at. This is the same frontmost-app signal the capture
-  /// loop uses, so the notch and the assistants can never disagree about the active app.
+  /// The frontmost app as the capture loop sees it, so the notch and the assistants can never
+  /// disagree about the active app.
+  private static func frontmostCaptureApp() -> String? {
+    let name = ProactiveAssistantsPlugin.shared.currentStatus.currentApp
+    guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+    return name
+  }
+
+  /// What Omi is currently looking at.
   private func currentAppRow(_ name: String) -> some View {
     HStack(spacing: OmiSpacing.xxs) {
       Circle()
@@ -148,6 +152,7 @@ struct NotchSystemControlsView: View {
 
   private func refresh() {
     screenCaptureOn = SystemCaptureControls.isScreenCaptureOn
+    currentAppName = Self.frontmostCaptureApp()
     audioRecordingOn = SystemCaptureControls.isAudioRecordingOn
   }
 

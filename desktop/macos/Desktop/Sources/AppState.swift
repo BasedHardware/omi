@@ -852,8 +852,6 @@ extension Notification.Name {
   static let conversationsPageDidLoad = Notification.Name("conversationsPageDidLoad")
   /// Posted when Tasks page finishes loading initial data
   static let tasksPageDidLoad = Notification.Name("tasksPageDidLoad")
-  /// Posted when Focus page finishes loading initial data
-  static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
   /// Posted when Advice page finishes loading initial data
   static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
