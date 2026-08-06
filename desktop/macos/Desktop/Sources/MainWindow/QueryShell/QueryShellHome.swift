@@ -240,7 +240,13 @@ struct QueryShellHome: View {
       Button("Clear conversation", role: .destructive, action: clearTranscript)
         .disabled(!menu.canClear)
       Divider()
-      Button("AI settings…") {
+      // The deleted page's gear, with its own words ("Advanced AI settings"). It posts the shared
+      // notification rather than routing itself, so it lands wherever `DesktopHomeView` already
+      // sends that jump — today `.advanced`, which is the *visible* section holding AI Provider, the
+      // Claude connection and the chat workspace directory. `SettingsSection.aiChat` is deliberately
+      // absent from the sidebar and bounces to `.advanced` on production bundles; pointing a chat
+      // control straight at it would be a menu item that silently lands somewhere else.
+      Button("Advanced AI settings…") {
         NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
       }
     } label: {
