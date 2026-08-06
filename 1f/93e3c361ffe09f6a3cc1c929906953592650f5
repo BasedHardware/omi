@@ -1,0 +1,19 @@
+backend/utils/paper/editorial.py
+  s_814cfc8af23811::t_e5d3da7b8ec8b4 232-235,237-240,244-251,257-258,266-277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1f93e3c361ffe09f6a3cc1c929906953592650f5",
+  "prompts": {},
+  "sessions": {
+    "s_814cfc8af23811": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1fcdb13-5b42-47d9-a8ea-d2da9669b2be",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
