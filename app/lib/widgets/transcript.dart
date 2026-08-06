@@ -19,11 +19,7 @@ import 'package:omi/utils/other/temp.dart';
 // Use speaker colors from person.dart for bubble colors
 final List<Color> _speakerColors = speakerColors;
 
-typedef TranscriptSegmentBuilder = Widget Function(
-  BuildContext context,
-  TranscriptSegment segment,
-  int index,
-);
+typedef TranscriptSegmentBuilder = Widget Function(BuildContext context, TranscriptSegment segment, int index);
 
 class TranscriptWidget extends StatefulWidget {
   final List<TranscriptSegment> segments;
@@ -734,10 +730,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
               final segmentIndex = idx - widget.leadingItems.length - 1;
               if (segmentIndex == widget.segments.length) {
-                return SizedBox(
-                  key: const ValueKey('transcript_bottom_spacing'),
-                  height: widget.bottomMargin + 120,
-                );
+                return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
               }
 
               final segment = widget.segments[segmentIndex];
@@ -746,15 +739,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                   ? _buildSegmentItem(segmentIndex)
                   : Container(key: _segmentKeys[segment.id], child: customSegment);
               if (widget.separator && segmentIndex > 0) {
-                child = Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [const SizedBox(height: 4), child],
-                );
+                child = Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 4), child]);
               }
-              return KeyedSubtree(
-                key: ValueKey('transcript-segment-${segment.id}'),
-                child: child,
-              );
+              return KeyedSubtree(key: ValueKey('transcript-segment-${segment.id}'), child: child);
             },
           ),
         ),
