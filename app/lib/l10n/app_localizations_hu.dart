@@ -9813,5 +9813,12 @@ class AppLocalizationsHu extends AppLocalizations {
       'Nem sikerült csatlakozni ehhez a mikrofonhoz. Ellenőrizd, hogy csatlakoztatva van-e az iPhone Beállításokban.';
 
   @override
+  String get sendRawAudioToOmi => 'Nyers hang küldése az Ominak';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak.';
+
+  @override
   String get syncStatusTooOld => 'Túl régi a szinkronizáláshoz — az Omi nem tudja elfogadni';
 }

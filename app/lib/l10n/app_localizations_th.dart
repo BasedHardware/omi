@@ -9719,5 +9719,12 @@ class AppLocalizationsTh extends AppLocalizations {
       'เชื่อมต่อกับไมโครโฟนนั้นไม่ได้ ตรวจสอบว่าเชื่อมต่ออยู่ในการตั้งค่า iPhone';
 
   @override
+  String get sendRawAudioToOmi => 'ส่งเสียงดิบไปยัง Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'ปิดเพื่อไม่ให้ส่งเสียงดิบไปยัง Omi ข้อความถอดเสียงและข้อมูลที่ฟีเจอร์คลาวด์ต้องใช้อาจยังถูกส่งไปยัง Omi';
+
+  @override
   String get syncStatusTooOld => 'เก่าเกินกว่าจะซิงค์ — Omi รับไม่ได้';
 }

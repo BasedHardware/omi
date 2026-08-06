@@ -9790,5 +9790,12 @@ class AppLocalizationsLt extends AppLocalizations {
       'Nepavyko prisijungti prie šio mikrofono. Įsitikinkite, kad jis prijungtas iPhone nustatymuose.';
 
   @override
+  String get sendRawAudioToOmi => 'Siųsti neapdorotą garsą į Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.';
+
+  @override
   String get syncStatusTooOld => 'Per senas sinchronizuoti — „Omi“ negali jo priimti';
 }

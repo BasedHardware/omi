@@ -9752,5 +9752,12 @@ class AppLocalizationsHi extends AppLocalizations {
       'उस माइक्रोफ़ोन से कनेक्ट नहीं हो सके। सुनिश्चित करें कि वह iPhone सेटिंग्स में कनेक्ट है।';
 
   @override
+  String get sendRawAudioToOmi => 'Omi को कच्चा ऑडियो भेजें';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi को कच्चा ऑडियो भेजे जाने से रोकने के लिए इसे बंद करें। ट्रांसक्रिप्ट और क्लाउड सुविधाओं के लिए आवश्यक डेटा अभी भी Omi को भेजा जा सकता है।';
+
+  @override
   String get syncStatusTooOld => 'सिंक करने के लिए बहुत पुराना — Omi इसे स्वीकार नहीं कर सकता';
 }

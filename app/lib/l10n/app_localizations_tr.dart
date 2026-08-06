@@ -9785,5 +9785,12 @@ class AppLocalizationsTr extends AppLocalizations {
       'Bu mikrofona bağlanılamadı. iPhone Ayarları\'nda bağlı olduğundan emin olun.';
 
   @override
+  String get sendRawAudioToOmi => 'Ham sesi Omi\'ye gönder';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Ham sesin Omi\'ye gönderilmesini önlemek için kapatın. Transkriptler ve bulut özelliklerinin gerektirdiği veriler yine de Omi\'ye gönderilebilir.';
+
+  @override
   String get syncStatusTooOld => 'Eşitlemek için çok eski — Omi bunu kabul edemez';
 }

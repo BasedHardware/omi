@@ -9787,5 +9787,12 @@ class AppLocalizationsUr extends AppLocalizations {
       'اس مائیکروفون سے منسلک نہیں ہو سکے۔ یقینی بنائیں کہ یہ iPhone کی ترتیبات میں منسلک ہے۔';
 
   @override
+  String get sendRawAudioToOmi => 'خام آڈیو Omi کو بھیجیں';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔';
+
+  @override
   String get syncStatusTooOld => 'ہم آہنگ کرنے کے لیے بہت پرانا — Omi اسے قبول نہیں کر سکتا';
 }

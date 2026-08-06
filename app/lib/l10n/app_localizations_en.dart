@@ -9767,5 +9767,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not connect to that microphone. Make sure it is connected in iPhone Settings.';
 
   @override
+  String get sendRawAudioToOmi => 'Send raw audio to Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.';
+
+  @override
   String get syncStatusTooOld => 'Too old to sync — Omi can\'t accept it';
 }

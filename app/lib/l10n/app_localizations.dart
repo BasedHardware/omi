@@ -18219,6 +18219,18 @@ abstract class AppLocalizations {
   /// **'Could not connect to that microphone. Make sure it is connected in iPhone Settings.'**
   String get rayBanMetaMicPickerConnectError;
 
+  /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Send raw audio to Omi'**
+  String get sendRawAudioToOmi;
+
+  /// Explains that disabling raw audio forwarding preserves transcript-based cloud features
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.'**
+  String get sendRawAudioToOmiDescription;
+
   /// No description provided for @syncStatusTooOld.
   ///
   /// In en, this message translates to:

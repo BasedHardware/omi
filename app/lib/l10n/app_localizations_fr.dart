@@ -9860,5 +9860,12 @@ class AppLocalizationsFr extends AppLocalizations {
       'Impossible de se connecter à ce micro. Vérifiez qu\'il est connecté dans les réglages de l\'iPhone.';
 
   @override
+  String get sendRawAudioToOmi => 'Envoyer l\'audio brut à Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Désactivez cette option pour empêcher l\'envoi de l\'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.';
+
+  @override
   String get syncStatusTooOld => 'Trop ancien pour être synchronisé — Omi ne peut pas l\'accepter';
 }

@@ -9809,5 +9809,12 @@ class AppLocalizationsRu extends AppLocalizations {
       'Не удалось подключиться к этому микрофону. Убедитесь, что он подключён в настройках iPhone.';
 
   @override
+  String get sendRawAudioToOmi => 'Отправлять необработанный звук в Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Отключите, чтобы необработанный звук не отправлялся в Omi. Расшифровки и данные, необходимые облачным функциям, всё ещё могут отправляться в Omi.';
+
+  @override
   String get syncStatusTooOld => 'Слишком старая для синхронизации — Omi не может её принять';
 }

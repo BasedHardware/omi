@@ -9698,5 +9698,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get rayBanMetaMicPickerConnectError => 'לא ניתן היה להתחבר למיקרופון הזה. ודאו שהוא מחובר בהגדרות ה-iPhone.';
 
   @override
+  String get sendRawAudioToOmi => 'שליחת שמע גולמי ל-Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.';
+
+  @override
   String get syncStatusTooOld => 'ישן מדי לסנכרון — Omi לא יכול לקבל אותו';
 }

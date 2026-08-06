@@ -9593,5 +9593,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rayBanMetaMicPickerConnectError => '无法连接到该麦克风。请确保它已在 iPhone 设置中连接。';
 
   @override
+  String get sendRawAudioToOmi => '向 Omi 发送原始音频';
+
+  @override
+  String get sendRawAudioToOmiDescription => '关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。';
+
+  @override
   String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
 }

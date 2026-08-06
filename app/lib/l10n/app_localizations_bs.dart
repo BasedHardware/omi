@@ -9800,5 +9800,12 @@ class AppLocalizationsBs extends AppLocalizations {
       'Povezivanje s tim mikrofonom nije uspjelo. Provjerite je li povezan u postavkama iPhonea.';
 
   @override
+  String get sendRawAudioToOmi => 'Šalji sirovi zvuk u Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Isključite da spriječite slanje sirovog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi.';
+
+  @override
   String get syncStatusTooOld => 'Prestaro za sinkronizaciju — Omi ga ne može prihvatiti';
 }

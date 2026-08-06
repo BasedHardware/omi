@@ -9713,5 +9713,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get rayBanMetaMicPickerConnectError => 'تعذر الاتصال بهذا الميكروفون. تأكد من أنه متصل في إعدادات iPhone.';
 
   @override
+  String get sendRawAudioToOmi => 'إرسال الصوت الخام إلى Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'أوقف هذا الخيار لمنع إرسال الصوت الخام إلى Omi. قد يستمر إرسال النصوص والبيانات اللازمة للميزات السحابية إلى Omi.';
+
+  @override
   String get syncStatusTooOld => 'قديم جدًا للمزامنة — لا يمكن لـ Omi قبوله';
 }

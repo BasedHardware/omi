@@ -9782,5 +9782,12 @@ class AppLocalizationsPt extends AppLocalizations {
       'Não foi possível ligar a esse microfone. Certifique-se de que está ligado nas Definições do iPhone.';
 
   @override
+  String get sendRawAudioToOmi => 'Enviar áudio em bruto para o Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Desative para impedir o envio de áudio em bruto para o Omi. As transcrições e os dados necessários às funcionalidades na nuvem ainda podem ser enviados para o Omi.';
+
+  @override
   String get syncStatusTooOld => 'Demasiado antiga para sincronizar — o Omi não pode aceitá-la';
 }

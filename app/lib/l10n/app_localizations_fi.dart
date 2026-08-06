@@ -9774,5 +9774,12 @@ class AppLocalizationsFi extends AppLocalizations {
       'Mikrofoniin ei voitu muodostaa yhteyttä. Varmista, että se on yhdistetty iPhonen asetuksissa.';
 
   @override
+  String get sendRawAudioToOmi => 'Lähetä käsittelemätön ääni Omille';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.';
+
+  @override
   String get syncStatusTooOld => 'Liian vanha synkronoitavaksi — Omi ei voi hyväksyä sitä';
 }
