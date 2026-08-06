@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchLayout.swift
+  s_569f1df936cc22::t_02db3c02e3cdf2 70-79,86,89,103-104
+desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
+  s_569f1df936cc22::t_210f180f4dd789 34-36,49-56,280-313
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4e700f728ffb7951cc45cd5b40f52861360afa75",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
