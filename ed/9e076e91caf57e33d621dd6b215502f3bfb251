@@ -1,0 +1,37 @@
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  s_569f1df936cc22::t_25acdd16c27364 101-119,228-242,249,269-303,648-680
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  s_569f1df936cc22::t_86adca11540e50 18-23,45-84,104-116,121,124-126,150,256,258,265-311,323-333,484-486
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_569f1df936cc22::t_a5fcad8f0c2d8b 13-18,28,106-108,114,151-164,167-171,206-209,212-214,221-228,279-291,295-301,305,317-322,325-328,331-349,351-360,382-403
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_569f1df936cc22::t_93a8e6f7810094 194-196,356-427
+desktop/macos/changelog/unreleased/20260806-spine-day-can-be-folded.json
+  s_acebfdccb4f1d0::t_fda0f12a95530a 1-3
+desktop/macos/changelog/unreleased/20260806-spine-reads-as-separate-moments.json
+  s_569f1df936cc22::t_fce6d95bbaf304 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ed9e076e91caf57e33d621dd6b215502f3bfb251",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_acebfdccb4f1d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c28e6e32-7183-43a4-8843-7add11629185",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
