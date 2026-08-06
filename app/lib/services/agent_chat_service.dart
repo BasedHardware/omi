@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -26,6 +27,15 @@ void agentLog(String msg) {
   try {
     agentLogFile?.writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
   } catch (_) {}
+}
+
+Map<String, String> buildAgentWebSocketHeaders({required String token, String? timeZone}) {
+  final headers = <String, String>{'Authorization': 'Bearer $token'};
+  final normalizedTimeZone = timeZone?.trim();
+  if (normalizedTimeZone != null && normalizedTimeZone.isNotEmpty) {
+    headers['X-Timezone'] = normalizedTimeZone;
+  }
+  return headers;
 }
 
 enum AgentChatEventType { textDelta, toolActivity, result, error, status }
@@ -93,10 +103,16 @@ class AgentChatService {
 
     try {
       final uri = Uri.parse(Env.agentProxyWsUrl);
+      String? timeZone;
+      try {
+        timeZone = await FlutterTimezone.getLocalTimezone();
+      } catch (e) {
+        agentLog('Unable to resolve local timezone; agent proxy will use UTC: $e');
+      }
       agentLog('Connecting to $uri');
       _channel = IOWebSocketChannel.connect(
         uri,
-        headers: {'Authorization': 'Bearer $token'},
+        headers: buildAgentWebSocketHeaders(token: token, timeZone: timeZone),
         pingInterval: const Duration(seconds: 30),
       );
       await _channel!.ready;

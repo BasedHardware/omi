@@ -8,6 +8,7 @@ turns the live session already had (duplicate context, wasted tokens). The seedi
 decision now keys off the VM's reported session state.
 """
 
+from datetime import datetime, timezone
 import importlib.util
 from pathlib import Path
 from types import ModuleType
@@ -38,6 +39,26 @@ HISTORY = [
     {"sender": "human", "text": "what did I do yesterday"},
     {"sender": "ai", "text": "You had 3 meetings."},
 ]
+
+
+def test_current_time_prompt_uses_server_clock_and_mobile_timezone(agent_proxy):
+    result = agent_proxy.current_time_prompt(
+        "What year is it?",
+        "America/New_York",
+        now=datetime(2026, 7, 31, 2, 30, 45, tzinfo=timezone.utc),
+    )
+
+    assert result == "# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nWhat year is it?"
+
+
+def test_current_time_prompt_falls_back_to_utc_for_invalid_mobile_timezone(agent_proxy):
+    result = agent_proxy.current_time_prompt(
+        "What year is it?",
+        "Not/AZone",
+        now=datetime(2026, 7, 31, 2, 30, 45, tzinfo=timezone.utc),
+    )
+
+    assert result == "# Current Time\n2026-07-31T02:30:45+00:00 (UTC)\n\nWhat year is it?"
 
 
 def _patch_history(agent_proxy, monkeypatch) -> MagicMock:

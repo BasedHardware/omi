@@ -573,10 +573,14 @@ Stream<String> makeStreamingApiCall({
     }
 
     if (streamedResponse.statusCode != 200) {
-      Logger.error('Streaming request failed: ${streamedResponse.statusCode}');
-      if (streamedResponse.statusCode == 402) {
+      // Materialize error responses so clock-skew detection sees the JSON body;
+      // streamed responses previously bypassed _checkClockSkewResponse().
+      final errorResponse = await http.Response.fromStream(streamedResponse);
+      _checkClockSkewResponse(errorResponse);
+      Logger.error('Streaming request failed: ${errorResponse.statusCode}');
+      if (errorResponse.statusCode == 402) {
         try {
-          var body = await streamedResponse.stream.bytesToString();
+          final body = errorResponse.body;
           yield 'error:402:$body';
         } catch (_) {
           yield 'error:402:{}';
@@ -663,10 +667,14 @@ Stream<String> makeMultipartStreamingApiCall({
     }
 
     if (response.statusCode != 200) {
-      Logger.error('Multipart streaming request failed: ${response.statusCode}');
-      if (response.statusCode == 402) {
+      // Materialize error responses so clock-skew detection sees the JSON body;
+      // streamed responses previously bypassed _checkClockSkewResponse().
+      final errorResponse = await http.Response.fromStream(response);
+      _checkClockSkewResponse(errorResponse);
+      Logger.error('Multipart streaming request failed: ${errorResponse.statusCode}');
+      if (errorResponse.statusCode == 402) {
         try {
-          var body = await response.stream.bytesToString();
+          final body = errorResponse.body;
           yield 'error:402:$body';
         } catch (_) {
           yield 'error:402:{}';
