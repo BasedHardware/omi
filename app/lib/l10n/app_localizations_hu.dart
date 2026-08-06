@@ -750,11 +750,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Előfizetésed $date-án megújul.';
-  }
-
-  @override
   String get basicPlan => 'Ingyenes csomag';
 
   @override
@@ -9844,16 +9839,6 @@ class AppLocalizationsHu extends AppLocalizations {
       one: '1 hónap ingyen',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'A csomagod $date napján lejárt.\nIratkozz fel újra – az új számlázási időszak díja azonnal levonásra kerül.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'A csomagod $date napján megszűnik.\nIratkozz fel újra, hogy megtartsd az előnyöket – $date előtt nincs levonás.';
   }
 
   @override

@@ -750,11 +750,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Planul tău se reînnoiește pe $date.';
-  }
-
-  @override
   String get basicPlan => 'Plan gratuit';
 
   @override
@@ -9851,16 +9846,6 @@ class AppLocalizationsRo extends AppLocalizations {
       one: '$count lună gratuit',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Planul tău s-a încheiat pe $date.\nAbonează-te din nou acum - vei fi taxat imediat pentru o nouă perioadă de facturare.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Planul tău va fi anulat pe $date.\nAbonează-te din nou pentru a-ți păstra beneficiile - fără taxare până pe $date.';
   }
 
   @override

@@ -21,25 +21,29 @@ const _planSheetKeys = [
   'noDesktopAccess',
   'annualBillingSummary',
   'monthsFreeBadge',
-  'endsOnDate',
-  'planEndedResubscribe',
-  'planCancelsResubscribe',
   'freemiumLimitsIntro',
   'downgradeLimitDelayNotRealTime',
   'downgradeToFreemiumAction',
   'getFreeUnlimitedAccess',
   'shareDataForTraining',
   'yourRequestUnderReview',
-  // Pre-existing keys the sheet was ignoring until this change.
+  // Pre-existing keys the sheet was ignoring until this change. Reusing these
+  // is the point: a second key with the same meaning is the defect that
+  // `no plans-sheet key repeats another key's text` below now catches.
   'unlimitedConversations',
   'askOmiAnything',
   'unlockOmiInfiniteMemory',
   'selectedPlanNotAvailable',
+  'upgradeScheduled',
   'upgradeAlreadyScheduled',
   'annualPlanStartsAutomatically',
   'planRenewsOn',
+  'planEndedOn',
+  'planSetToCancelOn',
+  'endsOnDate',
   'youreOnAnnualPlan',
   'alreadyBestValuePlan',
+  'trainingDataProgram',
 ];
 
 Map<String, dynamic> _arb(String locale) =>
@@ -102,9 +106,28 @@ void main() {
     }
   });
 
+  test("no plans-sheet key repeats another key's text", () {
+    // Regression: planEndedResubscribe and planCancelsResubscribe shipped with
+    // text identical to the existing planEndedOn / planSetToCancelOn, and
+    // endsOnDate was added on top of a key of the same name. A second key
+    // saying the same thing splits future translation work in two and lets the
+    // two copies drift. The duplicate-key check above cannot see this one,
+    // because the names differ.
+    final en = _arb('en');
+    final byValue = <String, List<String>>{};
+    en.forEach((key, value) {
+      if (key.startsWith('@') || value is! String) return;
+      byValue.putIfAbsent(value, () => []).add(key);
+    });
+    for (final key in _planSheetKeys) {
+      final twins = byValue[en[key] as String]!.where((k) => k != key).toList();
+      expect(twins, isEmpty, reason: '$key says the same thing as $twins — reuse one of them instead');
+    }
+  });
+
   group('placeholders survive translation', () {
     test('date and price placeholders are present in every locale', () {
-      final withDate = ['endsOnDate', 'planEndedResubscribe', 'planCancelsResubscribe', 'planRenewsOn'];
+      final withDate = ['endsOnDate', 'planEndedOn', 'planSetToCancelOn', 'planRenewsOn'];
       for (final file in Directory('lib/l10n').listSync().whereType<File>()) {
         final name = file.path.split('/').last;
         if (!name.startsWith('app_') || !name.endsWith('.arb')) continue;

@@ -747,11 +747,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'आपल्या योजना $date वर नवीकरण होईल.';
-  }
-
-  @override
   String get basicPlan => 'मुक्त योजना';
 
   @override
@@ -9813,16 +9808,6 @@ class AppLocalizationsMr extends AppLocalizations {
       one: '1 महिना मोफत',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'तुमची योजना $date रोजी संपली.\nआता पुन्हा सदस्यता घ्या - नवीन बिलिंग कालावधीसाठी लगेच शुल्क आकारले जाईल.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'तुमची योजना $date रोजी रद्द होईल.\nफायदे टिकवण्यासाठी आता पुन्हा सदस्यता घ्या - $date पर्यंत कोणतेही शुल्क नाही.';
   }
 
   @override

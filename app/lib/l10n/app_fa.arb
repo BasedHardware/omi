@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "طرح شما در تاریخ {date} تجدید خواهد شد.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "طرح رایگان",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10775,8 +10765,6 @@
     "noDesktopAccess": "روی دسکتاپ کار نمی‌کند",
     "annualBillingSummary": "{months} ماه / {price}",
     "monthsFreeBadge": "{count, plural, =1{۱ ماه رایگان} other{{count} ماه رایگان}}",
-    "planEndedResubscribe": "طرح شما در {date} به پایان رسید.\nاکنون دوباره مشترک شوید - هزینه دوره صورتحساب جدید بلافاصله دریافت می‌شود.",
-    "planCancelsResubscribe": "طرح شما در {date} لغو می‌شود.\nبرای حفظ مزایا اکنون دوباره مشترک شوید - تا {date} هزینه‌ای دریافت نمی‌شود.",
     "freemiumLimitsIntro": "Omi رایگان است، اما نسخه رایگان محدودیت‌هایی دارد که بر تجربه شما اثر می‌گذارد:",
     "downgradeLimitDelayNotRealTime": "۵ تا ۷ ثانیه تأخیر (بلادرنگ نیست)",
     "downgradeToFreemiumAction": "بازگشت به نسخه رایگان",

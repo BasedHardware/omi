@@ -747,11 +747,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'آپ کا منصوبہ $date پر تجدید ہو گا۔';
-  }
-
-  @override
   String get basicPlan => 'مفت منصوبہ';
 
   @override
@@ -9818,16 +9813,6 @@ class AppLocalizationsUr extends AppLocalizations {
       one: '1 ماہ مفت',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'آپ کا پلان $date کو ختم ہو گیا۔\nابھی دوبارہ سبسکرائب کریں - نئی بلنگ مدت کے لیے فوری چارج کیا جائے گا۔';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'آپ کا پلان $date کو منسوخ ہو جائے گا۔\nفوائد برقرار رکھنے کے لیے ابھی دوبارہ سبسکرائب کریں - $date تک کوئی چارج نہیں۔';
   }
 
   @override

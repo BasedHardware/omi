@@ -751,11 +751,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Το πρόγραμμά σας ανανεώνεται στις $date.';
-  }
-
-  @override
   String get basicPlan => 'Δωρεάν Πρόγραμμα';
 
   @override
@@ -9873,16 +9868,6 @@ class AppLocalizationsEl extends AppLocalizations {
       one: '1 μήνας δωρεάν',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Το πρόγραμμά σου έληξε στις $date.\nΚάνε ξανά συνδρομή τώρα – θα χρεωθείς άμεσα για νέα περίοδο χρέωσης.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Το πρόγραμμά σου θα ακυρωθεί στις $date.\nΚάνε ξανά συνδρομή για να κρατήσεις τα προνόμιά σου – καμία χρέωση μέχρι τις $date.';
   }
 
   @override

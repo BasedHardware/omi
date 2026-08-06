@@ -733,11 +733,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return '플랜이 $date에 갱신됩니다.';
-  }
-
-  @override
   String get basicPlan => '무료 플랜';
 
   @override
@@ -9643,16 +9638,6 @@ class AppLocalizationsKo extends AppLocalizations {
       one: '1개월 무료',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return '플랜이 $date에 종료되었습니다.\n지금 다시 구독하세요. 새 결제 주기 요금이 즉시 청구됩니다.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return '플랜이 $date에 취소됩니다.\n혜택을 유지하려면 지금 다시 구독하세요. $date까지는 청구되지 않습니다.';
   }
 
   @override

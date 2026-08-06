@@ -750,11 +750,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'El vostre pla es renova el $date.';
-  }
-
-  @override
   String get basicPlan => 'Pla gratuït';
 
   @override
@@ -9860,16 +9855,6 @@ class AppLocalizationsCa extends AppLocalizations {
       one: '1 mes gratis',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'El teu pla va acabar el $date.\nTorna a subscriure\'t ara: se\'t cobrarà immediatament un nou període de facturació.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'El teu pla es cancel·larà el $date.\nTorna a subscriure\'t per mantenir els avantatges: sense càrrec fins al $date.';
   }
 
   @override

@@ -744,11 +744,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Pakettisi uusiutuu $date.';
-  }
-
-  @override
   String get basicPlan => 'Ilmaispaketti';
 
   @override
@@ -9805,16 +9800,6 @@ class AppLocalizationsFi extends AppLocalizations {
       one: '1 kuukausi ilmaiseksi',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Tilauksesi päättyi $date.\nTilaa uudelleen nyt – veloitus uudesta laskutusjaksosta tapahtuu heti.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Tilauksesi perutaan $date.\nTilaa uudelleen säilyttääksesi etusi – ei veloitusta ennen $date.';
   }
 
   @override

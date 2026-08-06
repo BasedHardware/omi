@@ -744,11 +744,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Seu plano renova em $date.';
-  }
-
-  @override
   String get basicPlan => 'Plano Gratuito';
 
   @override
@@ -9785,10 +9780,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get syncStatusTooOld => 'Demasiado antiga para sincronizar — o Omi não pode aceitá-la';
 
   @override
-  String get planSheetChooseYourPlan => 'Escolha o seu plano para desbloquear o Omi sem limites.';
+  String get planSheetChooseYourPlan => 'Escolha seu plano para desbloquear o Omi sem limites.';
 
   @override
-  String get availableOnMacMobileWeb => 'Disponível no Mac, no telemóvel e na web';
+  String get availableOnMacMobileWeb => 'Disponível no Mac, no celular e na web';
 
   @override
   String get popularBadge => 'POPULAR';
@@ -9816,17 +9811,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String planEndedResubscribe(String date) {
-    return 'O seu plano terminou a $date.\nSubscreva novamente agora - será cobrado de imediato um novo período de faturação.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'O seu plano será cancelado a $date.\nSubscreva novamente para manter os benefícios - sem cobrança até $date.';
-  }
-
-  @override
-  String get freemiumLimitsIntro => 'O Omi é gratuito, mas a versão gratuita tem limites que afetam a sua experiência:';
+  String get freemiumLimitsIntro => 'O Omi é gratuito, mas a versão gratuita tem limites que afetam sua experiência:';
 
   @override
   String get downgradeLimitDelayNotRealTime => 'Atraso de 5-7 segundos (não é em tempo real)';
@@ -9835,11 +9820,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Mudar para a versão gratuita';
 
   @override
-  String get getFreeUnlimitedAccess => 'Obtenha acesso ilimitado gratuito';
+  String get getFreeUnlimitedAccess => 'Tenha acesso ilimitado grátis';
 
   @override
-  String get shareDataForTraining => 'Partilhar dados para treino';
+  String get shareDataForTraining => 'Compartilhar dados para treinamento';
 
   @override
-  String get yourRequestUnderReview => 'O seu pedido está em análise';
+  String get yourRequestUnderReview => 'Sua solicitação está em análise';
 }

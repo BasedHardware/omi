@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "आपल्या योजना {date} वर नवीकरण होईल.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "मुक्त योजना",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10775,8 +10765,6 @@
     "noDesktopAccess": "डेस्कटॉपवर चालत नाही",
     "annualBillingSummary": "{months} महिने / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 महिना मोफत} other{{count} महिने मोफत}}",
-    "planEndedResubscribe": "तुमची योजना {date} रोजी संपली.\nआता पुन्हा सदस्यता घ्या - नवीन बिलिंग कालावधीसाठी लगेच शुल्क आकारले जाईल.",
-    "planCancelsResubscribe": "तुमची योजना {date} रोजी रद्द होईल.\nफायदे टिकवण्यासाठी आता पुन्हा सदस्यता घ्या - {date} पर्यंत कोणतेही शुल्क नाही.",
     "freemiumLimitsIntro": "Omi मोफत आहे, परंतु मोफत आवृत्तीला मर्यादा आहेत ज्या तुमच्या अनुभवावर परिणाम करतात:",
     "downgradeLimitDelayNotRealTime": "5-7 सेकंद विलंब (रिअल-टाइम नाही)",
     "downgradeToFreemiumAction": "मोफत आवृत्तीवर जा",

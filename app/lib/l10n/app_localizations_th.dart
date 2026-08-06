@@ -743,11 +743,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'แผนของคุณจะต่ออายุในวันที่ $date';
-  }
-
-  @override
   String get basicPlan => 'แผนฟรี';
 
   @override
@@ -9750,16 +9745,6 @@ class AppLocalizationsTh extends AppLocalizations {
       one: 'ฟรี 1 เดือน',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'แพ็กเกจของคุณสิ้นสุดเมื่อ $date\nสมัครใหม่ตอนนี้ - ระบบจะเรียกเก็บเงินสำหรับรอบบิลใหม่ทันที';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'แพ็กเกจของคุณจะถูกยกเลิกในวันที่ $date\nสมัครใหม่ตอนนี้เพื่อรักษาสิทธิประโยชน์ - ไม่มีการเรียกเก็บเงินจนถึง $date';
   }
 
   @override

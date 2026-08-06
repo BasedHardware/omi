@@ -945,14 +945,14 @@ class _PlansSheetState extends State<PlansSheet> {
                               if (periodEnded) {
                                 // Scenario B: Must create new subscription
                                 return Text(
-                                  context.l10n.planEndedResubscribe(renewalDate),
+                                  context.l10n.planEndedOn(renewalDate),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 14, color: Colors.orange.shade400),
                                 );
                               } else {
                                 // Scenario A: Can reactivate without charge
                                 return Text(
-                                  context.l10n.planCancelsResubscribe(renewalDate),
+                                  context.l10n.planSetToCancelOn(renewalDate),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(fontSize: 14, color: Colors.blue.shade400),
                                 );

@@ -734,11 +734,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'プランは$dateに更新されます。';
-  }
-
-  @override
   String get basicPlan => '無料プラン';
 
   @override
@@ -9642,16 +9637,6 @@ class AppLocalizationsJa extends AppLocalizations {
       one: '1か月無料',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'プランは$dateに終了しました。\n今すぐ再登録してください。新しい請求期間の料金がすぐに請求されます。';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'プランは$dateに解約されます。\n特典を維持するには今すぐ再登録してください。$dateまでは請求されません。';
   }
 
   @override

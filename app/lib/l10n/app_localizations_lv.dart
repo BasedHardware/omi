@@ -747,11 +747,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Jūsu plāns atjaunojas $date.';
-  }
-
-  @override
   String get basicPlan => 'Bezmaksas plāns';
 
   @override
@@ -9827,16 +9822,6 @@ class AppLocalizationsLv extends AppLocalizations {
       zero: '$count mēnešu bez maksas',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Jūsu plāns beidzās $date.\nAbonējiet atkārtoti – maksa par jauno norēķinu periodu tiks ieturēta uzreiz.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Jūsu plāns tiks atcelts $date.\nAbonējiet atkārtoti, lai saglabātu priekšrocības – līdz $date maksa netiks ieturēta.';
   }
 
   @override

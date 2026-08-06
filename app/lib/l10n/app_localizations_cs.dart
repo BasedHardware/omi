@@ -746,11 +746,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Váš plán se obnoví dne $date.';
-  }
-
-  @override
   String get basicPlan => 'Bezplatný plán';
 
   @override
@@ -9806,16 +9801,6 @@ class AppLocalizationsCs extends AppLocalizations {
       one: '$count měsíc zdarma',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Váš plán skončil $date.\nObnovte předplatné nyní – platba proběhne ihned za nové zúčtovací období.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Váš plán bude zrušen $date.\nObnovte předplatné a zachovejte si výhody – do $date bez poplatku.';
   }
 
   @override

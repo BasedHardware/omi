@@ -981,16 +981,6 @@
             }
         }
     },
-    "renewsOn": "Your plan renews on {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Free Plan",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -11594,24 +11584,6 @@
         "placeholders": {
             "count": {
                 "type": "int"
-            }
-        }
-    },
-    "planEndedResubscribe": "Your plan ended on {date}.\nResubscribe now - you'll be charged immediately for a new billing period.",
-    "@planEndedResubscribe": {
-        "description": "Shown when a cancelled subscription's period has already ended",
-        "placeholders": {
-            "date": {
-                "type": "String"
-            }
-        }
-    },
-    "planCancelsResubscribe": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
-    "@planCancelsResubscribe": {
-        "description": "Shown when a subscription is cancelled but still active until the period end",
-        "placeholders": {
-            "date": {
-                "type": "String"
             }
         }
     },

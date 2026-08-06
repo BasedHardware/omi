@@ -747,11 +747,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'طرح شما در تاریخ $date تجدید خواهد شد.';
-  }
-
-  @override
   String get basicPlan => 'طرح رایگان';
 
   @override
@@ -9806,16 +9801,6 @@ class AppLocalizationsFa extends AppLocalizations {
       one: '۱ ماه رایگان',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'طرح شما در $date به پایان رسید.\nاکنون دوباره مشترک شوید - هزینه دوره صورتحساب جدید بلافاصله دریافت می‌شود.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'طرح شما در $date لغو می‌شود.\nبرای حفظ مزایا اکنون دوباره مشترک شوید - تا $date هزینه‌ای دریافت نمی‌شود.';
   }
 
   @override

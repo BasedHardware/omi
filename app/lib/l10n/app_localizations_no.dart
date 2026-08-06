@@ -747,11 +747,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Abonnementet ditt fornyes $date.';
-  }
-
-  @override
   String get basicPlan => 'Gratis abonnement';
 
   @override
@@ -9803,16 +9798,6 @@ class AppLocalizationsNo extends AppLocalizations {
       one: '1 måned gratis',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Abonnementet ditt utløp $date.\nAbonner på nytt nå – du belastes umiddelbart for en ny faktureringsperiode.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Abonnementet ditt avsluttes $date.\nAbonner på nytt for å beholde fordelene – ingen belastning før $date.';
   }
 
   @override

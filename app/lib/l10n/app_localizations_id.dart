@@ -747,11 +747,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Paket Anda diperbarui pada $date.';
-  }
-
-  @override
   String get basicPlan => 'Paket Gratis';
 
   @override
@@ -9814,16 +9809,6 @@ class AppLocalizationsId extends AppLocalizations {
       one: '1 bulan gratis',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Paket Anda berakhir pada $date.\nBerlangganan lagi sekarang - Anda akan langsung ditagih untuk periode penagihan baru.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Paket Anda akan dibatalkan pada $date.\nBerlangganan lagi untuk mempertahankan manfaat Anda - tanpa biaya hingga $date.';
   }
 
   @override

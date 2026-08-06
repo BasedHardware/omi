@@ -749,11 +749,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Вашият план се подновява на $date.';
-  }
-
-  @override
   String get basicPlan => 'Безплатен план';
 
   @override
@@ -9841,16 +9836,6 @@ class AppLocalizationsBg extends AppLocalizations {
       one: '1 месец безплатно',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Планът ви приключи на $date.\nАбонирайте се отново сега – ще бъдете таксувани веднага за нов период на плащане.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Планът ви ще бъде отменен на $date.\nАбонирайте се отново, за да запазите предимствата си – без такса до $date.';
   }
 
   @override

@@ -748,11 +748,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Je abonnement wordt verlengd op $date.';
-  }
-
-  @override
   String get basicPlan => 'Gratis abonnement';
 
   @override
@@ -9831,16 +9826,6 @@ class AppLocalizationsNl extends AppLocalizations {
       one: '1 maand gratis',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Je abonnement is geëindigd op $date.\nNeem nu opnieuw een abonnement – je wordt direct gefactureerd voor een nieuwe periode.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Je abonnement wordt op $date geannuleerd.\nNeem nu opnieuw een abonnement om je voordelen te behouden – geen kosten tot $date.';
   }
 
   @override

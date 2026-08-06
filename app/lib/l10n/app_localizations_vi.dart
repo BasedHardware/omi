@@ -748,11 +748,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Gói của bạn sẽ gia hạn vào $date.';
-  }
-
-  @override
   String get basicPlan => 'Gói miễn phí';
 
   @override
@@ -9800,16 +9795,6 @@ class AppLocalizationsVi extends AppLocalizations {
       one: 'Miễn phí 1 tháng',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Gói của bạn đã kết thúc vào $date.\nĐăng ký lại ngay - bạn sẽ bị tính phí ngay cho kỳ thanh toán mới.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Gói của bạn sẽ bị hủy vào $date.\nĐăng ký lại để giữ quyền lợi - không tính phí cho đến $date.';
   }
 
   @override

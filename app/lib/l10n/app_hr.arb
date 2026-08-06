@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Tvoj plan se obnavlja {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Besplatni plan",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10775,8 +10765,6 @@
     "noDesktopAccess": "Ne radi na računalu",
     "annualBillingSummary": "{months} mjeseci / {price}",
     "monthsFreeBadge": "{count, plural, one{{count} mjesec besplatno} few{{count} mjeseca besplatno} other{{count} mjeseci besplatno}}",
-    "planEndedResubscribe": "Vaš je plan istekao {date}.\nPretplatite se ponovno - naplata za novo obračunsko razdoblje slijedi odmah.",
-    "planCancelsResubscribe": "Vaš će plan biti otkazan {date}.\nPretplatite se ponovno kako biste zadržali pogodnosti - bez naplate do {date}.",
     "freemiumLimitsIntro": "Omi je besplatan, ali besplatna inačica ima ograničenja koja utječu na vaše iskustvo:",
     "downgradeLimitDelayNotRealTime": "Kašnjenje od 5-7 sekundi (nije u stvarnom vremenu)",
     "downgradeToFreemiumAction": "Prijeđite na besplatnu inačicu",

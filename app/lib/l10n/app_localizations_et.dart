@@ -747,11 +747,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Teie plaan uueneb $date.';
-  }
-
-  @override
   String get basicPlan => 'Tasuta plaan';
 
   @override
@@ -9800,16 +9795,6 @@ class AppLocalizationsEt extends AppLocalizations {
       one: '1 kuu tasuta',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Sinu pakett lõppes $date.\nTelli uuesti – uue arveldusperioodi eest võetakse tasu kohe.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Sinu pakett tühistatakse $date.\nTelli uuesti, et hüved säiliksid – tasu ei võeta enne $date.';
   }
 
   @override

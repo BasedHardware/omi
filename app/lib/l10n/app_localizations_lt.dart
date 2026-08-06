@@ -747,11 +747,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Jūsų planas bus atnaujintas $date.';
-  }
-
-  @override
   String get basicPlan => 'Nemokamas planas';
 
   @override
@@ -9823,16 +9818,6 @@ class AppLocalizationsLt extends AppLocalizations {
       one: '$count mėnuo nemokamai',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Jūsų planas baigėsi $date.\nPrenumeruokite dar kartą – mokestis už naują atsiskaitymo laikotarpį bus nuskaitytas iš karto.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Jūsų planas bus atšauktas $date.\nPrenumeruokite dar kartą, kad išsaugotumėte privalumus – iki $date mokestis netaikomas.';
   }
 
   @override

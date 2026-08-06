@@ -1617,12 +1617,6 @@ abstract class AppLocalizations {
   /// **'Your plan will cancel on {date}.'**
   String cancelAtPeriodEnd(String date);
 
-  /// Renewal message
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan renews on {date}.'**
-  String renewsOn(String date);
-
   /// Basic plan name
   ///
   /// In en, this message translates to:
@@ -18266,18 +18260,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 Month Free} other{{count} Months Free}}'**
   String monthsFreeBadge(int count);
-
-  /// Shown when a cancelled subscription's period has already ended
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan ended on {date}.\nResubscribe now - you\'ll be charged immediately for a new billing period.'**
-  String planEndedResubscribe(String date);
-
-  /// Shown when a subscription is cancelled but still active until the period end
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.'**
-  String planCancelsResubscribe(String date);
 
   /// Intro line above the list of free-tier limitations
   ///

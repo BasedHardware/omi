@@ -748,11 +748,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'మీ ప్లాన్ $dateన పునరుద్ధరించబడుతుంది.';
-  }
-
-  @override
   String get basicPlan => 'ఉచిత ప్లాన్';
 
   @override
@@ -9853,16 +9848,6 @@ class AppLocalizationsTe extends AppLocalizations {
       one: '1 నెల ఉచితం',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'మీ ప్లాన్ $dateన ముగిసింది.\nఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - కొత్త బిల్లింగ్ వ్యవధికి వెంటనే ఛార్జ్ చేయబడుతుంది.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'మీ ప్లాన్ $dateన రద్దవుతుంది.\nప్రయోజనాలను నిలుపుకోవడానికి ఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - $date వరకు ఎలాంటి ఛార్జీ లేదు.';
   }
 
   @override

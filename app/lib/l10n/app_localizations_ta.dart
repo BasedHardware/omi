@@ -750,11 +750,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'உங்கள் திட்டம் $date இல் புதுப்பிக்கப்படும்.';
-  }
-
-  @override
   String get basicPlan => 'இலவச திட்டம்';
 
   @override
@@ -9874,16 +9869,6 @@ class AppLocalizationsTa extends AppLocalizations {
       one: '1 மாதம் இலவசம்',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'உங்கள் திட்டம் $date அன்று முடிந்தது.\nஇப்போது மீண்டும் சந்தா செலுத்தவும் - புதிய பட்டியல் காலத்திற்கு உடனடியாக கட்டணம் விதிக்கப்படும்.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'உங்கள் திட்டம் $date அன்று ரத்தாகும்.\nபலன்களைத் தக்கவைக்க இப்போது மீண்டும் சந்தா செலுத்தவும் - $date வரை கட்டணம் இல்லை.';
   }
 
   @override

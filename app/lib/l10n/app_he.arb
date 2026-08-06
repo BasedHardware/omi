@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "התוכנית שלך מתחדשת ב-{date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "תוכנית חינם",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10775,8 +10765,6 @@
     "noDesktopAccess": "לא עובד במחשב",
     "annualBillingSummary": "{months} חודשים / {price}",
     "monthsFreeBadge": "{count, plural, =1{חודש אחד חינם} other{{count} חודשים חינם}}",
-    "planEndedResubscribe": "התוכנית שלכם הסתיימה ב-{date}.\nהירשמו מחדש עכשיו - החיוב על תקופת חיוב חדשה יתבצע מיד.",
-    "planCancelsResubscribe": "התוכנית שלכם תבוטל ב-{date}.\nהירשמו מחדש כדי לשמור על ההטבות - ללא חיוב עד {date}.",
     "freemiumLimitsIntro": "Omi בחינם, אבל לגרסה החינמית יש מגבלות שמשפיעות על החוויה שלכם:",
     "downgradeLimitDelayNotRealTime": "עיכוב של 5-7 שניות (לא בזמן אמת)",
     "downgradeToFreemiumAction": "מעבר לגרסה החינמית",

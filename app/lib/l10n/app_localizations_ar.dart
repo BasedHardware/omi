@@ -740,11 +740,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'تتجدد خطتك في $date.';
-  }
-
-  @override
   String get basicPlan => 'خطة مجانية';
 
   @override
@@ -9748,16 +9743,6 @@ class AppLocalizationsAr extends AppLocalizations {
       zero: '$count شهر مجاني',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'انتهت خطتك في $date.\nأعد الاشتراك الآن - سيتم خصم المبلغ فورًا لفترة فوترة جديدة.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'من المقرر إلغاء خطتك في $date.\nأعد الاشتراك الآن للاحتفاظ بمزاياك - لا رسوم حتى $date.';
   }
 
   @override

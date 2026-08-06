@@ -733,11 +733,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return '您的套餐将于 $date 续订。';
-  }
-
-  @override
   String get basicPlan => '免费套餐';
 
   @override
@@ -9624,16 +9619,6 @@ class AppLocalizationsZh extends AppLocalizations {
       one: '免费 1 个月',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return '你的方案已于 $date 结束。\n立即重新订阅 - 系统将立刻按新的计费周期收费。';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return '你的方案将于 $date 取消。\n立即重新订阅以保留权益 - 在 $date 之前不会收费。';
   }
 
   @override

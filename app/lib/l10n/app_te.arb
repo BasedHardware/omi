@@ -966,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "మీ ప్లాన్ {date}న పునరుద్ధరించబడుతుంది.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "ఉచిత ప్లాన్",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -10775,8 +10765,6 @@
     "noDesktopAccess": "డెస్క్‌టాప్‌లో పనిచేయదు",
     "annualBillingSummary": "{months} నెలలు / {price}",
     "monthsFreeBadge": "{count, plural, =1{1 నెల ఉచితం} other{{count} నెలలు ఉచితం}}",
-    "planEndedResubscribe": "మీ ప్లాన్ {date}న ముగిసింది.\nఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - కొత్త బిల్లింగ్ వ్యవధికి వెంటనే ఛార్జ్ చేయబడుతుంది.",
-    "planCancelsResubscribe": "మీ ప్లాన్ {date}న రద్దవుతుంది.\nప్రయోజనాలను నిలుపుకోవడానికి ఇప్పుడే మళ్లీ సబ్‌స్క్రైబ్ చేయండి - {date} వరకు ఎలాంటి ఛార్జీ లేదు.",
     "freemiumLimitsIntro": "Omi ఉచితం, కానీ ఉచిత వెర్షన్‌లో మీ అనుభవాన్ని ప్రభావితం చేసే పరిమితులు ఉన్నాయి:",
     "downgradeLimitDelayNotRealTime": "5-7 సెకన్ల ఆలస్యం (రియల్-టైమ్ కాదు)",
     "downgradeToFreemiumAction": "ఉచిత వెర్షన్‌కు మారండి",

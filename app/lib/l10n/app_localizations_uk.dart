@@ -748,11 +748,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Ваш план поновиться $date.';
-  }
-
-  @override
   String get basicPlan => 'Безкоштовний план';
 
   @override
@@ -9826,16 +9821,6 @@ class AppLocalizationsUk extends AppLocalizations {
       one: '$count місяць безкоштовно',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Ваш тариф завершився $date.\nОформіть підписку знову — оплата за новий розрахунковий період спишеться одразу.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Ваш тариф буде скасовано $date.\nОформіть підписку знову, щоб зберегти переваги — без оплати до $date.';
   }
 
   @override

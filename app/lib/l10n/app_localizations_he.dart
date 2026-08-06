@@ -742,11 +742,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'התוכנית שלך מתחדשת ב-$date.';
-  }
-
-  @override
   String get basicPlan => 'תוכנית חינם';
 
   @override
@@ -9729,16 +9724,6 @@ class AppLocalizationsHe extends AppLocalizations {
       one: 'חודש אחד חינם',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'התוכנית שלכם הסתיימה ב-$date.\nהירשמו מחדש עכשיו - החיוב על תקופת חיוב חדשה יתבצע מיד.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'התוכנית שלכם תבוטל ב-$date.\nהירשמו מחדש כדי לשמור על ההטבות - ללא חיוב עד $date.';
   }
 
   @override

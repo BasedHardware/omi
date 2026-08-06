@@ -747,11 +747,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Pelan anda diperbaharui pada $date.';
-  }
-
-  @override
   String get basicPlan => 'Pelan Percuma';
 
   @override
@@ -9829,16 +9824,6 @@ class AppLocalizationsMs extends AppLocalizations {
       one: '1 bulan percuma',
     );
     return '$_temp0';
-  }
-
-  @override
-  String planEndedResubscribe(String date) {
-    return 'Pelan anda tamat pada $date.\nLanggan semula sekarang - anda akan dicaj serta-merta untuk tempoh bil baharu.';
-  }
-
-  @override
-  String planCancelsResubscribe(String date) {
-    return 'Pelan anda akan dibatalkan pada $date.\nLanggan semula untuk mengekalkan manfaat anda - tiada caj sehingga $date.';
   }
 
   @override
