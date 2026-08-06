@@ -1,7 +1,7 @@
 version: 2
 name: navigation
 tier: manual
-description: Top navigation bar smoke — the flat destination row (Library, Tasks, Rewind, Focus, Apps), the Memory hub's own three-way switcher, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
+description: Top navigation bar smoke — the flat destination row (Home, Library, Tasks, Rewind, Insights, Apps), the Memory hub's own three-way switcher, the Settings gear and Rewind all reach their real pages with no menu and nothing opening on hover
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
@@ -25,15 +25,15 @@ preconditions:
 steps:
   - id: S1
     name: Verify Home tab loads
-    do: "Verify the app is on the search surface. The top bar shows the Omi mark then a flat row of destinations — Library, Tasks, Rewind, Focus, Apps — with nothing that opens a menu; the right cluster is three wordless icons with state dots (microphone, screen capture, settings). Home content is a query bar above a separate results panel."
+    do: "Verify the app is on the search surface. The top bar shows the flat row of destinations — Home, Library, Tasks, Rewind, Insights, Apps — with nothing that opens a menu and no Omi mark duplicated out of the query bar; the right cluster is three wordless icons with state dots (microphone, screen capture, settings). Home content is a query bar above a separate results panel."
     expect:
       interactive_count: { min: 8 }
       text_visible:
-        - Omi
+        - Home
         - Library
         - Tasks
         - Rewind
-        - Focus
+        - Insights
         - Apps
 
   - id: S2
@@ -52,14 +52,12 @@ steps:
         - Brain Map
 
   - id: S2b
-    name: Navigate to Focus and reach Insights on its page
+    name: Navigate to Insights
     do: >-
-      Click the Focus button in the top nav bar. Verify the Focus page loads showing
-      the Focus segment first, with an Insights segment beside it, and that clicking
-      Insights shows the insights list.
+      Click the Insights button in the top nav bar. Verify the Insights page loads with
+      its category filter chips and insight list.
     expect:
       text_visible:
-        - Focus
         - Insights
 
   - id: S2a
@@ -137,7 +135,7 @@ steps:
       also has no buttons.
     expect:
       text_visible:
-        - Omi
+        - Home
         - Library
         - Tasks
         - Apps
@@ -157,7 +155,7 @@ steps:
       menu-bar icon and confirm both Open Omi and Quit still work.
     expect:
       text_visible:
-        - Omi
+        - Home
         - Library
         - Tasks
         - Apps

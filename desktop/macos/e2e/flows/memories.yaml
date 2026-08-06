@@ -6,6 +6,7 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryVisibilityGuardrails.swift

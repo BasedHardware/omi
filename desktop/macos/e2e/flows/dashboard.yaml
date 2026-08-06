@@ -13,7 +13,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationListView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/DailyScoreWidget.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/FocusSummaryWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/RecentConversationsWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TodaysTasksWidget.swift
   - desktop/macos/Desktop/Sources/WhatsNewToast.swift
@@ -29,7 +28,6 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBWallpaper.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/InsightPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
-  - desktop/macos/Desktop/Sources/MainWindow/ShellGlassGround.swift
 preconditions:
   - automation_bridge_ready
 
