@@ -580,7 +580,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) {
-      return ColoredBox(color: Colors.black, child: _buildBody());
+      // No background of its own — the embedding parent owns the surface
+      // colour (see BrainPage, which frames this as a rounded section).
+      return _buildBody();
     }
 
     return Scaffold(
