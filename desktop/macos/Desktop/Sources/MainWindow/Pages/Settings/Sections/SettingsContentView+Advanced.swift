@@ -478,8 +478,12 @@ extension SettingsContentView {
                       )
                       if success {
                         aiProfileText = aiProfileEditText
+                        isEditingAIProfile = false
                       }
-                      isEditingAIProfile = false
+                      // A rejected save used to close the editor anyway, which
+                      // threw the edit away and looked exactly like a save that
+                      // worked. Leave the editor open with the text intact so
+                      // the edit survives and can be retried.
                     }
                   }
                 }
