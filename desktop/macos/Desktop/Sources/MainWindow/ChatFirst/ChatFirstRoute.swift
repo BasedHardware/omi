@@ -206,7 +206,12 @@ private struct ChatFirstPersistedNavigation: Codable, Equatable {
 final class ChatFirstShellNavigation: ObservableObject {
   static let storageKey = "chatFirstShell.windowNavigation.v1"
 
-  @Published private(set) var route: ChatFirstRoute
+  /// Every mutation below is a navigation the user asked for — a rail press, a More page, a typed
+  /// Chat link — so the cue belongs on the property rather than on each of the three call sites.
+  /// The value assigned in `init` is a restore, not a navigation, and `didSet` correctly skips it.
+  @Published private(set) var route: ChatFirstRoute {
+    didSet { OmiUISound.play(.navigate) }
+  }
   /// The destination currently mounted by SwiftUI. This is deliberately
   /// separate from `route`: navigation commands are not complete until the
   /// requested target has actually appeared.
@@ -382,7 +387,6 @@ final class ChatFirstShellNavigation: ObservableObject {
     switch item {
     case .dashboard: selectMore(.dashboard)
     case .conversations: selectPrimary(.conversations)
-    case .chat: selectPrimary(.chat)
     case .memories: selectPrimary(.memories)
     case .tasks: selectPrimary(.tasks)
     case .focus: selectMore(.focus)

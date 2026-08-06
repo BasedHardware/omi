@@ -994,11 +994,8 @@ import XCTest
     XCTAssertFalse(source.contains("handleViewportSizeChange"))
     // omi-test-quality: source-inspection -- static contract: geometry inside
     // the LazyVStack must not feed transcript layout values back into state;
-    // the behavioral scroll/active-mark coverage lives in
-    // ChatPromptTimelineTests and ChatScrollLiveEdgeTests.
-    XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
-    XCTAssertFalse(source.contains("transcriptGeometry.setRowOffset("))
-    XCTAssertTrue(source.contains("ChatPromptRowAnchorReporter"))
+    // the behavioral scroll coverage lives in ChatScrollLiveEdgeTests.
+    XCTAssertFalse(source.contains(".onGeometryChange(for: "))
     // omi-test-quality: source-inspection -- static contract: a local send may
     // enter follow mode, but must never clear the reader's in-flight gesture
     // latch to do it; the behavioral coverage is in
@@ -1886,14 +1883,6 @@ import XCTest
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatProvider.swift")
-    return try String(contentsOf: sourceURL, encoding: .utf8)
-  }
-
-  private func chatPageSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

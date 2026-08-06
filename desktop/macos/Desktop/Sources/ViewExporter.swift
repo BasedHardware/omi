@@ -67,12 +67,6 @@ enum ViewExporter {
       ),
 
       (
-        "03-ai-chat",
-        { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: ChatProvider())) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
         "04-conversations",
         { AnyView(ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))) },
         CGSize(width: 900, height: 700)
@@ -319,10 +313,6 @@ enum ViewExporter {
               selectedConversation: .constant(nil)
             ))
         }
-      ),
-      (
-        "full-ai-chat", 2,
-        { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
       ),
       (
         "full-memories", 3,

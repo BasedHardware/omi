@@ -310,7 +310,7 @@ struct ChatFirstShell: View {
 
   private func legacySidebarItem(for route: ChatFirstRoute) -> SidebarNavItem {
     switch route {
-    case .chat: return .chat
+    case .chat: return .dashboard
     case .conversations: return .conversations
     case .tasks: return .tasks
     case .memories: return .memories

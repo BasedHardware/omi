@@ -46,7 +46,7 @@ preconditions:
 
 steps:
   - id: S1
-    name: Navigate the prepared capability-off bundle to its actual legacy Chat surface
+    name: Navigate the prepared capability-off bundle to its legacy chat surface (Home)
     bridge.navigate:
       target: chat
       activateApp: false

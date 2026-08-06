@@ -1688,7 +1688,7 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    // Send a message through the real main-window chat pipeline (ChatPage),
+    // Send a message through the real main-window chat pipeline (Home),
     // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
     // or keyboard input, so it never touches the user's actual cursor.
     register(

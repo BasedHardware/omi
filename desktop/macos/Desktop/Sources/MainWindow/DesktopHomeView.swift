@@ -821,12 +821,13 @@ struct DesktopHomeView: View {
   private func resolvedAutomationTarget(_ target: String) -> SidebarNavItem? {
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
-    case "dashboard", "home":
+    // "chat" lands on Home because Home *is* the chat now — the same contract
+    // `.navigateToChat` already honours. There is no separate chat destination
+    // to route to any more.
+    case "dashboard", "home", "chat":
       return .dashboard
     case "conversations":
       return .conversations
-    case "chat":
-      return .chat
     case "memories":
       return .memories
     case "tasks":
@@ -1747,12 +1748,6 @@ private struct PageContentView: View {
           viewModelContainer: viewModelContainer,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
           destinationRawValue: $memoryDestinationRawValue
-        )
-      case 2:
-        ChatPage(
-          appProvider: viewModelContainer.appProvider,
-          chatProvider: viewModelContainer.chatProvider,
-          onHome: { selectedTabIndex = SidebarNavItem.dashboard.rawValue }
         )
       case 3:
         // Same rule as the hub's Memories destination: the readable-width

@@ -1343,26 +1343,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
 
-    let chatPage = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift"),
-      encoding: .utf8)
-    XCTAssertTrue(
-      chatPage.contains("messages: chatProvider.messages,"),
-      "main Chat must bind the shared ChatProvider timeline"
-    )
-    XCTAssertFalse(
-      chatPage.contains("transcriptMessages"),
-      "main Chat must not filter notch/PTT turns out of history"
-    )
-    XCTAssertTrue(
-      chatPage.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
-      "main Chat must open spawned-agent links from the timeline with open result feedback"
-    )
-    XCTAssertTrue(
-      chatPage.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
-      "main Chat must open structured agent refs with open result feedback"
-    )
-
+    // Home is the only main-window chat surface now, so the assertions the
+    // standalone chat page used to carry move onto it rather than retiring.
     let dashboard = try String(
       contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift"),
       encoding: .utf8)
@@ -1370,6 +1352,18 @@ final class ChatTimelineContinuityTests: XCTestCase {
       dashboard.components(separatedBy: "messages: chatProvider.messages,").count - 1,
       2,
       "Home chat surfaces must bind the shared ChatProvider timeline"
+    )
+    XCTAssertFalse(
+      dashboard.contains("transcriptMessages"),
+      "Home chat must not filter notch/PTT turns out of history"
+    )
+    XCTAssertTrue(
+      dashboard.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
+      "Home chat must open spawned-agent links from the timeline with open result feedback"
+    )
+    XCTAssertTrue(
+      dashboard.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
+      "Home chat must open structured agent refs with open result feedback"
     )
     XCTAssertFalse(
       dashboard.contains("transcriptMessages"),

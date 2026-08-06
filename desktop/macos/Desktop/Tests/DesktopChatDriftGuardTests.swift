@@ -22,8 +22,11 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
     let inputSource = try sourceFile("MainWindow/Components/ChatInputView.swift")
 
-    XCTAssertTrue(messagesSource.contains("Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat)."))
-    XCTAssertTrue(inputSource.contains("Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat)."))
+    // Deliberately not pinned to whichever name the main surface currently has:
+    // the contract is that both views stay documented as shared with the task
+    // sidebar, not what the other caller happens to be called this month.
+    XCTAssertTrue(messagesSource.contains("and TaskChatPanel (task sidebar chat)."))
+    XCTAssertTrue(inputSource.contains("and TaskChatPanel (task sidebar chat)."))
   }
 
   func testChatComposerUsesAThinUniformShellAndTranscriptFade() {
@@ -52,24 +55,19 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 3, in: messages), 0)
   }
 
-  func testPromptTimelineCannotMutateTranscriptScrollerDuringLayout() throws {
+  func testTranscriptScrollerPolicyIsStaticAndSingle() throws {
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
-    let timelineSource = try sourceFile("MainWindow/Components/ChatPromptTimeline.swift")
 
-    // omi-test-quality: source-inspection -- static contract: the prompt rail must stay an observational overlay; changing NSScrollView chrome from its visibility callbacks can re-enter transcript layout.
+    // omi-test-quality: source-inspection -- static contract: the transcript owns exactly one
+    // vertical scroll affordance, and its chrome policy never changes at runtime. Mutating
+    // NSScrollView's scroller visibility during layout can re-enter the transcript's own pass.
     XCTAssertFalse(messagesSource.contains("hidesNativeScrollIndicator"))
     XCTAssertFalse(messagesSource.contains("ChatTimelineScrollerSuppressionHost"))
     XCTAssertTrue(messagesSource.contains(".scrollIndicators(.hidden)"))
-    XCTAssertFalse(timelineSource.contains("onVisibilityChange"))
-  }
-
-  func testPromptTimelineReceivesScrollUpdatesDuringContinuousGestures() throws {
-    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
-
-    // omi-test-quality: source-inspection -- continuous gestures must deliver the latest position on the next run-loop turn, including while AppKit is servicing event tracking.
-    XCTAssertTrue(scrollSource.contains("inModes: [.common, .default, Self.eventTrackingRunLoopMode]"))
-    XCTAssertTrue(scrollSource.contains("private static let eventTrackingRunLoopMode"))
-    XCTAssertFalse(scrollSource.contains("asyncAfter(deadline: .now() + 0.06, execute: workItem)"))
+    // The prompt rail drew a second vertical bar beside the scroller. It is gone; nothing may
+    // reserve a trailing gutter for one again.
+    XCTAssertFalse(messagesSource.contains("contentColumnWidth"))
+    XCTAssertFalse(messagesSource.contains("PromptTimeline"))
   }
 
   func testScrollDetectorsRebindAfterSwiftUIReplacesTheTranscriptScrollView() throws {
@@ -150,20 +148,24 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(homeSource.contains("if usesChatFirstShell,"))
   }
 
-  func testMainAndNotchChatShareTheTranscriptFade() throws {
-    let mainChat = try sourceFile("MainWindow/Pages/ChatPage.swift")
+  /// The fade is the notch's alone now that the standalone chat page is gone.
+  /// Home deliberately does not mask its transcript viewport — the ask bar
+  /// already draws its own boundary, and a mask there clips the first lines of
+  /// an incoming reply — so this pins the notch and pins Home's abstention.
+  func testTheTranscriptFadeIsTheNotchsAloneAndHomeAbstains() throws {
     let notchChat = try sourceFile("FloatingControlBar/AIResponseView.swift")
+    let home = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    XCTAssertTrue(mainChat.contains(".overlay(alignment: .bottom) {\n      ChatComposerFade()"))
     XCTAssertTrue(notchChat.contains(".overlay(alignment: .bottom) {\n        ChatComposerFade()"))
-    XCTAssertTrue(mainChat.contains(".padding(.vertical, OmiSpacing.sm)"))
+    XCTAssertFalse(
+      home.contains("ChatComposerFade()"),
+      "Home's transcript must stay unmasked; a fade there cuts off incoming replies.")
   }
 
   func testChatTranscriptLoaderIgnoresSessionListRefreshes() throws {
-    let chatPage = try sourceFile("MainWindow/Pages/ChatPage.swift")
     let dashboardPage = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    for source in [chatPage, dashboardPage] {
+    for source in [dashboardPage] {
       XCTAssertFalse(
         source.contains("isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)"),
         "Session-list refreshes must not hide a non-empty transcript behind the initial message-history loader."
@@ -174,7 +176,6 @@ final class DesktopChatDriftGuardTests: XCTestCase {
       )
     }
 
-    XCTAssertTrue(chatPage.contains("isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing"))
     XCTAssertEqual(
       dashboardPage.components(separatedBy: "isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing")
         .count - 1,

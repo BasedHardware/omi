@@ -102,9 +102,9 @@ extension DesktopAutomationBridge {
 
   private func legacyAutomationDestinationTitle(named target: String) -> String? {
     switch target.lowercased().replacingOccurrences(of: "-", with: "_") {
-    case "dashboard", "home": return "Home"
+    // Home is the chat surface, so "chat" and "home" name the same destination.
+    case "dashboard", "home", "chat": return "Home"
     case "conversations": return "Conversations"
-    case "chat": return "Chat"
     case "memories": return "Memories"
     case "tasks": return "Tasks"
     case "focus": return "Focus"
