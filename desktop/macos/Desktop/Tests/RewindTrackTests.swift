@@ -42,6 +42,29 @@ final class RewindTrackTests: XCTestCase {
     return view
   }
 
+  // MARK: - The drag belongs to the scrubber, not to the window
+
+  /// The shell's window is `isMovableByWindowBackground`, so every view that does not say otherwise
+  /// hands AppKit its drags. This one is a scrubber: its whole gesture *is* a drag, and giving it
+  /// away leaves a control where a click seeks and a drag walks the window sideways — a failure that
+  /// reads as a rendering quirk rather than a dead gesture, which is why it needs a test rather than
+  /// a screenshot.
+  func testTheTrackKeepsItsDragsRatherThanHandingThemToTheWindow() {
+    let day = gappedDay()
+    XCTAssertFalse(track(day.instants, day.apps).mouseDownCanMoveWindow)
+  }
+
+  /// …and the reason it has to say so: the window really is draggable by its background.
+  func testTheShellWindowIsTheOneThatMakesThatOptOutNecessary() {
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: true)
+    ShellWindowChrome.dress(window)
+    XCTAssertTrue(window.isMovableByWindowBackground)
+  }
+
   // MARK: - The time-linearity contract
 
   func testHalfwayAlongTheBarLandsInTheGapNotOnTheMiddleRow() throws {

@@ -421,6 +421,17 @@ final class RewindTrackNSView: NSView {
 
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+  /// **The scrubber keeps its own drags.**
+  ///
+  /// `NSView`'s default answer to this is yes for any view that is not opaque, and the shell's window
+  /// is `isMovableByWindowBackground` (see `ShellWindowChrome`) so that the parts of a mostly-desktop
+  /// window that are not a control drag it. This *is* a control, and it is the one control in the app
+  /// whose entire gesture is a drag: without opting out, `mouseDown` seeks once and then AppKit takes
+  /// the first `mouseDragged` to move the window, so dragging the playhead walks the whole window
+  /// sideways and never advances the day. A click still seeks, which is what makes the failure look
+  /// like a rendering quirk rather than a dead gesture.
+  override var mouseDownCanMoveWindow: Bool { false }
+
   override func resetCursorRects() {
     super.resetCursorRects()
     addCursorRect(bounds, cursor: .pointingHand)
