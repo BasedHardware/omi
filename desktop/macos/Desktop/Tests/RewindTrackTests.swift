@@ -44,7 +44,7 @@ final class RewindTrackTests: XCTestCase {
 
   // MARK: - The time-linearity contract
 
-  func testHalfwayAlongTheBarLandsInTheGapNotOnTheMiddleRow() {
+  func testHalfwayAlongTheBarLandsInTheGapNotOnTheMiddleRow() throws {
     let day = gappedDay()
     let view = track(day.instants, day.apps)
     let range = RewindTrackWindow.fullRange(of: day.instants)
@@ -65,10 +65,9 @@ final class RewindTrackTests: XCTestCase {
     // And the arithmetic that proves the axis is time: a pixel one tenth along is one tenth of the
     // *day*, whatever the capture density there.
     let tenth = range.lowerBound + (range.upperBound - range.lowerBound) / 10
-    let tenthIndex = view.nearestIndex(to: tenth)
-    XCTAssertNotNil(tenthIndex)
+    let tenthIndex = try XCTUnwrap(view.nearestIndex(to: tenth))
     XCTAssertLessThan(
-      day.instants[tenthIndex!], range.lowerBound + (range.upperBound - range.lowerBound) / 2,
+      day.instants[tenthIndex], range.lowerBound + (range.upperBound - range.lowerBound) / 2,
       "a tenth of the way through the day must resolve to a capture in the first half of it")
   }
 
@@ -126,6 +125,20 @@ final class RewindTrackTests: XCTestCase {
     XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: 6 * 3600), 1800)
     // Past the ladder's top the marks are a day apart rather than absent.
     XCTAssertEqual(RewindTrackNSView.tickInterval(forSpan: 30 * 24 * 3600), 24 * 3600)
+  }
+
+  /// Caught live: on a day with ten minutes of capture in it the ladder picks one-minute ticks, and
+  /// the reference's `h a` format printed `12 AM` on every one of them.
+  func testSubHourTicksAreLabelledWithMinutes() {
+    let noon = Date(timeIntervalSince1970: 1_700_000_000)
+    let minutes = RewindTrackNSView.tickFormatter(forInterval: 60)
+    let hours = RewindTrackNSView.tickFormatter(forInterval: 3600)
+    XCTAssertTrue(minutes.string(from: noon).contains(":"), "a minute-spaced tick must show minutes")
+    XCTAssertFalse(hours.string(from: noon).contains(":"), "an hour-spaced tick reads as a whole hour")
+    XCTAssertNotEqual(
+      minutes.string(from: noon),
+      minutes.string(from: noon.addingTimeInterval(60)),
+      "two ticks a minute apart must not carry the same label")
   }
 
   // MARK: - Zoom bounds

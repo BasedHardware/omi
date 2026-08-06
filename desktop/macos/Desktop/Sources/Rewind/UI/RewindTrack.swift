@@ -328,6 +328,7 @@ final class RewindTrackNSView: NSView {
     let step = tickInterval
     guard step > 0 else { return }
     let attributes = Self.hourLabelAttributes
+    let formatter = Self.tickFormatter(forInterval: step)
     var instant = (trackStart / step).rounded(.up) * step
     while instant <= trackStart + trackSpan {
       let tickX = x(for: instant)
@@ -335,7 +336,7 @@ final class RewindTrackNSView: NSView {
       NSRect(x: tickX, y: bar.maxY, width: 1, height: 4).fill()
 
       let label = NSAttributedString(
-        string: Self.tickFormatter.string(from: Date(timeIntervalSince1970: instant)),
+        string: formatter.string(from: Date(timeIntervalSince1970: instant)),
         attributes: attributes)
       let size = label.size()
       // Only when it fits without colliding with the view's edge.
@@ -359,9 +360,30 @@ final class RewindTrackNSView: NSView {
     return candidates.first { span / $0 <= 12 } ?? 24 * 3600
   }
 
-  private static let tickFormatter: DateFormatter = {
+  /// How a tick is labelled, which depends on how far apart the ticks are.
+  ///
+  /// **The reference labels every tick `h a`, and that is only right while the ticks are an hour or
+  /// more apart.** Zoomed in — or on a day with ten minutes of capture in it, which is what a day
+  /// looks like just after midnight — the ladder picks a one-minute interval and every label on the
+  /// track reads `12 AM`. Five identical labels are worse than none: they say the axis is not moving.
+  /// Below an hour the minutes are the information, and the hour is the one thing the reader can
+  /// infer from the pill under the frame.
+  /// Both are built once. `drawHourTicks` runs on every redraw, and a redraw happens on every pointer
+  /// sample of a scrub; constructing a `DateFormatter` there would put a locale lookup on the frame
+  /// budget this rebuild exists to protect.
+  static func tickFormatter(forInterval interval: Double) -> DateFormatter {
+    interval >= 3600 ? hourTickFormatter : minuteTickFormatter
+  }
+
+  private static let hourTickFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "h a"
+    return formatter
+  }()
+
+  private static let minuteTickFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "h:mm"
     return formatter
   }()
 
