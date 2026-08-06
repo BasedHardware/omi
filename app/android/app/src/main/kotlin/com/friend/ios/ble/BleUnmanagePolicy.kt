@@ -25,9 +25,9 @@ object BleUnmanagePolicy {
     )
 
     /**
-     * @param managedEntryPresent whether [address] was present in `managedDevices`
-     *        before removal. Does not change teardown / prefs / notify / stop —
-     *        those always run for a user disconnect tap.
+     * @param managedEntryPresent whether the requested address was present in
+     *        `managedDevices` before removal. Does not change teardown / prefs /
+     *        notify / stop — those always run for a user disconnect tap.
      */
     fun plan(managedEntryPresent: Boolean): Plan = Plan(
         cancelManagedTimers = managedEntryPresent,
