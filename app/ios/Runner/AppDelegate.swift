@@ -89,7 +89,6 @@ final class QuickActionsIconPatcher: NSObject {
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
-  private var syncBackgroundTaskId: UIBackgroundTaskIdentifier = .invalid
 
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
@@ -218,16 +217,6 @@ final class QuickActionsIconPatcher: NSObject {
     // Create WiFi Network plugin for device AP connection
     _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
 
-    // Bounded sync grace after screen lock (#7221) — keeps Flutter alive briefly
-    // for phone-disk upload + reconcile without BLE device drains.
-    let syncBackgroundChannel = FlutterMethodChannel(
-      name: "com.omi/sync_background_task",
-      binaryMessenger: controller!.binaryMessenger
-    )
-    syncBackgroundChannel.setMethodCallHandler { [weak self] (call, result) in
-      self?.handleSyncBackgroundTaskCall(call, result: result)
-    }
-
     // Battery widget channel — writes Omi device battery to the shared App Group
     // so the WidgetKit extension can read it.
     let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller!.binaryMessenger)
@@ -295,28 +284,6 @@ final class QuickActionsIconPatcher: NSObject {
       default:
         result(FlutterMethodNotImplemented)
     }
-  }
-
-  private func handleSyncBackgroundTaskCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    switch call.method {
-    case "begin":
-      endSyncBackgroundTaskIfNeeded()
-      syncBackgroundTaskId = UIApplication.shared.beginBackgroundTask(withName: "omi.sync.cloudGrace") { [weak self] in
-        self?.endSyncBackgroundTaskIfNeeded()
-      }
-      result(nil)
-    case "end":
-      endSyncBackgroundTaskIfNeeded()
-      result(nil)
-    default:
-      result(FlutterMethodNotImplemented)
-    }
-  }
-
-  private func endSyncBackgroundTaskIfNeeded() {
-    guard syncBackgroundTaskId != .invalid else { return }
-    UIApplication.shared.endBackgroundTask(syncBackgroundTaskId)
-    syncBackgroundTaskId = .invalid
   }
 
   private func handleSetNotificationOnKillService(call: FlutterMethodCall) {
