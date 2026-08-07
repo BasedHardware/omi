@@ -20,7 +20,7 @@ export class PipelineEntryPrototype {
   }
 
   finalizeCurrent(uid, { failAfterAdmission = false } = {}) {
-    const id = this.#currentByUser.get(uid);
+    const id = this.#currentByUser.get(uid) ?? this.#findInProgress(uid)?.id;
     if (!id) throw new FixtureError(404, "in-progress-not-found", "no current in-progress conversation exists");
     const record = this.#records.get(`${uid}:${id}`);
     if (!record || record.status !== "in_progress") {
@@ -30,9 +30,26 @@ export class PipelineEntryPrototype {
     record.status = "processing";
     record.processingRuns += 1;
     this.#currentByUser.delete(uid);
-    if (failAfterAdmission) throw new FixtureError(503, "processor-crashed", "admitted row requires recovery");
+    if (failAfterAdmission === "handled-exception") {
+      record.status = "in_progress";
+      throw new FixtureError(503, "processor-failed", "guard rolled admission back for a normal retry");
+    }
+    if (failAfterAdmission === "hard-crash") {
+      throw new FixtureError(503, "processor-hard-crashed", "stale-orphan recovery must close the admitted row");
+    }
     record.status = "completed";
     return structuredClone(record);
+  }
+
+  recoverStaleOrphan(uid, id) {
+    const record = this.#records.get(`${uid}:${id}`);
+    if (!record || record.status !== "processing") return false;
+    record.status = "completed";
+    return true;
+  }
+
+  #findInProgress(uid) {
+    return [...this.#records.values()].find((record) => record.uid === uid && record.status === "in_progress") ?? null;
   }
 
   get(uid, id) {

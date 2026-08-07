@@ -44,25 +44,53 @@ function stableJson(value) {
 export class OperationLedger {
   #entries = new Map();
 
-  run(opId, request, mutation) {
+  run(scope, opId, request, mutation) {
+    requireLedgerScope(scope);
     requireOpId(opId);
+    const ledgerKey = fingerprint({ scope, opId });
     const requestFingerprint = fingerprint(request);
-    const prior = this.#entries.get(opId);
+    const prior = this.#entries.get(ledgerKey);
     if (prior) {
       if (prior.requestFingerprint !== requestFingerprint) {
         throw new FixtureError(409, "op-id-reused", "opId was already committed for a different mutation");
       }
+      if (prior.outcome === "terminal-conflict") {
+        throw new FixtureError(prior.error.status, prior.error.code, prior.error.message);
+      }
       return structuredClone(prior.response);
     }
 
-    const response = mutation();
-    this.#entries.set(opId, { requestFingerprint, response: structuredClone(response) });
-    return response;
+    try {
+      const response = mutation();
+      this.#entries.set(ledgerKey, { requestFingerprint, outcome: "success", response: structuredClone(response) });
+      return response;
+    } catch (error) {
+      if (error instanceof FixtureError && isTerminalConflict(error.status)) {
+        this.#entries.set(ledgerKey, {
+          requestFingerprint,
+          outcome: "terminal-conflict",
+          error: { status: error.status, code: error.code, message: error.message },
+        });
+      }
+      throw error;
+    }
   }
 
   size() {
     return this.#entries.size;
   }
+}
+
+function requireLedgerScope(scope) {
+  for (const key of ["tenantId", "userId", "domain"]) {
+    if (typeof scope?.[key] !== "string" || scope[key].trim() === "") {
+      throw new FixtureError(422, "invalid-op-scope", `operation scope requires ${key}`);
+    }
+  }
+}
+
+function isTerminalConflict(status) {
+  return status === 400 || status === 402 || status === 409 || status === 413 || status === 422;
 }
 
 export function samePayload(left, right) {

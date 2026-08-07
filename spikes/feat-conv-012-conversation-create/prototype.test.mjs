@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { FixtureError } from "./lib.mjs";
+import { FixtureError, OperationLedger } from "./lib.mjs";
 import { ClientIdCreatePrototype } from "./prototypes/client-id-create.mjs";
 import { HybridPrototype } from "./prototypes/hybrid.mjs";
 import { PipelineEntryPrototype } from "./prototypes/pipeline-entry.mjs";
+
+const fixtureScope = { tenantId: "tenant-a", domain: "conversations" };
+
+function clientFixture(scope = fixtureScope) {
+  return new ClientIdCreatePrototype(scope);
+}
+
+function hybridFixture(scope = fixtureScope) {
+  return new HybridPrototype(scope);
+}
 
 function expectFixtureError(fn, status, code) {
   assert.throws(fn, (error) => error instanceof FixtureError && error.status === status && error.code === code);
@@ -20,16 +30,48 @@ test("A: pipeline entry requires a pre-existing server-owned current record", ()
   assert.equal(finalized.processingRuns, 1);
 });
 
-test("A: a lost processor after admission cannot be recovered by retrying the current-pointer entry", () => {
+test("A: a handled processor exception rolls admission back and DB fallback makes retry possible", () => {
   const fixture = new PipelineEntryPrototype();
   const captured = fixture.capture("u1", [{ text: "server capture" }]);
-  expectFixtureError(() => fixture.finalizeCurrent("u1", { failAfterAdmission: true }), 503, "processor-crashed");
+  expectFixtureError(
+    () => fixture.finalizeCurrent("u1", { failAfterAdmission: "handled-exception" }),
+    503,
+    "processor-failed",
+  );
+  assert.equal(fixture.get("u1", captured.id).status, "in_progress");
+  const retried = fixture.finalizeCurrent("u1");
+  assert.equal(retried.status, "completed");
+  assert.equal(retried.processingRuns, 2);
+});
+
+test("A: only a hard process crash leaves a processing orphan for stale recovery", () => {
+  const fixture = new PipelineEntryPrototype();
+  const captured = fixture.capture("u1", [{ text: "server capture" }]);
+  expectFixtureError(
+    () => fixture.finalizeCurrent("u1", { failAfterAdmission: "hard-crash" }),
+    503,
+    "processor-hard-crashed",
+  );
   assert.equal(fixture.get("u1", captured.id).status, "processing");
   expectFixtureError(() => fixture.finalizeCurrent("u1"), 404, "in-progress-not-found");
+  assert.equal(fixture.recoverStaleOrphan("u1", captured.id), true);
+  assert.equal(fixture.get("u1", captured.id).status, "completed");
+});
+
+test("operation receipt scope is parameterized by tenant, user, and domain", () => {
+  const ledger = new OperationLedger();
+  const seen = [];
+  const run = (scope, label) => ledger.run(scope, "same-op", { mutation: "create" }, () => seen.push(label));
+  run({ tenantId: "t1", userId: "u1", domain: "conversations" }, "t1-u1-conv");
+  run({ tenantId: "t2", userId: "u1", domain: "conversations" }, "t2-u1-conv");
+  run({ tenantId: "t1", userId: "u2", domain: "conversations" }, "t1-u2-conv");
+  run({ tenantId: "t1", userId: "u1", domain: "tasks" }, "t1-u1-task");
+  assert.deepEqual(seen, ["t1-u1-conv", "t2-u1-conv", "t1-u2-conv", "t1-u1-task"]);
+  assert.equal(ledger.size(), 4);
 });
 
 test("B: client create accepts UUID or word-slug ids and rejects arbitrary ids", () => {
-  const fixture = new ClientIdCreatePrototype();
+  const fixture = clientFixture();
   const created = fixture.create("u1", {
     opId: "create-1",
     id: "quiet-river-stone",
@@ -51,13 +93,11 @@ test("B: client create accepts UUID or word-slug ids and rejects arbitrary ids",
   );
 });
 
-test("B: same opId replays exactly; changed input is a terminal 409", () => {
-  const fixture = new ClientIdCreatePrototype();
+test("B: same successful opId replays exactly; changed input is a terminal 409", () => {
+  const fixture = clientFixture();
   const op = { opId: "create-1", id: "quiet-river-stone", segments: [{ text: "offline" }], startedAt: 1 };
   const first = fixture.create("u1", op);
-  const replay = fixture.create("u1", op);
-  assert.deepEqual(replay, first);
-  assert.equal(fixture.ledgerSize, 1);
+  assert.deepEqual(fixture.create("u1", op), first);
   expectFixtureError(
     () => fixture.create("u1", { ...op, segments: [{ text: "different" }] }),
     409,
@@ -65,25 +105,30 @@ test("B: same opId replays exactly; changed input is a terminal 409", () => {
   );
 });
 
-test("B: create identity conflicts are explicit and a failed processor can resume with the same opId", () => {
-  const fixture = new ClientIdCreatePrototype();
+test("B: a first terminal conflict is stored and cannot become success under that opId", () => {
+  const fixture = clientFixture();
+  const seed = {
+    opId: "seed",
+    id: "quiet-river-stone",
+    segments: [{ text: "authoritative" }],
+    startedAt: 1,
+  };
+  fixture.create("u1", seed);
+  const conflicting = { ...seed, opId: "conflict", segments: [{ text: "conflicting" }] };
+  expectFixtureError(() => fixture.create("u1", conflicting), 409, "record-id-conflict");
+  expectFixtureError(() => fixture.create("u1", conflicting), 409, "record-id-conflict");
+  expectFixtureError(() => fixture.create("u1", { ...seed, opId: "conflict" }), 409, "op-id-reused");
+  assert.equal(fixture.get("u1", seed.id).createPayload.segments[0].text, "authoritative");
+});
+
+test("B: a failed processor can resume with the same opId without changing create identity", () => {
+  const fixture = clientFixture();
   fixture.create("u1", {
     opId: "create-1",
     id: "quiet-river-stone",
     segments: [{ text: "offline" }],
     startedAt: 1,
   });
-  expectFixtureError(
-    () =>
-      fixture.create("u1", {
-        opId: "create-2",
-        id: "quiet-river-stone",
-        segments: [{ text: "other" }],
-        startedAt: 1,
-      }),
-    409,
-    "record-id-conflict",
-  );
   expectFixtureError(
     () => fixture.process("u1", { opId: "process-1", id: "quiet-river-stone", failAfterAdmission: true }),
     503,
@@ -94,78 +139,120 @@ test("B: create identity conflicts are explicit and a failed processor can resum
   assert.equal(recovered.record.processingRuns, 2);
 });
 
-test("C: an offline client record can later receive pipeline capture under one identity", () => {
-  const fixture = new HybridPrototype();
-  fixture.createOffline("u1", { opId: "client-1", id: "quiet-river-stone", startedAt: 1 });
-  const ingested = fixture.ingestCapture("u1", {
-    opId: "ingest-1",
-    id: "quiet-river-stone",
-    captureId: "capture-1",
-    startedAt: 1,
-    segments: [{ text: "server transcript" }],
-  });
-  assert.equal(ingested.status, 200);
-  assert.equal(ingested.record.origin, "client");
-  assert.equal(ingested.record.captureId, "capture-1");
-  assert.equal(ingested.record.status, "completed");
-  assert.deepEqual(fixture.ingestCapture("u1", {
-    opId: "ingest-1",
-    id: "quiet-river-stone",
-    captureId: "capture-1",
-    startedAt: 1,
-    segments: [{ text: "server transcript" }],
-  }), ingested);
-});
-
-test("C: pipeline-only creation works, while ambiguous content and identity bindings fail closed", () => {
-  const fixture = new HybridPrototype();
-  const pipelineOnly = fixture.ingestCapture("u1", {
-    opId: "ingest-1",
-    captureId: "capture-1",
-    startedAt: 1,
-    segments: [{ text: "server transcript" }],
-  });
-  assert.equal(pipelineOnly.status, 201);
-  assert.equal(pipelineOnly.record.origin, "pipeline");
-  assert.deepEqual(
-    fixture.ingestCapture("u1", {
-      opId: "ingest-1",
-      captureId: "capture-1",
-      startedAt: 1,
-      segments: [{ text: "server transcript" }],
-    }),
-    pipelineOnly,
-    "pipeline-generated identity must remain stable when a committed response is lost",
-  );
-
+// domain-pending(FEAT-CONV-012): hybrid binding and metadata names below are spike vocabulary only.
+test("C: client identity binds to matching capture metadata before separate finalization", () => {
+  const fixture = hybridFixture();
   fixture.createOffline("u1", {
     opId: "client-1",
     id: "quiet-river-stone",
+    startedAt: 1,
+    source: "phone",
+    captureDeviceId: "device-1",
+  });
+  const bound = fixture.bindCapture("u1", {
+    opId: "bind-1",
+    id: "quiet-river-stone",
+    captureId: "capture-1",
+    startedAt: 1,
+    source: "phone",
+    captureDeviceId: "device-1",
+    segments: [{ text: "server transcript" }],
+  });
+  assert.equal(bound.record.status, "in_progress", "binding is not finalization");
+  assert.equal(bound.record.captureId, "capture-1");
+  const admitted = fixture.admitFinalization("u1", { opId: "finalize-1", id: "quiet-river-stone" });
+  assert.equal(admitted.record.status, "processing");
+  assert.equal(admitted.job.status, "queued");
+  const completed = fixture.runFinalizer("u1", "quiet-river-stone");
+  assert.equal(completed.record.status, "completed");
+  assert.equal(completed.job.status, "completed");
+});
+
+// domain-pending(FEAT-CONV-012): pipeline-created identity and captureId are provisional.
+test("C: pipeline-only binding has stable identity across lost-response replay", () => {
+  const fixture = hybridFixture();
+  const op = {
+    opId: "bind-1",
+    captureId: "capture-1",
+    startedAt: 1,
+    source: "phone",
+    captureDeviceId: "device-1",
+    segments: [{ text: "server transcript" }],
+  };
+  const first = fixture.bindCapture("u1", op);
+  assert.equal(first.status, 201);
+  assert.equal(first.record.origin, "pipeline");
+  assert.deepEqual(fixture.bindCapture("u1", op), first);
+});
+
+// domain-pending(FEAT-CONV-012): timestamp/source/device matching tolerance needs David's ruling.
+test("C: binding fails closed when identity-bearing capture metadata differs", () => {
+  const fixture = hybridFixture();
+  fixture.createOffline("u1", {
+    opId: "client-1",
+    id: "quiet-river-stone",
+    startedAt: 1,
+    source: "phone",
+    captureDeviceId: "device-1",
+  });
+  const mismatched = {
+    opId: "bind-mismatch",
+    id: "quiet-river-stone",
+    captureId: "capture-1",
     startedAt: 2,
+    source: "phone",
+    captureDeviceId: "device-1",
+    segments: [{ text: "server transcript" }],
+  };
+  expectFixtureError(() => fixture.bindCapture("u1", mismatched), 409, "capture-metadata-needs-ruling");
+  expectFixtureError(() => fixture.bindCapture("u1", mismatched), 409, "capture-metadata-needs-ruling");
+  expectFixtureError(
+    () => fixture.bindCapture("u1", { ...mismatched, startedAt: 1 }),
+    409,
+    "op-id-reused",
+  );
+});
+
+// domain-pending(FEAT-CONV-012): capture content reconciliation remains undecided.
+test("C: ambiguous client and pipeline content fails closed", () => {
+  const fixture = hybridFixture();
+  fixture.createOffline("u1", {
+    opId: "client-1",
+    id: "quiet-river-stone",
+    startedAt: 1,
+    source: "phone",
+    captureDeviceId: "device-1",
     segments: [{ text: "client transcript" }],
   });
   expectFixtureError(
     () =>
-      fixture.ingestCapture("u1", {
-        opId: "ingest-2",
+      fixture.bindCapture("u1", {
+        opId: "bind-1",
         id: "quiet-river-stone",
-        captureId: "capture-2",
-        startedAt: 2,
+        captureId: "capture-1",
+        startedAt: 1,
+        source: "phone",
+        captureDeviceId: "device-1",
         segments: [{ text: "different server transcript" }],
       }),
     409,
     "content-reconciliation-needs-ruling",
   );
-  expectFixtureError(
-    () =>
-      fixture.ingestCapture("u1", {
-        opId: "ingest-3",
-        id: "amber-forest-field",
-        captureId: "capture-1",
-        startedAt: 1,
-        segments: [{ text: "server transcript" }],
-      }),
-    409,
-    "capture-binding-conflict",
-  );
+});
+
+test("C: a hard-crashed finalizer is retried through a new lease, not through binding", () => {
+  const fixture = hybridFixture();
+  const bound = fixture.bindCapture("u1", {
+    opId: "bind-1",
+    captureId: "capture-1",
+    startedAt: 1,
+    source: "phone",
+    segments: [{ text: "server transcript" }],
+  });
+  fixture.admitFinalization("u1", { opId: "finalize-1", id: bound.record.id });
+  expectFixtureError(() => fixture.runFinalizer("u1", bound.record.id, { hardCrash: true }), 503, "finalizer-hard-crashed");
+  expectFixtureError(() => fixture.runFinalizer("u1", bound.record.id), 503, "finalization-lease-active");
+  const recovered = fixture.runFinalizer("u1", bound.record.id, { reclaimExpired: true });
+  assert.equal(recovered.record.status, "completed");
+  assert.equal(recovered.job.leaseEpoch, 2);
 });

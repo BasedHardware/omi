@@ -6,12 +6,23 @@ import { FixtureError, OperationLedger, requireClientRecordId, samePayload } fro
 export class ClientIdCreatePrototype {
   #records = new Map();
   #ledger = new OperationLedger();
+  #tenantId;
+  #domain;
+
+  constructor({ tenantId, domain }) {
+    this.#tenantId = tenantId;
+    this.#domain = domain;
+  }
+
+  #scope(uid) {
+    return { tenantId: this.#tenantId, userId: uid, domain: this.#domain };
+  }
 
   // domain-pending(FEAT-CONV-012): this create shape is spike evidence, not a ratified ConversationOp variant.
   create(uid, { opId, id, segments, startedAt }) {
     requireClientRecordId(id);
     const request = { mutation: "create", uid, id, segments, startedAt };
-    return this.#ledger.run(opId, request, () => {
+    return this.#ledger.run(this.#scope(uid), opId, request, () => {
       const key = `${uid}:${id}`;
       const payload = { segments: structuredClone(segments), startedAt };
       const prior = this.#records.get(key);
@@ -31,7 +42,7 @@ export class ClientIdCreatePrototype {
   process(uid, { opId, id, failAfterAdmission = false }) {
     requireClientRecordId(id);
     const request = { mutation: "process", uid, id };
-    return this.#ledger.run(opId, request, () => {
+    return this.#ledger.run(this.#scope(uid), opId, request, () => {
       const record = this.#records.get(`${uid}:${id}`);
       if (!record) throw new FixtureError(404, "record-not-found", "create must commit before processing");
       if (record.status === "completed") return { status: 200, record: structuredClone(record), replay: "record" };
@@ -57,7 +68,7 @@ export class ClientIdCreatePrototype {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const fixture = new ClientIdCreatePrototype();
+  const fixture = new ClientIdCreatePrototype({ tenantId: "tenant-1", domain: "conversations" });
   const created = fixture.create("user-1", {
     opId: "op-create-1",
     id: "quiet-river-stone",

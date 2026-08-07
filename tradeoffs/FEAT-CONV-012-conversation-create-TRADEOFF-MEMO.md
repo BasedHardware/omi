@@ -47,6 +47,7 @@ data migration, live write, or deployment.
 | Observation | Current implementation evidence | Consequence |
 | --- | --- | --- |
 | `POST /v1/conversations` first resolves the user's current in-progress record, then admits that existing id to processing. | `omi:backend/routers/conversations.py` `process_in_progress_conversation`; `omi:backend/utils/conversations/process_conversation.py` `retrieve_in_progress_conversation` | It is a finalization command, not record creation. After admission it clears the current Redis pointer. |
+| A handled processor exception is wrapped by `processing_admission_guard`, which CAS-rolls `processing` back to `in_progress`; retrieval then falls back from the cleared Redis pointer to the database query. | `omi:backend/utils/conversations/lifecycle.py` `processing_admission_guard` and `rollback_processing_admission`; `omi:backend/utils/conversations/process_conversation.py` `retrieve_in_progress_conversation` | Normal request failures remain retryable. Only a hard process loss bypasses the exception rollback and leaves a stale processing orphan. |
 | Capture/listen already created the conversation before that route runs. | `omi:backend/utils/conversations/lifecycle.py` `create_in_progress_conversation` and recording-session ownership | The server/capture path owns identity before processing starts. |
 | `POST /v1/conversations/{id}/finalize` is a newer explicit-id durable admission path. | `omi:backend/routers/conversations.py` `finalize_conversation`; `omi:backend/database/conversation_finalization_jobs.py` | Pipeline entry does not inherently require a mutable “current” pointer, but it still requires a pre-existing record. |
 | The finalization outbox is keyed by `(uid, conversation_id, finalization_revision)` and workers are fenced by dispatch generation and lease epoch. | `omi:backend/database/conversation_finalization_jobs.py`; `omi:backend/services/conversation_finalization.py` | Any new create design should reuse this recovery machinery after durable record creation rather than create another processor lease model. |
@@ -75,9 +76,11 @@ nothing an offline create outbox can send before capture has established the rec
   input.
 - **Conflict semantics:** few create conflicts because clients cannot create. The complexity is
   displaced into aliasing any local draft to a server id.
-- **Failure recovery:** the current-pointer route loses its retry handle after admission. The
-  explicit-id finalization route and finalization outbox are materially safer, but they still do
-  not provide create idempotency.
+- **Failure recovery:** a handled processor exception rolls admission back to `in_progress`, and
+  the database fallback makes a later current-route retry possible even though the Redis pointer
+  was cleared. A hard process crash bypasses that handler, leaving `processing` for the stale
+  orphan reconciler. The explicit-id finalization route and finalization outbox are stronger for
+  durable replay, but neither provides client create idempotency.
 - **Compatibility:** lowest immediate backend migration cost and highest divergence from the
   cross-domain sync contract.
 
@@ -89,8 +92,9 @@ Without that amendment, calling it conformant would weaken ADR-004 by implicatio
 Fixture: `omi:spikes/feat-conv-012-conversation-create/prototypes/client-id-create.mjs`
 
 The fixture separates durable create from processing. Create accepts a UUID or word slug and
-commits an op receipt keyed by opId; processing is a second opId mutation. A repeated opId with
-the same fingerprint returns the prior outcome, while changed input returns terminal `409`.
+commits an op receipt under an explicitly supplied tenant/user/domain scope; processing is a
+second mutation. A repeated opId with the same fingerprint returns the prior success or terminal
+conflict, while changed input returns terminal `409`.
 
 ### Tradeoffs
 
@@ -101,8 +105,9 @@ the same fingerprint returns the prior outcome, while changed input returns term
 - **Pipeline-created records:** supported only if listen/import/merge are migrated to the same
   create service and internal opId discipline. Existing UUIDv4 minting can remain accepted as
   legacy UUID generation, but must move before persistence rather than occur inside processing.
-- **opId:** cleanest mapping to ADR-004. A durable receipt can make a lost `201` response harmless
-  and reject changed-input replay.
+- **opId:** cleanest mapping to ADR-004. A durable receipt can make a lost `201` response harmless,
+  replay a first terminal conflict, and reject changed-input replay. The fixture parameterizes
+  tenant/user/domain scope; it does not choose the production uniqueness key.
 - **Conflict semantics:** same `(uid, id)` with different content is terminal `409`; same opId with
   different content is terminal `409`. Same record id with a new opId and byte-equivalent create
   can safely return the existing record, but David should ratify whether that is allowed.
@@ -120,9 +125,11 @@ identity incrementally and may run before a client has enough content for an ord
 Fixture: `omi:spikes/feat-conv-012-conversation-create/prototypes/hybrid.mjs`
 
 The fixture permits either a client-created `in_progress` row or a pipeline-created row. A
-capture can bind to the client id when identity and content do not conflict. If the client and
-pipeline carry different non-empty content, or one capture is already bound to another record,
-the fixture returns terminal `409`; it does not guess whether to merge, replace, or rekey.
+capture can bind to the client id only when identity, content, start time, source, and capture
+device metadata agree exactly. If those differ, or one capture is already bound to another
+record, the fixture returns terminal `409`; it does not guess tolerance, merge, replacement, or
+rekey rules. Binding leaves the row `in_progress`. A separate opId mutation admits a durable
+finalization job, and a leased worker retry owns completion after a simulated hard crash.
 
 The provisional create/ingest/binding names in code carry
 `// domain-pending(FEAT-CONV-012)` markers. They are not proposed contract vocabulary.
@@ -130,17 +137,19 @@ The provisional create/ingest/binding names in code carry
 ### Tradeoffs
 
 - **Identity ownership:** matches reality but is conditional: first durable creator owns the id;
-  the other producer must bind to it. That rule and its authorization boundary become part of the
-  contract.
+  the other producer must bind to it. That rule, metadata tolerance, and proof that the binder is
+  authorized to claim an existing id become part of the contract.
 - **Offline drafts:** supported without forcing all capture to originate from a connected client.
 - **Pipeline-created records:** remain first-class for device capture, import, merge, and recovery.
-- **opId:** both client create and pipeline ingest use the same receipt semantics. Internal
-  producers need durable opIds too.
+- **opId:** client create, pipeline binding, and finalization admission use the same parameterized
+  receipt semantics. Success and terminal conflict are replayed. Internal producers need durable
+  opIds too; the exact production scope remains a ruling question.
 - **Conflict semantics:** the most explicit but also the richest: op reuse, record-id collision,
   capture-binding collision, and content reconciliation are distinct terminal conflicts.
-- **Failure recovery:** lost replies are recoverable through receipts; processing should still be
-  admitted through the existing finalization ledger. Unique capture binding prevents two retries
-  from attaching one capture to different conversations.
+- **Failure recovery:** lost create/bind/admission replies are recoverable through receipts;
+  processing is separately admitted through a thin model of the existing finalization ledger.
+  A hard-crashed worker is retried under a new lease epoch. Unique capture binding prevents two
+  retries from attaching one capture to different conversations.
 - **Compatibility:** provides a route for gradually forwarding existing capture and
   from-segments producers into one service, but adds a binding relation and origin provenance that
   option B does not need.
@@ -171,7 +180,9 @@ These names are illustrative only:
 ```ts
 // domain-pending(FEAT-CONV-012): provisional evidence, not a contract declaration.
 type ProvisionalCreateReceipt = {
+  tenantScope: string;
   uid: string;
+  domainScope: string;
   opId: string;
   requestFingerprint: string;
   conversationId: "legacy-UUID | word-slug";
@@ -187,9 +198,11 @@ type ProvisionalCaptureBinding = {
 ```
 
 Across B/C, the receipt should not store transcript content. Store a canonical request hash,
-record id, terminal outcome, and enough response metadata to replay the acknowledgement. The
-uniqueness scope should include tenant/user and domain so unrelated producers cannot collide on a
-short opId. Retention must cover the longest supported offline retry window.
+record id, success or terminal-conflict outcome, and enough response/error metadata to replay the
+acknowledgement. The fixture requires explicit tenant, user, and domain scope components so it
+never assumes opIds are global. Whether production needs all three components, a stronger tenant
+principal, or an API-client component remains for David to rule. Retention must cover the longest
+supported offline retry window.
 
 The authoritative conversation remains separate from:
 
@@ -206,9 +219,12 @@ store or the processing job from becoming recreate authority.
 | --- | --- | --- | --- |
 | Create commits, response is lost | Not representable for client create | Same opId returns stored response | Receipt and record write must be atomic. |
 | Same opId, changed request | Not detected | `409 op-id-reused` | Matches ADR-004 terminal status classification. |
+| First attempt is a terminal conflict | Not represented as an op receipt | Same request replays the stored conflict; changed request is `409 op-id-reused` | A rejected opId must never become a fresh success later. |
 | Same record id, different create content | Client cannot create | `409 record-id-conflict` | Never overwrite or silently merge. |
-| Processor crashes after admission | Current-pointer retry loses handle; stale recovery can close status but not recreate the requested create receipt | Fixture can re-enter, but may duplicate work | Reuse the fenced finalization outbox; do not rely on inline op replay for side-effect safety. |
+| Handled processor exception after admission | CAS rollback to `in_progress`; DB fallback makes retry possible | Separate finalization admission can be retried | Preserve the current truthful rollback behavior. |
+| Hard process crash after admission | Row remains `processing` until stale-orphan recovery | Hybrid worker retries under a new lease; B must reuse the same production primitive | Reuse the fenced finalization outbox; do not rely on inline op replay for side-effect safety. |
 | Client content and capture content disagree | Alias problem outside contract | Hybrid returns `409 content-reconciliation-needs-ruling` | David must choose reject, replace, or an explicit merge operation. |
+| Client/capture start time, source, or device differs | Alias problem outside contract | Hybrid returns `409 capture-metadata-needs-ruling` | David must assign metadata authority and timestamp tolerance. |
 | One capture is proposed for two ids | Not exposed | Hybrid returns `409 capture-binding-conflict` | Enforce one unique binding transactionally. |
 | Conversation was deleted while processing | Processor persistence is fenced | Must remain fenced | Preserve current “processor cannot recreate” invariant. |
 
@@ -245,7 +261,8 @@ durable server write; that fact would eliminate the binding model and make B mat
 Regardless of B vs C:
 
 - commit the record and op receipt atomically;
-- return terminal `409` for changed-input opId reuse and id/content collision;
+- persist and replay terminal conflicts as well as success, and return terminal `409` for
+  changed-input opId reuse and id/content/metadata collision;
 - split durable create acknowledgement from asynchronous finalization admission;
 - reuse the existing finalization job, lease epoch, and processor fencing;
 - preserve processor non-recreation and user-field ownership; and
@@ -268,12 +285,17 @@ Regardless of B vs C:
    also admit processing? The latter makes a lost response harder to distinguish from long-running
    processing.
 7. What is the op receipt uniqueness scope and minimum retention window for offline clients?
-8. If A wins, what exact ADR-004 amendment defines the server-originated-record class and explains
+8. Who is authorized to bind a capture to an existing client-created id, and what possession
+   proof, session token, or server-issued capability proves that authority without enabling one
+   producer to claim another user's record?
+9. Which producer owns `startedAt`, source, and capture-device provenance when values differ, and
+   what timestamp tolerance (if any) is safe?
+10. If A wins, what exact ADR-004 amendment defines the server-originated-record class and explains
    why conversations alone do not support offline create?
 
 ## Verification evidence
 
-- Disposable spike tests: 7/7 pass with Node's hermetic test runner.
+- Disposable spike tests: 13/13 pass with Node's hermetic test runner.
 - Executable demo: all three prototypes run and emit their record/outcome shapes.
 - Existing `core/foundation` conversation adapter contract tests: 11/11 pass after building the
   testkit dependency slice; they continue to prove that the live contract has patch/delete only.
