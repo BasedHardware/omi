@@ -3,8 +3,17 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "lib": ["ES2023", "DOM"]
+    "lib": [
+      "ES2023",
+      "DOM"
+    ]
   },
-  "include": ["src"],
-  "references": [{ "path": "../../contracts" }, { "path": "../adapters-legacy" }]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../contracts"
+    }
+  ]
 }

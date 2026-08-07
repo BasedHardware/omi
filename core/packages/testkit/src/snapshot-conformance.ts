@@ -25,7 +25,7 @@
  */
 
 import type { IdSnapshot } from "@omi-core/contracts";
-import type { HttpClient, HttpResponse } from "@omi-core/adapters-legacy";
+import type { HttpClient, HttpResponse } from "@omi-core/contracts";
 
 /** Shortest evidence we accept — long enough to force a locator or a reason,
  * not a bare "unfiltered". */

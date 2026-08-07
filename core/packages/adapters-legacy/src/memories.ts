@@ -62,7 +62,8 @@
 import type { Memory, MemoryIdSnapshot, MemoryOp, MemoryPatch } from "@omi-core/contracts";
 import { parseRecordId } from "@omi-core/contracts";
 import type { PendingOp } from "@omi-core/sync";
-import { classifyStatus, type HttpClient } from "./http.js";
+import type { HttpClient } from "@omi-core/contracts";
+import { classifyStatus } from "@omi-core/kernel";
 
 export type MemorySendResult =
   | { ok: true; serverRevision?: string; serverAssignedId?: string }

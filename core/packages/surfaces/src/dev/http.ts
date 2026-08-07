@@ -6,7 +6,7 @@
  * adapters own paths — this only prefixes the base URL and adds auth.
  */
 
-import type { HttpClient, HttpResponse } from "@omi-core/adapters-legacy";
+import type { HttpClient, HttpResponse } from "@omi-core/contracts";
 
 export function devHttpClient(baseUrl: string, token: () => string): HttpClient {
   return {
