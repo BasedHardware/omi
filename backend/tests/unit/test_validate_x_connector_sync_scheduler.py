@@ -15,6 +15,12 @@ PROJECT = "based-hardware-dev"
 REGION = "us-central1"
 SCHEDULER_JOB = "x-connector-sync-6h"
 CLOUD_RUN_JOB = "x-connector-sync-job"
+EXPECTED_RESOURCE_NAME = f"projects/{PROJECT}/locations/{REGION}/jobs/{SCHEDULER_JOB}"
+EXPECTED_TARGET_URI = (
+    f"https://run.googleapis.com/v2/projects/{PROJECT}"
+    f"/locations/{REGION}/jobs/{CLOUD_RUN_JOB}:run"
+)
+EXPECTED_SCHEDULER_SA = f"x-connector-sync-scheduler@{PROJECT}.iam.gserviceaccount.com"
 
 
 def _contract():
@@ -27,24 +33,24 @@ def _contract():
 
 
 def _valid_state() -> dict[str, Any]:
-    contract = _contract()
     return {
-        "name": contract.resource_name,
+        "name": EXPECTED_RESOURCE_NAME,
         "schedule": "0 */6 * * *",
         "state": "ENABLED",
         "timeZone": "Etc/UTC",
         "httpTarget": {
             "httpMethod": "POST",
-            "oauthToken": {
-                "serviceAccountEmail": "x-connector-sync-scheduler@based-hardware-dev.iam.gserviceaccount.com"
-            },
-            "uri": contract.target_uri,
+            "oauthToken": {"serviceAccountEmail": EXPECTED_SCHEDULER_SA},
+            "uri": EXPECTED_TARGET_URI,
         },
     }
 
 
 def test_validate_scheduler_state_accepts_exact_6h_contract():
     assert scheduler_validator.validate_scheduler_state(_valid_state(), _contract()) == []
+    assert _contract().resource_name == EXPECTED_RESOURCE_NAME
+    assert _contract().target_uri == EXPECTED_TARGET_URI
+    assert _contract().scheduler_service_account == EXPECTED_SCHEDULER_SA
 
 
 @pytest.mark.parametrize(
@@ -58,8 +64,13 @@ def test_validate_scheduler_state_accepts_exact_6h_contract():
         (("httpTarget", "uri"), "https://example.invalid/run", "httpTarget.uri must equal"),
         (
             ("httpTarget", "oauthToken", "serviceAccountEmail"),
+            "wrong-scheduler@based-hardware-dev.iam.gserviceaccount.com",
+            "httpTarget.oauthToken.serviceAccountEmail must equal",
+        ),
+        (
+            ("httpTarget", "oauthToken", "serviceAccountEmail"),
             " ",
-            "httpTarget.oauthToken.serviceAccountEmail must be a nonempty string",
+            "httpTarget.oauthToken.serviceAccountEmail must equal",
         ),
     ],
 )
@@ -75,26 +86,49 @@ def test_validate_scheduler_state_rejects_contract_drift(path, wrong_value, expe
     assert any(expected_error in error for error in errors)
 
 
+def _main_argv(state_file: Path) -> list[str]:
+    return [
+        "--state-file",
+        str(state_file),
+        "--project",
+        PROJECT,
+        "--region",
+        REGION,
+        "--scheduler-job",
+        SCHEDULER_JOB,
+        "--cloud-run-job",
+        CLOUD_RUN_JOB,
+    ]
+
+
 def test_main_rejects_invalid_json_without_cloud_calls(tmp_path):
     state_file = tmp_path / "scheduler.json"
     state_file.write_text("not-json", encoding="utf-8")
 
-    exit_code = scheduler_validator.main(
-        [
-            "--state-file",
-            str(state_file),
-            "--project",
-            PROJECT,
-            "--region",
-            REGION,
-            "--scheduler-job",
-            SCHEDULER_JOB,
-            "--cloud-run-job",
-            CLOUD_RUN_JOB,
-        ]
-    )
+    assert scheduler_validator.main(_main_argv(state_file)) == 2
 
-    assert exit_code == 2
+
+def test_main_rejects_non_utf8_state_file(tmp_path):
+    state_file = tmp_path / "scheduler.json"
+    state_file.write_bytes(b"\xff\xfe invalid")
+
+    assert scheduler_validator.main(_main_argv(state_file)) == 2
+
+
+def test_main_fails_on_contract_drift(tmp_path):
+    state_file = tmp_path / "scheduler.json"
+    state = _valid_state()
+    state["schedule"] = "0 * * * *"
+    state_file.write_text(__import__("json").dumps(state), encoding="utf-8")
+
+    assert scheduler_validator.main(_main_argv(state_file)) == 1
+
+
+def test_main_passes_exact_contract(tmp_path):
+    state_file = tmp_path / "scheduler.json"
+    state_file.write_text(__import__("json").dumps(_valid_state()), encoding="utf-8")
+
+    assert scheduler_validator.main(_main_argv(state_file)) == 0
 
 
 def test_deploy_workflow_gates_success_on_read_only_scheduler_validation():

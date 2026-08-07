@@ -37,6 +37,10 @@ class SchedulerContract(NamedTuple):
             f"/locations/{self.region}/jobs/{self.cloud_run_job}:run"
         )
 
+    @property
+    def scheduler_service_account(self) -> str:
+        return f"x-connector-sync-scheduler@{self.project}.iam.gserviceaccount.com"
+
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
@@ -56,15 +60,17 @@ def validate_scheduler_state(state: Mapping[str, Any], contract: SchedulerContra
         ("timeZone", state.get("timeZone"), EXPECTED_TIME_ZONE),
         ("httpTarget.httpMethod", http_target.get("httpMethod"), EXPECTED_HTTP_METHOD),
         ("httpTarget.uri", http_target.get("uri"), contract.target_uri),
+        (
+            "httpTarget.oauthToken.serviceAccountEmail",
+            service_account,
+            contract.scheduler_service_account,
+        ),
     )
-    errors = [
+    return [
         f"{field} must equal {expected!r}; got {actual!r}"
         for field, actual, expected in expected_values
         if actual != expected
     ]
-    if not isinstance(service_account, str) or not service_account.strip():
-        errors.append("httpTarget.oauthToken.serviceAccountEmail must be a nonempty string")
-    return errors
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -81,7 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         raw_state = json.loads(args.state_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"x connector sync scheduler contract: invalid state file: {exc}", file=sys.stderr)
         return 2
     if not isinstance(raw_state, Mapping):

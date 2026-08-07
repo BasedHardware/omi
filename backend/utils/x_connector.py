@@ -75,7 +75,6 @@ _STATE_PREFIX = 'x_oauth_state:'
 # them without a collection-group query/index. Written on connect, removed on
 # disconnect.
 _REGISTRY_COLLECTION = 'x_connector_users'
-SYNC_JOB_INTERVAL_HOURS = 6  # background sync cadence (the cron fires hourly)
 _SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 
 # Cap how much we pull per sync to stay well within X rate limits.
@@ -614,16 +613,7 @@ def disconnect(uid: str) -> None:
 # ----------------------------------------------------------------------------
 
 
-def should_run_x_sync_job() -> bool:
-    """Legacy hour-modulo gate from when sync hitchhiked on notifications-job.
-
-    Kept for callers/tests; the dedicated Cloud Run Job must not use this —
-    Cloud Scheduler (``x-connector-sync-6h``) owns the 6h cadence.
-    """
-    return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
-
-
-async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
+async def run_x_sync_job() -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others."""
     try:
@@ -632,17 +622,14 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
         logger.error(f'x_connector: sync job could not list users: {e}')
         return {'users': 0, 'synced': 0, 'new_posts': 0}
 
-    background_flex = PromotionFlexRunRouter(db_client=db, started_at=job_started_at)
     synced = 0
     new_posts = 0
     for uid in uids:
         try:
-            result = await sync_x_for_user(uid, background_flex=background_flex)
+            result = await sync_x_for_user(uid)
             if result.get('success'):
                 synced += 1
                 new_posts += int(result.get('new_posts', 0))
-        except PromotionFlexDeferred:
-            logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
         except Exception as e:
             logger.warning(f'x_connector: sync job failed for uid={uid}: {e}')
         await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)
