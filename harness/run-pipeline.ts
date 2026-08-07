@@ -188,7 +188,7 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
   // Resume must not reuse prior cycle_ids: dream-mentions/predicate idempotency
   // keys include the cycle id, and a collided key with new mention content throws
   // after promotion already committed (stranding the rest of the cycle).
-  let cycleCounter = new SqliteDreamStore(db).trajectories(corpus.owner_account_id).length;
+  let cycleCounter = new SqliteDreamStore(db).cycleCount(corpus.owner_account_id);
   let previousWindow: string | null = null, previousEventTime: string | null = null;
   const relations: string[] = [];
 

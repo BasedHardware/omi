@@ -58,6 +58,14 @@ export class SqliteDreamStore {
       .map((row) => ({ group_mention_ids: JSON.parse(row.group_key) as string[], reason: row.reason }));
   }
   recordCycle(report: DreamCycleReport, owner: string, trigger: string, before: number, after: number): void { this.db.query("INSERT OR REPLACE INTO dream_cycles VALUES (?, ?, ?, ?, ?, ?)").run(report.cycle_id, owner, trigger, before, after, JSON.stringify(report.trajectory)); }
+  /**
+   * How many cycles this owner has recorded, without reading a single
+   * trajectory. Resume only ever wanted the count, but took it from
+   * `trajectories().length` -- which on the live v7 db meant loading and
+   * JSON.parsing ~400 MB of trajectory blobs, at startup, on every relaunch,
+   * to arrive at a small integer.
+   */
+  cycleCount(owner: string): number { return (this.db.query("SELECT COUNT(*) AS count FROM dream_cycles WHERE owner_account_id=?").get(owner) as { count: number }).count; }
   trajectories(owner: string): readonly { cycle_id: string; trajectory: ReturnType<typeof diffGraphSnapshots> }[] { return (this.db.query("SELECT cycle_id, trajectory_json FROM dream_cycles WHERE owner_account_id=? ORDER BY cycle_id").all(owner) as { cycle_id: string; trajectory_json: string }[]).map((row) => ({ cycle_id: row.cycle_id, trajectory: JSON.parse(row.trajectory_json) })); }
 }
 

@@ -1,3 +1,4 @@
+import { compareStrings } from "./order";
 import type { ClaimPlacementStatus, GeneratedAdjacency, PlacementArtifact } from "../ledger";
 import type { CanonicalClaim, ClaimArgument, Entity, Evidence, IdentityAuthorization, IdentityConstraint, IdentityEndpoint, L1Event, Mention, PersistedValidTime, Predicate, PredicateAssertion, ProvisionalClaim } from "../schema";
 import type { ImmutableIdentitySupport } from "../resolve/identity-authority";
@@ -224,12 +225,12 @@ const selectLineageHead = (members: readonly CommittedClaim[]): CommittedClaim =
   if (members.length === 1) return members[0]!;
   const explicitHeads = members.filter((candidate) => !members.some((other) => other !== candidate && explicitlySupersedes(other, candidate)));
   if (explicitHeads.length === 1 && members.some((candidate) => explicitlySupersedes(explicitHeads[0]!, candidate))) return explicitHeads[0]!;
-  if (members.some((member) => member.commit_sequence === undefined)) return [...members].sort((left, right) => stableTieBreak(left).localeCompare(stableTieBreak(right)))[0]!;
+  if (members.some((member) => member.commit_sequence === undefined)) return [...members].sort((left, right) => compareStrings(stableTieBreak(left), stableTieBreak(right)))[0]!;
   return [...members].sort((left, right) => {
     const sequence = right.commit_sequence! - left.commit_sequence!;
     if (sequence) return sequence;
     const placement = rank(right) - rank(left);
-    return placement || stableTieBreak(left).localeCompare(stableTieBreak(right));
+    return placement || compareStrings(stableTieBreak(left), stableTieBreak(right));
   })[0]!;
 };
 
@@ -304,7 +305,7 @@ const selectLiveCommittedClaims = (snapshot: GraphSnapshot, ctx?: RequestContext
     }
     return members.filter((item) => isLive(item, causesFor(snapshot, members)));
   });
-  return { claims: winners.sort((left, right) => left.revision_id.localeCompare(right.revision_id)), diagnostics };
+  return { claims: winners.sort((left, right) => compareStrings(left.revision_id, right.revision_id)), diagnostics };
 };
 
 /** Returns deterministic live members; projection callers also receive selection diagnostics. */
@@ -347,12 +348,12 @@ export const project = (snapshot: GraphSnapshot, ctx: RequestContext): SafeSubgr
     const evidence = currentEvidence.get(evidence_id);
     const event = evidence ? eventById.get(evidence.event_revision_id) : undefined;
     return evidence && event ? [{ claim_revision_id: claim.revision_id, evidence_id, event_revision_id: evidence.event_revision_id, capture_session_id: event.capture_session_id, event_time: event.event_time, range: evidence.range, excerpt: evidence.excerpt }] : [];
-  })).sort((left, right) => `${left.claim_revision_id}\u0000${left.evidence_id}\u0000${left.event_revision_id}`.localeCompare(`${right.claim_revision_id}\u0000${right.evidence_id}\u0000${right.event_revision_id}`));
+  })).sort((left, right) => compareStrings(`${left.claim_revision_id}\u0000${left.evidence_id}\u0000${left.event_revision_id}`, `${right.claim_revision_id}\u0000${right.evidence_id}\u0000${right.event_revision_id}`));
   return {
     owner_account_id: snapshot.owner_account_id,
     reader_account_id: ctx.reader_account_id,
     claims,
-    adjacency: snapshot.adjacency.filter((edge) => visible.has(edge.claim_revision_id)).map((edge) => ({ ...edge, entity_id: canonicalIds.get(edge.entity_id) ?? edge.entity_id })).sort((left, right) => `${left.claim_revision_id}\u0000${left.entity_id}\u0000${left.role_slot_id}`.localeCompare(`${right.claim_revision_id}\u0000${right.entity_id}\u0000${right.role_slot_id}`)),
+    adjacency: snapshot.adjacency.filter((edge) => visible.has(edge.claim_revision_id)).map((edge) => ({ ...edge, entity_id: canonicalIds.get(edge.entity_id) ?? edge.entity_id })).sort((left, right) => compareStrings(`${left.claim_revision_id}\u0000${left.entity_id}\u0000${left.role_slot_id}`, `${right.claim_revision_id}\u0000${right.entity_id}\u0000${right.role_slot_id}`)),
     evidence_lineage,
   };
 };
@@ -369,7 +370,7 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
     const event = eventById.get(evidence.event_revision_id);
     return event ? [{ evidence_id: evidence.evidence_id, event_revision_id: evidence.event_revision_id,
       capture_session_id: event.capture_session_id, excerpt: evidence.excerpt, range: evidence.range, policy_labels: evidence.policy_labels }] : [];
-  }).sort((left, right) => left.evidence_id.localeCompare(right.evidence_id));
+  }).sort((left, right) => compareStrings(left.evidence_id, right.evidence_id));
   const spanById = new Map(spans.map((span) => [span.evidence_id, span]));
   const canonicalIds = canonicalEntityIds(snapshot);
   const selection = selectLiveCommittedClaims(snapshot, options.request_context);

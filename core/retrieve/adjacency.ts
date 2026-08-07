@@ -1,3 +1,4 @@
+import { compareStrings } from "./order";
 import type { PersistedValidTime } from "../schema";
 import type { CommittedClaim, SafeSubgraph } from "./index";
 
@@ -20,7 +21,7 @@ const pair = (kind: TypedAdjacencyEdge["kind"], left: string, right: string): Ty
   { kind, from: left, to: right }, { kind, from: right, to: left },
 ];
 const canonical = (edges: readonly ProjectedAdjacencyEdge[]): TypedAdjacencyProjection => ({
-  edges: [...edges].sort((left, right) => `${left.kind}\u0000${left.from}\u0000${left.to}`.localeCompare(`${right.kind}\u0000${right.from}\u0000${right.to}`)),
+  edges: [...edges].sort((left, right) => compareStrings(`${left.kind}\u0000${left.from}\u0000${left.to}`, `${right.kind}\u0000${right.from}\u0000${right.to}`)),
 });
 
 const interval = (claim: CommittedClaim): PersistedValidTime["resolved_interval"] | null =>
@@ -41,7 +42,7 @@ export const projectTypedAdjacency = (subgraph: SafeSubgraph, options: { tempora
   const temporalWindow = options.temporal_proximity_window_ms ?? DEFAULT_TEMPORAL_PROXIMITY_WINDOW_MS;
   if (!Number.isInteger(temporalWindow) || temporalWindow < 0) throw new Error("temporal proximity window must be a non-negative integer milliseconds");
   const edges: ProjectedAdjacencyEdge[] = [];
-  const claims = [...subgraph.claims].sort((left, right) => left.revision_id.localeCompare(right.revision_id));
+  const claims = [...subgraph.claims].sort((left, right) => compareStrings(left.revision_id, right.revision_id));
   for (let left = 0; left < claims.length; left += 1) for (let right = left + 1; right < claims.length; right += 1) {
     const a = claims[left]!; const b = claims[right]!;
     if (overlaps(a, b)) edges.push(...pair("when-adjacent", claimNode(a.revision_id), claimNode(b.revision_id)));
@@ -76,7 +77,7 @@ export const projectTypedAdjacency = (subgraph: SafeSubgraph, options: { tempora
     if (!current || current < lineage.event_time) watermarkByCapture.set(lineage.capture_session_id, lineage.event_time);
   }
   const captures = [...watermarkByCapture.entries()].map(([capture_session_id, event_time]) => ({ capture_session_id, event_time, timestamp: Date.parse(event_time) }))
-    .filter((capture) => Number.isFinite(capture.timestamp)).sort((left, right) => left.timestamp - right.timestamp || left.capture_session_id.localeCompare(right.capture_session_id));
+    .filter((capture) => Number.isFinite(capture.timestamp)).sort((left, right) => left.timestamp - right.timestamp || compareStrings(left.capture_session_id, right.capture_session_id));
   for (let index = 1; index < captures.length; index += 1) {
     const previous = captures[index - 1]!, next = captures[index]!;
     if (next.timestamp - previous.timestamp <= temporalWindow) edges.push({ kind: "temporal-proximity", from: captureNode(previous.capture_session_id), to: captureNode(next.capture_session_id), temporal_window_ms: temporalWindow, identity_evidence: false });

@@ -1,3 +1,4 @@
+import { compareStrings } from "./order";
 import type { SafeEvidenceLineage, SafeSubgraph } from "./index";
 import { projectTypedAdjacency, type ProjectedAdjacencyEdge, type TypedAdjacencyKind } from "./adjacency";
 
@@ -32,7 +33,7 @@ export const buildWalkIndex = (subgraph: SafeSubgraph, request: { relation_kinds
   const outgoing = new Map<string, ProjectedAdjacencyEdge[]>();
   // Append in place: rebuilding the bucket array per edge made this O(edges^2) in memmove.
   for (const edge of edges) { const bucket = outgoing.get(edge.from); if (bucket) bucket.push(edge); else outgoing.set(edge.from, [edge]); }
-  for (const values of outgoing.values()) values.sort((left, right) => `${left.kind}\u0000${left.to}\u0000${left.from}`.localeCompare(`${right.kind}\u0000${right.to}\u0000${right.from}`));
+  for (const values of outgoing.values()) values.sort((left, right) => compareStrings(`${left.kind}\u0000${left.to}\u0000${left.from}`, `${right.kind}\u0000${right.to}\u0000${right.from}`));
   const lineage = subgraph.evidence_lineage;
   // A span depends only on the (claim, capture) pair the edge names, so the linear
   // lineage scan is memoized instead of repeated for every hop of every path.
@@ -66,6 +67,15 @@ export const walk = (subgraph: SafeSubgraph, request: { anchor: string; max_hops
     if (path.hops.length > 0) paths.push(path);
     if (path.hops.length === request.max_hops || paths.length === resultCap) continue;
     for (const edge of outgoing.get(path.nodes[path.nodes.length - 1]!) ?? []) {
+      // Everything already queued but not yet dequeued is `queue.length - head`.
+      // Every queued entry has at least one hop (only the seed has none, and it
+      // is dequeued first), so each remaining dequeue appends exactly one result
+      // and the loop stops after `resultCap - paths.length` more of them. Once
+      // that many are already pending, anything pushed now lands beyond the last
+      // index this loop can ever reach, so not pushing it is output-preserving --
+      // and it keeps a high-fan-out node from queueing cap x fan-out paths, each
+      // one a fresh copy of the node and hop arrays, only to discard them.
+      if (queue.length - head >= resultCap - paths.length) break;
       if (path.nodes.includes(edge.to)) continue;
       const hop: WalkHop = { relation_kind: edge.kind, from: edge.from, to: edge.to, evidence_span: evidenceSpan(edge), ...(edge.kind === "temporal-proximity" ? { temporal_window_ms: edge.temporal_window_ms } : {}) };
       queue.push({ nodes: [...path.nodes, edge.to], hops: [...path.hops, hop] });
