@@ -7,9 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
-import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -23,7 +23,13 @@ import 'widgets/action_item_form_sheet.dart';
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
 
-enum TaskCategory { today, tomorrow, later, noDeadline, overdue }
+/// Two buckets, plus Completed rendered separately below them.
+///
+/// Overdue folds into [today] — a task that is past due is the most actionable
+/// thing on the page, and filing it under its own heading pushed it below
+/// everything else. Tomorrow and no-deadline fold into [later]: five headings
+/// for eight tasks read as filing, not as a list of what to do.
+enum TaskCategory { today, later }
 
 class ActionItemsPage extends StatefulWidget {
   final VoidCallback? onAddGoal;
@@ -36,6 +42,11 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+
+  /// Entry point for the "add goal" affordance outside this page — goals live
+  /// here now, so the host routes to this tab and calls through.
+  void addGoal() => _goalsWidgetKey.currentState?.addGoal();
 
   /// Items whose completion animation is still playing. See [_toggleCompletion].
   final Set<String> _completingIds = {};
@@ -57,11 +68,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   static const double _indentStep = 28.0;
   double? _dragStartX;
 
-  // Overdue section expanded by default — missed deadlines are the most
-  // important thing to surface, hiding them behind a tap caused regret.
-  bool _overdueExpanded = true;
-
-  bool _noDeadlineExpanded = true;
+  /// Completed section starts collapsed — it grows without bound and must not
+  /// push the active list off screen.
+  bool _completedExpanded = false;
 
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
@@ -209,34 +218,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  void _showCreateGoalSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => _GoalCreateSheet(
-        onSave: (title, current, target) async {
-          // Create goal via provider
-          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-          final created = await goalsProvider.createGoal(
-            title: title,
-            goalType: 'numeric',
-            targetValue: target,
-            currentValue: current,
-          );
-          if (created != null) {
-            PlatformManager.instance.analytics.goalCreated(
-              goalId: created.id,
-              titleLength: title.length,
-              targetValue: target,
-              source: 'tasks_page',
-            );
-          }
-        },
-      ),
-    );
-  }
-
   Widget _buildFab() {
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, _) {
@@ -253,8 +234,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               HapticFeedback.lightImpact();
               _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
             },
-            backgroundColor: Colors.deepPurple,
-            child: const Icon(Icons.add, color: Colors.white),
+            // White on black, matching the chat bar's mic button. Purple is
+            // off-brand (INV-UI-1) and this was the loudest instance of it.
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            child: const Icon(Icons.add, color: Colors.black),
           ),
         );
       },
@@ -387,17 +371,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     bool showCompleted,
   ) {
     final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
       TaskCategory.today: [],
-      TaskCategory.tomorrow: [],
-      TaskCategory.noDeadline: [],
       TaskCategory.later: [],
-      TaskCategory.overdue: [],
     };
 
     for (var item in items) {
@@ -406,24 +385,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!item.completed && showCompleted) continue;
 
       if (item.dueAt == null) {
-        // No deadline tasks older than 7 days go to overdue
-        if (!showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-          categorized[TaskCategory.overdue]!.add(item);
-        } else {
-          categorized[TaskCategory.noDeadline]!.add(item);
-        }
+        // Undated work that has been sitting for over a week is treated as
+        // needing attention now rather than drifting in Later forever.
+        final isStale = !showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo);
+        categorized[isStale ? TaskCategory.today : TaskCategory.later]!.add(item);
       } else {
         final dueDate = item.dueAt!;
-        if (!showCompleted && dueDate.isBefore(startOfToday)) {
-          // Due date in the past → overdue
-          categorized[TaskCategory.overdue]!.add(item);
-        } else if (dueDate.isBefore(startOfTomorrow)) {
-          categorized[TaskCategory.today]!.add(item);
-        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-          categorized[TaskCategory.tomorrow]!.add(item);
-        } else {
-          categorized[TaskCategory.later]!.add(item);
-        }
+        // Overdue counts as today: it is due, and burying it under its own
+        // heading put the most urgent work at the bottom of the page.
+        final isDueNow = dueDate.isBefore(startOfTomorrow);
+        categorized[isDueNow ? TaskCategory.today : TaskCategory.later]!.add(item);
       }
     }
 
@@ -434,14 +405,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     switch (category) {
       case TaskCategory.today:
         return context.l10n.today;
-      case TaskCategory.tomorrow:
-        return context.l10n.tomorrow;
-      case TaskCategory.noDeadline:
-        return context.l10n.tasksNoDeadline;
       case TaskCategory.later:
         return context.l10n.tasksLater;
-      case TaskCategory.overdue:
-        return context.l10n.tasksOverdue;
     }
   }
 
@@ -450,16 +415,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     switch (category) {
       case TaskCategory.today:
         return DateTime(now.year, now.month, now.day, 23, 59);
-      case TaskCategory.tomorrow:
-        return DateTime(now.year, now.month, now.day + 1, 23, 59);
-      case TaskCategory.noDeadline:
-        return null;
       case TaskCategory.later:
-        // Day after tomorrow
+        // Day after tomorrow — the earliest date that still lands in Later.
         return DateTime(now.year, now.month, now.day + 2, 23, 59);
-      case TaskCategory.overdue:
-        // Yesterday, so the task stays in overdue after rebuild
-        return DateTime(now.year, now.month, now.day - 1, 23, 59);
     }
   }
 
@@ -607,8 +565,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     HapticFeedback.mediumImpact();
                     return provider.forceRefreshActionItems();
                   },
-                  color: Colors.deepPurple,
-                  backgroundColor: Colors.white,
+                  color: Colors.white,
+                  backgroundColor: const Color(0xFF1F1F25),
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
@@ -631,7 +589,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+    return const Center(child: CircularProgressIndicator(color: Colors.white));
   }
 
   Widget _buildEmptyTasksList() {
@@ -640,7 +598,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
-        SliverToBoxAdapter(child: _buildGoalsRow()),
+        SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
       ],
@@ -665,7 +623,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [Colors.deepPurple.withValues(alpha: 0.35), Colors.deepPurple.withValues(alpha: 0.0)],
+                    colors: [Colors.white.withValues(alpha: 0.14), Colors.white.withValues(alpha: 0.0)],
                     stops: const [0.0, 1.0],
                   ),
                 ),
@@ -683,7 +641,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.deepPurple.withValues(alpha: 0.45),
+                      color: Colors.white.withValues(alpha: 0.16),
                       blurRadius: 30,
                       spreadRadius: 2,
                       offset: const Offset(0, 12),
@@ -758,6 +716,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   ) {
     final isSearching = provider.isSearching;
     final filteredItems = isSearching ? provider.filteredActionItems : const <ActionItemWithMetadata>[];
+    // Taken straight off the provider: _categorizeItems drops completed items
+    // entirely when showCompleted is false, so they never reach categorizedItems.
+    final completedItems = provider.actionItems.where((i) => i.completed).toList();
 
     return CustomScrollView(
       controller: _scrollController,
@@ -785,12 +746,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               }, childCount: filteredItems.length),
             ),
         ] else ...[
-          SliverToBoxAdapter(child: _buildGoalsRow()),
+          SliverToBoxAdapter(child: GoalsWidget(key: _goalsWidgetKey)),
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
-          // Build each category section (skip empty ones, skip overdue — rendered separately below)
+          // Today then Later; empty sections are skipped entirely.
           for (final category in TaskCategory.values)
-            if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
+            if ((categorizedItems[category] ?? []).isNotEmpty)
               SliverToBoxAdapter(
                 child: _buildCategorySection(
                   category: category,
@@ -799,71 +760,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 ),
               ),
 
-          // Overdue section — expanded by default
-          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
-            ),
+          // Completed, beneath the active work. Suppressed in the completed-only
+          // view, where the whole page is already this list.
+          if (!provider.showCompletedView && completedItems.isNotEmpty)
+            SliverToBoxAdapter(child: _buildCompletedSection(items: completedItems, provider: provider)),
         ],
 
         // Bottom padding
         const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
       ],
-    );
-  }
-
-  Widget _buildGoalsRow() {
-    return Consumer2<GoalsProvider, ActionItemsProvider>(
-      builder: (context, goalsProvider, actionProvider, child) {
-        if (goalsProvider.isLoading) return const SizedBox.shrink();
-
-        final goals = goalsProvider.goals;
-        if (goals.isEmpty) return const SizedBox.shrink();
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                child: Row(
-                  children: [
-                    Text(
-                      context.l10n.goals,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    if (!actionProvider.isSelectionMode) ...[
-                      if (goals.length < 4)
-                        GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
-                            _showCreateGoalSheet();
-                          },
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.12),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
-                          ),
-                        ),
-                    ],
-                  ],
-                ),
-              ),
-              // Goal items
-              ...goals.map((goal) => _buildGoalItem(goal, actionProvider)),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
     );
   }
 
@@ -902,46 +807,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
                   child: Row(
                     children: [
-                      if (category == TaskCategory.noDeadline)
-                        GestureDetector(
-                          onTap: () => setState(() => _noDeadlineExpanded = !_noDeadlineExpanded),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _noDeadlineExpanded ? Icons.expand_less : Icons.expand_more,
-                                color: Colors.grey[500],
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                title.toUpperCase(),
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                              if (orderedItems.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                              ],
-                            ],
-                          ),
-                        )
-                      else
-                        Text(
-                          title.toUpperCase(),
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.8,
-                          ),
+                      // Both sections render a plain heading; the collapsible
+                      // no-deadline variant went away with that category.
+                      Text(
+                        title.toUpperCase(),
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
                         ),
+                      ),
                       const Spacer(),
-                      if (category != TaskCategory.noDeadline) ...[
+                      ...[
                         if (provider.showCompletedView && orderedItems.isNotEmpty)
                           Row(
                             mainAxisSize: MainAxisSize.min,
@@ -956,25 +834,20 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           )
                         else if (orderedItems.isNotEmpty)
                           Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                      ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
-                        GestureDetector(
-                          onTap: () => _confirmClearCompleted(provider, orderedItems),
-                          child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
-                        ),
+                      ],
                     ],
                   ),
                 ),
 
                 // Drop zone for first position
-                if (orderedItems.isNotEmpty && (category != TaskCategory.noDeadline || _noDeadlineExpanded))
+                if (orderedItems.isNotEmpty)
                   _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
                 // Task items. Row padding alone carries the rhythm — no
                 // dividers between rows; matches Things 3 / Apple Reminders.
-                if (category != TaskCategory.noDeadline || _noDeadlineExpanded)
-                  ...orderedItems.map(
-                    (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
-                  ),
+                ...orderedItems.map(
+                  (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
+                ),
 
                 // Spacing after section
                 const SizedBox(height: 12),
@@ -986,8 +859,23 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildOverdueSection({required List<ActionItemWithMetadata> items, required ActionItemsProvider provider}) {
-    final orderedItems = _getOrderedItems(TaskCategory.overdue, items);
+  /// Completed tasks, listed under the active ones.
+  ///
+  /// Checking something off used to make it vanish — recoverable only by
+  /// flipping the whole page into the completed-only view. Keeping a collapsed
+  /// section in place means finished work stays visible as work you did,
+  /// and un-checking a mistake doesn't require finding a toggle first.
+  ///
+  /// Collapsed by default: it grows without bound, and it must never push the
+  /// active list off the screen.
+  Widget _buildCompletedSection({
+    required List<ActionItemWithMetadata> items,
+    required ActionItemsProvider provider,
+  }) {
+    // Newest first — the thing you just finished belongs at the top.
+    final ordered = [...items]..sort(
+        (a, b) => (b.completedAt ?? b.updatedAt ?? DateTime(0)).compareTo(a.completedAt ?? a.updatedAt ?? DateTime(0)));
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Column(
@@ -995,42 +883,36 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _overdueExpanded = !_overdueExpanded;
-                    });
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        context.l10n.tasksOverdue.toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                    ],
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _completedExpanded = !_completedExpanded);
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(_completedExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    context.l10n.completed.toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Text('${ordered.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                ],
+              ),
             ),
           ),
-          if (_overdueExpanded) ...[
-            _buildFirstPositionDropZone(TaskCategory.overdue, orderedItems, false),
-            ...orderedItems.map(
-              (item) => _buildTaskItem(item, provider, category: TaskCategory.overdue, categoryItems: orderedItems),
+          if (_completedExpanded)
+            ...ordered.map(
+              (item) => _buildTaskItem(item, provider, category: TaskCategory.later, categoryItems: ordered),
             ),
-          ],
           const SizedBox(height: 12),
         ],
       ),
@@ -1085,7 +967,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           height: showIndicator ? 6 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurple : Colors.transparent,
+            color: showIndicator ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(2),
           ),
         );
@@ -1203,7 +1085,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(1)),
               ),
             _buildDraggableTaskItem(item, provider, indentLevel, indentWidth, categoryItems),
             // Drop indicator below
@@ -1211,7 +1093,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(1)),
               ),
           ],
         );
@@ -1385,27 +1267,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
     final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
 
+    // Mirrors the bucketing in _categorizeItems: overdue and stale undated work
+    // read as Today; everything else is Later.
     if (item.dueAt == null) {
       final sevenDaysAgo = now.subtract(const Duration(days: 7));
-      if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-        return TaskCategory.overdue;
-      }
-      return TaskCategory.noDeadline;
+      final isStale = item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo);
+      return isStale ? TaskCategory.today : TaskCategory.later;
     }
-    final dueDate = item.dueAt!;
-    if (dueDate.isBefore(startOfToday)) {
-      return TaskCategory.overdue;
-    } else if (dueDate.isBefore(startOfTomorrow)) {
-      return TaskCategory.today;
-    } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-      return TaskCategory.tomorrow;
-    } else {
-      return TaskCategory.later;
-    }
+    return item.dueAt!.isBefore(startOfTomorrow) ? TaskCategory.today : TaskCategory.later;
   }
 
   Widget _buildTaskItemContent(
@@ -1436,7 +1307,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         duration: const Duration(milliseconds: 150),
         margin: EdgeInsets.zero,
         decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurple.withValues(alpha: 0.15) : Colors.transparent,
+          color: isSelected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
@@ -1518,8 +1389,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return Container(
         width: 22,
         height: 22,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: AppStyles.completedGreen),
-        child: const Icon(Icons.check, size: 14, color: Colors.white),
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: AppStyles.completedAccent),
+        child: const Icon(Icons.check, size: 14, color: AppStyles.completedGlyph),
       );
     }
     // Incomplete: dashed outline circle (Joi-inspired). Quieter than a solid
@@ -1540,10 +1411,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       height: 22,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: isSelected ? Colors.deepPurple : Colors.grey[600]!, width: 2),
-        color: isSelected ? Colors.deepPurple : Colors.transparent,
+        border: Border.all(color: isSelected ? Colors.white : Colors.grey[600]!, width: 2),
+        color: isSelected ? Colors.white : Colors.transparent,
       ),
-      child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
+      // Dark tick: the fill is white now that selection is neutral rather than
+      // purple, so a white tick would be invisible.
+      child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
     );
   }
 
@@ -1564,11 +1437,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  Future<void> _deleteGoal(Goal goal) async {
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    await goalsProvider.deleteGoal(goal.id);
-  }
-
   void _showEditSheet(ActionItemWithMetadata item) {
     showModalBottomSheet(
       context: context,
@@ -1576,563 +1444,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       backgroundColor: Colors.transparent,
       builder: (context) => ActionItemFormSheet(actionItem: item),
     );
-  }
-
-  Widget _buildGoalItem(Goal goal, ActionItemsProvider provider) {
-    final progress = goal.targetValue > 0 ? goal.currentValue / goal.targetValue : 0.0;
-    final progressText = '(${goal.currentValue.toInt()}/${goal.targetValue.toInt()})';
-    final displayTitle = '${goal.title} $progressText';
-
-    final goalContent = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        // Goals are not part of selection mode — selection only applies to
-        // tasks (the action bar's Export action acts on tasks only).
-        if (provider.isSelectionMode) return;
-        PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'tasks_page');
-        _showEditGoalSheet(goal);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 0),
-        margin: const EdgeInsets.only(left: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 44,
-              height: 44,
-              child: Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CustomPaint(
-                    painter: _CircularProgressPainter(
-                      progress: progress.clamp(0.0, 1.0),
-                      color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                displayTitle,
-                style: TextStyle(
-                  color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
-                  fontSize: 15,
-                  decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
-                  height: 1.4,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (provider.isSelectionMode) return goalContent;
-
-    return Dismissible(
-      key: Key('goal_${goal.id}'),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (direction) async {
-        HapticFeedback.mediumImpact();
-        return await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: const Color(0xFF1F1F25),
-                title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
-                content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(context, false), child: Text(context.l10n.cancel)),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: Text(context.l10n.delete),
-                  ),
-                ],
-              ),
-            ) ??
-            false;
-      },
-      onDismissed: (direction) async {
-        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
-        await _deleteGoal(goal);
-      },
-      background: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline, color: Colors.white),
-      ),
-      child: goalContent,
-    );
-  }
-
-  void _showEditGoalSheet(Goal goal) {
-    HapticFeedback.lightImpact();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => _GoalEditSheet(
-        goal: goal,
-        onSave: (title, current, target) async {
-          // Update goal via provider
-          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-          await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
-          PlatformManager.instance.analytics.goalUpdated(goalId: goal.id, source: 'tasks_page');
-        },
-        onDelete: () {
-          PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
-          _deleteGoal(goal);
-        },
-      ),
-    );
-  }
-}
-
-/// Stateful widget for goal creation sheet that properly manages TextEditingController lifecycle
-class _GoalCreateSheet extends StatefulWidget {
-  final Function(String title, double current, double target) onSave;
-
-  const _GoalCreateSheet({required this.onSave});
-
-  @override
-  State<_GoalCreateSheet> createState() => _GoalCreateSheetState();
-}
-
-class _GoalCreateSheetState extends State<_GoalCreateSheet> {
-  late final TextEditingController titleController;
-  late final TextEditingController currentController;
-  late final TextEditingController targetController;
-
-  @override
-  void initState() {
-    super.initState();
-    titleController = TextEditingController();
-    currentController = TextEditingController(text: '0');
-    targetController = TextEditingController(text: '100');
-  }
-
-  @override
-  void dispose() {
-    titleController.dispose();
-    currentController.dispose();
-    targetController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-              ),
-              Text(
-                context.l10n.addGoal,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 24),
-              // Title field
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.goalTitle,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: titleController,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.08),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Current & Target fields
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.current,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: currentController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.target,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: targetController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final title = titleController.text.trim();
-                    if (title.isEmpty) {
-                      Navigator.pop(context);
-                      return;
-                    }
-
-                    final current = double.tryParse(currentController.text) ?? 0;
-                    final target = double.tryParse(targetController.text) ?? 100;
-
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-
-                    widget.onSave(title, current, target);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF22C55E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(context.l10n.addGoal),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Stateful widget for goal edit sheet that properly manages TextEditingController lifecycle
-class _GoalEditSheet extends StatefulWidget {
-  final Goal goal;
-  final Function(String title, double current, double target) onSave;
-  final Function() onDelete;
-
-  const _GoalEditSheet({required this.goal, required this.onSave, required this.onDelete});
-
-  @override
-  State<_GoalEditSheet> createState() => _GoalEditSheetState();
-}
-
-class _GoalEditSheetState extends State<_GoalEditSheet> {
-  late final TextEditingController titleController;
-  late final TextEditingController currentController;
-  late final TextEditingController targetController;
-
-  @override
-  void initState() {
-    super.initState();
-    titleController = TextEditingController(text: widget.goal.title);
-    currentController = TextEditingController(text: widget.goal.currentValue.toInt().toString());
-    targetController = TextEditingController(text: widget.goal.targetValue.toInt().toString());
-  }
-
-  @override
-  void dispose() {
-    titleController.dispose();
-    currentController.dispose();
-    targetController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-              ),
-              Text(
-                context.l10n.editGoal,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 24),
-              // Title field
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.goalTitle,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: titleController,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.08),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Current & Target fields
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.current,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: currentController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.target,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: targetController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  // Delete button
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        // Confirm and delete
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            backgroundColor: const Color(0xFF1F1F25),
-                            title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
-                            content: Text(
-                              'Delete "${widget.goal.title}"?',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: Text(context.l10n.cancel),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                child: Text(context.l10n.delete),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          widget.onDelete();
-                        }
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Text(context.l10n.delete),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Save button
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        if (title.isEmpty) {
-                          Navigator.pop(context);
-                          return;
-                        }
-
-                        final current = double.tryParse(currentController.text) ?? widget.goal.currentValue;
-                        final target = double.tryParse(targetController.text) ?? widget.goal.targetValue;
-
-                        if (!context.mounted) return;
-                        Navigator.pop(context);
-
-                        widget.onSave(title, current, target);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF22C55E),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(context.l10n.save),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Custom painter for circular progress indicator (pie chart style)
-class _CircularProgressPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-
-  _CircularProgressPainter({required this.progress, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-
-    // Draw background circle (empty part)
-    final bgPaint = Paint()
-      ..color = color.withValues(alpha: 0.2)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius, bgPaint);
-
-    // Draw progress arc (filled part)
-    if (progress > 0) {
-      final progressPaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.fill;
-
-      final rect = Rect.fromCircle(center: center, radius: radius);
-      const startAngle = -90 * 3.14159 / 180; // Start from top
-      final sweepAngle = progress * 2 * 3.14159; // Full circle is 2π
-
-      canvas.drawArc(rect, startAngle, sweepAngle, true, progressPaint);
-    }
-
-    // Draw border circle
-    final borderPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, radius - 1, borderPaint);
-  }
-
-  @override
-  bool shouldRepaint(_CircularProgressPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }
 
