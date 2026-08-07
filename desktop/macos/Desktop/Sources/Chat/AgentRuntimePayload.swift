@@ -74,3 +74,26 @@ enum AgentRuntimePayload {
     }
   }
 }
+
+extension AgentRuntimePayload {
+  /// Why a start must be refused, and what to say about it — one value so the coordinator neither
+  /// decides nor phrases it.
+  ///
+  /// This lives here rather than at the call site because the convergence ratchet bounds
+  /// `AgentRuntimeProcess`: the two historic coordinator files are meant to shrink toward deletion,
+  /// so a policy that can live beside the thing it describes belongs beside it.
+  struct StartRefusal {
+    let missing: [String]
+    var logLine: String {
+      "AgentRuntimeProcess: pi-mono start refused, agent runtime payload incomplete "
+        + "missing=\(missing.joined(separator: ","))"
+    }
+    var error: BridgeError { .agentRuntimePayloadIncomplete(missing: missing) }
+  }
+
+  /// `nil` when the bundle can actually answer a turn.
+  static func startRefusal(bridgeScriptPath: String) -> StartRefusal? {
+    let missing = missingComponents(bridgeScriptPath: bridgeScriptPath)
+    return missing.isEmpty ? nil : StartRefusal(missing: missing)
+  }
+}
