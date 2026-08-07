@@ -1,0 +1,34 @@
+desktop/macos/scripts/prepare-local-dev-entitlements.sh
+  s_569f1df936cc22::t_cfb9ec91339a70 4-86,88-89,94-131,135-137,140-148,153,163,166,197-201
+desktop/macos/tests/test-prepare-local-dev-entitlements.sh
+  s_569f1df936cc22::t_3bda55b6bcec65 2-13,19,22-28,38,40-48,50-62,67-71,74,83-84,89-90,93-100,103-109,111-114,119-120,134,147,155-207,210,220,225,236-284,290-297,300
+  s_569f1df936cc22::t_7998eb851cbc30 208-209,211-219,221-224,226-235
+  s_569f1df936cc22::t_8cacbcc3d7690e 63-66,72-73
+.github/failure-classes/FC-signing-attribute-inferred-from-identity-name.json
+  s_569f1df936cc22::t_71c76423af117c 1-17
+.github/checks-manifest.yaml
+  s_569f1df936cc22::t_74311bae9854ce 484-489
+desktop/macos/run.sh
+  s_569f1df936cc22::t_c3e6913779f09e 261-265
+  s_569f1df936cc22::t_8d449984fe081d 504-505,518-524,530-540
+  s_569f1df936cc22::t_140eafad6dad03 420
+  s_569f1df936cc22::t_f85e0522aed28d 570-574,581-590
+  s_569f1df936cc22::t_704e0d836e50af 358-367,374-419
+  s_569f1df936cc22::t_a1b931cf0f84ec 421-422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2d8e857e68ceb292afd30ffdfe9700ca982dccae",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
