@@ -1,0 +1,70 @@
+desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
+  s_569f1df936cc22::t_41f6bff60383e3 299-304
+desktop/macos/e2e/flows/home-spine.yaml
+  s_569f1df936cc22::t_ce5f70a8c6a875 19-20
+desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
+  s_569f1df936cc22::t_07bd1b070d1da1 118,126
+  s_569f1df936cc22::t_e7b14692b27f9e 109
+  s_569f1df936cc22::t_3a178cdc383c4b 16-17
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_cfa85669076019 174-180
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  s_569f1df936cc22::t_e3c553ed094773 561-570
+  s_569f1df936cc22::t_383c46c1474355 342-343,347-356
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
+  s_569f1df936cc22::t_cc73c755da8bf7 76-114
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_b1ed906441620e 198-204,213-237
+  s_569f1df936cc22::t_6225fc4b46722e 378-380
+  s_569f1df936cc22::t_8311cea516f902 238-239
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_569f1df936cc22::t_a2622267d32067 342-347
+  s_739c5116e517ee::t_5b93e20d8945fb 241-242,245-246,292
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_569f1df936cc22::t_d05a4e5bc780a7 231,233-239,242-255
+  s_569f1df936cc22::t_c79e8e75dcf5e7 131-132,137,139,148-169
+  s_569f1df936cc22::t_a994b835268ab2 105-106
+  s_569f1df936cc22::t_98ca1b676fa373 445-451,473-487,489-501
+desktop/macos/Desktop/Sources/MainWindow/SidebarNavItem.swift
+  s_569f1df936cc22::t_de72d757b53b96 52
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_569f1df936cc22::t_fbab2ab1167ae5 414-446
+  s_569f1df936cc22::t_e39123ec591193 447
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
+  s_569f1df936cc22::t_a58316ab5b4d64 105
+  s_569f1df936cc22::t_7e3a232f94650e 52-73
+  s_569f1df936cc22::t_8d8880ed9257bc 131-134,143-160,162-163,165,168,170-178,188-189,193-195
+  s_569f1df936cc22::t_532afc2ad9a0a2 216-237,239-240
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_4a644ca75f9646 1704-1705
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  s_569f1df936cc22::t_52a3d061060437 471,705,1056,1127,1142,1347,1394
+desktop/macos/e2e/flows/home.yaml
+  s_569f1df936cc22::t_3cbaf01ec0677a 4,54-55,57-58
+desktop/macos/e2e/flows/navigation.yaml
+  s_569f1df936cc22::t_19da20f6096ade 4,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e60370bf54b447e9fff17ffb4e4d1af480dc91c4",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_739c5116e517ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ab74656d56b730efc",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
