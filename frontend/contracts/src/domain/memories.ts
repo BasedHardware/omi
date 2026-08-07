@@ -34,6 +34,15 @@ export interface Memory {
   updatedAt: number;
   /** Server revision of the last write we saw; reconcile compares these. */
   revision: string | null;
+  /**
+   * The server withheld this record's full content and sent a TRUNCATION in
+   * `content` (legacy: locked memories are serialized as `content[:70] + '...'`
+   * behind a paid-plan gate). `content` is therefore NOT the record when this
+   * is true, and writing it back destroys the real content — so a locked
+   * memory's content is never editable and `MemoryPatch.content` must never be
+   * built from it. Server-owned: absent from `MemoryPatch` by construction.
+   */
+  locked: boolean;
 }
 
 /**
@@ -43,6 +52,11 @@ export interface Memory {
  * endpoint to change a memory's category after creation (only content,
  * visibility, and review verdict have PATCH/POST equivalents) — see the
  * adapter file header for the full gap list.
+ *
+ * `locked` is excluded because it is server-owned (a paid-plan gate), and
+ * because `content` on a locked record is a truncation rather than the record
+ * — see `Memory.locked`. `MemoriesStore.patch` refuses a `content` patch on a
+ * locked row for exactly that reason.
  */
 export type MemoryPatch = Partial<Pick<Memory, "content" | "visibility" | "userReview">>;
 
