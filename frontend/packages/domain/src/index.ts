@@ -5,5 +5,6 @@ export * from "./folders-codec.js";
 export * from "./folders-store.js";
 export * from "./memories-codec.js";
 export * from "./memories-store.js";
+export * from "./store-status.js";
 export * from "./tasks-codec.js";
 export * from "./tasks-store.js";
