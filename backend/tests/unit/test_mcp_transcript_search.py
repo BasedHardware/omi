@@ -37,6 +37,15 @@ def test_snippet_empty_when_no_transcript_match():
     assert build_transcript_match_snippets(segments, "budget review") == []
 
 
+def test_snippet_unicode_multi_term_match():
+    segments = [
+        {"id": "s0", "text": "Reunión sobre el presupuesto Q3", "start": 1.0, "end": 3.0, "speaker_id": 0},
+    ]
+    snippets = build_transcript_match_snippets(segments, "presupuesto Q3")
+    assert len(snippets) == 1
+    assert "presupuesto" in snippets[0]["text"].casefold()
+
+
 def test_merge_typesense_page_prefers_transcript_on_page_one():
     from utils.conversations.mcp_transcript_search import merge_typesense_page_with_transcript_hits
 

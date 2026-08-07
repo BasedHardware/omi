@@ -29,6 +29,7 @@ from models.conversation import (
     SetConversationActionItemsStateRequest,
     SetConversationEventsStateRequest,
     TestPromptRequest,
+    TranscriptMatchSnippet,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
     UpdateSummaryRequest,
@@ -142,8 +143,14 @@ class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
 
+class ConversationSearchItem(Conversation):
+    """Search hit: base conversation fields plus optional transcript match evidence."""
+
+    match_snippets: List[TranscriptMatchSnippet] = []
+
+
 class SearchConversationsResponse(BaseModel):
-    items: List[Conversation]
+    items: List[ConversationSearchItem]
     total_pages: int
     current_page: int
     per_page: int
@@ -1306,12 +1313,16 @@ def search_conversations_endpoint(
     effective_per_page = search_results.get('per_page', 10)
     # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
     # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
+    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
+    # without permanently dropping displaced Typesense hits that lost the merge race.
     transcript_ids: List[str] = []
-    if (search_request.query or '').strip():
+    merge_cap = effective_per_page
+    if effective_page == 1 and (search_request.query or '').strip():
+        merge_cap = min(max(effective_per_page * 3, effective_per_page), 60)
         transcript_ids = search_transcript_conversation_ids(
             uid,
             search_request.query,
-            limit=effective_per_page,
+            limit=merge_cap,
             starts_at=start_timestamp,
             ends_at=end_timestamp,
             search_transcript_chunks=vector_db.search_transcript_chunks,
@@ -1320,7 +1331,7 @@ def search_conversations_endpoint(
         typesense_ids,
         transcript_ids,
         page=effective_page,
-        per_page=effective_per_page,
+        per_page=merge_cap,
     )
     conversations = conversations_db.get_conversations_by_id_without_photos(
         uid,
@@ -1336,15 +1347,19 @@ def search_conversations_endpoint(
     # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
     # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
     # transcript_segments, so match against those.
+    # Date filter also re-applies here: transcript-chunk hits can arrive with one-sided chunk
+    # metadata gaps; keep them consistent with Typesense + exact-reference paths.
     conversations = [
         conversation
         for conversation in conversations
         if conversation_matches_speaker(conversation, search_request.speaker_id)
+        and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
     # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
     # clears segments on locked rows.
     if (search_request.query or '').strip():
         conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
+    conversations = conversations[:effective_per_page]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the

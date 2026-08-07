@@ -420,6 +420,7 @@ def install_ws_j_heavy_import_stubs() -> list[str]:
         "utils.conversations.factory",
         "utils.conversations.process_conversation",
         "utils.conversations.search",
+        "utils.conversations.mcp_transcript_search",
         "utils.conversations.calendar_linking",
         "utils.speaker_identification",
         "utils.app_integrations",

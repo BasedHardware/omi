@@ -15,22 +15,29 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+# Letters/digits in any script (not ASCII-only) so multi-term non-English queries
+# can still extract lexical snippets after a semantic transcript hit.
+_TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+
+
+def _normalize_text(value: str) -> str:
+    return unicodedata.normalize("NFKC", value or "").casefold()
 
 
 def _query_terms(query: str) -> List[str]:
-    return [t.lower() for t in _TOKEN_RE.findall(query or "") if len(t) >= 2]
+    return [t for t in _TOKEN_RE.findall(_normalize_text(query)) if len(t) >= 2]
 
 
-def _segment_matches(text: str, query_lower: str, terms: Sequence[str]) -> bool:
-    hay = (text or "").lower()
+def _segment_matches(text: str, query_norm: str, terms: Sequence[str]) -> bool:
+    hay = _normalize_text(text)
     if not hay:
         return False
-    if query_lower and query_lower in hay:
+    if query_norm and query_norm in hay:
         return True
     # Prefer multi-term: require every token when the query has 2+ terms so
     # "budget review" does not match every segment that merely says "review".
@@ -68,16 +75,16 @@ def build_transcript_match_snippets(
     Each snippet includes surrounding neighbor lines (``context_neighbors``),
     segment id when present, and start/end in both seconds and milliseconds.
     """
-    query_lower = (query or "").strip().lower()
+    query_norm = _normalize_text((query or "").strip())
     terms = _query_terms(query)
-    if not query_lower and not terms:
+    if not query_norm and not terms:
         return []
 
     segs = _as_segment_dicts(segments)
     if not segs:
         return []
 
-    match_idxs = [i for i, seg in enumerate(segs) if _segment_matches(str(seg.get("text") or ""), query_lower, terms)]
+    match_idxs = [i for i, seg in enumerate(segs) if _segment_matches(str(seg.get("text") or ""), query_norm, terms)]
     if not match_idxs:
         return []
 

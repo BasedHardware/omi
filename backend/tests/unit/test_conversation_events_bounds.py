@@ -155,6 +155,7 @@ def router():
         "utils.conversations.render": _pkg("utils.conversations.render"),
         "utils.conversations.process_conversation": _pkg("utils.conversations.process_conversation"),
         "utils.conversations.search": _pkg("utils.conversations.search"),
+        "utils.conversations.mcp_transcript_search": _pkg("utils.conversations.mcp_transcript_search"),
         "utils.conversations.calendar_linking": _pkg("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": _pkg("utils.conversations.calendar_utils"),
         "utils.conversations.location": _pkg("utils.conversations.location"),

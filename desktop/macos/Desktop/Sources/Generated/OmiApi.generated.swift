@@ -1329,7 +1329,6 @@ public enum OmiAPI {
     public let id: String
     public let isLocked: Bool?
     public let language: String?
-    public let matchSnippets: [TranscriptMatchSnippet]?
     public let photos: [ConversationPhoto]?
     public let pluginsResults: [PluginResult]?
     public let privateCloudSyncEnabled: Bool?
@@ -1366,7 +1365,6 @@ public enum OmiAPI {
       case id
       case isLocked = "is_locked"
       case language
-      case matchSnippets = "match_snippets"
       case photos
       case pluginsResults = "plugins_results"
       case privateCloudSyncEnabled = "private_cloud_sync_enabled"
@@ -1405,7 +1403,6 @@ public enum OmiAPI {
       id = try c.decode(String.self, forKey: .id)
       isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
       language = try c.decodeIfPresent(String.self, forKey: .language)
-      matchSnippets = try c.decodeIfPresent([TranscriptMatchSnippet].self, forKey: .matchSnippets)
       photos = try c.decodeIfPresent([ConversationPhoto].self, forKey: .photos)
       pluginsResults = try c.decodeIfPresent([PluginResult].self, forKey: .pluginsResults)
       privateCloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .privateCloudSyncEnabled)
@@ -1423,7 +1420,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, matchSnippets: [TranscriptMatchSnippet]? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1443,7 +1440,6 @@ public enum OmiAPI {
       self.id = id
       self.isLocked = isLocked
       self.language = language
-      self.matchSnippets = matchSnippets
       self.photos = photos
       self.pluginsResults = pluginsResults
       self.privateCloudSyncEnabled = privateCloudSyncEnabled
@@ -3861,48 +3857,6 @@ public enum OmiAPI {
       let c = try decoder.singleValueContainer()
       let raw = try c.decode(String.self)
       self = TaskWorkflowMode(rawValue: raw) ?? ._unknown
-    }
-  }
-
-
-  public struct TranscriptMatchSnippet: Codable {
-    public let end: Double?
-    public let endMs: Int?
-    public let segmentId: String?
-    public let speakerId: Int?
-    public let start: Double?
-    public let startMs: Int?
-    public let text: String
-
-    private enum CodingKeys: String, CodingKey {
-      case end
-      case endMs = "end_ms"
-      case segmentId = "segment_id"
-      case speakerId = "speaker_id"
-      case start
-      case startMs = "start_ms"
-      case text
-    }
-
-    public init(from decoder: Decoder) throws {
-      let c = try decoder.container(keyedBy: CodingKeys.self)
-      end = try c.decodeIfPresent(Double.self, forKey: .end)
-      endMs = try c.decodeIfPresent(Int.self, forKey: .endMs)
-      segmentId = try c.decodeIfPresent(String.self, forKey: .segmentId)
-      speakerId = try c.decodeIfPresent(Int.self, forKey: .speakerId)
-      start = try c.decodeIfPresent(Double.self, forKey: .start)
-      startMs = try c.decodeIfPresent(Int.self, forKey: .startMs)
-      text = try c.decode(String.self, forKey: .text)
-    }
-
-    public init(end: Double? = nil, endMs: Int? = nil, segmentId: String? = nil, speakerId: Int? = nil, start: Double? = nil, startMs: Int? = nil, text: String) {
-      self.end = end
-      self.endMs = endMs
-      self.segmentId = segmentId
-      self.speakerId = speakerId
-      self.start = start
-      self.startMs = startMs
-      self.text = text
     }
   }
 

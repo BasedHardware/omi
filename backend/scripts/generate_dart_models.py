@@ -33,6 +33,7 @@ SCHEMA_GROUPS = {
             'CalendarEventLink',
             'TranscriptMatchSnippet',
             'Conversation',
+            'ConversationSearchItem',
             'ConversationTestPromptResponse',
             'MergeConversationsResponse',
             'SearchConversationsResponse',
