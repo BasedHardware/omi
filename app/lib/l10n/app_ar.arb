@@ -138,6 +138,7 @@
     "offlineSync": "المزامنة دون اتصال",
     "autoSync": "المزامنة التلقائية",
     "autoSyncDescription": "مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك",
+    "omiButtonActions": "إجراءات زر Omi",
     "deviceSettings": "إعدادات الجهاز",
     "integrations": "التكاملات",
     "feedbackBug": "ملاحظات / خطأ",

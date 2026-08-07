@@ -438,6 +438,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get autoSyncDescription => 'Automatski sinkroniziraj izvanmrežne snimke kada se uređaj poveže';
 
   @override
+  String get omiButtonActions => 'Radnje gumba Omi';
+
+  @override
   String get deviceSettings => 'Postavke uređaja';
 
   @override

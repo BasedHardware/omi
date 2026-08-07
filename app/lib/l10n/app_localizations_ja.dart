@@ -431,6 +431,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
 
   @override
+  String get omiButtonActions => 'Omiボタンの操作';
+
+  @override
   String get deviceSettings => 'デバイス設定';
 
   @override

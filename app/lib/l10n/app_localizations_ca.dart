@@ -440,6 +440,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
   @override
+  String get omiButtonActions => 'Accions del botó Omi';
+
+  @override
   String get deviceSettings => 'Configuració del dispositiu';
 
   @override

@@ -440,6 +440,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get autoSyncDescription => 'Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот';
 
   @override
+  String get omiButtonActions => 'Дејства на копчето Omi';
+
+  @override
   String get deviceSettings => 'Поставки на уред';
 
   @override

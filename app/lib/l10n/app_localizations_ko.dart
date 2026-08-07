@@ -431,6 +431,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get autoSyncDescription => '기기가 연결되면 오프라인 녹음을 자동으로 동기화합니다';
 
   @override
+  String get omiButtonActions => 'Omi 버튼 동작';
+
+  @override
   String get deviceSettings => '기기 설정';
 
   @override

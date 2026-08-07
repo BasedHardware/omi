@@ -138,6 +138,7 @@
     "offlineSync": "Sincronizare offline",
     "autoSync": "Sincronizare automată",
     "autoSyncDescription": "Sincronizează automat înregistrările offline când dispozitivul tău se conectează",
+    "omiButtonActions": "Acțiuni buton Omi",
     "deviceSettings": "Setări dispozitiv",
     "integrations": "Integrări",
     "feedbackBug": "Feedback / Eroare",

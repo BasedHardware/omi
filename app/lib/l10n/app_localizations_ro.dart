@@ -440,6 +440,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get autoSyncDescription => 'Sincronizează automat înregistrările offline când dispozitivul tău se conectează';
 
   @override
+  String get omiButtonActions => 'Acțiuni buton Omi';
+
+  @override
   String get deviceSettings => 'Setări dispozitiv';
 
   @override

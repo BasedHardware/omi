@@ -436,6 +436,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
 
   @override
+  String get omiButtonActions => 'Omi-painikkeen toiminnot';
+
+  @override
   String get deviceSettings => 'Laitteen asetukset';
 
   @override

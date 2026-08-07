@@ -138,6 +138,7 @@
     "offlineSync": "Офлайн синхронізація",
     "autoSync": "Автоматична синхронізація",
     "autoSyncDescription": "Автоматично синхронізувати офлайн-записи під час підключення пристрою",
+    "omiButtonActions": "Дії кнопки Omi",
     "deviceSettings": "Налаштування пристрою",
     "integrations": "Інтеграції",
     "feedbackBug": "Відгук / Помилка",
