@@ -28,6 +28,9 @@
     },
     {
       "path": "../wire-listen"
+    },
+    {
+      "path": "../bridge-web"
     }
   ]
 }

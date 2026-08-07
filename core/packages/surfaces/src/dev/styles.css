@@ -83,3 +83,11 @@ body { margin: 0; background: Canvas; color: CanvasText; }
 .folder-list .delete:hover { opacity: 1; }
 .folder-list li.system .name { opacity: 0.85; }
 .badge.default { font-size: 12px; opacity: 0.7; white-space: nowrap; }
+
+/* Which HTTP transport the harness bound to. Visible in the harness (not just
+   the connect screen) so evidence screenshots record the mode. */
+.transport-badge { align-self: center; font-size: 11px; padding: 3px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid color-mix(in srgb, CanvasText 30%, transparent); }
+.transport-badge.bridge { font-weight: 600; }
+.transport-badge.dev { opacity: 0.65; }
+.dev-connect .transport { font-size: 13px; padding: 8px 10px; border-radius: 6px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); }
+.dev-connect .transport.bridge { font-weight: 600; }
