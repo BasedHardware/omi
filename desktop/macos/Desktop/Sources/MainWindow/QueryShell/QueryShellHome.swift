@@ -108,11 +108,12 @@ struct QueryShellHome: View {
       isQueryFocused = true
       showOnboardingOpenerIfPresent()
     }
-    // **The other half of `hidesOnDeactivate`.** The shell hides itself when you click away and the
-    // next summon re-orders the *same* window forward rather than rebuilding this view, so `onAppear`
-    // — the only thing that ever claimed the caret — never runs again. A summoned search surface that
-    // swallows the first thing you type is the whole bug. Claiming it again is idempotent when the
-    // field already has it.
+    // **Coming back to Omi puts the caret back in the field.** This surface's whole job is to be typed
+    // into, and re-activating the app is the one moment it is certain the person is here to type.
+    // `onAppear` claims the caret exactly once — the page `switch` in `DesktopHomeView` only rebuilds
+    // this view on a tab change — so anything that took the keyboard away in between (another app
+    // becoming key, a sheet, a menu) left the field cold and the next thing typed went nowhere.
+    // Idempotent when the field already has it.
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       isQueryFocused = true
     }
