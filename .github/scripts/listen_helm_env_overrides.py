@@ -73,6 +73,9 @@ def resolve_env_override_argv(
         # chart-default sentinel means "leave the values file alone", same as "".
         if value in ("", "chart-default"):
             continue
+        # workflow_dispatch choice cannot ship literal "off"; accept disabled alias.
+        if name == "OMI_LLM_GATEWAY_FEATURE_MODE" and value == "disabled":
+            value = "off"
         if name not in indices:
             raise ValueError(f"env {name} not found in values env list")
         index = indices[name]
