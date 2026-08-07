@@ -1,0 +1,19 @@
+desktop/macos/changelog/unreleased/20260807-modal-dim-stops-at-the-app.json
+  s_569f1df936cc22::t_dd8eb41c84729d 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6b3fd3ffbd7c28687b46595c313d8302b84cad73",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
