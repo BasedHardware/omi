@@ -265,10 +265,11 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   func testMemoryGraphSnapshotUsesKnowledgeGraphAPI() throws {
     let source = try bridgeSource()
     let body = try actionBody(named: "memory_graph_snapshot", in: source)
-    for key in ["node_count", "edge_count", "is_empty"] {
+    for key in ["node_count", "edge_count", "catalog_memory_count", "atlas_mark_count", "is_empty"] {
       XCTAssertTrue(body.contains("\"\(key)\""), "memory_graph_snapshot should return \(key)")
     }
     XCTAssertTrue(body.contains("getKnowledgeGraph"))
+    XCTAssertTrue(body.contains("MemoryAtlasProjection"))
   }
 
   func testMemoryAtlasHarnessActionsPostBoundedViewportNotifications() throws {

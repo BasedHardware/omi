@@ -747,11 +747,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Jūsu plāns atjaunojas $date.';
-  }
-
-  @override
   String get basicPlan => 'Bezmaksas plāns';
 
   @override
@@ -2132,16 +2127,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get editMemory => '✏️ Rediģēt atmiņu';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Piespraust kā pamatu';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Atspraust no pamata';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Pamata atmiņa';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Vienmēr kontekstā';
 
   @override
   String get memoryContentHint => 'Man patīk ēst saldējumu...';
@@ -9796,4 +9791,55 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Pārāk vecs, lai sinhronizētu — Omi to nevar pieņemt';
+
+  @override
+  String get planSheetChooseYourPlan => 'Izvēlieties savu plānu, lai atbloķētu neierobežotu Omi.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Pieejams Mac, mobilajā ierīcē un tīmeklī';
+
+  @override
+  String get popularBadge => 'POPULĀRS';
+
+  @override
+  String get worksOnDesktop => 'Darbojas datorā';
+
+  @override
+  String get noDesktopAccess => 'Nedarbojas datorā';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mēneši / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mēneši bez maksas',
+      one: '$count mēnesis bez maksas',
+      zero: '$count mēnešu bez maksas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi ir bez maksas, taču bezmaksas versijai ir ierobežojumi, kas ietekmē jūsu pieredzi:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 sekunžu aizkave (nav reāllaikā)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Pāriet uz bezmaksas versiju';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Iegūstiet bezmaksas neierobežotu piekļuvi';
+
+  @override
+  String get shareDataForTraining => 'Kopīgot datus apmācībai';
+
+  @override
+  String get yourRequestUnderReview => 'Jūsu pieprasījums tiek izskatīts';
 }

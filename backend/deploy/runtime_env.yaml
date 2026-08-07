@@ -930,6 +930,8 @@ environments:
               value: 'true'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
+              value: '25'
       workflow_files:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml

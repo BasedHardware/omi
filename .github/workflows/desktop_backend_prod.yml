@@ -547,7 +547,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
           flags: >-
             --command=python
-            --args=-m,jobs.agent_vm_reconciler
+            '--args=-m,jobs.agent_vm_reconciler'
             --max-retries=0
             --task-timeout=3600s
             --service-account=agent-vm-reconciler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
@@ -560,6 +560,7 @@ jobs:
             AGENT_VM_ENVIRONMENT=production
             AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
             AGENT_VM_ACTIVE_RELEASE_URI=${{ steps.agent-vm-release.outputs.active_manifest_uri }}
+            AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS=86400
 
       - name: Save previous Agent VM release pointer
         if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
@@ -641,7 +642,7 @@ jobs:
           restored_revision="$(gcloud run services describe "$SERVICE" \
             --project="$PROJECT_ID" \
             --region="$REGION" \
-            --format='value(status.traffic[percent=100].revisionName)')"
+            --format=json | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py)"
           if [[ "$restored_revision" != "$PREVIOUS_REVISION" ]]; then
             echo "ERROR: rollback verification found $restored_revision, expected $PREVIOUS_REVISION." >&2
             exit 1

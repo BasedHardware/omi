@@ -51,10 +51,20 @@ if ! docker info >/dev/null 2>&1; then
   fi
 fi
 
+# Agent VM base images before the immutable-container rollout boot a legacy
+# host-level Node service on port 8080. Retire only that known service before
+# taking over the listener with the release-pinned container below. The guard
+# keeps fresh images (which have no legacy unit) idempotent.
+if systemctl cat omi-agent.service >/dev/null 2>&1; then
+  systemctl disable --now omi-agent.service || true
+fi
+
 registry_token="$(metadata_access_token)"
 printf '%s' "$registry_token" | docker login --username oauth2accesstoken --password-stdin https://gcr.io >/dev/null
 docker pull "$image"
-docker rm -f omi-agent-vm >/dev/null 2>&1 || true
+if docker container inspect omi-agent-vm >/dev/null 2>&1; then
+  docker rm -f omi-agent-vm >/dev/null
+fi
 backend_env=()
 if [[ -n "$backend_url" ]]; then
   backend_env=(--env "BACKEND_URL=$backend_url")

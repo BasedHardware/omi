@@ -15,14 +15,21 @@ import google.auth.transport.requests
 import google.oauth2.id_token
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from google.cloud.firestore import DELETE_FIELD, transactional
+from google.cloud.firestore import transactional
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import users as users_db
 from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
-from services.agent_vm_lifecycle import startup_wrapper
+from services.agent_vm_lifecycle import (
+    claim_vm_lease,
+    clear_vm_reconcile_lease_fields,
+    reconcile_requested,
+    request_vm_start,
+    startup_wrapper,
+    update_vm_reconcile,
+)
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
@@ -84,18 +91,17 @@ def _now() -> str:
 
 
 def _project() -> str:
-    project = os.getenv("GCE_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
+    project = os.getenv("GCE_PROJECT_ID")
     if not project:
-        raise RuntimeError("GCE project is not configured")
+        raise RuntimeError("GCE_PROJECT_ID is required for Agent VM control")
     return project
 
 
 def _source_image(project: str) -> str:
-    return (
-        os.getenv("GCE_SOURCE_IMAGE")
-        or os.getenv("AGENT_VM_BOOT_IMAGE")
-        or f"projects/{project}/global/images/family/omi-agent"
-    )
+    source_image = os.getenv("AGENT_VM_BOOT_IMAGE", "").strip()
+    if not re.fullmatch(rf"projects/{re.escape(project)}/global/images/[^/]+", source_image):
+        raise RuntimeError("AGENT_VM_BOOT_IMAGE must name an exact immutable image in the configured GCE project")
+    return source_image
 
 
 def _gcs_bucket() -> str:
@@ -112,26 +118,29 @@ def _service_account() -> str:
     return service_account
 
 
-def _agent_vm_startup_uri(bucket: str) -> str:
-    return os.getenv("AGENT_VM_STARTUP_URI") or f"https://storage.googleapis.com/{bucket}/startup.sh"
-
-
 def _agent_vm_startup_metadata(bucket: str) -> dict[str, str]:
-    startup_uri = _agent_vm_startup_uri(bucket)
-    startup_sha256 = os.getenv("AGENT_VM_STARTUP_SHA256")
+    del bucket
+    startup_uri = os.getenv("AGENT_VM_STARTUP_URI", "").strip()
+    startup_sha256 = os.getenv("AGENT_VM_STARTUP_SHA256", "").strip()
+    release_id = os.getenv("AGENT_VM_RELEASE_ID", "").strip()
+    image_digest = os.getenv("AGENT_VM_IMAGE_DIGEST", "").strip()
+    boot_image = os.getenv("AGENT_VM_BOOT_IMAGE", "").strip()
+    if (
+        not startup_uri.startswith("https://storage.googleapis.com/")
+        or not re.fullmatch(r"[0-9a-f]{64}", startup_sha256)
+        or not re.fullmatch(r"[0-9a-f]{40}", release_id)
+        or not re.fullmatch(r".+@sha256:[0-9a-f]{64}", image_digest)
+        or not re.fullmatch(r"projects/[^/]+/global/images/[^/]+", boot_image)
+    ):
+        raise RuntimeError("Agent VM provisioning requires a complete immutable release contract")
     metadata = {
         "startup-script": startup_wrapper(startup_uri, startup_sha256),
         "omi-agent-reconciler-schema": "1",
+        "omi-agent-release": release_id,
+        "omi-agent-image-digest": image_digest,
+        "omi-agent-startup-sha256": startup_sha256,
+        "omi-agent-boot-image": boot_image,
     }
-    for key, env_name in (
-        ("omi-agent-release", "AGENT_VM_RELEASE_ID"),
-        ("omi-agent-image-digest", "AGENT_VM_IMAGE_DIGEST"),
-        ("omi-agent-startup-sha256", "AGENT_VM_STARTUP_SHA256"),
-        ("omi-agent-boot-image", "AGENT_VM_BOOT_IMAGE"),
-    ):
-        value = os.getenv(env_name)
-        if value:
-            metadata[key] = value
     return metadata
 
 
@@ -141,6 +150,22 @@ def _get_vm(uid: str) -> dict[str, Any] | None:
         return None
     vm = snapshot.to_dict().get("agentVm")
     return vm if isinstance(vm, dict) and vm.get("vmName") else None
+
+
+def _reconcile_lease_active(vm: dict[str, Any], now: float | None = None) -> bool:
+    reconcile = vm.get("reconcile")
+    lease = reconcile.get("lease") if isinstance(reconcile, dict) else None
+    if not isinstance(lease, dict):
+        return False
+    return float(lease.get("expiresAt", 0) or 0) > (time.time() if now is None else now)
+
+
+def _reconcile_in_progress(vm: dict[str, Any], now: float | None = None) -> bool:
+    return reconcile_requested(vm) or _reconcile_lease_active(vm, now)
+
+
+def _updating_vm(vm: dict[str, Any]) -> dict[str, Any]:
+    return {**vm, "status": "updating", "ip": None}
 
 
 def _validate_ready_vm_ip(status: str, ip: str | None) -> None:
@@ -247,28 +272,6 @@ def _set_vm_if_current(
         status,
         ip,
         zone,
-    )
-
-
-@transactional
-def _delete_vm_if_current_txn(transaction, user_ref, expected_vm_name: str, expected_auth_token: str) -> bool:
-    snapshot = user_ref.get(transaction=transaction)
-    current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
-    if not isinstance(current, dict):
-        return False
-    if current.get("vmName") != expected_vm_name or current.get("authToken") != expected_auth_token:
-        return False
-    transaction.update(user_ref, {"agentVm": DELETE_FIELD})
-    return True
-
-
-def _delete_vm_if_current(uid: str, expected_vm_name: str, expected_auth_token: str) -> bool:
-    client = get_firestore_client()
-    return _delete_vm_if_current_txn(
-        client.transaction(),
-        client.collection("users").document(uid),
-        expected_vm_name,
-        expected_auth_token,
     )
 
 
@@ -412,18 +415,6 @@ async def _create_vm(
     return ip
 
 
-async def _set_service_account(project: str, vm_name: str, zone: str, service_account: str) -> None:
-    token = await run_blocking(db_executor, _get_access_token)
-    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/setServiceAccount"
-    body = {"email": service_account, "scopes": [_CLOUD_PLATFORM_SCOPE]}
-    response = await _gce_request("POST", url, token, body)
-    response.raise_for_status()
-    operation = response.json().get("name")
-    if not operation:
-        raise RuntimeError("GCE set-service-account response omitted operation name")
-    await _operation(project, zone, operation)
-
-
 async def _stop_vm(project: str, vm_name: str, zone: str) -> None:
     token = await run_blocking(db_executor, _get_access_token)
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/stop"
@@ -433,24 +424,6 @@ async def _stop_vm(project: str, vm_name: str, zone: str) -> None:
     if not operation:
         raise RuntimeError("GCE stop response omitted operation name")
     await _operation(project, zone, operation)
-
-
-async def _start_vm(project: str, vm_name: str, zone: str) -> str:
-    token = await run_blocking(db_executor, _get_access_token)
-    url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}/start"
-    response = await _gce_request("POST", url, token)
-    response.raise_for_status()
-    operation = response.json().get("name")
-    if not operation:
-        raise RuntimeError("GCE start response omitted operation name")
-    await _operation(project, zone, operation)
-    _, instance = await _instance(project, zone, vm_name)
-    if instance is None:
-        raise RuntimeError("GCE restarted VM is unavailable")
-    ip = _ip(instance)
-    if ip is None:
-        raise RuntimeError("GCE restarted VM has no usable IP address")
-    return ip
 
 
 async def _delete_vm(project: str, vm_name: str, zone: str) -> None:
@@ -571,14 +544,37 @@ async def stop_self(request: Request) -> dict[str, str]:
     auth_token = str(vm.get("authToken") or "")
     if not auth_token or not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
         raise HTTPException(status_code=409, detail="Agent VM owner is no longer active")
-    status, instance = await _instance(project, zone, vm_name)
-    if instance is None:
-        raise HTTPException(status_code=404, detail="Agent VM instance not found")
-    if str(instance.get("id") or "") != instance_id or str(instance.get("name") or "") != vm_name:
-        raise HTTPException(status_code=403, detail="Agent VM runtime identity does not match the live instance")
-    if status == "RUNNING":
-        await _stop_vm(project, vm_name, zone)
-    return {"status": "stopping", "vmName": vm_name}
+    if _reconcile_in_progress(vm):
+        return {"status": "updating", "vmName": vm_name}
+    stop_owner = f"idle-stop:{uuid.uuid4().hex}"
+    claimed = await run_blocking(db_executor, claim_vm_lease, uid, vm_name, auth_token, stop_owner)
+    if not claimed:
+        return {"status": "updating", "vmName": vm_name}
+    persisted_stopped = False
+    try:
+        status, instance = await _instance(project, zone, vm_name)
+        if instance is None:
+            raise HTTPException(status_code=404, detail="Agent VM instance not found")
+        if str(instance.get("id") or "") != instance_id or str(instance.get("name") or "") != vm_name:
+            raise HTTPException(status_code=403, detail="Agent VM runtime identity does not match the live instance")
+        if status == "RUNNING":
+            await _stop_vm(project, vm_name, zone)
+            persisted_stopped = True
+            return {"status": "stopping", "vmName": vm_name}
+        if status in {"STOPPED", "TERMINATED"}:
+            persisted_stopped = True
+        return {"status": "stopped", "vmName": vm_name}
+    finally:
+        await run_blocking(
+            db_executor,
+            update_vm_reconcile,
+            uid,
+            vm_name,
+            auth_token,
+            stop_owner,
+            {"state": "ready", **clear_vm_reconcile_lease_fields()},
+            {"status": "stopped"} if persisted_stopped else None,
+        )
 
 
 async def _delete_late_vm_or_record(uid: str, project: str, vm_name: str, zone: str) -> None:
@@ -627,35 +623,6 @@ async def _provision_background(
         await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
 
 
-async def _restart_background(uid: str, project: str, vm: dict[str, Any], service_account: str) -> None:
-    vm_name = str(vm["vmName"])
-    zone = str(vm.get("zone") or _ZONE)
-    auth_token = str(vm.get("authToken") or "")
-    try:
-        await _set_service_account(project, vm_name, zone, service_account)
-        ip = await _start_vm(project, vm_name, zone)
-        await _wait_for_vm_ready(ip, auth_token)
-        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip, zone)
-    except Exception as exc:
-        logger.error("Agent VM restart failed for uid=%s: %s", uid, exc)
-        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error", None, zone)
-
-
-async def _rebootstrap_background(uid: str, project: str, vm: dict[str, Any], service_account: str) -> None:
-    vm_name = str(vm["vmName"])
-    zone = str(vm.get("zone") or _ZONE)
-    auth_token = str(vm.get("authToken") or "")
-    try:
-        await _stop_vm(project, vm_name, zone)
-        await _set_service_account(project, vm_name, zone, service_account)
-        ip = await _start_vm(project, vm_name, zone)
-        await _wait_for_vm_ready(ip, auth_token)
-        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip, zone)
-    except Exception as exc:
-        logger.error("Agent VM rebootstrap failed for uid=%s: %s", uid, exc)
-        await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error", None, zone)
-
-
 def _response(vm: dict[str, Any]) -> AgentVmResponse:
     return AgentVmResponse(
         vmName=str(vm["vmName"]),
@@ -697,6 +664,14 @@ async def provision_agent_vm(
     except AccountDeletionAccessBlocked as exc:
         raise HTTPException(status_code=403, detail="account_deletion_in_progress") from exc
     if not claimed:
+        if _reconcile_in_progress(vm):
+            return ProvisionAgentResponse(
+                status="exists",
+                vmName=str(vm["vmName"]),
+                ip=None,
+                authToken=str(vm.get("authToken") or ""),
+                agentStatus="updating",
+            )
         return ProvisionAgentResponse(
             status="exists",
             vmName=str(vm["vmName"]),
@@ -721,6 +696,8 @@ async def get_agent_status(
     vm = await run_blocking(db_executor, _get_vm, uid)
     if not vm:
         return None
+    if _reconcile_in_progress(vm):
+        return _response(_updating_vm(vm))
     status = str(vm.get("status") or "provisioning")
     if status not in {"ready", "error", "stopped"}:
         return _response(vm)
@@ -731,84 +708,53 @@ async def get_agent_status(
         logger.warning("Agent VM status check failed for uid=%s: %s", uid, exc)
         return _response(vm)
     if gce_status == "NOT_FOUND":
-        deleted = await run_blocking(
-            db_executor,
-            _delete_vm_if_current,
-            uid,
-            str(vm["vmName"]),
-            str(vm.get("authToken") or ""),
-        )
-        return None if deleted else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
+        # A provider 404 is a reconciler-owned terminal transition. Do not
+        # erase the owner pointer from a request path: it may be a late create
+        # or a session-protected record, and the reconciler has the complete
+        # deletion, demand, session, and grace-period fences.
+        return _response(_updating_vm(vm))
     if gce_status in {"TERMINATED", "STOPPED"}:
-        pending = {**vm, "status": "provisioning", "ip": None}
-        updated = await run_blocking(
+        requested = await run_blocking(
             db_executor,
-            _set_vm_if_current,
+            request_vm_start,
             uid,
             str(vm["vmName"]),
             str(vm.get("authToken") or ""),
-            "provisioning",
-            None,
-            str(vm.get("zone") or _ZONE),
         )
-        if not updated:
+        if not requested:
             return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        try:
-            service_account = _service_account()
-        except RuntimeError as exc:
-            logger.error("Agent VM restart blocked for uid=%s: %s", uid, exc)
-            await run_blocking(
-                db_executor,
-                _set_vm_if_current,
-                uid,
-                str(vm["vmName"]),
-                str(vm.get("authToken") or ""),
-                "error",
-                None,
-                str(vm.get("zone") or _ZONE),
-            )
-            return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        background_tasks.add_task(_restart_background, uid, project, vm, service_account)
-        return _response(pending)
+        return _response(_updating_vm(vm))
     if (
         gce_status == "RUNNING"
         and instance is not None
         and (status in {"error", "stopped"} or not _is_usable_vm_ip(vm.get("ip")))
     ):
-        pending = {**vm, "status": "provisioning", "ip": None}
         instance_ip = _ip(instance)
         if instance_ip is None:
-            vm_name = str(vm["vmName"])
-            auth_token = str(vm.get("authToken") or "")
-            zone = str(vm.get("zone") or _ZONE)
             logger.warning(
-                "Deleting unusable running Agent VM without an external IP for uid=%s",
+                "Deferring running Agent VM without an external IP to the reconciler for uid=%s",
                 uid,
             )
-            await _delete_vm(project, vm_name, zone)
-            deleted = await run_blocking(
+            requested = await run_blocking(
                 db_executor,
-                _delete_vm_if_current,
-                uid,
-                vm_name,
-                auth_token,
-            )
-            return None if deleted else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        try:
-            service_account = _service_account()
-        except RuntimeError as exc:
-            logger.error("Agent VM recovery blocked for uid=%s: %s", uid, exc)
-            await run_blocking(
-                db_executor,
-                _set_vm_if_current,
+                request_vm_start,
                 uid,
                 str(vm["vmName"]),
                 str(vm.get("authToken") or ""),
-                "error",
-                None,
-                str(vm.get("zone") or _ZONE),
             )
-            return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        background_tasks.add_task(_rebootstrap_background, uid, project, vm, service_account)
-        return _response(pending)
+            return (
+                _response(_updating_vm(vm))
+                if requested
+                else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
+            )
+        requested = await run_blocking(
+            db_executor,
+            request_vm_start,
+            uid,
+            str(vm["vmName"]),
+            str(vm.get("authToken") or ""),
+        )
+        return (
+            _response(_updating_vm(vm)) if requested else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
+        )
     return _response(vm)

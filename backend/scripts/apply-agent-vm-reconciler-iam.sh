@@ -9,8 +9,13 @@ fi
 
 project="${AGENT_VM_RECONCILER_PROJECT:-}"
 bucket="${AGENT_VM_RECONCILER_BUCKET:-}"
-if [[ -z "$project" || -z "$bucket" ]]; then
-  echo "AGENT_VM_RECONCILER_PROJECT and AGENT_VM_RECONCILER_BUCKET are required." >&2
+deployer="${AGENT_VM_RECONCILER_DEPLOYER:-}"
+if [[ -z "$project" || -z "$bucket" || -z "$deployer" ]]; then
+  echo "AGENT_VM_RECONCILER_PROJECT, AGENT_VM_RECONCILER_BUCKET, and AGENT_VM_RECONCILER_DEPLOYER are required." >&2
+  exit 2
+fi
+if [[ ! "$deployer" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]@[a-z][a-z0-9-]{4,28}[a-z0-9]\.iam\.gserviceaccount\.com$ ]]; then
+  echo "AGENT_VM_RECONCILER_DEPLOYER must be a full Google service-account email." >&2
   exit 2
 fi
 
@@ -20,17 +25,31 @@ role_id="omiAgentVmReconciler"
 role="projects/${project}/roles/${role_id}"
 operations_role_id="omiAgentVmReconcilerOperations"
 operations_role="projects/${project}/roles/${operations_role_id}"
-permissions="compute.disks.get,compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
+permissions="compute.disks.create,compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
+subnetwork_role_id="omiAgentVmReconcilerSubnetwork"
+subnetwork_role="projects/${project}/roles/${subnetwork_role_id}"
+subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"
 operations_permissions="compute.globalOperations.get,compute.zoneOperations.get"
 zone="us-central1-a"
+region="${zone%-*}"
 
 if ! gcloud iam service-accounts describe "$gsa" --project="$project" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$gsa_name" --project="$project" --display-name="Omi Agent VM reconciler"
 fi
+# The CI deploy identity needs actAs only on this dedicated runtime identity to
+# attach it to the Cloud Run Job. Do not grant Service Account User at project
+# scope: that would let the deployer impersonate unrelated service accounts.
+gcloud iam service-accounts add-iam-policy-binding "$gsa" --project="$project" \
+  --member="serviceAccount:${deployer}" --role=roles/iam.serviceAccountUser
 if gcloud iam roles describe "$role_id" --project="$project" >/dev/null 2>&1; then
   gcloud iam roles update "$role_id" --project="$project" --title="Omi Agent VM reconciler" --permissions="$permissions" --stage=GA
 else
   gcloud iam roles create "$role_id" --project="$project" --title="Omi Agent VM reconciler" --permissions="$permissions" --stage=GA
+fi
+if gcloud iam roles describe "$subnetwork_role_id" --project="$project" >/dev/null 2>&1; then
+  gcloud iam roles update "$subnetwork_role_id" --project="$project" --title="Omi Agent VM reconciler subnet" --permissions="$subnetwork_permissions" --stage=GA
+else
+  gcloud iam roles create "$subnetwork_role_id" --project="$project" --title="Omi Agent VM reconciler subnet" --permissions="$subnetwork_permissions" --stage=GA
 fi
 if gcloud iam roles describe "$operations_role_id" --project="$project" >/dev/null 2>&1; then
   gcloud iam roles update "$operations_role_id" --project="$project" --title="Omi Agent VM reconciler operation polling" --permissions="$operations_permissions" --stage=GA
@@ -48,9 +67,26 @@ gcloud projects add-iam-policy-binding "$project" \
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
   --condition="title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
+# An explicit dev migration may create a replacement only from the immutable
+# Agent VM image family.  Image use is evaluated against the Image resource,
+# not the instance/disk scopes above.
 gcloud projects add-iam-policy-binding "$project" \
-  --member="serviceAccount:${gsa}" --role="$operations_role"
-gcloud projects add-iam-policy-binding "$project" --member="serviceAccount:${gsa}" --role=roles/datastore.user
+  --member="serviceAccount:${gsa}" --role="$role" \
+  --condition="title=Agent VM reconciler image scope,description=Immutable omi-agent images only,expression=resource.type == 'compute.googleapis.com/Image' && resource.name.startsWith('projects/${project}/global/images/omi-agent-')"
+# Replacement VMs preserve the predecessor's default subnet and external NAT.
+# Bind the two network permissions directly on that subnetwork: Compute IAM
+# Conditions do not make the project-level instance/disk/image bindings apply
+# to a Subnetwork resource.
+gcloud compute networks subnets add-iam-policy-binding default --project="$project" --region="$region" \
+  --member="serviceAccount:${gsa}" --role="$subnetwork_role"
+gcloud projects add-iam-policy-binding "$project" \
+  --member="serviceAccount:${gsa}" --role="$operations_role" --condition=None
+# Project IAM policies containing scoped bindings require unconditional bindings
+# to say so explicitly.  The operations and datastore roles are intentionally
+# unconditioned because neither permission supports the instance resource
+# condition used above.
+gcloud projects add-iam-policy-binding "$project" \
+  --member="serviceAccount:${gsa}" --role=roles/datastore.user --condition=None
 gcloud storage buckets add-iam-policy-binding "gs://${bucket}" --member="serviceAccount:${gsa}" --role=roles/storage.objectViewer
 
 bootstrap="omi-agent-vm-bootstrap@${project}.iam.gserviceaccount.com"

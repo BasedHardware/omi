@@ -14174,11 +14174,16 @@ public enum OmiAPI {
     return try JSONDecoder().decode(MemoryDB.self, from: data)
   }
 
-  public static func deleteMemoriesV3MemoriesDelete(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func deleteMemoriesV3MemoriesDelete(client: OmiApiClient, scope: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v3/memories"
-    guard let components = URLComponents(string: client.baseURL + _path) else {
+    guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
+    var queryItems: [URLQueryItem] = []
+    if let scope {
+      queryItems.append(URLQueryItem(name: "scope", value: String(scope)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
     var req = URLRequest(url: url)
     req.httpMethod = "DELETE"

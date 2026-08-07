@@ -30,4 +30,24 @@ final class MemoryHubSidebarRoutingTests: XCTestCase {
     XCTAssertEqual(selectedIndex, SidebarNavItem.tasks.rawValue)
     XCTAssertEqual(memoryDestinationRawValue, MemoryHubDestination.conversations.rawValue)
   }
+
+  func testLegacyHomeDesignKeepsConversationsAsAStandalonePage() {
+    XCTAssertEqual(
+      MemoryHubDestination.presentation(
+        for: .conversations,
+        useLegacyHomeDesign: true
+      ),
+      .standaloneConversations
+    )
+  }
+
+  func testModernHomeDesignUsesTheMemoryHubForTheSharedRailIndex() {
+    XCTAssertEqual(
+      MemoryHubDestination.presentation(
+        for: .conversations,
+        useLegacyHomeDesign: false
+      ),
+      .memoryHub
+    )
+  }
 }

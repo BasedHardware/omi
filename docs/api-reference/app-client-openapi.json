@@ -25507,7 +25507,7 @@
     },
     "/v1/agent/vm-ensure": {
       "post": {
-        "description": "Check VM status; if stopped/terminated, restart it in the background.",
+        "description": "Queue a fenced reconciliation when the persisted VM is unavailable.",
         "operationId": "ensure_vm_v1_agent_vm_ensure_post",
         "parameters": [
           {
@@ -56363,6 +56363,22 @@
       "delete": {
         "operationId": "delete_memories_v3_memories_delete",
         "parameters": [
+          {
+            "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+              "enum": [
+                "all",
+                "default"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
