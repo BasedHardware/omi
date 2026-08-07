@@ -67,20 +67,34 @@ struct TypingIndicator: View {
 }
 
 enum ChatWorkingStatus {
-  static func motion(for message: ChatMessage?) -> ChatMarkMotion {
-    guard let name = inFlightToolName(for: message) else { return .gather }
-    return ChatMarkMotion.forTool(name)
+  /// The motion the transcript mark is allowed for `message` — or `nil` for a still mark.
+  ///
+  /// **The mark turns only while it is the row's one report of work.** Once a tool call is in
+  /// flight the row already carries a tool card that spins *and names what is running*
+  /// ("Searching the web"), so a mark turning beside it is a second spinner for a single
+  /// activity: motion with no meaning of its own, immediately next to something already saying
+  /// more. It drops to its resting frame there and goes on being what it is the rest of the
+  /// time — the assistant's identity, not a progress bar.
+  ///
+  /// This is the rule app personas have always followed: `ChatBubble` withholds their
+  /// `TypingIndicator` when the last group has a running tool. Omi's own mark was the one
+  /// indicator that did not.
+  ///
+  /// Still is also cheap. `nil` puts `ChatOmiMark` on its static branch, which *destroys* the
+  /// per-frame `TimelineView` rather than leaving it repainting behind the card — the only
+  /// version of "stop" the run loop honours.
+  static func motion(for message: ChatMessage?) -> ChatMarkMotion? {
+    guard let message, message.sender == .ai, message.isStreaming else { return nil }
+    guard !hasInFlightTool(message) else { return nil }
+    return .gather
   }
 
-  private static func inFlightToolName(for message: ChatMessage?) -> String? {
-    guard let message, message.sender == .ai else { return nil }
-    let inFlight = message.contentBlocks.last { block in
+  private static func hasInFlightTool(_ message: ChatMessage) -> Bool {
+    message.contentBlocks.contains { block in
       if case .toolCall(_, _, let status, _, _, _) = block {
         return status.isInFlight
       }
       return false
     }
-    guard case .toolCall(_, let name, _, _, _, _) = inFlight else { return nil }
-    return name
   }
 }

@@ -166,7 +166,7 @@ struct ChatBubble: View {
     .overlay(alignment: .topLeading) {
       if message.sender == .ai, app == nil, showsOmiMark {
         ChatOmiMark(
-          motion: message.isStreaming ? ChatWorkingStatus.motion(for: message) : nil,
+          motion: ChatWorkingStatus.motion(for: message),
           size: ChatOmiMarkPlacement.markSize
         )
         // `.leading`, not the default centre: the layout box is wider than the
