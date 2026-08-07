@@ -20,23 +20,6 @@ enum ChatMarkMotion: Equatable {
     case .wave: return 0.6
     }
   }
-
-  static func forTool(_ toolName: String) -> ChatMarkMotion {
-    let cleaned =
-      toolName.hasPrefix("mcp__")
-      ? String(toolName.split(separator: "__").last ?? Substring(toolName))
-      : toolName
-    let lower = cleaned.lowercased()
-    let head =
-      lower.split(separator: ":").first.map(String.init)?
-      .trimmingCharacters(in: .whitespaces) ?? lower
-
-    let acting: Set<String> = [
-      "write", "edit", "multiedit", "notebookedit", "bash",
-      "spawn_agent", "run_agent_and_wait", "send_agent_message", "run_attempt",
-    ]
-    return acting.contains(head) ? .wave : .gather
-  }
 }
 
 enum ChatOmiMarkPlacement {
