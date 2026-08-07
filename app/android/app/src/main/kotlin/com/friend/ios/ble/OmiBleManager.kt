@@ -165,9 +165,24 @@ class OmiBleManager private constructor(private val application: Application) {
         }
     }
 
+    private val adapterStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
+            mainHandler.post {
+                flutterApi?.onBluetoothStateChanged(getBluetoothState()) {}
+            }
+        }
+    }
+
     init {
         Log.i(TAG, "OmiBleManager initialized")
         application.registerReceiver(bondStateReceiver, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED))
+        ContextCompat.registerReceiver(
+            application,
+            adapterStateReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     // ── Scanning ──

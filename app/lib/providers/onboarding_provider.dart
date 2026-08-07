@@ -17,6 +17,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/audio/foreground.dart';
@@ -129,15 +130,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       Logger.debug('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
-      if (Platform.isAndroid) {
-        // Show the system "enable Bluetooth" prompt if the adapter is off.
-        // No-op when Bluetooth is already on.
-        try {
-          await BleHostApi().enableBluetooth();
-        } catch (e) {
-          Logger.debug('enableBluetooth failed: $e');
-        }
-      }
       PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
       PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
       updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
@@ -149,6 +141,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           updateLocationPermission(locationStatus.isGranted);
         }
       }
+    }
+    if (hasBluetoothPermission) {
+      await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery);
     }
     notifyListeners();
   }
@@ -293,6 +288,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       deviceAlreadyUnpaired();
     }
 
+    // Subscribe before checking the adapter so a successful enable action can
+    // retry discovery and publish its results back to this page.
+    ServiceManager.instance().device.subscribe(this, this);
+
     // check if bluetooth is enabled on both platforms
     if (!hasBluetoothPermission) {
       await askForBluetoothPermissions();
@@ -300,6 +299,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         onShowDialog();
         return;
       }
+    }
+
+    if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
+      return;
     }
 
     // Android 11 and below: location permission required for BLE scanning
@@ -320,7 +323,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       notifyListeners();
     });
 
-    ServiceManager.instance().device.subscribe(this, this);
     await deviceProvider?.initiateConnection("Onboarding");
   }
 
