@@ -119,6 +119,58 @@ const main = () => {
     calls_total_floor: batches.length + 2 * prepared.length,
   };
 
+  // --cross-cycle measures the hit rate verdict memoization would actually see
+  // BETWEEN cycles, which is the number that predicts its value -- the 100% a
+  // cold/warm replay reports is only the unchanged-ledger case. The ledger is
+  // append-only, so an earlier state is reconstructed by restricting to the
+  // first N capture sessions; no waiting on a live run required.
+  if (process.argv.includes("--cross-cycle")) {
+    const evidenceById = new Map<string, (typeof evidence)[number]>();
+    for (const item of evidence) { evidenceById.set(item.revision_id, item); evidenceById.set(item.evidence.evidence_id, item); }
+    const eventByRevision = new Map(events.map((item) => [item.revision_id, item.event]));
+    const sessionOfClaim = new Map<string, string | null>();
+    for (const entry of claims) {
+      let session: string | null = null;
+      for (const ref of [...entry.claim.evidence_refs].sort()) {
+        const item = evidenceById.get(ref);
+        const event = item ? eventByRevision.get(item.evidence.event_revision_id) : undefined;
+        if (event?.capture_session_id) { session = event.capture_session_id; break; }
+      }
+      sessionOfClaim.set(entry.revision_id, session);
+    }
+    const order: string[] = []; const seenSession = new Set<string>();
+    for (const entry of claims) { const session = sessionOfClaim.get(entry.revision_id); if (session && !seenSession.has(session)) { seenSession.add(session); order.push(session); } }
+
+    const digestsAt = (count: number): Set<string> => {
+      const keep = new Set(order.slice(0, count));
+      const inScope = (revision: string) => { const session = sessionOfClaim.get(revision); return !!session && keep.has(session); };
+      const scopedMentions = mentions.filter((mention) => inScope(mention.claim_revision_id));
+      const scopedClaims = claims.filter((entry) => inScope(entry.revision_id));
+      const scopedSurface = blockMentionClusters(scopedMentions, maxClusterSize);
+      const scopedIdentity = blockIdentityClusters(scopedMentions, maxClusterSize);
+      const scopedKeys = new Set(scopedSurface.clusters.map(clusterKey));
+      const out = new Set<string>();
+      for (const cluster of [...scopedSurface.clusters, ...scopedIdentity.clusters.filter((entry) => !scopedKeys.has(clusterKey(entry)))]) {
+        const profiles = buildReferentProfiles(cluster, scopedClaims, evidence, events);
+        if (profiles.length > 1) out.add(new Bun.CryptoHasher("sha256").update(JSON.stringify(profiles)).digest("hex"));
+      }
+      return out;
+    };
+    console.log(`sessions with derivable capture ids: ${order.length}`);
+    const steps = [20, 30, 40, 50, 60, order.length].filter((n, index, all) => n <= order.length && all.indexOf(n) === index);
+    let previous: Set<string> | null = null; let previousCount = 0;
+    for (const count of steps) {
+      const current = digestsAt(count);
+      if (previous) {
+        let hits = 0; for (const digest of current) if (previous.has(digest)) hits += 1;
+        console.log(`sessions ${previousCount} -> ${count}: clusters ${previous.size} -> ${current.size}, cache hits ${hits}/${current.size} (${current.size ? ((hits / current.size) * 100).toFixed(1) : "0.0"}%)`);
+      } else console.log(`sessions ${count}: clusters ${current.size} (baseline)`);
+      previous = current; previousCount = count;
+    }
+    db.close();
+    return;
+  }
+
   // --digests prints the verdict-cache key input per cluster, one per line, so
   // two snapshots taken at different points in a run can be diffed to measure
   // the hit rate memoization would actually see ACROSS cycles. That is the
