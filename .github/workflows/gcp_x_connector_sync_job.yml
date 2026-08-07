@@ -114,6 +114,10 @@ jobs:
         env:
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          # Required by run_x_sync_job() OAuth refresh + RapidAPI fallback.
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job x-connector-sync-job >> "$GITHUB_OUTPUT"
 

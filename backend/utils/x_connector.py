@@ -76,7 +76,6 @@ _STATE_PREFIX = 'x_oauth_state:'
 # them without a collection-group query/index. Written on connect, removed on
 # disconnect.
 _REGISTRY_COLLECTION = 'x_connector_users'
-SYNC_JOB_INTERVAL_HOURS = 6  # background sync cadence (the cron fires hourly)
 _SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 
 # Cap how much we pull per sync to stay well within X rate limits.
@@ -578,15 +577,6 @@ def disconnect(uid: str) -> None:
 # ----------------------------------------------------------------------------
 # Periodic background sync (hosted by x-connector-sync-job; Scheduler owns cadence)
 # ----------------------------------------------------------------------------
-
-
-def should_run_x_sync_job() -> bool:
-    """Legacy hour-modulo gate from when sync hitchhiked on notifications-job.
-
-    Kept for callers/tests; the dedicated Cloud Run Job must not use this —
-    Cloud Scheduler (``x-connector-sync-6h``) owns the 6h cadence.
-    """
-    return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
 
 
 async def run_x_sync_job() -> Dict:

@@ -69,10 +69,8 @@ done
 
 SNAKE_NAME="${JOB_NAME//-/_}"
 MODULE_NAME="${SNAKE_NAME}"
-# Strip trailing _job from module if already present in job name ending with -job
-if [[ "$MODULE_NAME" == *_job ]]; then
-  :
-else
+# Preserve an existing _job suffix so we do not double it (foo-job → foo_job).
+if [[ "$MODULE_NAME" != *_job ]]; then
   MODULE_NAME="${MODULE_NAME}_job"
 fi
 
@@ -155,18 +153,26 @@ text = text.replace("memory-maintenance-job", job_name)
 text = text.replace("memory_maintenance_job", module_name)
 text = text.replace("memory-maintenance-hourly", f"{job_name}-schedule")
 text = text.replace("Deploy Memory Maintenance Job to Cloud RUN", f"Deploy {job_name} to Cloud RUN")
-# Drop LLM gateway gate/probe blocks — not every job needs them.
-text = re.sub(
-    r"\n      - name: Get GKE credentials for gateway serving gate\n.*?"
-    r"\n      - name: Render maintenance runtime env from the gated gateway endpoint\n",
-    "\n      - name: Render runtime env\n",
-    text,
-    count=1,
-    flags=re.S,
-)
+# Drop LLM-gateway-only steps; keep Build / Verify / Push image pipeline intact.
+for step_name in (
+    "Get GKE credentials for gateway serving gate",
+    "Verify LLM Gateway serving data plane",
+    "Probe memory L2 gateway lane from the Cloud Run VPC",
+):
+    text = re.sub(
+        rf"\n      - name: {re.escape(step_name)}\n(?:        .*\n)*",
+        "\n",
+        text,
+        count=1,
+    )
 text = text.replace(
-    "OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}\n        run: |",
-    "run: |",
+    "      - name: Render maintenance runtime env from the gated gateway endpoint\n",
+    "      - name: Render runtime env\n",
+)
+# Remove gateway URL env binding while keeping the step-level `run: |` key.
+text = text.replace(
+    "          OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}\n        run: |",
+    "        run: |",
 )
 text = text.replace(
     "validate_memory_maintenance_scheduler.py",

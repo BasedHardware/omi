@@ -6,7 +6,21 @@ Dedicated Cloud Run Job for X (Twitter) connector incremental sync. Scheduler ow
 
 Manual: `.github/workflows/gcp_x_connector_sync_job.yml` (`workflow_dispatch`, environment `development` or `prod`).
 
-Env contract: `cloud_run.jobs.x-connector-sync-job` in `backend/deploy/runtime_env.yaml` (compose from `_base.yaml` + overlays). Secrets match the former X path on notifications-job: `SERVICE_ACCOUNT_JSON`, `ENCRYPTION_SECRET`, `OPENAI_API_KEY`, `PINECONE_API_KEY`, plus `PINECONE_INDEX_NAME`. Interactive OAuth (`X_OAUTH_*`) stays on the API / GKE backend; add those bindings to this job later if token refresh or RapidAPI fallback must run in-job.
+Env contract: `cloud_run.jobs.x-connector-sync-job` in `backend/deploy/runtime_env.yaml` (compose from `_base.yaml` + overlays). Required for `run_x_sync_job()`:
+
+- Secrets: `SERVICE_ACCOUNT_JSON`, `ENCRYPTION_SECRET`, `OPENAI_API_KEY`, `PINECONE_API_KEY`, `X_OAUTH_CLIENT_SECRET`, `RAPID_API_KEY`
+- Env: `PINECONE_INDEX_NAME`, `X_OAUTH_CLIENT_ID`, `X_OAUTH_REDIRECT_URI`, `RAPID_API_HOST`, `OMI_ENV_STAGE`
+
+Interactive OAuth connect/callback still lives on the GKE API; this job needs the same OAuth + RapidAPI bindings so incremental sync can refresh expired access tokens and use the public-timeline fallback.
+
+### Rollout order (no sync gap)
+
+Deploying a notifications-job image that no longer runs X sync **before** this job + Scheduler exist stops all incremental sync. Required sequence per environment:
+
+1. Ensure Secret Manager has `X_OAUTH_CLIENT_SECRET` / `RAPID_API_KEY`, and GitHub env vars `X_OAUTH_CLIENT_ID` / `X_OAUTH_REDIRECT_URI` / `RAPID_API_HOST` for the deploy environment.
+2. Create Scheduler SA + `x-connector-sync-6h` (below) after the Cloud Run Job resource exists (or create the job stub first).
+3. Run `gcp_x_connector_sync_job.yml` until deploy + scheduler validation both pass.
+4. Only then deploy the notifications-job revision that dropped X sync.
 
 ## Manual execute
 

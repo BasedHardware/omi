@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 MODAL_DIR = BACKEND_DIR / "modal"
 IMPORT_PURITY_SCANNER = BACKEND_DIR / "scripts" / "scan_import_time_side_effects.py"
@@ -38,6 +40,7 @@ def test_import_purity_scanner_rejects_langchain_provider_constructors():
     assert (3, "import-time constructor: OpenAIEmbeddings") in offenders
 
 
+@pytest.mark.slow
 def test_x_connector_sync_job_imports_without_provider_credentials_or_network():
     environment = dict(os.environ)
     for variable in PROVIDER_ENV_VARS:

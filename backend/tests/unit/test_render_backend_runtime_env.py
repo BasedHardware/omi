@@ -104,7 +104,7 @@ def test_selected_job_rejects_unknown_name_without_emitting_partial_output(capsy
     assert capsys.readouterr().out == ''
 
 
-def test_render_dev_emits_memory_maintenance_job_outputs():
+def test_render_dev_emits_memory_maintenance_job_outputs(monkeypatch):
     jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
     memory_job = jobs['memory-maintenance-job']
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
@@ -141,6 +141,9 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
         'TYPESENSE_HOST_PORT',
         'TYPESENSE_API_KEY',
         'PINECONE_INDEX_NAME',
+        'X_OAUTH_CLIENT_ID',
+        'X_OAUTH_REDIRECT_URI',
+        'RAPID_API_HOST',
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
     assert set(notifications_job['secrets']) == {
@@ -148,19 +151,33 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
     }
+    assert 'X_OAUTH_CLIENT_SECRET' not in notifications_job['secrets']
+    assert 'RAPID_API_KEY' not in notifications_job['secrets']
+    assert 'PINECONE_API_KEY' not in notifications_job['secrets']
 
     x_sync_job = jobs['x-connector-sync-job']
+    # env_var bindings require the same GitHub env vars the deploy workflow passes.
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     x_sync_env = _MODULE['_render_env_vars'](x_sync_job['env'])
     assert 'PINECONE_INDEX_NAME=memories-backend-dev' in x_sync_env
     assert 'OMI_ENV_STAGE=dev' in x_sync_env
+    assert 'X_OAUTH_CLIENT_ID=x-client-id' in x_sync_env
+    assert 'X_OAUTH_REDIRECT_URI=https://api.example/v1/x/callback' in x_sync_env
+    assert 'RAPID_API_HOST=twitter-api.example' in x_sync_env
     x_sync_secrets = _MODULE['_render_secrets'](x_sync_job['secrets'])
     assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in x_sync_secrets
     assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in x_sync_secrets
+    assert 'X_OAUTH_CLIENT_SECRET=X_OAUTH_CLIENT_SECRET:latest' in x_sync_secrets
+    assert 'RAPID_API_KEY=RAPID_API_KEY:latest' in x_sync_secrets
     assert set(x_sync_job['secrets']) == {
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
+        'X_OAUTH_CLIENT_SECRET',
+        'RAPID_API_KEY',
     }
 
 
@@ -172,6 +189,9 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setenv(
         'ACCOUNT_DELETION_HANDLER_URL', 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run'
     )
@@ -205,6 +225,9 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(capsys, monkeypatc
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setenv(
         'ACCOUNT_DELETION_HANDLER_URL', 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run'
     )
@@ -308,6 +331,9 @@ def test_x_connector_sync_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'x_connector_sync_job_secrets' in text
     assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
     assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
+    assert 'X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}' in text
+    assert 'X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}' in text
+    assert 'RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}' in text
     assert (
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.x_connector_sync_job_flags }}'
@@ -324,6 +350,9 @@ def test_x_connector_sync_job_workflow_passes_vpc_vars_and_checkout_sha():
 def test_selected_job_renders_x_connector_sync_outputs(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr(
         'sys.argv',
         ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'],

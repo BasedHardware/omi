@@ -867,10 +867,25 @@ environments:
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
           env:
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -1771,10 +1786,25 @@ environments:
             PINECONE_API_KEY:
               secret: PINECONE_API_KEY
               version: latest
+            X_OAUTH_CLIENT_SECRET:
+              secret: X_OAUTH_CLIENT_SECRET
+              version: latest
+            RAPID_API_KEY:
+              secret: RAPID_API_KEY
+              version: latest
           env:
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
+            X_OAUTH_CLIENT_ID:
+              env_var: X_OAUTH_CLIENT_ID
+              category: oauth_metadata
+            X_OAUTH_REDIRECT_URI:
+              env_var: X_OAUTH_REDIRECT_URI
+              category: oauth_metadata
+            RAPID_API_HOST:
+              env_var: RAPID_API_HOST
+              category: integrations
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
