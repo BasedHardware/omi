@@ -1,0 +1,4 @@
+packages:
+  - codegen
+  - packages/*
+  - shells/*
