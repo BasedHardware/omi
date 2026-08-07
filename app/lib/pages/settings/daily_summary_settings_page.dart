@@ -188,7 +188,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
       if (summaryId != null) {
         PlatformManager.instance.analytics.dailySummaryTestGenerated(date: dateStr);
 
-        // Refresh the hasDailySummaries flag so the Recap tab shows
+        // Refresh the hasDailySummaries flag now that a recap exists
         Provider.of<ConversationProvider>(context, listen: false).checkHasDailySummaries();
 
         ScaffoldMessenger.of(context).showSnackBar(

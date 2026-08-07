@@ -22,6 +22,7 @@ import 'package:omi/utils/audio/ui_sounds.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'action_item_form_sheet.dart';
 
 class ActionItemTileWidget extends StatefulWidget {
@@ -49,10 +50,6 @@ class ActionItemTileWidget extends StatefulWidget {
   @override
   State<ActionItemTileWidget> createState() => _ActionItemTileWidgetState();
 }
-
-/// Fill for a checked-off task. Green is the one place the app reads "done" as
-/// a colour; everything else stays neutral.
-const Color _completedGreen = Color(0xFF34C759);
 
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
   bool _isAnimating = false;
@@ -966,10 +963,10 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: isDone ? _completedGreen : Colors.grey.shade600,
+                                  color: isDone ? AppStyles.completedGreen : Colors.grey.shade600,
                                   width: 2,
                                 ),
-                                color: isDone ? _completedGreen : Colors.transparent,
+                                color: isDone ? AppStyles.completedGreen : Colors.transparent,
                               ),
                               child: isDone ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
                             );

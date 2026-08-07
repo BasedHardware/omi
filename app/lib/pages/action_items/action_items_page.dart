@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +16,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/audio/ui_sounds.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
 
@@ -33,6 +36,9 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
+
+  /// Items whose completion animation is still playing. See [_toggleCompletion].
+  final Set<String> _completingIds = {};
   final AppReviewService _appReviewService = AppReviewService();
 
   // Task -> goal mapping
@@ -147,6 +153,37 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         provider.loadMoreActionItems();
       }
     }
+  }
+
+  /// Checks a task off: chime and green check land on the tap, the text strikes
+  /// through, and only then is the item handed to the provider that moves it
+  /// into Completed.
+  ///
+  /// Un-checking skips all of it — undo is not an accomplishment, and pacing it
+  /// behind a celebration just makes the app feel slow.
+  Future<void> _toggleCompletion(ActionItemWithMetadata item, ActionItemsProvider provider) async {
+    final completing = !item.completed;
+    HapticFeedback.lightImpact();
+
+    if (!completing) {
+      await provider.updateActionItemState(item, false);
+      return;
+    }
+
+    UiSounds.instance.playTaskComplete();
+    setState(() => _completingIds.add(item.id));
+
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+
+    await provider.updateActionItemState(item, true);
+    // Fire the completion side effects on the intent to complete, not on
+    // `item.completed` after the await — the provider mutates the item in
+    // place, so reading it back here inverted the condition.
+    unawaited(_onActionItemCompleted());
+
+    if (!mounted) return;
+    setState(() => _completingIds.remove(item.id));
   }
 
   Future<void> _onActionItemCompleted() async {
@@ -1298,9 +1335,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
         confirmDismiss: (direction) async {
           if (direction == DismissDirection.startToEnd) {
-            HapticFeedback.lightImpact();
-            await provider.updateActionItemState(item, !item.completed);
-            if (!item.completed) _onActionItemCompleted();
+            // Same feedback as tapping the circle, so the two ways of
+            // completing a task don't behave differently.
+            await _toggleCompletion(item, provider);
             return false;
           }
           return true;
@@ -1380,6 +1417,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
     final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
+    // Show the row as done while its completion is still playing out, so the
+    // check and the strikethrough land on the tap rather than after the
+    // provider has finished moving the item.
+    final isDone = item.completed || _completingIds.contains(item.id);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1417,14 +1458,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // (the row tap drives selection there); tappable otherwise.
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: provider.isSelectionMode
-                    ? null
-                    : () async {
-                        HapticFeedback.lightImpact();
-                        await provider.updateActionItemState(item, !item.completed);
-                        if (!item.completed) _onActionItemCompleted();
-                      },
-                child: SizedBox(width: 44, height: 48, child: Center(child: _buildCheckbox(item.completed))),
+                onTap: provider.isSelectionMode ? null : () => _toggleCompletion(item, provider),
+                child: SizedBox(width: 44, height: 48, child: Center(child: _buildCheckbox(isDone))),
               ),
               // Task text
               Expanded(
@@ -1437,11 +1472,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       Text(
                         item.description,
                         style: TextStyle(
-                          color: item.completed ? Colors.grey[500] : Colors.white,
+                          color: isDone ? Colors.grey[500] : Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.2,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                          decoration: isDone ? TextDecoration.lineThrough : null,
                           decorationColor: Colors.grey[600],
                         ),
                       ),
@@ -1483,8 +1518,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return Container(
         width: 22,
         height: 22,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.amber),
-        child: const Icon(Icons.check, size: 14, color: Colors.black),
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: AppStyles.completedGreen),
+        child: const Icon(Icons.check, size: 14, color: Colors.white),
       );
     }
     // Incomplete: dashed outline circle (Joi-inspired). Quieter than a solid

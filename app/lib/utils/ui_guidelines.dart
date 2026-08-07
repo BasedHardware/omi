@@ -26,6 +26,10 @@ class AppStyles {
   static final Color textTertiary = Colors.white.withValues(alpha: 0.6);
 
   static const Color accent = Colors.blue;
+
+  /// Fill for a checked-off task. Green is the one place the app reads "done"
+  /// as a colour; everything else stays neutral.
+  static const Color completedGreen = Color(0xFF34C759);
   static final Color error = Colors.red.shade800;
   static final Color success = Colors.green.shade600;
 

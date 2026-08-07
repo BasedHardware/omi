@@ -21,9 +21,6 @@ class FolderTabs extends StatefulWidget {
   final Function(String?) onFolderSelected;
   final bool showStarredOnly;
   final VoidCallback onStarredToggle;
-  final bool showDailySummaries;
-  final VoidCallback onDailySummariesToggle;
-  final bool hasDailySummaries;
 
   const FolderTabs({
     super.key,
@@ -32,9 +29,6 @@ class FolderTabs extends StatefulWidget {
     required this.onFolderSelected,
     required this.showStarredOnly,
     required this.onStarredToggle,
-    required this.showDailySummaries,
-    required this.onDailySummariesToggle,
-    required this.hasDailySummaries,
   });
 
   @override
@@ -45,26 +39,21 @@ class _FolderTabsState extends State<FolderTabs> {
   final ScrollController _scrollController = ScrollController();
   String? _previousSelectedFolderId;
   bool _previousShowStarredOnly = false;
-  bool _previousShowDailySummaries = false;
 
   @override
   void initState() {
     super.initState();
     _previousSelectedFolderId = widget.selectedFolderId;
     _previousShowStarredOnly = widget.showStarredOnly;
-    _previousShowDailySummaries = widget.showDailySummaries;
   }
 
   @override
   void didUpdateWidget(FolderTabs oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Auto-scroll to top when selection changes
-    if (widget.selectedFolderId != _previousSelectedFolderId ||
-        widget.showStarredOnly != _previousShowStarredOnly ||
-        widget.showDailySummaries != _previousShowDailySummaries) {
+    if (widget.selectedFolderId != _previousSelectedFolderId || widget.showStarredOnly != _previousShowStarredOnly) {
       _previousSelectedFolderId = widget.selectedFolderId;
       _previousShowStarredOnly = widget.showStarredOnly;
-      _previousShowDailySummaries = widget.showDailySummaries;
       _scrollToStart();
     }
   }
@@ -121,24 +110,20 @@ class _FolderTabsState extends State<FolderTabs> {
 
   @override
   Widget build(BuildContext context) {
-    // Build ordered list of tabs: All, Recap (if available), Starred, folders
+    // Build ordered list of tabs: All, Starred, folders
     final List<Widget> tabs = [];
 
     // "All" tab always first - clears all filters when clicked
     tabs.add(
       _FolderTab(
         label: context.l10n.all,
-        isSelected: widget.selectedFolderId == null && !widget.showStarredOnly && !widget.showDailySummaries,
+        isSelected: widget.selectedFolderId == null && !widget.showStarredOnly,
         onTap: () {
           // Clear folder filter
           widget.onFolderSelected(null);
           // Clear starred filter if active
           if (widget.showStarredOnly) {
             widget.onStarredToggle();
-          }
-          // Clear daily summaries filter if active
-          if (widget.showDailySummaries) {
-            widget.onDailySummariesToggle();
           }
         },
       ),

@@ -11,6 +11,36 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
+/// "Today" / "Yesterday" / "Wed, Aug 6" from a `YYYY-MM-DD` string.
+///
+/// Shared with [DailyRecapsCarousel] so both recap surfaces label a date the
+/// same way.
+String formatCondensedRecapDate(String dateStr) {
+  final parts = dateStr.split('-');
+  if (parts.length != 3) return dateStr;
+
+  final year = int.tryParse(parts[0]) ?? 2024;
+  final month = int.tryParse(parts[1]) ?? 1;
+  final day = int.tryParse(parts[2]) ?? 1;
+
+  final date = DateTime(year, month, day);
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final yesterday = today.subtract(const Duration(days: 1));
+
+  if (date.year == today.year && date.month == today.month && date.day == today.day) {
+    return 'Today';
+  }
+  if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+    return 'Yesterday';
+  }
+
+  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  return '${weekdays[date.weekday - 1]}, ${months[month - 1]} $day';
+}
+
 class DailySummariesList extends StatefulWidget {
   const DailySummariesList({super.key});
 
@@ -210,37 +240,6 @@ class _DailySummariesListState extends State<DailySummariesList> {
     );
   }
 
-  String _formatCondensedDate(String dateStr) {
-    // dateStr is in YYYY-MM-DD format
-    final parts = dateStr.split('-');
-    if (parts.length != 3) return dateStr;
-
-    final year = int.tryParse(parts[0]) ?? 2024;
-    final month = int.tryParse(parts[1]) ?? 1;
-    final day = int.tryParse(parts[2]) ?? 1;
-
-    final date = DateTime(year, month, day);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-
-    // Check for Today and Yesterday
-    if (date.year == today.year && date.month == today.month && date.day == today.day) {
-      return 'Today';
-    }
-    if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
-      return 'Yesterday';
-    }
-
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-    final weekday = weekdays[date.weekday - 1];
-    final monthName = months[month - 1];
-
-    return '$weekday, $monthName $day';
-  }
-
   Widget _buildSummaryCard(DailySummary summary) {
     return Dismissible(
       key: ValueKey('daily-summary-${summary.id}'),
@@ -311,7 +310,7 @@ class _DailySummariesListState extends State<DailySummariesList> {
                         Row(
                           children: [
                             Text(
-                              _formatCondensedDate(summary.date),
+                              formatCondensedRecapDate(summary.date),
                               style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                               maxLines: 1,
                             ),

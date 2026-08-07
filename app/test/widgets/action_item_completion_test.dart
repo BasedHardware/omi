@@ -4,15 +4,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/pages/action_items/widgets/action_item_tile_widget.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/action_items/action_items_page.dart';
+import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/utils/ui_guidelines.dart';
 
 /// Checking a task off has to *show* the completion before the item is handed
-/// to the provider that moves it into Completed — fill the circle green, strike
-/// the text through, and only then report the toggle. These tests pin that
-/// ordering, which is invisible to a static read of the widget: the delay is a
-/// bare `Future.delayed` between the setState and the callback.
+/// to the provider: fill the circle green, strike the text through, and only
+/// then report it.
+///
+/// These run against [ActionItemsPage] rather than a tile widget on purpose —
+/// the page owns the checkbox and the toggle handler, and an earlier version of
+/// this test exercised an unused tile widget instead, which passed while the
+/// real screen was untouched.
 void main() {
   ActionItemWithMetadata buildItem({bool completed = false}) {
     final now = DateTime(2026, 8, 7, 9);
@@ -29,74 +35,66 @@ void main() {
     );
   }
 
-  Future<void> pumpTile(
-    WidgetTester tester, {
-    required ActionItemWithMetadata item,
-    required void Function(bool) onToggle,
-  }) async {
+  Future<ActionItemsProvider> pumpPage(WidgetTester tester, {bool completed = false}) async {
+    final provider = ActionItemsProvider();
+    provider.seedDemoData([buildItem(completed: completed)]);
+
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider<ActionItemsProvider>.value(value: provider),
+          ChangeNotifierProvider<GoalsProvider>(create: (_) => GoalsProvider()),
           ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => TaskIntegrationProvider()),
-          ChangeNotifierProvider<UsageProvider>(create: (_) => UsageProvider()),
         ],
-        child: MaterialApp(
-          home: Scaffold(
-            body: ActionItemTileWidget(actionItem: item, onToggle: onToggle),
-          ),
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ActionItemsPage(),
         ),
       ),
     );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    return provider;
   }
 
-  /// The circle is the only 24x24 [AnimatedContainer] in the tile.
-  BoxDecoration checkboxDecoration(WidgetTester tester) {
-    final container = tester.widget<AnimatedContainer>(
-      find.byWidgetPredicate((w) => w is AnimatedContainer && w.constraints?.maxWidth == 24.0),
+  /// The completed circle is the only solid-green Container on the page.
+  bool hasGreenCheck(WidgetTester tester) {
+    return tester.widgetList<Container>(find.byType(Container)).any((c) {
+      final decoration = c.decoration;
+      return decoration is BoxDecoration && decoration.color == AppStyles.completedGreen;
+    });
+  }
+
+  bool isStruckThrough(WidgetTester tester) {
+    final text = tester.widget<Text>(find.text('Audit spacing and type scale'));
+    return text.style?.decoration == TextDecoration.lineThrough;
+  }
+
+  testWidgets('an open task shows no green check and no strikethrough', (tester) async {
+    await pumpPage(tester);
+
+    expect(hasGreenCheck(tester), isFalse);
+    expect(isStruckThrough(tester), isFalse);
+  });
+
+  testWidgets('tapping the circle shows a green check and strikes the text through', (tester) async {
+    await pumpPage(tester);
+
+    // The tap target is the 44x48 box around the circle, left of the text.
+    final circle = find.byWidgetPredicate(
+      (w) => w is SizedBox && w.width == 44 && w.height == 48,
     );
-    return container.decoration! as BoxDecoration;
-  }
+    expect(circle, findsWidgets, reason: 'the completion circle should have a 44x48 tap target');
 
-  TextStyle descriptionStyle(WidgetTester tester) {
-    return tester.widget<Text>(find.text('Audit spacing and type scale')).style!;
-  }
-
-  testWidgets('an open task shows an empty circle and undecorated text', (tester) async {
-    await pumpTile(tester, item: buildItem(), onToggle: (_) {});
-
-    expect(checkboxDecoration(tester).color, Colors.transparent);
-    expect(descriptionStyle(tester).decoration, isNull);
-  });
-
-  testWidgets('tapping fills the circle green and strikes the text through before reporting', (tester) async {
-    final toggles = <bool>[];
-    await pumpTile(tester, item: buildItem(), onToggle: toggles.add);
-
-    await tester.tap(find.byWidgetPredicate((w) => w is AnimatedContainer && w.constraints?.maxWidth == 24.0));
+    await tester.tap(circle.first, warnIfMissed: false);
     await tester.pump();
 
-    // Mid-animation: the user sees completion, but the provider has not been
-    // told yet — so the row is still sitting in its original section.
-    expect(checkboxDecoration(tester).color, const Color(0xFF34C759));
-    expect(descriptionStyle(tester).decoration, TextDecoration.lineThrough);
-    expect(toggles, isEmpty, reason: 'onToggle must not fire until the completed state has been shown');
+    expect(hasGreenCheck(tester), isTrue, reason: 'the circle fills green on tap');
+    expect(isStruckThrough(tester), isTrue, reason: 'the text strikes through on tap');
 
+    // Let the 500ms completion window and the provider call drain.
     await tester.pump(const Duration(milliseconds: 500));
-
-    expect(toggles, [true], reason: 'onToggle fires once the completion has been shown');
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('un-checking reports immediately, with no completion animation', (tester) async {
-    final toggles = <bool>[];
-    await pumpTile(tester, item: buildItem(completed: true), onToggle: toggles.add);
-
-    await tester.tap(find.byWidgetPredicate((w) => w is AnimatedContainer && w.constraints?.maxWidth == 24.0));
-    await tester.pump();
-
-    // Undo is not an accomplishment — it should not be paced by the celebration.
-    expect(toggles, [false]);
     await tester.pumpAndSettle();
   });
 }

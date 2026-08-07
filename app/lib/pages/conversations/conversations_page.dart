@@ -7,7 +7,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
+import 'package:omi/pages/conversations/widgets/daily_recaps_carousel.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -40,6 +40,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
+  final GlobalKey<DailyRecapsCarouselState> _recapsCarouselKey = GlobalKey<DailyRecapsCarouselState>();
 
   void _refreshGoals() {}
 
@@ -244,13 +245,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return Consumer<ConversationProvider>(
       builder: (context, convoProvider, child) {
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
-        // grouped into the same date buckets. Only in the default view (no search/folder/
-        // starred/daily-summaries filter).
+        // grouped into the same date buckets. Only in the default view (no
+        // search/folder/starred filter).
         final recordingsProvider = context.watch<LocalRecordingsProvider>();
         final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
-            !convoProvider.showStarredOnly &&
-            !convoProvider.showDailySummaries;
+            !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem
@@ -276,6 +276,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               convoProvider.getInitialConversations(),
               Provider.of<FolderProvider>(context, listen: false).loadFolders(),
               recordingsProvider.refresh(),
+              _recapsCarouselKey.currentState?.refresh() ?? Future<void>.value(),
             ]);
           },
           color: Colors.deepPurpleAccent,
@@ -304,33 +305,32 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
               getProcessingConversationsWidget(convoProvider.processingConversations),
 
-              // Today's Tasks and Goals widgets - hide when showing daily recaps, search bar is active, or calendar filter is active
+              // Goals, then the recap strip — both hidden while searching or
+              // filtering by date, when the user is looking for one specific
+              // thing and a standing summary is just noise.
               Consumer<HomeProvider>(
                 builder: (context, homeProvider, _) {
                   final isSearchActive = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
                   final hasCalendarFilter = convoProvider.selectedDate != null;
-                  final prefs = SharedPreferencesUtil();
-                  if (convoProvider.showDailySummaries || isSearchActive || hasCalendarFilter) {
+                  if (isSearchActive || hasCalendarFilter) {
                     return const SliverToBoxAdapter(child: SizedBox.shrink());
                   }
-                  final showGoals = prefs.showGoalTrackerEnabled;
-                  if (!showGoals) {
-                    return const SliverToBoxAdapter(child: SizedBox.shrink());
-                  }
+                  final showGoals = SharedPreferencesUtil().showGoalTrackerEnabled;
                   return SliverToBoxAdapter(
                     child: Column(
-                      children: [if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals)],
+                      children: [
+                        if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
+                        DailyRecapsCarousel(key: _recapsCarouselKey),
+                      ],
                     ),
                   );
                 },
               ),
 
-              // Section header - show "Daily Recaps" or "Conversations" with optional recording pill.
-              // Hidden entirely when the user has zero non-discarded
-              // conversations (and isn't on the Daily Recaps view) — those
-              // users get the empty-state hero below instead.
-              if (convoProvider.showDailySummaries ||
-                  _nonDiscardedConversationCount(convoProvider) > 0 ||
+              // Section header. Hidden entirely when the user has zero
+              // non-discarded conversations — those users get the empty-state
+              // hero below instead.
+              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
                   convoProvider.isLoadingConversations ||
                   convoProvider.isFetchingConversations ||
                   _hasActiveFilter(convoProvider))
@@ -345,7 +345,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
-                            convoProvider.showDailySummaries ? context.l10n.dailyRecaps : context.l10n.conversations,
+                            context.l10n.conversations,
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                         ],
@@ -354,15 +354,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   ),
                 ),
 
-              // Folder tabs - hide when showing daily recaps OR when the user
-              // has no conversations yet (matches the title). Keep chips
-              // visible whenever a filter is active so the user can always
-              // clear it, even when the filtered result is empty.
-              if (!convoProvider.showDailySummaries &&
-                  (_nonDiscardedConversationCount(convoProvider) > 0 ||
-                      convoProvider.isLoadingConversations ||
-                      convoProvider.isFetchingConversations ||
-                      _hasActiveFilter(convoProvider)))
+              // Folder tabs - hidden when the user has no conversations yet
+              // (matches the title). Keep chips visible whenever a filter is
+              // active so the user can always clear it, even when the filtered
+              // result is empty.
+              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
+                  convoProvider.isLoadingConversations ||
+                  convoProvider.isFetchingConversations ||
+                  _hasActiveFilter(convoProvider))
                 Consumer2<FolderProvider, ConversationProvider>(
                   builder: (context, folderProvider, convoProvider, _) {
                     return SliverToBoxAdapter(
@@ -374,17 +373,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         },
                         showStarredOnly: convoProvider.showStarredOnly,
                         onStarredToggle: convoProvider.toggleStarredFilter,
-                        showDailySummaries: convoProvider.showDailySummaries,
-                        onDailySummariesToggle: convoProvider.toggleDailySummaries,
-                        hasDailySummaries: convoProvider.hasDailySummaries,
                       ),
                     );
                   },
                 ),
-              // Show daily summaries list or conversations based on filter
-              if (convoProvider.showDailySummaries)
-                const DailySummariesList()
-              else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+              if (_nonDiscardedConversationCount(convoProvider) == 0 &&
                   !hasRecordings &&
                   !convoProvider.isLoadingConversations &&
                   !convoProvider.isFetchingConversations &&

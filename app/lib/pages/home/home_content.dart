@@ -8,6 +8,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
@@ -15,7 +16,6 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -92,10 +92,13 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   child: _buildSectionHeader(
                     context,
                     context.l10n.dailyRecaps,
-                    onViewAll: () {
-                      if (!convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
-                      context.read<HomeProvider>().setIndex(1);
-                    },
+                    // Recaps are no longer a mode of the conversations page, so
+                    // this opens the recap history directly instead of
+                    // switching tabs and flipping a filter.
+                    onViewAll: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const DailyRecapsPage()),
+                    ),
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildDailyRecapsPreview(context)),
