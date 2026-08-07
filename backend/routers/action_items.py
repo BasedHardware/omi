@@ -21,6 +21,7 @@ from database.vector_db import (
     search_action_items_by_vector,
 )
 from utils.users import get_user_display_name
+from utils.share_links import build_share_url
 from utils.other import endpoints as auth
 from utils.notifications import (
     send_notification,
@@ -728,7 +729,7 @@ def share_action_items(request: ShareTasksRequest, uid: str = Depends(auth.get_c
     if result is None:
         raise HTTPException(status_code=500, detail="Failed to create share link")
 
-    return {"url": f"https://h.omi.me/tasks/{token}", "token": token}
+    return {"url": build_share_url(f"/tasks/{token}"), "token": token}
 
 
 @router.get("/v1/action-items/shared/{token}", response_model=SharedActionItemsResponse, tags=['action-items'])
