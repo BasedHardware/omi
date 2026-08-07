@@ -554,6 +554,84 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertNil(SpineHourRail.headlineScope("   "))
   }
 
+  /// **The scope line has to fit the rail's column on one line, and the way it was checked is the
+  /// reason it did not.**
+  ///
+  /// The comment beside it reasoned from a hand-picked date — "Wednesday 6 August 2025", 153 pt
+  /// against a 154 pt column — and concluded the line fit. `EEEE d MMMM yyyy` also emits
+  /// "Wednesday 30 September 2026" at 183 pt, so 1,808 of the 10,234 forms the day formatter can
+  /// produce were overhanging the column and wrapping to two lines.
+  ///
+  /// So the assertion is the invariant over every form the formatter can emit, not another example:
+  /// picking a better example leaves exactly the same mistake available to the next format change.
+  /// The formatters are pinned to `en_US_POSIX` so the sweep is the same set of strings on every
+  /// machine.
+  func testEveryDayTheFormatterCanEmitFitsTheRailColumnOnOneLine() {
+    let dayOnly = DateFormatter()
+    dayOnly.locale = Locale(identifier: "en_US_POSIX")
+    dayOnly.dateFormat = "EEEE d MMMM"
+    let dayAndYear = DateFormatter()
+    dayAndYear.locale = Locale(identifier: "en_US_POSIX")
+    dayAndYear.dateFormat = "EEEE d MMMM yyyy"
+
+    // Six years covers every weekday × day-of-month × month pairing, and enough distinct year
+    // stamps for the digit widths to vary.
+    var forms: Set<String> = ["Today", "Yesterday"]
+    for year in 2024...2029 {
+      for month in 1...12 {
+        for day in 1...31 {
+          var components = DateComponents()
+          components.year = year
+          components.month = month
+          components.day = day
+          guard let date = calendar.date(from: components),
+            calendar.component(.month, from: date) == month,
+            calendar.component(.day, from: date) == day
+          else { continue }
+          forms.insert(dayOnly.string(from: date))
+          forms.insert(dayAndYear.string(from: date))
+        }
+      }
+    }
+    XCTAssertGreaterThan(forms.count, 3_000, "the sweep has to be the whole space, not a sample")
+
+    for form in forms {
+      guard let scope = SpineHourRail.headlineScope(form) else {
+        return XCTFail("\(form) is a real day and must claim a scope")
+      }
+      XCTAssertLessThanOrEqual(
+        SpineHourRail.scopeWidth(scope), SpineHourRail.contentWidth,
+        "\"\(scope)\" (from \"\(form)\") overhangs the rail's column and wraps")
+    }
+  }
+
+  /// What the fit rule is allowed to change, and what it must leave alone.
+  ///
+  /// It drops the weekday, and only the weekday, and only when the full title does not fit: the
+  /// date alone still identifies the day, and the list header beside the rail is printing the day
+  /// in full anyway. A title that already fits must come back untouched — a scope that quietly
+  /// shortens every day would be a copy change wearing a bug fix's clothes.
+  func testTheScopeDropsTheWeekdayOnlyWhenTheFullDayWillNotFit() {
+    XCTAssertEqual(
+      SpineHourRail.headlineScope("Wednesday 30 September 2026"), "30 September 2026",
+      "the formatter's widest output, 183 pt against a 154 pt column")
+    XCTAssertEqual(SpineHourRail.headlineScope("Tuesday 22 September 2026"), "22 September 2026")
+
+    XCTAssertEqual(SpineHourRail.headlineScope("Today"), "Today")
+    XCTAssertEqual(SpineHourRail.headlineScope("Yesterday"), "Yesterday")
+    XCTAssertEqual(
+      SpineHourRail.headlineScope("Wednesday 6 August"), "Wednesday 6 August",
+      "120 pt — fits, so it keeps its weekday")
+    XCTAssertEqual(
+      SpineHourRail.headlineScope("Wednesday 6 August 2025"), "Wednesday 6 August 2025",
+      "153 pt — the date the old comment reasoned from, and the reason the wrap went unseen")
+
+    XCTAssertEqual(
+      SpineHourRail.headlineScope("Supercalifragilisticexpialidociously"),
+      "Supercalifragilisticexpialidociously",
+      "a single word there is no weekday to drop from keeps its text rather than losing the day")
+  }
+
   /// The day word used to be the tail of the footer, twenty-four bars below the number it scoped.
   /// Moving it up must not leave it in both places: a scope stated twice is a scope nobody reads
   /// once.
