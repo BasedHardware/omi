@@ -66,51 +66,36 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
 
 
 def test_claim_allows_replacement_when_reconciler_marked_missing():
-    class Snapshot:
-        def __init__(self, data, exists=True):
-            self._data = data
-            self.exists = exists
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
-        def to_dict(self):
-            return self._data
-
-    class Ref:
-        def __init__(self, data, exists=True):
-            self._data = data
-            self.exists = exists
-            self.writes = []
-
-        def get(self, transaction=None):
-            del transaction
-            return Snapshot(self._data, exists=self.exists)
-
-        def set(self, data, merge=False):
-            self.writes.append((data, merge))
-            self._data = {**(self._data or {}), **data} if merge else data
-
-    class Transaction:
-        def set(self, ref, data, merge=False):
-            ref.set(data, merge=merge)
-
-    user_ref = Ref(
+    database = StrictFirestore(
         {
-            "agentVm": {
-                "vmName": "omi-agent-stale",
-                "authToken": "old",
-                "status": "ready",
-                "reconcile": {"state": "missing", "missingSince": 1.0},
+            ("users", "uid"): {
+                "agentVm": {
+                    "vmName": "omi-agent-stale",
+                    "authToken": "old",
+                    "status": "ready",
+                    "reconcile": {"state": "missing", "missingSince": 1.0},
+                }
             }
         }
     )
-    deletion_ref = Ref({}, exists=False)
     candidate = {"vmName": "omi-agent-new", "status": "provisioning", "authToken": "new"}
     raw = getattr(desktop_agent_vm._claim_vm_if_allowed_txn, "to_wrap", desktop_agent_vm._claim_vm_if_allowed_txn)
 
-    claimed_vm, claimed = raw(Transaction(), deletion_ref, user_ref, candidate)
+    claimed_vm, claimed = raw(
+        database.transaction(),
+        database.collection("account_deletions").document("uid"),
+        database.collection("users").document("uid"),
+        candidate,
+    )
 
     assert claimed is True
     assert claimed_vm == candidate
-    assert user_ref.writes
+    stored = database.rows[("users", "uid")]["agentVm"]
+    assert stored == candidate
+    assert "reconcile" not in stored
+    assert database.transactions[-1].updates[-1][1] == {"agentVm": candidate}
 
 
 @pytest.mark.asyncio

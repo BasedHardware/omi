@@ -191,6 +191,11 @@ def _claim_vm_if_allowed_txn(
         # the reconciler's terminal-cleanup grace to erase the record.
         if not (isinstance(reconcile, dict) and reconcile.get("state") == "missing"):
             return current, False
+        # Replace the entire agentVm map. set(..., merge=True) recursively
+        # preserves nested reconcile.state/missingSince and would leave the
+        # replacement permanently treated as reconcile-in-progress.
+        transaction.update(user_ref, {"agentVm": candidate})
+        return candidate, True
     transaction.set(user_ref, {"agentVm": candidate}, merge=True)
     return candidate, True
 
