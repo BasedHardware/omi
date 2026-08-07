@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  s_569f1df936cc22::t_f4451b59bf287d 126-167
+desktop/macos/changelog/unreleased/20260806-home-brain-map-control.json
+  s_569f1df936cc22::t_33fce2ebf171f2 1-3
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_daa3c2bc84d452 369,373,377-378,380,384,387-393,395
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_dafe8b0463b3e3 187-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5289f79350b6ef241b6e8c76a53d83cad700b57c",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
