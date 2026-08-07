@@ -25,7 +25,7 @@ import {
   type BridgeHttpRequest,
 } from "@omi-core/contracts";
 import { bridgeHttpClient, isBridgeHttpAvailable } from "@omi-core/bridge-web";
-import { classifyStatus } from "@omi-core/adapters-legacy";
+import { classifyStatus } from "@omi-core/kernel";
 
 /** Install a fake shell handler; returns the requests it saw. */
 function installShell(reply: (req: BridgeHttpRequest) => BridgeHttpReply | Promise<BridgeHttpReply>): {

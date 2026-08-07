@@ -1,5 +1,6 @@
+# Generators are plain scripts in scripts/ (gen-barrels, gen-bridge-swift), not a
+# workspace package — ruled 2026-08-07; revisit only if a generator needs dependencies.
 packages:
   - contracts
-  - codegen
   - packages/*
   - shells/*

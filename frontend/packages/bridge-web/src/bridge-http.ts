@@ -15,7 +15,7 @@
  *
  * Failure policy: this binding NEVER throws and never invents taxonomy. Every
  * outcome becomes an `HttpResponse`, using the contract's documented
- * `BRIDGE_HTTP_FAILURE_STATUS` mapping so `classifyStatus` in adapters-legacy
+ * `BRIDGE_HTTP_FAILURE_STATUS` mapping so `classifyStatus` in @omi-core/kernel
  * remains the one place a status becomes a `WriteFailure`.
  */
 
@@ -25,10 +25,9 @@ import {
   type BridgeHttpMethod,
   type BridgeHttpReply,
   type BridgeHttpRequest,
+  type HttpClient,
+  type HttpResponse,
 } from "@omi-core/contracts";
-// Type-only: the seam lives with the adapters that consume it. Erased at
-// runtime, so this adds no dependency edge to the bundle.
-import type { HttpClient, HttpResponse } from "@omi-core/adapters-legacy";
 
 /** The reply-capable handler a shell installs. Narrow by design. */
 interface ReplyHandler {

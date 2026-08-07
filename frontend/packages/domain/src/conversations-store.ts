@@ -20,8 +20,8 @@ import {
   conversationsTransport,
   fetchConversationIdSnapshot,
   fetchConversations,
-  type HttpClient,
 } from "@omi-core/adapters-legacy";
+import type { HttpClient } from "@omi-core/contracts";
 import {
   buildDeleteConversation,
   buildPatchConversation,

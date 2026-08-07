@@ -9,14 +9,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FolderOp } from "@omi-core/contracts";
 import {
-  classifyStatus,
   fetchFolderIdSnapshot,
   foldersTransport,
   sendFolderOp,
   wireToFolder,
-  type HttpClient,
-  type HttpResponse,
 } from "@omi-core/adapters-legacy";
+import { classifyStatus } from "@omi-core/kernel";
+import { type HttpClient, type HttpResponse } from "@omi-core/contracts";
 
 class ScriptedHttp implements HttpClient {
   public readonly calls: { method: string; path: string; body?: unknown }[] = [];

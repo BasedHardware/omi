@@ -19,8 +19,8 @@ import {
   fetchFolderIdSnapshot,
   fetchFolders,
   foldersTransport,
-  type HttpClient,
 } from "@omi-core/adapters-legacy";
+import type { HttpClient } from "@omi-core/contracts";
 import {
   buildCreateFolder,
   buildDeleteFolder,

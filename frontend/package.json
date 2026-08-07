@@ -2,7 +2,7 @@
   "name": "omi-core",
   "private": true,
   "version": "0.0.0",
-  "description": "Omi shared product core — contracts, codegen, packages, shells (WS-002)",
+  "description": "Omi shared product core \u2014 contracts, codegen, packages, shells (WS-002)",
   "engines": {
     "node": ">=22.19.0"
   },
@@ -11,7 +11,8 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "codegen": "pnpm --filter @omi-core/codegen run generate",
-    "codegen:check": "pnpm --filter @omi-core/codegen run check"
+    "codegen": "node scripts/gen-bridge-swift.mjs",
+    "codegen:check": "node scripts/gen-bridge-swift.mjs --check",
+    "verify": "pnpm -r build && pnpm -r test && node scripts/check-isolation.mjs && node scripts/gen-barrels.mjs --check && node scripts/check-structure.mjs && node scripts/gen-bridge-swift.mjs --check"
   }
 }

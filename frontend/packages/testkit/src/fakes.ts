@@ -138,9 +138,9 @@ export class ScriptedTransport {
 /** Scriptable HttpClient for adapter/store tests: FIFO responses, call log. */
 export class ScriptedHttp {
   public readonly calls: { method: string; path: string; body?: unknown }[] = [];
-  private script: import("@omi-core/adapters-legacy").HttpResponse[] = [];
+  private script: import("@omi-core/contracts").HttpResponse[] = [];
 
-  respond(...responses: import("@omi-core/adapters-legacy").HttpResponse[]): void {
+  respond(...responses: import("@omi-core/contracts").HttpResponse[]): void {
     this.script.push(...responses);
   }
 
@@ -148,7 +148,7 @@ export class ScriptedHttp {
     method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     body?: unknown,
-  ): Promise<import("@omi-core/adapters-legacy").HttpResponse> {
+  ): Promise<import("@omi-core/contracts").HttpResponse> {
     this.calls.push(body === undefined ? { method, path } : { method, path, body });
     return this.script.shift() ?? { status: 500, json: null };
   }

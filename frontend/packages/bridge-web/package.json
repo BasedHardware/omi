@@ -12,7 +12,6 @@
     "lint": "echo bridge-web:no-lint-yet"
   },
   "dependencies": {
-    "@omi-core/adapters-legacy": "workspace:*",
     "@omi-core/contracts": "workspace:*"
   },
   "devDependencies": {
