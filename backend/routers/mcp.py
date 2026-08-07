@@ -27,6 +27,10 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from models.conversation import AppResult
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    resolve_mcp_conversation_search_ids,
+)
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
@@ -450,6 +454,18 @@ class SimpleTranscriptSegment(BaseModel):
     end: float
 
 
+class TranscriptMatchSnippet(BaseModel):
+    """Grep-style transcript evidence for MCP search hits (#6621)."""
+
+    text: str
+    segment_id: Optional[str] = None
+    start: Optional[float] = None
+    end: Optional[float] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+    speaker_id: Optional[int] = None
+
+
 class SimpleConversation(BaseModel):
     id: str
     started_at: Optional[datetime]
@@ -457,6 +473,7 @@ class SimpleConversation(BaseModel):
     structured: SimpleStructured
     language: Optional[str] = None
     apps_results: List[AppResult] = []
+    match_snippets: List[TranscriptMatchSnippet] = []
 
 
 class FullConversation(SimpleConversation):
@@ -542,12 +559,24 @@ def search_conversations(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
 
-    conversation_ids = vector_db.query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+    # Summary vectors miss transcript-only phrases; merge transcript-chunk hits and
+    # attach grep-style snippets from hydrated segments (#6621).
+    conversation_ids = resolve_mcp_conversation_search_ids(
+        uid,
+        query,
+        limit=limit,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        query_vectors=vector_db.query_vectors,
+        search_transcript_chunks=vector_db.search_transcript_chunks,
+    )
     if not conversation_ids:
         return []
 
     conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
     redact_conversations_for_list(conversations)
+    # Snippets after redaction so locked list rows never leak transcript evidence (#6621).
+    conversations = attach_match_snippets_to_conversations(conversations, query)
     valid = []
     for conv in conversations:
         try:

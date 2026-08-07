@@ -124,7 +124,9 @@ class TestRestSearchUtcBounds:
             captured.update(starts_at=starts_at, ends_at=ends_at, k=k)
             return []
 
-        with patch.object(mcp_router.vector_db, 'query_vectors', side_effect=_query_vectors):
+        with patch.object(mcp_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
+            mcp_router.vector_db, 'search_transcript_chunks', return_value=[]
+        ):
             mcp_router.search_conversations(
                 query='hi',
                 start_date='2026-08-01',
@@ -142,7 +144,9 @@ class TestRestSearchUtcBounds:
             captured.update(starts_at=starts_at, ends_at=ends_at, k=k)
             return []
 
-        with patch.object(mcp_router.vector_db, 'query_vectors', side_effect=_query_vectors):
+        with patch.object(mcp_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
+            mcp_router.vector_db, 'search_transcript_chunks', return_value=[]
+        ):
             mcp_router.search_conversations(query='hi', end_date='2026-08-01', uid='user-1')
 
         # 2026-08-01T23:59:59.999999Z, not 2026-08-01T00:00:00Z (naive local parse).
@@ -167,7 +171,9 @@ class TestSseSearchUtcBounds:
             captured.update(starts_at=starts_at, ends_at=ends_at, k=k)
             return []
 
-        with patch.object(mcp_sse_router.vector_db, 'query_vectors', side_effect=_query_vectors):
+        with patch.object(mcp_sse_router.vector_db, 'query_vectors', side_effect=_query_vectors), patch.object(
+            mcp_sse_router.vector_db, 'search_transcript_chunks', return_value=[]
+        ):
             mcp_sse_router.execute_tool(
                 'user-1',
                 'search_conversations',
