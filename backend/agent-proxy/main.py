@@ -40,6 +40,7 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from services.agent_vm_lifecycle import (
     SESSION_LEASE_TTL_SECONDS,
     claim_session_lease,
+    demoted_updating_vm,
     heartbeat_session_lease,
     reconcile_requested,
     release_session_lease,
@@ -247,7 +248,7 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
         vm_name,
         health_failed,
     )
-    return {**vm, "status": "updating", "ip": None}
+    return demoted_updating_vm(vm)
 
 
 async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120) -> bool:

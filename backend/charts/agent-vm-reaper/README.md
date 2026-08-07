@@ -17,8 +17,10 @@ desktop agent leaves a permanent disk (~$5/mo).
 | `RUNNING` | `creationTimestamp` older than **2d** |
 
 After a TERMINATED VM is deleted, `GET /v2/agent/status` sees `NOT_FOUND`,
-clears Firestore `agentVm`, and the desktop client re-provisions + re-uploads
-its DB (`AgentVMService`).
+demotes the client-facing status to `updating`, and queues fenced reconciler
+demand. The reconciler records `missing` and clears Firestore `agentVm` after
+its grace/session fences, after which the desktop client re-provisions +
+re-uploads its DB (`AgentVMService`).
 
 ## Apply (refuse-by-default)
 

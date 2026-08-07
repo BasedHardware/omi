@@ -285,6 +285,7 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
         "status": "ready",
         "createdAt": "2026-07-26T00:00:00Z",
     }
+    requests = []
 
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -296,11 +297,75 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
+    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
     assert response.status == "updating"
     assert response.ip is None
+    assert requests == [("uid", "omi-agent-stale", "old-token")]
+
+
+@pytest.mark.asyncio
+async def test_status_preserves_ready_when_gce_probe_fails(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-blip",
+        "zone": "us-central1-a",
+        "ip": "34.1.2.3",
+        "authToken": "token",
+        "status": "ready",
+        "createdAt": "2026-07-26T00:00:00Z",
+    }
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def probe_failed(*_args):
+        raise RuntimeError("GCE unavailable")
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_instance", probe_failed)
+    monkeypatch.setattr(
+        desktop_agent_vm, "request_vm_start", lambda *_args: pytest.fail("API blip must preserve ownership")
+    )
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response.status == "ready"
+    assert response.ip == "34.1.2.3"
+
+
+@pytest.mark.asyncio
+async def test_status_leaves_ready_running_instance_unchanged(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-live",
+        "zone": "us-central1-a",
+        "ip": "34.1.2.3",
+        "authToken": "token",
+        "status": "ready",
+        "createdAt": "2026-07-26T00:00:00Z",
+    }
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def running(*_args):
+        return "RUNNING", {"networkInterfaces": [{"accessConfigs": [{"natIP": "34.1.2.3"}]}]}
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_instance", running)
+    monkeypatch.setattr(
+        desktop_agent_vm, "request_vm_start", lambda *_args: pytest.fail("healthy ready VM must not queue repair")
+    )
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response.status == "ready"
+    assert response.ip == "34.1.2.3"
 
 
 @pytest.mark.asyncio

@@ -23,9 +23,14 @@ from database import users as users_db
 from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import (
+    apply_agent_vm_read_decision,
     claim_vm_lease,
+    classify_provider_observation,
     clear_vm_reconcile_lease_fields,
-    reconcile_requested,
+    decide_agent_vm_read,
+    demoted_updating_vm,
+    reconcile_in_progress,
+    reconcile_lease_active,
     request_vm_start,
     startup_wrapper,
     update_vm_reconcile,
@@ -153,19 +158,15 @@ def _get_vm(uid: str) -> dict[str, Any] | None:
 
 
 def _reconcile_lease_active(vm: dict[str, Any], now: float | None = None) -> bool:
-    reconcile = vm.get("reconcile")
-    lease = reconcile.get("lease") if isinstance(reconcile, dict) else None
-    if not isinstance(lease, dict):
-        return False
-    return float(lease.get("expiresAt", 0) or 0) > (time.time() if now is None else now)
+    return reconcile_lease_active(vm, now)
 
 
 def _reconcile_in_progress(vm: dict[str, Any], now: float | None = None) -> bool:
-    return reconcile_requested(vm) or _reconcile_lease_active(vm, now)
+    return reconcile_in_progress(vm, now)
 
 
 def _updating_vm(vm: dict[str, Any]) -> dict[str, Any]:
-    return {**vm, "status": "updating", "ip": None}
+    return demoted_updating_vm(vm)
 
 
 def _validate_ready_vm_ip(status: str, ip: str | None) -> None:
@@ -693,6 +694,7 @@ async def get_agent_status(
 ) -> AgentVmResponse | None:
     if _agent_disabled():
         return None
+    del background_tasks
     vm = await run_blocking(db_executor, _get_vm, uid)
     if not vm:
         return None
@@ -704,16 +706,24 @@ async def get_agent_status(
     try:
         project = _project()
         gce_status, instance = await _instance(project, str(vm.get("zone") or _ZONE), str(vm["vmName"]))
+        observation = classify_provider_observation(gce_status=gce_status)
     except Exception as exc:
         logger.warning("Agent VM status check failed for uid=%s: %s", uid, exc)
+        # GCE UNKNOWN / API blip — do not wipe Firestore ownership.
         return _response(vm)
-    if gce_status == "NOT_FOUND":
-        # A provider 404 is a reconciler-owned terminal transition. Do not
-        # erase the owner pointer from a request path: it may be a late create
-        # or a session-protected record, and the reconciler has the complete
-        # deletion, demand, session, and grace-period fences.
-        return _response(_updating_vm(vm))
-    if gce_status in {"TERMINATED", "STOPPED"}:
+    usable_cached_ip: bool | None = None
+    if observation.kind == "running":
+        usable_cached_ip = _is_usable_vm_ip(vm.get("ip"))
+        if instance is not None and not usable_cached_ip and _ip(instance) is None:
+            logger.warning(
+                "Deferring running Agent VM without an external IP to the reconciler for uid=%s",
+                uid,
+            )
+    decision = decide_agent_vm_read(vm, observation, usable_cached_ip=usable_cached_ip)
+    if decision.queue_start:
+        # Provider 404 / stopped / repairable running: queue fenced reconciler
+        # demand. Do not erase the owner pointer here — the reconciler owns
+        # missing/grace/session fences and eventual terminal cleanup.
         requested = await run_blocking(
             db_executor,
             request_vm_start,
@@ -723,38 +733,4 @@ async def get_agent_status(
         )
         if not requested:
             return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        return _response(_updating_vm(vm))
-    if (
-        gce_status == "RUNNING"
-        and instance is not None
-        and (status in {"error", "stopped"} or not _is_usable_vm_ip(vm.get("ip")))
-    ):
-        instance_ip = _ip(instance)
-        if instance_ip is None:
-            logger.warning(
-                "Deferring running Agent VM without an external IP to the reconciler for uid=%s",
-                uid,
-            )
-            requested = await run_blocking(
-                db_executor,
-                request_vm_start,
-                uid,
-                str(vm["vmName"]),
-                str(vm.get("authToken") or ""),
-            )
-            return (
-                _response(_updating_vm(vm))
-                if requested
-                else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-            )
-        requested = await run_blocking(
-            db_executor,
-            request_vm_start,
-            uid,
-            str(vm["vmName"]),
-            str(vm.get("authToken") or ""),
-        )
-        return (
-            _response(_updating_vm(vm)) if requested else _response(await run_blocking(db_executor, _get_vm, uid) or vm)
-        )
-    return _response(vm)
+    return _response(apply_agent_vm_read_decision(vm, decision))
