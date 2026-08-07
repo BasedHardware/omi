@@ -1,0 +1,33 @@
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
+  s_569f1df936cc22::t_73fccdd337da5f 947-951,954-961,963-971
+  s_569f1df936cc22::t_1e79f0327d1163 313-316
+  s_569f1df936cc22::t_4caf9c981f56c9 708-711
+  s_569f1df936cc22::t_61757b3e25c953 706-707
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
+  s_569f1df936cc22::t_e4c681310337d8 687-688,691-698,700-708
+  s_569f1df936cc22::t_280fa698b922e0 65-107
+  s_569f1df936cc22::t_17a1cadc84330b 525-526
+  s_569f1df936cc22::t_8c6d37ae9f4e13 715
+desktop/macos/Desktop/Tests/ChatScrollLiveEdgeTests.swift
+  s_569f1df936cc22::t_096bc9cc49354a 144,147-153
+  s_569f1df936cc22::t_ad583ed6f35186 102,104-143,145-146,154-163
+  s_569f1df936cc22::t_19c8c34dead63f 103
+desktop/macos/Desktop/Tests/ChatTranscriptGestureHarnessTests.swift
+  s_569f1df936cc22::t_785d1397b54b43 79-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "26077e589c3101b0db2062afe29f249fca3df710",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
