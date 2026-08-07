@@ -22,11 +22,11 @@ export interface PluginCardProps {
 
 const getCapabilityColor = (capability: string): string => {
   const colors: Record<string, string> = {
-    'ai-powered': 'bg-indigo-500/15 text-indigo-300',
+    'ai-powered': 'bg-amber-500/15 text-amber-300',
     memories: 'bg-rose-500/15 text-rose-300',
     notification: 'bg-emerald-500/15 text-emerald-300',
     integration: 'bg-sky-500/15 text-sky-300',
-    chat: 'bg-violet-500/15 text-violet-300',
+    chat: 'bg-teal-500/15 text-teal-300',
   };
   return colors[capability.toLowerCase()] ?? 'bg-gray-700/20 text-gray-300';
 };

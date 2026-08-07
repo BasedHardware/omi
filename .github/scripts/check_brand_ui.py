@@ -41,6 +41,11 @@ PURPLE_PATTERNS = [
     re.compile(r"--purple-"),
     re.compile(r"""['"]Purple['"]"""),
     re.compile(r"""\bpurple\b""", re.I),  # CSS: color: purple; also catches bare "purple" references
+    # Tailwind's other purple ramps. `violet` and `indigo` read as purple on
+    # screen but spell nothing like it, so they slipped past every pattern
+    # above: the web marketplace shipped a violet promo card and two violet
+    # category themes while this check reported OK.
+    re.compile(r"\b(?:violet|indigo|fuchsia)-\d{2,4}\b"),
 ]
 
 
