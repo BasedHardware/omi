@@ -65,7 +65,10 @@ async function buildAndServe(): Promise<void> {
       cwd: root,
       stdout: 'inherit',
       stderr: 'inherit',
-      env: { ...process.env },
+      // Without a port the server picks a free one, so every rebuild moves the
+      // origin and Firebase drops the signed-in session with it — you re-auth
+      // after each save. Pin it; PORT still overrides.
+      env: { PORT: '3000', ...process.env },
     });
   } finally {
     building = false;
