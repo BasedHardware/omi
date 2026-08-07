@@ -11,7 +11,6 @@ import { AudioModeSelector } from '@/components/recording/AudioModeSelector';
 import { RecordingControls } from '@/components/recording/RecordingControls';
 import { LiveTranscript } from '@/components/recording/LiveTranscript';
 import { cn } from '@/lib/utils';
-import { RECORDING_ENABLED } from '@/lib/featureFlags';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 /**
@@ -89,28 +88,22 @@ function RecordPageContent() {
             <button
               type="button"
               onClick={handleStartClick}
-              disabled={!RECORDING_ENABLED}
               aria-label="Start recording"
               className={cn(
                 'group relative w-32 h-32 rounded-full flex items-center justify-center',
                 'transition-all duration-200 outline-none',
                 'focus-visible:ring-2 focus-visible:ring-text-primary/60 focus-visible:ring-offset-4 focus-visible:ring-offset-bg-primary',
-                RECORDING_ENABLED
-                  ? 'bg-text-primary text-bg-primary hover:scale-105 active:scale-95'
-                  : 'bg-bg-tertiary text-text-quaternary border border-stroke cursor-not-allowed',
+                'bg-text-primary text-bg-primary hover:scale-105 active:scale-95',
               )}
             >
               <Mic className="w-12 h-12" strokeWidth={1.5} />
             </button>
 
             <div className="max-w-sm space-y-2">
-              <p className="text-lg font-medium text-text-primary">
-                {RECORDING_ENABLED ? 'Start recording' : 'Recording is coming soon'}
-              </p>
+              <p className="text-lg font-medium text-text-primary">Start recording</p>
               <p className="text-sm text-text-tertiary">
-                {RECORDING_ENABLED
-                  ? 'Live transcription with speaker identification, straight from your browser.'
-                  : 'Record conversations directly from your browser with live transcription.'}
+                Live transcription with speaker identification, straight from your
+                browser.
               </p>
             </div>
           </div>
