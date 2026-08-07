@@ -47,7 +47,8 @@ class ConversationProvider extends ChangeNotifier {
   bool showStarredOnly = false; // filter to show only starred conversations
   bool showDailySummaries = false; // filter to show daily summaries instead of conversations
   bool hasDailySummaries = false; // whether user has any daily summaries
-  DateTime? selectedDate;
+  DateTime? selectedStartDate;
+  DateTime? selectedEndDate;
   String? selectedFolderId;
   String? selectedSpeakerId;
 
@@ -139,7 +140,8 @@ class ConversationProvider extends ChangeNotifier {
     isSelectionModeActive = false;
     showDailySummaries = false;
     hasDailySummaries = false;
-    selectedDate = null;
+    selectedStartDate = null;
+    selectedEndDate = null;
     selectedFolderId = null;
     selectedSpeakerId = null;
     previousQuery = '';
@@ -600,12 +602,13 @@ class ConversationProvider extends ChangeNotifier {
         }
       }
 
-      // Apply date filter if selected
-      if (selectedDate != null) {
+      // Apply date range filter if selected
+      if (selectedStartDate != null && selectedEndDate != null) {
         var effectiveDate = convo.startedAt ?? convo.createdAt;
         var convoDate = conversationLocalDayKey(effectiveDate);
-        var filterDate = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day);
-        if (convoDate != filterDate) {
+        var startDay = DateTime(selectedStartDate!.year, selectedStartDate!.month, selectedStartDate!.day);
+        var endDay = DateTime(selectedEndDate!.year, selectedEndDate!.month, selectedEndDate!.day);
+        if (convoDate.isBefore(startDay) || convoDate.isAfter(endDay)) {
           return false;
         }
       }
@@ -621,9 +624,10 @@ class ConversationProvider extends ChangeNotifier {
     }).toList();
   }
 
-  /// Filter conversations by a specific date
-  Future<void> filterConversationsByDate(DateTime date) async {
-    selectedDate = date;
+  /// Filter conversations by a date range (inclusive of both start and end day)
+  Future<void> filterConversationsByDateRange(DateTime start, DateTime end) async {
+    selectedStartDate = start;
+    selectedEndDate = end;
 
     // Clear search when applying date filter
     selectedSpeakerId = null;
@@ -640,7 +644,8 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Clear the date filter
   Future<void> clearDateFilter() async {
-    selectedDate = null;
+    selectedStartDate = null;
+    selectedEndDate = null;
 
     // Clear search when clearing date filter
     selectedSpeakerId = null;
@@ -707,9 +712,13 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   (DateTime?, DateTime?) _getDateFilterRange() {
-    if (selectedDate == null) return (null, null);
-    final date = selectedDate!;
-    return (DateTime(date.year, date.month, date.day, 0, 0, 0), DateTime(date.year, date.month, date.day, 23, 59, 59));
+    if (selectedStartDate == null || selectedEndDate == null) return (null, null);
+    final start = selectedStartDate!;
+    final end = selectedEndDate!;
+    return (
+      DateTime(start.year, start.month, start.day, 0, 0, 0),
+      DateTime(end.year, end.month, end.day, 23, 59, 59, 999),
+    );
   }
 
   Future<({List<ServerConversation> items, bool ok})> _getConversationsFromServer() async {
