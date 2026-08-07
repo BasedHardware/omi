@@ -1,0 +1,17 @@
+{
+  "name": "omi-core",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Omi shared product core — contracts, codegen, packages, shells (WS-002)",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "codegen": "pnpm --filter @omi-core/codegen run generate",
+    "codegen:check": "pnpm --filter @omi-core/codegen run check"
+  }
+}
