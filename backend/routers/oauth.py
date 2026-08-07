@@ -13,7 +13,7 @@ import httpx
 from database.apps import get_app_by_id_db
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import enforce_account_deletion_http_access
-from utils.http_client import safe_request_target, get_auth_client, UnsafeWebhookURLError
+from utils.http_client import UnsafeWebhookURLError, get_pinned_http_url_once, safe_request_target
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
 from models.app import App as AppModel, ActionType
@@ -213,12 +213,10 @@ async def oauth_token(
                 pinned_url, pin_kwargs = await run_blocking(
                     db_executor, safe_request_target, app.external_integration.setup_completed_url
                 )
-                client = get_auth_client()
-                res = await client.get(
+                res = await get_pinned_http_url_once(
                     pinned_url + f'?uid={uid}',
-                    headers=pin_kwargs['headers'],
-                    extensions=pin_kwargs['extensions'],
-                    follow_redirects=False,
+                    pin_kwargs,
+                    timeout=httpx.Timeout(10.0, connect=2.0),
                 )
                 res.raise_for_status()
                 if not _setup_completed_from_payload(res.json()):

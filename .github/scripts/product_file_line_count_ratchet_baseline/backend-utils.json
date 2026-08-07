@@ -1,6 +1,6 @@
 {
   "files": {
-    "backend/utils/apps.py": 1652,
+    "backend/utils/apps.py": 1635,
     "backend/utils/conversations/process_conversation.py": 1970,
     "backend/utils/memory/canonical_consolidation.py": 1935,
     "backend/utils/memory/canonical_memory_adapter.py": 2037,

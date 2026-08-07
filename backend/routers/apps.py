@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
+from utils.app_setup import setup_completed_from_response
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -23,7 +24,7 @@ from utils.executors import (
     run_blocking,
     start_background_task,
 )
-from utils.http_client import get_webhook_client
+from utils.http_client import UnsafeWebhookURLError, get_pinned_http_url_once, safe_request_target
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -2083,20 +2084,6 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 # ******************************************************
 
 
-def _setup_completed_from_response(res: httpx.Response) -> bool:
-    """Read `is_setup_completed` from a third-party setup_completed_url response.
-
-    The body is developer-controlled, so it may be non-JSON or a JSON scalar/array
-    rather than the documented object. Anything that is not an object carrying a
-    truthy `is_setup_completed` means setup is not completed.
-    """
-    try:
-        payload: object = res.json()
-    except ValueError:
-        return False
-    return isinstance(payload, dict) and bool(payload.get('is_setup_completed', False))
-
-
 @router.post('/v1/apps/enable', response_model=AppMutationResponse)
 async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
@@ -2112,10 +2099,20 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
-        client = get_webhook_client()
-        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+        try:
+            pinned_url, pin_kwargs = await run_blocking(
+                db_executor, safe_request_target, app.external_integration.setup_completed_url
+            )
+        except UnsafeWebhookURLError:
+            raise HTTPException(status_code=400, detail='App setup URL is not a public address')
+
+        res = await get_pinned_http_url_once(
+            pinned_url + f'?uid={uid}',
+            pin_kwargs,
+            timeout=httpx.Timeout(30.0, connect=2.0),
+        )
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
-        if res.status_code != 200 or not _setup_completed_from_response(res):
+        if res.status_code != 200 or not setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status

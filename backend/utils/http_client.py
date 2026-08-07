@@ -16,8 +16,8 @@ import logging
 import socket
 import time
 from collections import defaultdict
-from collections.abc import Callable
-from urllib.parse import urlparse
+from collections.abc import Callable, Mapping
+from urllib.parse import ParseResult, urlparse
 
 import httpx
 
@@ -51,6 +51,24 @@ def _is_unsafe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     )
 
 
+def _parse_http_url(url: str) -> ParseResult:
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except (TypeError, ValueError) as e:
+        raise UnsafeWebhookURLError(f'Malformed URL authority: {e}') from e
+    if parsed.scheme not in ('http', 'https'):
+        raise UnsafeWebhookURLError(f'Unsupported URL scheme: {parsed.scheme!r}')
+    if not parsed.hostname:
+        raise UnsafeWebhookURLError('URL has no hostname')
+    if parsed.username is not None or parsed.password is not None:
+        raise UnsafeWebhookURLError('URL must not contain credentials')
+    # Accessing parsed.port above is intentional: urllib validates numeric and
+    # in-range ports lazily, so malformed authorities fail before DNS or I/O.
+    _ = port
+    return parsed
+
+
 def assert_public_http_url(url: str) -> str:
     """Reject webhook/callback URLs that don't point at a public host.
 
@@ -61,13 +79,9 @@ def assert_public_http_url(url: str) -> str:
     swapped between this check and the real connect (DNS rebinding), and
     this validation is worthless.
     """
-    parsed = urlparse(url)
-    if parsed.scheme not in ('http', 'https'):
-        raise UnsafeWebhookURLError(f'Unsupported URL scheme: {parsed.scheme!r}')
-
+    parsed = _parse_http_url(url)
     hostname = parsed.hostname
-    if not hostname:
-        raise UnsafeWebhookURLError('URL has no hostname')
+    assert hostname is not None
 
     try:
         addrinfo = socket.getaddrinfo(hostname, None)
@@ -98,13 +112,18 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     connection targets the pinned IP, but looks and authenticates exactly
     like a normal request to the original hostname.
     """
-    parsed = urlparse(url)
+    parsed = _parse_http_url(url)
     hostname = parsed.hostname
+    assert hostname is not None
     netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
     if parsed.port:
         netloc += f':{parsed.port}'
     pinned_url = parsed._replace(netloc=netloc).geturl()
-    extra = {'headers': {'Host': hostname}, 'extensions': {'sni_hostname': hostname}}
+    host_header = f'[{hostname}]' if ':' in hostname else hostname
+    default_port = 443 if parsed.scheme == 'https' else 80
+    if parsed.port is not None and parsed.port != default_port:
+        host_header += f':{parsed.port}'
+    extra = {'headers': {'Host': host_header}, 'extensions': {'sni_hostname': hostname}}
     return pinned_url, extra
 
 
@@ -115,6 +134,50 @@ def safe_request_target(url: str) -> tuple[str, dict]:
     for anything private/loopback/link-local/reserved/unresolvable."""
     resolved_ip = assert_public_http_url(url)
     return pin_to_resolved_ip(url, resolved_ip)
+
+
+def get_pinned_http_url_once_sync(
+    pinned_url: str,
+    pin_kwargs: Mapping[str, Mapping[str, str]],
+    *,
+    timeout: float,
+    headers: Mapping[str, str] | None = None,
+) -> httpx.Response:
+    """GET one already-validated pinned URL without a reusable connection pool."""
+    request_headers = {**(headers or {}), **pin_kwargs['headers']}
+    with httpx.Client(limits=httpx.Limits(max_connections=1, max_keepalive_connections=0)) as client:
+        return client.get(
+            pinned_url,
+            timeout=timeout,
+            headers=request_headers,
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+        )
+
+
+async def get_pinned_http_url_once(
+    pinned_url: str,
+    pin_kwargs: Mapping[str, Mapping[str, str]],
+    *,
+    timeout: httpx.Timeout,
+    headers: Mapping[str, str] | None = None,
+) -> httpx.Response:
+    """GET one already-validated pinned URL without a reusable connection pool.
+
+    A pool keyed only by the pinned scheme/IP/port can reuse a TLS connection
+    across two original hostnames on the same address, skipping the second
+    request's SNI. One request per client makes the original Host and SNI part
+    of the effective connection identity.
+    """
+    request_headers = {**(headers or {}), **pin_kwargs['headers']}
+    limits = httpx.Limits(max_connections=1, max_keepalive_connections=0)
+    async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
+        return await client.get(
+            pinned_url,
+            headers=request_headers,
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+        )
 
 
 # ---------------------------------------------------------------------------

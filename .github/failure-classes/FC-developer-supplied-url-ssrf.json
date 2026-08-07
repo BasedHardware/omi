@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-developer-supplied-url-ssrf",
+  "violated_contract": "Every backend request to a developer-supplied URL must reject non-public destinations and connect only to the exact IP address that passed validation; redirects must never create an unvalidated second destination.",
+  "canonical_prevention": "Route every developer-supplied HTTP target through utils.http_client.safe_request_target, connect to its pinned URL with the returned Host and TLS SNI metadata on a one-request client that cannot reuse a same-IP connection across original hostnames, and disable automatic redirects unless each hop is independently validated and pinned.",
+  "canonical_prevention_artifact": [
+    "backend/utils/http_client.py",
+    "backend/tests/unit/test_ssrf_public_url_guard.py",
+    "backend/tests/unit/test_app_developer_url_ssrf.py"
+  ],
+  "evidence_prs": [
+    10638
+  ],
+  "scope_hints": [
+    "backend/**"
+  ],
+  "status": "open"
+}

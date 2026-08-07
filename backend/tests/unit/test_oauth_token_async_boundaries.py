@@ -81,9 +81,12 @@ def _loaded_oauth_router() -> Iterator[tuple[ModuleType, ModuleType, ModuleType]
     class _UnsafeWebhookURLError(Exception):
         pass
 
+    async def _get_pinned_http_url_once(_url, _pin_kwargs, **_kwargs):
+        return None
+
     http_client = _module(
         'utils.http_client',
-        get_auth_client=lambda: None,
+        get_pinned_http_url_once=_get_pinned_http_url_once,
         # Passthrough: none of this file's tests exercise the setup_completed_url
         # branch (default is_user_app_enabled=True skips it), so this only needs
         # to satisfy the import and match safe_request_target's (url, extra) shape.

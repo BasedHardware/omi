@@ -16,13 +16,16 @@ DNS is always mocked (via utils.http_client.socket.getaddrinfo) so these
 tests are deterministic and make no real network calls.
 """
 
+import asyncio
 import socket
 
+import httpx
 import pytest
 
 from utils.http_client import (
     UnsafeWebhookURLError,
     assert_public_http_url,
+    get_pinned_http_url_once,
     pin_to_resolved_ip,
     safe_request_target,
 )
@@ -65,6 +68,41 @@ def test_rejects_non_http_schemes(scheme_url):
 def test_rejects_url_with_no_hostname():
     with pytest.raises(UnsafeWebhookURLError, match='no hostname'):
         assert_public_http_url('http:///just-a-path')
+
+
+@pytest.mark.parametrize(
+    'credential_url',
+    [
+        'https://user@example.com/private',
+        'https://user:password@example.com/private',
+        'https://user%40tenant@example.com/private',
+    ],
+)
+def test_rejects_credential_bearing_urls_before_dns(monkeypatch, credential_url):
+    monkeypatch.setattr(
+        'utils.http_client.socket.getaddrinfo',
+        lambda *_args: (_ for _ in ()).throw(AssertionError('credential URLs must not resolve')),
+    )
+    with pytest.raises(UnsafeWebhookURLError, match='must not contain credentials'):
+        assert_public_http_url(credential_url)
+
+
+@pytest.mark.parametrize(
+    'malformed_url',
+    [
+        'https://example.com:not-a-port/path',
+        'https://example.com:70000/path',
+        'https://[2001:db8::1/path',
+        'https://2001:db8::1]/path',
+    ],
+)
+def test_malformed_port_or_ipv6_is_an_unsafe_url_error(monkeypatch, malformed_url):
+    monkeypatch.setattr(
+        'utils.http_client.socket.getaddrinfo',
+        lambda *_args: (_ for _ in ()).throw(AssertionError('malformed URLs must not resolve')),
+    )
+    with pytest.raises(UnsafeWebhookURLError, match='Malformed URL authority'):
+        assert_public_http_url(malformed_url)
 
 
 def test_rejects_when_dns_resolution_fails(monkeypatch):
@@ -177,8 +215,18 @@ def test_pin_ipv4_preserves_path_and_query():
 def test_pin_ipv6_brackets_host_and_preserves_port():
     pinned_url, extra = pin_to_resolved_ip('http://example.com:8080/x', '2001:db8::1')
     assert pinned_url == 'http://[2001:db8::1]:8080/x'
-    assert extra['headers']['Host'] == 'example.com'
+    assert extra['headers']['Host'] == 'example.com:8080'
     assert extra['extensions']['sni_hostname'] == 'example.com'
+
+
+def test_pin_host_header_omits_default_port_and_brackets_ipv6_origin():
+    _, default_extra = pin_to_resolved_ip('https://example.com:443/x', PUBLIC_IP_A)
+    assert default_extra['headers']['Host'] == 'example.com'
+
+    pinned_url, ipv6_extra = pin_to_resolved_ip('https://[2606:4700:4700::1111]:8443/x', PUBLIC_IP_A)
+    assert pinned_url == f'https://{PUBLIC_IP_A}:8443/x'
+    assert ipv6_extra['headers']['Host'] == '[2606:4700:4700::1111]:8443'
+    assert ipv6_extra['extensions']['sni_hostname'] == '2606:4700:4700::1111'
 
 
 # ---------------------------------------------------------------------------
@@ -198,3 +246,44 @@ def test_safe_request_target_raises_for_unsafe_target_without_pinning(monkeypatc
     _mock_resolve(monkeypatch, '10.0.0.5')
     with pytest.raises(UnsafeWebhookURLError):
         safe_request_target('https://internal.example.com/callback')
+
+
+def test_same_ip_different_hosts_use_distinct_one_shot_clients(monkeypatch):
+    clients = []
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.init_kwargs = kwargs
+            self.calls = []
+            clients.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, **kwargs):
+            self.calls.append((url, kwargs))
+            return object()
+
+    monkeypatch.setattr('utils.http_client.httpx.AsyncClient', _Client)
+    first_url, first_pin = pin_to_resolved_ip('https://alpha.example.test/setup', PUBLIC_IP_A)
+    second_url, second_pin = pin_to_resolved_ip('https://beta.example.test/setup', PUBLIC_IP_A)
+
+    async def exercise():
+        timeout = httpx.Timeout(10.0, connect=2.0)
+        await get_pinned_http_url_once(first_url, first_pin, timeout=timeout)
+        await get_pinned_http_url_once(second_url, second_pin, timeout=timeout)
+
+    asyncio.run(exercise())
+
+    assert len(clients) == 2
+    assert clients[0] is not clients[1]
+    assert clients[0].init_kwargs['limits'].max_keepalive_connections == 0
+    assert clients[1].init_kwargs['limits'].max_keepalive_connections == 0
+    assert clients[0].calls[0][1]['headers']['Host'] == 'alpha.example.test'
+    assert clients[0].calls[0][1]['extensions']['sni_hostname'] == 'alpha.example.test'
+    assert clients[1].calls[0][1]['headers']['Host'] == 'beta.example.test'
+    assert clients[1].calls[0][1]['extensions']['sni_hostname'] == 'beta.example.test'
+    assert all(client.calls[0][1]['follow_redirects'] is False for client in clients)

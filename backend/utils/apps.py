@@ -45,6 +45,7 @@ from database._client import db as firestore_db
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
+from utils.http_client import UnsafeWebhookURLError, get_pinned_http_url_once_sync, safe_request_target
 from database.redis_db import (
     get_enabled_apps,
     get_app_reviews,
@@ -1472,66 +1473,48 @@ def fetch_app_chat_tools_from_manifest(
     Returns:
         Dict with 'tools' (list) and 'proactive_messages_enabled' (bool), or None if fetch fails
 
-    Example manifest response:
-    {
-        "tools": [
-            {
-                "name": "add_to_playlist",
-                "description": "Add a song to a Spotify playlist",
-                "endpoint": "/tools/add_to_playlist",
-                "method": "POST",
-                "parameters": {
-                    "properties": {
-                        "song_name": {"type": "string", "description": "Name of the song"},
-                        "artist_name": {"type": "string", "description": "Artist name"}
-                    },
-                    "required": ["song_name"]
-                },
-                "auth_required": true,
-                "status_message": "Adding to playlist..."
-            }
-        ],
-        "proactive_messages": {
-            "enabled": true
-        }
-    }
     """
     if not manifest_url:
         return None
 
+    try:
+        pinned_url, pin_kwargs = safe_request_target(manifest_url)
+    except UnsafeWebhookURLError:
+        logger.warning("⚠️ Rejected unsafe chat tools manifest URL")
+        return None
+
     # Check cache first (unless force refresh)
-    cache_key = f'manifest:{manifest_url}'
+    cache_key = f'manifest:{hashlib.sha256(manifest_url.encode()).hexdigest()}'
     if not force_refresh:
         cached_result = get_generic_cache(cache_key)
         if cached_result:
-            logger.info(f"✅ Using cached manifest for: {manifest_url}")
+            logger.info("✅ Using cached chat tools manifest")
             return cached_result
 
     try:
-        logger.info(f"📥 Fetching chat tools manifest from: {manifest_url}")
-
-        response = httpx.get(
-            manifest_url,
+        response = get_pinned_http_url_once_sync(
+            pinned_url,
+            pin_kwargs,
             timeout=float(timeout),
             headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'},
         )
 
         if response.status_code != 200:
-            logger.error(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
+            logger.error(f"⚠️ Chat tools manifest fetch failed with status {response.status_code}")
             return None
 
         data_raw: object = response.json()
 
         # Validate response structure
         if not isinstance(data_raw, dict):
-            logger.error(f"⚠️ Invalid manifest format (not a dict): {manifest_url}")
+            logger.error("⚠️ Invalid chat tools manifest format (not a dict)")
             return None
 
         data: Dict[str, Any] = cast(Dict[str, Any], data_raw)
         tools_raw: object = data.get('tools', [])
 
         if not isinstance(tools_raw, list):
-            logger.error(f"⚠️ Invalid manifest format ('tools' is not a list): {manifest_url}")
+            logger.error("⚠️ Invalid chat tools manifest format ('tools' is not a list)")
             return None
 
         tools: List[Any] = cast(List[Any], tools_raw)
@@ -1574,16 +1557,16 @@ def fetch_app_chat_tools_from_manifest(
         return result
 
     except httpx.TimeoutException:
-        logger.warning(f"⚠️ Manifest fetch timed out: {manifest_url}")
+        logger.warning("⚠️ Chat tools manifest fetch timed out")
         return None
     except httpx.RequestError as e:
-        logger.error(f"⚠️ Manifest fetch request error: {e}")
+        logger.error(f"⚠️ Chat tools manifest fetch request error: {type(e).__name__}")
         return None
     except ValueError as e:
-        logger.error(f"⚠️ Invalid JSON in manifest response: {e}")
+        logger.error(f"⚠️ Invalid JSON in chat tools manifest response: {type(e).__name__}")
         return None
     except Exception as e:
-        logger.error(f"⚠️ Unexpected error fetching manifest: {e}")
+        logger.error(f"⚠️ Unexpected chat tools manifest fetch error: {type(e).__name__}")
         return None
 
 

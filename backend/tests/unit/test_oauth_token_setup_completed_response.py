@@ -39,18 +39,17 @@ def _install_pending_setup_app(oauth, body: bytes, content_type: str = 'applicat
         def works_externally(self) -> bool:
             return True
 
-    class _Client:
-        async def get(self, url, **_kwargs):
-            return httpx.Response(
-                200,
-                content=body,
-                headers={'Content-Type': content_type},
-                request=httpx.Request('GET', url),
-            )
+    async def _get_pinned_http_url_once(url, _pin_kwargs, **_kwargs):
+        return httpx.Response(
+            200,
+            content=body,
+            headers={'Content-Type': content_type},
+            request=httpx.Request('GET', url),
+        )
 
     oauth.AppModel = _ExternalApp
     oauth.is_user_app_enabled = lambda _uid, _app_id: False
-    oauth.get_auth_client = lambda: _Client()
+    oauth.get_pinned_http_url_once = _get_pinned_http_url_once
 
 
 def _exchange(oauth):
