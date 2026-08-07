@@ -1,0 +1,38 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_569f1df936cc22::t_147c4e43d0f66b 28-31
+  s_569f1df936cc22::t_c2e3f6c87d89dc 7
+desktop/macos/Desktop/Tests/GlassContentChromeTests.swift
+  s_569f1df936cc22::t_815b5bbd3ce520 7-9
+  s_569f1df936cc22::t_d4ca95cd7831b3 124,126,131-152,159-167
+  s_569f1df936cc22::t_ff328b46e8a127 168
+desktop/macos/changelog/unreleased/20260806-remove-insights-page.json
+  s_569f1df936cc22::t_b8c96971ab25be 1-3
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_569f1df936cc22::t_7e33b43d5e9c71 342-356,358-362
+desktop/macos/scripts/omi-ctl
+  s_569f1df936cc22::t_4d293e933d4ea8 118-122
+desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  s_569f1df936cc22::t_cfcf3c64afe32f 1479-1480
+  s_569f1df936cc22::t_c4fc6b9320ba82 1461-1463
+desktop/macos/e2e/SKILL.md
+  s_569f1df936cc22::t_e48130e883cf62 435-438
+  s_569f1df936cc22::t_a7b8828f46ab42 519
+desktop/macos/Desktop/Sources/MainWindow/Components/GlassContentChrome.swift
+  s_569f1df936cc22::t_9d978043d9b4a8 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9e4f64e29e7cbb783be500f39302143de2b55afc",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
