@@ -52,7 +52,7 @@
         "@testing-library/jest-dom": "^6.9.1",
         "@testing-library/react": "^16.3.2",
         "@testing-library/user-event": "^14.6.1",
-        "@tschk/moonshine-cli": "^0.3.5",
+        "@tschk/moonshine-cli": "^0.3.7",
         "@types/bun": "1.3.14",
         "@types/node": "^22",
         "@types/react": "^19",
@@ -383,7 +383,7 @@
 
     "@testing-library/user-event": ["@testing-library/user-event@14.6.1", "", { "peerDependencies": { "@testing-library/dom": ">=7.21.4" } }, "sha512-vq7fv0rnt+QTXgPxr5Hjc210p6YKq2kmdziLgnsZGgLJ9e6VAShx1pACLuRjd/AS/sr7phAR58OIIpf0LlmQNw=="],
 
-    "@tschk/crepus-moonshine": ["@tschk/crepus-moonshine@0.3.5", "", { "dependencies": { "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-7wnyXwfnLYgNcMKlZK0etk9uz+gcPrCqO+ZFT1FhtQ9Xt/W5aX7kZvKO+/VHEKCMEButizgHZhQ4tq52QcWJwQ=="],
+    "@tschk/crepus-moonshine": ["@tschk/crepus-moonshine@0.3.7", "", { "dependencies": { "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-EjFyuVVdbTjfa2PT/i+3jG7P7AfWb5XhrKNVC0OOUhMBJbYPqc5DqlT641B9MR1xKCGzjwOhabD2w0Rr2QK37g=="],
 
     "@tschk/crepuscularity-wasm": ["@tschk/crepuscularity-wasm@0.1.3", "", {}, "sha512-oaiTeb5mQQX/oX+pRZJiHL0bVvZ8R6TMRbVY52a6bjjAPjibuchmWIq4H4gqBI6wE/20sPn03nqosIkSykAf5g=="],
 
@@ -391,7 +391,7 @@
 
     "@tschk/moonshine-adapter-conformance": ["@tschk/moonshine-adapter-conformance@0.3.7", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-react": "^0.3.6", "@tschk/moonshine-server": "^0.3.6", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-n+yh1bjxB4Xsqgiing9FtMLWFCExX5fD3iujqKvTWROYGz5+RSWOCYgk20QsoFs4aAvbVtYo2EHBPZqGTHfQJg=="],
 
-    "@tschk/moonshine-cli": ["@tschk/moonshine-cli@0.3.5", "", { "dependencies": { "@tschk/crepus-moonshine": "^0.3.5", "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine-compiler": "^0.3.5", "@tschk/moonshine-deploy-bun": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-next": "^0.3.5", "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-react-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-tanstack": "^0.3.5", "@tschk/moonshine-waku": "^0.3.5" }, "optionalDependencies": { "@tschk/moonshine-solid": "^0.3.5" }, "bin": { "moonshine": "bin/moonshine.ts" } }, "sha512-/K9SKnBg2tEq+LhJBLPx/17k1+vRtlHlEH3fqrh8jxfFiwTHJ5WqdVOrYsTAJd0R6xXvrXzLLSeQuPAYRT1D3w=="],
+    "@tschk/moonshine-cli": ["@tschk/moonshine-cli@0.3.7", "", { "dependencies": { "@tschk/crepus-moonshine": "^0.3.6", "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine-compiler": "^0.3.6", "@tschk/moonshine-deploy-bun": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-next": "^0.3.6", "@tschk/moonshine-react": "^0.3.6", "@tschk/moonshine-react-router": "^0.3.6", "@tschk/moonshine-server": "^0.3.6", "@tschk/moonshine-tanstack": "^0.3.6", "@tschk/moonshine-waku": "^0.3.6" }, "optionalDependencies": { "@tschk/moonshine-solid": "^0.3.6" }, "bin": { "moonshine": "bin/moonshine.ts" } }, "sha512-Zv5hSWp/v9ridXYvEoVxzsC8Erseyu7HqJei2WoxIUFRz14/NHZqOitZFHTsZcFjZlVUOdgm51aKoVn3QmnEzg=="],
 
     "@tschk/moonshine-compiler": ["@tschk/moonshine-compiler@0.3.7", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" } }, "sha512-tH2ArGs4ZQoviU6eurLm6WNAe/LZwHLy9De95u3Hengy6oeq7ahEiGJgnt06kORkRMzLi6vWhBZV2iXfZWaoZw=="],
 
@@ -403,7 +403,7 @@
 
     "@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-9MvW4Vojff9+epHLet7HrLByEdEiWNdT6DbA53FKaAAPCJjJGL2Y+VKhuh3DkMZx8dwMKIqaZI28QabMUqR8vw=="],
 
-    "@tschk/moonshine-react-router": ["@tschk/moonshine-react-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-1cRO7435nqm2fSYvCA/9YjSFI5ZJZPe2jTWIc1wFPkNe22NpVXBcENRlkUVOauVJetJJgNZcnWiRr94XWJNjWw=="],
+    "@tschk/moonshine-react-router": ["@tschk/moonshine-react-router@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-jKfCG2WDNul0/M1WsvM+Qv1RhABkWyfr3plNnZBsa1P272cQPyDAKmTetoUTz6DskXR22WsWUpgt176quF+V7A=="],
 
     "@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-2ZLbmeaJEiJgYf7Jth7KRHqdI7YVOPMgN2iETL3q0kMO6tdhR0KAnR+rxwgJT865UuBVLJh1yvzISzJV9rMdvQ=="],
 
@@ -411,11 +411,11 @@
 
     "@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.7", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-wNnDY48yLUdnqCBuQvB7ojxYOC2HuQl/EwfyqWSIGczUwATmTVGQQKdIzZ+ahgl7/XpHkNIodhTjkI04F9ufaw=="],
 
-    "@tschk/moonshine-solid": ["@tschk/moonshine-solid@0.3.5", "", { "dependencies": { "@tschk/crepus-moonshine": "^0.3.5", "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "solid-js": ">=1.8" } }, "sha512-O5lI1hv0E8j3DHL2PuH6LxiWPb9umHkaSAwH1ei7Y+CsfWAJ4F0/ttWi7ztBPBcIi9W0cJLLv34tqHo9GtbQYA=="],
+    "@tschk/moonshine-solid": ["@tschk/moonshine-solid@0.3.7", "", { "dependencies": { "@tschk/crepus-moonshine": "^0.3.6", "@tschk/crepuscularity-wasm": "^0.1.3", "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-framework": "^0.3.6" }, "peerDependencies": { "solid-js": ">=1.8" } }, "sha512-nAQ8VV2D6x4p0a7F8U9qkik24Ql70M1UCZLfaMf03r+mIyHEU6UV+x8PxOJ+ZzQR8NAwER6v0/PMpUO9SI3oJQ=="],
 
-    "@tschk/moonshine-tanstack": ["@tschk/moonshine-tanstack@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-5E41LarOuBUAK5fYn3wtlJkZacpTtJLfg5hGnFDPBOLQ0xbXqkeSSTRALAuvmvlVMnZBkQ3AxfWZI58/CYhXZw=="],
+    "@tschk/moonshine-tanstack": ["@tschk/moonshine-tanstack@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-ZxMCoFLhoD2/2wN1q1NE0+TGAy5E/TmjWi5J8o5qLEagaG6h4d37qIkb3iosciikgYDdOvdlLSoDaMdQscmgAA=="],
 
-    "@tschk/moonshine-waku": ["@tschk/moonshine-waku@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-c9jVYesAALimm4AlwKlJWtupp8dakJ9mIHKLac8R+I/zCP7LYHUEgPJmMT+nDaqvBUvyd/uDx9DO24z8RxKijw=="],
+    "@tschk/moonshine-waku": ["@tschk/moonshine-waku@0.3.7", "", { "dependencies": { "@tschk/moonshine": "^0.3.6", "@tschk/moonshine-router": "^0.3.6" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-6PAEjqXF2EOaIosE9xMPD3tvpMvQirLegvHOF+Gb1BKpz7HUmZGkmb3K6eQw9MihNuJ6s92ZFV9A63GLMjzLRQ=="],
 
     "@tweenjs/tween.js": ["@tweenjs/tween.js@23.1.3", "", {}, "sha512-vJmvvwFxYuGnF2axRtPYocag6Clbb5YS7kLL+SO/TeVFzHqDIWrNKYtcsPMibjDx9O+bu+psAy9NKfWklassUA=="],
 
@@ -1183,38 +1183,6 @@
 
     "@testing-library/dom/dom-accessibility-api": ["dom-accessibility-api@0.5.16", "", {}, "sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg=="],
 
-    "@tschk/crepus-moonshine/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/crepus-moonshine/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-compiler": ["@tschk/moonshine-compiler@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" } }, "sha512-ITazf3gZOFHbIu18YeeXVZLk2bbDy5BhUfgbMSNnypRUrRIYT8zTBMsKAe/nEQxIPIzJ1MOVI4uiHDC80L8Uww=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-deploy-bun": ["@tschk/moonshine-deploy-bun@0.3.5", "", { "dependencies": { "@tschk/moonshine-adapter-conformance": "^0.3.5", "@tschk/moonshine-compiler": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-server": "^0.3.5" } }, "sha512-M2ylrpCa4Ib8vq5+0hm5JWJaqxRSG4XWpUBY7MR2pjOTmT2gefcjEjXUaKcC2GhANlh39GWpCBVponlXUHq9MQ=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-next": ["@tschk/moonshine-next@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" } }, "sha512-R/scCEGw2L9aauPoqhky3SmFtbTpLnB/ZIYv3HpQSGxjbXZRdmyUW+0Bb8Qr+ldo2as/2+P+jU9uvHDCwkOCaQ=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-8ZoG+TIyTM4AZ2bpy8kN7+jC8UyWb0ayq72A+aejUT6FaZ/3wqv2Xs7xQNjnL4H9yVqYT/JtHGAcXwT6C1T/aA=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-server": ["@tschk/moonshine-server@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" } }, "sha512-MWV8sorWC9TfJMZOMSi+rKnmvBFFhSy1wtllMFfdqbqWyZcJ8BbSbwt00qxTXRhcxrP9gBxJ+jL4g2jAMNsQxQ=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-solid/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-solid/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
     "anymatch/picomatch": ["picomatch@2.3.2", "", {}, "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA=="],
 
     "chokidar/glob-parent": ["glob-parent@5.1.2", "", { "dependencies": { "is-glob": "^4.0.1" } }, "sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow=="],
@@ -1257,92 +1225,8 @@
 
     "@radix-ui/react-tabs/@radix-ui/react-use-controllable-state/@radix-ui/react-use-layout-effect": ["@radix-ui/react-use-layout-effect@1.1.4", "", { "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-K20DkRkUwDnxEYMBPcg3Y6voLkEy5p5QQmszZgLngKKiC7dzBR/aEuK3w1qlx2JWDUNH6FluahYdgR3BP+QbYw=="],
 
-    "@tschk/crepus-moonshine/@tschk/moonshine/@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-8ZoG+TIyTM4AZ2bpy8kN7+jC8UyWb0ayq72A+aejUT6FaZ/3wqv2Xs7xQNjnL4H9yVqYT/JtHGAcXwT6C1T/aA=="],
-
-    "@tschk/crepus-moonshine/@tschk/moonshine/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/crepus-moonshine/@tschk/moonshine/@tschk/moonshine-server": ["@tschk/moonshine-server@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" } }, "sha512-MWV8sorWC9TfJMZOMSi+rKnmvBFFhSy1wtllMFfdqbqWyZcJ8BbSbwt00qxTXRhcxrP9gBxJ+jL4g2jAMNsQxQ=="],
-
-    "@tschk/crepus-moonshine/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-compiler/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-deploy-bun/@tschk/moonshine-adapter-conformance": ["@tschk/moonshine-adapter-conformance@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-y/4CQOP8irJccHKNUlSmsk2kKvPMuZZspCV2xcdhAXYDxkxSLoj0T0xyJHnhk8s3aWJTAkV565/O9XKC0cN5mQ=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-framework/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-next/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-next/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-next/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-react/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-server/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine/@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-8ZoG+TIyTM4AZ2bpy8kN7+jC8UyWb0ayq72A+aejUT6FaZ/3wqv2Xs7xQNjnL4H9yVqYT/JtHGAcXwT6C1T/aA=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine/@tschk/moonshine-server": ["@tschk/moonshine-server@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" } }, "sha512-MWV8sorWC9TfJMZOMSi+rKnmvBFFhSy1wtllMFfdqbqWyZcJ8BbSbwt00qxTXRhcxrP9gBxJ+jL4g2jAMNsQxQ=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine-router/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-solid/@tschk/moonshine/@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-8ZoG+TIyTM4AZ2bpy8kN7+jC8UyWb0ayq72A+aejUT6FaZ/3wqv2Xs7xQNjnL4H9yVqYT/JtHGAcXwT6C1T/aA=="],
-
-    "@tschk/moonshine-solid/@tschk/moonshine/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-solid/@tschk/moonshine/@tschk/moonshine-server": ["@tschk/moonshine-server@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" } }, "sha512-MWV8sorWC9TfJMZOMSi+rKnmvBFFhSy1wtllMFfdqbqWyZcJ8BbSbwt00qxTXRhcxrP9gBxJ+jL4g2jAMNsQxQ=="],
-
-    "@tschk/moonshine-solid/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine/@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-8ZoG+TIyTM4AZ2bpy8kN7+jC8UyWb0ayq72A+aejUT6FaZ/3wqv2Xs7xQNjnL4H9yVqYT/JtHGAcXwT6C1T/aA=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine/@tschk/moonshine-server": ["@tschk/moonshine-server@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" } }, "sha512-MWV8sorWC9TfJMZOMSi+rKnmvBFFhSy1wtllMFfdqbqWyZcJ8BbSbwt00qxTXRhcxrP9gBxJ+jL4g2jAMNsQxQ=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine-router/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine/@tschk/moonshine-react": ["@tschk/moonshine-react@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5", "react": "^19.1.0", "react-dom": "^19.1.0" } }, "sha512-8ZoG+TIyTM4AZ2bpy8kN7+jC8UyWb0ayq72A+aejUT6FaZ/3wqv2Xs7xQNjnL4H9yVqYT/JtHGAcXwT6C1T/aA=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine/@tschk/moonshine-server": ["@tschk/moonshine-server@0.3.5", "", { "dependencies": { "@tschk/moonshine-framework": "^0.3.5", "@tschk/moonshine-router": "^0.3.5" } }, "sha512-MWV8sorWC9TfJMZOMSi+rKnmvBFFhSy1wtllMFfdqbqWyZcJ8BbSbwt00qxTXRhcxrP9gBxJ+jL4g2jAMNsQxQ=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine-router/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
     "@radix-ui/react-separator/@radix-ui/react-primitive/@radix-ui/react-slot/@radix-ui/react-compose-refs": ["@radix-ui/react-compose-refs@1.1.5", "", { "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA=="],
 
     "@radix-ui/react-tabs/@radix-ui/react-primitive/@radix-ui/react-slot/@radix-ui/react-compose-refs": ["@radix-ui/react-compose-refs@1.1.5", "", { "peerDependencies": { "@types/react": "*", "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc" }, "optionalPeers": ["@types/react"] }, "sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-compiler/@tschk/moonshine-router/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-framework/@tschk/moonshine/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-framework/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-react/@tschk/moonshine/@tschk/moonshine-router": ["@tschk/moonshine-router@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5", "@tschk/moonshine-framework": "^0.3.5" }, "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-diTaQFH2NBPcLBHAbnfF0atDIISoNEq01CkvmOkJ/zaRgj12SpJkJDa71+RcITgWsij8l0GpTPKesFjBWRs4xQ=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-react/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-server/@tschk/moonshine-router/@tschk/moonshine": ["@tschk/moonshine@0.3.5", "", { "dependencies": { "@tschk/moonshine-react": "^0.3.5", "@tschk/moonshine-router": "^0.3.5", "@tschk/moonshine-server": "^0.3.5", "@tschk/moonshine-shaders": "^0.3.5" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18" }, "optionalPeers": ["react", "react-dom"] }, "sha512-SkgZUw/DaZqgBFy5VuqRvGEprWLb9LwXma1X5yxv/EgBfOE/kAe4SBEuvxv7AnVmL5J1+Jn3WQuij+cXxoO63Q=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine/@tschk/moonshine-react/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-react-router/@tschk/moonshine/@tschk/moonshine-server/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine/@tschk/moonshine-react/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-tanstack/@tschk/moonshine/@tschk/moonshine-server/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine/@tschk/moonshine-react/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-waku/@tschk/moonshine/@tschk/moonshine-server/@tschk/moonshine-framework": ["@tschk/moonshine-framework@0.3.5", "", { "dependencies": { "@tschk/moonshine": "^0.3.5" } }, "sha512-3pBj4WMf8NDVMRNscTOh2HOV7D/DsS/6uAkk2Amaxgfh8iwAolp+bTkQ6C1mhY7vVTn6T3UqBrF6LvIOO+Ax3Q=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-compiler/@tschk/moonshine-router/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
-
-    "@tschk/moonshine-cli/@tschk/moonshine-server/@tschk/moonshine-router/@tschk/moonshine/@tschk/moonshine-shaders": ["@tschk/moonshine-shaders@0.3.5", "", { "peerDependencies": { "react": ">=18" }, "optionalPeers": ["react"] }, "sha512-Qsf1rnHJuKdeSAWNO17AzQKXn/MLIzqcnDbqn8F6ipjOA1KzPcyd/0DuFcdd73FyRZO8uuqluHJdIsl+wLMASw=="],
   }
 }

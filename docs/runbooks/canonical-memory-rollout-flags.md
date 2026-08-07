@@ -16,6 +16,10 @@ an unentitled user canonical.
 | `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | Maintenance job only | Master switch for normalization, TTL settlement, consolidation, and the projection outbox. It must be false on request-path services. Cloud Scheduler owns cadence. |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | Maintenance job only | Independently disables the L2 consolidation/model step while leaving required processing, TTL settlement, and outbox repair available. This is an incident/cost switch, not a rollout stage. |
 
+When the job is enabled, L2 and required processing run on the gateway-only
+`omi:auto:memory-l2` Luna lane; the deploy workflows derive that endpoint only
+after the serving gate and the Cloud Run VPC probe have both passed.
+
 `MEMORY_TYPESENSE_COLLECTION`, `TYPESENSE_HOST_PORT`, `PINECONE_INDEX_NAME`,
 and their secrets are infrastructure bindings, not rollout gates. Cursor
 secret/version/TTL settings are API integrity bindings, not enrollment flags.
