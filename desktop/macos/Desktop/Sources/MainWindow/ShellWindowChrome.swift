@@ -106,12 +106,23 @@ enum ShellWindowChrome {
     .closeButton, .miniaturizeButton, .zoomButton,
   ]
 
-  /// Which glass a presentation wears. Pure, so the pairing is a claim a test can hold without a
-  /// window: a summoned shell must never be dressed as `.titled`, whose system shadow would trace the
-  /// transparent rectangle around its panels.
-  static func glassKind(for presentation: Presentation) -> WindowGlass.Kind {
-    presentation == .summoned ? .summoned : .titled
-  }
+  /// The glass this window wears — **one kind, in both presentations.**
+  ///
+  /// It used to be `.titled` when anchored, and that was right for exactly as long as
+  /// `ShellGlassGround` made the whole window one slab of glass: a titled window's frame *is* the
+  /// panel's edge, so AppKit's window shadow is the correct one and the only one.
+  ///
+  /// The ground is gone. In **both** presentations the window is now a transparent rectangle
+  /// noticeably larger than the panels floating inside it, which is precisely the case
+  /// `WindowGlass.Kind.summoned` was written for — AppKit's shadow traces empty air. On the first-run
+  /// window it did, and it is the most visible thing on the screen: a large rounded rectangle hanging
+  /// on the wallpaper around a 540 × 640 onboarding card, reading as a second sheet of glass that the
+  /// desktop is supposed to show through untouched.
+  ///
+  /// A constant rather than a function of the presentation, because that parameter had one job and no
+  /// longer has it. `Presentation` is behavioural — level, Spaces, whether the window survives losing
+  /// focus — and what a window's frame draws is not one of those.
+  static let glassKind: WindowGlass.Kind = .summoned
 
   /// How the window joins Spaces.
   ///
@@ -142,7 +153,7 @@ enum ShellWindowChrome {
   /// re-applies it to switch presentations. Every step here is a property assignment, so a second pass
   /// re-asserts rather than accumulating.
   static func dress(_ window: NSWindow, as presentation: Presentation = .summoned) {
-    WindowGlass.wear(window, as: glassKind(for: presentation))
+    WindowGlass.wear(window, as: glassKind)
     // Before hiding the buttons, never after: a window that lost the bits would otherwise spend the
     // window between the two calls with no way to be closed at all.
     window.styleMask.formUnion(keyboardWindowCommands)

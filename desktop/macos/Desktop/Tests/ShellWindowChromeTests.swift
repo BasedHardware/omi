@@ -187,18 +187,41 @@ final class ShellWindowChromeTests: XCTestCase {
     XCTAssertTrue(window.collectionBehavior.contains(.fullScreenAuxiliary))
   }
 
-  /// The summoned shell wears its own glass, not the titled window's. The difference is one property
-  /// and it is visible: AppKit's frame shadow on a window that is a transparent rectangle around
-  /// several inset panels draws a hard edge around empty air.
-  func testTheSummonedShellWearsGlassThatLeavesTheShadowToItsPanels() {
-    XCTAssertEqual(ShellWindowChrome.glassKind(for: .summoned), .summoned)
-    XCTAssertEqual(ShellWindowChrome.glassKind(for: .anchored), .titled)
+  /// The shell wears its own glass, not the titled window's — **in both presentations.** The
+  /// difference is one property and it is the most visible thing on the screen: AppKit's frame shadow
+  /// on a window that is a transparent rectangle around inset panels draws a hard rounded edge around
+  /// empty air, which reads as a second sheet of glass laid over the wallpaper.
+  ///
+  /// Anchored was `.titled` while the window had a full-bleed ground, and kept it after the ground was
+  /// retired. That is the defect this asserts is gone: onboarding is a card floating on the desktop,
+  /// so its window may no more draw a frame than the summoned shell's may.
+  func testTheShellWearsGlassThatLeavesTheShadowToItsPanelsInBothPresentations() {
+    XCTAssertEqual(ShellWindowChrome.glassKind, .summoned)
     XCTAssertFalse(
-      WindowGlass.drawsSystemShadow(.summoned),
+      WindowGlass.drawsSystemShadow(ShellWindowChrome.glassKind),
       "the panels inside draw their own ambient shadow; AppKit's would trace the transparent frame")
     XCTAssertTrue(
-      WindowGlass.hasTitlebar(.summoned),
+      WindowGlass.hasTitlebar(ShellWindowChrome.glassKind),
       "the transparent title bar is one of the shell's two drag handles, and ⌘W routes from the mask")
+  }
+
+  /// …and `dress` really applies it, in both presentations. The mapping above is a value; this is the
+  /// window, and a first run that ordered a system shadow onto the desktop is the reason the value
+  /// alone is not enough of a claim.
+  func testNeitherPresentationLetsAppKitDrawTheWindowsOwnShadow() {
+    for presentation in ShellWindowChrome.Presentation.allCases {
+      let window = makeWindow()
+      window.hasShadow = true
+      ShellWindowChrome.dress(window, as: presentation)
+      XCTAssertFalse(
+        window.hasShadow,
+        """
+        \(presentation) leaves AppKit drawing the window's frame shadow. The window is transparent \
+        and the panels inside it carry `InkGlassShadow.ambient`, so this traces a rounded rectangle \
+        around empty desktop — the "second sheet of glass" a first-run screen shipped with.
+        """)
+      XCTAssertFalse(window.isOpaque, "\(presentation) must stay transparent for the desktop to show")
+    }
   }
 
   /// Neither presentation may drop the keyboard close/minimise route or the drag handles — the
