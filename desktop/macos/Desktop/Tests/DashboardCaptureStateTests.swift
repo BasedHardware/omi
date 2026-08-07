@@ -180,7 +180,16 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
     XCTAssertTrue(
       source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
-    XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissAppsPopup()"))
+    // omi-test-quality: source-inspection -- static contract: whether Home hands its dim a dismiss
+    // action. `isShowingAppsPopup` is private `@State` on a view that needs five live providers to
+    // mount, so the popup cannot be raised and clicked from the test host. That a click on the dim
+    // then runs this action — anywhere on the host, including the undimmed band beside the paint —
+    // is exercised for real in `ShellModalScrimDismissTests`; this is only the wiring that reaches
+    // it. It reads Home's own file because Home is what must do the wiring.
+    XCTAssertTrue(
+      normalizedSource.contains("ShellModalScrim(onTap: dismissAppsPopup)"),
+      "The dim behind the apps popup must carry Home's dismiss action, or clicking outside the "
+        + "popup stops closing it")
     XCTAssertTrue(
       normalizedSource.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
     XCTAssertTrue(
@@ -224,7 +233,14 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(
       source.contains("let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)"))
     XCTAssertTrue(source.contains(".position(x: contentWidth / 2, y: panelTop + panelHeight / 2)"))
-    XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissHomeConnectSheet()"))
+    // omi-test-quality: source-inspection -- static contract: same wiring as the apps popup above,
+    // for the sheet stacked on top of it, and unreachable for the same reason —
+    // `selectedImportConnector` and its siblings are private `@State`. The click that runs it is
+    // behavioural in `ShellModalScrimDismissTests`.
+    XCTAssertTrue(
+      normalizedSource.contains("ShellModalScrim(onTap: dismissHomeConnectSheet)"),
+      "The dim behind the Home connect sheet must carry its dismiss action, or clicking outside the "
+        + "sheet stops closing it")
     XCTAssertFalse(source.contains("homeConnectSheetHasKeyboardFocus"))
     XCTAssertTrue(source.contains("private func dismissHomeConnectSheet()"))
   }
