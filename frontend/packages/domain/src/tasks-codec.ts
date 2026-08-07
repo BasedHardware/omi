@@ -25,7 +25,7 @@ export function buildDeleteTask(env: Env, id: RecordId): TaskOp {
 
 /** Contract op → outbox record, with the human summary the dead-letter
  * surface renders (a retained op nobody can read is still lost content). */
-export function toPendingOp(op: TaskOp): PendingOp {
+export function taskToPendingOp(op: TaskOp): PendingOp {
   const summary =
     op.op === "create"
       ? `Add task: ${op.description}`

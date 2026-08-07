@@ -8,6 +8,10 @@
 body { margin: 0; background: Canvas; color: CanvasText; }
 #root { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
 
+.dev-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.dev-tabs button { padding: 8px 16px; font: inherit; cursor: pointer; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; border-radius: 6px; }
+.dev-tabs button.active { font-weight: 600; border-color: color-mix(in srgb, CanvasText 50%, transparent); }
+
 .dev-connect { display: flex; flex-direction: column; gap: 12px; }
 .dev-connect label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .dev-connect input { padding: 8px; font: inherit; }
@@ -31,3 +35,15 @@ body { margin: 0; background: Canvas; color: CanvasText; }
 .dead-letters ul { list-style: none; padding: 0; margin: 0; }
 .dead-letters li { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; }
 .dead-letters .reason { opacity: 0.7; }
+
+.memories-surface header { display: flex; align-items: baseline; gap: 12px; }
+.memories-surface .add-row textarea { flex: 1; padding: 10px; font: inherit; resize: vertical; }
+.memory-list { list-style: none; padding: 0; margin: 0; }
+.memory-list li { display: flex; align-items: flex-start; gap: 8px; padding: 10px 4px; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+.memory-list li .content { flex: 1; padding: 8px; font: inherit; resize: vertical; }
+.memory-list li.empty { opacity: 0.6; justify-content: center; border: none; }
+.memory-list .visibility { padding: 6px 10px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.memory-list .delete { border: none; background: none; font-size: 18px; cursor: pointer; opacity: 0.5; }
+.memory-list .delete:hover { opacity: 1; }
+.memory-list li.locked .content { margin: 0; opacity: 0.7; font-style: italic; }
+.badge.locked { font-size: 12px; opacity: 0.7; white-space: nowrap; align-self: center; }

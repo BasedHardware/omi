@@ -1,14 +1,15 @@
 /**
  * DEV harness entry: token + base-URL form (persisted in localStorage), then
- * mounts TasksSurface on a real TasksStore over the web storage bridge.
- * This file is the dev-mode "shell"; real shells replace everything here.
+ * mounts TasksSurface and MemoriesSurface on real stores over the web storage
+ * bridge. This file is the dev-mode "shell"; real shells replace everything here.
  */
 
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { realEnv } from "@omi-core/kernel";
 import { openWebStorageBridge } from "@omi-core/bridge-web";
-import { TasksStore } from "@omi-core/domain";
+import { MemoriesStore, TasksStore } from "@omi-core/domain";
+import { MemoriesSurface } from "../memories/MemoriesSurface.js";
 import { TasksSurface } from "../tasks/TasksSurface.js";
 import { devHttpClient } from "./http.js";
 import "./styles.css";
@@ -17,8 +18,30 @@ const LS_URL = "omi-dev-base-url";
 const LS_TOKEN = "omi-dev-token";
 const LS_UID = "omi-dev-uid";
 
+type DevTab = "tasks" | "memories";
+
+type DevStores = { tasks: TasksStore; memories: MemoriesStore };
+
+function DevHarness({ stores }: { stores: DevStores }): React.JSX.Element {
+  const [tab, setTab] = useState<DevTab>("tasks");
+
+  return (
+    <>
+      <nav className="dev-tabs" aria-label="Surface switcher">
+        <button type="button" className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>
+          Tasks
+        </button>
+        <button type="button" className={tab === "memories" ? "active" : ""} onClick={() => setTab("memories")}>
+          Memories
+        </button>
+      </nav>
+      {tab === "tasks" ? <TasksSurface store={stores.tasks} /> : <MemoriesSurface store={stores.memories} />}
+    </>
+  );
+}
+
 function DevApp(): React.JSX.Element {
-  const [store, setStore] = useState<TasksStore | null>(null);
+  const [stores, setStores] = useState<DevStores | null>(null);
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem(LS_URL) ?? "https://api.omi.me");
   const [token, setToken] = useState(localStorage.getItem(LS_TOKEN) ?? "");
   const [uid, setUid] = useState(localStorage.getItem(LS_UID) ?? "dev-user");
@@ -29,10 +52,14 @@ function DevApp(): React.JSX.Element {
     localStorage.setItem(LS_UID, uid);
     const bridge = await openWebStorageBridge(uid);
     const http = devHttpClient(baseUrl, () => localStorage.getItem(LS_TOKEN) ?? "");
-    setStore(await TasksStore.open(bridge, realEnv(), http));
+    const env = realEnv();
+    setStores({
+      tasks: await TasksStore.open(bridge, env, http),
+      memories: await MemoriesStore.open(bridge, env, http),
+    });
   };
 
-  if (store) return <TasksSurface store={store} />;
+  if (stores) return <DevHarness stores={stores} />;
 
   return (
     <div className="dev-connect">
@@ -53,7 +80,7 @@ function DevApp(): React.JSX.Element {
         Local profile (storage namespace)
         <input value={uid} onChange={(e) => setUid(e.target.value)} />
       </label>
-      <button onClick={() => void connect()}>Open tasks</button>
+      <button onClick={() => void connect()}>Open harness</button>
     </div>
   );
 }

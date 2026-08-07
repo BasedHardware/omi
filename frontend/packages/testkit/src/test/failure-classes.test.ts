@@ -59,7 +59,7 @@ test("FC-CONV-004: retry exhaustion surfaces retained content in dead letters, n
     { ok: false, failure: { kind: "permanent", reason: "validation", detail: "rejected after retries" } },
   );
 
-  const box = await Outbox.open(store.openBridge("u"), env, t);
+  const box = await Outbox.open(store.openBridge("u"), env, t, "tasks");
   await box.enqueue(op("precious", "cedar-owl-brook", "create: user dictated words"));
   await env.advance(10_000);
 
@@ -76,7 +76,7 @@ test("FC-TASKS-012: a failed delete is dead-lettered, never fire-and-forget", as
   const t = new ScriptedTransport();
   t.respondWith({ ok: false, failure: { kind: "permanent", reason: "gone", detail: "server blocked delete" } });
 
-  const box = await Outbox.open(store.openBridge("u"), env, t);
+  const box = await Outbox.open(store.openBridge("u"), env, t, "tasks");
   await box.enqueue(op("del-1", "amber-fox-ridge", "delete: amber-fox-ridge"));
   await env.advance(1);
 
@@ -96,7 +96,7 @@ test("FC-TASKS-014: a failed delete rolls back to confirmed server rows, never a
 
   const p = await Projection.open(await store.openBridge("u").openKv("tasks"), codec);
   await p.upsertServerRows([{ id: "amber-fox-ridge", text: "still here" }]);
-  const box = await Outbox.open(store.openBridge("u"), env, t);
+  const box = await Outbox.open(store.openBridge("u"), env, t, "tasks");
   await box.enqueue(op("del-1", "amber-fox-ridge", "delete: amber-fox-ridge"));
   await env.advance(1);
 
@@ -119,7 +119,7 @@ test("FC-MEM-004: edit-while-offline enqueues without error", async () => {
   const env = new ManualEnv();
   const t = new ScriptedTransport();
 
-  const box = await Outbox.open(store.openBridge("u"), env, t);
+  const box = await Outbox.open(store.openBridge("u"), env, t, "tasks");
   await assert.doesNotReject(async () => {
     await box.enqueue(op("edit-a"));
     await box.enqueue(op("edit-b", "delta-kite-moss"));

@@ -17,12 +17,12 @@ test("offline write survives app restart (FC: write loss on kill)", async () => 
   const env = new ManualEnv();
   const t1 = new ScriptedTransport(); // never responds ok — we stay offline
 
-  const box1 = await Outbox.open(store.openBridge("user-a"), env, t1);
+  const box1 = await Outbox.open(store.openBridge("user-a"), env, t1, "tasks");
   await box1.enqueue(op("op-1"));
   // App killed before any send succeeds. New launch, same disk:
   const t2 = new ScriptedTransport();
   t2.respondWith({ ok: true, serverRevision: "r1" });
-  const box2 = await Outbox.open(store.openBridge("user-a"), env, t2);
+  const box2 = await Outbox.open(store.openBridge("user-a"), env, t2, "tasks");
   await env.advance(1);
   assert.deepEqual(t2.sent, ["op-1"], "journaled op replays after restart");
   void box1;
@@ -35,7 +35,7 @@ test("permanent rejection dead-letters, never retries (FC-permanent-write-reject
   const t = new ScriptedTransport();
   t.respondWith({ ok: false, failure: { kind: "permanent", reason: "oversize", detail: "1MiB doc limit" } });
 
-  const box = await Outbox.open(store.openBridge("user-a"), env, t);
+  const box = await Outbox.open(store.openBridge("user-a"), env, t, "tasks");
   await box.enqueue(op("op-big"));
   await env.advance(700_000); // far past every backoff step
 
@@ -57,7 +57,7 @@ test("retryable failures back off and eventually succeed", async () => {
     { ok: true, serverRevision: "r2" },
   );
 
-  const box = await Outbox.open(store.openBridge("user-a"), env, t);
+  const box = await Outbox.open(store.openBridge("user-a"), env, t, "tasks");
   await box.enqueue(op("op-flaky"));
   await env.advance(10_000);
 
@@ -71,7 +71,7 @@ test("auth-invalid pauses the queue; auth-restored resumes it (no drop, no spin)
   const t = new ScriptedTransport();
   t.respondWith({ ok: false, failure: { kind: "auth-invalid", detail: "token expired" } }, { ok: true });
 
-  const box = await Outbox.open(store.openBridge("user-a"), env, t);
+  const box = await Outbox.open(store.openBridge("user-a"), env, t, "tasks");
   await box.enqueue(op("op-authed"));
   await env.advance(700_000);
   assert.equal(t.sent.length, 1, "paused — no spinning while logged out");
@@ -88,7 +88,7 @@ test("rate-limited honors retryAfter, not the backoff table", async () => {
   const t = new ScriptedTransport();
   t.respondWith({ ok: false, failure: { kind: "rate-limited", retryAfterMs: 60_000, detail: "429" } }, { ok: true });
 
-  const box = await Outbox.open(store.openBridge("user-a"), env, t);
+  const box = await Outbox.open(store.openBridge("user-a"), env, t, "tasks");
   await box.enqueue(op("op-limited"));
   await env.advance(59_000);
   assert.equal(t.sent.length, 1, "not before the server's hint");
@@ -100,12 +100,12 @@ test("account switch: user B never sees or replays user A's queue (FC: cross-acc
   const store = new MemoryStore();
   const env = new ManualEnv();
   const tA = new ScriptedTransport();
-  const boxA = await Outbox.open(store.openBridge("user-a"), env, tA);
+  const boxA = await Outbox.open(store.openBridge("user-a"), env, tA, "tasks");
   await boxA.enqueue(op("op-private-to-a"));
 
   const tB = new ScriptedTransport();
   tB.respondWith({ ok: true });
-  const boxB = await Outbox.open(store.openBridge("user-b"), env, tB);
+  const boxB = await Outbox.open(store.openBridge("user-b"), env, tB, "tasks");
   await env.advance(1_000);
 
   assert.deepEqual(tB.sent, [], "user B's outbox is empty");
@@ -122,7 +122,7 @@ test("ops send strictly in order; a patch never overtakes its create", async () 
     { ok: true },
   );
 
-  const box = await Outbox.open(store.openBridge("user-a"), env, t);
+  const box = await Outbox.open(store.openBridge("user-a"), env, t, "tasks");
   await box.enqueue(op("op-create"));
   await box.enqueue(op("op-patch"));
   await env.advance(10_000);
@@ -134,15 +134,15 @@ test("crash after journal append but before send: op is not lost (crash harness)
   const store = new MemoryStore();
   const env = new ManualEnv();
   const t1 = new ScriptedTransport();
-  const box1 = await Outbox.open(store.openBridge("user-a"), env, t1);
+  const box1 = await Outbox.open(store.openBridge("user-a"), env, t1, "tasks");
   await box1.enqueue(op("op-1"));
   await box1.enqueue(op("op-2"));
   // Crash: the disk kept only the first append.
-  store.crashDropLogTail("user-a", "outbox", 1);
+  store.crashDropLogTail("user-a", "outbox-tasks", 1);
 
   const t2 = new ScriptedTransport();
   t2.respondWith({ ok: true }, { ok: true });
-  await Outbox.open(store.openBridge("user-a"), env, t2);
+  await Outbox.open(store.openBridge("user-a"), env, t2, "tasks");
   await env.advance(1);
   assert.deepEqual(t2.sent, ["op-1"], "surviving journal entries replay; lost tail loses only what durability semantics allow");
 });

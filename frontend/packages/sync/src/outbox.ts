@@ -50,10 +50,19 @@ export class Outbox {
     private readonly transport: Transport,
   ) {}
 
-  static async open(bridge: StorageBridge, env: Env, transport: Transport): Promise<Outbox> {
+  /**
+   * `domain` namespaces the journal and dead-letter store. It is REQUIRED, not
+   * defaulted: a shell hosting two domains opens two Outboxes over one bridge,
+   * and a shared namespace makes them read each other's journals and replay
+   * each other's ops through the wrong transport — a memory write dispatched
+   * at the tasks adapter, and vice versa. One durable log per domain is what
+   * makes that unrepresentable; the required parameter is what stops the next
+   * domain from forgetting.
+   */
+  static async open(bridge: StorageBridge, env: Env, transport: Transport, domain: string): Promise<Outbox> {
     const box = new Outbox(env, transport);
-    box.log = await bridge.openLog("outbox");
-    box.kv = await bridge.openKv("outbox-meta");
+    box.log = await bridge.openLog(`outbox-${domain}`);
+    box.kv = await bridge.openKv(`outbox-meta-${domain}`);
     const entries = await box.log.scan(0);
     const done = new Set<string>();
     const ops: PendingOp[] = [];

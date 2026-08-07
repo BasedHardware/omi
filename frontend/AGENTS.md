@@ -19,10 +19,14 @@ their output in your commit message evidence.
 
 ## The exemplar rule
 
-The tasks slice is the exemplar. When you add or change anything, find how the tasks slice
-does it and copy that shape. **Do not invent a parallel pattern** — if the exemplar's
-pattern genuinely cannot express what you need, stop and surface it; that is a foundation
-gap, not your call to fill.
+The exemplar is the **tasks + memories pair**. When you add or change anything, find how
+those two slices do it and copy that shape. Two slices, not one, because a single
+instance cannot teach multiplicity: wave 4 proved that copying tasks *correctly* still
+produced a cross-domain outbox collision, because nothing in one instance shows which
+names must be namespaced per domain. Where the two slices differ, the difference IS the
+lesson — look at why before choosing. **Do not invent a parallel pattern** — if the
+exemplar pair genuinely cannot express what you need, stop and surface it; that is a
+foundation gap, not your call to fill.
 
 ## Hard rules (violations are review-blocking, most are CI-enforced)
 
@@ -58,15 +62,21 @@ gap, not your call to fill.
     `node scripts/gen-barrels.mjs` (CI runs `--check`). Adding a file to a package's
     `src/` is all it takes to export it.
 
-12. **Snapshot honesty.** An id snapshot may claim `complete: true` only when the source
-    provably returned the whole unfiltered set: a 200 with an unexpected body returns
-    `null` (never a complete empty snapshot), a full page never claims completeness, and
-    a list endpoint with ANY server-side filter may never back `complete: true` at all.
-    Wrong `complete: true` is user data loss via `Projection.reconcile`.
+12. **Snapshot honesty — `complete: true` is the exceptional claim.** Filtered sources
+    are the NORM on this backend (2 of the first 4 domains filter server-side, one of
+    them *after* the page limit). The default assumption for any list endpoint is
+    therefore: it may NOT back `complete: true`. An id snapshot claims completeness only
+    when the source provably returned the whole unfiltered set, and the domain's
+    `SnapshotDescriptor` must carry the declared evidence for that claim (a repo-relative
+    locator or one-line proof of unfilteredness) — a descriptor asserting
+    complete-capability without evidence fails the harness. A 200 with an unexpected
+    body returns `null` (never a complete empty snapshot); a full page never claims
+    completeness. Wrong `complete: true` is user data loss via `Projection.reconcile`.
     ENFORCED BY HARNESS: every new domain registers a `SnapshotDescriptor` in
     `packages/testkit/src/test/snapshot-conformance.test.ts` — the shared law suite runs
-    it automatically (it caught this bug in 3 of the first 5 domains, including the
-    original exemplar).
+    it automatically. History: the permissive version of this rule let wave 4 certify a
+    data-loss bug as conformant via a mis-declared descriptor kind; declaring the kind is
+    a claim about the BACKEND, not about your adapter, and must cite backend evidence.
 
 13. **Shell hosts bind loopback-only, and the origin is frozen.** A serving socket binds
     `127.0.0.1` explicitly and the verification script asserts it (`lsof` + a LAN-address
