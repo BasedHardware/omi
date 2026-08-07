@@ -181,21 +181,32 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
 
   // MARK: - The orientation cue describes the window the user actually has
 
-  /// The cue used to read "I live in your menu bar. Closing this window doesn't stop me." Both
-  /// halves of the second sentence were wrong: the window has no close button (`ShellWindowChrome`
-  /// hides all three traffic lights), and completing onboarding turns the shell into a `.summoned`
-  /// panel with `hidesOnDeactivate = true`. So the first click into another app made the whole
-  /// window disappear, having just been told the opposite about a control that isn't there.
-  func testTheMenuBarCuePreparesTheUserForTheWindowDisappearing() throws {
+  /// This cue has been wrong twice, in opposite directions, which is why it is asserted on substance
+  /// rather than left to review. It first read "I live in your menu bar. Closing this window doesn't
+  /// stop me" — and the window has no close button, `ShellWindowChrome` hides all three traffic
+  /// lights. It was then rewritten to "click another app and I'll step out of the way", which was true
+  /// only while `.summoned` meant `hidesOnDeactivate = true`; the shell now stays in front of your work
+  /// until you ask it to leave, so that sentence promises a disappearance that no longer happens.
+  ///
+  /// What has to hold in either direction: name no control the window does not have, describe the
+  /// behaviour it actually has, and always name the way back.
+  func testTheMenuBarCueDescribesAShellThatStaysUntilYouPutItAway() throws {
     let cues = SBPostOnboardingGuidance.orientationCues(
       openShortcutTokens: ["⌃", "⌘", "O"], talkShortcutTokens: [], setup: SBSetupSnapshot())
     let menubar = try XCTUnwrap(cues.first { $0.id == "menubar" })
+    let title = menubar.title.lowercased()
 
     XCTAssertFalse(
-      menubar.title.lowercased().contains("clos"),
-      "there is no close button on this window, and describing one is how the old cue went stale")
+      title.contains("clos"),
+      "there is no close button on this window, and describing one is how the first cue went stale")
+    XCTAssertFalse(
+      title.contains("step out of the way") || title.contains("get out of your way"),
+      "the shell no longer hides itself when another app takes focus; promising it does is the second")
     XCTAssertTrue(
-      menubar.title.lowercased().contains("menu bar"),
+      title.contains("escape"),
+      "a window that stays in front of everything has to say how to put it away")
+    XCTAssertTrue(
+      title.contains("menu bar"),
       "the always-available way back must be named — the chord cue is conditional, this one is not")
   }
 
@@ -208,7 +219,7 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
   }
 
   /// A user who set no chord gets no chord cue, so the menu-bar sentence is then the *only* thing
-  /// standing between them and a window that has vanished with no explanation.
+  /// standing between them and a shell they dismissed with no idea how to get it back.
   func testWithNoChordTheMenuBarCueIsStillTheWayBack() {
     let cues = SBPostOnboardingGuidance.orientationCues(
       openShortcutTokens: [], talkShortcutTokens: [], setup: SBSetupSnapshot())
