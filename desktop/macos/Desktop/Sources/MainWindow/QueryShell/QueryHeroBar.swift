@@ -19,6 +19,19 @@
 //  the `⌘⏎ Ask` slot while a turn is in flight. A send button with no way to stop what it started is
 //  a control that only works when nothing has gone wrong.
 //
+//  The third thing it shipped without was **more than one line.** It was an `NSTextField` in a
+//  surface whose whole job is a question, so a pasted paragraph was stored in full and drawn as its
+//  last line, a long sentence scrolled its own beginning out of view, and there was no way to type a
+//  newline at all. It is now the same `OmiTextEditor` the other two composers use — one composer
+//  vocabulary, so Shift-⏎ writes a newline here exactly as it does there — measured by SwiftUI and
+//  capped at `QueryShellLayout.composerMaxHeight` so the results panel underneath keeps its window.
+//
+//  **The text is `ChatProvider`'s draft, not this view's.** The bar used to bind a `@State` on its
+//  host while `ChatProvider.draftText` — what the automation bridge writes and what persistence
+//  restores — went to a different variable nothing rendered: two variables behind one apparent
+//  control, so a restored draft was invisible and a harness that set one was asserting on neither.
+//  The host hands this view the provider's draft through `ChatDraftScope`.
+//
 //  Brand: `Ink` semantics only; the single accent is spent on `⌘⏎ Ask` — and on the Stop that stands
 //  in for it, because they are the same slot and the same weight (INV-UI-1).
 //
@@ -29,8 +42,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct QueryHeroBar: View {
+  /// The composer's text. **Always `ChatProvider.composerDraft` through `ChatDraftScope`** — see the
+  /// file header. A `@State` here, or on the host, is the defect this parameter exists to prevent.
   @Binding var text: String
-  var focus: FocusState<Bool>.Binding
+  /// The host's caret claim. Monotonic: every increment puts the caret back in this bar. `@FocusState`
+  /// cannot do that job here, because the field is an `NSTextView` that SwiftUI's `.focused()` does
+  /// not reach — and because a flag that is already `true` cannot re-claim a caret AppKit has since
+  /// given to something else. See `OmiTextEditor.focusRequest`.
+  let caretClaim: Int
   /// Quickens the mark while a turn is in flight, and swaps `⌘⏎ Ask` for Stop.
   let isWorking: Bool
   /// Stop has been asked for and the runtime has not finished unwinding yet.
@@ -49,6 +68,10 @@ struct QueryHeroBar: View {
   var onAttachmentRemoved: (String) -> Void = { _ in }
 
   @State private var isDropTargeted = false
+  /// True while an input method has uncommitted marked text, which is the one moment the placeholder
+  /// must stay hidden over an apparently empty field.
+  @State private var hasMarkedText = false
+  @Environment(\.fontScale) private var fontScale
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -61,6 +84,14 @@ struct QueryHeroBar: View {
     .padding(.horizontal, QueryShellLayout.barPaddingHorizontal)
     .padding(.vertical, QueryShellLayout.barPaddingVertical)
     .frame(minHeight: QueryShellLayout.barMinHeight)
+    // **The bar is sized by what is in it; the panel below is the flexible one.** Without this the
+    // column squeezes the bar — which has a range now that the composer grows — down to whatever is
+    // left after the results panel has taken its share, while the composer inside keeps the height it
+    // asked for and draws straight through the glass edge. Worse, the height the surface then
+    // *measures* off this bar is the squeezed one, so the panel's own reserve is computed from a
+    // number the bar never wanted, and the two settle on a wrong answer that neither can leave.
+    // `ChatInputView` pins itself the same way, for the same reason.
+    .fixedSize(horizontal: false, vertical: true)
     .frame(maxWidth: .infinity)
     .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
     .overlay(
@@ -80,34 +111,7 @@ struct QueryHeroBar: View {
     HStack(spacing: 14) {
       OmiQueryDotMark(diameter: QueryShellLayout.markDiameter, isWorking: isWorking)
 
-      TextField(
-        "",
-        text: $text,
-        prompt: Text(placeholder).foregroundColor(Ink.secondary)
-      )
-      .textFieldStyle(.plain)
-      .scaledFont(size: QueryShellLayout.queryFontSize, weight: .medium)
-      .foregroundStyle(Ink.primary)
-      .focused(focus)
-      .accessibilityIdentifier("query-shell-field")
-      .accessibilityLabel(Text(placeholder))
-      // Bare Return only. **A Command-modified key never reaches `onKeyPress`** — AppKit routes it
-      // to key-equivalent handling first — so `⌘⏎` is a real `keyboardShortcut` on the Ask button
-      // below rather than a modifier read here. Reading `press.modifiers` for it compiles, draws a
-      // convincing hint, and never fires once.
-      .onKeyPress(phases: .down) { press in
-        guard press.key == .return else { return .ignored }
-        switch QueryShellSubmit.resolve(text: text, commandHeld: mode == .answer) {
-        case .ask:
-          onAsk()
-          return .handled
-        case .search:
-          onSearch()
-          return .handled
-        case .none:
-          return .ignored
-        }
-      }
+      composer
 
       attachButton
 
@@ -137,6 +141,66 @@ struct QueryHeroBar: View {
       )
       .background(Circle().fill(Ink.rowFill))
       .accessibilityIdentifier("query-shell-push-to-talk")
+    }
+  }
+
+  /// **The field, grown into a composer.**
+  ///
+  /// **The editor reports its own height and the bar is sized from it.** The other arrangement —
+  /// measuring a hidden `Text` and overlaying the editor on it, which `ChatInputView` uses — was
+  /// tried here first and it grows the *text* without growing the glass: an `NSViewRepresentable`
+  /// with no `sizeThatFits` has no size of its own, so the editor kept drawing three lines through a
+  /// bar that was still one line tall, spilling the reader's own words outside the panel. Handing
+  /// `OmiTextEditor` a floor and a ceiling makes `sizeThatFits` return a real clamped height, which
+  /// is what SwiftUI then lays the row out to.
+  ///
+  /// The ceiling is the editor's, not a `frame` around it. Capping the frame would leave the editor
+  /// its full natural height inside a shorter window: you would see the *middle* of a long draft with
+  /// no way to scroll to either end, because the missing part is outside the scroll view rather than
+  /// below it. Bounded here, the editor gets a five-line viewport over the whole draft — which is
+  /// what its scroll bar is for. The floor equals one line plus its insets, so the bar's own
+  /// `minHeight` (64) still wins at rest and an empty composer leaves the surface exactly as it was.
+  private var composer: some View {
+    OmiTextEditor(
+      text: $text,
+      fontSize: round(QueryShellLayout.queryFontSize * fontScale),
+      textColor: Ink.nsPrimaryOnGlass,
+      // Bare Return only. **A Command-modified key never reaches here** — AppKit routes it to
+      // key-equivalent handling first — so `⌘⏎` is a real `keyboardShortcut` on the Ask button below
+      // rather than a modifier read at the field. Shift-Return is the editor's own newline and never
+      // arrives as a submit (`OmiComposerReturnKey`).
+      textContainerInset: NSSize(width: 0, height: QueryShellLayout.composerInsetVertical),
+      onSubmit: submitFromReturnKey,
+      // The caret is claimed explicitly by the host, so this editor must not also grab it — and must
+      // never bring the window forward on its own (`ComposerScrollView`).
+      focusOnAppear: false,
+      onMarkedTextChange: { hasMarkedText = $0 },
+      focusRequest: caretClaim,
+      minHeight: QueryShellLayout.composerMinHeight,
+      maxHeight: QueryShellLayout.composerMaxHeight
+    )
+    .frame(maxWidth: .infinity)
+    .overlay(alignment: .topLeading) {
+      if text.isEmpty && !hasMarkedText {
+        Text(placeholder)
+          .scaledFont(size: QueryShellLayout.queryFontSize, weight: .medium)
+          .foregroundStyle(Ink.secondary)
+          // Matches `textContainerInset` exactly, so the placeholder sits where the caret will.
+          .padding(.vertical, QueryShellLayout.composerInsetVertical)
+          .allowsHitTesting(false)
+      }
+    }
+    .accessibilityIdentifier("query-shell-field")
+    .accessibilityLabel(Text(placeholder))
+  }
+
+  /// `⏎` in the composer means whatever the bar's own hint says it means, so the key and the label
+  /// cannot disagree. `⌘⏎` never arrives here.
+  private func submitFromReturnKey() {
+    switch QueryShellSubmit.resolve(text: text, commandHeld: mode == .answer) {
+    case .ask: onAsk()
+    case .search: onSearch()
+    case .none: break
     }
   }
 

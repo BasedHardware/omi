@@ -303,10 +303,11 @@ enum QueryShellLayout {
   // were about to ask. Growing it is the fix, and the two numbers a growing field needs are how tall
   // one line is and where it stops.
 
-  /// One laid-out line of the query face. Not a guess: `QueryShellTests` checks it against
-  /// `NSLayoutManager`'s own line height for `NSFont.systemFont(ofSize: queryFontSize)`, so it tracks
-  /// the platform's metrics rather than dating from the day it was typed.
-  static let composerLineHeight: CGFloat = 25
+  /// One laid-out line of the query face — `NSLayoutManager.defaultLineHeight` for
+  /// `NSFont.systemFont(ofSize: 21)`, measured rather than estimated. `QueryComposerTests` checks it
+  /// against the platform every run, because the ceiling below is a whole number of these and an
+  /// approximate line height shows as a sixth line half-drawn at the bottom edge of the glass.
+  static let composerLineHeight: CGFloat = 24
 
   /// The text container's breathing room, top and bottom.
   static let composerInsetVertical: CGFloat = 6

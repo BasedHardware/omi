@@ -158,7 +158,7 @@ struct ChatInputView: View {
               OmiTextEditor(
                 text: $inputText,
                 fontSize: round(14 * fontScale),
-                textColor: composerTextColor,
+                textColor: Ink.nsPrimaryOnGlass,
                 textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
                 onSubmit: handleSubmit,
                 onMarkedTextChange: { hasMarkedText = $0 }
@@ -247,23 +247,6 @@ struct ChatInputView: View {
 
   private var dropStrokeColor: Color {
     isDropTargeted ? Ink.accent.opacity(0.6) : Ink.separator
-  }
-
-  /// The typed text, resolved against the glass's pinned light appearance instead of left dynamic.
-  ///
-  /// This one `NSColor` goes straight to an `NSTextView`, and AppKit resolves a dynamic colour
-  /// against the *view's* `effectiveAppearance` — not the SwiftUI `colorScheme` that
-  /// `glassContent()` pins. `WindowGlass.wear` pins the window for exactly this reason, but
-  /// `DesktopHomeView.enforceMainWindowMinimumSize` still stamps `.darkAqua` back onto every window
-  /// whose title starts with "omi", so this composer cannot rely on winning that race. Resolving up
-  /// front keeps the caret and the typed text near-black on the light well either way; the old
-  /// hardcoded `textPrimary` was `#FFFFFF` and lost that race in every case.
-  private var composerTextColor: NSColor {
-    var resolved = Ink.nsPrimary
-    InkGlass.appearance.performAsCurrentDrawingAppearance {
-      resolved = Ink.nsPrimary.usingColorSpace(.sRGB) ?? resolved
-    }
-    return resolved
   }
 
   private func handleSubmit() {
