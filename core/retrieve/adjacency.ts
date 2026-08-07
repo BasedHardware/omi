@@ -1,4 +1,4 @@
-import { compareStrings } from "./order";
+import { compareStrings } from "../order";
 import type { PersistedValidTime } from "../schema";
 import type { CommittedClaim, SafeSubgraph } from "./index";
 

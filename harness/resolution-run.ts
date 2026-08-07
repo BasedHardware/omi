@@ -1,3 +1,4 @@
+import { compareStrings } from "../core/order";
 import type { Entity } from "../core/schema";
 import type { EntityTable } from "../core/resolve/entities";
 import type { LocalHandle } from "../core/resolve/mentions";
@@ -30,7 +31,7 @@ export const runResolution = async (mentions: readonly ResolutionMention[], port
   };
   const assignments: Record<string, ResolutionBucket> = {};
   const clusters: Record<string, { cluster_id: string; label: string }> = {};
-  const ordered = [...mentions].sort((left, right) => left.session_id.localeCompare(right.session_id) || left.mention_id.localeCompare(right.mention_id));
+  const ordered = [...mentions].sort((left, right) => compareStrings(left.session_id, right.session_id) || compareStrings(left.mention_id, right.mention_id));
 
   for (const mention of ordered) {
     const handle: LocalHandle = { handle: `local:${mention.mention_id}`, mention_ref: mention.mention_id, antecedent_handle: null, uncertainty: [] };

@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 import { sha256CanonicalRedacted } from "../ledger";
 import { policyPartitionLabel, type LiveClaimView, type TreeInputSnapshot } from "./index";
 
@@ -46,7 +47,7 @@ const temporalParts = (value: string, timezone: string): { year: string; month: 
   const lookup = (type: string) => parts.find((part) => part.type === type)?.value ?? "00";
   return { year: lookup("year"), month: lookup("month"), day: lookup("day") };
 };
-const sorted = <T>(items: readonly T[], key: (item: T) => string): T[] => [...items].sort((left, right) => key(left).localeCompare(key(right)));
+const sorted = <T>(items: readonly T[], key: (item: T) => string): T[] => [...items].sort((left, right) => compareStrings(key(left), key(right)));
 
 interface Draft { view_kind: ViewKind; anchor_key: string; parent_anchor: string | null; partition: string; members: Set<string>; }
 const add = (drafts: Map<string, Draft>, view_kind: ViewKind, anchor_key: string, parent_anchor: string | null, claim: LiveClaimView): void => {

@@ -1,9 +1,10 @@
+import { compareStrings } from "../order";
 export interface StmItem {
   id: string; session_id: string; event_time_watermark: string; capture_sequence: number; revision_lineage: string;
   ingest_sequence: number; entity_refs: readonly string[]; lexical_terms: readonly string[]; vector_key: string; predicate_id: string; bytes: number;
 }
 export const compareStmOrder = (left: StmItem, right: StmItem): number =>
-  left.event_time_watermark.localeCompare(right.event_time_watermark) || left.capture_sequence - right.capture_sequence || left.revision_lineage.localeCompare(right.revision_lineage) || left.ingest_sequence - right.ingest_sequence || left.id.localeCompare(right.id);
+  compareStrings(left.event_time_watermark, right.event_time_watermark) || left.capture_sequence - right.capture_sequence || compareStrings(left.revision_lineage, right.revision_lineage) || left.ingest_sequence - right.ingest_sequence || compareStrings(left.id, right.id);
 
 /** Append-only STM with deterministic secondary indexes. */
 export class StmStore {

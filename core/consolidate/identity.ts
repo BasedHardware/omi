@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 import type { Evidence, L1Event, Mention } from "../schema";
 import { sha256CanonicalRedacted } from "../ledger";
 
@@ -81,20 +82,20 @@ export const buildReferentProfiles = (mentions: readonly Mention[], claims: read
           const matched = evidenceById.get(ref);
           const event = matched ? eventsByRevision.get(matched.evidence.event_revision_id) : undefined;
           return { evidence_ref: ref, excerpt: matched?.evidence.excerpt ?? null, capture_session_id: event?.capture_session_id ?? null, event_time: event?.event_time ?? null, source_sequence: event?.source_sequence ?? null };
-        }).sort((left, right) => left.evidence_ref.localeCompare(right.evidence_ref));
+        }).sort((left, right) => compareStrings(left.evidence_ref, right.evidence_ref));
         return {
           predicate: claim.claim.predicate,
           role: argument.role,
           polarity: claim.claim.polarity ?? null,
           other_arguments: claim.claim.arguments.filter((other) => other.slot_id !== mention.slot_id)
-            .map((other) => ({ role: other.role, value: other.value })).sort((left, right) => `${left.role}\u0000${stableValue(left.value)}`.localeCompare(`${right.role}\u0000${stableValue(right.value)}`)),
+            .map((other) => ({ role: other.role, value: other.value })).sort((left, right) => compareStrings(`${left.role}\u0000${stableValue(left.value)}`, `${right.role}\u0000${stableValue(right.value)}`)),
           evidence_context,
           cooccurring_predicates: [...(predicatesByIdentity.get(sourceIdentityKey(mention.source_identity_ref!)) ?? new Set<string>())].filter((predicate) => predicate !== claim.claim.predicate).sort(),
           observed_at: claim.claim.temporal_scope?.observed_at ?? null,
           evidence_refs: [...claim.claim.evidence_refs].sort(),
         };
       })),
-  })).sort((left, right) => left.mention_id.localeCompare(right.mention_id));
+  })).sort((left, right) => compareStrings(left.mention_id, right.mention_id));
 };
 
 /** A conservative deterministic harness proposer: predicate/role alone never forms a group. */
@@ -121,7 +122,7 @@ export const proposeProfileOverlaps = (profiles: readonly ReferentProfile[]): re
   }
   const groups = new Map<number, string[]>();
   for (let index = 0; index < profiles.length; index++) groups.set(root(index), [...(groups.get(root(index)) ?? []), profiles[index]!.mention_id]);
-  return [...groups.values()].filter((group) => group.length > 1).map((group) => group.sort()).sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
+  return [...groups.values()].filter((group) => group.length > 1).map((group) => group.sort()).sort((left, right) => compareStrings(left.join("\u0000"), right.join("\u0000")));
 };
 
 /**
@@ -152,9 +153,9 @@ export const blockMentionClusters = (mentions: readonly Mention[], maxClusterSiz
   const clusters: (readonly Mention[])[] = [];
   const oversize: (readonly Mention[])[] = [];
   const single_claim: (readonly Mention[])[] = [];
-  for (const [, group] of [...byKey.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [, group] of [...byKey.entries()].sort(([left], [right]) => compareStrings(left, right))) {
     if (group.length < 2) continue;
-    const sorted = [...group].sort((left, right) => left.mention_id.localeCompare(right.mention_id));
+    const sorted = [...group].sort((left, right) => compareStrings(left.mention_id, right.mention_id));
     // A cluster whose members all sit in one claim has nothing admissible to
     // merge: the same_claim_revision_id gate would reject any group formed
     // from it. Pre-reject it deterministically -- the audit record survives
@@ -200,9 +201,9 @@ export const blockIdentityClusters = (mentions: readonly Mention[], maxClusterSi
   }
   const clusters: (readonly Mention[])[] = [];
   const single_claim: (readonly Mention[])[] = [];
-  for (const [, group] of [...byKey.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [, group] of [...byKey.entries()].sort(([left], [right]) => compareStrings(left, right))) {
     if (group.length < 2) continue;
-    const sorted = [...group].sort((left, right) => left.mention_id.localeCompare(right.mention_id));
+    const sorted = [...group].sort((left, right) => compareStrings(left.mention_id, right.mention_id));
     if (new Set(group.map((mention) => mention.claim_revision_id)).size < 2) { single_claim.push(sorted); continue; }
     const seenClaims = new Set<string>();
     const bySession = new Map<string, Mention[]>();
@@ -218,7 +219,7 @@ export const blockIdentityClusters = (mentions: readonly Mention[], maxClusterSi
       const session = sessionByClaim.get(mention.claim_revision_id) ?? "";
       bySession.set(session, [...(bySession.get(session) ?? []), mention]);
     }
-    const rounds = [...bySession.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, members]) => members);
+    const rounds = [...bySession.entries()].sort(([left], [right]) => compareStrings(left, right)).map(([, members]) => members);
     const sample: Mention[] = [];
     for (let round = 0; sample.length < maxClusterSize && rounds.some((members) => members.length > round); round++)
       for (const members of rounds) {
@@ -227,7 +228,7 @@ export const blockIdentityClusters = (mentions: readonly Mention[], maxClusterSi
         if (member) sample.push(member);
       }
     if (sample.length < 2) continue;
-    clusters.push(sample.sort((left, right) => left.mention_id.localeCompare(right.mention_id)));
+    clusters.push(sample.sort((left, right) => compareStrings(left.mention_id, right.mention_id)));
   }
   return { clusters, single_claim };
 };
@@ -437,7 +438,7 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
     // label it by its dominant surface instead.
     const whoTokens = new Set(tokens(who));
     const surfaceGrounded = group.filter((id) => tokens(surfaceByMention.get(id) ?? "").some((token) => whoTokens.has(token))).length >= 2;
-    const dominantSurface = [...group.reduce((counts, id) => { const surface = (surfaceByMention.get(id) ?? "").trim(); if (surface) counts.set(surface.toLowerCase(), (counts.get(surface.toLowerCase()) ?? 0) + 1); return counts; }, new Map<string, number>()).entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? null;
+    const dominantSurface = [...group.reduce((counts, id) => { const surface = (surfaceByMention.get(id) ?? "").trim(); if (surface) counts.set(surface.toLowerCase(), (counts.get(surface.toLowerCase()) ?? 0) + 1); return counts; }, new Map<string, number>()).entries()].sort((left, right) => right[1] - left[1] || compareStrings(left[0], right[0]))[0]?.[0] ?? null;
     verified.push(group); whoByGroup.set(key(group), surfaceGrounded || producerBacked(group) ? who : dominantSurface ?? who); laneByGroup.set(key(group), "verified");
   }
   // Member-level pruning: a verified group may still carry same-sentence
@@ -483,7 +484,7 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
       // unanswerable check rejects the group for this cycle.
       const groupSurfaces = [...new Set(group.map((id) => surfaceByMention.get(id)).filter((surface): surface is string => !!surface))].sort();
       const renderingOf = (id: string): string | null => renderingByEvidence.get(evidenceByMention.get(id) ?? "") ?? null;
-      const dominantOf = (members: readonly string[]): string | null => [...members.flatMap((id) => { const rendering = renderingOf(id); return rendering ? [rendering] : []; }).reduce((counts, rendering) => counts.set(rendering, (counts.get(rendering) ?? 0) + 1), new Map<string, number>()).entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ?? null;
+      const dominantOf = (members: readonly string[]): string | null => [...members.flatMap((id) => { const rendering = renderingOf(id); return rendering ? [rendering] : []; }).reduce((counts, rendering) => counts.set(rendering, (counts.get(rendering) ?? 0) + 1), new Map<string, number>()).entries()].sort((left, right) => right[1] - left[1] || compareStrings(left[0], right[0]))[0]?.[0] ?? null;
       let coherent: readonly string[];
       try {
         const verdict = await model.invoke({ strategy: "speaker-self-reference", version: "dream-self-reference-v1", input: { speaker: dominantOf(group), phrases: groupSurfaces } }) as { self_referring?: readonly boolean[] };
@@ -527,8 +528,8 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
     if (outcome.kind === "no_label" || outcome.check?.names_specific_referent !== true) { rejected_same_groups.push({ group_mention_ids: [...group].sort(), retryable: false, reason: "identity_reference_context_dependent" }); continue; }
     admitted.push(group);
   }
-  const same_groups = [...admitted].sort((left, right) => key(left).localeCompare(key(right)));
-  const uncertain_pairs = [...new Map(uncertainPairs.map((pair) => [pair.join("|"), pair])).values()].sort((left, right) => left.join("|").localeCompare(right.join("|")));
+  const same_groups = [...admitted].sort((left, right) => compareStrings(key(left), key(right)));
+  const uncertain_pairs = [...new Map(uncertainPairs.map((pair) => [pair.join("|"), pair])).values()].sort((left, right) => compareStrings(left.join("|"), right.join("|")));
   return { partition_hash: `partition:${sha256CanonicalRedacted({ same_groups })}`, same_groups, same_group_who: same_groups.map((group) => whoByGroup.get(key(group)) ?? null), same_group_kind: same_groups.map((group) => kindByGroup.get(key(group)) ?? null), same_group_lane: same_groups.map((group) => laneByGroup.get(key(group)) ?? "verified"), uncertain_pairs, rejected_same_groups };
 };
 
@@ -585,6 +586,6 @@ export const invokeIdentityAdjudication = async (model: IdentityAdjudicationPort
       return true;
     });
   const same_groups = admitted.map((group) => group.members);
-  const uncertain_pairs = (response.uncertain_pairs ?? []).map((pair) => [pair[0], pair[1]!].sort() as [string, string]).sort((left, right) => left.join("\u0000").localeCompare(right.join("\u0000")));
+  const uncertain_pairs = (response.uncertain_pairs ?? []).map((pair) => [pair[0], pair[1]!].sort() as [string, string]).sort((left, right) => compareStrings(left.join("\u0000"), right.join("\u0000")));
   return { partition_hash: `partition:${sha256CanonicalRedacted({ same_groups })}`, same_groups, same_group_who: admitted.map((group) => group.who), same_group_kind: admitted.map((group) => group.kind), same_group_lane: admitted.map(() => "verified" as const), uncertain_pairs, rejected_same_groups };
 };

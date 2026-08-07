@@ -1,4 +1,4 @@
-import { compareStrings } from "./order";
+import { compareStrings } from "../order";
 import type { ClaimPlacementStatus, GeneratedAdjacency, PlacementArtifact } from "../ledger";
 import type { CanonicalClaim, ClaimArgument, Entity, Evidence, IdentityAuthorization, IdentityConstraint, IdentityEndpoint, L1Event, Mention, PersistedValidTime, Predicate, PredicateAssertion, ProvisionalClaim } from "../schema";
 import type { ImmutableIdentitySupport } from "../resolve/identity-authority";

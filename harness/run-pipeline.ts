@@ -1,3 +1,4 @@
+import { compareStrings } from "../core/order";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import Ajv2020 from "ajv/dist/2020.js";
@@ -181,7 +182,7 @@ export const runPipeline = async (argv: readonly string[], dependencies: RunPipe
   if (!Number.isInteger(batchSize) || batchSize < 1) throw new Error("--batch must be a positive integer");
 
   const corpus = readCorpus(corpusPath), db = new Database(dbPath), ledger = new SqliteLedger(db), stm = new SqliteStmStore(db);
-  const sessions = [...corpus.sessions].sort((left, right) => left.segments[0]!.start_at.localeCompare(right.segments[0]!.start_at) || left.capture_sequence - right.capture_sequence || left.revision_lineage.localeCompare(right.revision_lineage) || left.ingest_sequence - right.ingest_sequence || left.session_id.localeCompare(right.session_id)).slice(0, maxSessions);
+  const sessions = [...corpus.sessions].sort((left, right) => compareStrings(left.segments[0]!.start_at, right.segments[0]!.start_at) || left.capture_sequence - right.capture_sequence || compareStrings(left.revision_lineage, right.revision_lineage) || left.ingest_sequence - right.ingest_sequence || compareStrings(left.session_id, right.session_id)).slice(0, maxSessions);
   let parent = ledger.graphHead(corpus.owner_account_id)?.commit_id ?? null;
   const dreamFailures: { cycle: number; reason: string }[] = [];
   let calls = 0, dreamCycles = 0, lastTriggerTokens = 0;

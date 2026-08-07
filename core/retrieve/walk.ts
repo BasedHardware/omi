@@ -1,4 +1,4 @@
-import { compareStrings } from "./order";
+import { compareStrings } from "../order";
 import type { SafeEvidenceLineage, SafeSubgraph } from "./index";
 import { projectTypedAdjacency, type ProjectedAdjacencyEdge, type TypedAdjacencyKind } from "./adjacency";
 

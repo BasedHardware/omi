@@ -1,4 +1,4 @@
-import { compareStrings } from "./order";
+import { compareStrings } from "../order";
 import { canonicalEntityIdsAt, project, type GraphSnapshot, type SafeSubgraph } from "./index";
 import { projectTypedAdjacency, type TypedAdjacencyKind } from "./adjacency";
 import { buildWalkIndex, walk, type WalkPath } from "./walk";

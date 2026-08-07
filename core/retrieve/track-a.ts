@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 import { policyPartitionLabel, type LiveClaimView } from "./index";
 import { nodeId, structuralRevision, type StructuralNode, type StructuralTree, type ViewKind } from "./tree";
 
@@ -67,7 +68,7 @@ export const incrementallyTransitionAnchors = (previous: StructuralTree, transit
     const parent = draft.parent ? all.find((other) => other.view === draft.view && other.anchor === draft.parent && other.partition === draft.partition) : undefined;
     const partial = { node_id: nodeId(transition.owner_account_id, draft.view, draft.anchor, draft.partition), view_kind: draft.view, anchor_key: draft.anchor, parent_node_id: parent ? nodeId(transition.owner_account_id, parent.view, parent.anchor, parent.partition) : null, child_node_ids: children, order_key: draft.anchor, policy_partition_label: draft.partition, member_claim_revision_ids: members, dependency_manifest: { live_member_revisions: members, child_render_hashes: [] }, graph_generation: transition.next_graph_generation };
     return { ...partial, structural_revision: structuralRevision(partial) };
-  }).sort((a, b) => a.node_id.localeCompare(b.node_id));
+  }).sort((a, b) => compareStrings(a.node_id, b.node_id));
   return { input_generation: transition.next_graph_generation, nodes };
 };
 

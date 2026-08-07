@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 import { sha256CanonicalRedacted } from "../ledger";
 import type { CanonicalClaim, PredicateAssertion, ProvisionalClaim } from "../schema";
 
@@ -7,7 +8,7 @@ export interface PropositionIdentity { predicate_id: string; slots: readonly { s
 
 /** Hash every semantic input: aliases are never an ambient mutable lookup. */
 export const aliasFrontierGeneration = (edges: readonly AliasEdge[]): string => sha256CanonicalRedacted({
-  kind: "predicate-alias-frontier-v1", edges: [...edges].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+  kind: "predicate-alias-frontier-v1", edges: [...edges].sort((a, b) => compareStrings(JSON.stringify(a), JSON.stringify(b))),
 });
 
 const resolve = (value: string, edges: readonly AliasEdge[], field: "from_predicate_id" | "from_slot_id", target: "to_predicate_id" | "to_slot_id"): string => {
@@ -21,11 +22,11 @@ const resolve = (value: string, edges: readonly AliasEdge[], field: "from_predic
   return current;
 };
 
-export const rawPropositionKey = (identity: PropositionIdentity): string => sha256CanonicalRedacted({ predicate_id: identity.predicate_id, slots: [...identity.slots].sort((a, b) => a.slot_id.localeCompare(b.slot_id)) });
+export const rawPropositionKey = (identity: PropositionIdentity): string => sha256CanonicalRedacted({ predicate_id: identity.predicate_id, slots: [...identity.slots].sort((a, b) => compareStrings(a.slot_id, b.slot_id)) });
 export const resolvedPropositionKey = (identity: PropositionIdentity, frontier: PredicateAliasFrontier): string => sha256CanonicalRedacted({
   frontier: frontier.generation,
   predicate_id: resolve(identity.predicate_id, frontier.edges, "from_predicate_id", "to_predicate_id"),
-  slots: identity.slots.map((slot) => ({ ...slot, slot_id: resolve(slot.slot_id, frontier.edges, "from_slot_id", "to_slot_id") })).sort((a, b) => a.slot_id.localeCompare(b.slot_id)),
+  slots: identity.slots.map((slot) => ({ ...slot, slot_id: resolve(slot.slot_id, frontier.edges, "from_slot_id", "to_slot_id") })).sort((a, b) => compareStrings(a.slot_id, b.slot_id)),
 });
 
 /** Only accepted append-only assertions participate in the persisted alias frontier. */

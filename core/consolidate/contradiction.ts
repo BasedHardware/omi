@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 /** Pure false-merge detector. Inputs are already committed claim facts; no model dependency. */
 export interface ContradictionFact {
   claim_revision_id: string;
@@ -18,7 +19,7 @@ const overlaps = (left: ContradictionFact, right: ContradictionFact): boolean =>
 
 export const scanContradictions = (facts: readonly ContradictionFact[]): readonly SplitCandidate[] => {
   const result: SplitCandidate[] = [];
-  const ordered = [...facts].sort((a, b) => a.claim_revision_id.localeCompare(b.claim_revision_id));
+  const ordered = [...facts].sort((a, b) => compareStrings(a.claim_revision_id, b.claim_revision_id));
   for (let index = 0; index < ordered.length; index++) for (let peer = index + 1; peer < ordered.length; peer++) {
     const left = ordered[index]!, right = ordered[peer]!;
     if (left.entity_id !== right.entity_id || !overlaps(left, right)) continue;
@@ -29,5 +30,5 @@ export const scanContradictions = (facts: readonly ContradictionFact[]): readonl
       result.push({ entity_id: left.entity_id, kind: "single_valued", claim_revision_ids: [left.claim_revision_id, right.claim_revision_id], reason: "two values for a single-valued attribute over overlapping valid time" });
     }
   }
-  return result.sort((a, b) => `${a.entity_id}:${a.kind}:${a.claim_revision_ids.join(":")}`.localeCompare(`${b.entity_id}:${b.kind}:${b.claim_revision_ids.join(":")}`));
+  return result.sort((a, b) => compareStrings(`${a.entity_id}:${a.kind}:${a.claim_revision_ids.join(":")}`, `${b.entity_id}:${b.kind}:${b.claim_revision_ids.join(":")}`));
 };

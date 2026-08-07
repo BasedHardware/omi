@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 import { sha256CanonicalRedacted } from "../ledger";
 import type { GraphSnapshot } from "./index";
 import { projectTreeInputSnapshot } from "./index";
@@ -48,13 +49,13 @@ export const getWritingContext = (snapshot: GraphSnapshot, request: WritingConte
   for (const claim of claims) { const predicateId = claim.predicate_id ?? `raw:${claim.predicate}`; const current = predicateStats.get(predicateId) ?? { count: 0, slots: new Set<string>(), example: claim.predicate }; current.count++; for (const argument of claim.arguments) current.slots.add(argument.slot_id); predicateStats.set(predicateId, current); }
   const frontier = { graph_head: String(snapshot.graph_generation ?? "snapshot"), policy_version: request.policy_version, predicate_alias_generation: request.predicate_alias_generation, authorization_generation: request.authorization_generation, stm_generation: request.stm_generation };
   return { frontier,
-    entity_candidates: [...candidates.values()].sort((a, b) => relevance([...a.renderings, ...a.profile], queryTerms) - relevance([...b.renderings, ...b.profile], queryTerms) || a.ref.localeCompare(b.ref)).reverse().slice(0, 20),
+    entity_candidates: [...candidates.values()].sort((a, b) => relevance([...a.renderings, ...a.profile], queryTerms) - relevance([...b.renderings, ...b.profile], queryTerms) || compareStrings(a.ref, b.ref)).reverse().slice(0, 20),
     // `name` falls back to the extracted predicate spelling, never to the
     // predicate_id: a sha256 shown as a name is what let one poisoned emission
     // re-enter the next window's context and poison the cycle after it. A
     // signature whose display name is already an id is dropped rather than
     // shown, which breaks that loop for graphs that were written before this.
-    predicate_signatures: [...predicateStats].map(([predicate_id, item]) => ({ predicate_id, name: snapshot.predicates?.find((candidate) => candidate.predicate.predicate_id === predicate_id)?.predicate.display_name ?? item.example, slots: [...item.slots].sort(), use_count: item.count, example: item.example })).filter((signature) => !isOpaqueIdentifier(signature.name)).sort((a, b) => relevance([a.name, a.example, ...a.slots], queryTerms) - relevance([b.name, b.example, ...b.slots], queryTerms) || a.predicate_id.localeCompare(b.predicate_id)).reverse().slice(0, 30),
-    open_propositions: claims.filter((claim) => claim.canonical_claim_id !== null).map((claim) => ({ proposition_key_resolved: claim.proposition_key_resolved ?? sha256CanonicalRedacted({ predicate_id: claim.predicate_id ?? `raw:${claim.predicate}`, arguments: claim.arguments }), canonical_claim_id: claim.canonical_claim_id!, text: claimText(claim), valid_time: claim.valid_time })).sort((a, b) => relevance([a.text], queryTerms) - relevance([b.text], queryTerms) || a.canonical_claim_id.localeCompare(b.canonical_claim_id)).reverse().slice(0, 20),
+    predicate_signatures: [...predicateStats].map(([predicate_id, item]) => ({ predicate_id, name: snapshot.predicates?.find((candidate) => candidate.predicate.predicate_id === predicate_id)?.predicate.display_name ?? item.example, slots: [...item.slots].sort(), use_count: item.count, example: item.example })).filter((signature) => !isOpaqueIdentifier(signature.name)).sort((a, b) => relevance([a.name, a.example, ...a.slots], queryTerms) - relevance([b.name, b.example, ...b.slots], queryTerms) || compareStrings(a.predicate_id, b.predicate_id)).reverse().slice(0, 30),
+    open_propositions: claims.filter((claim) => claim.canonical_claim_id !== null).map((claim) => ({ proposition_key_resolved: claim.proposition_key_resolved ?? sha256CanonicalRedacted({ predicate_id: claim.predicate_id ?? `raw:${claim.predicate}`, arguments: claim.arguments }), canonical_claim_id: claim.canonical_claim_id!, text: claimText(claim), valid_time: claim.valid_time })).sort((a, b) => relevance([a.text], queryTerms) - relevance([b.text], queryTerms) || compareStrings(a.canonical_claim_id, b.canonical_claim_id)).reverse().slice(0, 20),
   };
 };

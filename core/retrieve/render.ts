@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 import { sha256CanonicalRedacted } from "../ledger";
 import { policyPartitionLabel, type PolicyClass, type TreeInputSnapshot } from "./index";
 import type { DependencyManifest, StructuralNode, StructuralTree } from "./tree";
@@ -73,5 +74,5 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
     }
   };
   await Promise.all(tree.nodes.map(visit));
-  return [...rendered.values()].sort((left, right) => left.node_id.localeCompare(right.node_id));
+  return [...rendered.values()].sort((left, right) => compareStrings(left.node_id, right.node_id));
 };

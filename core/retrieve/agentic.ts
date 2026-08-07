@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 import { project, walk, type GraphSnapshot, type LiveClaimView, type TreeInputSnapshot } from "./index";
 import type { RequestContext } from "./grant";
 import type { AbsenceDisclosure, ComposeModelPort, DogfoodResponse } from "./dogfood";
@@ -110,7 +111,7 @@ export const runAgenticTools = (input: TreeInputSnapshot, graph: GraphSnapshot, 
     const ranked = searchable
       .map((claim) => ({ claim, score: scoreClaim(query, claim) }))
       .filter((row) => row.score > 0)
-      .sort((a, b) => b.score - a.score || a.claim.claim_revision_id.localeCompare(b.claim.claim_revision_id))
+      .sort((a, b) => b.score - a.score || compareStrings(a.claim.claim_revision_id, b.claim.claim_revision_id))
       .slice(0, limit)
       .map((row) => ({ score: row.score, ...summarizeClaim(row.claim) }));
     return { result: { hits: ranked } };
@@ -133,7 +134,7 @@ export const runAgenticTools = (input: TreeInputSnapshot, graph: GraphSnapshot, 
     }
     const surfaces = [...counts.entries()]
       .map(([name, row]) => ({ name, ...row }))
-      .sort((a, b) => b.count - a.count || Number(b.owner) - Number(a.owner) || a.name.localeCompare(b.name))
+      .sort((a, b) => b.count - a.count || Number(b.owner) - Number(a.owner) || compareStrings(a.name, b.name))
       .slice(0, limit);
     return { result: { surfaces } };
   }

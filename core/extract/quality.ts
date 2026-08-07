@@ -1,3 +1,4 @@
+import { compareStrings } from "../order";
 /**
  * Post-extraction degeneracy report.
  *
@@ -42,6 +43,6 @@ export const checkRelationDistribution = (relations: readonly string[]): readonl
   return [...counts]
     .map(([relation, count]) => ({ relation, share: count / relations.length, count }))
     .filter((item) => item.share > extractionQualityThresholds.max_relation_share)
-    .sort((left, right) => right.share - left.share || left.relation.localeCompare(right.relation))
+    .sort((left, right) => right.share - left.share || compareStrings(left.relation, right.relation))
     .map((item) => ({ code: "relation_share_exceeded" as const, detail: `${item.relation} used by ${item.count} of ${relations.length} claims`, observed: item.share, threshold: extractionQualityThresholds.max_relation_share }));
 };

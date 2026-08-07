@@ -1,3 +1,4 @@
+import { compareStrings } from "../../core/order";
 import { Database } from "bun:sqlite";
 import {
   canonicalizeRedacted,
@@ -387,7 +388,7 @@ export class SqliteLedger implements LedgerPort {
     const mentionRows = (this.db.query("SELECT m.revision_id, m.content_json, d.sequence AS commit_sequence FROM mention_revisions m JOIN derivation_commits d ON d.commit_id=m.commit_id WHERE m.owner_account_id = ? ORDER BY d.sequence, m.revision_id").all(ownerAccountId) as { revision_id: string; content_json: string; commit_sequence: number }[]);
     const latestMentions = new Map<string, { revision_id: string; mention: import("../../core/schema").Mention; commit_sequence: number }>();
     for (const row of mentionRows) { const mention = JSON.parse(row.content_json) as import("../../core/schema").Mention; latestMentions.set(mention.mention_id, { revision_id: row.revision_id, mention, commit_sequence: row.commit_sequence }); }
-    const mentions = [...latestMentions.values()].sort((left, right) => left.revision_id.localeCompare(right.revision_id)).map(({ revision_id, mention }) => ({ revision_id, mention }));
+    const mentions = [...latestMentions.values()].sort((left, right) => compareStrings(left.revision_id, right.revision_id)).map(({ revision_id, mention }) => ({ revision_id, mention }));
     const identity_authorizations = (this.db.query("SELECT revision_id, content_json FROM identity_authorization_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { revision_id: string; content_json: string }[])
       .map((row) => ({ revision_id: row.revision_id, authorization: JSON.parse(row.content_json) }));
     const identity_support = (this.db.query("SELECT content_json FROM identity_support_revisions WHERE owner_account_id = ? ORDER BY revision_id").all(ownerAccountId) as { content_json: string }[])
