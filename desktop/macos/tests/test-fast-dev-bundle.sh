@@ -109,6 +109,17 @@ grep -q 'OMI_FORCE_FULL_BUNDLE=1' "$assert_output"
 install_agent_runtime_payload "$TMP_ROOT/installed.app"
 omi_assert_agent_runtime_payload "$TMP_ROOT/installed.app" "install"
 
+# Everything above is pure fingerprint and payload arithmetic and runs anywhere.
+# Everything below invokes the real `run.sh`, which needs macOS — it resolves
+# /Applications, codesigns, and drives launchctl. The Hygiene lane runs on
+# ubuntu-latest, so gate the launcher half on the platform rather than dropping
+# the whole file from CI: the static half is the part that catches a bundle
+# shipped without its runtime payload, and it is worth running on every push.
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "fast-dev-bundle fingerprint and payload tests passed (launcher contracts skipped: not macOS)"
+  exit 0
+fi
+
 # An agent's failed --fast-only probe must not tear down a running app, clean
 # build output, or start services merely to discover that the named bundle does
 # not exist. Exercise the real launcher with a unique missing app name.
