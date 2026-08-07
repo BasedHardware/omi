@@ -97,6 +97,59 @@ final class PageGlassLaneTests: XCTestCase {
       "one tall panel: the page fills the window and scrolls inside itself")
   }
 
+  /// **The desktop survives on all four sides of the panel, at every window size.**
+  ///
+  /// This is the claim the two cases around it exist to serve, and the one they cannot make. Both
+  /// assert the panel *matches* `laneWidth` and the gaps — which stays true if `contentLaneWidth` is
+  /// ever changed to return the whole window, or if the gaps go to zero. Either change turns the
+  /// lane back into a full-bleed sheet of glass behind the UI, renders identically to the window
+  /// ground `ShellWindowChrome` deleted, and logs nothing.
+  ///
+  /// Measured off a real layout pass rather than recomputed: the recorded frame is in the hosting
+  /// view's own coordinates, so the four margins are the wallpaper the user actually keeps.
+  func testTheLanesGlassNeverReachesAnyEdgeOfTheWindow() {
+    let sizes: [CGSize] = [
+      CGSize(width: DesktopWindowLayoutPolicy.width, height: DesktopWindowLayoutPolicy.height),
+      CGSize(width: 900, height: 600),
+      CGSize(width: 1_280, height: 800),
+      CGSize(width: 3_440, height: 1_440),
+    ]
+
+    for size in sizes {
+      let recorder = PageGlassLaneFrameRecorder()
+      let host = NSHostingView(
+        rootView: PageGlassLane(selectedIndex: SidebarNavItem.tasks.rawValue) {
+          PageGlassLaneProbe(recorder: recorder) { Color.clear }
+        }
+        .frame(width: size.width, height: size.height)
+      )
+      host.frame = NSRect(origin: .zero, size: size)
+      host.layoutSubtreeIfNeeded()
+
+      guard let placed = recorder.frame else {
+        return XCTFail("expected the wrapped destination to be placed at \(size)")
+      }
+
+      let leading = placed.minX
+      let trailing = size.width - placed.maxX
+      let top = placed.minY
+      let bottom = size.height - placed.maxY
+
+      for (edge, margin) in [("leading", leading), ("trailing", trailing), ("top", top), ("bottom", bottom)] {
+        XCTAssertGreaterThan(
+          margin, 0,
+          "at \(size) the panel reaches the \(edge) edge: that is a ground spanning the window, not a "
+            + "panel floating on the desktop")
+      }
+      // The horizontal margin is the page's own, never smaller — a panel one point inside the frame
+      // is a full-bleed sheet with a rounding error, not a floating object.
+      XCTAssertGreaterThanOrEqual(leading, ChatComposerLayout.pageMargin - 0.5)
+      XCTAssertGreaterThanOrEqual(trailing, ChatComposerLayout.pageMargin - 0.5)
+      // …and it is centred, so neither side is the one that got the desktop.
+      XCTAssertEqual(leading, trailing, accuracy: 0.5, "the panel drifted off the window's axis")
+    }
+  }
+
   /// …and a destination that already has glass is handed through untouched, at the full size it was
   /// given. Home positions its own panels inside that space.
   func testADestinationThatOwnsItsPanelsIsHandedTheWholeSurface() {
