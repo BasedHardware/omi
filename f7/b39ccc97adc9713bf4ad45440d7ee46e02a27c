@@ -1,0 +1,291 @@
+.github/scripts/product_file_line_count_ratchet_baseline/backend-other.json
+  s_569f1df936cc22::t_8f4b538d800ef9 3,7
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_569f1df936cc22::t_1c996621e612ce 6,17
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_569f1df936cc22::t_f6d5fd1b6fe968 7,18
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_569f1df936cc22::t_8433ec3b57782a 3,7
+app/ios/Runner/PhoneMic/PhoneMicCaptureEngine.swift
+  s_569f1df936cc22::t_8093357f67045b 82-86
+app/ios/Runner/PhoneMic/PhoneMicController.swift
+  s_569f1df936cc22::t_46acbd442ca432 327-331,333,337-352
+app/lib/backend/http/shared.dart
+  s_569f1df936cc22::t_2008a25ca52efa 36-40,44-56,192-202,334,473,539,589-594,596,632,683-688,690,720
+app/lib/backend/schema/conversation.dart
+  s_569f1df936cc22::t_b47235591bf082 590-596,604-605
+app/lib/l10n/app_localizations.dart
+  s_569f1df936cc22::t_a399cf91b3702a 18221-18298
+app/lib/l10n/app_localizations_ar.dart
+  s_569f1df936cc22::t_4a3662ceecd73a 2109,2112,2115,2118,9712-9764
+app/lib/l10n/app_localizations_be.dart
+  s_569f1df936cc22::t_d12bfaabd31a78 2127,2130,2133,2136,9802-9853
+app/lib/l10n/app_localizations_bg.dart
+  s_569f1df936cc22::t_ad78016f3a8e37 2129,2132,2135,2138,9809-9858
+app/lib/l10n/app_localizations_bn.dart
+  s_569f1df936cc22::t_c857dfdf09f17a 2124,2127,2130,2133,9778-9826
+app/lib/l10n/app_localizations_bs.dart
+  s_569f1df936cc22::t_63c4e2693e2cef 2126,2129,2132,2135,9799-9849
+app/lib/l10n/app_localizations_ca.dart
+  s_569f1df936cc22::t_59a9406b527ffb 2138,2141,2144,2147,9828-9877
+app/lib/l10n/app_localizations_cs.dart
+  s_569f1df936cc22::t_9409a538e06812 2127,2130,2133,2136,9772-9822
+app/lib/l10n/app_localizations_da.dart
+  s_569f1df936cc22::t_4a7d3374a4d8f9 2108,2111,2114,2117,9758-9806
+app/lib/l10n/app_localizations_de.dart
+  s_569f1df936cc22::t_36bf5b97eb10e7 2143,2146,2149,2152,9854-9903
+app/lib/l10n/app_localizations_el.dart
+  s_569f1df936cc22::t_5c8c93f25b09cc 2142,2145,2148,2151,9841-9890
+app/lib/l10n/app_localizations_en.dart
+  s_569f1df936cc22::t_43a31dd4cbf87b 9766-9814
+app/lib/l10n/app_localizations_es.dart
+  s_569f1df936cc22::t_c2e9194a8f277a 2109,2112,2115,2118,9796-9844
+app/lib/l10n/app_localizations_et.dart
+  s_569f1df936cc22::t_6099a0dec19745 2125,2128,2131,2134,9768-9816
+app/lib/l10n/app_localizations_fa.dart
+  s_569f1df936cc22::t_0b024b07b6cb39 2123,2126,2129,2132,9774-9822
+app/lib/l10n/app_localizations_fi.dart
+  s_569f1df936cc22::t_f8c16e88547f8b 2123,2126,2129,2132,9773-9822
+app/lib/l10n/app_localizations_fr.dart
+  s_569f1df936cc22::t_03d8a6ece543f3 2144,2147,2150,2153,9859-9908
+app/lib/l10n/app_localizations_he.dart
+  s_569f1df936cc22::t_125e36950e9dc0 2108,2111,2114,2117,9697-9745
+app/lib/l10n/app_localizations_hi.dart
+  s_569f1df936cc22::t_c1991afac9f51d 2100,2103,2106,2109,9751-9800
+app/lib/l10n/app_localizations_hr.dart
+  s_569f1df936cc22::t_ad955afabfaeab 2127,2130,2133,2136,9806-9856
+app/lib/l10n/app_localizations_hu.dart
+  s_569f1df936cc22::t_10e51e368cdaef 2139,2142,2145,2148,9812-9861
+app/lib/l10n/app_localizations_id.dart
+  s_569f1df936cc22::t_0725294123fa53 2131,2134,2137,2140,9782-9831
+app/lib/l10n/app_localizations_it.dart
+  s_569f1df936cc22::t_18f4ad45b54565 2134,2137,2140,2143,9829-9878
+app/lib/l10n/app_localizations_ja.dart
+  s_569f1df936cc22::t_fbc5d3360bea2e 2087,2090,2093,2096,9610-9658
+app/lib/l10n/app_localizations_kn.dart
+  s_569f1df936cc22::t_329e98673f2888 2130,2133,2136,2139,9804-9852
+app/lib/l10n/app_localizations_ko.dart
+  s_569f1df936cc22::t_617901bc5dbbb8 2087,2090,2093,2096,9611-9659
+app/lib/l10n/app_localizations_lt.dart
+  s_569f1df936cc22::t_53fc02eac35137 2125,2128,2131,2134,9789-9840
+app/lib/l10n/app_localizations_lv.dart
+  s_569f1df936cc22::t_8b396069468075 2130,2133,2136,2139,9794-9844
+app/lib/l10n/app_localizations_mk.dart
+  s_569f1df936cc22::t_447b7f2be4afc7 2133,2136,2139,2142,9824-9873
+app/lib/l10n/app_localizations_mr.dart
+  s_569f1df936cc22::t_66c51994e0297f 2126,2129,2132,2135,9781-9830
+app/lib/l10n/app_localizations_ms.dart
+  s_569f1df936cc22::t_fdbcba0193a908 2133,2136,2139,2142,9797-9846
+app/lib/l10n/app_localizations_nl.dart
+  s_569f1df936cc22::t_6687fc023405b0 2131,2134,2137,2140,9799-9848
+app/lib/l10n/app_localizations_no.dart
+  s_569f1df936cc22::t_34c83693e4b8b4 2123,2126,2129,2132,9771-9820
+app/lib/l10n/app_localizations_pl.dart
+  s_569f1df936cc22::t_aa9f35cc48b66a 2128,2131,2134,2137,9799-9850
+app/lib/l10n/app_localizations_pt.dart
+  s_569f1df936cc22::t_ddc09b6c69f1a8 2101,2104,2107,2110,9781-9829
+app/lib/l10n/app_localizations_ro.dart
+  s_569f1df936cc22::t_c57778512450e2 2135,2138,2141,2144,9818-9868
+app/lib/l10n/app_localizations_ru.dart
+  s_569f1df936cc22::t_af15b228c0ddc4 2132,2135,2138,2141,9808-9858
+app/lib/l10n/app_localizations_sk.dart
+  s_569f1df936cc22::t_fae55bf7049842 2130,2133,2136,2139,9764-9814
+app/lib/l10n/app_localizations_sl.dart
+  s_569f1df936cc22::t_a6cc90f0f62f4e 2126,2129,2132,2135,9800-9851
+app/lib/l10n/app_localizations_sr.dart
+  s_569f1df936cc22::t_e0f6346a41cc45 2125,2128,2131,2134,9786-9836
+app/lib/l10n/app_localizations_sv.dart
+  s_569f1df936cc22::t_5d7fb0750c220b 2127,2130,2133,2136,9777-9825
+app/lib/l10n/app_localizations_ta.dart
+  s_569f1df936cc22::t_63d7b748b5c305 2137,2140,2143,2146,9842-9890
+app/lib/l10n/app_localizations_te.dart
+  s_569f1df936cc22::t_bbddcaa6b11063 2134,2137,2140,2143,9821-9869
+app/lib/l10n/app_localizations_th.dart
+  s_569f1df936cc22::t_c93384c4f93b3b 2114,2117,2120,2123,9718-9766
+app/lib/l10n/app_localizations_tl.dart
+  s_569f1df936cc22::t_91f2d6f41b6212 2138,2141,2144,2147,9862-9911
+app/lib/l10n/app_localizations_tr.dart
+  s_569f1df936cc22::t_aa4606a377ed7a 2131,2134,2137,2140,9784-9832
+app/lib/l10n/app_localizations_uk.dart
+  s_569f1df936cc22::t_37ea63cb3d0fe1 2129,2132,2135,2138,9792-9843
+app/lib/l10n/app_localizations_ur.dart
+  s_569f1df936cc22::t_3624b0c65b90b6 2124,2127,2130,2133,9786-9834
+app/lib/l10n/app_localizations_vi.dart
+  s_569f1df936cc22::t_465e996fb2b5ec 2128,2131,2134,2137,9768-9817
+app/lib/l10n/app_localizations_zh.dart
+  s_569f1df936cc22::t_e0e3693f269fb4 9592-9640
+app/lib/pages/conversation_capturing/page.dart
+  s_569f1df936cc22::t_6c07d84e509c30 250,404
+app/lib/pages/conversation_detail/page.dart
+  s_569f1df936cc22::t_e8e9c21a6aee4d 79-80,1061,1063
+app/lib/pages/conversations/widgets/processing_capture.dart
+  s_569f1df936cc22::t_0a5f9577dc8b28 357-359,364,372
+app/lib/pages/home/page.dart
+  s_569f1df936cc22::t_40cb2664e878de 197-199
+app/lib/pages/settings/widgets/plans_sheet.dart
+  s_569f1df936cc22::t_43539ab91b3c77 486,900-902,920,926,947,954,968,974,987-990,994,997-1000,1004,1056,1065,1086,1095,1243,1262,1303-1305,1678,1701,1804-1806,1869,2053,2081-2082,2093,2152-2154,2157,2218-2220,2223,2251-2253,2256
+app/lib/providers/sync_provider.dart
+  s_569f1df936cc22::t_0a05b730ff5995 5,23,216-221,559-564,620-644,648-657
+app/lib/services/agent_chat_service.dart
+  s_569f1df936cc22::t_0bfca574b1d6d4 6,32-62,128,132,275-276,281-291
+app/lib/services/capture/capture_controller.dart
+  s_569f1df936cc22::t_04ca726484dee8 257-267
+app/lib/services/mic/mic_arbiter.dart
+  s_569f1df936cc22::t_f587e4c6f58c47 100-104
+app/lib/services/mic/native_mic_recorder_service.dart
+  s_569f1df936cc22::t_3e41af9c4a3164 293-310
+app/lib/services/notifications.dart
+  s_569f1df936cc22::t_a173ccb41c1488 1,61,64-103,106-109,111-114,118
+app/lib/services/notifications/notification_service_fcm.dart
+  s_569f1df936cc22::t_c42368a7c015b3 15,265-278
+app/lib/services/services.dart
+  s_569f1df936cc22::t_6e6c75fea09e27 289-294,340-342,472-474
+app/lib/services/wals/local_wal_sync.dart
+  s_569f1df936cc22::t_45eb9378c404ac 8,811-814,818,836
+app/lib/services/wals/wal_syncs.dart
+  s_569f1df936cc22::t_02105bf2d0e527 277-278,363-364
+app/lib/utils/audio/audio_timeline_mapper.dart
+  s_569f1df936cc22::t_d868e44e97291f 47-50,71-95
+app/lib/utils/plan_pricing.dart
+  s_569f1df936cc22::t_3685ef3db2500c 3,10-13
+app/lib/widgets/conversation_bottom_bar.dart
+  s_569f1df936cc22::t_62073ea4d5a595 41,73-77,108,145,147-153,155,157-158,160-164,167-172,175-176,179,188-205,207,213,784-787,790-796
+app/lib/widgets/transcript.dart
+  s_569f1df936cc22::t_cc88ccbccd2660 22,733,742,744
+app/test/providers/sync_provider_sync_wal_wake_test.dart
+  s_569f1df936cc22::t_2cf1ef0fba04b2 103-105,132-171,173
+app/test/services/agent_chat_service_test.dart
+  s_569f1df936cc22::t_b419b03df535ad 5-31
+app/test/unit/audio_timeline_mapper_test.dart
+  s_569f1df936cc22::t_587c617f6f3507 34-66
+app/test/unit/backend/http/shared_test.dart
+  s_569f1df936cc22::t_82e71e68e87189 1-4,6-7,10-12,14,32-47,68-171
+app/test/unit/mic_arbiter_test.dart
+  s_569f1df936cc22::t_983663692e8936 53-55
+app/test/unit/native_mic_recorder_service_test.dart
+  s_569f1df936cc22::t_fba2af97a0ff1a 197-253
+app/test/unit/notification_fcm_navigate_to_test.dart
+  s_569f1df936cc22::t_006d25aeaf75a6 1-56
+app/test/unit/plans_sheet_l10n_test.dart
+  s_569f1df936cc22::t_b6cc6e749bcb16 1-199
+app/test/unit/transient_network_error_test.dart
+  s_569f1df936cc22::t_47fab4f5129787 1-31
+app/test/unit/voice_recorder_mic_contention_test.dart
+  s_569f1df936cc22::t_ff9cb0b8c101ed 51-53
+app/test/utils/plan_pricing_test.dart
+  s_569f1df936cc22::t_784421455bd008 13-16,21-22,26,29-30,34-35,39-42
+app/test/widgets/transcription_paused_warning_test.dart
+  s_569f1df936cc22::t_fcd24ba9c8ffee 4,121-154
+backend/agent-proxy/main.py
+  s_569f1df936cc22::t_2f5a8f4bdb2045 20,73-100,646-658,969,989-995,1007,1012,1017-1024
+backend/jobs/agent_vm_reconciler.py
+  s_569f1df936cc22::t_d9dcb53448663f 20,39-40,45-46,48-49,53,78,88-140,406-607,641,676,737-751,774-777,906-930,962-964,996-1018,1022-1045
+backend/routers/listen/conversations.py
+  s_569f1df936cc22::t_3dce99a5b4e658 27,266-275
+backend/routers/memories.py
+  s_569f1df936cc22::t_a47c98265ba7da 94,102,290,363-366,814,822,854,871,1036-1039,1046-1049
+backend/scripts/activate-agent-vm-dev-migration.sh
+  s_569f1df936cc22::t_a8352989c486aa 1-105
+backend/scripts/agent_vm_release.py
+  s_569f1df936cc22::t_ade67b1f6441d8 44-55,81-95,118-124,134-135
+backend/scripts/apply-agent-vm-reconciler-iam.sh
+  s_569f1df936cc22::t_dca33093cde907 28-31,34,49-53,70-81
+backend/services/agent_vm_lifecycle.py
+  s_569f1df936cc22::t_264d0ed2712906 643-1229,1461-1472,1479-1555,1653,1655,1660-1661,1665,1668-1669
+backend/testing/workflow_contracts.json
+  s_569f1df936cc22::t_d9f05944371415 114
+backend/tests/unit/test_agent_proxy_async_boundaries.py
+  s_569f1df936cc22::t_550f0e281e8557 6,69,71,75,87,180-195,207-212,237-238,240-243
+backend/tests/unit/test_agent_proxy_history_seeding.py
+  s_569f1df936cc22::t_8781f377c934b4 11,44-63,96-107
+backend/tests/unit/test_agent_vm_reconciler.py
+  s_569f1df936cc22::t_221a490442ce8e 183-229
+backend/tests/unit/test_agent_vm_reconciler_deployment_scripts.py
+  s_569f1df936cc22::t_7434631a7272ae 2,43-107,150,153,159-161,238-242,250-275
+backend/tests/unit/test_agent_vm_reconciler_job.py
+  s_569f1df936cc22::t_976f0111e58f1f 212-725
+backend/tests/unit/test_desktop_updates.py
+  s_569f1df936cc22::t_6fb340c71f6600 808-875
+backend/tests/unit/test_memories_batch_delete.py
+  s_569f1df936cc22::t_bd4ed5003bbb07 385-423
+backend/tests/unit/test_transcribe_decisions.py
+  s_569f1df936cc22::t_93c31fb0624207 17,22,221-234
+backend/tests/unit/test_v3_real_router_default_off_f4.py
+  s_569f1df936cc22::t_520ca0571d6600 209-216,243,281
+backend/tests/unit/test_ws_j_delete_privacy.py
+  s_569f1df936cc22::t_abd64dbff4b2ed 72,93,1330-1370
+backend/utils/memory/canonical_memory_adapter.py
+  s_569f1df936cc22::t_3e109654caa404 1897-1903,1918,1929,1938,1951,1959-1978
+backend/utils/memory/memory_service.py
+  s_569f1df936cc22::t_c0676958db1400 16,370-374,457-459,617-619
+backend/utils/transcribe_decisions.py
+  s_569f1df936cc22::t_e94b828a56158e 5-6,178-202
+desktop/macos/Desktop/Sources/AppState.swift
+  s_569f1df936cc22::t_ed64a53b951c3e 212-221,366-367
+desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  s_569f1df936cc22::t_95907e7ae15ac2 858,860
+desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
+  s_569f1df936cc22::t_e439389a7ed6a9 1-132
+desktop/macos/Desktop/Sources/AudioCaptureService.swift
+  s_569f1df936cc22::t_24d07d989f317a 83-85
+desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
+  s_569f1df936cc22::t_531327750983ab 14173,14175,14178-14182
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  s_569f1df936cc22::t_0801984e1fec06 427,484-486,488,490-492,635,2046-2047,2471,2474,2477
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
+  s_569f1df936cc22::t_efe5d0989ce5d5 495,501,591-592,596-597,785,788
+desktop/macos/Desktop/Tests/APIClientMemoryBulkSafetyTests.swift
+  s_569f1df936cc22::t_2e6307cb23507c 167,179
+desktop/macos/Desktop/Tests/APIClientMemoryLifecycleHeaderTests.swift
+  s_569f1df936cc22::t_6f4035a8765641 70,78,91,98,106
+desktop/macos/Desktop/Tests/ChatTranscriptGestureHarnessTests.swift
+  s_569f1df936cc22::t_f4ddda602e493f 180-185,642-647,650,652,656-666
+desktop/macos/Desktop/Tests/PreferredMicrophoneReconnectTests.swift
+  s_569f1df936cc22::t_e37761558e5670 1-81
+desktop/macos/changelog/unreleased/20260805-memory-default-delete.json
+  s_569f1df936cc22::t_15e6585e04f321 1-3
+desktop/macos/changelog/unreleased/20260806-preferred-mic-reconnect.json
+  s_569f1df936cc22::t_65394134af70fc 1-3
+desktop/macos/e2e/flows/capture-lifecycle.yaml
+  s_569f1df936cc22::t_22acd5f538b245 8
+desktop/windows/src/main/agentKernel/desktopChatPrompt.test.ts
+  s_569f1df936cc22::t_41dc527cd53e15 2-6,54-56,97-117
+desktop/windows/src/main/agentKernel/desktopChatPrompt.ts
+  s_569f1df936cc22::t_69ed1a90c743ee 75,115-165
+desktop/windows/src/main/ipc/mainChat.test.ts
+  s_569f1df936cc22::t_bd19bd3df73c36 38-41,150-151,410-432,491,517,525,584,623-624,634,647-648,658
+desktop/windows/src/main/ipc/mainChat.ts
+  s_569f1df936cc22::t_fe459d19a8a54a 15,49-51,293,296-300
+desktop/windows/src/renderer/src/lib/omiApi.generated.ts
+  s_569f1df936cc22::t_4b83a3460a14d3 15761,15764-15767
+docs/api-reference/app-client-openapi.json
+  s_569f1df936cc22::t_f26b61c9f63157 56356-56371
+docs/runbooks/agent-vm-fleet-reconciler.md
+  s_569f1df936cc22::t_d131f08b02e6c4 53-110,150-154
+web/admin/lib/services/omi-api/omiApi.generated.ts
+  s_569f1df936cc22::t_5101bc40041085 15761,15764-15767
+web/app/src/lib/api.ts
+  s_569f1df936cc22::t_380c2046f7c384 269-295
+web/app/src/lib/omiApi.generated.ts
+  s_569f1df936cc22::t_18ad9b53bc983e 15761,15764-15767
+web/app/src/lib/transcriptionSocket.ts
+  s_569f1df936cc22::t_0d28573bbfed05 20-21,26-27,152-155,332-337
+web/personas-open-source/src/lib/omiApi.generated.ts
+  s_569f1df936cc22::t_040fbb2eb81ff8 15761,15764-15767
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f7b39ccc97adc9713bf4ad45440d7ee46e02a27c",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
