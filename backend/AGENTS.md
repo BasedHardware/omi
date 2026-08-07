@@ -105,9 +105,6 @@ backend/
   modal/                 # Serverless GPU services (deployed on Modal) + Cloud Run Jobs
                           #   - Speaker identification: matches segments to speech profiles (SpeechBrain, T4 GPU)
                           #   - VAD: voice activity detection (pyannote/voice-activity-detection)
-                          #   - notifications-job: hourly push notifications + daily summary (Cloud Run Job)
-                          #   - x-connector-sync-job: X connector incremental sync every 6h (Cloud Run Job)
-                          #   - memory-maintenance-job: canonical ST→LT maintenance (Cloud Run Job)
   tests/unit/            # 50+ unit tests (no external service deps)
   tests/integration/     # Integration tests (need Redis, Firebase, API keys)
   scripts/run-unit-ci.sh # Full CI unit-test contract
@@ -145,7 +142,6 @@ backend-sync (main.py, Cloud Run)
   └── ──────► Cloud Tasks queue `conversation-finalization` ──► POST /v1/conversation-finalization-jobs/run (OIDC, same service)
 
 notifications-job (modal/job.py)  [cron]
-x-connector-sync-job (modal/x_connector_sync_job.py)  [cron]
 memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
 agent-vm-reaper (backend/charts/agent-vm-reaper)  [cron]
 ```
@@ -167,7 +163,7 @@ Serving STT provider/surface policy and canonical model order are owned exclusiv
 - **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
 - **backend-sync** (`main.py`, same image as backend) — Cloud Run admission service for `/v2/sync-local-files`. The server classifies whole batches: recordings no more than six hours old enter `sync-jobs` (fresh), while older or untrusted batches enter `sync-backfill` and the scale-to-zero **backend-sync-backfill** worker. Fresh keeps its bounded inline fallback; backfill never falls into fresh/inline capacity. Backfill defaults to one in-flight job per UID, four processed speech hours per UID/day, 555 processed speech hours globally/day, a 30-day lookback, and four queue workers. Live fair-use reads only `realtime + sync_fresh`; `sync_backfill` is separately metered. A 45-day Firestore content ledger protects transcription and usage side effects across job expiry and re-upload. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`) — per-part files plus one dense per-conversation `conversation.mp3` whose spans manifest + audio_files fingerprint are stamped on the conversation doc (`conversation_audio`); a fingerprint mismatch after late chunks re-enqueues the build. In production, account deletion requires `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` and complete Cloud Tasks bindings to enqueue opaque job IDs to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; startup rejects inline or incomplete configuration, reconciliation only re-dispatches tasks so the OIDC handler is the sole wipe executor, and the post-deploy queue-drain window accepts the former sync OIDC audience only for legacy UID payloads. API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
 - **notifications-job** (`modal/job.py`) — Cron job for push notifications and daily summary only. X connector sync and canonical maintenance are not hosted here.
-- **x-connector-sync-job** (`modal/x_connector_sync_job.py`) — Cloud Run Job for X (Twitter) connector incremental sync. Deploy via `.github/workflows/gcp_x_connector_sync_job.yml`. Cloud Scheduler `x-connector-sync-6h` owns the 6h cadence (no hour-modulo gate in the entrypoint). Runbook: `backend/docs/runbooks/x-connector-sync-job.md`. Pattern checklist: `docs/doc/developer/backend/cloud_run_jobs_checklist.md`.
+- **x-connector-sync-job** (`modal/x_connector_sync_job.py`) — Cloud Run Job for X connector sync; Scheduler owns its 6h cadence. Deploy via `.github/workflows/gcp_x_connector_sync_job.yml`; see `backend/docs/runbooks/x-connector-sync-job.md`.
 - **memory-maintenance-job** (`modal/memory_maintenance_job.py`) — Cloud Run Job for canonical maintenance (normalization → TTL audit → terminal consolidation/promotion). Deploy manually via `.github/workflows/gcp_memory_maintenance_job.yml`; auto-dev on `main` via `gcp_memory_maintenance_job_auto_dev.yml`. Flag ownership and readiness order: `docs/runbooks/canonical-memory-rollout-flags.md`. Env contract is validated by `backend/scripts/validate-backend-runtime-env.py`; Scheduler owns cadence; prod declares `MEMORY_MODE=off` until Gate 3; job users come from `CANONICAL_MEMORY_USERS` in `config/canonical_memory_cohort.py`. When enabled, L2/required-processing uses the gateway-only `omi:auto:memory-l2` Luna lane; workflows derive the endpoint after the serving gate and Cloud Run VPC probe.
 - **monitoring** (`backend/charts/monitoring/`) — Prometheus, Grafana, Loki, Alloy, alerts, and HPA metric adapters for backend services.
 - **agent-vm-reaper** (`backend/charts/agent-vm-reaper/`) — CronJob that deletes stale `omi-agent-*` GCE VMs left by desktop agent sandboxes.
