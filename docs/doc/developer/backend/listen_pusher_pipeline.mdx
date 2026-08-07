@@ -462,13 +462,13 @@ conversation: `MAX_VERIFICATIONS_PER_CONVERSATION` (6) refutation calls and
 - The pass is started by `schedule_speaker_resolution` *after* the private-cloud
   `audio_files` write, because enrolment reads those files back and silently gives up when
   there are none.
-- It is an async coordinator, driven on a shared daemon event-loop thread rather than a
-  `postprocess_executor` worker. Each blocking step inside borrows a db/llm/storage thread
-  for that step alone, so a burst of finalized conversations cannot pin postprocess slots
-  and starve memory extraction, action items or vector indexing. Each pass is a tracked
-  task (`utils.async_tasks.create_named_task`) and `drain_speaker_resolution` — registered
-  with `atexit`, like `shutdown_executors` — waits it out at process exit, so a shutdown
-  cannot abandon a pass midway through creating a Person or writing segments.
+- It is an async coordinator submitted through `utils.executors.submit_background_task` onto
+  the registered application loop rather than a `postprocess_executor` worker. Each blocking
+  step inside borrows a db/llm/storage thread for that step alone, so a burst of finalized
+  conversations cannot pin postprocess slots and starve memory extraction, action items or
+  vector indexing. `main.py` registers the application loop during startup and unregisters it
+  during shutdown; shutdown drains the work through `drain_background_tasks` so a pass cannot
+  be abandoned midway through creating a Person or writing segments.
 - It is handed a deep copy of the conversation. It reassigns `person_id` on the segments it
   names and persists them itself, so the live object that `_extract_memories` reads
   concurrently on `postprocess_executor` is never mutated underneath it.
