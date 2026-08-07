@@ -182,13 +182,19 @@ export function bridgeHttpClient(replyTimeoutMs: number = DEFAULT_REPLY_TIMEOUT_
   return {
     async request(method: BridgeHttpMethod, path: string, body?: unknown): Promise<HttpResponse> {
       seq += 1;
-      const message: BridgeHttpRequest = {
-        id: `h${seq}`,
-        method,
-        path,
-        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      };
+      const id = `h${seq}`;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
+        // Serialization is part of the transport boundary. A circular value
+        // (or BigInt) must become the same retryable shell-error as a channel
+        // failure, never a rejected HttpClient promise that bypasses the
+        // shared failure taxonomy.
+        const message: BridgeHttpRequest = {
+          id,
+          method,
+          path,
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        };
         if (transport.kind === "reply") {
           return toHttpResponse(await transport.handler.postMessage(message));
         }
@@ -197,21 +203,29 @@ export function bridgeHttpClient(replyTimeoutMs: number = DEFAULT_REPLY_TIMEOUT_
           const settle = (value: unknown): void => {
             if (done) return;
             done = true;
+            if (timer !== undefined) {
+              clearTimeout(timer);
+              timer = undefined;
+            }
             resolve(value);
           };
           pending.set(message.id, settle);
-          const timer = setTimeout(() => {
+          // Keep this timer referenced: a lost reply must settle even when no
+          // other work keeps the host event loop alive.
+          timer = setTimeout(() => {
             pending.delete(message.id);
             settle(undefined); // no reply in time -> shell-error -> retryable
           }, replyTimeoutMs);
-          // Never let a pending timer keep a host process alive (Node tests).
-          (timer as unknown as { unref?: () => void }).unref?.();
           transport.channel.postMessage(JSON.stringify(message));
         });
         return toHttpResponse(raw);
       } catch {
         // A throwing channel is a transport failure, not a server answer.
-        pending.delete(message.id);
+        pending.delete(id);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
         return { status: BRIDGE_HTTP_FAILURE_STATUS["shell-error"], json: null };
       }
     },

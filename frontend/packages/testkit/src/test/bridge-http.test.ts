@@ -210,6 +210,9 @@ test("the forbidden-header list names every credential-bearing header the shell 
 //    any reply resolves any request => "concurrent one-way requests" fails;
 //  - remove the setTimeout guard in the one-way branch => "a lost reply" hangs
 //    and fails by test timeout;
+//  - re-add `(timer as unknown as { unref?: () => void }).unref?.()` in the
+//    one-way branch => Node cancels the lost-reply test before its timeout can
+//    settle, proving the timeout must stay referenced;
 //  - reorder detectTransport to check the one-way channel first => "reply-capable
 //    transport wins" fails.
 // ---------------------------------------------------------------------------
@@ -317,6 +320,7 @@ test("a lost reply becomes a retryable transport failure instead of stalling the
   try {
     const res = await bridgeHttpClient(40).request("GET", "/v1/action-items");
     assert.equal(res.status, BRIDGE_HTTP_FAILURE_STATUS["shell-error"]);
+    assert.equal(res.json, null, "a lost reply has no HTTP body");
     assert.equal(classifyStatus(res, "lost reply").kind, "retryable", "the outbox must be able to retry, not hang");
   } finally {
     shell.uninstall();
@@ -329,6 +333,24 @@ test("an unparseable one-way reply degrades to retryable", async () => {
     const res = await bridgeHttpClient(200).request("GET", "/v1/action-items");
     assert.equal(res.status, BRIDGE_HTTP_FAILURE_STATUS["shell-error"]);
     assert.equal(classifyStatus(res, "junk reply").kind, "retryable");
+  } finally {
+    shell.uninstall();
+  }
+});
+
+// RED-PROOF (rule 14): remove the try/catch around JSON.stringify in
+// bridge-http.ts and this circular body rejects the request instead of
+// returning the documented retryable shell-error.
+test("an unencodable request body degrades to retryable, never throws", async () => {
+  const shell = installOneWayShell(() => {
+    throw new Error("the channel must not see an unencodable body");
+  });
+  try {
+    const circular: Record<string, unknown> = {};
+    circular["self"] = circular;
+    const res = await bridgeHttpClient(40).request("POST", "/v1/action-items", circular);
+    assert.equal(res.status, BRIDGE_HTTP_FAILURE_STATUS["shell-error"]);
+    assert.equal(classifyStatus(res, "unencodable body").kind, "retryable");
   } finally {
     shell.uninstall();
   }
