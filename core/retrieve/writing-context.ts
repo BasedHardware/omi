@@ -29,7 +29,36 @@ export interface WritingContextRequest {
 
 const terms = (text: string): readonly string[] => [...new Set((text.toLocaleLowerCase().match(/[\p{L}\p{N}_-]+/gu) ?? []).filter((term) => term.length > 1))];
 const claimText = (claim: ReturnType<typeof projectTreeInputSnapshot>["claims"][number]): string => `${claim.predicate}(${claim.arguments.map((argument) => `${argument.role}=${argument.surface ?? (argument.value.kind === "literal" ? String(argument.value.value) : argument.value.ref)}`).join(", ")})${claim.polarity === "negative" ? " [not]" : ""}`;
-const relevance = (values: readonly string[], queryTerms: readonly string[]): number => queryTerms.reduce((score, term) => score + values.reduce((matches, value) => matches + (value.toLocaleLowerCase().includes(term) ? 1 : 0), 0), 0);
+/**
+ * Counts (term, value) hits -- the same sum as before, accumulated value-major
+ * instead of term-major so each value is lowercased once rather than once per
+ * query term. Integer addition is associative, so the score is unchanged.
+ *
+ * toLocaleLowerCase resolves the host locale on every call, and a sample of the
+ * live v7 lane found the main thread inside ulocimp_forLanguageTag / u_strToLower
+ * reached from exactly here.
+ */
+const relevance = (values: readonly string[], queryTerms: readonly string[]): number => {
+  let score = 0;
+  for (const value of values) {
+    const lowered = value.toLocaleLowerCase();
+    for (const term of queryTerms) if (lowered.includes(term)) score += 1;
+  }
+  return score;
+};
+/**
+ * Score once per element, then sort on the stored number.
+ *
+ * These comparators used to call relevance() on both sides of every comparison,
+ * so each sort recomputed the score O(n log n) times -- over the whole candidate
+ * set, the whole predicate table and every canonical claim, once per session.
+ * The scores are a pure function of the element, so hoisting them out of the
+ * comparator is output-preserving.
+ */
+const byScoreThen = <T>(items: readonly T[], score: (item: T) => number, tieBreak: (item: T) => string, take: number): T[] =>
+  items.map((item) => ({ item, score: score(item), key: tieBreak(item) }))
+    .sort((a, b) => a.score - b.score || compareStrings(a.key, b.key))
+    .reverse().slice(0, take).map((entry) => entry.item);
 
 /** Composes the existing read projection; this module intentionally owns no storage reach. */
 export const getWritingContext = (snapshot: GraphSnapshot, request: WritingContextRequest): WritingContext => {
@@ -49,13 +78,15 @@ export const getWritingContext = (snapshot: GraphSnapshot, request: WritingConte
   for (const claim of claims) { const predicateId = claim.predicate_id ?? `raw:${claim.predicate}`; const current = predicateStats.get(predicateId) ?? { count: 0, slots: new Set<string>(), example: claim.predicate }; current.count++; for (const argument of claim.arguments) current.slots.add(argument.slot_id); predicateStats.set(predicateId, current); }
   const frontier = { graph_head: String(snapshot.graph_generation ?? "snapshot"), policy_version: request.policy_version, predicate_alias_generation: request.predicate_alias_generation, authorization_generation: request.authorization_generation, stm_generation: request.stm_generation };
   return { frontier,
-    entity_candidates: [...candidates.values()].sort((a, b) => relevance([...a.renderings, ...a.profile], queryTerms) - relevance([...b.renderings, ...b.profile], queryTerms) || compareStrings(a.ref, b.ref)).reverse().slice(0, 20),
+    entity_candidates: byScoreThen([...candidates.values()], (item) => relevance([...item.renderings, ...item.profile], queryTerms), (item) => item.ref, 20),
     // `name` falls back to the extracted predicate spelling, never to the
     // predicate_id: a sha256 shown as a name is what let one poisoned emission
     // re-enter the next window's context and poison the cycle after it. A
     // signature whose display name is already an id is dropped rather than
     // shown, which breaks that loop for graphs that were written before this.
-    predicate_signatures: [...predicateStats].map(([predicate_id, item]) => ({ predicate_id, name: snapshot.predicates?.find((candidate) => candidate.predicate.predicate_id === predicate_id)?.predicate.display_name ?? item.example, slots: [...item.slots].sort(), use_count: item.count, example: item.example })).filter((signature) => !isOpaqueIdentifier(signature.name)).sort((a, b) => relevance([a.name, a.example, ...a.slots], queryTerms) - relevance([b.name, b.example, ...b.slots], queryTerms) || compareStrings(a.predicate_id, b.predicate_id)).reverse().slice(0, 30),
-    open_propositions: claims.filter((claim) => claim.canonical_claim_id !== null).map((claim) => ({ proposition_key_resolved: claim.proposition_key_resolved ?? sha256CanonicalRedacted({ predicate_id: claim.predicate_id ?? `raw:${claim.predicate}`, arguments: claim.arguments }), canonical_claim_id: claim.canonical_claim_id!, text: claimText(claim), valid_time: claim.valid_time })).sort((a, b) => relevance([a.text], queryTerms) - relevance([b.text], queryTerms) || compareStrings(a.canonical_claim_id, b.canonical_claim_id)).reverse().slice(0, 20),
+    predicate_signatures: byScoreThen([...predicateStats].map(([predicate_id, item]) => ({ predicate_id, name: snapshot.predicates?.find((candidate) => candidate.predicate.predicate_id === predicate_id)?.predicate.display_name ?? item.example, slots: [...item.slots].sort(), use_count: item.count, example: item.example })).filter((signature) => !isOpaqueIdentifier(signature.name)),
+      (item) => relevance([item.name, item.example, ...item.slots], queryTerms), (item) => item.predicate_id, 30),
+    open_propositions: byScoreThen(claims.filter((claim) => claim.canonical_claim_id !== null).map((claim) => ({ proposition_key_resolved: claim.proposition_key_resolved ?? sha256CanonicalRedacted({ predicate_id: claim.predicate_id ?? `raw:${claim.predicate}`, arguments: claim.arguments }), canonical_claim_id: claim.canonical_claim_id!, text: claimText(claim), valid_time: claim.valid_time })),
+      (item) => relevance([item.text], queryTerms), (item) => item.canonical_claim_id, 20),
   };
 };
