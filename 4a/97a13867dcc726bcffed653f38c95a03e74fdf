@@ -1,0 +1,39 @@
+desktop/macos/Desktop/Sources/SignInView.swift
+  s_569f1df936cc22::t_be76bb1ebf2057 8-17
+  s_569f1df936cc22::t_149bfde67862ee 107-113
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingView.swift
+  s_569f1df936cc22::t_9c4b8ee021fe21 173-181,188,201
+  s_569f1df936cc22::t_e308ec89e5c89a 25-28,32-37
+  s_569f1df936cc22::t_5c8b94baba117d 167-169
+desktop/macos/Desktop/Sources/Auth/SessionRecoveryView.swift
+  s_569f1df936cc22::t_2ce9fa714befc2 65-68
+  s_569f1df936cc22::t_f66e24501a06d0 8-13
+desktop/macos/Desktop/Sources/Onboarding/OnboardingGlassChrome.swift
+  s_569f1df936cc22::t_ff183b06e0be9f 4-7,9-15
+  s_569f1df936cc22::t_9e9f759fb5b563 183-197
+  s_569f1df936cc22::t_c8e78178f2377a 145-146,148-162,167-171
+  s_569f1df936cc22::t_96f6146f1e0a4c 198
+desktop/macos/Desktop/Tests/OnboardingGlassChromeTests.swift
+  s_569f1df936cc22::t_3d358f187d14f2 174-175,181-184,189-208
+  s_569f1df936cc22::t_4a83290f59e701 209-211
+desktop/macos/Desktop/Tests/GlassLegibilityTests.swift
+  s_569f1df936cc22::t_82b30d206ab689 580-651,653-777,782
+  s_569f1df936cc22::t_74f71431aff792 652
+  s_569f1df936cc22::t_15a6197353362a 778-781,783
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4a97a13867dcc726bcffed653f38c95a03e74fdf",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
