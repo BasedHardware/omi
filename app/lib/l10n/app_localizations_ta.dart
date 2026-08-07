@@ -439,6 +439,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
 
   @override
+  String get omiButtonActions => 'Omi பொத்தான் செயல்கள்';
+
+  @override
   String get deviceSettings => 'சாதன அமைப்புகள்';
 
   @override

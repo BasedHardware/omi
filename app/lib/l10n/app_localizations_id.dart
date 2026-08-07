@@ -438,6 +438,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get autoSyncDescription => 'Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung';
 
   @override
+  String get omiButtonActions => 'Tindakan Tombol Omi';
+
+  @override
   String get deviceSettings => 'Pengaturan Perangkat';
 
   @override

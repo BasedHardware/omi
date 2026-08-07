@@ -439,6 +439,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
 
   @override
+  String get omiButtonActions => 'Omi pogas darbības';
+
+  @override
   String get deviceSettings => 'Ierīces iestatījumi';
 
   @override

@@ -437,6 +437,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get autoSyncDescription => 'Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže';
 
   @override
+  String get omiButtonActions => 'Dejanja gumba Omi';
+
+  @override
   String get deviceSettings => 'Nastavitve naprave';
 
   @override

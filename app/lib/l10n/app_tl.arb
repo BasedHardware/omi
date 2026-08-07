@@ -557,6 +557,7 @@
     "offlineSync": "Offline Sync",
     "autoSync": "Awtomatikong pag-sync",
     "autoSyncDescription": "Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device",
+    "omiButtonActions": "Mga aksyon ng button ng Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

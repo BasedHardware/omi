@@ -438,6 +438,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get autoSyncDescription => 'Automatski sinkronizuj offline snimke kada se vaš uređaj poveže';
 
   @override
+  String get omiButtonActions => 'Radnje Omi dugmeta';
+
+  @override
   String get deviceSettings => 'Postavke uređaja';
 
   @override

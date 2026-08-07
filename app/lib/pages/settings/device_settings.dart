@@ -47,6 +47,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isFindingDevice = false;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
+  bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
   Future _bleUnpairDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -754,6 +755,23 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                     )
                   : null,
               onTap: () => _findDevice(provider),
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
+          if (device?.type == DeviceType.omi) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.handPointer,
+              title: context.l10n.omiButtonActions,
+              showChevron: false,
+              trailing: Switch(
+                value: _omiButtonActionsEnabled,
+                activeThumbColor: Colors.white,
+                activeTrackColor: const Color(0xFF8E8E93),
+                onChanged: (value) {
+                  setState(() => _omiButtonActionsEnabled = value);
+                  SharedPreferencesUtil().omiButtonActionsEnabled = value;
+                },
+              ),
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
