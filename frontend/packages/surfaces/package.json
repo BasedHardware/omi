@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "dev": "vite --port 4650",
-    "test": "echo surfaces:covered-by-store-tests-and-shell-e2e",
+    "test": "node --test test/production.test.mjs",
     "lint": "echo surfaces:no-lint-yet"
   },
   "dependencies": {
@@ -15,8 +15,10 @@
     "@omi-core/bridge-web": "workspace:*",
     "@omi-core/contracts": "workspace:*",
     "@omi-core/domain": "workspace:*",
+    "@omi-core/i18n": "workspace:*",
     "@omi-core/kernel": "workspace:*",
     "@omi-core/sync": "workspace:*",
+    "@omi-core/tokens": "workspace:*",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"
   },

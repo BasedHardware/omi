@@ -89,12 +89,18 @@ importers:
       '@omi-core/domain':
         specifier: workspace:*
         version: link:../domain
+      '@omi-core/i18n':
+        specifier: workspace:*
+        version: link:../i18n
       '@omi-core/kernel':
         specifier: workspace:*
         version: link:../kernel
       '@omi-core/sync':
         specifier: workspace:*
         version: link:../sync
+      '@omi-core/tokens':
+        specifier: workspace:*
+        version: link:../tokens
       react:
         specifier: ^19.2.1
         version: 19.2.8
