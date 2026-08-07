@@ -67,15 +67,22 @@ package enum Ink {
   ///
   /// On glass `surface` is no longer the whole ground: it is `InkGlass.scrim` of `surface` over a
   /// light-pinned blurred desktop. Because the glass pins its appearance, that ground does not depend
-  /// on the machine's. **This is the bottom rung on glass, so it is the rung that sets how see-through
-  /// those panels are allowed to be**, and it is therefore measured rather than assumed: through the
-  /// real material over the two desktops that can exist, it lands at **4.58:1 over a solid black
-  /// desktop and 7.46:1 over a solid white one**, in both system appearances. Eight hundredths above
-  /// AA on the worst desktop there is — this rung is spent, and `InkGlass.scrim` is what spent it.
+  /// on the machine's. **This is the bottom rung on glass, so it is the rung every bound on that
+  /// ground is evaluated at**, and it is therefore measured rather than assumed: through the real
+  /// material over the two desktops that can exist, it lands at **5.89:1 over a solid black desktop
+  /// and 7.66:1 over a solid white one**, in both system appearances.
   ///
-  /// It cannot be thinned. It is deliberately not *thickened* either: contrast this rung does not
-  /// need is contrast the panel paid for in opacity, which is exactly what an opaque-looking panel is
-  /// made of.
+  /// **AA is no longer what holds the ground up, though.** This rung cleared 4.5:1 at a much thinner
+  /// scrim — it did, at 4.58:1, on the panel that shipped unreadable over a browser window. A contrast
+  /// ratio is defined against a *uniform* background, and the ground under this panel is a blurred
+  /// picture of another app. What sets the scrim now is `InkGlass.interferenceRatio`, evaluated at this
+  /// rung because it is the faintest one here.
+  ///
+  /// It still cannot be thinned, and the reason is sharper than it was: thinning it does not spend
+  /// margin this rung has, it pushes the *ground* up for every surface, because the ground is solved
+  /// for whatever sits at the bottom. It is deliberately not *thickened* either — contrast this rung
+  /// does not need is contrast the panel paid for in opacity, which is exactly what an opaque-looking
+  /// panel is made of.
   package static let secondary = Color(nsColor: .labelColor).opacity(0.80)
 
   /// A word someone glances at: `Granted`, `Quit`, `Sign out`. Never a whole sentence — **and never
@@ -84,19 +91,24 @@ package enum Ink {
   /// `labelColor` at 0.68 — 5.2:1 over `surface` in Light, 6.3:1 in Dark, which is a comfortable
   /// glance step on an *opaque* sheet.
   ///
-  /// **The rule "never on glass" is the whole of why those panels are see-through, and it was arrived
-  /// at the hard way.** The ground under dark type has to stay light enough for the *faintest* rung
-  /// set on it, so whichever rung is at the bottom is what decides the ground, and the ground is what
-  /// "glassmorphic" means. With this rung on the panel the floor was a ground of ≈203/255 and 17%
-  /// passthrough — pale paper — and three separate retunes of the material and the scrim moved it by
-  /// fourteen levels out of 255, correctly reported each time as no change at all. Dropping it moved
-  /// the floor to 154/255 and **34.8% passthrough**, twice the desktop, at the same 4.5:1.
+  /// **The rule "never on glass" was arrived at the hard way, and the arithmetic behind it has since
+  /// moved.** The ground under dark type has to stay light enough for the *faintest* rung set on it, so
+  /// whichever rung is at the bottom is what decides the ground. With this rung on the panel the floor
+  /// was a ground of ≈203/255 and 17% passthrough — pale paper — and three separate retunes of the
+  /// material and the scrim moved it by fourteen levels out of 255, correctly reported each time as no
+  /// change at all. Dropping it bought twice the desktop at the same 4.5:1.
   ///
-  /// **And it really is drop-or-nothing: there is no alpha that rescues it.** To clear AA on today's
-  /// ground this rung would have to darken to ≈0.79, which *is* `secondary` to within a hundredth — a
-  /// third step that measures as the second is not a ladder, it is the same colour twice with an extra
-  /// token to keep true. Nor can it darken a little to buy the glass a little: at 0.69 it is already
-  /// 7.8 L* from `secondary` on a Dark sheet, under the 8 L* the rungs are held apart by.
+  /// **That bargain is smaller now, and the rule has to stand on something else.** The scrim is no
+  /// longer set by AA on the bottom rung but by `InkGlass.interferenceRatio` — how strongly the panel
+  /// shows the app behind it against how strongly it shows its own words — so "this rung costs half the
+  /// desktop" is no longer the argument. What holds the rule is the plainer pair of facts: at today's
+  /// ground this rung measures **4.34:1**, under AA, so as written it may not carry type here at all;
+  /// and darkening it to the **0.694** that would just clear AA puts it **7.5 L\*** from `secondary` on
+  /// this ground, inside the 8 L\* the rungs are held apart by. A third step that close to the second is
+  /// not a ladder, it is the same colour twice with an extra token to keep true.
+  ///
+  /// If the ladder is ever revisited, revisit it deliberately and with the interference bound in hand —
+  /// do not reintroduce this rung by noticing that the panel got lighter.
   ///
   /// So on a glass surface, promote to `secondary`. A run that was `tertiary` because it is a sentence
   /// rather than a glance word was on the wrong rung anyway; one that was genuinely a glance word
@@ -180,6 +192,24 @@ package enum Ink {
 
   package static let nsSurface = NSColor.controlBackgroundColor
   package static let nsPrimary = NSColor.labelColor
+
+  /// `nsPrimary` resolved against the glass's own pinned appearance.
+  ///
+  /// The composers embed an `NSTextView`, which paints its `textColor` against the *view's*
+  /// `effectiveAppearance` — not the SwiftUI `colorScheme` the glass pins. `WindowGlass.wear` pins the
+  /// window for exactly this reason, but `DesktopHomeView.enforceMainWindowMinimumSize` still stamps
+  /// `.darkAqua` back onto every window whose title starts with "omi", so a composer cannot rely on
+  /// winning that race. Handing the dynamic `labelColor` straight to the text view is how one ends up
+  /// drawing white type on the light panel: unreadable, and the reader's own words are the last run of
+  /// text in the app that can afford to disappear. Resolved up front, the caret and the typed text
+  /// stay near-black on the light well either way.
+  package static var nsPrimaryOnGlass: NSColor {
+    var resolved = nsPrimary
+    InkGlass.appearance.performAsCurrentDrawingAppearance {
+      resolved = nsPrimary.usingColorSpace(.sRGB) ?? resolved
+    }
+    return resolved
+  }
   // There is deliberately no `nsAccent`. An AppKit twin nothing uses is a second definition of the
   // accent waiting to drift from the first, and the accent is exactly the token a design system is
   // most often bitten by having two opinions about. AppKit callers that genuinely need it can say
