@@ -45,18 +45,20 @@ struct SpineHourRail: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
+      // Number, noun, day — "0 screen moments, Yesterday", read straight down. **The day goes last,
+      // and that is a fix rather than a preference:** see `headlineScope`.
       VStack(alignment: .leading, spacing: 2) {
-        if let scope = Self.headlineScope(dayTitle) {
-          Text(scope)
-            .inkStyle(.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
         Text(Self.headlineNumber(momentCount))
           .inkStyle(.stepHeadline, color: Ink.primary)
           .lineLimit(1)
           .minimumScaleFactor(0.6)
         Text(Self.headlineCaption(momentCount))
           .inkStyle(.statusLabel, color: Ink.secondary)
+        if let scope = Self.headlineScope(dayTitle) {
+          Text(scope)
+            .inkStyle(.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
 
       bars
@@ -94,10 +96,10 @@ struct SpineHourRail: View {
   ///
   /// So the rule is not "name the thing counted", it is **each counter states its own scope in its
   /// own words, and is legible alone.** `headlineScope` prints the day this number belongs to —
-  /// "Today", "Yesterday", "Wednesday 6 August" — above the number it scopes. It comes from
-  /// `dayTitle` rather than the literal word "today", because the rail follows the topmost visible
-  /// row and describes whatever day that is. Do not go back to a scope-free caption: that is this
-  /// defect, twice.
+  /// "Today", "Yesterday", "Wednesday 6 August" — in the same tight group as the number it scopes.
+  /// It comes from `dayTitle` rather than the literal word "today", because the rail follows the
+  /// topmost visible row and describes whatever day that is. Do not go back to a scope-free
+  /// caption: that is this defect, twice.
   ///
   /// The other half of the original defect was the number itself. Screen days are read lazily,
   /// three at a time, and a day that has not been read yet is indistinguishable in the store from a
@@ -113,8 +115,17 @@ struct SpineHourRail: View {
     return count == 1 ? "screen moment" : "screen moments"
   }
 
-  /// The day the headline number belongs to, printed above it — the rail's half of "state your own
-  /// scope".
+  /// The day the headline number belongs to — the rail's half of "state your own scope".
+  ///
+  /// **It sits under the caption, not over the number, and that placement is load-bearing.** The
+  /// results list beside the rail pins its own day header, `day.title.uppercased()`, and that band
+  /// starts within a few points of the rail's first baseline. With the scope on top, Home drew
+  /// "Yesterday" and "YESTERDAY" side by side on one baseline about 120 pt apart: one day name, in
+  /// two cases, twice. Under the caption the group reads "0 / screen moments / Yesterday" — the
+  /// number still arrives inside its own explanation, 2 pt from the noun and 12 pt from the bars,
+  /// while nothing of the rail's shares a baseline with the header. Do not move it back above the
+  /// number, and do not answer a future collision by deleting the day word: that is the defect this
+  /// whole line exists to fix, and it has now been fixed twice.
   ///
   /// It gets its own line rather than riding along with the noun because the day is not always a
   /// short word: at the rail's real content width of 154 pt, "screen moments today" fits at 129 pt
@@ -151,9 +162,17 @@ struct SpineHourRail: View {
 
   /// The whole rail as one spoken sentence, because the whole rail is one accessibility element.
   ///
-  /// It has to say what is drawn: the scope leads here exactly as it leads on screen, so a reader
-  /// who cannot see the two counters side by side is told which one this is — which is the entire
-  /// point of the fix, and the case where comparing them across the window was never possible.
+  /// It has to say everything that is drawn, and it does — but **the scope leads here while it
+  /// trails on screen, deliberately.** The written scope moved under the caption to get off the
+  /// list header's baseline (see `headlineScope`); speech has no baselines to collide on, and no
+  /// grouping either. A listener gets one linear sentence with no way to glance back, so the scope
+  /// has to frame the number before the number arrives — "Today: 0 screen moments", not a number
+  /// that turns out three clauses later to have been about a particular day. Reordering this to
+  /// match the stack would trade a real gain in speech for a cosmetic symmetry.
+  ///
+  /// This matters most for exactly the reader the original defect was worst for: comparing two
+  /// counters across the width of the window, which the written rail wrongly asked for, was never
+  /// available to them at all.
   nonisolated static func readAloud(
     momentCount: Int?,
     dayTitle: String,
