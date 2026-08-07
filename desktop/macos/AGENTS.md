@@ -262,8 +262,8 @@ checked in. Ask the user for anything you are missing rather than guessing an en
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
-- **DO NOT** launch the app directly from `build/` — always use `./run.sh`. These scripts install to `/Applications/Omi Dev.app` and launch from there, which is required for macOS "Quit & Reopen" (after granting permissions) to find the correct binary. Launching from `build/` causes stale binaries to run after permission restarts.
-- **DO NOT** manually copy binaries into app bundles and launch them — this bypasses signing, `/Applications/` installation, and LaunchServices registration
+- **DO NOT** launch from `build/` or hand-copy binaries into a bundle — always `./run.sh`. It installs to `/Applications/`, signs, and registers with LaunchServices; `build/` binaries go stale after a permission restart.
+- **Code signing**: local entitlements key on the identity's Team ID, not its name. **Never** use `OMI_ALLOW_ADHOC_SIGN=1` to fix a launch failure — it kills that bundle's Screen Recording grant. [`docs/local-code-signing.md`](docs/local-code-signing.md)
 
 - **DO NOT** kill, delete, or interfere with running "Omi", "omi", or "Omi Beta" app bundles — these are production/release installs the user relies on
 
