@@ -28,12 +28,14 @@ import {
   conversationToPendingOp,
   conversationsCodec,
 } from "./conversations-codec.js";
+import { RefreshTracker, type StoreStatus } from "./store-status.js";
 
 const ALIAS_KEY = "id-aliases"; // { [serverId]: localSlug }
 
 export class ConversationsStore {
   private listeners = new Set<() => void>();
   private aliases: Record<string, string> = {};
+  private readonly refreshTracker: RefreshTracker;
 
   private constructor(
     private readonly env: Env,
@@ -41,7 +43,10 @@ export class ConversationsStore {
     private readonly outbox: Outbox,
     private readonly projection: Projection<Conversation>,
     private readonly aliasKv: DurableKv,
-  ) {}
+    hasSavedData: boolean,
+  ) {
+    this.refreshTracker = new RefreshTracker(hasSavedData);
+  }
 
   static async open(bridge: StorageBridge, env: Env, http: HttpClient): Promise<ConversationsStore> {
     const aliasKv = await bridge.openKv("conversations-aliases");
@@ -53,7 +58,7 @@ export class ConversationsStore {
     let store: ConversationsStore;
     const transport = conversationsTransport(http, (localId, serverId) => void store.recordAlias(localId, serverId));
     const outbox = await Outbox.open(bridge, env, transport, "conversations");
-    store = new ConversationsStore(env, http, outbox, projection, aliasKv);
+    store = new ConversationsStore(env, http, outbox, projection, aliasKv, (await projection.read([])).length > 0);
     store.aliases = JSON.parse((await aliasKv.get(ALIAS_KEY)) ?? "{}") as Record<string, string>;
     outbox.onChange = () => store.notify();
     outbox.onOutcome = async (op, outcome) => {
@@ -83,6 +88,10 @@ export class ConversationsStore {
     return this.outbox.pendingOps().length;
   }
 
+  status(): StoreStatus {
+    return { refresh: this.refreshTracker.snapshot(), queue: this.outbox.queueStatus() };
+  }
+
   deadLetters(): Promise<DeadLetter[]> {
     return this.outbox.deadLetters();
   }
@@ -110,16 +119,44 @@ export class ConversationsStore {
    * Snapshot is never complete on the legacy wire (status-filtered list) —
    * reconcile only adds knowledge, never deletes filtered-out local rows. */
   async refresh(): Promise<void> {
-    const rows = await fetchConversations(this.http);
-    if (rows) {
-      await this.projection.upsertServerRows(rows.map((r) => this.rekeyed(r)));
+    const token = this.refreshTracker.begin();
+    this.notify();
+    let rows: Conversation[] | null = null;
+    let failed = false;
+    let thrown: unknown;
+    try {
+      rows = await fetchConversations(this.http);
+      if (rows) {
+        await this.refreshTracker.applyIfCurrent(token, () =>
+          this.projection.upsertServerRows(rows!.map((r) => this.rekeyed(r))),
+        );
+      }
+      if (this.refreshTracker.isCurrent(token)) {
+        const snapshot = await fetchConversationIdSnapshot(this.http);
+        if (snapshot && this.refreshTracker.isCurrent(token)) {
+          const localIds = snapshot.ids.map((id) => this.aliases[id] ?? id);
+          await this.refreshTracker.applyIfCurrent(token, () =>
+            this.projection.reconcile({ ...snapshot, ids: localIds }).then(() => undefined),
+          );
+        }
+      }
+    } catch (error) {
+      failed = true;
+      thrown = error;
     }
-    const snapshot = await fetchConversationIdSnapshot(this.http);
-    if (snapshot) {
-      const localIds = snapshot.ids.map((id) => this.aliases[id] ?? id);
-      await this.projection.reconcile({ ...snapshot, ids: localIds });
+    if (this.refreshTracker.isCurrent(token)) {
+      let hasSavedData = false;
+      try {
+        // Pending overlays are not durable server truth.
+        hasSavedData = (await this.projection.read([])).length > 0;
+      } catch (error) {
+        failed = true;
+        if (thrown === undefined) thrown = error;
+      }
+      this.refreshTracker.complete(token, !failed && rows !== null, hasSavedData);
     }
     this.notify();
+    if (thrown !== undefined) throw thrown;
   }
 
   private rekeyed(row: Conversation): Conversation {

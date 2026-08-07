@@ -28,12 +28,14 @@ import {
   foldersCodec,
   folderToPendingOp,
 } from "./folders-codec.js";
+import { RefreshTracker, type StoreStatus } from "./store-status.js";
 
 const ALIAS_KEY = "id-aliases"; // { [serverId]: localSlug }
 
 export class FoldersStore {
   private listeners = new Set<() => void>();
   private aliases: Record<string, string> = {};
+  private readonly refreshTracker: RefreshTracker;
 
   private constructor(
     private readonly env: Env,
@@ -41,7 +43,10 @@ export class FoldersStore {
     private readonly outbox: Outbox,
     private readonly projection: Projection<Folder>,
     private readonly aliasKv: DurableKv,
-  ) {}
+    hasSavedData: boolean,
+  ) {
+    this.refreshTracker = new RefreshTracker(hasSavedData);
+  }
 
   static async open(bridge: StorageBridge, env: Env, http: HttpClient): Promise<FoldersStore> {
     const aliasKv = await bridge.openKv("folders-aliases");
@@ -54,7 +59,7 @@ export class FoldersStore {
       (localId) => store.toWireId(localId),
     );
     const outbox = await Outbox.open(bridge, env, transport, "folders");
-    store = new FoldersStore(env, http, outbox, projection, aliasKv);
+    store = new FoldersStore(env, http, outbox, projection, aliasKv, (await projection.read([])).length > 0);
     store.aliases = JSON.parse((await aliasKv.get(ALIAS_KEY)) ?? "{}") as Record<string, string>;
     outbox.onChange = () => store.notify();
     outbox.onOutcome = async (op, outcome) => {
@@ -82,6 +87,10 @@ export class FoldersStore {
 
   pendingCount(): number {
     return this.outbox.pendingOps().length;
+  }
+
+  status(): StoreStatus {
+    return { refresh: this.refreshTracker.snapshot(), queue: this.outbox.queueStatus() };
   }
 
   deadLetters(): Promise<DeadLetter[]> {
@@ -114,16 +123,44 @@ export class FoldersStore {
   /** Pull server truth: rows + id reconcile. Safe to call on interval; all
    * failures are silent-degrade (offline reads keep serving the projection). */
   async refresh(): Promise<void> {
-    const rows = await fetchFolders(this.http);
-    if (rows) {
-      await this.projection.upsertServerRows(rows.map((r) => this.rekeyed(r)));
+    const token = this.refreshTracker.begin();
+    this.notify();
+    let rows: Folder[] | null = null;
+    let failed = false;
+    let thrown: unknown;
+    try {
+      rows = await fetchFolders(this.http);
+      if (rows) {
+        await this.refreshTracker.applyIfCurrent(token, () =>
+          this.projection.upsertServerRows(rows!.map((r) => this.rekeyed(r))),
+        );
+      }
+      if (this.refreshTracker.isCurrent(token)) {
+        const snapshot = await fetchFolderIdSnapshot(this.http);
+        if (snapshot && this.refreshTracker.isCurrent(token)) {
+          const localIds = snapshot.ids.map((id) => this.aliases[id] ?? id);
+          await this.refreshTracker.applyIfCurrent(token, () =>
+            this.projection.reconcile({ ...snapshot, ids: localIds }).then(() => undefined),
+          );
+        }
+      }
+    } catch (error) {
+      failed = true;
+      thrown = error;
     }
-    const snapshot = await fetchFolderIdSnapshot(this.http);
-    if (snapshot) {
-      const localIds = snapshot.ids.map((id) => this.aliases[id] ?? id);
-      await this.projection.reconcile({ ...snapshot, ids: localIds });
+    if (this.refreshTracker.isCurrent(token)) {
+      let hasSavedData = false;
+      try {
+        // Pending overlays are not durable server truth.
+        hasSavedData = (await this.projection.read([])).length > 0;
+      } catch (error) {
+        failed = true;
+        if (thrown === undefined) thrown = error;
+      }
+      this.refreshTracker.complete(token, !failed && rows !== null, hasSavedData);
     }
     this.notify();
+    if (thrown !== undefined) throw thrown;
   }
 
   private rekeyed(row: Folder): Folder {

@@ -30,6 +30,13 @@ type JournalEntry =
 
 const DEAD_LETTERS_KEY = "dead-letters";
 
+export type QueuePhase = "idle" | "queued" | "sending" | "retrying" | "needs-auth";
+
+export interface QueueStatus {
+  readonly phase: QueuePhase;
+  readonly pendingCount: number;
+}
+
 export class Outbox {
   private state: EngineState = INITIAL_STATE;
   /** Fired after every state transition and terminal outcome — stores use it
@@ -105,6 +112,16 @@ export class Outbox {
   /** Snapshot of ops not yet at a terminal outcome, in send order. */
   pendingOps(): readonly PendingOp[] {
     return this.state.pending;
+  }
+
+  /** Public queue state for surfaces; derived from the engine, never UI flags. */
+  queueStatus(): QueueStatus {
+    const pendingCount = this.state.pending.length;
+    if (pendingCount === 0) return { phase: "idle", pendingCount };
+    if (this.state.pausedForAuth) return { phase: "needs-auth", pendingCount };
+    if (this.state.inFlight !== null) return { phase: "sending", pendingCount };
+    if (this.state.backoffStep > 0) return { phase: "retrying", pendingCount };
+    return { phase: "queued", pendingCount };
   }
 
   private dispatch(event: Parameters<typeof step>[1]): void {
