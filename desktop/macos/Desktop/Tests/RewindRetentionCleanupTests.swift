@@ -13,26 +13,52 @@ import XCTest
 final class RewindRetentionCleanupTests: XCTestCase {
 
   private var testUserId: String!
+  private var storageRoot: URL!
   private var userDir: URL!
   private var savedRetentionDays: Int = 7
+  private var previousLocalProfile: String?
+  private var previousStorageName: String?
 
   override func setUp() async throws {
     try await super.setUp()
 
-    // Isolate all Rewind storage to a unique throwaway user so we never touch
-    // real recordings (storage is keyed by userId, not bundle id).
-    testUserId = "retention-test-\(UUID().uuidString)"
-    RewindDatabase.currentUserId = testUserId
-    try await RewindDatabase.shared.initialize()
-    try await RewindStorage.shared.initialize()
+    // Isolate all Rewind storage to a throwaway *root*, not just a throwaway user id: this suite
+    // writes real video chunk files, and anything that ends a test before `tearDown` would
+    // otherwise leave them inside the user's own `~/Library/Application Support/Omi` tree.
+    previousLocalProfile = ProcessInfo.processInfo.environment["OMI_DESKTOP_LOCAL_PROFILE"]
+    previousStorageName = ProcessInfo.processInfo.environment["OMI_LOCAL_PROFILE_STORAGE_NAME"]
+    let storageName = "OmiTests-retention-\(UUID().uuidString)"
+    setenv("OMI_DESKTOP_LOCAL_PROFILE", "1", 1)
+    setenv("OMI_LOCAL_PROFILE_STORAGE_NAME", storageName, 1)
 
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    storageRoot = appSupport.appendingPathComponent(storageName, isDirectory: true)
+
+    // Same lifecycle `RewindStorageTestIsolation` uses: the pool has to be closed and *retargeted*
+    // to this suite's user. Setting `currentUserId` alone is not enough — a `configuredUserId` left
+    // behind by an earlier suite in the same process outranks it, and the database would open for
+    // that user instead.
+    testUserId = "retention-test-\(UUID().uuidString)"
+    await RewindDatabase.shared.close()
+    await RewindStorageTestIsolation.invalidateAllStorageCaches()
+    RewindDatabase.currentUserId = testUserId
+    await RewindDatabase.shared.configure(userId: testUserId)
+    try await RewindDatabase.shared.initialize()
+    try await RewindStorage.shared.initialize()
+
     userDir =
-      appSupport
-      .appendingPathComponent("Omi", isDirectory: true)
+      storageRoot
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
+
+    // Fail loudly rather than quietly writing recordings into the user's real Omi directory if
+    // the storage redirection ever stops working.
+    let videosDirectory = await RewindStorage.shared.getVideosDirectory()
+    XCTAssertEqual(
+      videosDirectory?.standardizedFileURL,
+      userDir.appendingPathComponent("Videos", isDirectory: true).standardizedFileURL,
+      "test recordings must be written under the throwaway storage root, not the user's Omi data")
 
     // Pin retention to a known value so the test is deterministic.
     savedRetentionDays = RewindSettings.shared.retentionDays
@@ -41,8 +67,26 @@ final class RewindRetentionCleanupTests: XCTestCase {
 
   override func tearDown() async throws {
     RewindSettings.shared.retentionDays = savedRetentionDays
-    if let userDir { try? FileManager.default.removeItem(at: userDir) }
+    // `VideoChunkEncoder` is a process-wide singleton pinned to one owner's videos directory, so a
+    // second test in this process is a storage-owner change and must cross the same boundary the
+    // app crosses when the signed-in user changes. Without it the next `RewindStorage.initialize`
+    // throws "Video encoder must reset before changing storage owner".
+    await RewindStorage.shared.reset()
+    await RewindDatabase.shared.close()
+    await RewindStorageTestIsolation.invalidateAllStorageCaches()
+    await RewindDatabase.shared.configure(userId: nil)
+    if let storageRoot { try? FileManager.default.removeItem(at: storageRoot) }
     RewindDatabase.currentUserId = nil
+    if let previousLocalProfile {
+      setenv("OMI_DESKTOP_LOCAL_PROFILE", previousLocalProfile, 1)
+    } else {
+      unsetenv("OMI_DESKTOP_LOCAL_PROFILE")
+    }
+    if let previousStorageName {
+      setenv("OMI_LOCAL_PROFILE_STORAGE_NAME", previousStorageName, 1)
+    } else {
+      unsetenv("OMI_LOCAL_PROFILE_STORAGE_NAME")
+    }
     try await super.tearDown()
   }
 
