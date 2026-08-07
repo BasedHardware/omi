@@ -23,6 +23,7 @@ import pytest
 from fastapi import HTTPException
 
 import routers.chat as chat_router
+import utils.chat_session_target as chat_target
 
 APP_SESSION = {
     'id': 'sess-app',
@@ -56,14 +57,14 @@ def sessions(monkeypatch):
 
 
 def test_target_takes_its_app_identity_from_the_named_session(sessions):
-    target = chat_router._resolve_chat_target('uid-1', None, 'sess-app')
+    target = chat_target.resolve_chat_target('uid-1', None, 'sess-app')
 
     assert target.session_id == 'sess-app'
     assert target.app_id == 'app-9'
 
 
 def test_target_without_a_named_session_keeps_the_requested_app(sessions):
-    target = chat_router._resolve_chat_target('uid-1', 'app-9', None)
+    target = chat_target.resolve_chat_target('uid-1', 'app-9', None)
 
     assert target.session_id == 'sess-current'
     assert target.app_id == 'app-9'

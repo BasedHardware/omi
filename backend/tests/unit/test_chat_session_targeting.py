@@ -11,7 +11,7 @@ That resolver made it worse: its Firestore query was `.limit(1)` with no
 Creating a second session via `/v2/chat-sessions` could silently move the
 conversation.
 
-Seam: the router's `_resolve_chat_session` and `database.chat.get_chat_session`
+Seam: `utils.chat_session_target.resolve_chat_session` and `database.chat.get_chat_session`
 are exercised directly with patched collaborators — no Firestore client and no
 FastAPI app construction.
 """
@@ -22,6 +22,7 @@ import pytest
 from fastapi import HTTPException
 
 import routers.chat as chat_router
+import utils.chat_session_target as chat_target
 
 
 class _FakeQuery:
@@ -59,7 +60,7 @@ def test_explicit_session_id_is_used_instead_of_the_current_session(monkeypatch)
         lambda uid, app_id=None: {'id': 'current-session'},
     )
 
-    resolved = chat_router._resolve_chat_session('uid-1', None, 'older-session')
+    resolved = chat_target.resolve_chat_session('uid-1', None, 'older-session')
 
     assert resolved['id'] == 'older-session'
 
@@ -74,7 +75,7 @@ def test_unknown_session_id_fails_instead_of_falling_back(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as excinfo:
-        chat_router._resolve_chat_session('uid-1', None, 'does-not-exist')
+        chat_target.resolve_chat_session('uid-1', None, 'does-not-exist')
 
     assert excinfo.value.status_code == 404
 
@@ -90,7 +91,7 @@ def test_a_foreign_session_id_cannot_be_targeted(monkeypatch):
     monkeypatch.setattr(chat_router.chat_db, 'get_chat_session', lambda uid, app_id=None: None)
 
     with pytest.raises(HTTPException) as excinfo:
-        chat_router._resolve_chat_session('uid-2', None, 'sess-a')
+        chat_target.resolve_chat_session('uid-2', None, 'sess-a')
 
     assert excinfo.value.status_code == 404
 
@@ -105,7 +106,7 @@ def test_without_an_id_the_current_session_is_used(monkeypatch):
 
     monkeypatch.setattr(chat_router.chat_db, 'get_chat_session', _current)
 
-    resolved = chat_router._resolve_chat_session('uid-1', 'app-9', None)
+    resolved = chat_target.resolve_chat_session('uid-1', 'app-9', None)
 
     assert resolved['id'] == 'current-session'
     assert seen['app_id'] == 'app-9'
@@ -114,7 +115,7 @@ def test_without_an_id_the_current_session_is_used(monkeypatch):
 def test_blank_session_id_is_treated_as_absent(monkeypatch):
     monkeypatch.setattr(chat_router.chat_db, 'get_chat_session', lambda uid, app_id=None: {'id': 'current-session'})
 
-    assert chat_router._resolve_chat_session('uid-1', None, '')['id'] == 'current-session'
+    assert chat_target.resolve_chat_session('uid-1', None, '')['id'] == 'current-session'
 
 
 def test_current_session_resolves_to_the_newest(monkeypatch):
