@@ -324,6 +324,10 @@ final class DashboardCaptureStateTests: XCTestCase {
   func testHomeOverlaysBehaveLikeModals() throws {
     let dashboard = try dashboardSource()
     let apps = try appsSource()
+    // The `dismissableSheet` modifiers are the shared presentation primitive
+    // both Home overlays and the pages mount; they live beside the pages that
+    // use them rather than inside any one of them.
+    let dismissableSheet = try source(named: "DismissableSheet.swift")
     let escapeKeyHandler = try escapeKeyHandlerSource()
     let normalizedDashboard = normalizedWhitespace(dashboard)
 
@@ -347,16 +351,17 @@ final class DashboardCaptureStateTests: XCTestCase {
       "Home overlays must not rely on onExitCommand — it requires focus the overlays never receive"
     )
     XCTAssertTrue(
-      apps.contains("OverlayModalEscapeCatcher {\n              log(\"DISMISSABLE_SHEET: Escape pressed"))
+      dismissableSheet.contains(
+        "OverlayModalEscapeCatcher {\n              log(\"DISMISSABLE_SHEET: Escape pressed"))
 
     // While an overlay is up, the content underneath must be hidden from
     // VoiceOver / Full Keyboard Access and the panel marked as modal.
     XCTAssertTrue(dashboard.contains("private var isHomeModalPresented: Bool"))
     XCTAssertTrue(dashboard.contains(".accessibilityHidden(isHomeModalPresented)"))
     XCTAssertTrue(dashboard.contains(".accessibilityAddTraits(.isModal)"))
-    XCTAssertTrue(apps.contains(".accessibilityHidden(isPresented)"))
-    XCTAssertTrue(apps.contains(".accessibilityHidden(item != nil)"))
-    XCTAssertTrue(apps.contains(".accessibilityAddTraits(.isModal)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityHidden(isPresented)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityHidden(item != nil)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityAddTraits(.isModal)"))
 
     // The close control must be a real, labeled button — not a tap gesture.
     XCTAssertTrue(apps.contains("var accessibilityLabel: String = \"Close\""))
