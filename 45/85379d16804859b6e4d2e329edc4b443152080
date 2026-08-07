@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Sources/Theme/Ink.swift
+  s_569f1df936cc22::t_48a0b29a929353 94-108,110-111
+  s_569f1df936cc22::t_b407dc2677ec92 195-197,206-212
+  s_569f1df936cc22::t_9c9a9a591f193b 198-205
+  s_569f1df936cc22::t_42aadce995c4f2 70-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4585379d16804859b6e4d2e329edc4b443152080",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
