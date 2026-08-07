@@ -256,6 +256,21 @@ export interface BlockedAdjudicationInput {
 }
 
 /**
+ * STANDING RULE for any future input reduction here: a reduction may SELECT
+ * whole clusters and must never PRUNE members inside a selected cluster.
+ * Both prior attempts to reduce within a cluster failed the same way -- sol #7
+ * restricted admission supports to newly bound members and manufactured false
+ * `non_independent_support_set`, and sol #8's fixed-prefix sampling starved the
+ * tail forever. Admission supports derive from all coherent members, bound and
+ * new, and a bound representative is what anchors a group to its existing
+ * entity; drop either and late joins stop working.
+ *
+ * Note also that `batch_profile_budget` bounds bytes per phase-1 call and
+ * NOTHING else: phases 2 and 3 are per-group calls whose count no budget
+ * bounds, and they are ~87% of a cycle's model calls at corpus scale
+ * (harness/identity-cost.ts). Reducing payload size alone does not reduce them.
+ */
+/**
  * Blocked, batched adjudication. Each call stays under a fixed payload budget;
  * a batch that cannot be adjudicated (model error, oversize response) loses
  * only its own candidates for this cycle, recorded as a durable rejection the

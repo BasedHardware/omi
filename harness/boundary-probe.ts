@@ -110,6 +110,7 @@ const main = async () => {
   const selection = selectModel(process.argv, "boundary-probe");
   if (!selection.live) throw new Error("boundary-probe scores a real prompt: pass --model glm or --model codex");
   const model = selection.model;
+  const started = Date.now();
 
   const labels = JSON.parse(await Bun.file(labelsPath).text()) as Label[];
   const db = new Database(dbPath, { readonly: true });
@@ -152,6 +153,15 @@ const main = async () => {
       console.log(`  ${good ? "FIXED  " : "REGRESS"} [${from.label.expect}] ${from.predicate}: ${from.decision} -> ${to.decision}${to.reason ? ` (${to.reason})` : ""}`);
     }
   }
+  const elapsed_s = Math.round((Date.now() - started) / 100) / 10;
+  // Reported whenever OMI_VERDICT_CACHE is set, so a cold/warm pair is directly
+  // comparable: same labels, same versions, only the cache differs.
+  const stats = (model as { stats?: { hits: number; misses: number; writes: number } }).stats;
+  if (stats) {
+    const total = stats.hits + stats.misses;
+    console.log(`\ncache: hits=${stats.hits} misses=${stats.misses} writes=${stats.writes} hit_rate=${total ? ((stats.hits / total) * 100).toFixed(1) : "0.0"}%`);
+  }
+  console.log(`wall_clock_s: ${elapsed_s}`);
   console.log(`\n${JSON.stringify(summaries)}`);
   db.close();
 };

@@ -119,6 +119,17 @@ const main = () => {
     calls_total_floor: batches.length + 2 * prepared.length,
   };
 
+  // --digests prints the verdict-cache key input per cluster, one per line, so
+  // two snapshots taken at different points in a run can be diffed to measure
+  // the hit rate memoization would actually see ACROSS cycles. That is the
+  // number that predicts the production benefit: a cluster which gains a single
+  // mention is a different input and therefore a miss.
+  if (process.argv.includes("--digests")) {
+    for (const entry of prepared) console.log(new Bun.CryptoHasher("sha256").update(JSON.stringify(entry.profiles)).digest("hex"));
+    db.close();
+    return;
+  }
+
   if (process.argv.includes("--json")) console.log(JSON.stringify(report, null, 2));
   else for (const [k, v] of Object.entries(report)) console.log(`  ${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
   db.close();
