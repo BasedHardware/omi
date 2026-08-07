@@ -213,11 +213,19 @@ class ResponseMessage(Message):
 
 
 class PageContext(BaseModel):
-    """Page context for chat - indicates what the user is currently viewing."""
+    """Page context for chat - indicates what the user is currently viewing.
+
+    When ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /
+    ``end_date`` are set, retrieval tools hard-scope to that conversation and/or
+    timeframe (#4515). Dates must include a timezone offset
+    (YYYY-MM-DDTHH:MM:SS+HH:MM).
+    """
 
     type: Literal["conversation", "task", "memory", "recap"]
     id: Optional[str] = None
     title: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 class SendMessageRequest(BaseModel):

@@ -1359,6 +1359,10 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Generate run_id for LangSmith tracing
     langsmith_run_id = str(uuid.uuid4())
 
+    from utils.retrieval.chat_scope import build_chat_scope
+
+    chat_scope = build_chat_scope(context)
+
     # Config for tools to access via RunnableConfig
     configurable = {
         "user_id": uid,
@@ -1367,6 +1371,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         "safety_guard": safety_guard,
         "chat_session_id": chat_session.id if chat_session else None,
         "tools": core_tools + app_tools,
+        "chat_scope": chat_scope,
     }
 
     # Store config in context variable for tools that use agent_config_context

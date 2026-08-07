@@ -45,8 +45,15 @@ class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
   final String? autoMessage;
   final bool autoStartVoice;
+  final ChatPageContext? initialChatContext;
 
-  const ChatPage({super.key, this.isPivotBottom = false, this.autoMessage, this.autoStartVoice = false});
+  const ChatPage({
+    super.key,
+    this.isPivotBottom = false,
+    this.autoMessage,
+    this.autoStartVoice = false,
+    this.initialChatContext,
+  });
 
   @override
   State<ChatPage> createState() => ChatPageState();
@@ -78,6 +85,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   String? _pendingDeleteAppId;
   String? _selectedContext;
   bool _quotaSheetShown = false;
+  String? _timeframePreset; // 'today' | 'week' | null
 
   @override
   bool get wantKeepAlive => true;
@@ -112,6 +120,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       provider.fetchChatApps();
       // Pre-connect agent WebSocket so it's ready when the user sends a message
       provider.preConnectAgent();
+      if (widget.initialChatContext != null) {
+        provider.setChatScope(widget.initialChatContext);
+      }
       // Chat quota is checked via 402 error when sending messages
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
@@ -177,6 +188,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   @override
   void dispose() {
     _messageProvider?.removeListener(_onMessageProviderChanged);
+    _messageProvider?.setChatScope(null);
     _cancelPendingScrolls();
     textController.dispose();
     scrollController.dispose();
@@ -458,6 +470,45 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               } else {
                                 return const SizedBox.shrink();
                               }
+                            },
+                          ),
+                          // Scope chips (#4515) — conversation and/or Today / This week
+                          Consumer<MessageProvider>(
+                            builder: (context, messageProvider, _) {
+                              final scope = messageProvider.chatScope;
+                              final hasConversation = scope?.type == 'conversation' && (scope?.id?.isNotEmpty ?? false);
+                              return Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      if (hasConversation) ...[
+                                        _scopeChip(
+                                          label: 'About: ${scope!.title ?? 'conversation'}',
+                                          selected: true,
+                                          onTap: () {
+                                            setState(() => _timeframePreset = null);
+                                            messageProvider.setChatScope(null);
+                                          },
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
+                                      _scopeChip(
+                                        label: 'Today',
+                                        selected: _timeframePreset == 'today',
+                                        onTap: () => _toggleTimeframe(messageProvider, 'today'),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _scopeChip(
+                                        label: 'This week',
+                                        selected: _timeframePreset == 'week',
+                                        onTap: () => _toggleTimeframe(messageProvider, 'week'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
                             },
                           ),
                           // Send bar
@@ -947,6 +998,67 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
+  }
+
+  Widget _scopeChip({required String label, required bool selected, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF5E35B1).withValues(alpha: 0.35) : const Color(0xFF1F1F25),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: selected ? const Color(0xFF8B7CFF) : const Color(0xFF35343B)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : const Color(0xFFC4C4CC),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _toggleTimeframe(MessageProvider provider, String preset) {
+    if (_timeframePreset == preset) {
+      setState(() => _timeframePreset = null);
+      final existing = provider.chatScope;
+      if (existing != null && existing.type == 'conversation') {
+        provider.setChatScope(existing.copyWith(clearDates: true));
+      } else {
+        provider.setChatScope(null);
+      }
+      return;
+    }
+
+    final now = DateTime.now();
+    final end = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    late DateTime start;
+    if (preset == 'today') {
+      start = DateTime(now.year, now.month, now.day);
+    } else {
+      final mondayOffset = now.weekday == DateTime.sunday ? -6 : 1 - now.weekday;
+      final monday = now.add(Duration(days: mondayOffset));
+      start = DateTime(monday.year, monday.month, monday.day);
+    }
+
+    final existing = provider.chatScope;
+    final next = (existing != null && existing.type == 'conversation')
+        ? existing.copyWith(
+            startDate: start.toUtc().toIso8601String(),
+            endDate: end.toUtc().toIso8601String(),
+          )
+        : ChatPageContext(
+            type: 'recap',
+            title: preset == 'today' ? 'Today' : 'This week',
+            startDate: start.toUtc().toIso8601String(),
+            endDate: end.toUtc().toIso8601String(),
+          );
+    setState(() => _timeframePreset = preset);
+    provider.setChatScope(next);
   }
 
   void _showPlansSheetOnQuotaExceeded() {

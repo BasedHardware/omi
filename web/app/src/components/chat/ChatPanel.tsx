@@ -51,7 +51,7 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
-  const { isOpen, closeChat, currentContext, selectedAppId, clearAppContext } = useChatContext();
+  const { isOpen, closeChat, currentContext, setContext, selectedAppId, clearAppContext } = useChatContext();
   const {
     messages,
     isLoading,
@@ -70,6 +70,7 @@ export function ChatPanel() {
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedApp, setSelectedApp] = useState<App | null>(null);
+  const [timeframePreset, setTimeframePreset] = useState<'today' | 'week' | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,6 +107,52 @@ export function ChatPanel() {
   }, [isOpen]);
 
   const quickPrompts = getQuickPrompts(currentContext?.type);
+
+  const applyTimeframePreset = (preset: 'today' | 'week' | null) => {
+    setTimeframePreset(preset);
+    if (!preset) {
+      if (!currentContext) return;
+      const { start_date: _s, end_date: _e, ...rest } = currentContext;
+      // Keep conversation/task context; drop only the date window.
+      if (rest.type === 'recap' && !rest.id && (rest.title === 'Today' || rest.title === 'This week')) {
+        setContext(null);
+      } else {
+        setContext({ ...rest });
+      }
+      return;
+    }
+
+    const now = new Date();
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(now);
+    if (preset === 'today') {
+      start.setHours(0, 0, 0, 0);
+    } else {
+      // Monday-start week in local time
+      const day = start.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      start.setDate(start.getDate() + mondayOffset);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    const base =
+      currentContext && currentContext.type !== 'general'
+        ? currentContext
+        : { type: 'recap' as const, title: preset === 'today' ? 'Today' : 'This week' };
+
+    setContext({
+      ...base,
+      title:
+        currentContext?.type === 'conversation'
+          ? currentContext.title
+          : preset === 'today'
+            ? 'Today'
+            : 'This week',
+      start_date: start.toISOString(),
+      end_date: end.toISOString(),
+    });
+  };
 
   // Handle file selection
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -271,7 +318,8 @@ export function ChatPanel() {
                   </h2>
                   {currentContext?.title && !selectedAppId && (
                     <p className="text-xs text-text-tertiary truncate max-w-[250px]">
-                      Context: {currentContext.title}
+                      Asking about: {currentContext.title}
+                      {currentContext.start_date ? ' · timed' : ''}
                     </p>
                   )}
                 </div>
@@ -296,6 +344,45 @@ export function ChatPanel() {
                 </button>
               </div>
             </div>
+
+            {!selectedAppId && (
+              <div className="flex items-center gap-2 px-4 py-2 border-b border-bg-tertiary">
+                <span className="text-xs text-text-quaternary">Scope</span>
+                <button
+                  type="button"
+                  onClick={() => applyTimeframePreset(timeframePreset === 'today' ? null : 'today')}
+                  className={cn(
+                    'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                    timeframePreset === 'today'
+                      ? 'border-purple-primary bg-purple-primary/20 text-purple-primary'
+                      : 'border-bg-tertiary text-text-tertiary hover:text-text-secondary',
+                  )}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyTimeframePreset(timeframePreset === 'week' ? null : 'week')}
+                  className={cn(
+                    'text-xs px-2.5 py-1 rounded-full border transition-colors',
+                    timeframePreset === 'week'
+                      ? 'border-purple-primary bg-purple-primary/20 text-purple-primary'
+                      : 'border-bg-tertiary text-text-tertiary hover:text-text-secondary',
+                  )}
+                >
+                  This week
+                </button>
+                {(timeframePreset || currentContext?.start_date) && (
+                  <button
+                    type="button"
+                    onClick={() => applyTimeframePreset(null)}
+                    className="text-xs text-text-quaternary hover:text-text-secondary ml-auto"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Error banner */}
             {error && (

@@ -37,6 +37,7 @@ class MessageProvider extends ChangeNotifier {
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
   bool _isNextMessageFromVoice = false;
+  ChatPageContext? chatScope;
 
   final AgentChatService _agentChatService = AgentChatService();
   Timer? _vmKeepaliveTimer;
@@ -187,6 +188,11 @@ class MessageProvider extends ChangeNotifier {
 
   void setSendingMessage(bool value) {
     sendingMessage = value;
+    notifyListeners();
+  }
+
+  void setChatScope(ChatPageContext? scope) {
+    chatScope = scope;
     notifyListeners();
   }
 
@@ -663,7 +669,12 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(
+      text,
+      appId: currentAppId,
+      filesId: fileIds,
+      context: chatScope,
+    )) {
         chunkCount++;
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
