@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Tests/RewindHistoryReachTests.swift
+  s_569f1df936cc22::t_e78dccc400129d 59,61
+  s_569f1df936cc22::t_4eb55589d8383c 42,46
+  s_569f1df936cc22::t_4ce116265c23ee 18-20,26-28
+desktop/macos/Desktop/Tests/RewindRetentionCleanupTests.swift
+  s_569f1df936cc22::t_56e2d656c0d3de 150
+  s_569f1df936cc22::t_0a984abd7409dd 16
+  s_569f1df936cc22::t_5dafd0d8f80f23 36-37
+desktop/macos/Desktop/Tests/RewindAllTimeSearchTests.swift
+  s_569f1df936cc22::t_d4fbbafa2d43e6 192
+  s_569f1df936cc22::t_384a903f3b43cb 201-202
+  s_569f1df936cc22::t_7bc1679112749e 34-38
+  s_569f1df936cc22::t_e1cb185ebd32bd 44
+  s_569f1df936cc22::t_7fda9b96d3fc10 13-16
+  s_569f1df936cc22::t_0e49c9251630d5 170-171
+  s_569f1df936cc22::t_ef7ade3b7e34a5 51
+  s_569f1df936cc22::t_d6c8f6c9f2d294 136
+  s_569f1df936cc22::t_2b92c6069b05c0 84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "fedb3eac0ef3a2022be46b9cb6c28bad39b6647f",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
