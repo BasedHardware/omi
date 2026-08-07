@@ -835,6 +835,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _processVoiceCommandBytes(String deviceId, List<List<int>> data) async {
+    if (_recordingDevice?.type == DeviceType.omi && !SharedPreferencesUtil().omiButtonActionsEnabled) return;
     if (data.isEmpty) {
       Logger.debug("voice frames is empty");
       return;
@@ -891,6 +892,7 @@ class CaptureController extends ChangeNotifier
         var buttonState =
             ByteData.view(Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer).getUint32(0);
         Logger.debug("device button $buttonState");
+        if (_recordingDevice?.type == DeviceType.omi && !SharedPreferencesUtil().omiButtonActionsEnabled) return;
 
         // Intercept for interactive device onboarding
         if (deviceOnboardingProvider?.isOnboardingActive == true) {

@@ -436,6 +436,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get autoSyncDescription => 'ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ';
 
   @override
+  String get omiButtonActions => 'การทำงานของปุ่ม Omi';
+
+  @override
   String get deviceSettings => 'การตั้งค่าอุปกรณ์';
 
   @override

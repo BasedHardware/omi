@@ -438,6 +438,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get autoSyncDescription => 'Synkronisera offlineinspelningar automatiskt när din enhet ansluter';
 
   @override
+  String get omiButtonActions => 'Omi-knappåtgärder';
+
+  @override
   String get deviceSettings => 'Enhetsinställningar';
 
   @override

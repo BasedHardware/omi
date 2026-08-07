@@ -441,6 +441,9 @@ class AppLocalizationsFr extends AppLocalizations {
       'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
 
   @override
+  String get omiButtonActions => 'Actions du bouton Omi';
+
+  @override
   String get deviceSettings => 'Paramètres de l\'appareil';
 
   @override

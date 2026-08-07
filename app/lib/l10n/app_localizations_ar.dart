@@ -434,6 +434,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get autoSyncDescription => 'مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك';
 
   @override
+  String get omiButtonActions => 'إجراءات زر Omi';
+
+  @override
   String get deviceSettings => 'إعدادات الجهاز';
 
   @override

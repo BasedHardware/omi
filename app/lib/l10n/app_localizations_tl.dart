@@ -440,6 +440,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
 
   @override
+  String get omiButtonActions => 'Mga aksyon ng button ng Omi';
+
+  @override
   String get deviceSettings => 'Mga Device Setting';
 
   @override

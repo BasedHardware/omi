@@ -138,6 +138,7 @@
     "offlineSync": "Offline synchronizácia",
     "autoSync": "Automatická synchronizácia",
     "autoSyncDescription": "Automaticky synchronizovať offline nahrávky pri pripojení zariadenia",
+    "omiButtonActions": "Akcie tlačidla Omi",
     "deviceSettings": "Nastavenia zariadenia",
     "integrations": "Integrácie",
     "feedbackBug": "Spätná väzba / chyba",

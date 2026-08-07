@@ -138,6 +138,7 @@
     "offlineSync": "Offline-synkronisering",
     "autoSync": "Automatisk synkronisering",
     "autoSyncDescription": "Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse",
+    "omiButtonActions": "Omi-knaphandlinger",
     "deviceSettings": "Enhedsindstillinger",
     "integrations": "Integrationer",
     "feedbackBug": "Feedback / Fejl",

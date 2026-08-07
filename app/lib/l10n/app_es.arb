@@ -138,6 +138,7 @@
     "offlineSync": "Sincronización sin conexión",
     "autoSync": "Sincronización automática",
     "autoSyncDescription": "Sincroniza automáticamente las grabaciones sin conexión cuando se conecta tu dispositivo",
+    "omiButtonActions": "Acciones del botón de Omi",
     "deviceSettings": "Ajustes del dispositivo",
     "integrations": "Integraciones",
     "feedbackBug": "Feedback / Error",
