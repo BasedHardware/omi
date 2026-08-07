@@ -26,8 +26,8 @@ struct QueryAnswerThread: View {
   @ObservedObject var chatProvider: ChatProvider
   let onOpenConversation: (String) -> Void
   let onOpenMemories: () -> Void
-  /// Re-sends the query that failed. The words are still in the bar, so retrying is the same action
-  /// the user would take by hand — it must not be a second send path.
+  /// Re-sends the question that failed, through the host's one send — never a second send path. The
+  /// host holds that question, because the composer is emptied by the send that failed.
   let onRetry: () -> Void
 
   var body: some View {

@@ -123,6 +123,46 @@ enum QueryShellSubmit: Equatable, Sendable {
   }
 }
 
+/// **One submit, resolved once — including what the field is left holding.**
+///
+/// The bar does two jobs with one string, and every way this surface felt broken
+/// came from confusing them. In `.results` the text is a *filter* over the list
+/// under it, so submitting keeps it. In `.answer` the text is a *message*, and a
+/// composer that keeps the message it just sent is a composer you have to empty
+/// by hand before you can write the next one: the `Ask a follow-up…` placeholder
+/// was unreachable, a second `⏎` re-sent the question verbatim, and emptying the
+/// field to type a follow-up used to throw the whole conversation away because
+/// an empty field was read as "take me back to the list".
+///
+/// So the field is emptied by the *send*, and nothing else reads emptiness as an
+/// instruction. The two labelled exits (`esc Results` on the bar, `‹ Results` in
+/// the panel header) are the only ways out of a conversation.
+struct QueryShellSubmission: Equatable, Sendable {
+  let action: QueryShellSubmit
+  /// The trimmed question to send. Non-nil only for `.ask`.
+  let question: String?
+  /// What the field holds afterwards.
+  let text: String
+  /// What the panel shows next, or nil to leave the panel exactly as it is — an
+  /// inert key must never move the reader.
+  let mode: QueryShellMode?
+
+  static func resolve(text: String, commandHeld: Bool) -> Self {
+    switch QueryShellSubmit.resolve(text: text, commandHeld: commandHeld) {
+    case .none:
+      return Self(action: .none, question: nil, text: text, mode: nil)
+    case .search:
+      return Self(action: .search, question: nil, text: text, mode: .results)
+    case .ask:
+      return Self(
+        action: .ask,
+        question: text.trimmingCharacters(in: .whitespacesAndNewlines),
+        text: "",
+        mode: .answer)
+    }
+  }
+}
+
 // MARK: - Where Home's controls send you
 
 /// **Every way out of Home, as a value.** Home shows rows it does not own: a conversation, a memory,

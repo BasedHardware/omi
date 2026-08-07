@@ -49,6 +49,9 @@ struct QueryShellHome: View {
   @State private var screenCount: Int?
   /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
   @State private var didCopyTranscript = false
+  /// The last question that actually went. `Try again` re-sends *that* — the composer is emptied by
+  /// the send now, so re-reading the bar would retry an empty string.
+  @State private var lastAskedQuestion = ""
   @FocusState private var isQueryFocused: Bool
 
   var body: some View {
@@ -105,6 +108,14 @@ struct QueryShellHome: View {
       isQueryFocused = true
       showOnboardingOpenerIfPresent()
     }
+    // **The other half of `hidesOnDeactivate`.** The shell hides itself when you click away and the
+    // next summon re-orders the *same* window forward rather than rebuilding this view, so `onAppear`
+    // — the only thing that ever claimed the caret — never runs again. A summoned search surface that
+    // swallows the first thing you type is the whole bug. Claiming it again is idempotent when the
+    // field already has it.
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      isQueryFocused = true
+    }
     .onChange(of: chatProvider.onboardingOpener == nil) { _, _ in showOnboardingOpenerIfPresent() }
     // The two product flows the provider drives and nothing renders. Both were hosted only by the
     // deleted chat page, so since that deletion a browser tool with no extension token has killed
@@ -156,11 +167,11 @@ struct QueryShellHome: View {
       return true
     }
     .task { await loadScreenCount() }
-    .onChange(of: request.text) { _, newValue in
-      // Clearing the field leaves the answer behind, which would otherwise strand you in a mode with
-      // nothing on screen explaining why the list is gone.
-      if newValue.isEmpty, mode == .answer { mode = .results }
-    }
+    // **No rule here reads an empty field as an instruction.** Emptying the bar used to eject you
+    // from answer mode — so backspacing your last question to type a follow-up threw the conversation
+    // off screen mid-edit, and the composer could never be cleared by the send either. `esc Results`
+    // on the bar and `‹ Results` in the panel header are the two labelled ways out, and they are the
+    // only two. See `QueryShellSubmission`.
   }
 
   @ViewBuilder
@@ -182,7 +193,7 @@ struct QueryShellHome: View {
         chatProvider: chatProvider,
         onOpenConversation: openConversation,
         onOpenMemories: openMemories,
-        onRetry: ask
+        onRetry: retry
       )
     }
   }
@@ -331,34 +342,55 @@ struct QueryShellHome: View {
 
   // MARK: - The two keys
 
-  /// `⏎` — the panel is already filtering as you type, so this only has to put you back on the list
-  /// and keep the caret where you are still typing.
-  private func search() {
-    showResults()
-    isQueryFocused = true
-  }
+  /// `⏎` — the panel is already filtering as you type, so this only has to put you back on the list.
+  private func search() { submit(commandHeld: false) }
 
   /// `⌘⏎` — the same words, asked instead of matched.
   ///
   /// It sends through the one `ChatProvider` the composer and the floating bar send through, so the
   /// answer lands in the single transcript rather than in a second one this surface would own.
-  private func ask() {
-    let question = request.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !question.isEmpty else { return }
+  private func ask() { submit(commandHeld: true) }
+
+  /// Both keys, resolved by `QueryShellSubmission` rather than by two functions that each restate the
+  /// trim, the empty guard and the mode change — which is how they drift.
+  private func submit(commandHeld: Bool) {
+    let submission = QueryShellSubmission.resolve(text: request.text, commandHeld: commandHeld)
+    if request.text != submission.text { request.text = submission.text }
+    guard let next = submission.mode else { return }
+    setMode(next)
+    guard let question = submission.question else { return }
+    lastAskedQuestion = question
+    send(question)
+  }
+
+  /// The one send. `Try again` on a failed turn enters here too, so a retry is the same turn through
+  /// the same provider and never a second send path (INV-6).
+  private func send(_ question: String) {
     OmiUISound.play(.commit)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: question.count, hasSelectedAppContext: false, source: "query_shell")
     chatProvider.dismissOnboardingOpener()
-    showAnswer()
     Task { await chatProvider.sendMessage(question) }
   }
 
-  private func showResults() {
-    OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = .results }
+  /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
+  private func retry() {
+    guard !lastAskedQuestion.isEmpty else { return }
+    showAnswer()
+    send(lastAskedQuestion)
   }
 
-  private func showAnswer() {
-    OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = .answer }
+  private func showResults() { setMode(.results) }
+
+  private func showAnswer() { setMode(.answer) }
+
+  /// **The caret belongs to the bar.** Both modes leave you about to type — a filter or a follow-up —
+  /// so every transition hands it back. Only `⏎ Search` used to, which meant the two exits the
+  /// surface advertises (`esc Results`, `‹ Results`) and a sent question all dropped it: you pressed
+  /// the key the bar told you to press, and the next thing you typed went nowhere.
+  private func setMode(_ next: QueryShellMode) {
+    OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = next }
+    isQueryFocused = true
   }
 
   // MARK: - Where a row goes

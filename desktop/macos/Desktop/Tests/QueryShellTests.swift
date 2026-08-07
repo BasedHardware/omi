@@ -25,6 +25,41 @@ final class QueryShellTests: XCTestCase {
     }
   }
 
+  // MARK: - What a submit leaves behind
+
+  /// A composer that keeps the message it just sent leaves `Ask a follow-up…` permanently
+  /// unreachable, makes a second `⏎` re-send the question verbatim, and forces the reader to empty
+  /// the field by hand before they can write the next one.
+  func testAskingSendsTheTrimmedQuestionAndEmptiesTheComposer() {
+    let submission = QueryShellSubmission.resolve(text: "  what did I ship  ", commandHeld: true)
+    XCTAssertEqual(submission.action, .ask)
+    XCTAssertEqual(submission.question, "what did I ship")
+    XCTAssertEqual(submission.text, "", "the send consumes the message")
+    XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// The other half of the same rule: in results mode the text is a *filter* over the list it is
+  /// about to show, so submitting must not throw it away.
+  func testSearchingKeepsTheTermBecauseItIsTheFilterAndSendsNothing() {
+    let submission = QueryShellSubmission.resolve(text: "priya", commandHeld: false)
+    XCTAssertEqual(submission.action, .search)
+    XCTAssertNil(submission.question)
+    XCTAssertEqual(submission.text, "priya")
+    XCTAssertEqual(submission.mode, .results)
+  }
+
+  /// An inert key must not move the reader. Before this, an empty field was itself read as "go back
+  /// to the list", so emptying the bar to type a follow-up ejected you from the conversation.
+  func testAnInertSubmitMovesNothingAndKeepsTheReaderInTheirConversation() {
+    for blank in ["", "   ", "\n \t"] {
+      let submission = QueryShellSubmission.resolve(text: blank, commandHeld: true)
+      XCTAssertEqual(submission.action, .none)
+      XCTAssertNil(submission.question)
+      XCTAssertNil(submission.mode, "an empty field is not an instruction to leave answer mode")
+      XCTAssertEqual(submission.text, blank)
+    }
+  }
+
   // MARK: - The gap
 
   /// The single most important number on the surface: two panels 12 pt apart read as two objects,
