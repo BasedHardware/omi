@@ -3,6 +3,7 @@
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -78,6 +79,35 @@ def test_upgrade_catches_stripe_invalid_request_error():
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
     assert "stripe.error.InvalidRequestError" in upgrade_section
+
+
+@pytest.fixture(scope="module")
+def payment_router():
+    return _setup_payment_module(include_client=False)
+
+
+def test_upgrade_rejects_subscription_pending_cancellation(payment_router):
+    router = payment_router
+    current_subscription = SimpleNamespace(stripe_subscription_id="sub_pending", plan="paid")
+    router.users_db.get_user_subscription.return_value = current_subscription
+
+    stripe_subscription = MagicMock()
+    stripe_subscription.to_dict.return_value = {
+        "id": "sub_pending",
+        "status": "active",
+        "cancel_at_period_end": True,
+        "current_period_end": 2_000_000_000,
+        "items": {"data": [{"id": "si_1", "price": {"id": "price_current"}}]},
+    }
+
+    with patch.object(router.is_purchasable_price_id, "__call__", return_value=True), patch.object(
+        router.is_paid_plan, "__call__", return_value=True
+    ), patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription):
+        with pytest.raises(router.HTTPException) as exc_info:
+            router.upgrade_subscription_endpoint(router.UpgradeSubscriptionRequest(price_id="price_target"), uid="u1")
+
+    assert exc_info.value.status_code == 409
+    assert "after the current subscription ends" in exc_info.value.detail
 
 
 def test_upgrade_releases_attached_schedule_before_change():

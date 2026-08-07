@@ -422,7 +422,7 @@ def get_available_plans_endpoint(
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Monthly',
                             price_string=f"${monthly_price.unit_amount / 100:.2f}/mo",
-                            description=None,
+                            description=definition.get("description"),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=monthly_price.recurring.interval,
@@ -444,7 +444,7 @@ def get_available_plans_endpoint(
                             plan_id=definition["plan_id"],
                             title=f'{definition["title"]} Annual',
                             price_string=f"${int(annual_price.unit_amount / 100 / 12)}/mo",
-                            description=definition["annual_description"],
+                            description=f'{definition.get("description", "")} {definition["annual_description"]}'.strip(),
                             subtitle=definition.get("subtitle"),
                             eyebrow=definition.get("eyebrow"),
                             interval=annual_price.recurring.interval,
@@ -627,6 +627,13 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     try:
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+        if stripe_sub.get('cancel_at_period_end') and (
+            not stripe_sub.get('current_period_end') or stripe_sub['current_period_end'] > int(time.time())
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Plan changes are available after the current subscription ends. Reactivate your current plan to keep it.",
+            )
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
         current_item_id = stripe_sub['items']['data'][0]['id']
 

@@ -1192,6 +1192,14 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
     return None
 
 
+def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[int] = None) -> bool:
+    if not subscription or not subscription.cancel_at_period_end:
+        return False
+    if not subscription.current_period_end:
+        return True
+    return subscription.current_period_end > (now or int(time.time()))
+
+
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -1218,7 +1226,24 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
 
     # If subscription is canceled (cancel_at_period_end=True), allow resubscription
     # This handles the case where user canceled but period hasn't ended yet
-    if subscription.cancel_at_period_end:
+    if is_pending_cancellation(subscription):
+        if target_price_id:
+            current_price_id = subscription.current_price_id
+            if not current_price_id and subscription.stripe_subscription_id:
+                try:
+                    stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                    stripe_sub_dict = stripe_sub.to_dict() if stripe_sub else {}
+                    items = stripe_sub_dict.get('items', {}).get('data', [])
+                    if items:
+                        current_price_id = items[0].get('price', {}).get('id')
+                except Exception as e:
+                    logger.error(f"Error retrieving current price ID: {sanitize(str(e))}")
+
+            if current_price_id == target_price_id:
+                return True, "User can reactivate the current subscription"
+
+            return False, "Plan changes are available after the current subscription ends"
+
         return True, "User can resubscribe (current subscription is scheduled for cancellation)"
 
     # If unlimited plan and active, check if this is a plan change
