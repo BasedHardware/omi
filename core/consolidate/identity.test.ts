@@ -110,6 +110,29 @@ test("a failed adjudication batch loses only its own candidates and the union ha
 });
 
 
+test("the batching budget is costed by an injected function, and the injection cannot change the answer", async () => {
+  const identityA = identity("cost");
+  const a = mention("mention:c1", "claim:c1", identityA), b = mention("mention:c2", "claim:c2", identityA);
+  const claims = [claim("claim:c1", "evidence:c1", "thing"), claim("claim:c2", "evidence:c2", "thing")];
+  const model = { async invoke(request: { strategy: string; input: unknown }): Promise<unknown> {
+    if (request.strategy === "identity-naming-check") return { names_specific_referent: true };
+    if (request.strategy === "identity-verification") return { verdict: "same", who: "beta thing" };
+    return { same_groups: [(request.input as { profiles: readonly { mention_id: string }[] }).profiles.map((profile) => profile.mention_id)], uncertain_pairs: [] };
+  } };
+
+  const seen: number[] = [];
+  // A cost function that reports a fraction of the storage size is exactly the
+  // prompt-shaped case: the same clusters pack into fewer, fuller batches.
+  const cheap = (profiles: readonly unknown[]) => { const n = Math.ceil(JSON.stringify(profiles).length / 10); seen.push(n); return n; };
+  const withDefault = await invokeBlockedIdentityAdjudication(model, { mentions: [a, b], claims });
+  const withInjected = await invokeBlockedIdentityAdjudication(model, { mentions: [a, b], claims, profile_cost: cheap as never });
+  expect(seen.length).toBeGreaterThan(0);
+  // Costing is a packing decision only: the admitted partition is identical, so
+  // the partition hash -- and therefore cycle dedup -- is unaffected.
+  expect(withInjected.partition_hash).toBe(withDefault.partition_hash);
+  expect(withInjected.same_groups).toEqual(withDefault.same_groups);
+});
+
 test("verification refutes an unproven group and the refusal is a durable rejection", async () => {
   const shared = (id: string, claimId: string, surface: string) => ({ ...mention(id, claimId, identity(id)), surface });
   const a = shared("mention:v1", "claim:v1", "she"), b = shared("mention:v2", "claim:v2", "she");

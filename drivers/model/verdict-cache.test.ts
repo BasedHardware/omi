@@ -82,3 +82,27 @@ test("the sqlite store survives reopening, so a later run reuses an earlier run'
   reopened.close();
   await Bun.$`rm -f ${path} ${path}-wal ${path}-shm`.quiet();
 });
+
+test("the identity budget cost is computed from the same view the prompt sends", async () => {
+  const { identityAdjudicationCost, identityAdjudicationView } = await import("./glm");
+  const profile = {
+    mention_id: "mention:very-long-identifier-that-never-reaches-the-model",
+    claim_revision_id: "provisional:8f166a27-fc41-463b-b95b-f9c3830b1969:evidence:8f166a27:0:25:use",
+    source_identity_ref: { namespace_instance_ref: "namespace:x", local_key: "k", producer: { producer_ref: "p", contract_ref: "c" }, asserted_identity: { domain: "person", scope_ref: "owner:djz" } },
+    discriminating_claims: [{
+      predicate: "use", role: "user", polarity: "positive",
+      other_arguments: [{ role: "instrument", value: { kind: "source_local_ref", ref: "source-local:8f166a27-fc41-463b-b95b-f9c3830b1969:evidence:8f166a27:32:43" } }],
+      evidence_context: [{ evidence_ref: "evidence:8f166a27:8f166a27-e134", excerpt: "I was using Proposers.", capture_session_id: "8f166a27", event_time: null, source_sequence: 1 }],
+      cooccurring_predicates: ["prefer"], observed_at: null, evidence_refs: ["evidence:8f166a27:8f166a27-e134"],
+    }],
+  };
+  const profiles = [profile, { ...profile, mention_id: "mention:second" }] as never;
+  const cost = identityAdjudicationCost(profiles);
+  expect(cost).toBe(JSON.stringify(identityAdjudicationView(profiles)).length);
+  // The point of the change: ids and source-local values are most of the stored
+  // bytes and none of them are sent, so the storage size badly over-counts.
+  expect(cost).toBeLessThan(JSON.stringify(profiles).length);
+  const sent = JSON.stringify(identityAdjudicationView(profiles));
+  for (const leaked of ["mention:very-long-identifier", "source-local:", "provisional:", "evidence:8f166a27:8f166a27-e134"]) expect(sent).not.toContain(leaked);
+  expect(sent).toContain("I was using Proposers.");
+});

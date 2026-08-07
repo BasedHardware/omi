@@ -324,12 +324,30 @@ const adjudicationProfiles = (input: { profiles?: readonly ReferentProfile[] }) 
  * for cycle deduplication, and a model cannot produce one reliably. It is
  * computed from the answer in `core/consolidate/identity`.
  */
-const promptForIdentityAdjudication = (input: { profiles?: readonly ReferentProfile[] }): string => JSON.stringify({
-  task: "Decide which of these observed referents are the same person or thing, for a single personal-memory graph owner.",
-  referents: adjudicationProfiles(input).view.map((entry) => ({
+/**
+ * The model-visible view of a referent profile: everything the adjudicator is
+ * actually shown, and nothing else. `mention_id`, `claim_revision_id`,
+ * `source_identity_ref`, `evidence_refs`, the `evidence_context` ids and the
+ * `source-local:` argument values never reach the model, and they are most of a
+ * profile's bytes.
+ *
+ * Exported so the batching budget can be costed on what is sent rather than on
+ * the storage representation. `identityAdjudicationCost` and the prompt share
+ * this one function by construction, so the budget cannot drift from the prompt.
+ */
+export const identityAdjudicationView = (profiles: readonly ReferentProfile[]) =>
+  labelled(profiles, "r").view.map((entry) => ({
     id: entry.id,
     observations: entry.item.discriminating_claims.map((claim) => ({ relation: claim.predicate, role: claim.role, negated: claim.polarity === "negative", other_roles: claim.other_arguments.map((argument) => argument.role), observed_at: claim.observed_at, also_said_about_this_speaker: claim.cooccurring_predicates, excerpts: claim.evidence_context.flatMap((item) => item.excerpt ? [item.excerpt] : []) })),
-  })),
+  }));
+
+/** Prompt-shaped cost for `BlockedAdjudicationInput.profile_cost`. */
+export const identityAdjudicationCost = (profiles: readonly ReferentProfile[]): number =>
+  JSON.stringify(identityAdjudicationView(profiles)).length;
+
+const promptForIdentityAdjudication = (input: { profiles?: readonly ReferentProfile[] }): string => JSON.stringify({
+  task: "Decide which of these observed referents are the same person or thing, for a single personal-memory graph owner.",
+  referents: identityAdjudicationView(input.profiles ?? []),
   output_contract: { same_groups: [{ members: ["r1", "r2"], who: "the individual, named in 2-6 words", kind: "named_individual | deictic_or_generic" }], uncertain_pairs: [["r1", "r3"]] },
   rules: [
     "Return JSON only, with exactly the output_contract shape and no Markdown or prose.",

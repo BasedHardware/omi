@@ -10,6 +10,7 @@ import { reprojectBoundClaims, reprojectionWitnesses, type ReprojectionBinding }
 import { invokePredicateAlignment } from "../../core/consolidate/relations";
 import { diffGraphSnapshots, liveCommittedClaims, type GraphSnapshot } from "../../core/retrieve";
 import type { Entity, IdentityAuthorization, IdentityConstraint, Mention } from "../../core/schema";
+import { identityAdjudicationCost } from "../model/glm";
 import { invokeScopeStrategy } from "../model/scope-edge";
 import { invokeUnitBoundaryStrategy } from "../model/unit-boundary-edge";
 import type { ModelPort } from "../model/port";
@@ -24,7 +25,15 @@ const versionsFor = (model_version: string) => ({ strategy_version: "dream-conso
 const instant = (at: string) => ({ typed_expression: { kind: "absolute" as const, granularity: "instant" as const, value: at }, resolved_interval: { kind: "instant" as const, start: at, end: at, timezone: "UTC", granularity: "instant" as const }, derivation: { resolver_version: "dream-promotion-v1", timezone: "UTC" } });
 const payload = (revision: GraphRevision) => revision.kind === "claim" ? revision.claim : revision.kind === "entity" ? revision.entity : revision.kind === "identity" ? revision.constraint : revision.kind === "identity_authorization" ? revision.authorization : revision.kind === "mention" ? revision.mention : revision.kind === "event" ? revision.event : revision.kind === "evidence" ? revision.evidence : revision.kind === "predicate" ? revision.predicate : revision.kind === "predicate_assertion" ? revision.assertion : revision.support;
 const promotionIdempotencyKey = (owner: string, itemId: string) => `dream-promotion:${owner}:${itemId}`;
-const passesSubjectOrTrust = (item: DurableStmItem): boolean =>
+/** Default stays on the historical cost so in-flight runs keep their batching. */
+export const promptShapedBudget = (): boolean => {
+  const requested = process.env.OMI_IDENTITY_BUDGET?.trim();
+  if (!requested || requested === "profile") return false;
+  if (requested !== "prompt") throw new Error(`unsupported OMI_IDENTITY_BUDGET: ${requested}`);
+  return true;
+};
+
+const passesSubjectOrTrust =(item: DurableStmItem): boolean =>
   item.claim.policy_labels.includes("subject:owner")
   || item.evidence.some((evidence) => TRUSTED_SOURCE_TRUST.has(evidence.source_trust));
 
@@ -204,11 +213,18 @@ export const runSqliteDreamCycle = async (input: {
     // Blocked + batched: each adjudication call stays under a fixed payload
     // budget, so the prompt no longer grows with the whole ledger (the first
     // real corpus run lost its later cycles to exactly that).
+    //
+    // OMI_IDENTITY_BUDGET=prompt costs that budget on what the prompt actually
+    // sends instead of on the profile's storage size. Measured on the v7 GLM
+    // lane the default over-counts by ~2.25x (872,618 profile bytes vs 387,207
+    // prompt bytes) and so packs 42 batches where 18 would fit -- 24 wasted
+    // phase-1 calls per cycle. It prunes nothing: every referent and every
+    // excerpt still goes to the model, in fuller batches.
     // Chunked promotion reuses one adjudication per trigger: later chunks set
     // adjudicate_identity=false so we do not re-pay full-graph identity each slice.
     const adjudicate = input.adjudicate_identity !== false;
     const proposal = adjudicate
-      ? await invokeBlockedIdentityAdjudication(input.model, { mentions: (before.mentions ?? []).map((item) => item.mention), claims: before.claims, evidence: before.evidence ?? [], events: before.events ?? [] })
+      ? await invokeBlockedIdentityAdjudication(input.model, { mentions: (before.mentions ?? []).map((item) => item.mention), claims: before.claims, evidence: before.evidence ?? [], events: before.events ?? [], ...(promptShapedBudget() ? { profile_cost: identityAdjudicationCost } : {}) })
       : { partition_hash: `partition:deferred:${input.cycle_id}`, same_groups: [] as string[][], same_group_who: [] as (string | null)[], same_group_kind: [] as (string | null)[], same_group_lane: [] as ("verified" | "recurrence" | "producer")[], uncertain_pairs: [] as [string, string][], rejected_same_groups: [] };
     const predicateAssertions = adjudicate
       ? await invokePredicateAlignment(input.model, (before.predicates ?? []).map((item) => item.predicate), String(before.graph_generation ?? 0))

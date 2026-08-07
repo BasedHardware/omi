@@ -251,6 +251,18 @@ export interface BlockedAdjudicationInput {
   max_cluster_size?: number;
   /** Per-call profile payload budget in JSON characters, not a truncation: whole clusters move to the next call. */
   batch_profile_budget?: number;
+  /**
+   * How a cluster's payload is costed against `batch_profile_budget`. Defaults
+   * to the profile's storage size, which is what this has always measured -- and
+   * which measured the wrong thing: profiles carry mention/claim/evidence ids and
+   * `source-local:` values that no prompt sends, so the default over-counts by
+   * ~2.25x and packs batches far smaller than the budget intends.
+   *
+   * Injected rather than imported because the prompt shape belongs to the
+   * driver and core must not depend on it. Pass the driver's own
+   * prompt-shaped cost to make the budget mean what it says.
+   */
+  profile_cost?: (profiles: readonly ReferentProfile[]) => number;
   /** Concurrent model calls per phase (adjudicate, verify, card). Results are applied in deterministic order regardless. */
   model_concurrency?: number;
 }
@@ -306,8 +318,9 @@ export const invokeBlockedIdentityAdjudication = async (model: IdentityAdjudicat
     ...oversize.map((group) => ({ group_mention_ids: group.map((mention) => mention.mention_id).sort(), retryable: false, reason: "ambiguous_high_frequency_surface" })),
   ];
   const budget = input.batch_profile_budget ?? 24_000;
+  const profileCost = input.profile_cost ?? ((profiles: readonly ReferentProfile[]) => JSON.stringify(profiles).length);
   const prepared = blocked
-    .map((cluster) => { const profiles = buildReferentProfiles(cluster, input.claims, input.evidence ?? [], input.events ?? []); return { profiles, cost: JSON.stringify(profiles).length }; })
+    .map((cluster) => { const profiles = buildReferentProfiles(cluster, input.claims, input.evidence ?? [], input.events ?? []); return { profiles, cost: profileCost(profiles) }; })
     .filter((entry) => entry.profiles.length > 1);
   const batches: (typeof prepared)[] = [];
   let current: typeof prepared = [];
