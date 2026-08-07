@@ -5,6 +5,7 @@ import XCTest
 final class MemoryGraphRevisitTests: XCTestCase {
   func testHomeMemoriesUsePersistentGraphViewModel() throws {
     let graph = try source(at: "Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift")
+    let hub = try source(at: "Sources/MainWindow/MemoryHubPage.swift")
     let home = try source(at: "Sources/MainWindow/DesktopHomeView.swift")
     let container = try source(at: "Sources/ViewModelContainer.swift")
 
@@ -16,14 +17,13 @@ final class MemoryGraphRevisitTests: XCTestCase {
     // Memories card is gone — so MemoriesPage no longer receives the graph view
     // model at all. Both the canonical destination and legacy fallback must use
     // the persistent, container-owned instance.
-    XCTAssertTrue(home.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
-    XCTAssertTrue(home.contains("viewModel: viewModelContainer.memoryGraphViewModel"))
-    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
-    // Static wiring tripwire: the Memory menu keeps the shared destination
-    // owner while the graph remains a dedicated spatial surface.
+    XCTAssertTrue(hub.contains("graphViewModel: viewModelContainer.memoryGraphViewModel"))
+    XCTAssertTrue(hub.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
+    XCTAssertTrue(hub.contains("switch destination"))
+    // Static wiring tripwire: the shell owns the hub's placement, and the hub is
+    // a full-bleed destination — the readable-width cap belongs to the pages
+    // inside it, not to the hub itself.
     XCTAssertFalse(home.contains("constrainedListPage(MemoryHubPage"))
-    XCTAssertTrue(home.contains("switch destination"))
-    XCTAssertTrue(home.contains("MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)"))
     // The Brain Map moved onto the glass panel. `OmiColors.backgroundPrimary` was the dark chrome's
     // near-black page ground, and a SceneKit view that paints it is drawing a page ground of its own
     // inside a translucent panel — the thing `InkGlass`'s "hosted content paints no background" rule

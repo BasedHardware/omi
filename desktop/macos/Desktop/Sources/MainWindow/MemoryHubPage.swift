@@ -1,6 +1,24 @@
 import OmiTheme
 import SwiftUI
 
+/// What the Brain Map does when a user clicks a cited memory.
+///
+/// The order is the contract: the graph is left only once the memory is
+/// actually open. Leaving first strands the user on the Memories page with an
+/// empty detail panel whenever the citation is not on this device — the graph
+/// cites the whole cache, so that is a routine outcome, not an edge case.
+@MainActor
+enum MemoryAtlasCitationOpen {
+  static func open(
+    id memoryID: String,
+    in memoriesViewModel: MemoriesViewModel,
+    leave: () -> Void
+  ) async {
+    guard await memoriesViewModel.openMemory(id: memoryID) else { return }
+    leave()
+  }
+}
+
 /// Isolated page content switch — does NOT observe AppState or ViewModelContainer
 /// as @ObservedObject, so pages like TasksPage won't re-render when unrelated
 /// AppState properties (conversations, permissions, etc.) change.
@@ -131,8 +149,8 @@ struct MemoryHubPage: View {
         },
         onOpenMemory: { memoryID in
           Task { @MainActor in
-            guard await memoriesViewModel.openMemory(id: memoryID) else { return }
-            onLeave()
+            await MemoryAtlasCitationOpen.open(
+              id: memoryID, in: memoriesViewModel, leave: onLeave)
           }
         },
         onLeave: onLeave
