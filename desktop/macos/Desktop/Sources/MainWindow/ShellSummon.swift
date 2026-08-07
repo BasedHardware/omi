@@ -14,9 +14,10 @@
 //  different spot every time you switch displays and never settles anywhere.
 //
 //  So the frame is remembered against the display it was left on, the way the surfaces this shell is
-//  modelled on do it. A summon reads the display under the *cursor* — not the key window's, not
-//  `NSScreen.main`'s — because the cursor is where the user is looking, and it is the only signal
-//  available when the app is not even active.
+//  modelled on do it. Which display that is comes from `ActiveDisplay` — the key window's, then the
+//  frontmost window's, then the focused one, and only then the pointer. Its header carries the
+//  argument; the short version is that a pointer parked on an idle monitor is not where the user is
+//  looking, and every surface in the app has to agree on the answer or they land apart.
 //
 //  ## What a summon does not do
 //
@@ -220,15 +221,17 @@ enum ShellSummon {
     applyPresentation(to: window)
     if window.isMiniaturized { window.deminiaturize(nil) }
 
-    let cursorScreen = activeScreen()
+    // `ActiveDisplay` — the same answer the onboarding cinematic lands on, so the intro and the
+    // window it hands off to can never disagree about which screen the user is on.
+    let landingScreen = ActiveDisplay.screen()
     let repositions =
       alwaysPlace
       || ShellSummonPlacement.shouldReposition(
         isVisible: window.isVisible,
         windowDisplayKey: window.screen.flatMap(ShellSummonPlacement.displayKey(for:)),
-        cursorDisplayKey: cursorScreen.flatMap(ShellSummonPlacement.displayKey(for:)))
+        cursorDisplayKey: landingScreen.flatMap(ShellSummonPlacement.displayKey(for:)))
 
-    if appliedPresentation == .summoned, repositions, let screen = cursorScreen ?? window.screen {
+    if appliedPresentation == .summoned, repositions, let screen = landingScreen ?? window.screen {
       window.setFrame(landingFrame(on: screen), display: true)
     } else if let screen = NSScreen.main, !screen.visibleFrame.intersects(window.frame) {
       // Anchored, or nothing to land on: the window may still be stranded on a display that went away.
@@ -337,14 +340,6 @@ enum ShellSummon {
       remembered: remembered, visibleFrame: screen.visibleFrame
     ).size
     return ShellSummonPlacement.centered(size, in: screen.visibleFrame)
-  }
-
-  /// The screen the user is working on: the key window's, then the frontmost app's, then the one
-  /// carrying the menu bar. Deliberately **not** the cursor's — a pointer parked on an idle display
-  /// is not where the user is looking, and that is exactly how the shell ended up alone on an empty
-  /// second display.
-  private static func activeScreen() -> NSScreen? {
-    NSApp.keyWindow?.screen ?? NSApp.mainWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
   }
 
   private static func registerEscapeRoute(on window: NSWindow) {

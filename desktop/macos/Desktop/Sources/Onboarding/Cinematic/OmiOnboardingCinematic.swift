@@ -32,12 +32,17 @@ enum OmiOnboardingCinematic {
   /// calls back, so a caller can never be left waiting on a completion that never comes.
   static var isPresenting: Bool { window != nil }
 
-  /// Plays the intro on `screen` (the display under the pointer by default) and calls `completion`
-  /// exactly once, on the main actor, when it ends.
+  /// Plays the intro on `screen` — by default the display onboarding itself is about to land on —
+  /// and calls `completion` exactly once, on the main actor, when it ends.
+  ///
+  /// The default is `ActiveDisplay`, the same answer `ShellSummon` places the shell with, and it has
+  /// to stay that way: this is a full-screen scrim that hands straight off to the onboarding window,
+  /// so a display chosen by any other rule means the user watches nothing for 8.6 seconds while the
+  /// intro plays to an empty monitor. It used to pick the display under the *pointer*, which is
+  /// exactly that bug.
   ///
   /// - Parameters:
-  ///   - screen: the display to cover. Defaults to the one the pointer is on, falling back to the
-  ///     main screen.
+  ///   - screen: the display to cover. Defaults to the display the user is working on.
   ///   - timing: injectable so a caller — or a test — can force the reduced table. Defaults to
   ///     whichever table the machine's Reduce Motion setting selects.
   ///   - completion: the terminal outcome. Always called, always once, on the main actor —
@@ -54,7 +59,14 @@ enum OmiOnboardingCinematic {
       return
     }
 
-    guard let target = screen ?? screenUnderPointer() else {
+    let target: NSScreen
+    if let screen {
+      target = screen
+      log("cinematic presenting on caller display \(ActiveDisplay.describe(screen))")
+    } else if let active = ActiveDisplay.resolve() {
+      target = active.screen
+      log("cinematic presenting on \(active.source.rawValue) display \(ActiveDisplay.describe(active.screen))")
+    } else {
       logError("cinematic: no screen to present on; handing straight off to onboarding")
       completion(.expired(.dim))
       return
@@ -154,11 +166,6 @@ enum OmiOnboardingCinematic {
     panel.ignoresMouseEvents = false
     panel.collectionBehavior = [.fullScreenAuxiliary, .canJoinAllSpaces, .stationary]
     return panel
-  }
-
-  private static func screenUnderPointer() -> NSScreen? {
-    let location = NSEvent.mouseLocation
-    return NSScreen.screens.first { NSMouseInRect(location, $0.frame, false) } ?? NSScreen.main
   }
 
   /// Esc, at the AppKit level.
