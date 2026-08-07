@@ -13,7 +13,6 @@ import { ChatComposer, type ChatComposerHandle } from '@/components/chat/ChatCom
 import { ChatTranscript } from '@/components/chat/ChatTranscript';
 import { RecordingStage } from '@/components/chat/RecordingStage';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
-import { RECORDING_ENABLED } from '@/lib/featureFlags';
 import { GoalCard } from './GoalCard';
 import { GoalComposer } from './GoalComposer';
 import { GoalDetailSheet } from './GoalDetailSheet';
@@ -281,7 +280,6 @@ export function HomePage() {
               level: micLevel,
               onStart: () => void startRecording(),
               onStop: () => void stopRecording(),
-              disabled: !RECORDING_ENABLED,
             }}
           />
         </div>
