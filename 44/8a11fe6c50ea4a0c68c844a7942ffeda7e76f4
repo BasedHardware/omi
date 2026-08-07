@@ -1,0 +1,115 @@
+.github/failure-classes/FC-cached-provider-ready-as-live.json
+  s_569f1df936cc22::t_73ed8b881f5f91 1-19
+.github/scripts/product_file_line_count_ratchet_baseline/backend-routers.json
+  s_569f1df936cc22::t_343307d28354d4 4,12
+.github/scripts/product_file_line_count_ratchet_baseline/backend-utils.json
+  s_569f1df936cc22::t_1a6446424e6657 4,10,21
+backend/AGENTS.md
+  s_569f1df936cc22::t_55888373709ba8 28
+backend/agent-proxy/Dockerfile
+  s_569f1df936cc22::t_7bff894caa36a5 27
+backend/agent-proxy/main.py
+  s_569f1df936cc22::t_63abb6136a564b 48,251
+backend/charts/agent-vm-reaper/README.md
+  s_569f1df936cc22::t_bf5b13841cbc7e 20-25
+backend/database/firestore_read_metrics.py
+  s_569f1df936cc22::t_366ffda211cf90 16
+backend/database/user_usage.py
+  s_569f1df936cc22::t_889d5e177abc28 15-19,27-52,69-71,116-121,123
+backend/routers/action_items.py
+  s_569f1df936cc22::t_e6d7917cf11f68 24,732
+backend/routers/agent_tools.py
+  s_569f1df936cc22::t_563e22c6af1914 23,71-80,86-91,94,96-97
+backend/routers/chat.py
+  s_569f1df936cc22::t_5fd6d215521841 70,85,425-434,444,447-501,514-515,523,527-551,1685
+backend/routers/desktop_agent_vm.py
+  s_569f1df936cc22::t_bbfa0fb6d79841 32-39,41,164,168,188-198,706,718,721-727,729-733,738-741,743,746,749-762,764-768,776-787
+backend/services/agent_vm_read.py
+  s_569f1df936cc22::t_6e82ffdb9e4903 1-275
+backend/tests/fast_unit_duration_allowlist.txt
+  s_569f1df936cc22::t_979b55331265e1 64-71
+backend/tests/unit/_chat_router_test_harness.py
+  s_569f1df936cc22::t_4978a8dab316de 124-128
+backend/tests/unit/test_agent_vm_read_decision.py
+  s_569f1df936cc22::t_31b9816cc79449 1-83
+backend/tests/unit/test_agent_vm_reaped_record_recovery.py
+  s_569f1df936cc22::t_a50745c1b47094 96-128
+backend/tests/unit/test_chat_agent_provider_retry.py
+  s_569f1df936cc22::t_d918575cd41458 514,568
+backend/tests/unit/test_chat_async_offload.py
+  s_569f1df936cc22::t_e9d4aed5da5ddb 229-278,401,403,530-532,553,572-578,593,608-610,621-703
+backend/tests/unit/test_chat_stream_error_fallback.py
+  s_569f1df936cc22::t_bb4ef69ed9d82c 324-492
+backend/tests/unit/test_desktop_agent_vm.py
+  s_569f1df936cc22::t_4f2efc5a52d3f3 68-212,433-434,446-449,455-556
+backend/tests/unit/test_llm_gateway_client_config.py
+  s_569f1df936cc22::t_19267d427af127 22,383,385-386
+backend/tests/unit/test_share_links.py
+  s_569f1df936cc22::t_34ca5af19e8997 1-46
+backend/tests/unit/test_summary_transcript_user_name.py
+  s_569f1df936cc22::t_9b285739769955 1-36
+backend/tests/unit/test_user_usage.py
+  s_569f1df936cc22::t_3e6dc240396892 35,37,50-83,87,143-177
+backend/utils/chat.py
+  s_569f1df936cc22::t_553e6252ee3cc4 391-392,408-417,543,546-590,596-608,614-616,621-643
+backend/utils/conversations/calendar_linking.py
+  s_569f1df936cc22::t_64c90d58ae4d99 28,175,188
+backend/utils/conversations/process_conversation.py
+  s_569f1df936cc22::t_5f004d5f358026 15,263,493-494
+backend/utils/conversations/search.py
+  s_569f1df936cc22::t_ae6293c97dabca 10-11,39-41,52-67,70-73,76,80
+backend/utils/conversations/transcript_for_llm.py
+  s_569f1df936cc22::t_2bf5e2e5224ba9 1-32
+backend/utils/llm/gateway_client.py
+  s_569f1df936cc22::t_76fcdcf880b346 51-67,152
+backend/utils/retrieval/agentic.py
+  s_569f1df936cc22::t_33a2199b63df3a 166-168,171,188,191-195,1186,1191-1192,1210-1214,1220-1226,1258-1260,1263-1265,1267,1272-1276,1279,1281,1284-1289,1421-1423,1476,1483-1486,1488,1494-1498,1505-1506,1508
+backend/utils/retrieval/graph.py
+  s_569f1df936cc22::t_cc2a46cda64e5a 24,34,36,104-107,146-148,176-178,180,192-203,206-210,213,215,233-234,294,296,317,319,345-361,377-378,380-401,415
+backend/utils/share_links.py
+  s_569f1df936cc22::t_f9d98b5051d079 1-46
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_569f1df936cc22::t_c984a5f377856e 724
+desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift
+  s_569f1df936cc22::t_433b323f575709 8-9,156-189
+desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
+  s_569f1df936cc22::t_a4946081c5e867 135,143
+desktop/macos/Desktop/Tests/RewindScreenshotRowIDCaptureTests.swift
+  s_569f1df936cc22::t_0e1e0ee794d227 1-40
+desktop/macos/Desktop/Tests/ShareLinksEnvironmentTests.swift
+  s_569f1df936cc22::t_072991e020feae 1-45
+desktop/macos/changelog/unreleased/20260807-rewind-embedding-rowid.json
+  s_569f1df936cc22::t_ce0db409170869 1-3
+desktop/macos/changelog/unreleased/20260807-share-base-url.json
+  s_569f1df936cc22::t_39bca6aca01bbd 1-3
+desktop/windows/src/renderer/src/env.d.ts
+  s_569f1df936cc22::t_c8b8700a4b0fc4 2-6
+desktop/windows/src/renderer/src/lib/conversations/mutations.ts
+  s_569f1df936cc22::t_ab88c07c680a29 9,41
+desktop/windows/src/renderer/src/lib/shareLinks.test.ts
+  s_569f1df936cc22::t_7da46ad5391d0e 1-23
+desktop/windows/src/renderer/src/lib/shareLinks.ts
+  s_569f1df936cc22::t_e761ab29978e21 1-25
+docs/api-reference/app-client-openapi.json
+  s_569f1df936cc22::t_fb7d386ec88752 25575
+web/app/src/components/settings/SettingsPage.tsx
+  s_569f1df936cc22::t_94679e0ee978b4 2166,2489-2493,2600,2608-2610,2628
+web/frontend/src/components/shared/app-header.tsx
+  s_569f1df936cc22::t_d710dc16e0d4cc 185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "448a11fe6c50ea4a0c68c844a7942ffeda7e76f4",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
