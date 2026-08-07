@@ -88,6 +88,60 @@ final class QueryShellTests: XCTestCase {
       "a query face under a conversation reads as a headline stacked on the end of it")
   }
 
+  // MARK: - The in-panel composer's proportions
+
+  /// **A true capsule, not a large-ish card corner.**
+  ///
+  /// It shipped wearing the shared `chatComposerShell`: an 18 pt corner on a 52 pt pill, which has
+  /// visibly straight sides and reads as a boxy input. At half the pill's own height the two ends
+  /// are semicircles — and the send disc, one `panelComposerShellInset` in from a
+  /// `panelComposerControlDiameter` frame, comes out concentric with the cap it sits in, which is
+  /// what makes the trailing cluster look settled rather than parked.
+  func testTheInPanelComposerIsATrueCapsuleRatherThanARoundedBox() {
+    XCTAssertEqual(
+      QueryShellLayout.panelComposerCornerRadius,
+      QueryShellLayout.panelComposerShellHeight / 2,
+      "the corner is no longer half the height, so the composer has straight sides again")
+    XCTAssertGreaterThan(
+      QueryShellLayout.panelComposerCornerRadius, ChatComposerLayout.shellRadius,
+      "the composer is back on a card radius that is too small for its own height")
+    XCTAssertEqual(
+      QueryShellLayout.panelComposerShellInset
+        + QueryShellLayout.panelComposerControlDiameter / 2,
+      QueryShellLayout.panelComposerCornerRadius,
+      "the send disc is no longer concentric with the capsule's cap")
+  }
+
+  /// **The height comes from the padding, and one line is exactly one control tall.**
+  ///
+  /// Both halves matter. A declared row height is how the interior padding silently stops being
+  /// symmetric; and if a laid-out line of the chat face is not the same height as the disc beside
+  /// it, the reader's own words and the button that sends them sit at permanently different centres
+  /// however the row aligns.
+  func testTheInPanelComposersHeightIsItsPaddingAndItsRowIsOneHeight() {
+    XCTAssertEqual(
+      QueryShellLayout.panelComposerShellHeight,
+      QueryShellLayout.panelComposerControlDiameter
+        + QueryShellLayout.panelComposerShellInset * 2,
+      "the pill's height stopped being one control row plus its own margin")
+    XCTAssertEqual(
+      QueryShellLayout.panelComposerMinEditorHeight,
+      QueryShellLayout.panelComposerControlDiameter,
+      "one line of the chat face is not a control tall — text and buttons sit at different centres")
+  }
+
+  /// **The pill stands inside the panel rather than spanning it corner to corner**, and the reserve
+  /// pays for the air under it. Reserving only the pill is how the composer overruns the panel's own
+  /// bottom padding the moment the inset is tuned.
+  func testTheInPanelComposerStandsInFromThePanelAndIsReservedWholesale() {
+    XCTAssertGreaterThan(QueryShellLayout.panelComposerEdgeInset, 0)
+    XCTAssertGreaterThan(QueryShellLayout.panelComposerBottomInset, 0)
+    XCTAssertEqual(
+      QueryShellLayout.panelComposerMinHeight,
+      QueryShellLayout.panelComposerShellHeight + QueryShellLayout.panelComposerBottomInset,
+      "the panel reserves the pill but not the air under it")
+  }
+
   // MARK: - The gap
 
   /// The single most important number on the surface: two panels 12 pt apart read as two objects,

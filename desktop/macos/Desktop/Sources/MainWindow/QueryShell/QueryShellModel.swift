@@ -323,6 +323,10 @@ enum QueryShellLayout {
   /// The push-to-talk disc. Larger than the composer's 32 because it is the bar's only round target.
   static let micDiameter: CGFloat = 38
 
+  /// Between the hero row's controls. It is set at the query face, so it can afford more air than
+  /// the chat row inside the panel, which uses `OmiSpacing.sm`.
+  static let heroRowSpacing: CGFloat = 14
+
   /// The query's point size. Visibly larger than every other run on the surface, and deliberately
   /// under `Font.inkDisplayThreshold` (22) so it resolves to the reading face rather than the display
   /// one — a search field is type you read, not a headline.
@@ -375,19 +379,70 @@ enum QueryShellLayout {
   /// half-drawn sixth line at the composer's own edge.
   static let panelComposerLineHeight: CGFloat = 17
 
+  /// **One size for every control in the in-panel row.** The row shipped with three: a 28 pt
+  /// paperclip frame, a 28 pt text pill and a 38 pt mic disc, each drawn in a different visual
+  /// language. Three loud controls at three sizes is not a cluster, it is a queue — and the loudest
+  /// of them was the least important. One diameter, and only one of them filled.
+  static let panelComposerControlDiameter: CGFloat = 32
+
+  /// The one glyph size the quiet controls share, so the paperclip and the mic read as the same
+  /// kind of thing rather than as two unrelated icons that happened to land beside each other.
+  static var panelComposerGlyphSize: CGFloat { OmiType.subheading }
+
+  /// **The text's breathing room, chosen so one line is exactly a control tall.**
+  ///
+  /// `(32 − 17) / 2`. It is derived rather than picked because when one laid-out line of the chat
+  /// face is the same height as the disc beside it, the row's baseline and the glyphs' centres
+  /// coincide — at rest and at the ceiling, whichever way the row aligns. A round number here buys a
+  /// permanent point or two of vertical drift between the reader's own words and the button that
+  /// sends them.
+  static var panelComposerInsetVertical: CGFloat {
+    (panelComposerControlDiameter - panelComposerLineHeight) / 2
+  }
+
+  /// **The interior margin, equal on all four sides.** The composer's height comes from this rather
+  /// than from a declared row height, which is what keeps the padding symmetric: the placeholder
+  /// starts this far in from the fill's leading edge, the send disc ends this far from its trailing
+  /// one, and there is the same air above and below.
+  static let panelComposerShellInset: CGFloat = 10
+
   static var panelComposerMinEditorHeight: CGFloat {
-    panelComposerLineHeight + composerInsetVertical * 2
+    panelComposerLineHeight + panelComposerInsetVertical * 2
   }
 
   static var panelComposerMaxEditorHeight: CGFloat {
-    panelComposerLineHeight * composerMaxLines + composerInsetVertical * 2
+    panelComposerLineHeight * composerMaxLines + panelComposerInsetVertical * 2
   }
 
-  /// **The resting height of the whole in-panel composer row.** The tallest thing in the row is the
-  /// push-to-talk disc, not the one-line editor, so that is what sets the row — plus the margin the
-  /// app's shared `chatComposerShell` puts around every composer that sits inside something else.
+  /// **The pill's own resting height** — one control row plus its margin, and nothing declared.
+  static var panelComposerShellHeight: CGFloat {
+    max(panelComposerMinEditorHeight, panelComposerControlDiameter) + panelComposerShellInset * 2
+  }
+
+  /// **A true capsule at rest: the corner is half the pill's own height.**
+  ///
+  /// Not a shared card radius. `ChatComposerLayout.shellRadius` is 18 against a 52 pt pill, which is
+  /// a rounded rectangle with visibly straight sides — a boxy input, which is exactly what the
+  /// reader said it looked like. At half the height the two ends are semicircles, and the send disc
+  /// (`panelComposerControlDiameter` inside `panelComposerShellInset`) ends up concentric with the
+  /// cap it sits in, which is the whole reason the trailing cluster reads as settled.
+  ///
+  /// It stops tracking the height past one line on purpose: a pill that stayed a capsule as it grew
+  /// would turn into an oval around a five-line draft. Every chat composer that grows keeps its
+  /// resting corner instead.
+  static var panelComposerCornerRadius: CGFloat { panelComposerShellHeight / 2 }
+
+  /// **The air between the pill and the panel holding it**, so the composer reads as an object
+  /// *inside* the panel rather than as the panel's own bottom edge. On top of the panel's padding
+  /// this leaves 22 pt at the sides and 16 pt underneath.
+  static let panelComposerEdgeInset: CGFloat = OmiSpacing.xs
+  static let panelComposerBottomInset: CGFloat = OmiSpacing.xxs
+
+  /// **The resting height of the whole in-panel composer container** — the pill plus the air under
+  /// it. This is the number the panel reserves, so it has to cover everything the composer occupies;
+  /// the pill's own height is `panelComposerShellHeight`.
   static var panelComposerMinHeight: CGFloat {
-    max(panelComposerMinEditorHeight, micDiameter) + ChatComposerLayout.shellInset * 2
+    panelComposerShellHeight + panelComposerBottomInset
   }
 
   /// The resting height of whichever container is holding the composer. The floor under the

@@ -213,6 +213,24 @@ final class QueryComposerTests: XCTestCase {
       "the composer inside the panel is still as tall as the hero bar it replaced")
   }
 
+  /// **One line of the chat face is laid out exactly one control tall.**
+  ///
+  /// `panelComposerInsetVertical` is derived from the control diameter rather than picked, so that
+  /// the field and the discs beside it share a centre. That is only true if the derived inset really
+  /// reaches the text container — which is what this reads, off the editor the composer actually put
+  /// on screen rather than off the constant it was computed from.
+  func testOneLineInTheInPanelComposerIsExactlyOneControlTall() throws {
+    let composer = try Composer(mode: .answer)
+    defer { composer.tearDown() }
+
+    composer.type("one line")
+
+    XCTAssertEqual(
+      composer.composerHeight, QueryShellLayout.panelComposerControlDiameter, accuracy: 0.5,
+      "the editor's own inset no longer makes one line a control tall, so the reader's words and "
+        + "the button that sends them sit at different centres")
+  }
+
   /// The same growth contract in the new place: it grows with the draft, stops at five lines, and
   /// never draws outside its own shell.
   func testTheInPanelComposerGrowsWithTheDraftAndStopsAtItsCeiling() throws {
