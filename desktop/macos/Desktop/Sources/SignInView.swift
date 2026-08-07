@@ -5,13 +5,16 @@ import SwiftUI
 /// The first screen anyone ever sees, and therefore the one that has to be most obviously *this*
 /// product rather than a template.
 ///
-/// **It paints no ground.** There was a full-bleed dune photograph here under a black gradient, and
-/// it is gone rather than restyled: the window wears the glass (`ShellWindowChrome`,
-/// "the one ground in this window — nothing above it paints a background"), so an opaque image on top
-/// of it hid the panel entirely and forced every label on this screen to be white. White type is what
-/// made this the worst-affected screen in the light conversion — it survived only *because* the art
-/// under it was dark. The blurred desktop is the backdrop now, the mark and the sentence are the
-/// design, and the whole screen is two rungs of near-black type on glass.
+/// **It paints one ground, and the ground is the glass.** There was a full-bleed dune photograph here
+/// under a black gradient, and it is gone rather than restyled: an opaque image edge to edge hid the
+/// panel entirely and forced every label on this screen to be white. White type is what made this the
+/// worst-affected screen in the light conversion — it survived only *because* the art under it was
+/// dark. The blurred desktop is the backdrop now, the mark and the sentence are the design, and the
+/// whole screen is two rungs of near-black type on one floating card (`onboardingScreen`).
+///
+/// It briefly had *no* ground at all: the art came off while `ShellWindowChrome` still installed a
+/// window-wide glass slab, so a bare column was a column on glass. When that slab was retired in
+/// favour of per-destination panels, this screen kept the bare column and got the wallpaper.
 struct SignInView: View {
   @ObservedObject var authState: AuthState
   @State private var breathe = false
@@ -101,12 +104,14 @@ struct SignInView: View {
         .transition(.opacity)
       }
     }
-    .onboardingColumn()
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // The card, and the pin. `onboardingScreen` puts the column on the shared glass — the same
+    // material, corner and ambient shadow every panel in this app wears — and pins the light
+    // appearance, so `Ink`'s dynamic colours resolve dark here even when the machine is in Dark Mode.
+    // Without the pin this screen is near-white type on a near-white panel; without the card it is
+    // near-black type on the user's wallpaper, which is what it became when the window's ground was
+    // retired (`ShellWindowChrome`) and nobody gave this screen one.
+    .onboardingScreen()
     .animation(InkReduceMotion.animation(.easeOut(duration: 0.5)), value: introRevealed)
-    // Pins the panel's light appearance, so `Ink`'s dynamic colours resolve dark here even when the
-    // machine is in Dark Mode. Without it this screen is near-white type on a near-white panel.
-    .glassContent()
     .onAppear {
       breathe = true
       guard !introRevealed else { return }

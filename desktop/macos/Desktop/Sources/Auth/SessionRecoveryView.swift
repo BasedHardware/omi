@@ -5,11 +5,12 @@ import SwiftUI
 /// complete (for example, offline or a temporarily locked Keychain).
 /// Authenticated product surfaces remain gated until Retry succeeds.
 ///
-/// It sits in the same auth entry shell as `SignInView`, on the window's one piece of glass, so it
-/// draws no ground and spends the same two rungs. The glyph and the headline were `.white` — the
-/// literal that is invisible on the light panel — and the sentence under them was
-/// `.secondary`, AppKit's own step rather than the ladder's, which measures 3.95:1 over this surface
-/// and fails AA for body text (see `Ink.secondary`).
+/// It sits in the same auth entry shell as `SignInView` and wears the same card
+/// (`onboardingScreen`) — one piece of glass on the desktop, since the window itself has no ground —
+/// and spends the same two rungs on it. The glyph and the headline were `.white`, the literal that is
+/// invisible on the light panel, and the sentence under them was `.secondary`, AppKit's own step
+/// rather than the ladder's, which measures 3.95:1 over this surface and fails AA for body text (see
+/// `Ink.secondary`).
 struct SessionRecoveryView: View {
   @State private var isRetrying = false
 
@@ -61,8 +62,9 @@ struct SessionRecoveryView: View {
         .accessibilityIdentifier("auth_recovery_sign_in")
       }
     }
-    .onboardingColumn()
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .glassContent()
+    // Same object as the onboarding card and sign-in: a column on the shared glass, centred on the
+    // desktop. It used to be a bare column, which was right while the window carried a full-bleed
+    // ground and wrong the moment `ShellWindowChrome` retired one.
+    .onboardingScreen()
   }
 }

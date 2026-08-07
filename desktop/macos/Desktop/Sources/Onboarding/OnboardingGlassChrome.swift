@@ -1,16 +1,18 @@
 //
 //  OnboardingGlassChrome.swift — the chrome every first-run card wears.
 //
-//  Onboarding and sign-in are the first screens a new user ever sees, and they are hosted on the
-//  shell's glass panels (`ShellWindowChrome` leaves the window itself bare). That makes them the
-//  surfaces where the two rules
-//  the glass is built on bite hardest, so they are encoded here rather than restated per step:
+//  Onboarding and sign-in are the first screens a new user ever sees, and `ShellWindowChrome` leaves
+//  the window itself bare — genuinely transparent, with the user's desktop behind it. That makes them
+//  the surfaces where the two rules the glass is built on bite hardest, so they are encoded here
+//  rather than restated per step:
 //
-//  1. **The card paints no ground.** The panel beneath it already is the glass, and says so
-//     ("The one ground in this window. Nothing above it paints a background."). A first-run screen
-//     that fills itself — with a colour, an image, or a `Material` — is an opaque slab pasted over
-//     the panel, and the panel is the product. What replaced the dark art here is not "no design",
-//     it is the design: the desktop, blurred, is the backdrop.
+//  1. **The card *is* the ground, and it is the shared one.** A first-run screen has nothing under it
+//     but the wallpaper, so it wears `inkGlassPanel` — the same material, scrim, corner, edge and
+//     ambient shadow every other destination gets from `PageGlassLane`. It draws **one** ground and
+//     never a second: no colour, no image, no `Material`, and no extra wash stacked on the panel. The
+//     scrim is tuned against a contrast floor *and* `InkGlass.interferenceRatio`, and a surface that
+//     grounds itself twice reads as two materials on one desktop. What replaced the dark art here is
+//     not "no design", it is the design: the desktop, blurred, is the backdrop.
 //  2. **Two type rungs, never three.** `Ink.tertiary` measures under WCAG AA on glass (see its
 //     doc comment), so a first-run screen may only spend `Ink.primary` and `Ink.secondary`. The
 //     faint-grey aside that reads as restraint on a dark sheet is illegible on this one.
@@ -140,16 +142,33 @@ struct OnboardingProgressBand: View {
 // MARK: - The card
 
 extension View {
-  /// A first-run card: a wash, a hairline, the 22 pt corner, and the panel's light appearance.
+  /// A first-run card: **the glass itself** — material, scrim, the 22 pt corner, the faint edge and
+  /// the one ambient shadow — with the panel's light appearance pinned on top of it.
   ///
-  /// It delegates to `glassCard` so a card here and a card on a content page cannot disagree, and
-  /// carries `glassContent()` because a first-run screen is reached before any navigation stack has
-  /// pinned the appearance for it. Without that pin, a machine in Dark Mode resolves `Ink.primary`
+  /// **It was a `glassCard` — a wash and a hairline — and that was correct for exactly as long as the
+  /// window had a ground.** `ShellGlassGround` installed an `InkGlassView` as the window's
+  /// `contentView`, so a first-run card floated on a full-bleed slab of glass and painting a second
+  /// scrim on it would have spent the passthrough budget twice. `ShellWindowChrome` retired that
+  /// slab; every other destination was handed its own panel in the same change (`PageGlassLane`) and
+  /// this one was not. A wash is not a surface: `Ink.rowFill` is 4.5% of `labelColor`, so over a
+  /// bright photograph of a city it leaves the ground *the photograph*, and the reported defect is a
+  /// faint rounded outline with near-black type on skyline inside it.
+  ///
+  /// So it is `inkGlassPanel` — the shared panel, at the shared corner, with the one ambient shadow —
+  /// and **never that plus a second wash**. Cards drawn *inside* this one stay `glassCard`: a wash on
+  /// a ground is a card, a wash on a desktop is nothing.
+  ///
+  /// `glassContent()` because a first-run screen is reached before any navigation stack has pinned
+  /// the appearance for it. Without that pin, a machine in Dark Mode resolves `Ink.primary`
   /// near-*white* onto the light panel and the whole card disappears — which is exactly the failure
   /// this conversion exists to end.
   func onboardingCard() -> some View {
     glassContent()
-      .glassCard(cornerRadius: OnboardingGlass.panelRadius)
+      // The step's own content stops at the corner. Without this a scrolling thread, a chip row or a
+      // full-width capsule paints over the squircle and out onto the wallpaper — the same clip
+      // `PageGlassLane` puts on a hosted page, for the same reason.
+      .clipShape(RoundedRectangle(cornerRadius: OnboardingGlass.panelRadius, style: .continuous))
+      .inkGlassPanel(cornerRadius: OnboardingGlass.panelRadius, shadow: .ambient)
   }
 
   /// The copy column of a first-run step: the reading measure, centred, with the page padding.
@@ -160,5 +179,21 @@ extension View {
     frame(maxWidth: maxWidth)
       .padding(.horizontal, InkLayout.pagePaddingHorizontal)
       .padding(.vertical, InkLayout.pagePaddingVertical)
+  }
+
+  /// A whole first-run **screen**: the copy column, on the card, floating in the middle of the window.
+  ///
+  /// Sign-in and session recovery are one column each rather than a chat thread, but they are the
+  /// same object as the onboarding card — a piece of glass on the user's desktop — and they lost
+  /// their ground in the same change. Composed here rather than restated at two call sites so the
+  /// three first-run screens cannot drift into three corners, three insets and three shadows.
+  ///
+  /// The card hugs the column; the outer frame only centres it. A first-run screen that stretched
+  /// the panel to the window would be the full-bleed window ground reintroduced under another name,
+  /// which is the thing `ShellWindowChrome` exists to have removed.
+  func onboardingScreen(maxWidth: CGFloat = InkLayout.contentMaxWidth) -> some View {
+    onboardingColumn(maxWidth: maxWidth)
+      .onboardingCard()
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

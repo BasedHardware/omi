@@ -22,17 +22,19 @@ enum SBOnboardingPanelLayout {
 /// The Second Brain conversational onboarding — a chat with Omi that streams
 /// word-by-word and performs real side-effects. Replaces the legacy wizard.
 ///
-/// **It paints no ground.** A full-bleed dune photograph under a black gradient used to sit behind
-/// this card, which meant the shell's glass — then a single window-wide ground, since retired in
-/// favour of per-panel glass (`ShellWindowChrome`) — was covered by the very first screen a new
-/// user reaches, and every label on it had to be white to survive. On the light-pinned panel that art is gone and the type is near-black:
-/// blurred desktop, one wash-and-hairline card, two rungs of ink.
+/// **It paints exactly one ground, and that ground is the app's glass.** A full-bleed dune photograph
+/// under a black gradient used to sit behind this card, and every label on the very first screen a
+/// new user reaches had to be white to survive it. The art is gone and the type is near-black:
+/// blurred desktop, one card, two rungs of ink.
 ///
 /// The card itself was `Color.white.opacity(0.05)` over `.ultraThinMaterial`. That is *within-window*
 /// vibrancy — it frosts the app's own content rather than the desktop — so it was never the same
-/// material as the panel around it, and stacked a second scrim on a ground already tuned to the
-/// contrast floor. It is `onboardingCard()` now, which is the shared wash the rest of the app's cards
-/// are.
+/// material as the panel around it. It became a bare wash-and-hairline `glassCard`, which was right
+/// while `ShellGlassGround` made the whole window one slab of glass and a second scrim would have
+/// spent the passthrough budget twice. `ShellWindowChrome` retired that slab and handed every other
+/// destination its own panel (`PageGlassLane`); this card was missed, so a wash over nothing left the
+/// user's wallpaper as the ground and the copy unreadable over a bright photograph. It is
+/// `onboardingCard()`, which is `inkGlassPanel` — the one shared piece of glass, once.
 struct SBOnboardingView: View {
   @StateObject private var model: SBOnboardingModel
   @ObservedObject private var importConnectorStatusStore: ImportConnectorStatusStore
@@ -162,10 +164,20 @@ struct SBOnboardingView: View {
       // grow into (see `OnboardingProgressBand`).
       Color.clear.frame(height: 14)
     }
-    // No shadow of its own. The window's panel already carries the one ambient shadow in this system,
-    // and the 60 pt black drop this had inside it read as depth on the dark art and as dirt on glass.
+    // One shadow, and it is `InkGlassShadow.ambient` — the same broad, diffuse one every floating
+    // panel in this app casts, drawn by `onboardingCard`. Not the 60 pt black drop this used to carry
+    // inside itself, which read as depth on the dark art and as dirt on glass.
     .onboardingCard()
   }
+
+  /// Back and Skip sit **outside** the card, in the window's top-right corner, so unlike everything
+  /// else on this screen they have no panel under them. `glassChip()` is a wash — the treatment for a
+  /// chip that already sits on a ground — and a wash on the desktop is the card's own defect at chip
+  /// scale: `Ink.secondary` on the wallpaper. So they are their own small pieces of glass, the same
+  /// way `RewindOnlyView`'s floating bar is. `.glassFloatingBar` and not a second `glassChip` on top
+  /// of it: the panel already draws the corner and the edge, and stacking the wash back on would be
+  /// two grounds on one 30 pt control.
+  private static let chipRadius: CGFloat = 999
 
   @ViewBuilder private var backButton: some View {
     if model.canGoBack {
@@ -173,7 +185,7 @@ struct SBOnboardingView: View {
         Text("← Back")
           .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .padding(.horizontal, 14).padding(.vertical, 7)
-          .glassChip()
+          .glassFloatingBar(cornerRadius: Self.chipRadius)
       }
       .buttonStyle(.plain)
       .help("Go back and change an earlier answer")
@@ -186,7 +198,7 @@ struct SBOnboardingView: View {
       Text("Skip")
         .inkStyle(InkType.statusLabel, color: Ink.secondary)
         .padding(.horizontal, 14).padding(.vertical, 7)
-        .glassChip()
+        .glassFloatingBar(cornerRadius: Self.chipRadius)
     }
     .buttonStyle(.plain)
     .help("Skip onboarding and go to your second brain")

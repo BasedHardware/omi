@@ -171,15 +171,41 @@ final class OnboardingGlassChromeTests: XCTestCase {
 
   /// **The one that would have caught the original defect.** The glass is the product; a first-run
   /// screen that fills itself with an image or a colour hides it and forces every label on top to be
-  /// white. `DesktopHomeView` owns the only ground in this window and says so.
-  func testStaticCheckerFirstRunSurfacesPaintNoGroundOfTheirOwn() throws {
+  /// white — which is how every label on these three screens came to be `Color.white`.
+  func testStaticCheckerFirstRunSurfacesPaintNoOpaqueGroundOfTheirOwn() throws {
     for path in Self.firstRunSources {
       let body = try code(path)
       for ground in ["signin_bg", "SBWallpaper()", "ignoresSafeArea()"] {
         XCTAssertFalse(
           body.contains(ground),
-          "\(path) paints its own ground (\(ground)). The shell's glass is already under it.")
+          """
+          \(path) fills itself edge to edge (\(ground)). A first-run screen carries one ground and \
+          it is the shared glass (`onboardingCard`); an opaque one hides it.
+          """)
       }
+    }
+  }
+
+  /// **The second defect, and the mirror image of the first.** Every screen above has to *have* a
+  /// ground, because since `ShellWindowChrome` retired the window's full-bleed glass there is nothing
+  /// under these screens but the user's wallpaper. Onboarding kept a bare `glassCard` — a 4.5%
+  /// darkening wash — and shipped its copy straight onto a photograph of a city.
+  ///
+  /// A source scrape because "does this view tree end up with a material under it" has no runtime
+  /// signal a hermetic test can read: `InkGlassBackdrop` blends `.behindWindow` and a test process has
+  /// no desktop behind its windows. What the ground is *worth* once it exists is measured for real in
+  /// `OnboardingGlassGroundRenderTests`; this only asserts each screen asks for it.
+  func testStaticCheckerEveryFirstRunScreenWearsTheSharedCard() throws {
+    // The chrome file defines the modifiers rather than wearing one.
+    for path in Self.firstRunSources where path != "Onboarding/OnboardingGlassChrome.swift" {
+      let body = try code(path)
+      XCTAssertTrue(
+        body.contains("onboardingCard()") || body.contains("onboardingScreen()"),
+        """
+        \(path) never applies `onboardingCard()` / `onboardingScreen()`, so it has no ground. The \
+        window is transparent (`ShellWindowChrome`) — a first-run screen that draws only a wash is \
+        drawing on the wallpaper.
+        """)
     }
   }
 

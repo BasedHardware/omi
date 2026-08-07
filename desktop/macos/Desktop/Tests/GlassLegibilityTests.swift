@@ -577,3 +577,207 @@ final class GlassGroundInterferenceRenderTests: XCTestCase {
       """)
   }
 }
+
+/// **A first-run card has to bring its own ground, because nothing else in the window has one.**
+///
+/// Every test above measures type against `Ink.surface` or against a modelled panel — it assumes a
+/// ground exists and asks whether the ink on it is dark enough. That assumption is what broke here.
+/// `ShellGlassGround` used to install an `InkGlassView` as the main window's `contentView`, so
+/// *everything* floated on one full-bleed slab of glass and a first-run card could correctly draw
+/// nothing but a wash (`glassCard` — `Ink.rowFill`, 4.5% of `labelColor`). When `ShellWindowChrome`
+/// retired the slab, every other destination was handed its own panel (`PageGlassLane`) and onboarding
+/// was not. A *darkening* wash over no ground leaves the ground the user's wallpaper: the reported
+/// frame is near-black copy and near-black trust rows drawn straight onto a bright photograph of a
+/// city, inside a faint rounded outline with nothing in it.
+///
+/// **Nothing above can see that**, because every assertion there composites onto `Ink.surface` — a
+/// ground the broken card did not have. So there are two different claims here and they need two
+/// different harnesses:
+///
+/// 1. **Is there a surface under the type at all?** Rendered over a raw desktop, where the card's own
+///    ground is the whole of what separates this app's ink from the wallpaper.
+/// 2. **Is the ink dark enough on the ground that surface produces?** Rendered over the *modelled*
+///    ground, bright and dark, against the ordinary AA bar.
+///
+/// ## Why the two cannot be one test
+///
+/// **A glass panel cannot be rendered over a chosen backdrop offscreen.** `InkGlassBackdrop` is an
+/// `NSVisualEffectView` blending `.behindWindow`; a test process has no desktop behind its windows, and
+/// AppKit does not fall through to whatever the harness put underneath — it renders its own flat
+/// substitute and hides the backdrop completely. An earlier version of this file tried to supply the
+/// material as a backdrop image and let production draw the scrim on top; its self-check caught it
+/// immediately, reporting the same ground over a black desktop and a white one. So (1) reads only the
+/// *presence* of the surface, and (2) uses the modelled ground — the same technique, for the same
+/// reason, as `GlassGroundInterferenceRenderTests` above.
+@MainActor
+final class OnboardingGlassGroundRenderTests: XCTestCase {
+
+  /// What is behind the window. Bright stands for the photograph in the reported frame; dark is where
+  /// near-black type on no ground disappears completely.
+  private enum Desktop: String, CaseIterable {
+    case bright, dark
+    var tone: CGFloat { self == .bright ? 1 : 0 }
+  }
+
+  private static let size = NSSize(width: 320, height: 200)
+
+  private func resolved(_ color: Color) -> NSColor {
+    var out = NSColor(color)
+    InkGlass.appearance.performAsCurrentDrawingAppearance {
+      out = NSColor(color).usingColorSpace(.sRGB) ?? out
+    }
+    return out.usingColorSpace(.sRGB) ?? out
+  }
+
+  private func contrast(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
+    let l1 = InkGlass.luminance(a)
+    let l2 = InkGlass.luminance(b)
+    return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+  }
+
+  /// The ground the panel really draws over a desktop of a given brightness.
+  private func modelledGround(_ desktop: Desktop) -> CGFloat {
+    InkGlass.ground(
+      overBackdrop: desktop.tone, surfaceTone: resolved(Ink.surface).redComponent)
+  }
+
+  /// The first step's copy, at the faintest rung the card carries.
+  ///
+  /// `Ink.secondary` because that is what `SBOnboardingView.omiRow` sets Omi's turn in, and what the
+  /// `OPEN` / `PRIVATE` / `YOURS` tags on the reported frame are — the weakest thing on the surface, so
+  /// the bound is evaluated where the card is weakest.
+  private func copy(_ color: Color) -> some View {
+    Text(
+      """
+      Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and \
+      handle the follow-ups. Three quick things:
+      """
+    )
+    .inkStyle(.prose, color: color)
+    .frame(width: Self.size.width - 56, alignment: .leading)
+    .padding(28)
+    .frame(width: Self.size.width, height: Self.size.height, alignment: .top)
+  }
+
+  /// Renders `view` over a flat tone and reads the bitmap back.
+  private func render(_ view: some View, overTone tone: CGFloat) throws -> NSBitmapImageRep {
+    let host = NSHostingView(
+      rootView: view.frame(width: Self.size.width, height: Self.size.height))
+    host.appearance = InkGlass.appearance
+    host.frame = NSRect(origin: .zero, size: Self.size)
+
+    let backdrop = NSView(frame: host.frame)
+    backdrop.appearance = InkGlass.appearance
+    backdrop.wantsLayer = true
+    backdrop.layer?.backgroundColor =
+      NSColor(srgbRed: tone, green: tone, blue: tone, alpha: 1).cgColor
+    backdrop.addSubview(host)
+    backdrop.layoutSubtreeIfNeeded()
+
+    let rep = try XCTUnwrap(backdrop.bitmapImageRepForCachingDisplay(in: backdrop.bounds))
+    backdrop.cacheDisplay(in: backdrop.bounds, to: rep)
+    return rep
+  }
+
+  private func tones(_ rep: NSBitmapImageRep) -> [CGFloat] {
+    var out: [CGFloat] = []
+    for y in 0..<rep.pixelsHigh {
+      for x in 0..<rep.pixelsWide {
+        guard let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+        out.append(color.redComponent)
+      }
+    }
+    return out
+  }
+
+  /// The surface's tone where no glyph is drawn on it: the mode of the rendered tones.
+  ///
+  /// The mode rather than the mean or the maximum — the frame is mostly bare surface with type over
+  /// part of it, so the most common tone *is* the surface, while a mean is dragged down by the ink and
+  /// a maximum would report the sheen's 1 pt specular line along the top edge.
+  private func surfaceTone(_ rep: NSBitmapImageRep) -> CGFloat {
+    var histogram: [Int: Int] = [:]
+    for tone in tones(rep) { histogram[Int((tone * 255).rounded()), default: 0] += 1 }
+    let peak = histogram.max { $0.value < $1.value }?.key ?? 0
+    return CGFloat(peak) / 255
+  }
+
+  // MARK: - The harness has to be measuring what it claims to
+
+  /// **The control.** With nothing grounding it, the harness really does show the desktop straight
+  /// through — which is both the proof that the next test can see a missing ground, and the defect's
+  /// whole mechanism in one line.
+  func testWithoutACardTheDesktopComesStraightThrough() throws {
+    for desktop in Desktop.allCases {
+      let rendered = surfaceTone(try render(copy(Ink.secondary), overTone: desktop.tone))
+      XCTAssertEqual(
+        rendered, desktop.tone, accuracy: 0.02,
+        """
+        An ungrounded first-run column rendered \(String(format: "%.3f", rendered)) over a \
+        \(desktop.rawValue) desktop. If the harness cannot show the bare desktop it cannot tell a \
+        card that grounds itself from one that does not.
+        """)
+    }
+  }
+
+  // MARK: - (1) The defect: the card had no ground of its own
+
+  /// **The regression, stated as the thing that was missing rather than as a contrast ratio.**
+  ///
+  /// Over a raw black desktop the card's own ground is the entire distance between this app's type and
+  /// the user's wallpaper. A `glassCard` wash *darkens* — `Ink.rowFill` is 4.5% of `labelColor` — so
+  /// the broken card renders a surface of about 0.02 there and the near-black copy on it is simply not
+  /// present. `inkGlassPanel` lays the app's material and `InkGlass.scrim` of `Ink.surface` down
+  /// instead.
+  ///
+  /// The bound is the design system's own number rather than one invented here: whatever a first-run
+  /// card puts between the user and their desktop must be at least the ground the glass is specified to
+  /// have (`InkGlass.groundAlpha`), because that is the ground every other panel in this app gets.
+  /// The rendered value comfortably exceeds it, because `NSVisualEffectView`'s offscreen substitute is
+  /// lighter than the material it stands in for — which is exactly why the *ratio* is measured against
+  /// the modelled ground below and not against this one.
+  func testTheCardPutsItsOwnGroundBetweenTheCopyAndTheDesktop() throws {
+    let floor = InkGlass.groundAlpha(reduceTransparency: false)
+    let rendered = surfaceTone(try render(copy(Ink.secondary).onboardingCard(), overTone: 0))
+
+    XCTAssertGreaterThanOrEqual(
+      rendered, floor - 0.03,
+      """
+      Over a black desktop the first-run card renders a surface of \
+      \(String(format: "%.3f", rendered)) where the glass specifies at least \
+      \(String(format: "%.3f", floor)). The card is not grounding itself — which is the reported \
+      defect: a wash (`glassCard`) is the treatment for a card that already sits on a panel, and \
+      since `ShellWindowChrome` retired the window's ground there is no panel under this one. Use \
+      `onboardingCard()`, which is `inkGlassPanel`.
+      """)
+  }
+
+  // MARK: - (2) …and the ink on that ground is dark enough, at both ends
+
+  /// The faintest rung the card carries clears AA on the ground the panel draws, over a **bright** and
+  /// a **dark** desktop alike.
+  ///
+  /// Both ends, because they fail in opposite directions and tuning against one of them is how this
+  /// surface has been mistuned before: over a bright desktop near-black type is safe and it is the
+  /// *panel* that disappears; over a dark one the panel is obvious and the type is what goes.
+  func testTheCardsFaintestRungClearsAAOverABrightAndADarkDesktop() throws {
+    for desktop in Desktop.allCases {
+      let ground = modelledGround(desktop)
+      let rep = try render(copy(Ink.secondary), overTone: ground)
+      // The glyph *body*, not its antialiased fringe: a contrast bar is stated at full coverage, and
+      // the partially-covered edge of a stroke is never what "the text colour" means. Same reason
+      // `GlassGroundInterferenceRenderTests` reads the strongest ink.
+      let ink = tones(rep).filter { ground - $0 > 0.15 }
+      XCTAssertFalse(ink.isEmpty, "no copy rendered over a \(desktop.rawValue) desktop")
+
+      let measured = ink.map { contrast(ground, $0) }.max() ?? 0
+      XCTAssertGreaterThanOrEqual(
+        measured, 4.5,
+        """
+        The card's faintest rung measures \(String(format: "%.2f", measured)):1 on the ground the \
+        panel draws over a \(desktop.rawValue) desktop. A first-run screen is the one surface whose \
+        reader has never seen the app work.
+        """)
+    }
+  }
+}
