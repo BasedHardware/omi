@@ -181,6 +181,17 @@ extension AppState {
       }
 
       try? await Task.sleep(nanoseconds: 150_000_000)
+
+      // Reset Onboarding is someone deliberately asking to see first run again,
+      // so the cinematic intro replays — the one onboarding key sign-out keeps
+      // and this site clears. It is the last write before the relaunch on
+      // purpose: the onboarding view re-mounted the moment this method dropped
+      // hasCompletedOnboarding, and that doomed session marks the intro played
+      // on appear. See OnboardingFlow.armIntroReplayForOnboardingReset.
+      OnboardingFlow.armIntroReplayForOnboardingReset()
+      UserDefaults.standard.synchronize()
+      log("Armed the cinematic intro to replay on the next launch")
+
       // Keep onboarding reset scoped to the current app instance.
       // It must not mutate production defaults, shared local data, or TCC permissions.
       self.restartApp()

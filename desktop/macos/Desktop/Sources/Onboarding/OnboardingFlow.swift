@@ -220,10 +220,13 @@ enum OnboardingFlow {
   /// - "screenAnalysisEnabled": SettingsSyncManager overwrites it from the
   ///   server within ~200ms of sign-in; onboarding force-starts monitoring
   ///   regardless of this setting.
-  /// - `SBOnboardingIntroGate.playedKey`: install-scoped, not account-scoped.
-  ///   The cinematic intro is a first-impression that earns its 8.6s exactly
-  ///   once per Mac — a re-auth or a Reset Onboarding must return the user to
-  ///   step 1, not replay it — so it deliberately survives both clearing sites.
+  /// - `SBOnboardingIntroGate.playedKey`: install-scoped, not account-scoped,
+  ///   and the one key the two clearing sites treat differently. A re-auth is
+  ///   involuntary — a session expired, someone signed back in — and owes them
+  ///   only the way back into their app, so sign-out must leave this key alone.
+  ///   Reset Onboarding is the opposite: a person deliberately asking to see
+  ///   first run again, for whom the cinematic is the point. That site clears
+  ///   it through `armIntroReplayForOnboardingReset` rather than this list.
   /// - onboarding chat keys ("onboardingChatMessages", "onboardingACPSessionId",
   ///   mid-onboarding/exploration state): owned by
   ///   `OnboardingChatPersistence.clear()`, which both sites call.
@@ -257,6 +260,23 @@ enum OnboardingFlow {
     for key in persistedStateKeys {
       defaults.removeObject(forKey: key)
     }
+  }
+
+  /// Re-arms the cinematic intro for the next launch. **Only
+  /// `AppState.resetOnboardingAndRestart` may call this** — see the note on
+  /// `persistedStateKeys` for why sign-out must not.
+  ///
+  /// Ordering is part of the contract: this has to be the *last* write before
+  /// the relaunch. Reset posts `.resetOnboardingRequested` first, which drops
+  /// `hasCompletedOnboarding` and re-mounts onboarding for the fraction of a
+  /// second before the process dies — and that transient session calls
+  /// `SBOnboardingIntroGate.markPlayed()` on appear. Clearing alongside the
+  /// bulk `clearPersistedState()` would hand that write the last word and the
+  /// intro would stay suppressed. Running last also keeps the flag set through
+  /// the doomed window, so the pre-restart session never starts a cinematic the
+  /// relaunch would cut off mid-playback.
+  static func armIntroReplayForOnboardingReset(in defaults: UserDefaults = .standard) {
+    SBOnboardingIntroGate.reset(defaults: defaults)
   }
 
   /// What pressing Continue does on a granted permission step. Granting alone
