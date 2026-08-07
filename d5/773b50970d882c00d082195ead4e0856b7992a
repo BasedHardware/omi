@@ -1,0 +1,35 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  s_569f1df936cc22::t_4796a76d26f65c 113-115
+  s_569f1df936cc22::t_6377b508feb8f0 374-376,379,381,401-405
+  s_569f1df936cc22::t_8260073a89029c 11-14,17-25
+  s_569f1df936cc22::t_475d13a3aa30a9 26
+  s_569f1df936cc22::t_7d67190e1f4253 334
+  s_569f1df936cc22::t_1164e8046b0ed1 127-130,140,143-155,157-159,163-166,179,181-189,193,197,199,203-204,216,232-306,406
+  s_569f1df936cc22::t_e6f25b67062f84 54-56
+  s_569f1df936cc22::t_f9899d0c352644 351
+  s_569f1df936cc22::t_6e18b9aa414a25 407
+desktop/macos/changelog/unreleased/20260807-chat-composer-capsule.json
+  s_569f1df936cc22::t_8dc68af50a56a0 1-3
+desktop/macos/Desktop/Tests/QueryComposerTests.swift
+  s_569f1df936cc22::t_e14aa0aeb2f0e6 216-233
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  s_569f1df936cc22::t_0d3e2128e0f108 326-329,382-408,410,414-419,422-443,445
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_bdca8d9bb74b9d 91-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d5773b50970d882c00d082195ead4e0856b7992a",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
