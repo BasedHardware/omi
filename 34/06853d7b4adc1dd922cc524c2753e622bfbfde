@@ -1,0 +1,28 @@
+docs/product/invariants/desktop-shell-feature-parity.md
+  s_569f1df936cc22::t_21c9cf9dd8800b 27
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_569f1df936cc22::t_6601ef8c23f0e8 257-279
+desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
+  s_569f1df936cc22::t_aa69d0180ef14a 129,137
+  s_569f1df936cc22::t_2a8f9314a3fdd1 63
+  s_569f1df936cc22::t_fac608a61532c8 55-62
+  s_569f1df936cc22::t_6675bc5e88b62f 108
+  s_569f1df936cc22::t_f2c13d737f1fee 95
+  s_569f1df936cc22::t_5cf886fa13915b 120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3406853d7b4adc1dd922cc524c2753e622bfbfde",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
