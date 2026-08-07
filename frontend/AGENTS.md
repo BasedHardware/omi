@@ -14,7 +14,10 @@ pnpm -r test         # hermetic; node:test; no network, no wall clock
 node scripts/check-isolation.mjs
 ```
 
-All three commands green (plus `node scripts/gen-barrels.mjs --check`) = the baseline Definition of Done for any change here. During a concurrent wave, verify your own package scope (`pnpm --filter <pkg> build/test`) — sibling workers' unbarrelled files make the full `-r` check red until the orchestrator integrates; the orchestrator owns the integrated check. Include
+All three commands green (plus `node scripts/gen-barrels.mjs --check` and
+`node scripts/check-structure.mjs` — no workspace dep cycles, no test files outside
+their home; tests for contracts/domain/sync/kernel/adapters live in `packages/testkit/`)
+= the baseline Definition of Done for any change here. During a concurrent wave, verify your own package scope (`pnpm --filter <pkg> build/test`) — sibling workers' unbarrelled files make the full `-r` check red until the orchestrator integrates; the orchestrator owns the integrated check. Include
 their output in your commit message evidence.
 
 ## The exemplar rule
