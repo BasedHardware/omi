@@ -467,19 +467,30 @@ def send_message(
                         answered = True
 
             if not answered:
-                # A typed ``error:`` frame (timeout / gateway block / stream failure) already
-                # gave the client a coherent failure. Do not also persist the generic canned
-                # sorry bubble as a second terminal answer. Prefer the typed answer when the
-                # stream set one; otherwise skip the canned fallback entirely.
-                if streamed_terminal_error:
-                    logger.error(
-                        'chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
-                        uid,
-                        callback_data.get('error') or 'stream_failure',
-                        callback_data.get('route') or 'unknown',
-                        True,
+                # Prefer a staged typed answer (timeout / gateway) even if the producer
+                # forgot the None sentinel. Only emit the generic canned sorry when no
+                # typed answer was staged — including persona paths that yield ``error:``
+                # without setting ``callback_data['answer']`` (those still need ``done:``).
+                response = callback_data.get('answer')
+                if response:
+                    ai_message, ask_for_nps = process_message(response, callback_data)
+                    ai_message_dict = ai_message.model_dump()
+                    response_message = ResponseMessage(**ai_message_dict)
+                    response_message.ask_for_nps = ask_for_nps
+                    encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
+                        'utf-8'
                     )
+                    journey_attempt.finish('success')
+                    yield f"done: {encoded_response}\n\n"
                 else:
+                    if streamed_terminal_error:
+                        logger.error(
+                            'chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+                            uid,
+                            callback_data.get('error') or 'stream_failure',
+                            callback_data.get('route') or 'unknown',
+                            True,
+                        )
                     yield await emit_stream_error_fallback(
                         uid,
                         app_id_from_app,

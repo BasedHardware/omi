@@ -568,15 +568,24 @@ async def process_voice_message_segment_stream(
                     await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
 
         if not answered:
-            if streamed_terminal_error:
-                logger.error(
-                    'voice_chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
-                    uid,
-                    callback_data.get('error') or 'stream_failure',
-                    callback_data.get('route') or 'unknown',
-                    True,
-                )
+            response = callback_data.get('answer')
+            if response:
+                ai_message, ask_for_nps = await process_message(response, callback_data)
+                ai_message_dict = ai_message.model_dump()
+                response_message = ResponseMessage(**ai_message_dict)
+                response_message.ask_for_nps = ask_for_nps
+                data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+                yield f"done: {data}\n\n"
+                await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
             else:
+                if streamed_terminal_error:
+                    logger.error(
+                        'voice_chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+                        uid,
+                        callback_data.get('error') or 'stream_failure',
+                        callback_data.get('route') or 'unknown',
+                        True,
+                    )
                 yield await emit_stream_error_fallback(
                     uid,
                     app_id,

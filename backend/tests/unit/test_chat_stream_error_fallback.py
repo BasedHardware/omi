@@ -351,3 +351,32 @@ def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error():
         chat_utils.record_fallback.assert_not_called()
     finally:
         _cleanup(saved)
+
+
+def test_v2_messages_emits_canned_done_after_error_without_staged_answer():
+    """Persona-style ``error:`` without ``answer`` must still emit a ``done:`` frame."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def persona_error_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'stream_failure'
+            kwargs['callback_data']['route'] = 'persona'
+            yield 'error: Unable to complete the response. Please try again.'
+            # No answer staged and no None sentinel — router must still finalize.
+
+        router_module.execute_chat_stream = persona_error_stream
+
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert 'error: Unable to complete the response. Please try again.' in response.text
+        assert response.text.count('done: ') == 1
+        payload = _decode_done_frame(response.text)
+        assert payload['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
+        chat_utils.record_fallback.assert_called_once()
+    finally:
+        _cleanup(saved)

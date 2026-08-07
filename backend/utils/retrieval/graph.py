@@ -31,6 +31,7 @@ from utils.retrieval.agentic import (
     AGENT_STREAM_MAX_DURATION_SECONDS,
     AGENT_STREAM_PROGRESS_HEARTBEAT,
     AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS,
+    AGENT_STREAM_SETUP_TIMEOUT_SECONDS,
     AGENT_STREAM_TIMEOUT_MESSAGE,
     FILE_CHAT_GATEWAY_BLOCKED_MESSAGE,
     AsyncStreamingCallback,
@@ -170,25 +171,6 @@ async def _execute_file_chat_stream(
 
         async for chunk in _drain_chat_callback(callback, task, route='file'):
             if chunk and chunk.startswith('error: '):
-                # Prefer a typed gateway-block failure over the generic stream-failure
-                # copy when the producer was rejected by feature-mode guards.
-                producer_error = None
-                if task.done() and not task.cancelled():
-                    producer_error = task.exception()
-                if isinstance(producer_error, GatewayDirectModelSurfaceBlocked):
-                    error_code = producer_error.error_code
-                    logger.error(
-                        'file chat stream failed route=file uid=%s error_code=%s error_type=%s',
-                        uid,
-                        error_code,
-                        type(producer_error).__name__,
-                    )
-                    if callback_data is not None:
-                        callback_data['error'] = error_code
-                        callback_data['answer'] = FILE_CHAT_GATEWAY_BLOCKED_MESSAGE
-                    yield f'error: {FILE_CHAT_GATEWAY_BLOCKED_MESSAGE}'
-                    yield None
-                    return
                 if callback_data is not None:
                     callback_data['error'] = 'stream_failure'
                     # Persist the typed failure so the router does not append the
@@ -210,7 +192,7 @@ async def _execute_file_chat_stream(
         yield None
     except GatewayDirectModelSurfaceBlocked as error:
         logger.error(
-            'file chat stream failed route=file uid=%s error_code=%s error_type=%s',
+            'file chat stream failed route=file uid=%s reason=%s error_type=%s',
             uid,
             error.error_code,
             type(error).__name__,
@@ -309,7 +291,9 @@ async def execute_persona_chat_stream(
             if chunk and chunk.startswith('error: '):
                 if callback_data is not None:
                     callback_data['error'] = 'stream_failure'
+                    callback_data['answer'] = chunk[len('error: ') :]
                 yield chunk
+                yield None
                 return
             if chunk:
                 if chunk.startswith("data: "):
@@ -330,7 +314,9 @@ async def execute_persona_chat_stream(
         logger.error('persona chat stream failed error_type=%s', type(error).__name__)
         if callback_data is not None:
             callback_data['error'] = 'stream_failure'
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
         return
 
 
@@ -356,7 +342,23 @@ async def execute_chat_stream(
     - Everything else -> Anthropic agentic chat (Claude decides whether to use tools)
     """
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
-    current_datetime_block, tz = await _current_prompt_metadata(uid, platform)
+    # Router metadata (timezone/city) is pre-agentic Firestore/location I/O and must
+    # share the setup budget so a stalled lookup cannot leave the SSE stream silent.
+    try:
+        async with asyncio.timeout(AGENT_STREAM_SETUP_TIMEOUT_SECONDS):
+            current_datetime_block, tz = await _current_prompt_metadata(uid, platform)
+    except TimeoutError:
+        logger.error(
+            'chat stream setup timed out route=router uid=%s reason=setup_timeout',
+            uid,
+        )
+        if callback_data is not None:
+            callback_data['error'] = 'setup_timeout'
+            callback_data['route'] = 'router'
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
+        yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+        yield None
+        return
 
     # 1. Persona apps
     if app and app.is_a_persona():
