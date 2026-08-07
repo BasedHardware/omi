@@ -38,6 +38,8 @@ covers:
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindowArt.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiCinematicWindows.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingCinematic.swift
+  # Decides which display the intro opens on — the same answer the shell lands with.
+  - desktop/macos/Desktop/Sources/MainWindow/ActiveDisplay.swift
   - desktop/macos/Desktop/Sources/Onboarding/Cinematic/OmiOnboardingSound.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingGlassChrome.swift
   - desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingIntroGate.swift
