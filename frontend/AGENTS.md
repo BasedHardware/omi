@@ -68,6 +68,13 @@ gap, not your call to fill.
     it automatically (it caught this bug in 3 of the first 5 domains, including the
     original exemplar).
 
+13. **Shell hosts bind loopback-only, and the origin is frozen.** A serving socket binds
+    `127.0.0.1` explicitly and the verification script asserts it (`lsof` + a LAN-address
+    curl that must fail) — `NWListener(using:on:)` binds all interfaces silently (caught
+    live in wave 2: the "LoopbackServer" was publishing the bundle to the LAN). The
+    origin (fixed port / custom scheme) is a storage-correctness invariant: an ephemeral
+    port is a silent user-data wipe (IndexedDB is origin-keyed).
+
 ## What you may do freely
 
 Add tests, extend the testkit's fakes with new fault modes, add a new domain following the

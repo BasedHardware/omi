@@ -139,6 +139,25 @@ importers:
       '@omi-core/sync':
         specifier: workspace:*
         version: link:../sync
+      '@omi-core/wire-listen':
+        specifier: workspace:*
+        version: link:../wire-listen
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/wire-listen:
+    dependencies:
+      '@omi-core/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@omi-core/kernel':
+        specifier: workspace:*
+        version: link:../kernel
     devDependencies:
       '@types/node':
         specifier: ^22
