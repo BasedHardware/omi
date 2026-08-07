@@ -1,0 +1,23 @@
+{
+  "name": "@omi-core/testkit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Hermetic test harness: in-memory storage bridge with crash simulation, manual clock, scriptable transport \u2014 plus the failure-class conformance suites every domain must pass.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "node --test 'dist/**/*.test.js'",
+    "lint": "echo testkit:no-lint-yet"
+  },
+  "dependencies": {
+    "@omi-core/contracts": "workspace:*",
+    "@omi-core/kernel": "workspace:*",
+    "@omi-core/sync": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.7.2"
+  }
+}
