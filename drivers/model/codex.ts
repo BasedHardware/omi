@@ -85,7 +85,18 @@ export const codexChatFetch = (options: { model?: string; binary?: string; reaso
   const reasoning = options.reasoning ?? process.env.OMI_CODEX_REASONING ?? "low";
   const adapter = (async (_url: unknown, init?: { body?: unknown; signal?: AbortSignal }) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as ChatBody;
-    const content = await runCodexExec({ prompt: promptFromMessages(body.messages), model, binary, reasoning, signal: init?.signal ?? undefined });
+    let content = await runCodexExec({ prompt: promptFromMessages(body.messages), model, binary, reasoning, signal: init?.signal ?? undefined });
+    // Spark sometimes fences or trails prose around the JSON. The edges expect a
+    // bare JSON object; salvage the outermost object before handing it over so
+    // malformed-JSON retries are spent on real failures, not formatting.
+    if (!content.startsWith("{") || !content.endsWith("}")) {
+      const first = content.indexOf("{");
+      const last = content.lastIndexOf("}");
+      if (first !== -1 && last > first) {
+        const candidate = content.slice(first, last + 1);
+        try { JSON.parse(candidate); content = candidate; } catch { /* leave as-is; edge retry handles it */ }
+      }
+    }
     return new Response(JSON.stringify({ model, choices: [{ message: { role: "assistant", content } }] }), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   return adapter;
