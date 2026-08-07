@@ -4,3 +4,4 @@ export * from "./degraded.js";
 export * from "./bridge/durable-log.js";
 export * from "./bridge/stream.js";
 export * from "./domain/tasks.js";
+export * from "./domain/memories.js";

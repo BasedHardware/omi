@@ -51,6 +51,11 @@ gap, not your call to fill.
 10. **Old-tree mount points** (the thin patches that host `core/` surfaces in existing
     apps) carry a `// core-seam:` marker comment at every call site.
 
+11. **Adapter export names carry the domain in the identifier** — `sendTaskOp`,
+    `fetchMemoryIdSnapshot`, `tasksTransport` — because `adapters-legacy/src/index.ts`
+    re-exports every domain with `export *` and bare names collide. (Rule added after the
+    first foundation test hit exactly this.)
+
 ## What you may do freely
 
 Add tests, extend the testkit's fakes with new fault modes, add a new domain following the
