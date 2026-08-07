@@ -139,10 +139,16 @@ function contentHash(ids: readonly string[]): string {
 export function tasksTransport(
   http: HttpClient,
   onServerAssignedId: (localId: string, serverId: string) => void,
+  /** Maps a local slug to the wire id the legacy server knows it by (the
+   * alias created when create returned serverAssignedId). Identity default. */
+  resolveWireId: (localId: string) => string = (id) => id,
 ): { send(op: PendingOp): Promise<TaskSendResult> } {
   return {
     async send(op: PendingOp): Promise<TaskSendResult> {
       const domainOp = JSON.parse(op.payload) as TaskOp;
+      if (domainOp.op !== "create") {
+        (domainOp as { id: string }).id = resolveWireId(domainOp.id);
+      }
       const result = await sendTaskOp(http, domainOp);
       if (result.ok && result.serverAssignedId !== undefined) {
         onServerAssignedId(domainOp.id, result.serverAssignedId);

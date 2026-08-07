@@ -1,0 +1,23 @@
+{
+  "name": "@omi-core/domain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Per-domain codecs, op builders, and stores: the layer view code talks to. Pure TS over contracts + sync + adapters; no UI framework, no platform APIs.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "echo domain:tested-via-testkit",
+    "lint": "echo domain:no-lint-yet"
+  },
+  "dependencies": {
+    "@omi-core/adapters-legacy": "workspace:*",
+    "@omi-core/contracts": "workspace:*",
+    "@omi-core/kernel": "workspace:*",
+    "@omi-core/sync": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
