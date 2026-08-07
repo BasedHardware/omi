@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_569f1df936cc22::t_d0b3aa42918fa3 132-134
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_da70d79f6bd77c 89-90,92-93,95-96,102-103,108-142
+  s_569f1df936cc22::t_0be41af52b1780 143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c2857b3fa7aab6df7efd9f4439f83dc07629f520",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
