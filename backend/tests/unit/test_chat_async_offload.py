@@ -626,7 +626,12 @@ async def test_agentic_stream_treats_a_cancelled_producer_as_a_failure():
 async def test_agentic_setup_budget_does_not_consume_first_event_deadline():
     """Multi-second setup must not silently exhaust the post-setup TTFT window."""
     callback_data = {}
-    setup_delay = 0.05
+    # setup_delay must exceed FIRST_EVENT_TIMEOUT so a shared clock would
+    # exhaust the producer's budget.  The first-event window is widened well
+    # beyond the 30ms that can flake under CI scheduling contention: the
+    # producer does almost no work, but it still needs to be scheduled, emit,
+    # and end within the budget.
+    setup_delay = 0.2
 
     def slow_tz(_uid):
         import time
@@ -653,12 +658,12 @@ async def test_agentic_setup_budget_does_not_consume_first_event_deadline():
     ), patch.object(
         agentic, '_run_anthropic_agent_stream', quick_producer
     ), patch.object(
-        agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 1.0
+        agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 2.0
     ), patch.object(
-        agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.03
+        agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.1
     ):
-        # If setup shared the first-event clock, the 50ms setup would leave no
-        # budget for the producer and this would idle-timeout before 'hello'.
+        # If setup shared the first-event clock, the 200ms setup would leave no
+        # budget for the producer (100ms window) and this would idle-timeout before 'hello'.
         chunks = [
             chunk
             async for chunk in agentic.execute_agentic_chat_stream(
