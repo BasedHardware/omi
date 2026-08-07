@@ -19,6 +19,7 @@ from services.agent_vm_lifecycle import (
     retry_delay_seconds,
     rollout_selected,
     runtime_matches,
+    state_runtime_matches,
     startup_wrapper,
     validate_release_manifest,
 )
@@ -89,6 +90,8 @@ def test_runtime_verification_requires_all_release_identity_fields():
     }
     assert runtime_matches(payload, release)
     assert not runtime_matches({**payload, "imageDigest": "gcr.io/project/agent-vm@sha256:" + "e" * 64}, release)
+    assert state_runtime_matches({"stateReady": True, "stateMigrationId": "migration-id"}, "migration-id")
+    assert not state_runtime_matches({"stateReady": True, "stateMigrationId": "stale"}, "migration-id")
 
 
 def test_reconciler_readiness_selects_only_an_rfc1918_instance_address():
@@ -205,6 +208,8 @@ async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet
         release,
         "candidate-owner-bearer",
         "migration-id",
+        "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-state-test",
+        "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-source-test",
     )
 
     body = captured["body"]
@@ -225,12 +230,166 @@ async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet
     assert metadata["auth-token"] == "candidate-owner-bearer"
     assert metadata["omi-agent-migration"] == "migration-id"
     assert body["disks"][0]["initializeParams"]["sourceImage"] == release.boot_image
+    assert body["disks"][1] == {
+        "boot": False,
+        "autoDelete": False,
+        "deviceName": "omi-agent-state",
+        "mode": "READ_WRITE",
+        "source": "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-state-test",
+    }
+    assert body["disks"][2] == {
+        "boot": False,
+        "autoDelete": True,
+        "deviceName": "omi-agent-state-source",
+        "mode": "READ_ONLY",
+        "source": "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-source-test",
+    }
+    assert metadata["omi-agent-state-required"] == "true"
+
+
+@pytest.mark.asyncio
+async def test_state_disk_compute_mutations_use_named_devices_and_identity_fenced_delete():
+    mutations: list[tuple[str, str, object]] = []
+
+    class Client(GceAgentVmClient):
+        disk: dict[str, object] | None = {
+            "id": "disk-id",
+            "status": "READY",
+            "labels": {
+                "omi-agent-migration": "a" * 24,
+                "omi-agent-role": "state",
+                "omi-agent-owner": "b" * 20,
+            },
+            "users": [],
+        }
+
+        async def get_disk(self, _disk_name: str):
+            return self.disk
+
+        async def _mutate(self, method, url, body=None):
+            mutations.append((method, url, body))
+
+    client = Client("project")
+    await client.set_disk_auto_delete("omi-agent-owner", "omi-agent-state", False)
+    await client.detach_disk("omi-agent-owner", "omi-agent-state")
+    await client.attach_disk(
+        "omi-agent-owner",
+        "projects/project/zones/us-central1-a/disks/omi-agent-state-test",
+        auto_delete=True,
+    )
+    assert await client.delete_disk("omi-agent-state-test", "disk-id", "a" * 24, "state", "b" * 20)
+
+    assert mutations[0][1].endswith("/setDiskAutoDelete?deviceName=omi-agent-state&autoDelete=false")
+    assert mutations[1][1].endswith("/detachDisk?deviceName=omi-agent-state")
+    assert mutations[2][2] == {
+        "source": "projects/project/zones/us-central1-a/disks/omi-agent-state-test",
+        "deviceName": "omi-agent-state",
+        "mode": "READ_WRITE",
+        "autoDelete": True,
+    }
+    assert mutations[3][0] == "DELETE"
+
+    client.disk = {**(client.disk or {}), "id": "foreign-id"}
+    assert not await client.delete_disk("omi-agent-state-test", "disk-id", "a" * 24, "state", "b" * 20)
+
+
+@pytest.mark.asyncio
+async def test_source_clone_uses_the_stopped_boot_disk_without_inheriting_a_smaller_size():
+    captured: dict[str, object] = {}
+
+    class Client(GceAgentVmClient):
+        calls = 0
+
+        async def get_disk(self, _disk_name: str):
+            type(self).calls += 1
+            if type(self).calls == 1:
+                return None
+            return {
+                "id": "clone-id",
+                "status": "READY",
+                "sourceDisk": "projects/project/zones/us-central1-a/disks/omi-agent-old",
+                "labels": {
+                    "omi-agent-migration": "a" * 24,
+                    "omi-agent-role": "source",
+                    "omi-agent-owner": "b" * 20,
+                },
+            }
+
+        async def _mutate(self, method, url, body=None):
+            captured.update({"method": method, "url": url, "body": body})
+
+    disk = await Client("project").create_disk(
+        "omi-agent-source-test",
+        migration_id="a" * 24,
+        role="source",
+        owner_hash="b" * 20,
+        source_disk="projects/project/zones/us-central1-a/disks/omi-agent-old",
+    )
+
+    assert disk["id"] == "clone-id"
+    assert captured["method"] == "POST"
+    assert captured["body"] == {
+        "name": "omi-agent-source-test",
+        "sourceDisk": "projects/project/zones/us-central1-a/disks/omi-agent-old",
+        "labels": {
+            "omi-agent-migration": "a" * 24,
+            "omi-agent-role": "source",
+            "omi-agent-owner": "b" * 20,
+        },
+    }
 
 
 def test_startup_wrapper_rejects_tampered_artifact_before_execution():
     wrapper = startup_wrapper("gs://bucket/releases/startup.sh", "d" * 64)
     assert "sha256sum /tmp/omi-startup.sh" in wrapper
     assert "Agent VM startup artifact checksum mismatch" in wrapper
+
+
+@pytest.mark.asyncio
+async def test_active_state_disk_repairs_auto_delete_only_after_identity_validation():
+    repairs: list[tuple[str, str, bool]] = []
+
+    class Api:
+        project = "project"
+        zone = "us-central1-a"
+
+        @staticmethod
+        def instance_url(name: str) -> str:
+            return f"https://compute.googleapis.com/compute/v1/projects/project/zones/us-central1-a/instances/{name}"
+
+        async def get_disk(self, _name: str):
+            return {
+                "id": "state-id",
+                "labels": {"omi-agent-role": "state", "omi-agent-owner": reconciler._owner_disk_label("uid")},
+                "users": ["projects/project/zones/us-central1-a/instances/omi-agent-owner"],
+            }
+
+        async def set_disk_auto_delete(self, vm_name: str, device_name: str, enabled: bool) -> None:
+            repairs.append((vm_name, device_name, enabled))
+
+    vm = {
+        "vmName": "omi-agent-owner",
+        "stateDisk": {"deviceName": "omi-agent-state", "diskName": "omi-agent-owner-state", "diskId": "state-id"},
+    }
+    instance = {
+        "disks": [
+            {
+                "boot": False,
+                "deviceName": "omi-agent-state",
+                "source": "projects/project/zones/us-central1-a/disks/omi-agent-owner-state",
+                "autoDelete": False,
+            }
+        ]
+    }
+
+    info = await reconciler._active_state_disk_info(Api(), "uid", vm, instance)
+
+    assert info == {"deviceName": "omi-agent-state", "diskName": "omi-agent-owner-state", "diskId": "state-id"}
+    assert repairs == [("omi-agent-owner", "omi-agent-state", True)]
+
+    vm["stateDisk"]["diskId"] = "foreign-id"
+    with pytest.raises(RuntimeError, match="identity is ambiguous"):
+        await reconciler._active_state_disk_info(Api(), "uid", vm, instance)
 
 
 def test_rollout_selection_is_stable_and_backoff_is_bounded():

@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import hashlib
 import json
 import os
 import sqlite3
@@ -17,6 +18,8 @@ STARTUP = SERVICE / "startup.sh"
 def load_app(tmp_path: Path):
     os.environ["AUTH_TOKEN"] = "test-token"
     os.environ["DB_PATH"] = str(tmp_path / "omi.db")
+    os.environ["AGENT_VM_WORKSPACE"] = str(tmp_path / "workspace")
+    os.environ["STATE_RECEIPT_PATH"] = str(tmp_path / "state-receipt.json")
     sys.path.insert(0, str(SERVICE))
     sys.modules.pop("main", None)
     module = importlib.import_module("main")
@@ -34,6 +37,28 @@ def test_health_requires_vm_token_and_reports_database_state(tmp_path: Path) -> 
     assert response.json()["databaseReady"] is False
 
 
+def test_health_reports_state_receipt_metadata_without_receipt_contents(tmp_path: Path) -> None:
+    receipt = {
+        "schemaVersion": 1,
+        "migrationId": "migration-1",
+        "tree": {"digest": "a" * 64, "count": 2, "bytes": 12},
+        "db": {"integrity": "ok"},
+    }
+    receipt_bytes = (json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    (tmp_path / "state-receipt.json").write_bytes(receipt_bytes)
+    app, _ = load_app(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.get("/health?token=test-token", headers={"Authorization": "Bearer test-token"})
+
+    body = response.json()
+    assert body["stateReady"] is True
+    assert body["stateMigrationId"] == "migration-1"
+    assert body["stateReceiptSha256"] == hashlib.sha256(receipt_bytes).hexdigest()
+    assert "tree" not in body
+    assert "db" not in body
+
+
 def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
     app, _ = load_app(tmp_path)
     with TestClient(app) as client:
@@ -43,6 +68,76 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/sync", json={"table": "screenshots", "rows": [{"id": "1"}]}).status_code == 401
         assert client.post("/auth?token=test-token", json={}).status_code == 400
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
+
+
+def test_invalid_database_upload_preserves_open_database(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE durable (value TEXT)")
+    connection.execute("INSERT INTO durable VALUES ('preserved')")
+    connection.commit()
+    connection.close()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload?token=test-token",
+            content=b"not sqlite",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        value = module.runtime.db.execute("SELECT value FROM durable").fetchone()[0]
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded database is not valid SQLite"
+    assert value == "preserved"
+    assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+
+
+def test_valid_database_upload_atomically_replaces_open_database(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    sqlite3.connect(module.runtime.db_path).close()
+    uploaded = tmp_path / "uploaded.db"
+    connection = sqlite3.connect(uploaded)
+    connection.execute("CREATE TABLE replacement (value TEXT)")
+    connection.execute("INSERT INTO replacement VALUES ('ready')")
+    connection.commit()
+    connection.close()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload?token=test-token",
+            content=uploaded.read_bytes(),
+            headers={"Authorization": "Bearer test-token"},
+        )
+        value = module.runtime.db.execute("SELECT value FROM replacement").fetchone()[0]
+
+    assert response.status_code == 200
+    assert value == "ready"
+    assert not module.runtime.db_path.with_suffix(".db.previous").exists()
+
+
+def test_database_uploads_are_serialized(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    active = 0
+    maximum = 0
+
+    monkeypatch.setattr(module.runtime, "require_auth", lambda _request: None)
+
+    async def fake_upload(_request):
+        nonlocal active, maximum
+        active += 1
+        maximum = max(maximum, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return 1, 1
+
+    monkeypatch.setattr(module, "upload_database", fake_upload)
+
+    async def run_uploads():
+        await asyncio.gather(module.upload(object()), module.upload(object()))
+
+    asyncio.run(run_uploads())
+
+    assert maximum == 1
 
 
 def test_startup_preserves_the_runtime_backend_default_when_override_is_empty():
@@ -277,3 +372,4 @@ def test_agent_session_adds_configured_playwright_mcp_server(tmp_path: Path, mon
         "command": "bunx",
         "args": ["@playwright/mcp", "--user-data-dir", "/app/chrome-profile", "--headless", "--no-sandbox"],
     }
+    assert options["cwd"] == str(tmp_path / "workspace")

@@ -98,6 +98,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _agent_vm_owner_hash(uid: str) -> str:
+    return hashlib.sha256(uid.encode("utf-8")).hexdigest()[:20]
+
+
 def _project() -> str:
     project = os.getenv("GCE_PROJECT_ID")
     if not project:
@@ -148,6 +152,7 @@ def _agent_vm_startup_metadata(bucket: str) -> dict[str, str]:
         "omi-agent-image-digest": image_digest,
         "omi-agent-startup-sha256": startup_sha256,
         "omi-agent-boot-image": boot_image,
+        "omi-agent-state-required": "true",
     }
     return metadata
 
@@ -335,7 +340,13 @@ async def _wait_for_vm_ready(ip: str, auth_token: str) -> None:
                     await asyncio.sleep(_READY_POLL_SECONDS)
                     continue
                 response = await client.get(url, headers=headers)
-                if response.status_code == 200 and response.json().get("status") == "ok":
+                payload = response.json()
+                if (
+                    response.status_code == 200
+                    and isinstance(payload, dict)
+                    and payload.get("status") == "ok"
+                    and payload.get("stateReady") is True
+                ):
                     return
             except (httpx.HTTPError, ValueError):
                 pass
@@ -362,7 +373,13 @@ def _ip(instance: dict[str, Any]) -> str | None:
 
 
 async def _create_vm(
-    project: str, source_image: str, bucket: str, vm_name: str, auth_token: str, service_account: str
+    project: str,
+    source_image: str,
+    bucket: str,
+    vm_name: str,
+    auth_token: str,
+    service_account: str,
+    owner_hash: str,
 ) -> str:
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{_ZONE}/instances"
     startup_metadata = _agent_vm_startup_metadata(bucket)
@@ -378,7 +395,22 @@ async def _create_vm(
                     "diskSizeGb": "50",
                     "diskType": f"zones/{_ZONE}/diskTypes/pd-balanced",
                 },
-            }
+            },
+            {
+                "boot": False,
+                "deviceName": "omi-agent-state",
+                "mode": "READ_WRITE",
+                "autoDelete": True,
+                "initializeParams": {
+                    "diskName": f"{vm_name}-state",
+                    "diskSizeGb": "50",
+                    "diskType": f"zones/{_ZONE}/diskTypes/pd-balanced",
+                    "labels": {
+                        "omi-agent-role": "state",
+                        "omi-agent-owner": owner_hash,
+                    },
+                },
+            },
         ],
         "serviceAccounts": [
             {
@@ -610,7 +642,15 @@ async def _provision_background(
         logger.info("Skipping Agent VM create after deletion/owner transition for uid=%s", uid)
         return
     try:
-        ip = await _create_vm(project, source_image, bucket, vm_name, auth_token, service_account)
+        ip = await _create_vm(
+            project,
+            source_image,
+            bucket,
+            vm_name,
+            auth_token,
+            service_account,
+            _agent_vm_owner_hash(uid),
+        )
     except AgentVmCreateOutcomeUnknown as exc:
         logger.error("Agent VM provisioning failed for uid=%s: %s", uid, exc)
         if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
@@ -659,7 +699,7 @@ async def provision_agent_vm(
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     generation = uuid.uuid4().hex
-    vm_name = f"omi-agent-{hashlib.sha256(uid.encode('utf-8')).hexdigest()[:20]}-{generation[:8]}"
+    vm_name = f"omi-agent-{_agent_vm_owner_hash(uid)}-{generation[:8]}"
     auth_token = f"omi-{generation}"
     created_at = _now()
     candidate = {

@@ -25,7 +25,10 @@ role_id="omiAgentVmReconciler"
 role="projects/${project}/roles/${role_id}"
 operations_role_id="omiAgentVmReconcilerOperations"
 operations_role="projects/${project}/roles/${operations_role_id}"
-permissions="compute.disks.create,compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
+# State-disk creation/clone and attachment are carried by the same narrow
+# custom role as the existing VM lifecycle permissions. The project bindings
+# below still constrain Disk and Instance resources to omi-agent-* names.
+permissions="compute.disks.create,compute.disks.delete,compute.disks.get,compute.disks.use,compute.disks.useReadOnly,compute.images.useReadOnly,compute.instances.attachDisk,compute.instances.create,compute.instances.delete,compute.instances.detachDisk,compute.instances.get,compute.instances.setDiskAutoDelete,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
 subnetwork_role_id="omiAgentVmReconcilerSubnetwork"
 subnetwork_role="projects/${project}/roles/${subnetwork_role_id}"
 subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"
@@ -60,13 +63,14 @@ fi
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
   --condition="title=Agent VM reconciler instance scope,description=Only omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Instance' && resource.name.startsWith('projects/${project}/zones/${zone}/instances/omi-agent-')"
-# Boot-image drift verification reads each VM's boot disk via compute.disks.get.
-# Disk reads are evaluated as compute.googleapis.com/Disk resources, so the
-# instance-scoped condition above does not cover them.  Agent VM boot disks are
-# auto-generated from the instance name, so the same omi-agent- prefix applies.
+# Boot-image drift verification and the persistent state-disk/clone path use
+# compute.googleapis.com/Disk permissions. Disk permissions are evaluated as
+# Disk resources, so the instance-scoped condition above does not cover them.
+# Agent VM disks are named from the owner/migration identity, so the same
+# omi-agent- prefix applies to boot, state, and temporary clone disks.
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
-  --condition="title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
+  --condition="title=Agent VM reconciler disk scope,description=Boot, state, and temporary clone disks for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
 # An explicit dev migration may create a replacement only from the immutable
 # Agent VM image family.  Image use is evaluated against the Image resource,
 # not the instance/disk scopes above.

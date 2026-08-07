@@ -147,7 +147,7 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
     assert "REFUSED:" in script
     assert (
-        "compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
+        "compute.disks.create,compute.disks.delete,compute.disks.get,compute.disks.use,compute.disks.useReadOnly,compute.images.useReadOnly,compute.instances.attachDisk,compute.instances.create,compute.instances.delete,compute.instances.detachDisk,compute.instances.get,compute.instances.setDiskAutoDelete,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
         in script
     )
     assert 'subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"' in script
@@ -245,6 +245,18 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
         "--role=roles/datastore.user --condition=None"
     ) in commands
+
+
+def test_reconciler_runbook_documents_state_disk_clone_browser_and_production_gates():
+    runbook = _read("docs/runbooks/agent-vm-fleet-reconciler.md")
+
+    assert "persistent state disk" in runbook
+    assert "source clone" in runbook
+    assert "explicit ephemeral browser policy" in runbook
+    assert "autoDelete: true" in runbook
+    assert "temporary clone" in runbook
+    assert "identity-fenced cleanup" in runbook
+    assert "Production remains disabled until dev proof" in runbook
 
 
 def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(tmp_path):

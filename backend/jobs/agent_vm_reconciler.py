@@ -35,6 +35,8 @@ from services.agent_vm_lifecycle import (
     AgentVmLeaseLost,
     AgentVmRelease,
     GceAgentVmClient,
+    STATE_DISK_DEVICE_NAME,
+    STATE_SOURCE_DEVICE_NAME,
     active_session_count,
     begin_boot_image_migration,
     claim_boot_image_migration_retirement,
@@ -51,6 +53,7 @@ from services.agent_vm_lifecycle import (
     renew_reconciler_run_lease,
     renew_vm_lease,
     record_boot_image_candidate,
+    record_boot_image_state_disks,
     retry_delay_seconds,
     rollout_selected,
     update_vm_reconcile,
@@ -136,6 +139,52 @@ def _boot_image_candidate_name(vm_name: str, migration_id: str) -> str:
     # GCE names are limited to 63 characters and the predecessor identity is
     # also recorded independently in the durable migration journal.
     return f"{vm_name[: 63 - len(suffix)]}{suffix}"
+
+
+def _disk_attachment(instance: Mapping[str, Any], device_name: str) -> Mapping[str, Any] | None:
+    disks = instance.get("disks")
+    if not isinstance(disks, list):
+        return None
+    return next(
+        (
+            disk
+            for disk in disks
+            if isinstance(disk, Mapping) and disk.get("deviceName") == device_name and disk.get("boot") is not True
+        ),
+        None,
+    )
+
+
+def _boot_disk_attachment(instance: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    disks = instance.get("disks")
+    if not isinstance(disks, list):
+        return None
+    return next((disk for disk in disks if isinstance(disk, Mapping) and disk.get("boot") is True), None)
+
+
+def _disk_name(source: Any) -> str:
+    if not isinstance(source, str) or not source.strip():
+        raise RuntimeError("Agent VM disk source is unavailable")
+    name = source.rstrip("/").rsplit("/", 1)[-1]
+    if not re.fullmatch(r"[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?", name):
+        raise RuntimeError("Agent VM disk source name is invalid")
+    return name
+
+
+def _state_disk_name(migration_id: str) -> str:
+    return f"omi-agent-state-{migration_id[:16]}"
+
+
+def _source_clone_disk_name(migration_id: str) -> str:
+    return f"omi-agent-source-{migration_id[:16]}"
+
+
+def _owner_disk_label(uid: str) -> str:
+    return hashlib.sha256(uid.encode()).hexdigest()[:20]
+
+
+def _disk_source(project: str, zone: str, disk_name: str) -> str:
+    return f"projects/{project}/zones/{zone}/disks/{disk_name}"
 
 
 def _init_firebase() -> None:
@@ -403,6 +452,141 @@ async def _boot_image_drift(
     return None
 
 
+async def _active_state_disk_info(
+    api: GceAgentVmClient,
+    uid: str,
+    vm: Mapping[str, Any],
+    instance: Mapping[str, Any],
+) -> dict[str, str] | None:
+    """Validate the active owner state disk and repair its auto-delete policy."""
+    attachment = _disk_attachment(instance, STATE_DISK_DEVICE_NAME)
+    expected = vm.get("stateDisk")
+    if attachment is None:
+        if isinstance(expected, Mapping):
+            raise RuntimeError("active Agent VM lost its journaled state disk attachment")
+        return None
+    disk_name = _disk_name(attachment.get("source"))
+    disk = await api.get_disk(disk_name)
+    if disk is None:
+        raise RuntimeError("active Agent VM state disk is unavailable")
+    disk_id = str(disk.get("id") or "")
+    labels = disk.get("labels")
+    expected_name = expected.get("diskName") if isinstance(expected, Mapping) else None
+    expected_id = expected.get("diskId") if isinstance(expected, Mapping) else None
+    users = disk.get("users")
+    expected_user = api.instance_url(str(vm["vmName"])).split("https://compute.googleapis.com/compute/v1/")[-1]
+    normalized_users = [str(user).split("/compute/v1/")[-1] for user in users] if isinstance(users, list) else []
+    if (
+        not disk_id
+        or (expected_name and expected_name != disk_name)
+        or (expected_id and str(expected_id) != disk_id)
+        or not isinstance(labels, Mapping)
+        or labels.get("omi-agent-role") != "state"
+        or labels.get("omi-agent-owner") != _owner_disk_label(uid)
+        or normalized_users != [expected_user]
+    ):
+        raise RuntimeError("active Agent VM state disk identity is ambiguous")
+    if attachment.get("autoDelete") is not True:
+        await api.set_disk_auto_delete(str(vm["vmName"]), STATE_DISK_DEVICE_NAME, True)
+    return {"deviceName": STATE_DISK_DEVICE_NAME, "diskName": disk_name, "diskId": disk_id}
+
+
+async def _rollback_failed_boot_image_candidate(
+    api: GceAgentVmClient,
+    uid: str,
+    predecessor_name: str,
+    context: Mapping[str, str],
+) -> bool:
+    """Restore the predecessor ownership boundary after any pre-cutover failure.
+
+    The context is populated before the first detach. Every provider mutation
+    remains fenced by numeric IDs plus migration/owner labels, so a partial
+    retry cannot attach or delete a same-named foreign resource.
+    """
+    migration_id = context.get("migrationId", "")
+    candidate_name = context.get("vmName", "")
+    candidate_id = context.get("instanceId", "")
+    old_instance_id = context.get("oldInstanceId", "")
+    state_disk_name = context.get("stateDiskName", "")
+    state_disk_id = context.get("stateDiskId", "")
+    owner_label = context.get("ownerLabel", "")
+    reused = context.get("stateDiskReused") == "true"
+    if not all((migration_id, candidate_name, old_instance_id, state_disk_name, state_disk_id, owner_label)):
+        return False
+
+    candidate = await api.get_instance(candidate_name)
+    if candidate is not None:
+        labels = candidate.get("labels")
+        observed_id = str(candidate.get("id") or "")
+        if (
+            not observed_id
+            or (candidate_id and candidate_id != observed_id)
+            or not isinstance(labels, Mapping)
+            or labels.get("omi-agent-migration") != migration_id
+            or labels.get("omi-agent-predecessor") != old_instance_id
+        ):
+            return False
+        candidate_id = observed_id
+        if not await api.delete_replacement(candidate_name, candidate_id, migration_id):
+            return False
+
+    state_disk = await api.get_disk(state_disk_name)
+    if state_disk is None:
+        return not reused
+    labels = state_disk.get("labels")
+    if (
+        str(state_disk.get("id") or "") != state_disk_id
+        or not isinstance(labels, Mapping)
+        or labels.get("omi-agent-migration") != migration_id
+        or labels.get("omi-agent-role") != "state"
+        or labels.get("omi-agent-owner") != owner_label
+    ):
+        return False
+    users = state_disk.get("users")
+    if isinstance(users, list) and users:
+        return False
+
+    if reused:
+        predecessor = await api.get_instance(predecessor_name)
+        predecessor_labels = predecessor.get("labels") if isinstance(predecessor, Mapping) else None
+        if (
+            not isinstance(predecessor, Mapping)
+            or str(predecessor.get("id") or "") != old_instance_id
+            or not isinstance(predecessor_labels, Mapping)
+            or predecessor_labels.get("omi-agent-migration") != migration_id
+        ):
+            return False
+        attachment = _disk_attachment(predecessor, STATE_DISK_DEVICE_NAME)
+        if attachment is None:
+            await api.attach_disk(
+                predecessor_name,
+                _disk_source(api.project, api.zone, state_disk_name),
+                auto_delete=True,
+            )
+        elif _disk_name(attachment.get("source")) != state_disk_name:
+            return False
+        elif attachment.get("autoDelete") is not True:
+            await api.set_disk_auto_delete(predecessor_name, STATE_DISK_DEVICE_NAME, True)
+    elif not await api.delete_disk(state_disk_name, state_disk_id, migration_id, "state", owner_label):
+        return False
+
+    source_clone_name = context.get("sourceCloneDiskName", "")
+    source_clone_id = context.get("sourceCloneDiskId", "")
+    if (
+        source_clone_name
+        and source_clone_id
+        and not await api.delete_disk(
+            source_clone_name,
+            source_clone_id,
+            migration_id,
+            "source",
+            owner_label,
+        )
+    ):
+        return False
+    return True
+
+
 async def _replace_stopped_boot_image_drift(
     uid: str,
     vm: Mapping[str, Any],
@@ -436,6 +620,14 @@ async def _replace_stopped_boot_image_drift(
         return ReconcileResult(uid, "recreate_required", "predecessor instance identity is unavailable")
     migration_id = _boot_image_migration_id(uid, vm_name, old_instance_id, release.release_id)
     candidate_name = _boot_image_candidate_name(vm_name, migration_id)
+    existing_state_attachment = _disk_attachment(instance, STATE_DISK_DEVICE_NAME)
+    state_disk_name = (
+        _disk_name(existing_state_attachment.get("source"))
+        if isinstance(existing_state_attachment, Mapping)
+        else _state_disk_name(migration_id)
+    )
+    state_disk_reused = existing_state_attachment is not None
+    source_clone_name = "" if state_disk_reused else _source_clone_disk_name(migration_id)
     candidate_token = secrets.token_urlsafe(32)
     migration = {
         "migrationId": migration_id,
@@ -448,6 +640,9 @@ async def _replace_stopped_boot_image_drift(
         "targetRelease": release.release_id,
         "targetBootImage": release.boot_image,
         "soakSeconds": plan.soak_seconds,
+        "stateDiskName": state_disk_name,
+        "stateDiskReused": state_disk_reused,
+        "sourceCloneDiskName": source_clone_name,
     }
     journal = await asyncio.to_thread(
         begin_boot_image_migration, uid, vm_name, zone, auth_token, owner, migration_id, migration
@@ -457,6 +652,26 @@ async def _replace_stopped_boot_image_drift(
     candidate_token = journal.get("candidateAuthToken") if isinstance(journal.get("candidateAuthToken"), str) else ""
     if not candidate_token:
         raise RuntimeError("boot-image migration journal has no candidate token")
+    state_disk_name = str(journal.get("stateDiskName") or "")
+    state_disk_reused = journal.get("stateDiskReused") is True
+    source_clone_name = str(journal.get("sourceCloneDiskName") or "")
+    if not state_disk_name or (not state_disk_reused and not source_clone_name):
+        raise RuntimeError("boot-image migration journal has no durable state disk plan")
+    if cleanup_context is not None and journal.get("stateDiskId"):
+        cleanup_context.update(
+            {
+                "vmName": candidate_name,
+                "instanceId": str(journal.get("candidateInstanceId") or ""),
+                "oldInstanceId": old_instance_id,
+                "migrationId": migration_id,
+                "stateDiskName": state_disk_name,
+                "stateDiskId": str(journal["stateDiskId"]),
+                "stateDiskReused": "true" if state_disk_reused else "false",
+                "ownerLabel": _owner_disk_label(uid),
+                "sourceCloneDiskName": source_clone_name,
+                "sourceCloneDiskId": str(journal.get("sourceCloneDiskId") or ""),
+            }
+        )
     await api.set_migration_labels(vm_name, instance, migration_id)
     candidate = await api.get_instance(candidate_name)
     if candidate is None:
@@ -464,7 +679,114 @@ async def _replace_stopped_boot_image_drift(
             recover_missing_boot_image_candidate, uid, vm_name, zone, auth_token, owner, migration_id
         ):
             return ReconcileResult(uid, "stale", "missing candidate recovery fence changed")
-        await api.create_replacement(candidate_name, instance, release, candidate_token, migration_id)
+        owner_label = _owner_disk_label(uid)
+        state_disk = await api.get_disk(state_disk_name)
+        if state_disk_reused:
+            if state_disk is None:
+                raise RuntimeError("journaled Agent VM state disk is missing")
+            labels = state_disk.get("labels")
+            expected_state = vm.get("stateDisk")
+            expected_state_id = expected_state.get("diskId") if isinstance(expected_state, Mapping) else None
+            users = state_disk.get("users")
+            expected_user = api.instance_url(vm_name).split("https://compute.googleapis.com/compute/v1/")[-1]
+            normalized_users = (
+                [str(user).split("/compute/v1/")[-1] for user in users] if isinstance(users, list) else []
+            )
+            if (
+                str(state_disk.get("id") or "") == ""
+                or (expected_state_id and str(state_disk.get("id")) != str(expected_state_id))
+                or not isinstance(labels, Mapping)
+                or labels.get("omi-agent-role") != "state"
+                or labels.get("omi-agent-owner") != owner_label
+                or any(user != expected_user for user in normalized_users)
+            ):
+                raise RuntimeError("journaled Agent VM state disk identity is ambiguous")
+            if cleanup_context is not None:
+                cleanup_context.update(
+                    {
+                        "vmName": candidate_name,
+                        "instanceId": "",
+                        "oldInstanceId": old_instance_id,
+                        "migrationId": migration_id,
+                        "stateDiskName": state_disk_name,
+                        "stateDiskId": str(state_disk["id"]),
+                        "stateDiskReused": "true",
+                        "ownerLabel": owner_label,
+                        "sourceCloneDiskName": "",
+                        "sourceCloneDiskId": "",
+                    }
+                )
+            if existing_state_attachment is not None:
+                await api.set_disk_auto_delete(vm_name, STATE_DISK_DEVICE_NAME, False)
+                await api.detach_disk(vm_name, STATE_DISK_DEVICE_NAME)
+        else:
+            state_disk = await api.create_disk(
+                state_disk_name,
+                migration_id=migration_id,
+                role="state",
+                owner_hash=owner_label,
+            )
+        if state_disk is None:
+            raise RuntimeError("Agent VM state disk is unavailable")
+        if cleanup_context is not None and not state_disk_reused:
+            cleanup_context.update(
+                {
+                    "vmName": candidate_name,
+                    "instanceId": "",
+                    "oldInstanceId": old_instance_id,
+                    "migrationId": migration_id,
+                    "stateDiskName": state_disk_name,
+                    "stateDiskId": str(state_disk["id"]),
+                    "stateDiskReused": "false",
+                    "ownerLabel": owner_label,
+                    "sourceCloneDiskName": source_clone_name,
+                    "sourceCloneDiskId": "",
+                }
+            )
+        source_clone: Mapping[str, Any] | None = None
+        if not state_disk_reused:
+            boot_attachment = _boot_disk_attachment(instance)
+            if not isinstance(boot_attachment, Mapping):
+                raise RuntimeError("predecessor boot disk is unavailable for state migration")
+            boot_source = boot_attachment.get("source")
+            if not isinstance(boot_source, str) or not boot_source:
+                raise RuntimeError("predecessor boot disk source is unavailable")
+            source_clone = await api.create_disk(
+                source_clone_name,
+                migration_id=migration_id,
+                role="source",
+                owner_hash=owner_label,
+                source_disk=boot_source,
+            )
+            if cleanup_context is not None:
+                cleanup_context["sourceCloneDiskId"] = str(source_clone["id"])
+        prepared_state = {
+            "stateDiskName": state_disk_name,
+            "stateDiskId": str(state_disk.get("id") or ""),
+            "stateDiskReused": state_disk_reused,
+            "sourceCloneDiskName": source_clone_name,
+            **({"sourceCloneDiskId": str(source_clone.get("id") or "")} if isinstance(source_clone, Mapping) else {}),
+        }
+        if not await asyncio.to_thread(
+            record_boot_image_state_disks,
+            uid,
+            vm_name,
+            zone,
+            auth_token,
+            owner,
+            migration_id,
+            prepared_state,
+        ):
+            raise RuntimeError("boot-image state disk journal fence changed")
+        await api.create_replacement(
+            candidate_name,
+            instance,
+            release,
+            candidate_token,
+            migration_id,
+            _disk_source(api.project, zone, state_disk_name),
+            _disk_source(api.project, zone, source_clone_name) if source_clone_name else None,
+        )
         candidate = await api.get_instance(candidate_name)
     if candidate is None or str(candidate.get("id") or "") == "":
         raise RuntimeError("replacement candidate is unavailable")
@@ -481,12 +803,45 @@ async def _replace_stopped_boot_image_drift(
         or candidate_service_account != release.service_account
     ):
         raise RuntimeError("replacement candidate identity is ambiguous")
+    state_attachment = _disk_attachment(candidate, STATE_DISK_DEVICE_NAME)
+    if not isinstance(state_attachment, Mapping) or _disk_name(state_attachment.get("source")) != state_disk_name:
+        raise RuntimeError("replacement candidate state disk identity is ambiguous")
+    state_disk = await api.get_disk(state_disk_name)
+    if state_disk is None or str(state_disk.get("id") or "") == "":
+        raise RuntimeError("replacement candidate state disk is unavailable")
+    expected_state_id = str(journal.get("stateDiskId") or "")
+    if expected_state_id and str(state_disk.get("id")) != expected_state_id:
+        raise RuntimeError("replacement candidate state disk ID changed")
+    source_clone = _disk_attachment(candidate, STATE_SOURCE_DEVICE_NAME)
+    if source_clone_name and (
+        not isinstance(source_clone, Mapping) or _disk_name(source_clone.get("source")) != source_clone_name
+    ):
+        raise RuntimeError("replacement candidate source clone identity is ambiguous")
+    source_clone_disk_id = ""
+    if source_clone_name:
+        source_clone_disk = await api.get_disk(source_clone_name)
+        source_clone_disk_id = str(source_clone_disk.get("id") or "") if isinstance(source_clone_disk, Mapping) else ""
+        if not source_clone_disk_id:
+            raise RuntimeError("replacement candidate source clone is unavailable")
     candidate_boot_drift = await _boot_image_drift(api, candidate, release)
     if candidate_boot_drift:
         raise RuntimeError("replacement candidate boot image does not match the pinned release")
     candidate_id = str(candidate["id"])
     if cleanup_context is not None:
-        cleanup_context.update({"vmName": candidate_name, "instanceId": candidate_id, "migrationId": migration_id})
+        cleanup_context.update(
+            {
+                "vmName": candidate_name,
+                "instanceId": candidate_id,
+                "migrationId": migration_id,
+                "oldInstanceId": old_instance_id,
+                "stateDiskName": state_disk_name,
+                "stateDiskId": str(state_disk["id"]),
+                "stateDiskReused": "true" if state_disk_reused else "false",
+                "ownerLabel": _owner_disk_label(uid),
+                "sourceCloneDiskName": source_clone_name,
+                "sourceCloneDiskId": source_clone_disk_id,
+            }
+        )
     if not await asyncio.to_thread(
         record_boot_image_candidate, uid, vm_name, zone, auth_token, owner, migration_id, candidate_id
     ):
@@ -494,7 +849,12 @@ async def _replace_stopped_boot_image_drift(
     private_ip = api.private_instance_ip(candidate)
     if not private_ip:
         raise RuntimeError("replacement candidate has no usable private IP")
-    await api.wait_for_runtime(private_ip, candidate_token, release)
+    await api.wait_for_runtime(
+        private_ip,
+        candidate_token,
+        release,
+        expected_state_migration_id=migration_id,
+    )
     # The lifecycle lease blocks new proxy admission.  Recheck pre-existing
     # sessions immediately before the irreversible pointer swap.
     if await asyncio.to_thread(active_session_count, uid, vm_name):
@@ -506,15 +866,27 @@ async def _replace_stopped_boot_image_drift(
         "authToken": candidate_token,
         "instanceId": candidate_id,
         "privateIp": private_ip,
+        "stateDisk": {
+            "deviceName": STATE_DISK_DEVICE_NAME,
+            "diskName": state_disk_name,
+            "diskId": str(state_disk["id"]),
+        },
         **({"ip": api.instance_ip(candidate)} if api.instance_ip(candidate) else {}),
         "reconcile": {
-            "state": "ready",
+            # Block proxy admission until the journaled soak completes. No
+            # owner work can land on the candidate during the rollback window.
+            "state": "migration_soaking",
             "releaseId": release.release_id,
             "observedRelease": release.release_id,
             "observedImageDigest": release.image_digest,
             "observedStartupSha256": release.startup_sha256,
             "migration": {
                 **migration,
+                "stateDiskName": state_disk_name,
+                "stateDiskId": str(state_disk["id"]),
+                "stateDiskReused": state_disk_reused,
+                "sourceCloneDiskName": source_clone_name,
+                "sourceCloneDiskId": source_clone_disk_id,
                 "candidateInstanceId": candidate_id,
                 "cutoverAt": time.time(),
                 "cutoverPending": True,
@@ -525,8 +897,28 @@ async def _replace_stopped_boot_image_drift(
         cutover_boot_image_migration, uid, vm_name, zone, auth_token, owner, migration_id, candidate_vm
     ):
         return ReconcileResult(uid, "stale", "boot-image cutover fence changed; predecessor remains active")
+    if source_clone_name:
+        try:
+            await api.detach_disk(candidate_name, STATE_SOURCE_DEVICE_NAME)
+            if not await api.delete_disk(
+                source_clone_name,
+                source_clone_disk_id,
+                migration_id,
+                "source",
+                _owner_disk_label(uid),
+            ):
+                logger.warning("Agent VM source clone cleanup fence changed for uid=%s", uid)
+        except Exception:
+            logger.exception("Agent VM source clone cleanup deferred for uid=%s", uid)
     if cleanup_context is not None:
         cleanup_context.clear()
+    try:
+        await api.set_disk_auto_delete(candidate_name, STATE_DISK_DEVICE_NAME, True)
+    except Exception:
+        # The active owner pointer already references this exact disk. Leaving
+        # auto-delete disabled preserves data; the next reconciliation repairs
+        # the privacy cleanup invariant before reporting the VM ready.
+        logger.exception("Agent VM state disk auto-delete repair deferred for uid=%s", uid)
     return ReconcileResult(uid, "migrated", f"cut over to {candidate_name}; predecessor retained for soak")
 
 
@@ -536,6 +928,7 @@ async def _retire_soaked_boot_image_predecessor(
     *,
     owner: str,
     api: GceAgentVmClient,
+    release: AgentVmRelease,
 ) -> ReconcileResult | None:
     """Retire a migrated predecessor only after its durable soak deadline.
 
@@ -563,6 +956,39 @@ async def _retire_soaked_boot_image_predecessor(
         and candidate_id == str(vm.get("instanceId") or "")
     ):
         return ReconcileResult(uid, "retry", "migration retirement record is incomplete")
+    candidate = await api.get_instance(str(vm["vmName"]))
+    if candidate is None or str(candidate.get("id") or "") != candidate_id:
+        return ReconcileResult(uid, "soaking", "replacement candidate identity is unavailable during soak")
+    private_ip = api.private_instance_ip(candidate)
+    if (
+        str(candidate.get("status") or "") != "RUNNING"
+        or not private_ip
+        or not await api.runtime_is_current(
+            private_ip,
+            str(vm["authToken"]),
+            release,
+            expected_state_migration_id=migration_id,
+        )
+    ):
+        return ReconcileResult(uid, "soaking", "replacement candidate is not healthy during soak")
+    source_clone_name = migration.get("sourceCloneDiskName")
+    source_clone_id = migration.get("sourceCloneDiskId")
+    if isinstance(source_clone_name, str) and source_clone_name:
+        source_disk = await api.get_disk(source_clone_name)
+        if source_disk is not None:
+            if not isinstance(source_clone_id, str) or str(source_disk.get("id") or "") != source_clone_id:
+                return ReconcileResult(uid, "stale", "migration source clone identity changed before cleanup")
+            attachment = _disk_attachment(candidate or {}, STATE_SOURCE_DEVICE_NAME)
+            if attachment is not None:
+                await api.detach_disk(str(vm["vmName"]), STATE_SOURCE_DEVICE_NAME)
+            if not await api.delete_disk(
+                source_clone_name,
+                source_clone_id,
+                migration_id,
+                "source",
+                _owner_disk_label(uid),
+            ):
+                return ReconcileResult(uid, "stale", "migration source clone cleanup fence changed")
     # A lease for the predecessor must have expired before deleting it. New
     # sessions can only bind to the candidate after the pointer cutover.
     if await asyncio.to_thread(active_session_count, uid, old_vm_name):
@@ -659,6 +1085,10 @@ async def reconcile_one(
         return ReconcileResult(uid, "drift" if reasons else "ready", ",".join(sorted(set(reasons))))
     reconcile_raw = vm.get("reconcile")
     reconcile_state = reconcile_raw if isinstance(reconcile_raw, Mapping) else {}
+    active_migration = reconcile_state.get("migration")
+    post_cutover_migration = isinstance(active_migration, Mapping) and str(
+        active_migration.get("candidateInstanceId") or ""
+    ) == str(vm.get("instanceId") or "")
     missing_since_raw = reconcile_state.get("missingSince")
     missing_since = float(missing_since_raw) if isinstance(missing_since_raw, (int, float)) else None
     start_requested = bool(reconcile_state.get("startRequested"))
@@ -771,10 +1201,10 @@ async def reconcile_one(
                 "recreate_required",
                 f"{reason}; operator must recreate VM from exact immutable image {release.boot_image}",
             )
-        if boot_image_migration is not None:
-            retirement = await _retire_soaked_boot_image_predecessor(uid, vm, owner=owner, api=api)
-            if retirement is not None:
-                return retirement
+        state_disk_info = await _active_state_disk_info(api, uid, vm, instance)
+        retirement = await _retire_soaked_boot_image_predecessor(uid, vm, owner=owner, api=api, release=release)
+        if retirement is not None:
+            return retirement
         reasons = drift_reasons(instance, release)
         if str(instance.get("status")) == "RUNNING":
             private_ip = api.private_instance_ip(instance)
@@ -826,7 +1256,10 @@ async def reconcile_one(
                     "missingSince": DELETE_FIELD,
                     **clear_vm_reconcile_lease_fields(),
                 },
-                vm_fields={"status": "stopped"},
+                vm_fields={
+                    "status": "stopped",
+                    **({"stateDisk": state_disk_info} if state_disk_info else {}),
+                },
                 consume_start_request_at=observed_start_request_at,
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording stopped VM")
@@ -885,6 +1318,7 @@ async def reconcile_one(
             vm_fields={
                 "status": "ready",
                 "privateIp": private_ip,
+                **({"stateDisk": state_disk_info} if state_disk_info else {}),
                 **({"ip": public_ip} if public_ip else {}),
             },
             consume_start_request_at=observed_start_request_at,
@@ -903,31 +1337,39 @@ async def reconcile_one(
         )
         retry_at = time.time() + retry_delay_seconds(retry_count)
         retry_state = "quarantined" if retry_count >= 3 else "retry"
-        if retry_state == "quarantined" and failed_candidate:
+        cleanup_succeeded = not post_cutover_migration
+        if failed_candidate:
             try:
-                deleted = await api.delete_replacement(
-                    failed_candidate["vmName"],
-                    failed_candidate["instanceId"],
-                    failed_candidate["migrationId"],
-                )
-                if not deleted:
-                    logger.warning("Agent VM migration candidate cleanup fence changed for uid=%s", uid)
-                elif not await asyncio.to_thread(
-                    mark_boot_image_migration_candidate_deleted,
+                cleanup_succeeded = await _rollback_failed_boot_image_candidate(
+                    api,
                     uid,
                     vm_name,
-                    zone,
-                    auth_token,
-                    owner,
-                    failed_candidate["migrationId"],
-                    failed_candidate["instanceId"],
-                ):
-                    logger.warning("Agent VM migration candidate journal fence changed after cleanup for uid=%s", uid)
+                    failed_candidate,
+                )
+                if not cleanup_succeeded:
+                    logger.error("Agent VM migration rollback fence changed for uid=%s", uid)
+                elif failed_candidate.get("instanceId"):
+                    if not await asyncio.to_thread(
+                        mark_boot_image_migration_candidate_deleted,
+                        uid,
+                        vm_name,
+                        zone,
+                        auth_token,
+                        owner,
+                        failed_candidate["migrationId"],
+                        failed_candidate["instanceId"],
+                    ):
+                        logger.warning(
+                            "Agent VM migration candidate journal fence changed after cleanup for uid=%s", uid
+                        )
             except Exception:
-                # Quarantine still protects the predecessor pointer. Record the
-                # provider cleanup failure without allowing it to hide the
-                # original candidate-readiness failure.
+                cleanup_succeeded = False
                 logger.exception("Agent VM migration candidate cleanup failed for uid=%s", uid)
+        if not cleanup_succeeded:
+            # Never reopen proxy admission while ownership of the durable disk
+            # is ambiguous. Operator repair or a later successful retry must
+            # restore the predecessor boundary first.
+            retry_state = "quarantined"
         if not await _update_reconcile(
             uid,
             vm_name,
@@ -942,8 +1384,8 @@ async def reconcile_one(
                 # until terminal quarantine so the scheduled reconciler can
                 # honor retryAt without requiring another client request.
                 "lease": DELETE_FIELD,
-                "drainRequested": DELETE_FIELD,
-                "drainRequestedAt": DELETE_FIELD,
+                "drainRequested": True if not cleanup_succeeded else DELETE_FIELD,
+                "drainRequestedAt": time.time() if not cleanup_succeeded else DELETE_FIELD,
             },
             consume_start_request_at=observed_start_request_at if retry_state == "quarantined" else None,
             force_consume_start_request=retry_state == "quarantined",

@@ -628,6 +628,8 @@ async def test_agent_vm_rejects_paywalled_desktop_user(monkeypatch):
 @pytest.mark.asyncio
 async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_scope(monkeypatch):
     requests = []
+    owner_hash = "a" * 20
+    vm_name = f"omi-agent-{owner_hash}-12345678"
 
     async def fake_gce_request(method, url, token, body=None):
         requests.append((method, url, body))
@@ -654,9 +656,10 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
         "project",
         "source-image",
         "bucket",
-        "omi-agent-user",
+        vm_name,
         "omi-token",
         "agent-bootstrap@example.iam.gserviceaccount.com",
+        owner_hash,
     )
 
     assert ip == "203.0.113.10"
@@ -667,6 +670,34 @@ async def test_create_vm_attaches_dedicated_service_account_with_cloud_platform_
             "scopes": ["https://www.googleapis.com/auth/cloud-platform"],
         }
     ]
+    assert requests[0][2]["disks"] == [
+        {
+            "boot": True,
+            "autoDelete": True,
+            "initializeParams": {
+                "sourceImage": "source-image",
+                "diskSizeGb": "50",
+                "diskType": "zones/us-central1-a/diskTypes/pd-balanced",
+            },
+        },
+        {
+            "boot": False,
+            "deviceName": "omi-agent-state",
+            "mode": "READ_WRITE",
+            "autoDelete": True,
+            "initializeParams": {
+                "diskName": f"{vm_name}-state",
+                "diskSizeGb": "50",
+                "diskType": "zones/us-central1-a/diskTypes/pd-balanced",
+                "labels": {
+                    "omi-agent-role": "state",
+                    "omi-agent-owner": owner_hash,
+                },
+            },
+        },
+    ]
+    metadata = {item["key"]: item["value"] for item in requests[0][2]["metadata"]["items"]}
+    assert metadata["omi-agent-state-required"] == "true"
 
 
 def test_stop_broker_rejects_identity_from_the_wrong_project_or_service_account(monkeypatch):
@@ -903,6 +934,7 @@ def test_new_vm_startup_metadata_contains_release_checksum_and_boot_image(monkey
     assert "sha256sum /tmp/omi-startup.sh" in metadata["startup-script"]
     assert metadata["omi-agent-startup-sha256"] == "c" * 64
     assert metadata["omi-agent-boot-image"].endswith("/omi-agent-20260805")
+    assert metadata["omi-agent-state-required"] == "true"
 
 
 def test_new_vm_requires_an_immutable_boot_image_and_complete_release_contract(monkeypatch):
@@ -931,10 +963,40 @@ async def test_health_readiness_requires_unauthenticated_rejection(monkeypatch):
             calls.append(headers)
             if headers is None:
                 return httpx.Response(401)
-            return httpx.Response(200, json={"status": "ok"})
+            return httpx.Response(200, json={"status": "ok", "stateReady": True})
 
     monkeypatch.setattr(desktop_agent_vm.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
     await desktop_agent_vm._wait_for_vm_ready("203.0.113.10", "omi-token")
+
+    assert calls == [None, {"Authorization": "Bearer omi-token"}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [{"status": "ok"}, {"status": "ok", "stateReady": False}])
+async def test_health_readiness_fails_closed_without_state_ready(monkeypatch, payload):
+    calls = []
+    clock = iter([0.0, 0.0, 2.0])
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url, headers=None):
+            calls.append(headers)
+            if headers is None:
+                return httpx.Response(401)
+            return httpx.Response(200, json=payload)
+
+    monkeypatch.setattr(desktop_agent_vm.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
+    monkeypatch.setattr(desktop_agent_vm, "time", type("FakeTime", (), {"monotonic": lambda _self: next(clock)})())
+    monkeypatch.setattr(desktop_agent_vm, "_READY_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(desktop_agent_vm, "_READY_POLL_SECONDS", 0)
+
+    with pytest.raises(RuntimeError, match="did not become healthy"):
+        await desktop_agent_vm._wait_for_vm_ready("203.0.113.10", "omi-token")
 
     assert calls == [None, {"Authorization": "Bearer omi-token"}]
 
