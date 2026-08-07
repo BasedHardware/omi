@@ -36,6 +36,38 @@ enum ChatMessageDeduplicator {
   }
 }
 
+/// **When duplicate detection has to run again.**
+///
+/// It is a full pass over every long message in the mounted window — 4.2 ms at
+/// the 500-row cap, measured — and the transcript used to re-derive it on every
+/// body evaluation, which during a streamed answer is once per 35 ms flush. A
+/// streamed tail cannot create a duplicate *pair* among the rows above it, so
+/// the derivation belongs to the transcript's **shape** rather than its content:
+/// which rows are present, how many are mounted, whose conversation it is, and
+/// the moment a turn settles and its text stops being rewritten.
+struct ChatTranscriptDuplicateKey: Equatable {
+  let messageCount: Int
+  let newestMessageID: String?
+  let presentation: ChatTranscriptWindow.Presentation
+  let conversationIdentity: String
+  /// A settled turn may have had its text replaced wholesale by journal replay
+  /// without the count moving, so the settle itself is part of the shape.
+  let isSettled: Bool
+
+  init(
+    messages: [ChatMessage],
+    presentation: ChatTranscriptWindow.Presentation,
+    conversationIdentity: String,
+    isSending: Bool
+  ) {
+    messageCount = messages.count
+    newestMessageID = messages.last?.id
+    self.presentation = presentation
+    self.conversationIdentity = conversationIdentity
+    isSettled = !isSending
+  }
+}
+
 /// Stable conversation identity sentinels for surfaces without a persisted session.
 enum ChatConversationIdentity {
   static let mainChatDefault = "main-chat-default"
@@ -357,6 +389,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Starts compact on Home, and expands only after the reader asks for older
   /// locally-loaded rows. Standard callers start at the existing 500-row cap.
   @State private var transcriptWindowPresentation: ChatTranscriptWindow.Presentation = .initial
+
+  // MARK: - Duplicate Rows
+
+  /// Derived when the transcript's shape changes, not when its tail is rewritten.
+  /// See `ChatTranscriptDuplicateKey`.
+  @State private var duplicateMessageIDs: Set<String> = []
   var body: some View {
     ScrollViewReader { proxy in
       // Anchored to the trailing edge, not the middle. A floating control with
@@ -385,6 +423,20 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       policy: effectiveTranscriptWindowPolicy,
       presentation: transcriptWindowPresentation
     )
+  }
+
+  private var duplicateKey: ChatTranscriptDuplicateKey {
+    ChatTranscriptDuplicateKey(
+      messages: messages,
+      presentation: transcriptWindowPresentation,
+      conversationIdentity: conversationIdentity,
+      isSending: isSending
+    )
+  }
+
+  private func refreshDuplicateMessageIDs() {
+    let refreshed = ChatTranscriptWindow.duplicateIDs(inVisibleWindow: visibleTranscriptMessages)
+    if refreshed != duplicateMessageIDs { duplicateMessageIDs = refreshed }
   }
 
   @ViewBuilder
@@ -434,6 +486,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // panel's rounded leading/trailing edge. `.never` overrides the scrollable
     // component instead of requesting.
     .scrollIndicators(.never)
+    // MARK: - Re-derive duplicate rows when the transcript's shape changes
+    .onChange(of: duplicateKey) { _, _ in refreshDuplicateMessageIDs() }
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
       handleMessagesCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
@@ -532,6 +586,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       userIsScrolling = false
       hasActivityBelow = false
       trackedConversationId = conversationIdentity
+      refreshDuplicateMessageIDs()
       if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
       }
@@ -789,11 +844,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     } else if messages.isEmpty {
       welcomeContent()
     } else {
-      // Streamed tokens re-evaluate this body. Take one bounded snapshot and
-      // share it with both projections so each token avoids another suffix
-      // copy and never scans history that cannot be rendered.
+      // Streamed tokens re-evaluate this body. Take one bounded snapshot so each
+      // token avoids another suffix copy and never scans history that cannot be
+      // rendered. Duplicate detection is deliberately *not* here — it is derived
+      // from the transcript's shape (`ChatTranscriptDuplicateKey`) rather than
+      // re-run on every rewrite of the streaming tail.
       let visibleMessages = visibleTranscriptMessages
-      let dupeIds = ChatTranscriptWindow.duplicateIDs(inVisibleWindow: visibleMessages)
       let displayMessages = AgentLifecycleDisplayProjection.project(visibleMessages)
       let finalAssistantMessageID = ChatOmiMarkPlacement.finalAssistantMessageID(in: displayMessages)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
@@ -807,7 +863,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onCitationTap: { citation in
             onCitationTap?(citation)
           },
-          isDuplicate: dupeIds.contains(message.id),
+          isDuplicate: duplicateMessageIDs.contains(message.id),
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef,
