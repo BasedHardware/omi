@@ -131,8 +131,9 @@ struct DesktopTopBar: View {
       ShellStatusIconButton(
         systemImage: item.icon,
         tooltip: item.tooltip,
-        state: .inactive,
-        showsDot: false,
+        // No live capability behind it, so it wears neither the dot nor the off-slash: a permanently
+        // hollow badge or a struck-through gear would both report a state Settings does not have.
+        state: nil,
         isSelected: selectedIndex == item.index,
         action: { navigate(to: item.index) }
       )

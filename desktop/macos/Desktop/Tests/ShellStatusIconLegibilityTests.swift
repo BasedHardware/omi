@@ -153,10 +153,30 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   }
 
   private func button(
-    _ systemImage: String, state: HomeStatusState, showsDot: Bool = true
+    _ systemImage: String, state: HomeStatusState, showsDot: Bool = true, isSelected: Bool = false
   ) -> some View {
     ShellStatusIconButton(
-      systemImage: systemImage, tooltip: "probe", state: state, showsDot: showsDot, action: {})
+      systemImage: systemImage, tooltip: "probe", state: state, showsDot: showsDot,
+      isSelected: isSelected, action: {})
+  }
+
+  /// Everything one control draws in one state, with the badge suppressed: the base glyph, plus the
+  /// off-slash in the states that wear one. `showsDot: false` moves nothing but the dot, which is the
+  /// contract `ShellStatusIconButton` documents on that flag.
+  ///
+  /// **`isSelected` is the experimental control, not a product state being asserted.** The button
+  /// draws its glyph in `Ink.primary` when prominent and `Ink.secondary` otherwise, and `display` is
+  /// mostly a large low-opacity interior — so ~34% of its pixels cross the mark threshold on that
+  /// change alone (measured). Comparing a running control against a stopped one therefore compares
+  /// two inks as well as two states, and on `display` the ink difference is the larger of the two. A
+  /// comparison that varies one thing at a time pins prominence with this flag, which `isSelected`
+  /// already feeds (`isSelected || isActive`), rather than inventing a second seam for it.
+  private func silhouette(
+    _ glyph: String, state: HomeStatusState, over desktop: Desktop, prominent: Bool = false
+  ) throws -> Set<Pixel> {
+    let rep = try render(
+      button(glyph, state: state, showsDot: false, isSelected: prominent), over: desktop)
+    return Set(marks(rep, over: desktop).map(\.0))
   }
 
   // MARK: - Reading marks back out of the bitmap
@@ -210,12 +230,60 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
     return (shown, out)
   }
 
-  /// Everything the glyph draws — every mark that is not the dot's.
-  private func glyphMarks(_ rep: NSBitmapImageRep, dot: [(Pixel, NSColor)], over desktop: Desktop)
-    -> [(Pixel, NSColor)]
+  /// Every pixel that visibly moves between two renders of the same control, and the largest move.
+  ///
+  /// Counted in ΔE against the same just-noticeable threshold `dotRender` uses, rather than by
+  /// counting mark-threshold crossings, because on a filled glyph most of the off-slash lands where
+  /// ink already was: `display` gains only 17 mark pixels but 134 pixels visibly move. A metric that
+  /// only sees ink appear over bare ground would report the slash on `mic` and miss it on `display`.
+  private func movement(_ before: NSBitmapImageRep, _ after: NSBitmapImageRep) -> (
+    pixels: [Pixel], peak: CGFloat
+  ) {
+    var moved: [Pixel] = []
+    var peak: CGFloat = 0
+    for y in 0..<before.pixelsHigh {
+      for x in 0..<before.pixelsWide {
+        guard let a = before.colorAt(x: x, y: y)?.usingColorSpace(.sRGB),
+          let b = after.colorAt(x: x, y: y)?.usingColorSpace(.sRGB)
+        else { continue }
+        let difference = deltaE(a, b)
+        if difference > 2.5 {
+          moved.append(Pixel(x: x, y: y))
+          peak = max(peak, difference)
+        }
+      }
+    }
+    return (moved, peak)
+  }
+
+  /// Half the width of the band the off-slash occupies, in points — **derived from the production
+  /// shape's own constants and the real symbol metrics**, so widening the mark widens the band the
+  /// test allows it to occupy instead of turning this file red for the wrong reason.
+  ///
+  /// The extra point absorbs the antialiased edge and any subpixel disagreement between where SwiftUI
+  /// centres the symbol and where `NSImage` reports its size.
+  private func slashHalfWidth(_ glyph: String) -> CGFloat {
+    let configuration = NSImage.SymbolConfiguration(pointSize: OmiType.body, weight: .semibold)
+    let size =
+      NSImage(systemSymbolName: glyph, accessibilityDescription: nil)?
+      .withSymbolConfiguration(configuration)?.size ?? .zero
+    let side = min(size.width, size.height) * ShellStatusSlash.extent
+    let stroke = side * ShellStatusSlash.weight * (1 + 2 * ShellStatusSlash.clearance)
+    return stroke / 2 + 1
+  }
+
+  /// Does this pixel lie on the diagonal the off-slash runs along?
+  ///
+  /// The slash is centred on the glyph and the glyph is centred in the canvas, so the diagonal is the
+  /// canvas's own — top-leading to bottom-trailing, which in bitmap coordinates (y downward, as
+  /// `colorAt` reads them) is the line `x - centre == y - centre`.
+  private func isOnSlashDiagonal(_ pixel: Pixel, in rep: NSBitmapImageRep, halfWidth: CGFloat)
+    -> Bool
   {
-    let claimed = Set(dot.map(\.0))
-    return marks(rep, over: desktop).filter { !claimed.contains($0.0) }
+    let scale = CGFloat(rep.pixelsWide) / Self.canvas.width
+    let dx = CGFloat(pixel.x) - CGFloat(rep.pixelsWide) / 2
+    let dy = CGFloat(pixel.y) - CGFloat(rep.pixelsHigh) / 2
+    return abs(dx - dy) / 2.0.squareRoot() <= halfWidth * scale
   }
 
   /// The mark furthest from the ground — the one a glance actually lands on.
@@ -344,9 +412,7 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   /// The glyph must clear the non-text bar too, in every form it can take. It is the only thing that
   /// says *which* capability this is, and the two controls sit adjacent.
   func testEveryGlyphClearsTheNonTextContrastBarOnBothDesktops() throws {
-    let glyphs = [
-      ShellStatusGlyph.listening, ShellStatusGlyph.listeningBlocked, ShellStatusGlyph.screen,
-    ]
+    let glyphs = [ShellStatusGlyph.listening, ShellStatusGlyph.screen]
     for desktop in Desktop.allCases {
       for glyph in glyphs {
         let rep = try render(button(glyph, state: .inactive, showsDot: false), over: desktop)
@@ -364,54 +430,122 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
     }
   }
 
-  /// **A control's glyph is its name, and a name does not change when the thing is switched off.**
+  /// **A control's glyph is its name, and a name does not change when the thing is switched off — the
+  /// off-slash is drawn *on top of* that name, never in place of it.**
   ///
-  /// The listening control drew `waveform` while transcribing and `mic` while idle — the dot's job
-  /// done a second time and done worse, because the two glyphs have different silhouettes: the button
-  /// appeared to become a different button when it changed state, and the user had to learn two
-  /// shapes to recognise one control.
+  /// This test used to assert the stronger claim that the control looks *identical* in both toggle
+  /// positions, because the defect it was written against was a glyph swap: the listening control drew
+  /// `waveform` while transcribing and `mic` while idle, so the button appeared to become a different
+  /// button and the user had to learn two shapes to recognise one control.
   ///
-  /// **The primary guard is the type, not this test.** `ShellStatusGlyph.listeningGlyph(isBlocked:)`
-  /// cannot see whether transcription is running, so the rule is unexpressible rather than merely
-  /// untested — which is the order `AGENTS.md` asks for. What this adds is the *rendered* half the
-  /// signature cannot state: that the control genuinely looks the same in both toggle positions
-  /// through the real button, including the fact that the button legitimately darkens its glyph when
-  /// active. A future edit that reaches for a differently-named symbol drawing the same thing passes;
-  /// one that changes the shape does not.
-  func testTheListeningControlKeepsItsSilhouetteWhenItIsSwitchedOn() throws {
-    func silhouette(_ state: HomeStatusState) throws -> Set<Pixel> {
-      let dot = try dotRender(
-        ShellStatusGlyph.listeningGlyph(isBlocked: false), state: state, over: .black)
-      return Set(glyphMarks(dot.rep, dot: dot.marks, over: .black).map(\.0))
-    }
-    let off = try silhouette(.inactive)
-    let on = try silhouette(.active)
-    let shared = CGFloat(off.intersection(on).count) / CGFloat(max(off.union(on).count, 1))
+  /// **A slash is not that defect, and the change here is to say so precisely rather than to drop the
+  /// guard.** Swapping `waveform` for `mic` *replaces* the silhouette; `ShellStatusSlash` *adds* to it.
+  /// The underlying rule — the control must not become unrecognisable when it toggles — is unchanged,
+  /// and it is now measured as the two things it actually consists of:
+  ///
+  /// - **the base survives**: nearly every pixel the running control draws is still drawn when it is
+  ///   off, so the capability is still read from the same shape;
+  /// - **the slash is additive**: the off state draws ink the on state does not, which is the whole
+  ///   point of the mark.
+  ///
+  /// Only the first can regress into a swap, so only the first needs a calibrated floor. It is
+  /// deliberately measured *against the on state* (`|on ∩ off| / |on|`) rather than as a Jaccard
+  /// overlap, because Jaccard counts the slash's own pixels as disagreement and would punish the
+  /// feature for existing.
+  ///
+  /// **The primary guard is still the type, not this test.** `ShellStatusGlyph.listening` is now a
+  /// single constant with no state-dependent sibling left in the enum at all — `mic.slash` is gone —
+  /// so a swap is unexpressible rather than merely untested, which is the order `AGENTS.md` asks for.
+  /// What this adds is the rendered half the type cannot state, including that the button legitimately
+  /// darkens its glyph when active (which makes both figures below conservative: the on state has
+  /// antialiased edge pixels the off state does not, and they count against the base surviving).
+  func testStoppingACapabilityMarksItsGlyphAndNeverRedrawsIt() throws {
+    for desktop in Desktop.allCases {
+      for glyph in [ShellStatusGlyph.listening, ShellStatusGlyph.screen] {
+        // Prominence pinned on both sides — see `silhouette(_:state:over:prominent:)`. Without it
+        // this compares two inks as well as two states, and on `display` the ink is the larger term.
+        let running = try render(
+          button(glyph, state: .active, showsDot: false, isSelected: true), over: desktop)
+        let on = Set(marks(running, over: desktop).map(\.0))
 
-    // Calibrated against this renderer rather than against a literal. A fixed 0.9 encoded one
-    // machine's antialiasing: the button legitimately darkens its glyph when active, so edge pixels
-    // sit near the mark threshold and a different renderer moves more of them across it. CI measured
-    // 0.87 on the *correct* shape and failed. The question is not "how identical", it is "far closer
-    // to itself than to a different glyph" — so the floor is derived from a genuinely different pair
-    // measured the same way, and both figures move together when the renderer changes.
-    func plainSilhouette(_ glyph: String) throws -> Set<Pixel> {
-      let rep = try render(button(glyph, state: .inactive, showsDot: false), over: .black)
-      return Set(marks(rep, over: .black).map(\.0))
-    }
-    let listening = try plainSilhouette(ShellStatusGlyph.listening)
-    let screen = try plainSilhouette(ShellStatusGlyph.screen)
-    let differentGlyphs =
-      CGFloat(listening.intersection(screen).count) / CGFloat(max(listening.union(screen).count, 1))
-    let floor = differentGlyphs + (1 - differentGlyphs) / 2
+        for state in [HomeStatusState.inactive, .blocked] {
+          let stopped = try render(
+            button(glyph, state: state, showsDot: false, isSelected: true), over: desktop)
+          let off = Set(marks(stopped, over: desktop).map(\.0))
+          let context = "\(glyph) went \(state) over a \(desktop.rawValue) desktop"
 
-    XCTAssertGreaterThan(
-      shared, floor,
-      """
-      the listening glyph covers \(Int(shared * 100))% of the same pixels when the control is on as \
-      when it is off, against a \(Int(floor * 100))% floor derived from two genuinely different \
-      glyphs at \(Int(differentGlyphs * 100))% — it is redrawing itself to report state, which is \
-      the dot's job.
-      """)
+          // 1. Nothing is taken away. Measured at exactly zero on both controls and both desktops;
+          //    the 2% allowance is for a renderer that antialiases the clearance differently, not
+          //    for a glyph that has started redrawing itself.
+          let lost = on.subtracting(off)
+          XCTAssertLessThanOrEqual(
+            CGFloat(lost.count), CGFloat(on.count) * 0.02,
+            """
+            \(context) and stopped drawing \(lost.count) of the \(on.count) pixels it draws while \
+            running. The slash is supposed to be laid *over* the capability's name; a state that \
+            erases the name is the `waveform`/`mic` swap coming back in another form.
+            """)
+
+          // 2. Everything that changed lies on the one diagonal the slash runs along. This is the
+          //    claim that makes the first one meaningful: a glyph could preserve every pixel and
+          //    still smear new ink across its whole area.
+          let moved = movement(running, stopped)
+          let strays = moved.pixels.filter {
+            !isOnSlashDiagonal($0, in: stopped, halfWidth: slashHalfWidth(glyph))
+          }
+          XCTAssertLessThanOrEqual(
+            CGFloat(strays.count), CGFloat(moved.pixels.count) * 0.05,
+            """
+            \(context) and \(strays.count) of the \(moved.pixels.count) pixels that changed are off \
+            the slash's diagonal. Stopping a capability may add one mark to its glyph and must do \
+            nothing else to it.
+            """)
+
+          // 3. The mark is actually there. `.blocked` and `.inactive` differ only in the dot, which
+          //    is suppressed here, so both off states must move the same ink.
+          XCTAssertGreaterThan(
+            moved.peak, 25,
+            """
+            \(context) and the largest change to its glyph is ΔE \
+            \(String(format: "%.1f", moved.peak)) — under the 25 this file already calls the bar \
+            for two distinguishable glances. The off state is not marking the glyph at all.
+            """)
+        }
+      }
+    }
+  }
+
+  /// **Off has to read as off on both controls, over any wallpaper.** The reported symptom was that a
+  /// coloured dot alone does not say "this is switched off" — so the slash is the readout now, and a
+  /// slash under the non-text bar is the same non-report the dot was.
+  ///
+  /// All four combinations the cluster can be in are covered by construction: both controls, each in
+  /// its running and not-running state, over both bounding desktops.
+  ///
+  /// The slash is isolated as the ink the off state adds to the on state. That difference is exact in
+  /// the conservative direction: the button draws its glyph *darker* when active, so the on state
+  /// contributes extra antialiased edge pixels and can only ever shrink what counts as added — a slash
+  /// that measures here measures for real.
+  func testTheOffStateAddsALegibleSlashToBothControlsOverBothDesktops() throws {
+    for desktop in Desktop.allCases {
+      for glyph in [ShellStatusGlyph.listening, ShellStatusGlyph.screen] {
+        let on = try silhouette(glyph, state: .active, over: desktop)
+        let offRep = try render(button(glyph, state: .inactive, showsDot: false), over: desktop)
+        let added = marks(offRep, over: desktop).filter { !on.contains($0.0) }
+
+        let mark = try XCTUnwrap(
+          strongest(added, over: desktop),
+          "\(glyph) draws nothing extra when it is off over a \(desktop.rawValue) desktop")
+        let ratio = contrast(mark, ground(over: desktop))
+        XCTAssertGreaterThanOrEqual(
+          ratio, 3.0,
+          """
+          the off-slash on \(glyph) measures \(String(format: "%.2f", ratio)):1 over a \
+          \(desktop.rawValue) desktop, under the 3:1 WCAG non-text bar. It is the mark that says \
+          this capability is not running.
+          """)
+      }
+    }
   }
 
   /// The two capture controls sit adjacent at 32 pt with near-identical weight, so if their glyphs
@@ -419,26 +553,75 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
   /// screenshot showed. Compared as *rendered coverage* rather than by name: two different symbol
   /// names that draw the same wide filled slab are the same defect.
   ///
+  /// **Measured in both states, because the off state deliberately puts the *same* slash on both
+  /// controls.** One vocabulary, one mark per state — so the shared mark is the feature, and the open
+  /// question is whether it swamps the two names underneath it. It does not: the pair measures 0.299
+  /// shared while running and 0.309 while off, so adding the slash to both costs one point of
+  /// distinctness and the capability still reads from the glyph.
+  ///
   /// **This assertion only works beside the one above it, and the bar is set to say so.** The shipped
   /// pair measured 0.56 *while listening* (`waveform` against
   /// `rectangle.inset.filled.and.person.filled`, both wide horizontal masses) but only 0.31 at rest —
-  /// so a silhouette check on the resting pair alone would have passed on the broken shape. It is the
-  /// glyph being *stable* that makes one measurement stand for every state, which is why 0.45 sits
-  /// below the both-on figure rather than below the resting one.
+  /// so a silhouette check on one state alone would have passed on the broken shape. It is the base
+  /// glyph being stable across states that makes this one measurement stand for every state, which is
+  /// why 0.45 sits below the both-on figure rather than below the resting one.
   func testTheTwoCaptureControlsDoNotShareASilhouette() throws {
-    func silhouette(_ glyph: String) throws -> Set<Pixel> {
-      let rep = try render(button(glyph, state: .inactive, showsDot: false), over: .black)
-      return Set(marks(rep, over: .black).map(\.0))
+    for state in [HomeStatusState.active, .inactive] {
+      let listening = try silhouette(ShellStatusGlyph.listening, state: state, over: .black)
+      let screen = try silhouette(ShellStatusGlyph.screen, state: state, over: .black)
+      let shared =
+        CGFloat(listening.intersection(screen).count)
+        / CGFloat(max(listening.union(screen).count, 1))
+      XCTAssertLessThan(
+        shared, 0.45,
+        """
+        while \(state), the microphone and screen glyphs cover \(Int(shared * 100))% of the same \
+        pixels — adjacent wordless controls that share a silhouette read as one capability, not two.
+        """)
     }
-    let listening = try silhouette(ShellStatusGlyph.listening)
-    let screen = try silhouette(ShellStatusGlyph.screen)
-    let shared =
-      CGFloat(listening.intersection(screen).count) / CGFloat(max(listening.union(screen).count, 1))
-    XCTAssertLessThan(
-      shared, 0.45,
+  }
+
+  // MARK: - The sentence the marks are short for
+
+  /// **A wordless control's tooltip is its label, so it has to start by being the label.**
+  ///
+  /// The shipped strings opened with the state — "Listening — In meeting", "Not listening. Click to
+  /// start." — which answers a question you can only be asking if you already know which of the two
+  /// icons you are pointing at. The screen control at least contained the word "screen"; the audio
+  /// control never named its capability in any state. On a cluster whose premise is that the labels
+  /// were deleted, that leaves the capability nameable only by recognising the glyph, which is exactly
+  /// the fallback the tooltip exists to remove.
+  ///
+  /// Asserts the property rather than the prose: every state of both controls opens with the
+  /// capability's name, so no future state can be added that forgets to.
+  func testEveryTooltipOpensWithTheNameOfItsCapability() {
+    for state in [HomeStatusState.active, .inactive, .blocked] {
+      let audio = ShellStatusTooltip.audio(state: state, mode: "In meeting")
+      XCTAssertTrue(
+        audio.hasPrefix("Audio"),
+        """
+        the \(state) audio tooltip reads "\(audio)" — it never says what the control is. Hovering a \
+        wordless icon has to answer "which capability is this", not only "what is it doing".
+        """)
+
+      let screen = ShellStatusTooltip.screen(state: state)
+      XCTAssertTrue(
+        screen.hasPrefix("Screen"),
+        """
+        the \(state) screen tooltip reads "\(screen)" — it never says what the control is.
+        """)
+    }
+  }
+
+  /// Naming the capability must not cost the qualifier. "Listening" with no mode is a claim the
+  /// meetings-only mode does not actually make, so the mode still has to survive into the sentence.
+  func testTheRunningAudioTooltipStillCarriesItsCaptureMode() {
+    let tooltip = ShellStatusTooltip.audio(state: .active, mode: "Meetings only")
+    XCTAssertTrue(
+      tooltip.contains("Meetings only"),
       """
-      the microphone and screen glyphs cover \(Int(shared * 100))% of the same pixels — adjacent \
-      wordless controls that share a silhouette read as one capability, not two.
+      the running audio tooltip reads "\(tooltip)" and has dropped its capture mode — unqualified \
+      "listening" overclaims whenever the mode is armed rather than live.
       """)
   }
 }
