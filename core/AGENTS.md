@@ -56,6 +56,13 @@ gap, not your call to fill.
     re-exports every domain with `export *` and bare names collide. (Rule added after the
     first foundation test hit exactly this.)
 
+12. **Snapshot honesty.** An id snapshot may claim `complete: true` only when the source
+    provably returned the whole unfiltered set: a 200 with an unexpected body returns
+    `null` (never a complete empty snapshot), a full page never claims completeness, and
+    a list endpoint with ANY server-side filter may never back `complete: true` at all.
+    Wrong `complete: true` is user data loss via `Projection.reconcile` — the wave-1
+    review caught this live in two of three domains.
+
 ## What you may do freely
 
 Add tests, extend the testkit's fakes with new fault modes, add a new domain following the
