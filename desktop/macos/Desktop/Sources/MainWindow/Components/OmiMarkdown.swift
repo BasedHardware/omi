@@ -157,9 +157,14 @@ struct OmiMarkdownContent: View, Equatable {
   private static func styledAttributedString(
     from processed: String, style: OmiMarkdown.Style, fontSize: CGFloat, fontScale: CGFloat
   ) -> AttributedString? {
+    // Every surface that renders assistant text lands here — chat bubbles, the floating bar, the
+    // onboarding transcript, table cells, and both the plain and inline-copy paths — so the tilde
+    // rule is applied once, at the only point all of them share.
+    let source = OmiMarkdownTilde.escapingNonPairDelimiters(processed)
+
     guard
       var attributed = try? AttributedString(
-        markdown: processed,
+        markdown: source,
         options: .init(
           allowsExtendedAttributes: true,
           interpretedSyntax: .inlineOnlyPreservingWhitespace
@@ -205,7 +210,10 @@ struct OmiMarkdownContent: View, Equatable {
     return attributed
   }
 
-  fileprivate static func inlineAttributedString(
+  /// `internal` rather than `fileprivate` so a test can assert what a surface actually renders —
+  /// preprocessing, delimiter handling and styling together — instead of re-implementing the parse
+  /// options beside it and drifting from the real path.
+  static func inlineAttributedString(
     from content: String,
     style: OmiMarkdown.Style,
     fontSize: CGFloat,
@@ -660,6 +668,64 @@ enum OmiMarkdownInlineCode {
     }
 
     return spans
+  }
+}
+
+extension OmiMarkdownInlineCode {
+  /// Closed code spans, backtick fences included, as ranges. Everything inside one is literal text.
+  static func codeSpanRanges(in text: String) -> [Range<String.Index>] {
+    closedSpans(in: text).map(\.range)
+  }
+}
+
+/// Tilde runs, held to the GFM rule.
+///
+/// GFM strikethrough is `~~text~~`. Foundation's Markdown parser also honours a *single* `~` as a
+/// delimiter, which GFM does not — and a lone tilde is overwhelmingly ordinary text: an approximate
+/// price, an approximate duration, a home directory.
+///
+/// The reported answer was a list of ticket prices. `(~$190)` and `(~$230)` are each flanked by
+/// punctuation on both sides, so each tilde can both open and close a run: they paired with *each
+/// other*, struck out the whole sentence between them, and swallowed their own tildes on the way, so
+/// the prices lost the very character that made them approximate.
+///
+/// Escaping every tilde run that is not exactly two restores the GFM rule at the delimiter level,
+/// which is the level the defect lives at — the content is never rewritten. `~~struck~~` still
+/// strikes. A run of three or more was already literal in the underlying parser and stays that way.
+enum OmiMarkdownTilde {
+  static func escapingNonPairDelimiters(_ text: String) -> String {
+    guard text.contains("~") else { return text }
+
+    // A backslash is literal inside a code span, so escaping in there would print `\~` at the user.
+    let codeSpans = OmiMarkdownInlineCode.codeSpanRanges(in: text)
+    var result = ""
+    result.reserveCapacity(text.count)
+    var index = text.startIndex
+
+    while index < text.endIndex {
+      if let span = codeSpans.first(where: { $0.contains(index) }) {
+        result += text[index..<span.upperBound]
+        index = span.upperBound
+        continue
+      }
+
+      guard text[index] == "~" else {
+        result.append(text[index])
+        index = text.index(after: index)
+        continue
+      }
+
+      var runEnd = index
+      while runEnd < text.endIndex, text[runEnd] == "~" {
+        runEnd = text.index(after: runEnd)
+      }
+      let run = text[index..<runEnd]
+      // Exactly two is the one form GFM calls a delimiter; everything else is a character.
+      result += run.count == 2 ? String(run) : String(repeating: "\\~", count: run.count)
+      index = runEnd
+    }
+
+    return result
   }
 }
 
