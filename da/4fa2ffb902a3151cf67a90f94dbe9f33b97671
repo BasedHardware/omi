@@ -1,0 +1,38 @@
+desktop/macos/Desktop/Tests/ShellStatusIconLegibilityTests.swift
+  s_569f1df936cc22::t_3d7a82ef32bf82 415
+  s_569f1df936cc22::t_92810021e6b0d3 569-581
+  s_569f1df936cc22::t_504b8ef6e58972 161,433-449,451-454,456-461,470,488,516-547,561,565-567,582-612,614-621,623-624
+  s_569f1df936cc22::t_857dcbcc968d95 156,159-160,166-178
+  s_569f1df936cc22::t_3a995c01046b56 233-281,283-286
+  s_569f1df936cc22::t_c4542f02e9cc50 163-165,179
+  s_569f1df936cc22::t_daef4667a8c98c 556-560
+  s_569f1df936cc22::t_4a850250acfef4 462-469,471-487,489-514
+  s_569f1df936cc22::t_e9d8507065e14e 162
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_569f1df936cc22::t_72564a1984c041 134-136
+desktop/macos/changelog/unreleased/20260807-status-icon-off-slash.json
+  s_569f1df936cc22::t_17c5e650232d79 1-3
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
+  s_569f1df936cc22::t_c3ff3c6103083f 15-28
+  s_569f1df936cc22::t_da18308f7e57df 331
+  s_569f1df936cc22::t_8418d9066dfbd8 250-251,255,257-260,262-267,272-280,289-293,297,302,305
+  s_569f1df936cc22::t_ac4576edbad5b6 116-172,176,178-180
+  s_569f1df936cc22::t_d8e11b75c11672 207-234,236-244
+  s_569f1df936cc22::t_5f6e218fc8a210 367-370,377
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "da4fa2ffb902a3151cf67a90f94dbe9f33b97671",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
