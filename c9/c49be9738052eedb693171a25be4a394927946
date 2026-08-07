@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/OmiQueryDotMark.swift
+  s_569f1df936cc22::t_fede19e915c07d 4-9,11-17,25-33,37-62,64-67,72-77,79-98,103,106-108,110,112-129
+desktop/macos/Desktop/Tests/OmiQueryDotMarkTests.swift
+  s_569f1df936cc22::t_ad42aa17d28dfa 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "c9c49be9738052eedb693171a25be4a394927946",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
