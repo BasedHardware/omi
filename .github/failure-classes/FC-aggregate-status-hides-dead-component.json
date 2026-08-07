@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-aggregate-status-hides-dead-component",
+  "violated_contract": "A health or liveness value summarising several independent components must not report healthy while any component the user believes is running has stopped; an aggregate computed as \"at least one member is live\" is read by every caller as \"every member is live\", so one working sensor answers for a dead one and the outage becomes unobservable.",
+  "canonical_prevention": "Derive the aggregate from a total per-component state map inside the type that publishes it, so \"capturing while a component is blocked\" is unrepresentable rather than merely untrue; keep each component's own reason attached to that component instead of a single top-level nullable string a healthy aggregate can discard, and distinguish a capability never granted from one this install has used and lost so the second can be reported as a regression.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/Tests/ContextAppTests/CaptureHealthTests.swift",
+    "desktop/context-for-claude/Tests/ContextMCPKitTests/StatusHonestyTests.swift"
+  ],
+  "evidence_prs": [
+    10783
+  ],
+  "scope_hints": [
+    "desktop/context-for-claude/Sources/ContextCore/CaptureHealth.swift",
+    "desktop/context-for-claude/Sources/ContextApp/Engine.swift",
+    "desktop/context-for-claude/Sources/ContextApp/Capture/**",
+    "desktop/context-for-claude/Sources/ContextMCPKit/StatusTool.swift"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Unsandboxed: the Core Audio process tap and ScreenCaptureKit paths need it. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.device.screen-capture</key>
+	<true/>
+	<!-- Release builds are signed with a real Developer ID/Team ID, so hardened-runtime library
+	     validation succeeds and this weakening must not ship. -->
+</dict>
+</plist>

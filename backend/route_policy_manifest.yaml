@@ -182,6 +182,28 @@ routes:
         state: active
   - route_type: http
     method: GET
+    path: /v2/micro-apps/{app_id}/appcast.xml
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - public
+        placement: none
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: desktop_update
+      visibility: public_undocumented
+      data_domain: desktop_updates
+      deprecation:
+        state: active
+  - route_type: http
+    method: GET
     path: /v2/desktop/previews/{slug}
     policy:
       review_status: reviewed

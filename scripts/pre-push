@@ -714,28 +714,38 @@ check_desktop_swift_if_needed() {
     return
   fi
 
-  if ! changed_matches \
-    'desktop/macos/Desktop/*.swift' \
-    'desktop/macos/Desktop/**/*.swift' \
-    'desktop/macos/Desktop/Package.swift' \
-    'desktop/macos/Desktop/Package.resolved' \
-    'scripts/pre-push'
-  then
-    return
-  fi
-
   if ! command -v xcrun >/dev/null 2>&1; then
     echo "FAIL: xcrun is required to compile the desktop Swift package for changed desktop files." >&2
     echo "Push from macOS with Xcode command line tools installed, or deliberately skip with PRE_PUSH_SKIP_DESKTOP_SWIFT=1 git push." >&2
     return 1
   fi
 
-  # #9440: keep pre-push to this fast compile. The pinned-toolchain full suite and
-  # release compile belong to CI; adding them here causes push-time budget bloat.
-  (
-    cd desktop/macos
-    xcrun swift build -c debug --package-path Desktop
-  )
+  if changed_matches \
+    'desktop/macos/Desktop/*.swift' \
+    'desktop/macos/Desktop/**/*.swift' \
+    'desktop/macos/Desktop/Package.swift' \
+    'desktop/macos/Desktop/Package.resolved' \
+    'scripts/pre-push'
+  then
+    # #9440: keep pre-push to this fast compile. The pinned-toolchain full suite and
+    # release compile belong to CI; adding them here causes push-time budget bloat.
+    (
+      cd desktop/macos
+      xcrun swift build -c debug --package-path Desktop
+    )
+  fi
+
+  if changed_matches \
+    'desktop/context-for-claude/Package.swift' \
+    'desktop/context-for-claude/Sources/**/*.swift' \
+    'desktop/context-for-claude/Tests/**/*.swift' \
+    'scripts/pre-push'
+  then
+    (
+      cd desktop/context-for-claude
+      swift build
+    )
+  fi
 }
 
 check_desktop_launcher_tests_if_needed() {
