@@ -20,5 +20,6 @@ Planned layout (files land as domains are ratified; tasks first):
   storage, secure credential custody, capture-core observation, notification delivery.
 - `domain/` — per-domain record schemas + write contracts (tasks, memories,
   conversations, goals, chat, settings).
-- `wire/` — `/listen` protocol schema (WS-003), entitlement payload, chat session
-  protocol (WS-006, gated).
+- `wire/listen/` — `/listen` protocol JSON Schema (WS-003); generated decoders live in
+  `@omi-core/wire-listen`. Entitlement payload REST envelope is WS-005; chat session
+  protocol is WS-006 (gated).
