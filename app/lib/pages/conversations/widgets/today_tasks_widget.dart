@@ -60,7 +60,7 @@ class TodayTasksWidget extends StatelessWidget {
                       onTap: () {
                         HapticFeedback.lightImpact();
                         // Navigate to Tasks tab (index 2). Index 1 is Conversations.
-                        context.read<HomeProvider>().setIndex(2);
+                        context.read<HomeProvider>().setIndex(3);
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

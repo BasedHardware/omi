@@ -13,10 +13,11 @@ import 'package:omi/utils/app_typography.dart';
 /// widget is mounted and unmounted by the tab switch, so animating on mount
 /// alone would replay it every time the user came back to Home.
 class HomeHero extends StatefulWidget {
-  const HomeHero({super.key, required this.chatBar, this.animate = true, this.onEntranceComplete});
+  const HomeHero({super.key, this.chatBar, this.animate = true, this.onEntranceComplete});
 
-  /// Built by the host — it owns the navigation and analytics the bar fires.
-  final Widget chatBar;
+  /// Optional. Null when the hero is the empty state of a live chat, which
+  /// already owns a real composer — the hero is then just the headline.
+  final Widget? chatBar;
 
   /// When false the hero renders in its final state immediately.
   final bool animate;
@@ -96,8 +97,10 @@ class _HomeHeroState extends State<HomeHero> with SingleTickerProviderStateMixin
             ),
           ),
         ),
-        const SizedBox(height: 24),
-        _entrance(interval: _barCurve, rise: 20, child: widget.chatBar),
+        if (widget.chatBar != null) ...[
+          const SizedBox(height: 24),
+          _entrance(interval: _barCurve, rise: 20, child: widget.chatBar!),
+        ],
       ],
     );
   }

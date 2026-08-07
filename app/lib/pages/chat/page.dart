@@ -46,7 +46,25 @@ class ChatPage extends StatefulWidget {
   final String? autoMessage;
   final bool autoStartVoice;
 
-  const ChatPage({super.key, this.isPivotBottom = false, this.autoMessage, this.autoStartVoice = false});
+  /// Renders as a tab body rather than a pushed route: no app bar of its own
+  /// (the host supplies one), and the composer clears the floating bottom nav.
+  /// Also adopts HomeProvider's chat focus node, which is what the nav bar
+  /// watches to hide itself while the keyboard is up.
+  final bool embedded;
+
+  /// Shown instead of the bare "no messages yet" line when there is no
+  /// conversation yet. Home passes its hero here so the empty chat *is* the
+  /// Home screen rather than an empty page.
+  final Widget? emptyState;
+
+  const ChatPage({
+    super.key,
+    this.isPivotBottom = false,
+    this.autoMessage,
+    this.autoStartVoice = false,
+    this.embedded = false,
+    this.emptyState,
+  });
 
   @override
   State<ChatPage> createState() => ChatPageState();
@@ -88,7 +106,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
   void initState() {
     apps = prefs.appsList;
     scrollController = ScrollController();
-    textFieldFocusNode = FocusNode();
+    // Embedded, the composer shares HomeProvider's node so focusing it hides
+    // the bottom nav (see HomePage's nav bar Consumer). That node is owned by
+    // the provider, so dispose() must not touch it.
+    textFieldFocusNode =
+        widget.embedded ? Provider.of<HomeProvider>(context, listen: false).chatFieldFocusNode : FocusNode();
     textController.addListener(() {
       setState(() {});
     });
@@ -122,8 +144,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             context.read<VoiceRecorderProvider>().startRecording();
           }
         });
-      } else if (_isInitialLoad) {
-        // Auto-focus the text field only on initial load, not on app switches
+      } else if (_isInitialLoad && !widget.embedded) {
+        // Auto-focus the text field only on initial load, not on app switches.
+        // Never when embedded: as a tab body this fires at app launch, popping
+        // the keyboard over a screen the user never asked to type on — and the
+        // bottom nav hides itself while the field has focus, so the whole nav
+        // bar would vanish on startup.
         Future.delayed(const Duration(milliseconds: 300), () {
           if (!mounted) return;
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
@@ -180,7 +206,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     _cancelPendingScrolls();
     textController.dispose();
     scrollController.dispose();
-    textFieldFocusNode.dispose();
+    // Embedded, the node belongs to HomeProvider — disposing it here would
+    // leave the provider holding a dead node for the rest of the session.
+    if (!widget.embedded) textFieldFocusNode.dispose();
     super.dispose();
   }
 
@@ -207,7 +235,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
-          appBar: _buildAppBar(context, provider),
+          appBar: widget.embedded ? null : _buildAppBar(context, provider),
           endDrawer: _buildChatAppsEndDrawer(context),
           onEndDrawerChanged: (isOpened) {
             if (isOpened) {
@@ -244,18 +272,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                               ],
                             )
                           : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 100.0),
-                                    child: Text(
-                                      connectivityProvider.isConnected
-                                          ? context.l10n.noMessagesYet
-                                          : context.l10n.noInternetConnection,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                )
+                              ? (widget.emptyState != null && connectivityProvider.isConnected
+                                  ? widget.emptyState!
+                                  : Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(bottom: 100.0),
+                                        child: Text(
+                                          connectivityProvider.isConnected
+                                              ? context.l10n.noMessagesYet
+                                              : context.l10n.noInternetConnection,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(color: Colors.white),
+                                        ),
+                                      ),
+                                    ))
                               : LayoutBuilder(
                                   builder: (context, constraints) {
                                     return Theme(
@@ -267,81 +297,94 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                       ),
                                       child: Stack(
                                         children: [
-                                          NotificationListener<ScrollNotification>(
-                                            onNotification: _handleScrollNotification,
-                                            child: ListView.builder(
-                                              shrinkWrap: false,
-                                              reverse: false,
-                                              controller: scrollController,
-                                              padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-                                              itemCount: provider.messages.length,
-                                              itemBuilder: (context, chatIndex) {
-                                                if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                                  _hasInitialScrolled = true;
-                                                  _schedulePostFrameModeAwareScroll();
-                                                }
+                                          // The dynamic spacer below sizes off
+                                          // this viewport, not the screen: as a
+                                          // tab body the list is far shorter
+                                          // than the window (app bar + composer
+                                          // + bottom nav), and a screen-sized
+                                          // reserve scrolled the newest message
+                                          // clean off the top.
+                                          LayoutBuilder(builder: (context, listConstraints) {
+                                            final spacerMinHeight = listConstraints.maxHeight * 0.5;
+                                            return NotificationListener<ScrollNotification>(
+                                              onNotification: _handleScrollNotification,
+                                              child: ListView.builder(
+                                                shrinkWrap: false,
+                                                reverse: false,
+                                                controller: scrollController,
+                                                padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                                itemCount: provider.messages.length,
+                                                itemBuilder: (context, chatIndex) {
+                                                  if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                                    _hasInitialScrolled = true;
+                                                    _schedulePostFrameModeAwareScroll();
+                                                  }
 
-                                                final message = provider.messages[chatIndex];
-                                                double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                                double bottomPadding = chatIndex == 0 ? 16 : 0;
+                                                  final message = provider.messages[chatIndex];
+                                                  double topPadding =
+                                                      chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                                  double bottomPadding = chatIndex == 0 ? 16 : 0;
 
-                                                return Padding(
-                                                  key: ValueKey(message.id),
-                                                  padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                                  child: message.sender == MessageSender.ai
-                                                      ? Builder(
-                                                          builder: (context) {
-                                                            final child = AIMessage(
-                                                              showTypingIndicator: provider.showTypingIndicator &&
-                                                                  chatIndex == provider.messages.length - 1,
-                                                              showThinkingAfterText: provider.agentThinkingAfterText,
-                                                              message: message,
-                                                              sendMessage: _sendMessageUtil,
-                                                              onAskOmi: (text) {
-                                                                setState(() {
-                                                                  _selectedContext = text;
-                                                                });
-                                                                textFieldFocusNode.requestFocus();
-                                                              },
-                                                              displayOptions: provider.messages.length <= 1,
-                                                              appSender: provider.messageSenderApp(message.appId),
-                                                              updateConversation: (ServerConversation conversation) {
-                                                                context.read<ConversationProvider>().updateConversation(
-                                                                      conversation,
-                                                                    );
-                                                              },
-                                                              setMessageNps: (int value, {String? reason}) {
-                                                                provider.setMessageNps(message, value, reason: reason);
-                                                              },
-                                                            );
-
-                                                            // Dynamic spacer logic
-                                                            if (chatIndex == provider.messages.length - 1 &&
-                                                                _allowSpacer) {
-                                                              return Container(
-                                                                constraints: BoxConstraints(
-                                                                  minHeight: MediaQuery.of(context).size.height * 0.5,
-                                                                ),
-                                                                alignment: Alignment.topLeft,
-                                                                child: child,
+                                                  return Padding(
+                                                    key: ValueKey(message.id),
+                                                    padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                                    child: message.sender == MessageSender.ai
+                                                        ? Builder(
+                                                            builder: (context) {
+                                                              final child = AIMessage(
+                                                                showTypingIndicator: provider.showTypingIndicator &&
+                                                                    chatIndex == provider.messages.length - 1,
+                                                                showThinkingAfterText: provider.agentThinkingAfterText,
+                                                                message: message,
+                                                                sendMessage: _sendMessageUtil,
+                                                                onAskOmi: (text) {
+                                                                  setState(() {
+                                                                    _selectedContext = text;
+                                                                  });
+                                                                  textFieldFocusNode.requestFocus();
+                                                                },
+                                                                displayOptions: provider.messages.length <= 1,
+                                                                appSender: provider.messageSenderApp(message.appId),
+                                                                updateConversation: (ServerConversation conversation) {
+                                                                  context
+                                                                      .read<ConversationProvider>()
+                                                                      .updateConversation(
+                                                                        conversation,
+                                                                      );
+                                                                },
+                                                                setMessageNps: (int value, {String? reason}) {
+                                                                  provider.setMessageNps(message, value,
+                                                                      reason: reason);
+                                                                },
                                                               );
-                                                            }
-                                                            return child;
-                                                          },
-                                                        )
-                                                      : HumanMessage(
-                                                          message: message,
-                                                          onAskOmi: (text) {
-                                                            setState(() {
-                                                              _selectedContext = text;
-                                                            });
-                                                            textFieldFocusNode.requestFocus();
-                                                          },
-                                                        ),
-                                                );
-                                              },
-                                            ),
-                                          ),
+
+                                                              // Dynamic spacer logic
+                                                              if (chatIndex == provider.messages.length - 1 &&
+                                                                  _allowSpacer) {
+                                                                return Container(
+                                                                  constraints:
+                                                                      BoxConstraints(minHeight: spacerMinHeight),
+                                                                  alignment: Alignment.topLeft,
+                                                                  child: child,
+                                                                );
+                                                              }
+                                                              return child;
+                                                            },
+                                                          )
+                                                        : HumanMessage(
+                                                            message: message,
+                                                            onAskOmi: (text) {
+                                                              setState(() {
+                                                                _selectedContext = text;
+                                                              });
+                                                              textFieldFocusNode.requestFocus();
+                                                            },
+                                                          ),
+                                                  );
+                                                },
+                                              ),
+                                            );
+                                          }),
                                           if (_chatScrollMode == _ChatScrollMode.freeScrolling)
                                             _buildJumpToLatestButton(),
                                         ],
@@ -469,12 +512,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 left: 8,
                                 right: 8,
                                 top: provider.selectedFiles.isNotEmpty ? 0 : 8,
-                                bottom: widget.isPivotBottom
-                                    ? 6
-                                    : (textFieldFocusNode.hasFocus &&
-                                            (textController.text.length > 40 || textController.text.contains('\n'))
-                                        ? 4
-                                        : 10),
+                                // Embedded, the bottom nav floats over the body
+                                // (Align(bottomCenter) in a Stack, 100 tall) and
+                                // would draw on top of the composer. The nav no
+                                // longer hides on focus, so this clearance is
+                                // unconditional — making it depend on focus put
+                                // the composer back under the bar the moment it
+                                // was tapped, so only ever one of the two was
+                                // visible.
+                                bottom: widget.embedded
+                                    ? 100
+                                    : widget.isPivotBottom
+                                        ? 6
+                                        : (textFieldFocusNode.hasFocus &&
+                                                (textController.text.length > 40 || textController.text.contains('\n'))
+                                            ? 4
+                                            : 10),
                               ),
                               child: Stack(
                                 clipBehavior: Clip.none,

@@ -31,7 +31,6 @@ import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
-import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/home_hero.dart';
 import 'package:omi/pages/memories/brain_page.dart';
 import 'package:omi/pages/memories/page.dart';
@@ -126,7 +125,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool scriptsInProgress = false;
   StreamSubscription? _notificationStreamSubscription;
 
-  final GlobalKey<HomeContentPageState> _homeContentPageKey = GlobalKey<HomeContentPageState>();
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
@@ -151,8 +149,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   void _scrollToTop(int pageIndex) {
     switch (pageIndex) {
+      // 0 is the chat — it follows the live edge on its own, and yanking a
+      // reader back to the top of a conversation is not what "tap the tab
+      // again" should mean.
       case 0:
-        _homeContentPageKey.currentState?.scrollToTop();
         break;
       case 1:
         final conversationsState = _conversationsPageKey.currentState;
@@ -160,13 +160,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           (conversationsState as dynamic).scrollToTop();
         }
         break;
-      case 2:
+      // 2 is the Brain graph — pan/zoom, nothing to scroll.
+      case 3:
         final actionItemsState = _actionItemsPageKey.currentState;
         if (actionItemsState != null) {
           (actionItemsState as dynamic).scrollToTop();
         }
         break;
-      // 3 is the Brain graph — pan/zoom, nothing to scroll.
       case 4:
         _appsPageKey.currentState?.scrollToTop();
         break;
@@ -252,14 +252,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void initState() {
     _pages = [
-      HomeContentPage(key: _homeContentPageKey),
+      // Home *is* the chat. Tapping the composer used to push ChatPage as a
+      // route — a leftover from when Chat was its own nav tab (the tap still
+      // fired bottomNavigationTabClicked('Chat')). It now lives here, so asking
+      // Omi something never leaves the tab. The hero is the empty state.
+      ChatPage(
+        embedded: true,
+        // Centred and inset: as an empty state it fills the message area, which
+        // has no padding of its own — without this the headline runs to both
+        // screen edges and clips.
+        emptyState: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Center(
+            child: HomeHero(
+              animate: !_heroEntrancePlayed,
+              onEntranceComplete: () => _heroEntrancePlayed = true,
+            ),
+          ),
+        ),
+      ),
       ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
-      // Brain tab. BrainPage frames the graph as a contained section on its own
-      // surface; it passes embedded/trackOpenEvent through to MemoryGraphPage
-      // (the host Scaffold supplies the app bar, and IndexedStack builds this at
-      // launch so the open event fires from the tab tap instead — see onTabTap).
+      // Brain tab. BrainPage paints no background, inheriting this Scaffold's;
+      // it passes embedded/trackOpenEvent through to MemoryGraphPage (the host
+      // Scaffold supplies the app bar, and IndexedStack builds this at launch so
+      // the open event fires from the tab tap instead — see onTabTap).
       const BrainPage(),
+      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
       AppsPage(key: _appsPageKey),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
@@ -720,9 +738,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     ),
                     Consumer<HomeProvider>(
                       builder: (context, home, child) {
-                        if (home.isChatFieldFocused ||
-                            home.isAppsSearchFieldFocused ||
-                            home.isMemoriesSearchFieldFocused) {
+                        // Deliberately not hiding on isChatFieldFocused: Home
+                        // *is* the chat, so focusing the composer is the most
+                        // ordinary thing on the tab — dropping the nav bar every
+                        // time would make the app feel like it navigated away.
+                        // The search fields still hide it; those take over the
+                        // whole screen with results.
+                        if (home.isAppsSearchFieldFocused || home.isMemoriesSearchFieldFocused) {
                           return const SizedBox.shrink();
                         }
 
@@ -740,31 +762,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                   // The Brain page is built once by IndexedStack
                                   // and never "opens", so record the open here.
-                                  if (index == 3) {
+                                  if (index == 2) {
                                     PlatformManager.instance.analytics.brainMapOpened();
                                   }
                                   home.setIndex(index);
                                 }
                               },
                             ),
-                            if (home.selectedIndex == 0)
-                              // The headline and the chat bar are the Home hero.
-                              // The box stops short of the bottom nav so the pair
-                              // centres in the space the user reads as the page,
-                              // not in the full body including nav chrome.
-                              Positioned(
-                                left: 24,
-                                right: 24,
-                                top: 0,
-                                bottom: 96,
-                                child: Center(
-                                  child: HomeHero(
-                                    animate: !_heroEntrancePlayed,
-                                    onEntranceComplete: () => _heroEntrancePlayed = true,
-                                    chatBar: _buildChatBar(context),
-                                  ),
-                                ),
-                              ),
+                            // Home is the chat; the hero is its empty state and
+                            // is supplied to ChatPage rather than overlaid here.
                           ],
                         );
                       },
@@ -774,7 +780,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
                     // Task selection action bar - floats above bottom nav on the
                     // tasks tab when selection mode is active in ActionItemsProvider.
-                    if (homeProvider.selectedIndex == 2)
+                    if (homeProvider.selectedIndex == 3)
                       const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
                   ],
                 ),
@@ -786,68 +792,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  Widget _buildChatBar(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
-      },
-      child: Container(
-        height: 62,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: const Color(0xFF35343B), width: 1),
-          // Only a soft drop shadow. The bar used to float at the bottom of a
-          // scrolling page and carried two large upward-offset scrims to darken
-          // content passing underneath; centred beneath the headline those
-          // scrims painted over its last line and greyed it out.
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 18),
-            const Expanded(
-              child: Text(
-                'Ask Omi',
-                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
-                );
-              },
-              child: Container(
-                width: 42,
-                height: 42,
-                margin: const EdgeInsets.only(right: 6),
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Tabs that render their own full-bleed surface and carry no app-bar chrome:
   /// Conversations (1), Brain (3) and Apps (4).
   ///
   /// Conversations keeps its calendar button — only the device status chip and
   /// the settings gear drop away. Apps carries its own overflow menu next to
   /// the search field, so it needs neither.
-  static bool _hidesAppBarChrome(int selectedIndex) => selectedIndex == 1 || selectedIndex == 3 || selectedIndex == 4;
+  // Conversations (1), Brain (2) and Apps (4) render no app bar content of
+  // their own; Home (0) and Tasks (3) do.
+  static bool _hidesAppBarChrome(int selectedIndex) => selectedIndex == 1 || selectedIndex == 2 || selectedIndex == 4;
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     // Tabs in [_hidesAppBarChrome] render no app bar content of their own, and
@@ -1048,7 +1001,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               // Tasks page buttons - export and completed toggle
               Consumer2<HomeProvider, ActionItemsProvider>(
                 builder: (context, homeProvider, actionItemsProvider, _) {
-                  if (homeProvider.selectedIndex != 2) {
+                  if (homeProvider.selectedIndex != 3) {
                     return const SizedBox.shrink();
                   }
                   final showCompleted = actionItemsProvider.showCompletedView;

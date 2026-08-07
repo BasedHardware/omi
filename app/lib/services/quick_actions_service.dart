@@ -112,7 +112,7 @@ class QuickActionsService {
   }
 
   void _navigateToTasksAndOpenSheet(NavigatorState navigator, BuildContext context) {
-    Provider.of<HomeProvider>(context, listen: false).setIndex(2);
+    Provider.of<HomeProvider>(context, listen: false).setIndex(3);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = globalNavigatorKey.currentContext;

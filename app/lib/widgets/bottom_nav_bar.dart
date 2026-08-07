@@ -8,6 +8,15 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// The bar's opaque fill — very slightly lifted off pure black so the divider
+/// above it has something to sit against.
+const Color _navSurface = Color.fromARGB(255, 15, 15, 15);
+
+/// Hairline separating the bar from the page. 0.5 logical px renders as a true
+/// hairline on 2x/3x screens; a neutral white at low alpha rather than a fixed
+/// grey so it holds up if the surface beneath it ever changes.
+const Color _navDivider = Color(0x14FFFFFF);
+
 class BottomNavBar extends StatelessWidget {
   const BottomNavBar({super.key, required this.onTabTap});
 
@@ -19,27 +28,47 @@ class BottomNavBar extends StatelessWidget {
       builder: (context, home, child) {
         return Align(
           alignment: Alignment.bottomCenter,
-          child: Container(
-            width: double.infinity,
-            height: 100,
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: [0.0, 0.30, 1.0],
-                colors: [Colors.transparent, Color.fromARGB(255, 15, 15, 15), Color.fromARGB(255, 15, 15, 15)],
+          // Split into a scrim strip and a solid bar so the divider can sit
+          // exactly where the fill turns opaque. The whole thing still measures
+          // 100 — 20 of scrim over an 80 bar — so the tabs land where they
+          // always did.
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Content scrolling up to the bar fades out instead of being cut
+              // off dead against the divider.
+              const SizedBox(
+                width: double.infinity,
+                height: 20,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, _navSurface],
+                    ),
+                  ),
+                ),
               ),
-            ),
-            child: Row(
-              children: [
-                _buildTab(context, home, 0, FontAwesomeIcons.house, 'Home', context.l10n.navHome),
-                _buildTab(context, home, 1, FontAwesomeIcons.comments, 'Conversations', context.l10n.navConvos),
-                _buildTab(context, home, 2, FontAwesomeIcons.listCheck, 'Tasks', context.l10n.navTodos),
-                _buildTab(context, home, 3, FontAwesomeIcons.brain, 'Brain', context.l10n.navBrain),
-                _buildTab(context, home, 4, FontAwesomeIcons.tableCellsLarge, 'Apps', context.l10n.apps),
-              ],
-            ),
+              Container(
+                width: double.infinity,
+                height: 80,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: const BoxDecoration(
+                  color: _navSurface,
+                  border: Border(top: BorderSide(color: _navDivider, width: 0.5)),
+                ),
+                child: Row(
+                  children: [
+                    _buildTab(context, home, 0, FontAwesomeIcons.house, 'Home', context.l10n.navHome),
+                    _buildTab(context, home, 1, FontAwesomeIcons.comments, 'Conversations', context.l10n.navConvos),
+                    _buildTab(context, home, 2, FontAwesomeIcons.brain, 'Brain', context.l10n.navBrain),
+                    _buildTab(context, home, 3, FontAwesomeIcons.listCheck, 'Tasks', context.l10n.navTodos),
+                    _buildTab(context, home, 4, FontAwesomeIcons.tableCellsLarge, 'Apps', context.l10n.apps),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },
