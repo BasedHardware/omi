@@ -69,6 +69,12 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/i18n:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/surfaces:
     dependencies:
       '@omi-core/adapters-legacy':
@@ -111,6 +117,12 @@ importers:
       vite:
         specifier: ^7.2.6
         version: 7.3.6(@types/node@22.20.1)
+
+  packages/tokens:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   packages/sync:
     dependencies:

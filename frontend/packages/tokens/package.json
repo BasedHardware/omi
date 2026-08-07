@@ -1,0 +1,23 @@
+{
+  "name": "@omi-core/tokens",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dependency-free semantic design tokens for Omi production surfaces.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "node --test test/*.test.mjs",
+    "lint": "echo tokens:no-lint-yet"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
