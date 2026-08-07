@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { getGoalAdvice, getGoalHistory } from '@/lib/api';
 import { useAsyncResource } from '@/hooks/useAsyncResource';
+import { useRequestOwner } from '@/hooks/useRequestOwner';
 import type { GoalHistoryEntry } from '@/types/goals';
 
 export interface UseGoalDetailReturn {
@@ -37,26 +38,35 @@ export function useGoalDetail(goalId: string | null): UseGoalDetailReturn {
   const [adviceGoalId, setAdviceGoalId] = useState<string | null>(goalId);
 
   // Advice belongs to the goal it was requested for; drop it when the
-  // selection changes rather than showing it under a new title.
+  // selection changes rather than showing it under a new title. The in-flight
+  // request goes with it: the new goal starts idle, not stuck behind the old
+  // goal's pending call.
   if (goalId !== adviceGoalId) {
     setAdviceGoalId(goalId);
     setAdvice(null);
     setAdviceError(null);
+    setAdviceLoading(false);
   }
+
+  const claimRequest = useRequestOwner(goalId);
 
   const requestAdvice = useCallback(async () => {
     if (!goalId) return;
+    const isCurrent = claimRequest();
     setAdviceLoading(true);
     setAdviceError(null);
     try {
-      setAdvice(await getGoalAdvice(goalId));
+      const result = await getGoalAdvice(goalId);
+      if (!isCurrent()) return;
+      setAdvice(result);
     } catch (err) {
+      if (!isCurrent()) return;
       console.error('Failed to load goal advice:', err);
       setAdviceError(err instanceof Error ? err.message : 'Failed to load advice');
     } finally {
-      setAdviceLoading(false);
+      if (isCurrent()) setAdviceLoading(false);
     }
-  }, [goalId]);
+  }, [goalId, claimRequest]);
 
   return useMemo(
     () => ({
