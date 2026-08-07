@@ -16,6 +16,8 @@ are exercised directly with patched collaborators — no Firestore client and no
 FastAPI app construction.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 from fastapi import HTTPException
 
@@ -23,7 +25,7 @@ import routers.chat as chat_router
 
 
 class _FakeQuery:
-    """Records the query chain so the test can assert ordering was applied."""
+    """Records the query chain so the test can assert what the query did."""
 
     def __init__(self, recorder, docs):
         self._recorder = recorder
@@ -115,22 +117,42 @@ def test_blank_session_id_is_treated_as_absent(monkeypatch):
     assert chat_router._resolve_chat_session('uid-1', None, '')['id'] == 'current-session'
 
 
-def test_current_session_query_is_ordered_newest_first(monkeypatch):
-    """Without order_by, Firestore may return any matching session."""
+def test_current_session_resolves_to_the_newest(monkeypatch):
+    """The newest session wins, and it is not the query that decides.
+
+    This asserted `.order_by('created_at', DESCENDING)` on the query. That
+    ordering is what the original bug report asked for, but Firestore excludes
+    from an ordered query every document that lacks the ordered field
+    (https://firebase.google.com/docs/firestore/query-data/order-limit-data
+    #limitations), so a session written without `created_at` became invisible
+    and the user's history was stranded behind a freshly created session.
+
+    The ranking therefore moved into `get_chat_session`, and this test moved
+    with it: it now asserts the outcome the ordering was there to produce.
+    `tests/unit/test_chat_session_selection.py` covers the untimestamped case
+    and guards against `order_by` returning to the query.
+    """
     import database.chat as chat_db
-    from google.cloud import firestore
 
     recorder = {}
 
     class _Doc:
-        id = 'sess-newest'
+        def __init__(self, session_id, created_at):
+            self.id = session_id
+            self._data = {'id': session_id, 'created_at': created_at}
 
         def to_dict(self):
-            return {'id': 'sess-newest'}
+            return self._data
+
+    docs = [
+        _Doc('sess-older', datetime(2026, 8, 5, tzinfo=timezone.utc)),
+        _Doc('sess-newest', datetime(2026, 8, 7, tzinfo=timezone.utc)),
+        _Doc('sess-middle', datetime(2026, 8, 6, tzinfo=timezone.utc)),
+    ]
 
     class _Collection:
         def where(self, filter=None):  # noqa: A002
-            return _FakeQuery(recorder, [_Doc()]).where(filter=filter)
+            return _FakeQuery(recorder, docs).where(filter=filter)
 
     class _Document:
         def collection(self, name):
@@ -151,6 +173,8 @@ def test_current_session_query_is_ordered_newest_first(monkeypatch):
 
     result = chat_db.get_chat_session('uid-1', app_id=None)
 
-    assert result == {'id': 'sess-newest'}
-    assert recorder['order_by'] == ('created_at', firestore.Query.DESCENDING)
-    assert recorder['limit'] == 1
+    assert result['id'] == 'sess-newest'
+    assert 'order_by' not in recorder
+    # The read stays bounded even though the newest is no longer picked by the
+    # query; an unbounded scan of a heavy user's sessions is its own outage.
+    assert recorder['limit'] == chat_db.CURRENT_CHAT_SESSION_SCAN_LIMIT
