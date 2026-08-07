@@ -169,6 +169,14 @@ enum DesktopBackendEnvironment {
     while raw.hasSuffix("/") {
       raw.removeLast()
     }
+    guard let url = URL(string: raw),
+      let scheme = url.scheme?.lowercased(),
+      ["http", "https"].contains(scheme),
+      let host = url.host,
+      !host.isEmpty
+    else {
+      return productionShareBaseURL
+    }
     return raw
   }
 

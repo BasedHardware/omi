@@ -31,4 +31,15 @@ final class ShareLinksEnvironmentTests: XCTestCase {
       "https://share.example.com/conversations/abc"
     )
   }
+
+  func testShareBaseURLFallsBackForMalformedOverride() {
+    XCTAssertEqual(
+      DesktopBackendEnvironment.shareBaseURL(environmentValue: "not a url"),
+      "https://h.omi.me"
+    )
+    XCTAssertEqual(
+      DesktopBackendEnvironment.shareBaseURL(environmentValue: "ftp://share.example.com"),
+      "https://h.omi.me"
+    )
+  }
 }
