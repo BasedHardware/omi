@@ -73,7 +73,9 @@ function wirePatch(p: TaskPatch): Record<string, unknown> {
 export async function fetchIdSnapshot(http: HttpClient): Promise<TaskIdSnapshot | null> {
   const res = await http.request("GET", "/v1/action-items/ids");
   if (res.status !== 200) return null;
-  const ids = (res.json as { ids?: string[] }).ids ?? [];
+  const body = res.json as { ids?: unknown } | null;
+  if (!body || !Array.isArray(body.ids)) return null; // rule 12: junk body never becomes a snapshot
+  const ids = body.ids.filter((x): x is string => typeof x === "string");
   return { setVersion: contentHash(ids), complete: true, ids };
 }
 

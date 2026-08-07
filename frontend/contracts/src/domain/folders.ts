@@ -77,8 +77,5 @@ export type FolderOp =
  * consistent (red-team finding 9); deletion of local rows is permitted only
  * against a `complete: true` snapshot.
  */
-export interface FolderIdSnapshot {
-  setVersion: string;
-  complete: boolean;
-  ids: readonly string[];
-}
+/** Alias of the shared IdSnapshot (wave-1 ratchet) — use IdSnapshot in new code. */
+export type FolderIdSnapshot = import("../snapshot.js").IdSnapshot;

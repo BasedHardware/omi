@@ -122,7 +122,8 @@ function wirePatchSteps(
 export async function fetchMemoryIdSnapshot(http: HttpClient, limit = 5000): Promise<MemoryIdSnapshot | null> {
   const res = await http.request("GET", `/v3/memories?limit=${limit}&offset=0`);
   if (res.status !== 200) return null;
-  const rows = Array.isArray(res.json) ? (res.json as unknown[]) : [];
+  if (!Array.isArray(res.json)) return null; // rule 12: junk body never becomes a snapshot
+  const rows = res.json as unknown[];
   const ids: string[] = [];
   for (const raw of rows) {
     const r = raw as Record<string, unknown>;
