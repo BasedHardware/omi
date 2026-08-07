@@ -250,6 +250,32 @@ async def test_chat_router_and_agentic_share_one_setup_deadline():
     assert before + 20.0 <= deadline <= after + 25.0
 
 
+async def test_file_route_classification_shares_router_setup_deadline():
+    """Existing session file IDs must classify under the remaining shared setup budget."""
+    message = SimpleNamespace(sender='human', text='what is in the file?', files_id=[])
+    session = SimpleNamespace(id='s1', file_ids=['f1'])
+    agentic_calls = []
+
+    async def slow_file_context(*_args, **_kwargs):
+        await asyncio.sleep(0.05)
+        return False
+
+    async def capture_agentic(*_args, **_kwargs):
+        agentic_calls.append(1)
+        yield None
+
+    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
+        graph, '_has_file_context', slow_file_context
+    ), patch.object(graph, 'execute_agentic_chat_stream', capture_agentic), patch.object(
+        graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 0.01
+    ):
+        chunks = [chunk async for chunk in graph.execute_chat_stream('uid1', [message], chat_session=session)]
+
+    assert not agentic_calls, 'stalled file classification must not fall through to agentic after setup budget'
+    assert chunks[0].startswith('error: ')
+    assert chunks[-1] is None
+
+
 def test_prompt_metadata_is_prepended_to_the_live_user_turn():
     assert graph._with_prompt_metadata('question', '<current_datetime>now</current_datetime>') == (
         '<current_datetime>now</current_datetime>\n\nquestion'

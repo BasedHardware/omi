@@ -437,8 +437,33 @@ def send_message(
         usage_token = set_usage_context(uid, Features.CHAT)
 
         def emit_done_frame(response: str) -> str:
-            """Persist a terminal answer. Typed stream errors stay failed for journey/fallback SLIs."""
-            ai_message, ask_for_nps = process_message(response, callback_data)
+            """Persist a terminal answer. Typed stream errors stay failed for journey/fallback SLIs.
+
+            If Firestore persistence fails, still emit an in-memory ``done:`` frame (same
+            fail-open contract as ``emit_stream_error_fallback``) so the text client is
+            not left with only an earlier ``error:`` frame.
+            """
+            persist_outcome = 'degraded'
+            try:
+                ai_message, ask_for_nps = process_message(response, callback_data)
+            except Exception as persist_exc:
+                logger.error(
+                    'chat stream terminal answer persistence failed for uid=%s: %s',
+                    uid,
+                    type(persist_exc).__name__,
+                )
+                persist_outcome = 'exhausted'
+                ai_message = Message(
+                    id=str(uuid.uuid4()),
+                    text=response,
+                    created_at=datetime.now(timezone.utc),
+                    sender='ai',
+                    app_id=app_id_from_app,
+                    type='text',
+                )
+                if chat_session:
+                    ai_message.chat_session_id = chat_session.id
+                ask_for_nps = False
             response_message = ResponseMessage(**ai_message.model_dump())
             response_message.ask_for_nps = ask_for_nps
             encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
@@ -449,10 +474,20 @@ def send_message(
                     from_mode='llm_answer',
                     to_mode='canned_reply',
                     reason='other',
-                    outcome='degraded',
+                    outcome=persist_outcome,
                 )
             else:
-                journey_attempt.finish('success')
+                if persist_outcome == 'exhausted':
+                    journey_attempt.finish('failure')
+                    record_fallback(
+                        component='other',
+                        from_mode='llm_answer',
+                        to_mode='canned_reply',
+                        reason='other',
+                        outcome='exhausted',
+                    )
+                else:
+                    journey_attempt.finish('success')
             return f"done: {encoded_response}\n\n"
 
         try:

@@ -383,3 +383,82 @@ def test_v2_messages_emits_canned_done_after_error_without_staged_answer():
         chat_utils.record_fallback.assert_called_once()
     finally:
         _cleanup(saved)
+
+
+def test_v2_messages_keeps_typed_answer_when_persistence_fails():
+    """Typed timeout answer must still emit done: if Firestore persistence fails."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def timeout_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'idle_timeout'
+            kwargs['callback_data']['route'] = 'agentic'
+            kwargs['callback_data']['answer'] = 'The response took too long. Please try again.'
+            yield 'error: The response took too long. Please try again.'
+            yield None
+
+        router_module.execute_chat_stream = timeout_stream
+
+        def add_message(uid, message_data):
+            if message_data.get('sender') == 'ai':
+                raise RuntimeError('firestore down')
+            return message_data
+
+        chat_db.add_message.side_effect = add_message
+
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert response.text.count('done: ') == 1
+        payload = _decode_done_frame(response.text)
+        assert payload['text'] == 'The response took too long. Please try again.'
+        assert chat_utils.CHAT_STREAM_ERROR_TEXT not in response.text
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'exhausted'
+    finally:
+        _cleanup(saved)
+
+
+def test_voice_stream_finalizes_staged_failure_before_error_frame():
+    """Voice clients disconnect on error:; persist/done must happen before that frame."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def timeout_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'idle_timeout'
+            kwargs['callback_data']['route'] = 'agentic'
+            kwargs['callback_data']['answer'] = 'The response took too long. Please try again.'
+            yield 'error: The response took too long. Please try again.'
+            yield None
+
+        chat_utils.execute_graph_chat_stream = timeout_stream
+
+        async def collect():
+            frames = []
+            async for frame in chat_utils.process_voice_message_segment_stream(
+                '/tmp/decoded.wav', 'test-uid', language='en'
+            ):
+                frames.append(frame)
+                if frame.startswith('error: '):
+                    break
+            return frames
+
+        frames = asyncio.run(collect())
+        assert any(frame.startswith('done: ') for frame in frames)
+        assert any(frame.startswith('error: ') for frame in frames)
+        done_idx = next(i for i, frame in enumerate(frames) if frame.startswith('done: '))
+        error_idx = next(i for i, frame in enumerate(frames) if frame.startswith('error: '))
+        assert done_idx < error_idx
+        payload = _decode_done_frame(''.join(frames))
+        assert payload['text'] == 'The response took too long. Please try again.'
+        ai_writes = [c.args[1] for c in chat_db.add_message.call_args_list if c.args[1].get('sender') == 'ai']
+        assert ai_writes
+        assert ai_writes[0]['text'] == 'The response took too long. Please try again.'
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'degraded'
+    finally:
+        _cleanup(saved)
