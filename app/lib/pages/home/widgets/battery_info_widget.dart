@@ -259,13 +259,17 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                         final isRecording = captureProvider.recordingState == RecordingState.record;
                         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
                         final showChevron = !isRecording && !isInitialising;
+                        // The idle pill is white, so its content is dark;
+                        // the recording pill is red and keeps white content.
+                        final onPill = isRecording ? Colors.white : Colors.black;
                         return Padding(
                           padding: const EdgeInsets.only(left: 8),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             height: 36,
                             decoration: BoxDecoration(
-                              color: isRecording ? Colors.red.shade700 : Colors.deepPurple,
+                              // White when idle, red while recording — red is a state, not an accent.
+                              color: isRecording ? Colors.red.shade700 : Colors.white,
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: Row(
@@ -284,15 +288,15 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                       crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
                                         if (isRecording)
-                                          const Icon(Icons.stop_rounded, size: 14, color: Colors.white)
+                                          Icon(Icons.stop_rounded, size: 14, color: onPill)
                                         else if (isInitialising)
-                                          const SizedBox(
+                                          SizedBox(
                                             width: 12,
                                             height: 12,
-                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: onPill),
                                           )
                                         else
-                                          const FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                          FaIcon(FontAwesomeIcons.microphone, size: 12, color: onPill),
                                         const SizedBox(width: 6),
                                         Text(
                                           isRecording
@@ -300,8 +304,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                               : isInitialising
                                                   ? '...'
                                                   : context.l10n.record,
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: TextStyle(
+                                            color: onPill,
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -311,7 +315,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                   ),
                                 ),
                                 if (showChevron) ...[
-                                  Container(width: 1, height: 18, color: Colors.white.withValues(alpha: 0.25)),
+                                  Container(width: 1, height: 18, color: onPill.withValues(alpha: 0.25)),
                                   GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: () => _showRecordOptions(context),
@@ -319,10 +323,10 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                       height: 36,
                                       alignment: Alignment.center,
                                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.keyboard_arrow_down_rounded,
                                         size: 18,
-                                        color: Colors.white,
+                                        color: onPill,
                                       ),
                                     ),
                                   ),
@@ -447,20 +451,16 @@ class _RecordOption extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
-                ),
+                color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     blurRadius: 14,
                     offset: const Offset(0, 4),
                   ),
                 ],
               ),
-              child: FaIcon(icon, color: Colors.white, size: 18),
+              child: FaIcon(icon, color: Colors.black, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(

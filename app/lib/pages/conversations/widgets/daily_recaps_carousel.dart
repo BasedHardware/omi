@@ -29,8 +29,8 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
   /// through the full history.
   static const int _limit = 7;
 
-  static const double _cardWidth = 168;
-  static const double _stripHeight = 150;
+  static const double _cardWidth = 200;
+  static const double _stripHeight = 176;
 
   List<DailySummary> _summaries = [];
   bool _isLoading = true;
@@ -138,31 +138,25 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(10)),
-                  alignment: Alignment.center,
-                  child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 18)),
-                ),
-                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     formatCondensedRecapDate(summary.date),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 13, fontWeight: FontWeight.w500),
+                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 10),
             Expanded(
+              // titleMedium — the same style the conversation rows use for
+              // their title, so the two card types read at one size.
               child: Text(
                 summary.headline,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500, height: 1.3),
+                style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
             const SizedBox(height: 8),
@@ -173,7 +167,7 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
                   const SizedBox(width: 4),
                   Text(
                     '${summary.stats.totalConversations}',
-                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 13),
+                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                   ),
                   const SizedBox(width: 10),
                 ],
@@ -182,7 +176,7 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
                   const SizedBox(width: 4),
                   Text(
                     '${summary.stats.actionItemsCount}',
-                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 13),
+                    style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
                   ),
                 ],
               ],

@@ -78,23 +78,10 @@ class _HomeHeroState extends State<HomeHero> with SingleTickerProviderStateMixin
         _entrance(
           interval: _headlineCurve,
           rise: 16,
-          // The headline dims toward its last line — brightest where the eye
-          // lands first, settling into the page as it falls. The grey it
-          // resolves to is the same one the bar's placeholder uses.
-          child: ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (bounds) => const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.white, Colors.white, Color(0xFF8E8E93)],
-              stops: [0.0, 0.35, 1.0],
-            ).createShader(bounds),
-            child: Text(
-              'Omi is your personal AI, memory assistant, and coach. '
-              'Ask Omi anything about your life',
-              textAlign: TextAlign.center,
-              style: AppType.headlineMedium.copyWith(height: 1.35),
-            ),
+          child: Text(
+            'Ask Omi anything about your life',
+            textAlign: TextAlign.center,
+            style: AppType.headlineMedium.copyWith(height: 1.35),
           ),
         ),
         if (widget.chatBar != null) ...[

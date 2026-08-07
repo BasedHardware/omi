@@ -963,12 +963,12 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: isDone ? AppStyles.completedGreen : Colors.grey.shade600,
+                                  color: isDone ? AppStyles.completedAccent : Colors.grey.shade600,
                                   width: 2,
                                 ),
-                                color: isDone ? AppStyles.completedGreen : Colors.transparent,
+                                color: isDone ? AppStyles.completedAccent : Colors.transparent,
                               ),
-                              child: isDone ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                              child: isDone ? const Icon(Icons.check, color: AppStyles.completedGlyph, size: 16) : null,
                             );
                           },
                         ),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
@@ -15,6 +16,12 @@ import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
+/// The conversations filter row: one dropdown carrying All / Starred / every
+/// folder, plus the search toggle.
+///
+/// This used to be a horizontally scrolling chip rail. With more than a couple
+/// of folders the active one could sit off screen, so the row failed at the one
+/// job it had — telling you what you are looking at.
 class FolderTabs extends StatefulWidget {
   final List<Folder> folders;
   final String? selectedFolderId;
@@ -36,229 +43,141 @@ class FolderTabs extends StatefulWidget {
 }
 
 class _FolderTabsState extends State<FolderTabs> {
-  final ScrollController _scrollController = ScrollController();
-  String? _previousSelectedFolderId;
-  bool _previousShowStarredOnly = false;
+  Folder? get _selectedFolder =>
+      widget.selectedFolderId == null ? null : widget.folders.firstWhereOrNull((f) => f.id == widget.selectedFolderId);
 
-  @override
-  void initState() {
-    super.initState();
-    _previousSelectedFolderId = widget.selectedFolderId;
-    _previousShowStarredOnly = widget.showStarredOnly;
+  /// What the button reads. Starred wins over a folder because toggling it
+  /// clears the folder filter.
+  String get _label {
+    if (widget.showStarredOnly) return context.l10n.starred;
+    return _selectedFolder?.name ?? context.l10n.all;
   }
 
-  @override
-  void didUpdateWidget(FolderTabs oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Auto-scroll to top when selection changes
-    if (widget.selectedFolderId != _previousSelectedFolderId || widget.showStarredOnly != _previousShowStarredOnly) {
-      _previousSelectedFolderId = widget.selectedFolderId;
-      _previousShowStarredOnly = widget.showStarredOnly;
-      _scrollToStart();
-    }
+  void _selectAll() {
+    widget.onFolderSelected(null);
+    if (widget.showStarredOnly) widget.onStarredToggle();
   }
 
-  void _scrollToStart() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  Widget _buildStarredTab() {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: _FolderTab(
-        label: context.l10n.starred,
-        icon: '⭐',
-        color: Colors.amber,
-        isSelected: widget.showStarredOnly,
-        skipFolderTracking: true,
-        onTap: () {
-          // Track starred filter toggle with the NEW state (opposite of current)
-          PlatformManager.instance.analytics.starredFilterToggled(
-            enabled: !widget.showStarredOnly,
-            selectedFolderId: widget.selectedFolderId,
-          );
-          widget.onStarredToggle();
-        },
-      ),
+  void _selectStarred() {
+    PlatformManager.instance.analytics.starredFilterToggled(
+      enabled: !widget.showStarredOnly,
+      selectedFolderId: widget.selectedFolderId,
     );
+    if (!widget.showStarredOnly) widget.onStarredToggle();
   }
 
-  Widget _buildFolderTab(Folder folder) {
-    final isSelected = widget.selectedFolderId == folder.id;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: _FolderTab(
-        label: folder.name,
-        icon: folder.icon,
-        color: folder.colorValue,
-        count: folder.conversationCount,
-        isSelected: isSelected,
-        // If already selected, clicking clears the selection
-        onTap: () => widget.onFolderSelected(isSelected ? null : folder.id),
-        folder: folder,
-      ),
+  void _selectFolder(Folder folder) {
+    PlatformManager.instance.analytics.folderSelected(folderId: folder.id, folderName: folder.name);
+    if (widget.showStarredOnly) widget.onStarredToggle();
+    widget.onFolderSelected(folder.id);
+  }
+
+  /// Edit/delete lived on a long-press of the folder's chip. The chips are gone,
+  /// so the menu carries the actions for whichever folder is selected.
+  void _showFolderActions(Folder folder) {
+    HapticFeedback.mediumImpact();
+    PlatformManager.instance.analytics.folderContextMenuOpened(folderId: folder.id, folderName: folder.name);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F1F25),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _FolderContextMenu(folder: folder),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Build ordered list of tabs: All, Starred, folders
-    final List<Widget> tabs = [];
-
-    // "All" tab always first - clears all filters when clicked
-    tabs.add(
-      _FolderTab(
-        label: context.l10n.all,
-        isSelected: widget.selectedFolderId == null && !widget.showStarredOnly,
-        onTap: () {
-          // Clear folder filter
-          widget.onFolderSelected(null);
-          // Clear starred filter if active
-          if (widget.showStarredOnly) {
-            widget.onStarredToggle();
-          }
-        },
-      ),
-    );
-    tabs.add(const SizedBox(width: 8));
-
-    // Starred tab
-    tabs.add(_buildStarredTab());
-
-    // If a folder is selected, show it first (after Starred)
-    final selectedFolder = widget.selectedFolderId != null
-        ? widget.folders.firstWhereOrNull((f) => f.id == widget.selectedFolderId)
-        : null;
-    if (selectedFolder != null) {
-      tabs.add(_buildFolderTab(selectedFolder));
-    }
-
-    // Add remaining folders (excluding selected one)
-    for (final folder in widget.folders) {
-      if (folder.id != widget.selectedFolderId) {
-        tabs.add(_buildFolderTab(folder));
-      }
-    }
-
-    // Extra padding at the end for scroll
-    tabs.add(const SizedBox(width: 8));
+    final selectedFolder = _selectedFolder;
 
     return Container(
       height: 36,
       margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // Scrollable folder tabs
-          Expanded(
-            child: ListView(
-              controller: _scrollController,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(left: 16),
-              children: tabs,
+          PullDownButton(
+            itemBuilder: (context) => [
+              PullDownMenuItem.selectable(
+                title: context.l10n.all,
+                selected: !widget.showStarredOnly && widget.selectedFolderId == null,
+                onTap: _selectAll,
+              ),
+              PullDownMenuItem.selectable(
+                title: context.l10n.starred,
+                selected: widget.showStarredOnly,
+                iconWidget: const FaIcon(FontAwesomeIcons.solidStar, size: 14, color: Colors.amber),
+                onTap: _selectStarred,
+              ),
+              if (widget.folders.isNotEmpty) const PullDownMenuDivider.large(),
+              ...widget.folders.map(
+                (folder) => PullDownMenuItem.selectable(
+                  title: folder.name,
+                  selected: !widget.showStarredOnly && widget.selectedFolderId == folder.id,
+                  iconWidget: FaIcon(folderIconToFa(folder.icon), size: 14, color: folder.colorValue),
+                  onTap: () => _selectFolder(folder),
+                ),
+              ),
+              const PullDownMenuDivider.large(),
+              if (selectedFolder != null)
+                PullDownMenuItem(
+                  title: context.l10n.editFolder,
+                  iconWidget: const Icon(Icons.edit_outlined, size: 18),
+                  onTap: () => _showFolderActions(selectedFolder),
+                ),
+              PullDownMenuItem(
+                title: context.l10n.newFolder,
+                iconWidget: const Icon(Icons.add, size: 18),
+                onTap: () async {
+                  HapticFeedback.mediumImpact();
+                  PlatformManager.instance.analytics.createFolderButtonClicked();
+                  await showCreateFolderBottomSheet(context);
+                },
+              ),
+            ],
+            buttonBuilder: (context, showMenu) => GestureDetector(
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                showMenu();
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.showStarredOnly)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
+                      )
+                    else if (selectedFolder != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: FaIcon(folderIconToFa(selectedFolder.icon), size: 12, color: selectedFolder.colorValue),
+                      ),
+                    Text(
+                      _label,
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.keyboard_arrow_down, size: 18, color: Colors.grey[400]),
+                  ],
+                ),
+              ),
             ),
           ),
-          // Fixed trailing buttons
+          const Spacer(),
           _SearchButton(),
-          _AddFolderButton(),
         ],
       ),
     );
   }
 }
 
-/// Individual folder tab with long-press context menu.
-class _FolderTab extends StatelessWidget {
-  final String label;
-  final String? icon;
-  final Color? color;
-  final int? count;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final Folder? folder;
-  final bool skipFolderTracking;
-
-  const _FolderTab({
-    required this.label,
-    this.icon,
-    this.color,
-    this.count,
-    required this.isSelected,
-    required this.onTap,
-    this.folder,
-    this.skipFolderTracking = false,
-  });
-
-  void _showContextMenu(BuildContext context) {
-    if (folder == null) return; // No context menu for "All" tab
-
-    HapticFeedback.mediumImpact();
-
-    // Track context menu opened
-    PlatformManager.instance.analytics.folderContextMenuOpened(folderId: folder!.id, folderName: folder!.name);
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1F1F25),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _FolderContextMenu(folder: folder!),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Use a visible color for "All" tab (white), otherwise use folder color
-    final effectiveColor = color ?? Colors.white;
-
-    return GestureDetector(
-      onTap: () {
-        // Track folder selection (skip for Starred tab which has its own tracking)
-        if (!skipFolderTracking) {
-          PlatformManager.instance.analytics.folderSelected(folderId: folder?.id, folderName: label);
-        }
-        onTap();
-      },
-      onLongPress: folder != null ? () => _showContextMenu(context) : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: FaIcon(folderIconToFa(icon), size: 12, color: isSelected ? effectiveColor : Colors.grey[400]),
-              ),
-              const SizedBox(width: 5),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? effectiveColor : Colors.grey[400],
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Search toggle, sitting inline with the folder chips rather than in the
+/// Search toggle, sitting inline with the filter dropdown rather than in the
 /// shared home app bar.
 class _SearchButton extends StatelessWidget {
   @override
@@ -288,29 +207,6 @@ class _SearchButton extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-/// Fixed add folder button on the right side.
-class _AddFolderButton extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(left: 8, right: 16),
-      child: GestureDetector(
-        onTap: () async {
-          HapticFeedback.mediumImpact();
-          PlatformManager.instance.analytics.createFolderButtonClicked();
-          await showCreateFolderBottomSheet(context);
-        },
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
-          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
-        ),
-      ),
     );
   }
 }
@@ -615,41 +511,6 @@ class _MoveOption extends StatelessWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class FolderChip extends StatelessWidget {
-  final Folder folder;
-  final VoidCallback? onTap;
-
-  const FolderChip({super.key, required this.folder, this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: folder.colorValue.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: FaIcon(folderIconToFa(folder.icon), size: 10, color: folder.colorValue),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              folder.name,
-              style: TextStyle(fontSize: 11, color: folder.colorValue, fontWeight: FontWeight.w500),
-            ),
-          ],
         ),
       ),
     );

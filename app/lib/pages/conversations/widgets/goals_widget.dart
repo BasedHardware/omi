@@ -500,14 +500,6 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
     return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
   }
 
-  Color _getColor(double progress) {
-    if (progress >= 0.8) return const Color(0xFF22C55E);
-    if (progress >= 0.6) return const Color(0xFF84CC16);
-    if (progress >= 0.4) return const Color(0xFFFBBF24);
-    if (progress >= 0.2) return const Color(0xFFF97316);
-    return const Color(0xFF6B7280);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<GoalsProvider>(
@@ -525,26 +517,26 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
         return Container(
           margin: const EdgeInsets.only(left: 16, right: 16),
-          padding: const EdgeInsets.only(top: 16, bottom: 20),
+          padding: const EdgeInsets.only(top: 12, bottom: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 12),
+                padding: const EdgeInsets.only(left: 4, bottom: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       context.l10n.goals,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     if (goals.length < _maxGoals)
                       GestureDetector(
                         onTap: addGoal,
                         child: Container(
-                          width: 32,
-                          height: 32,
+                          width: 28,
+                          height: 28,
                           decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
                           child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
                         ),
@@ -566,10 +558,6 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   }
 
   Widget _buildGoalItem(Goal goal, bool isLast) {
-    final progress = goal.progressPercentage;
-    final color = _getColor(progress);
-    final emoji = _getGoalEmoji(goal.id);
-
     return Dismissible(
       key: Key(goal.id),
       direction: DismissDirection.endToStart,
@@ -589,80 +577,78 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
           _editGoal(goal);
         },
         child: Container(
-          margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          margin: EdgeInsets.only(bottom: isLast ? 0 : 8),
+          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(14)),
+          padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
           child: Row(
             children: [
-              // Emoji icon
-              Container(
-                width: 40,
-                height: 40,
-                margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(child: Text(emoji, style: const TextStyle(fontSize: 18))),
-              ),
               // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      goal.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    // Progress bar with completion text
+                    // Title and count share a line — the count used to sit beside
+                    // the bar, forcing the row as wide as both.
                     Row(
                       children: [
                         Expanded(
-                          child: Transform.translate(
-                            offset: const Offset(-12, 0),
-                            child: SliderTheme(
-                              data: SliderThemeData(
-                                trackHeight: 6,
-                                activeTrackColor: color,
-                                inactiveTrackColor: Colors.white.withValues(alpha: 0.1),
-                                thumbColor: color,
-                                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
-                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                                trackShape: const RoundedRectSliderTrackShape(),
-                                tickMarkShape: SliderTickMarkShape.noTickMark,
-                              ),
-                              child: Slider(
-                                value: goal.currentValue.clamp(0.0, goal.targetValue),
-                                min: 0,
-                                max: goal.targetValue,
-                                divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
-                                onChanged: (value) => _updateGoalProgressUI(goal, value),
-                                onChangeEnd: (value) {
-                                  PlatformManager.instance.analytics.goalProgressChanged(
-                                    goalId: goal.id,
-                                    oldValue: goal.currentValue,
-                                    newValue: value,
-                                    targetValue: goal.targetValue,
-                                  );
-                                  _saveGoalProgress(goal, value);
-                                },
-                              ),
-                            ),
+                          child: Text(
+                            goal.title,
+                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: Colors.white.withValues(alpha: 0.5),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    // The bar stays draggable, but the Slider's default 48pt
+                    // interactive height and 12pt overlay were setting the row's
+                    // height on their own. Constrained and stripped of the
+                    // overlay, it renders as the thin bar it looks like — the
+                    // Transform.translate that used to cancel the overlay inset
+                    // is no longer needed either.
+                    SizedBox(
+                      height: 14,
+                      child: SliderTheme(
+                        data: SliderThemeData(
+                          trackHeight: 4,
+                          activeTrackColor: Colors.white,
+                          inactiveTrackColor: Colors.white.withValues(alpha: 0.1),
+                          thumbColor: Colors.white,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                          overlayShape: SliderComponentShape.noOverlay,
+                          trackShape: const RoundedRectSliderTrackShape(),
+                          tickMarkShape: SliderTickMarkShape.noTickMark,
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: Slider(
+                          value: goal.currentValue.clamp(0.0, goal.targetValue),
+                          min: 0,
+                          max: goal.targetValue,
+                          divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
+                          onChanged: (value) => _updateGoalProgressUI(goal, value),
+                          onChangeEnd: (value) {
+                            PlatformManager.instance.analytics.goalProgressChanged(
+                              goalId: goal.id,
+                              oldValue: goal.currentValue,
+                              newValue: value,
+                              targetValue: goal.targetValue,
+                            );
+                            _saveGoalProgress(goal, value);
+                          },
+                        ),
+                      ),
                     ),
                   ],
                 ),

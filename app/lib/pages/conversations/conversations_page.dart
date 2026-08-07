@@ -9,12 +9,10 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/daily_recaps_carousel.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
-import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
 import 'package:omi/pages/conversations/widgets/search_result_header_widget.dart';
 import 'package:omi/pages/conversations/widgets/search_widget.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
@@ -39,15 +37,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   TextEditingController textController = TextEditingController();
   final AppReviewService _appReviewService = AppReviewService();
   final ScrollController _scrollController = ScrollController();
-  final GlobalKey<GoalsWidgetState> _goalsWidgetKey = GlobalKey<GoalsWidgetState>();
   final GlobalKey<DailyRecapsCarouselState> _recapsCarouselKey = GlobalKey<DailyRecapsCarouselState>();
-
-  void _refreshGoals() {}
-
-  // Public method to trigger goal creation from outside
-  void addGoal() {
-    _goalsWidgetKey.currentState?.addGoal();
-  }
 
   @override
   bool get wantKeepAlive => true;
@@ -269,9 +259,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-            // Refresh goals widget
-            _goalsWidgetKey.currentState?.refresh();
-            _refreshGoals();
             await Future.wait([
               convoProvider.getInitialConversations(),
               Provider.of<FolderProvider>(context, listen: false).loadFolders(),
@@ -305,9 +292,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
               getProcessingConversationsWidget(convoProvider.processingConversations),
 
-              // Goals, then the recap strip — both hidden while searching or
-              // filtering by date, when the user is looking for one specific
-              // thing and a standing summary is just noise.
+              // Recap strip — hidden while searching or filtering by date, when
+              // the user is looking for one specific thing and a standing
+              // summary is just noise. Goals live on the Tasks page.
               Consumer<HomeProvider>(
                 builder: (context, homeProvider, _) {
                   final isSearchActive = homeProvider.showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
@@ -315,15 +302,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   if (isSearchActive || hasCalendarFilter) {
                     return const SliverToBoxAdapter(child: SizedBox.shrink());
                   }
-                  final showGoals = SharedPreferencesUtil().showGoalTrackerEnabled;
-                  return SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
-                        DailyRecapsCarousel(key: _recapsCarouselKey),
-                      ],
-                    ),
-                  );
+                  return SliverToBoxAdapter(child: DailyRecapsCarousel(key: _recapsCarouselKey));
                 },
               ),
 
@@ -337,9 +316,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 SliverToBoxAdapter(
                   child: Builder(
                     builder: (context) => Padding(
-                      // Tight top gap — the search button moved out of the app
-                      // bar into the chips row, so this section rides up.
-                      padding: const EdgeInsets.only(left: 24, right: 16, top: 4, bottom: 8),
+                      // Generous top gap so the headline separates from the
+                      // recap strip above rather than crowding it.
+                      padding: const EdgeInsets.only(left: 24, right: 16, top: 24, bottom: 8),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,

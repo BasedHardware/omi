@@ -173,11 +173,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
   }
 
+  /// Goals live on the Tasks tab, so route there before opening the sheet.
   void _addGoal() {
-    context.read<HomeProvider>().setIndex(1);
-    final conversationsState = _conversationsPageKey.currentState;
-    if (conversationsState != null) {
-      (conversationsState as dynamic).addGoal();
+    context.read<HomeProvider>().setIndex(3);
+    final actionItemsState = _actionItemsPageKey.currentState;
+    if (actionItemsState != null) {
+      (actionItemsState as dynamic).addGoal();
     }
   }
 

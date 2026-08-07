@@ -340,22 +340,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Emoji + Title row
+            // Title row
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!widget.conversation.discarded)
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
-                    alignment: Alignment.center,
-                    child: Text(
-                      widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                if (!widget.conversation.discarded) const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,19 +488,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 🧠 Emoji + Tag
+          // Tag
           Flexible(
             fit: FlexFit.tight,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
                 if (widget.conversation.structured.category.isNotEmpty)
                   Flexible(
                     child: Container(

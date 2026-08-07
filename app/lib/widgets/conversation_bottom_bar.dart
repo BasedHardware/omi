@@ -30,6 +30,17 @@ enum ConversationBottomBarMode {
 
 enum ConversationTab { transcript, summary, actionItems }
 
+// The bar was built on a purple ramp (#1A0B2E surface, #2D1B4E rest,
+// #6B46C1 selected). Purple is off-brand — INV-UI-1 — so the ramp is now
+// neutral: the same near-black surfaces the rest of the app uses, with
+// selection carried by white rather than by hue.
+const Color _barSurface = Color(0xFF15151A);
+const Color _barRest = Color(0xFF1F1F25);
+const Color _barSelected = Colors.white;
+
+/// Content colour on top of [_barSelected] — a white fill needs dark content.
+const Color _barOnSelected = Colors.black;
+
 class ConversationBottomBar extends StatefulWidget {
   final ConversationBottomBarMode mode;
   final ConversationTab selectedTab;
@@ -398,7 +409,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         width: 180,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A0B2E),
+          color: _barSurface,
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
@@ -499,7 +510,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF6B46C1),
+        color: _barSelected,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -533,7 +544,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       width: 56,
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+        color: isSelected ? _barSelected : _barRest,
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
@@ -553,7 +564,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             HapticFeedback.mediumImpact();
             onTap();
           },
-          child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+          child: Center(child: FaIcon(icon, color: isSelected ? _barOnSelected : Colors.grey.shade400, size: 22)),
         ),
       ),
     );
@@ -618,7 +629,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF6B46C1),
+        color: _barSelected,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
@@ -647,11 +658,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                 child: Text(
                   displayName,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(color: _barOnSelected, fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ),
               // Dropdown arrow
-              const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+              const Icon(Icons.keyboard_arrow_down, color: _barOnSelected, size: 18),
             ],
           ),
         ),
@@ -676,7 +687,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           width: 32,
           height: 32,
           decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-          child: const Icon(Icons.play_arrow, color: Color(0xFF6B46C1), size: 20),
+          child: const Icon(Icons.play_arrow, color: _barOnSelected, size: 20),
         ),
       );
     }
@@ -702,7 +713,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             width: 32,
             height: 32,
             decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: const Color(0xFF6B46C1), size: 20),
+            child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: _barOnSelected, size: 20),
           ),
         );
       },
@@ -859,7 +870,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         height: 56,
         width: 56,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+          color: isSelected ? _barSelected : _barRest,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
@@ -879,7 +890,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               HapticFeedback.mediumImpact();
               onTap();
             },
-            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+            child: Center(child: FaIcon(icon, color: isSelected ? _barOnSelected : Colors.grey.shade400, size: 22)),
           ),
         ),
       ),
