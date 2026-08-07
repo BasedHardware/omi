@@ -17,6 +17,10 @@ an unentitled user canonical.
 | `MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED` | Maintenance job only | Separately enables the bounded historical graph-enrichment page for active canonical Long-term items. Each assertion apply is revision-, evidence-, ledger-, and account-generation-fenced, so staging may continue independently. It defaults to false and must be enabled only with maintenance; it never grants entitlement or opens reads. |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | Maintenance job only | Independently disables the L2 consolidation/model step while leaving required processing, TTL settlement, and outbox repair available. This is an incident/cost switch, not a rollout stage. |
 
+When the job is enabled, L2 and required processing run on the gateway-only
+`omi:auto:memory-l2` Luna lane; the deploy workflows derive that endpoint only
+after the serving gate and the Cloud Run VPC probe have both passed.
+
 `MEMORY_TYPESENSE_COLLECTION`, `TYPESENSE_HOST_PORT`, `PINECONE_INDEX_NAME`,
 and their secrets are infrastructure bindings, not rollout gates. Cursor
 secret/version/TTL settings are API integrity bindings, not enrollment flags.
