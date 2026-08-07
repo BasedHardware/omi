@@ -481,6 +481,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "named bundles must keep copying the canonical app icon, and the regression test must remain an executable deterministic check"
+  - id: desktop-local-dev-entitlements
+    command: ["bash", "desktop/macos/tests/test-prepare-local-dev-entitlements.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/prepare-local-dev-entitlements.sh", "desktop/macos/tests/test-prepare-local-dev-entitlements.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "local dev signing granted disable-library-validation only for the literal `-` identity, so the documented self-signed 'Omi Local Dev Signing' identity (TeamIdentifier=not set) built bundles dyld refused to launch while `codesign --verify` passed and `open -a` exited 0; this suite had no runner, so nothing caught it"
   - id: desktop-swift-format-wrapper
     command: ["bash", "desktop/macos/tests/test-swift-format-wrapper.sh"]
     triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
