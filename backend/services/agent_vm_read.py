@@ -11,7 +11,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from services.agent_vm_lifecycle import reconcile_requested
+from google.cloud.firestore import transactional
+
+from database._client import get_firestore_client
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from services.agent_vm_lifecycle import DEFAULT_ZONE, RECONCILER_SCHEMA_VERSION, reconcile_requested
 
 
 def reconcile_lease_active(vm: Mapping[str, Any], now: float | None = None) -> bool:
@@ -53,6 +57,7 @@ class AgentVmReadDecision:
     queue_start: bool
     preserve_owner: bool
     clear_cached_ip: bool = False
+    record_missing: bool = False
 
 
 def classify_provider_observation(
@@ -87,8 +92,8 @@ def decide_agent_vm_read(
     Behavior contract:
     - Reconciler already owns the record → demote to ``updating``, do not probe
       demand again from this helper (callers skip provider lookups first).
-    - Provider ``NOT_FOUND`` → demote to ``updating`` and queue reconciler
-      demand so the fenced job can mark ``missing`` and eventually clear.
+    - Provider ``NOT_FOUND`` → demote to ``updating``, queue reconciler demand,
+      and record ``missing`` so provisioning can claim a replacement.
     - Provider API blip (``unknown``) → preserve the owner pointer and status.
     - Provider running with a healthy ready cache → leave unchanged.
     """
@@ -102,6 +107,13 @@ def decide_agent_vm_read(
         )
     if observation is None:
         if stored == "ready":
+            if usable_cached_ip is False:
+                return AgentVmReadDecision(
+                    client_status="updating",
+                    queue_start=True,
+                    preserve_owner=True,
+                    clear_cached_ip=True,
+                )
             return AgentVmReadDecision(
                 client_status="ready",
                 queue_start=False,
@@ -127,6 +139,7 @@ def decide_agent_vm_read(
             queue_start=True,
             preserve_owner=True,
             clear_cached_ip=True,
+            record_missing=True,
         )
     if observation.kind == "stopped":
         return AgentVmReadDecision(
@@ -150,6 +163,15 @@ def decide_agent_vm_read(
             preserve_owner=True,
             clear_cached_ip=False,
         )
+    # Transitional / unknown live GCE states (PROVISIONING, STAGING, STOPPING, …)
+    # must not be presented as ready.
+    if stored == "ready":
+        return AgentVmReadDecision(
+            client_status="updating",
+            queue_start=False,
+            preserve_owner=True,
+            clear_cached_ip=True,
+        )
     return AgentVmReadDecision(
         client_status=stored,
         queue_start=False,
@@ -165,6 +187,73 @@ def apply_agent_vm_read_decision(vm: Mapping[str, Any], decision: AgentVmReadDec
     return {**dict(vm), "status": decision.client_status}
 
 
+@transactional
+def _record_provider_missing_if_current_txn(
+    transaction: Any,
+    deletion_ref: Any,
+    user_ref: Any,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    now: float,
+) -> bool:
+    """Record a provider-confirmed 404 without erasing the owner pointer."""
+    deletion = deletion_ref.get(transaction=transaction)
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    status = normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    if account_deletion_blocks_access(status):
+        return False
+    snapshot = user_ref.get(transaction=transaction)
+    vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    if (
+        not isinstance(vm, dict)
+        or vm.get("vmName") != vm_name
+        or (vm.get("zone") or DEFAULT_ZONE) != zone
+        or vm.get("authToken") != auth_token
+        or vm.get("status") not in {"ready", "stopped", "error"}
+    ):
+        return False
+    reconcile_raw = vm.get("reconcile")
+    reconcile: dict[str, Any] = reconcile_raw if isinstance(reconcile_raw, dict) else {}
+    if reconcile.get("state") == "missing":
+        return True
+    missing_since = reconcile.get("missingSince")
+    recorded_missing_since = float(missing_since) if isinstance(missing_since, (int, float)) else now
+    transaction.update(
+        user_ref,
+        {
+            "agentVm.reconcile.state": "missing",
+            "agentVm.reconcile.lastError": "GCE instance not found",
+            "agentVm.reconcile.missingSince": recorded_missing_since,
+            "agentVm.reconcile.schemaVersion": RECONCILER_SCHEMA_VERSION,
+        },
+    )
+    return True
+
+
+def record_provider_missing_if_current(
+    uid: str,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    now: float | None = None,
+) -> bool:
+    """Mark a provider-confirmed missing instance so provisioning can replace it."""
+    now = time.time() if now is None else now
+    client = get_firestore_client()
+    return bool(
+        _record_provider_missing_if_current_txn(
+            client.transaction(),
+            client.collection("account_deletions").document(uid),
+            client.collection("users").document(uid),
+            vm_name,
+            zone,
+            auth_token,
+            now,
+        )
+    )
+
+
 __all__ = [
     "AgentVmProviderObservation",
     "AgentVmReadDecision",
@@ -174,4 +263,5 @@ __all__ = [
     "demoted_updating_vm",
     "reconcile_in_progress",
     "reconcile_lease_active",
+    "record_provider_missing_if_current",
 ]

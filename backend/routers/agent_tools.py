@@ -93,7 +93,7 @@ def get_vm_status(uid: str = Depends(get_current_user_uid)):
     logger.info(f"[vm-status] uid={uid} vm={sanitize(vm)}")
     if not vm:
         return {"has_vm": False}
-    decision = decide_agent_vm_read(vm)
+    decision = decide_agent_vm_read(vm, usable_cached_ip=_is_usable_vm_ip(vm.get("ip")))
     return _vm_info_from_decision(vm, decision.client_status)
 
 

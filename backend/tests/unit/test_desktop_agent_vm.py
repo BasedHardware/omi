@@ -65,6 +65,84 @@ async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
     assert not tasks.tasks
 
 
+def test_claim_allows_replacement_when_reconciler_marked_missing():
+    class Snapshot:
+        def __init__(self, data, exists=True):
+            self._data = data
+            self.exists = exists
+
+        def to_dict(self):
+            return self._data
+
+    class Ref:
+        def __init__(self, data, exists=True):
+            self._data = data
+            self.exists = exists
+            self.writes = []
+
+        def get(self, transaction=None):
+            del transaction
+            return Snapshot(self._data, exists=self.exists)
+
+        def set(self, data, merge=False):
+            self.writes.append((data, merge))
+            self._data = {**(self._data or {}), **data} if merge else data
+
+    class Transaction:
+        def set(self, ref, data, merge=False):
+            ref.set(data, merge=merge)
+
+    user_ref = Ref(
+        {
+            "agentVm": {
+                "vmName": "omi-agent-stale",
+                "authToken": "old",
+                "status": "ready",
+                "reconcile": {"state": "missing", "missingSince": 1.0},
+            }
+        }
+    )
+    deletion_ref = Ref({}, exists=False)
+    candidate = {"vmName": "omi-agent-new", "status": "provisioning", "authToken": "new"}
+    raw = getattr(desktop_agent_vm._claim_vm_if_allowed_txn, "to_wrap", desktop_agent_vm._claim_vm_if_allowed_txn)
+
+    claimed_vm, claimed = raw(Transaction(), deletion_ref, user_ref, candidate)
+
+    assert claimed is True
+    assert claimed_vm == candidate
+    assert user_ref.writes
+
+
+@pytest.mark.asyncio
+async def test_status_keeps_demotion_when_start_request_loses_same_owner_race(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-stale",
+        "zone": "us-central1-a",
+        "ip": "34.1.2.3",
+        "authToken": "old-token",
+        "status": "ready",
+        "createdAt": "2026-07-26T00:00:00Z",
+    }
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def not_found(*_args):
+        return "NOT_FOUND", None
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
+    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *_args: False)
+    monkeypatch.setattr(desktop_agent_vm, "record_provider_missing_if_current", lambda *_args: True)
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response.status == "updating"
+    assert response.ip is None
+
+
 @pytest.mark.asyncio
 async def test_sparse_new_uid_is_persisted_as_provisioning_and_scheduled(monkeypatch):
     writes = []
@@ -286,6 +364,7 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
         "createdAt": "2026-07-26T00:00:00Z",
     }
     requests = []
+    marked = []
 
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -298,12 +377,16 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
     monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
+    monkeypatch.setattr(
+        desktop_agent_vm, "record_provider_missing_if_current", lambda *args: marked.append(args) or True
+    )
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
     assert response.status == "updating"
     assert response.ip is None
     assert requests == [("uid", "omi-agent-stale", "old-token")]
+    assert marked == [("uid", "omi-agent-stale", "us-central1-a", "old-token")]
 
 
 @pytest.mark.asyncio

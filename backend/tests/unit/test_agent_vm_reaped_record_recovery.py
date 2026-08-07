@@ -115,3 +115,14 @@ class TestVmEnsureRequestsReconciliation:
         response = agent_tools.get_vm_status(uid="uid-ready")
 
         assert response == {"has_vm": True, "status": "ready"}
+
+    def test_vm_status_demotes_ready_with_unknown_placeholder_ip(self, agent_tools, monkeypatch):
+        monkeypatch.setattr(
+            agent_tools,
+            "get_agent_vm",
+            lambda _uid: {**READY_VM, "authToken": "token", "ip": "unknown"},
+        )
+
+        response = agent_tools.get_vm_status(uid="uid-poisoned")
+
+        assert response == {"has_vm": True, "status": "updating"}

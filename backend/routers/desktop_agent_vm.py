@@ -35,8 +35,10 @@ from services.agent_vm_read import (
     decide_agent_vm_read,
     demoted_updating_vm,
     reconcile_in_progress,
+    record_provider_missing_if_current,
 )
 from utils.executors import db_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_trial_paywalled
 
@@ -183,7 +185,12 @@ def _claim_vm_if_allowed_txn(
     snapshot = user_ref.get(transaction=transaction)
     current = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
     if isinstance(current, dict) and current.get("vmName"):
-        return current, False
+        reconcile = current.get("reconcile")
+        # A provider-confirmed missing pointer cannot be started; allow the
+        # account provisioning path to claim a replacement without waiting for
+        # the reconciler's terminal-cleanup grace to erase the record.
+        if not (isinstance(reconcile, dict) and reconcile.get("state") == "missing"):
+            return current, False
     transaction.set(user_ref, {"agentVm": candidate}, merge=True)
     return candidate, True
 
@@ -707,6 +714,13 @@ async def get_agent_status(
     except Exception as exc:
         logger.warning("Agent VM status check failed for uid=%s: %s", uid, exc)
         # GCE UNKNOWN / API blip — do not wipe Firestore ownership.
+        record_fallback(
+            component="other",
+            from_mode="provider_probe",
+            to_mode="firestore_cache",
+            reason="other",
+            outcome="degraded",
+        )
         return _response(vm)
     usable_cached_ip: bool | None = None
     if observation.kind == "running":
@@ -717,6 +731,15 @@ async def get_agent_status(
                 uid,
             )
     decision = decide_agent_vm_read(vm, observation, usable_cached_ip=usable_cached_ip)
+    if decision.record_missing:
+        await run_blocking(
+            db_executor,
+            record_provider_missing_if_current,
+            uid,
+            str(vm["vmName"]),
+            str(vm.get("zone") or _ZONE),
+            str(vm.get("authToken") or ""),
+        )
     if decision.queue_start:
         # Provider 404 / stopped / repairable running: queue fenced reconciler
         # demand. Do not erase the owner pointer here — the reconciler owns
@@ -729,5 +752,14 @@ async def get_agent_status(
             str(vm.get("authToken") or ""),
         )
         if not requested:
-            return _response(await run_blocking(db_executor, _get_vm, uid) or vm)
+            latest = await run_blocking(db_executor, _get_vm, uid)
+            if not latest:
+                return None
+            if str(latest.get("vmName") or "") != str(vm.get("vmName") or "") or str(
+                latest.get("authToken") or ""
+            ) != str(vm.get("authToken") or ""):
+                return _response(latest)
+            # Same owner lost the race (deletion fence / concurrent claim): still
+            # demote the confirmed-stale ready view for this generation.
+            return _response(apply_agent_vm_read_decision(latest, decision))
     return _response(apply_agent_vm_read_decision(vm, decision))
