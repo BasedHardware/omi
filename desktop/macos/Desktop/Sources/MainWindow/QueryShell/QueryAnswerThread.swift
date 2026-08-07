@@ -81,7 +81,13 @@ struct QueryAnswerThread: View {
           }
         }
       )
-      .frame(maxWidth: .infinity, minHeight: 240, maxHeight: 460)
+      // **The panel owns the height; the transcript takes what the rest of the thread leaves.**
+      // A flat 460 here was a guess at a window this view cannot see — and it was a *floor* as well
+      // as a ceiling, so on the shell's own default size the panel ran past the bottom edge and the
+      // last row was sliced through its text. Flexible instead: `QueryShellLayout.panelBodyHeight`
+      // fits the panel to the window, and an error card or a citation strip appearing below simply
+      // takes its space out of the transcript rather than off the end of the page.
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
 
       // **A turn that failed must say so here.** The transcript renders nothing for a turn that
       // never produced a message, so without this the panel swaps to the answer mode, shows the

@@ -44,7 +44,15 @@ struct QueryShellHome: View {
   @AppStorage(MemoryHubDestination.storageKey) private var memoryDestinationRawValue =
     MemoryHubDestination.memories.rawValue
 
-  @State private var request = QueryShellRequest()
+  /// **The shell owns the filters. It does not own the query text.**
+  ///
+  /// The text is `chatProvider.draftText` — the one composer draft, which is also what persistence
+  /// restores, what a send clears and what the automation bridge writes. This surface used to keep a
+  /// private `@State` copy of it, so the bar drew one variable while the rest of the app read
+  /// another: `set_chat_drafts` reported a draft stored and the bar went on showing its placeholder,
+  /// and any test asserting composer behaviour through the bridge was asserting on a variable nothing
+  /// rendered. A `QueryShellRequest` is assembled per render from the draft plus these.
+  @State private var filters = QueryShellFilters()
   @State private var mode: QueryShellMode = .results
   @State private var screenCount: Int?
   /// Two seconds of "copied", which is the whole confirmation a pasteboard write gets.
@@ -52,7 +60,19 @@ struct QueryShellHome: View {
   /// The last question that actually went. `Try again` re-sends *that* — the composer is emptied by
   /// the send now, so re-reading the bar would retry an empty string.
   @State private var lastAskedQuestion = ""
-  @FocusState private var isQueryFocused: Bool
+  /// The hero bar's measured height, so the panel under it can end inside the window.
+  ///
+  /// Measured rather than assumed: the bar is `barMinHeight` at rest but grows with a staged-file row
+  /// and with the reader's font scale, and a reserve that ignores that is a reserve that puts the
+  /// panel back off the bottom edge the first time somebody drops a file on it. The reporter is a
+  /// `background` `GeometryReader`, which cannot affect layout, and the value it feeds only ever flows
+  /// *downwards* — the bar's height never depends on the panel's — so there is no measurement loop.
+  @State private var heroBarHeight: CGFloat = QueryShellLayout.barMinHeight
+  /// **The caret, as a claim rather than a flag.** Monotonic, and every increment lands the caret in
+  /// the bar. `@FocusState` cannot do that job any more: the field is an `NSTextView` that SwiftUI's
+  /// `.focused()` does not reach, and a flag already `true` could never re-claim a caret AppKit had
+  /// since given away — which is precisely the case the `didBecomeActive` claim below exists for.
+  @State private var caretClaims = 0
 
   var body: some View {
     if useLegacyHomeDesign {
@@ -73,39 +93,58 @@ struct QueryShellHome: View {
   private var querySurface: some View {
     GeometryReader { proxy in
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
-      VStack(spacing: QueryShellLayout.panelGap) {
-        QueryHeroBar(
-          text: $request.text,
-          focus: $isQueryFocused,
-          isWorking: chatProvider.isSending,
-          isStopping: chatProvider.isStopping,
-          mode: mode,
-          attachments: chatProvider.pendingAttachments,
-          onSearch: search,
-          onAsk: ask,
-          onStop: { chatProvider.stopAgent(owner: .mainChat) },
-          onAttachmentsAdded: stageAttachments,
-          onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) }
-        )
-        QueryResultsPanel(
-          request: $request,
-          mode: mode,
-          total: total,
-          onExitAnswer: { showResults() },
-          headerAccessory: { headerAccessory }
-        ) {
-          panelBody
+      let bodyHeight = QueryShellLayout.panelBodyHeight(
+        availableHeight: proxy.size.height,
+        heroBarHeight: heroBarHeight,
+        mode: mode)
+      // **Only this column is woken by a keystroke.** The composer draft is not published on
+      // `ChatProvider` (see `ChatComposerDraft`), so subscribing to it here keeps typing out of the
+      // shell and the transcript while still giving the bar — and the list it filters — the live text.
+      ChatDraftScope(draft: chatProvider.composerDraft) { draft in
+        VStack(spacing: QueryShellLayout.panelGap) {
+          QueryHeroBar(
+            text: draft,
+            caretClaim: caretClaims,
+            isWorking: chatProvider.isSending,
+            isStopping: chatProvider.isStopping,
+            mode: mode,
+            attachments: chatProvider.pendingAttachments,
+            onSearch: search,
+            onAsk: ask,
+            onStop: { chatProvider.stopAgent(owner: .mainChat) },
+            onAttachmentsAdded: stageAttachments,
+            onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) }
+          )
+          .background {
+            GeometryReader { bar in
+              Color.clear.preference(key: QueryHeroBarHeightKey.self, value: bar.size.height)
+            }
+          }
+          QueryResultsPanel(
+            request: requestBinding(text: draft),
+            mode: mode,
+            total: total,
+            onExitAnswer: { showResults() },
+            bodyHeight: bodyHeight,
+            headerAccessory: { headerAccessory }
+          ) {
+            panelBody(request: QueryShellRequest(text: draft.wrappedValue, filters: filters))
+          }
+          Spacer(minLength: 0)
         }
-        Spacer(minLength: 0)
+        .onPreferenceChange(QueryHeroBarHeightKey.self) { measured in
+          guard measured > 0, measured != heroBarHeight else { return }
+          heroBarHeight = measured
+        }
+        .frame(width: lane)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.top, OmiSpacing.sm)
       }
-      .frame(width: lane)
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-      .padding(.top, OmiSpacing.sm)
     }
     // A typed character belongs in the field even when the field is not focused: this is a search
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
-      isQueryFocused = true
+      claimCaret()
       showOnboardingOpenerIfPresent()
     }
     // **Coming back to Omi puts the caret back in the field.** This surface's whole job is to be typed
@@ -113,9 +152,9 @@ struct QueryShellHome: View {
     // `onAppear` claims the caret exactly once — the page `switch` in `DesktopHomeView` only rebuilds
     // this view on a tab change — so anything that took the keyboard away in between (another app
     // becoming key, a sheet, a menu) left the field cold and the next thing typed went nowhere.
-    // Idempotent when the field already has it.
+    // Harmless when the field already has it — the claim is a no-op once the caret is already there.
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-      isQueryFocused = true
+      claimCaret()
     }
     .onChange(of: chatProvider.onboardingOpener == nil) { _, _ in showOnboardingOpenerIfPresent() }
     // The two product flows the provider drives and nothing renders. Both were hosted only by the
@@ -153,7 +192,7 @@ struct QueryShellHome: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
       guard !useLegacyHomeDesign, let query = note.userInfo?["query"] as? String else { return }
-      request.text = query
+      chatProvider.draftText = query
       ask()
     }
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
@@ -175,8 +214,20 @@ struct QueryShellHome: View {
     // only two. See `QueryShellSubmission`.
   }
 
+  /// The seam value the panel and its body are handed, **assembled rather than stored**: the text
+  /// half has an owner already (`chatProvider.composerDraft`) and a second copy of it here is the
+  /// two-variables defect this surface shipped with.
+  private func requestBinding(text: Binding<String>) -> Binding<QueryShellRequest> {
+    Binding(
+      get: { QueryShellRequest(text: text.wrappedValue, filters: filters) },
+      set: { next in
+        if next.text != text.wrappedValue { text.wrappedValue = next.text }
+        filters = next.filters
+      })
+  }
+
   @ViewBuilder
-  private var panelBody: some View {
+  private func panelBody(request: QueryShellRequest) -> some View {
     switch mode {
     case .results:
       // The seam's occupant: one merged chronological spine — a conversation, the memories it
@@ -355,8 +406,8 @@ struct QueryShellHome: View {
   /// Both keys, resolved by `QueryShellSubmission` rather than by two functions that each restate the
   /// trim, the empty guard and the mode change — which is how they drift.
   private func submit(commandHeld: Bool) {
-    let submission = QueryShellSubmission.resolve(text: request.text, commandHeld: commandHeld)
-    if request.text != submission.text { request.text = submission.text }
+    let submission = QueryShellSubmission.resolve(text: chatProvider.draftText, commandHeld: commandHeld)
+    if chatProvider.draftText != submission.text { chatProvider.draftText = submission.text }
     guard let next = submission.mode else { return }
     setMode(next)
     guard let question = submission.question else { return }
@@ -391,7 +442,14 @@ struct QueryShellHome: View {
   /// the key the bar told you to press, and the next thing you typed went nowhere.
   private func setMode(_ next: QueryShellMode) {
     OmiMotion.withGated(.easeOut(duration: 0.16)) { mode = next }
-    isQueryFocused = true
+    claimCaret()
+  }
+
+  /// Asks for the caret. Monotonic, so a claim is never swallowed for already having been made — the
+  /// bar can be cold while this view still believes it is focused, which is the state every one of
+  /// these call sites is written for.
+  private func claimCaret() {
+    caretClaims &+= 1
   }
 
   // MARK: - Where a row goes
@@ -450,5 +508,17 @@ struct QueryShellHome: View {
       return
     }
     screenCount = (try? await RewindDatabase.shared.getScreenshotCount()) ?? 0
+  }
+}
+
+/// The hero bar's height, reported up to the surface that has to fit a panel underneath it.
+///
+/// `max` rather than last-writer-wins: the bar reports once, but a preference that reduced to the
+/// newest value would let a transient zero from a view being torn down shrink the reserve and let the
+/// panel run off the window for a frame.
+private struct QueryHeroBarHeightKey: PreferenceKey {
+  static let defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+    value = max(value, nextValue())
   }
 }

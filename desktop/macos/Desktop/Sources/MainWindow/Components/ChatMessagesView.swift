@@ -160,6 +160,45 @@ enum ChatTranscriptLayout {
   }
 }
 
+/// **Where the jump-to-latest control sits: in the transcript's own trailing gutter, never on a
+/// message.**
+///
+/// It floats over a live transcript, so "in the corner" is not a placement. A 36 pt disc inset 16 pt
+/// reached 52 pt in from the scroll view's trailing edge while the message column stops at the
+/// transcript's trailing inset — 32 on the ask panel — so the control sat *on* the trailing edge of
+/// every user bubble it passed, which is the one place a right-aligned transcript guarantees there is
+/// something to cover.
+///
+/// The transcript already keeps a clear gutter on that side (it is the trailing half of the same
+/// symmetric inset whose leading half holds the assistant's mark). So the control is fitted to that
+/// gutter rather than dropped on top of it: as large as the gutter allows, pushed to the outside of
+/// it, and clamped so it stays a real click target on hosts whose gutter is too small to hold one.
+enum ChatScrollJumpPlacement {
+  /// The disc at full size, which is what the ask panel's gutter can hold.
+  static let maximumDiameter: CGFloat = 32
+  /// Below this it stops being a target worth aiming at, so a narrower gutter is overlapped rather
+  /// than obeyed — the honest trade, and the reason `clearsMessageColumn` exists to say which case a
+  /// host is in.
+  static let minimumDiameter: CGFloat = 24
+
+  static func diameter(trailingContentInset: CGFloat) -> CGFloat {
+    min(maximumDiameter, max(minimumDiameter, trailingContentInset))
+  }
+
+  /// How far the disc sits from the scroll view's trailing edge: whatever the gutter has left after
+  /// the disc, up to one small gap. Zero when the gutter is the disc, which is the ask panel.
+  static func trailingInset(trailingContentInset: CGFloat) -> CGFloat {
+    let leftover = trailingContentInset - diameter(trailingContentInset: trailingContentInset)
+    return max(0, min(OmiSpacing.sm, leftover))
+  }
+
+  /// Whether the disc lands entirely outside the message column.
+  static func clearsMessageColumn(trailingContentInset: CGFloat) -> Bool {
+    diameter(trailingContentInset: trailingContentInset)
+      + trailingInset(trailingContentInset: trailingContentInset) <= trailingContentInset
+  }
+}
+
 /// The desktop transcript is deliberately a recent-window view. Older turns
 /// stay in the canonical journal, but rendering an unbounded timeline makes
 /// ordinary chat sessions progressively more expensive to scroll and update.
@@ -412,6 +451,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     max(horizontalContentPadding, ChatOmiMarkPlacement.markGutter)
   }
 
+  /// The clear strip between the message column and the scroll view's trailing edge. The
+  /// jump-to-latest control is placed inside it — see `ChatScrollJumpPlacement`.
+  private var trailingContentInset: CGFloat {
+    horizontalContentPadding + trailingContentPadding
+  }
+
   private var effectiveTranscriptWindowPolicy: ChatTranscriptWindow.Policy {
     transcriptWindowPolicy
       ?? (chatFirstRichBlockContext == nil ? .standard : .compactHome)
@@ -460,7 +505,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       // made that a bug each of them could reintroduce; clamping here makes it
       // impossible.
       .padding(.leading, leadingContentPadding)
-      .padding(.trailing, horizontalContentPadding + trailingContentPadding)
+      .padding(.trailing, trailingContentInset)
       .padding(.vertical, verticalContentPadding)
       .frame(maxWidth: .infinity)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
@@ -956,6 +1001,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // Show when free-scrolled AND there are messages, AND either there's
     // activity below or we're in a non-following mode.
     if scrollMode == .freeScrolling && !messages.isEmpty {
+      let diameter = ChatScrollJumpPlacement.diameter(trailingContentInset: trailingContentInset)
       Button {
         cancelPendingScrollsForUserInteraction()
         userIsScrolling = false
@@ -966,10 +1012,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       } label: {
         ZStack(alignment: .center) {
           Color.clear
-            .frame(width: 36, height: 36)
+            .frame(width: diameter, height: diameter)
             // A free-floating object over the transcript, so it is real glass
             // with its own ambient shadow rather than a wash on the panel.
-            .glassFloatingBar(cornerRadius: 18)
+            .glassFloatingBar(cornerRadius: diameter / 2)
           Image(systemName: "arrow.down")
             .scaledFont(size: OmiType.body, weight: .semibold)
             .foregroundColor(Ink.primary)
@@ -985,7 +1031,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       .buttonStyle(.plain)
       .accessibilityLabel("Jump to latest message")
       .padding(.bottom, OmiSpacing.lg)
-      .padding(.trailing, OmiSpacing.lg)
+      .padding(
+        .trailing,
+        ChatScrollJumpPlacement.trailingInset(trailingContentInset: trailingContentInset)
+      )
       .transition(.scale.combined(with: .opacity))
       .omiAnimation(.easeInOut(duration: 0.2), value: scrollMode)
       .omiAnimation(.easeInOut(duration: 0.3), value: hasActivityBelow)

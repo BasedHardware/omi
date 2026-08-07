@@ -28,10 +28,28 @@ struct QueryShellMatchCount: PreferenceKey {
   }
 }
 
+/// Whether the body has composed the whole account yet, or is still paging it in.
+///
+/// The corner sentence is a claim about how much Omi is holding, and while hydration is still
+/// walking the account that claim is provisional and visibly climbing — the tester watched it go
+/// 5,562 → 7,310 in under a minute. A number that moves under the reader has to say why.
+struct QueryShellCorpusSettled: PreferenceKey {
+  /// `false`, because "we have not finished looking" is the honest state before a body reports.
+  static let defaultValue: Bool = false
+  static func reduce(value: inout Bool, nextValue: () -> Bool) {
+    value = nextValue()
+  }
+}
+
 extension View {
   /// A panel body says how many rows it kept. The only thing the chrome ever learns about the body.
   func queryShellMatchCount(_ count: Int) -> some View {
     preference(key: QueryShellMatchCount.self, value: count)
+  }
+
+  /// A panel body says whether what it is showing is the whole account yet.
+  func queryShellCorpusSettled(_ isSettled: Bool) -> some View {
+    preference(key: QueryShellCorpusSettled.self, value: isSettled)
   }
 }
 
@@ -42,6 +60,13 @@ struct QueryResultsPanel<Content: View, Accessory: View>: View {
   /// "counting…" rather than as a confident zero.
   let total: Int?
   let onExitAnswer: () -> Void
+  /// **How tall the body is allowed to be — the panel's decision, not the body's.**
+  ///
+  /// Each body used to pin its own height against a window it could not see, which is how the panel
+  /// ended up taller than the page and clipped mid-row. The chrome is the only thing here that knows
+  /// what it costs, so it is the only thing that can say what is left; the host measures the window
+  /// and `QueryShellLayout.panelBodyHeight` does the arithmetic.
+  let bodyHeight: CGFloat
   /// One slot in the header's leading cluster, next to `Filter ›` / `‹ Results`.
   ///
   /// **The chrome still learns nothing about the body.** It does not know that the thing beside the
@@ -53,6 +78,8 @@ struct QueryResultsPanel<Content: View, Accessory: View>: View {
   @ViewBuilder var content: () -> Content
 
   @State private var matching: Int = 0
+  /// Whether `total` is a finished count or a running one. See `QueryShellCorpusSettled`.
+  @State private var corpusSettled = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: QueryShellLayout.panelHeaderSpacing) {
@@ -61,8 +88,11 @@ struct QueryResultsPanel<Content: View, Accessory: View>: View {
         chips
       }
       content()
-        .frame(maxWidth: .infinity, minHeight: QueryShellLayout.minimumBodyHeight, alignment: .top)
+        .frame(
+          maxWidth: .infinity, minHeight: bodyHeight, maxHeight: bodyHeight, alignment: .top
+        )
         .onPreferenceChange(QueryShellMatchCount.self) { matching = $0 }
+        .onPreferenceChange(QueryShellCorpusSettled.self) { corpusSettled = $0 }
     }
     .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
     .padding(.top, QueryShellLayout.panelPaddingTop)
@@ -154,7 +184,7 @@ struct QueryResultsPanel<Content: View, Accessory: View>: View {
       return "Answered from \(QueryShellCount.number(total)) captured moments"
     }
     return QueryShellCount.sentence(
-      matching: matching, total: total, isFiltering: request.isFiltering)
+      matching: matching, total: total, isFiltering: request.isFiltering, isSettled: corpusSettled)
   }
 
   // MARK: - Chips

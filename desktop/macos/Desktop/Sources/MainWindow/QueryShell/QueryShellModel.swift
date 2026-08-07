@@ -100,6 +100,28 @@ struct QueryShellRequest: Equatable, Sendable {
   }
 }
 
+/// **The half of a request the shell owns.**
+///
+/// The other half — the text — belongs to `ChatProvider.composerDraft`, which is what the composer
+/// renders, what persistence restores and what the automation bridge writes. It is deliberately absent
+/// here: this surface stored its own copy of the query text once, and the copy the bridge wrote and
+/// the copy the bar drew were different variables behind one apparent control. A request is therefore
+/// *assembled* from the draft plus these, never stored whole.
+struct QueryShellFilters: Equatable, Sendable {
+  var kind: QueryShellKind = .all
+  var range: QueryShellRange = .all
+}
+
+extension QueryShellRequest {
+  init(text: String, filters: QueryShellFilters) {
+    self.init(text: text, kind: filters.kind, range: filters.range)
+  }
+
+  var filters: QueryShellFilters {
+    QueryShellFilters(kind: kind, range: range)
+  }
+}
+
 /// Which body the panel is hosting. **Asking is a mode of the same query, not a destination** — the
 /// query bar keeps its text, the panel keeps its frame, and only what is inside it swaps.
 enum QueryShellMode: Equatable, Sendable {
@@ -213,11 +235,17 @@ enum QueryShellRoute: Equatable, CaseIterable, Sendable {
 /// under a filter it says how much of that survived the filter. Collapsing them into one string is how
 /// a search surface ends up claiming "0 moments captured" the moment you type a letter.
 enum QueryShellCount {
-  static func sentence(matching: Int, total: Int, isFiltering: Bool) -> String {
+  /// - Parameter isSettled: whether `total` is a finished count. While the account is still paging
+  ///   in, the number climbs under the reader — so it says that instead of presenting a moving
+  ///   figure as a settled one.
+  static func sentence(matching: Int, total: Int, isFiltering: Bool, isSettled: Bool) -> String {
     guard isFiltering else {
-      return "\(number(total)) moment\(total == 1 ? "" : "s") captured"
+      guard isSettled else {
+        return "\(number(total)) so far · still counting"
+      }
+      return "\(number(total)) moment\(total == 1 ? "" : "s") in all"
     }
-    return "\(number(matching)) result\(matching == 1 ? "" : "s") · of \(number(total)) captured"
+    return "\(number(matching)) result\(matching == 1 ? "" : "s") · of \(number(total)) in all"
   }
 
   /// Grouped digits, because the count is routinely five figures and an ungrouped one is unreadable
@@ -267,6 +295,36 @@ enum QueryShellLayout {
   /// one — a search field is type you read, not a headline.
   static let queryFontSize: CGFloat = 21
 
+  // The composer inside the bar.
+  //
+  // **The bar is a composer, so it has to be able to show more than one line.** As a single-line
+  // `TextField` it stored everything you pasted and showed you the last line of it, and a long
+  // question scrolled the start of your own sentence out of view — you could not read back what you
+  // were about to ask. Growing it is the fix, and the two numbers a growing field needs are how tall
+  // one line is and where it stops.
+
+  /// One laid-out line of the query face. Not a guess: `QueryShellTests` checks it against
+  /// `NSLayoutManager`'s own line height for `NSFont.systemFont(ofSize: queryFontSize)`, so it tracks
+  /// the platform's metrics rather than dating from the day it was typed.
+  static let composerLineHeight: CGFloat = 25
+
+  /// The text container's breathing room, top and bottom.
+  static let composerInsetVertical: CGFloat = 6
+
+  /// **The resting height is the height it always was.** One line plus its insets is 37, which the
+  /// 38 pt push-to-talk disc beside it already sets — so an empty bar is exactly as tall as before
+  /// (`barMinHeight`) and nothing on the surface moves until there is a second line to show.
+  static var composerMinHeight: CGFloat { composerLineHeight + composerInsetVertical * 2 }
+
+  /// **Where growth stops.** Past this the composer scrolls instead of pushing the results panel
+  /// down: the bar and the panel share one column in an 800×680 window (`DesktopWindowLayoutPolicy`),
+  /// and a composer that grows without a ceiling walks the panel off the bottom of it.
+  static let composerMaxLines: CGFloat = 5
+
+  static var composerMaxHeight: CGFloat {
+    composerLineHeight * composerMaxLines + composerInsetVertical * 2
+  }
+
   // The results panel.
 
   static let panelPaddingHorizontal: CGFloat = 16
@@ -279,4 +337,43 @@ enum QueryShellLayout {
 
   /// The floor under the panel body, so an empty result set is still a panel and not a sliver.
   static let minimumBodyHeight: CGFloat = 120
+
+  /// The ceiling over it. Home is two objects with air between them, and a panel that keeps growing
+  /// with the window stops being the second one and becomes the surface.
+  static let maximumBodyHeight: CGFloat = 470
+
+  /// The air above the hero bar, between it and the navigation.
+  static let surfaceTopInset: CGFloat = OmiSpacing.sm
+
+  /// **The panel's own chrome, above and below whatever it is showing.**
+  ///
+  /// The header row is a chip plus its 2 pt of lift (`QueryPanelChipLabel`); the type chips exist only
+  /// on the list, because in answer mode there is nothing to narrow by type.
+  static func panelChromeHeight(mode: QueryShellMode) -> CGFloat {
+    let headerRow = chipHeight + 2
+    let typeChips = mode == .results ? chipHeight + panelHeaderSpacing : 0
+    return panelPaddingTop + headerRow + panelHeaderSpacing + typeChips + panelPaddingBottom
+  }
+
+  /// **How tall the panel body may be, so the panel ends inside the window instead of past it.**
+  ///
+  /// The body used to be pinned: the spine took a flat 470 and the answer thread a flat 460, numbers
+  /// chosen against a window nobody re-measured. At the shell's own default size the page has 600 pt
+  /// for a surface asking for 654, so the panel ran off the bottom edge and AppKit cut the last row
+  /// through the middle of its text — no fade, no bottom padding, no way to scroll to it, because the
+  /// part that was missing was outside the scroll view rather than below it.
+  ///
+  /// So the height is derived rather than declared: whatever the window has, less what is above the
+  /// body and the panel's own chrome, held between the floor and the ceiling. The hero bar is
+  /// measured rather than assumed — it grows when files are staged onto it, and reserving its minimum
+  /// would put the overflow straight back the first time somebody attached something.
+  static func panelBodyHeight(
+    availableHeight: CGFloat,
+    heroBarHeight: CGFloat,
+    mode: QueryShellMode
+  ) -> CGFloat {
+    let above = surfaceTopInset + max(barMinHeight, heroBarHeight) + panelGap
+    let room = availableHeight - above - panelChromeHeight(mode: mode)
+    return min(maximumBodyHeight, max(minimumBodyHeight, room))
+  }
 }

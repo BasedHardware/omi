@@ -79,9 +79,6 @@ enum SpineLayout {
   /// this is behind the header and is not what anybody is looking at.
   static let readingLine: CGFloat = SpineMetrics.dayHeaderHeight + 4
   static let coordinateSpace = "omi.spine"
-  /// How tall the stream is allowed to get before it scrolls inside the panel. The panel is one of
-  /// two objects on Home and must not grow until it swallows the gap under the query bar.
-  static let maximumHeight: CGFloat = 470
   /// Below this the rail is dropped rather than squeezed: a rail narrower than its own hour labels
   /// is a column of stubs, and the spine is the part worth the width.
   static let railBreakpoint: CGFloat = 620
@@ -126,7 +123,11 @@ struct SpineStream: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
     }
-    .frame(height: SpineLayout.maximumHeight)
+    // **The panel says how tall this is.** A flat 470 here was taller than the page the panel had at
+    // the shell's own default window size, so the list ran off the bottom edge and the last row was
+    // cut through the middle of its text — outside the scroll view, so unreachable by scrolling.
+    // `QueryShellLayout.panelBodyHeight` is the one place that number is decided now.
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .queryShellMatchCount(store.matchCount)
     // First paint is the first page of each store and nothing else. Only once that is composed and
     // on screen does hydration start walking the rest of the account in behind it.
@@ -389,7 +390,7 @@ private struct SpineRailColumn: View {
     SpineHourRail(
       density: dayID.map(store.density(for:)) ?? Array(repeating: 0, count: 24),
       currentHour: currentHour,
-      momentCount: dayID.map(store.momentCount(for:)) ?? 0,
+      momentCount: dayID.flatMap(store.momentCount(for:)),
       dayTitle: day?.title ?? "",
       conversationCount: day?.conversationCount ?? 0
     )

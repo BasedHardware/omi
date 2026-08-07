@@ -79,21 +79,50 @@ enum ChatRowPresentation: Equatable {
   var isFilled: Bool { self == .userTurn }
 }
 
+/// **The message body's ground, decided as arithmetic before it is drawn.**
+///
+/// The fill, the corner that rounds it and the padding that holds text away from that corner are one
+/// decision, and this is the only place that makes it. Splitting them is what broke the transcript:
+/// the spacing rebuild correctly took the capsule's padding off the assistant's reply — an unfilled
+/// reply is not a container and must not be indented like one — and left the capsule's *clip* behind.
+///
+/// A rounded clip is not a decoration on the corners; it is a curve that withdraws from the leading
+/// edge for the whole first `radius` points of the box. At `PageGlass.cardRadius` on a three-line
+/// reply that is 9 pt of withdrawal where the first line's cap height sits, tapering to nothing by its
+/// baseline. With no padding to absorb it, every reply lost the top-left of its opening glyph and the
+/// bottom-left of its closing line's — `I` became a low stub, `l` a high one — while the lines in
+/// between, at the box's full width, were untouched. That taper is the signature: a defect that reads
+/// as "the first character is missing" but only on a block's first and last line.
+enum ChatMessageBlockGeometry {
+  /// Only a container is padded like one.
+  static func horizontalPadding(filled: Bool) -> CGFloat { filled ? OmiSpacing.md : 0 }
+  static func verticalPadding(filled: Bool) -> CGFloat { filled ? OmiSpacing.sm : 0 }
+
+  /// Whether the block paints a ground of its own. An assistant reply's ground is the glass panel it
+  /// sits on, so it paints nothing — and therefore has no shape, nothing to round, and nothing that
+  /// could clip its own text.
+  static func drawsGround(filled: Bool) -> Bool { filled }
+
+  /// The corner of that ground. Zero when there is no ground: a shape that is never drawn must never
+  /// be reintroduced as a clip either.
+  static func cornerRadius(filled: Bool) -> CGFloat { filled ? PageGlass.cardRadius : 0 }
+}
+
 extension View {
-  /// The message body's ground.
-  ///
-  /// A user turn is a filled capsule and the padding is what makes it one. An
-  /// assistant reply has no fill — on a glass panel the glass is the ground, and
-  /// a second fill inside it would be a box inside a box — but the reply was
-  /// still wearing the capsule's padding: 12 pt of phantom indent and 16 pt of
-  /// dead vertical air wrapped around bare text with nothing to wrap it in. That
-  /// is what put two one-line replies further apart than a paragraph break.
-  /// Padding belongs to the container, so it now goes where the container goes.
+  /// The message body's ground. See `ChatMessageBlockGeometry` for why the fill is a background shape
+  /// rather than a clip: a block only ever rounds what it painted, never the text handed to it.
   func chatMessageBlock(filled: Bool) -> some View {
-    padding(.horizontal, filled ? OmiSpacing.md : 0)
-      .padding(.vertical, filled ? OmiSpacing.sm : 0)
-      .background(filled ? Ink.rowFillHover : Color.clear)
-      .clipShape(RoundedRectangle(cornerRadius: PageGlass.cardRadius, style: .continuous))
+    padding(.horizontal, ChatMessageBlockGeometry.horizontalPadding(filled: filled))
+      .padding(.vertical, ChatMessageBlockGeometry.verticalPadding(filled: filled))
+      .background {
+        if ChatMessageBlockGeometry.drawsGround(filled: filled) {
+          RoundedRectangle(
+            cornerRadius: ChatMessageBlockGeometry.cornerRadius(filled: filled),
+            style: .continuous
+          )
+          .fill(Ink.rowFillHover)
+        }
+      }
   }
 }
 
