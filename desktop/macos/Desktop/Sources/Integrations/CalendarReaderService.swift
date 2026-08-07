@@ -410,7 +410,7 @@ let manager = GoogleOAuthConnectionManager.shared
     for attempt in 1...maxAttempts {
       do {
         if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+          || UserDefaults.standard.bool(forKey: .forceSynthesisFail)
         {
           throw NSError(
             domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])

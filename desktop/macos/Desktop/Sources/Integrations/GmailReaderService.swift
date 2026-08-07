@@ -178,7 +178,7 @@ selectedCookiePath: selectedCookiePath
       var merged: [String: GmailEmail] = [:]
       for email in queryEmails + labelEmails {
         let existing = merged[email.id]
-        if existing == nil || existing!.date < email.date {
+        if (existing?.date ?? .distantPast) < email.date {
           merged[email.id] = email
         }
       }
@@ -333,7 +333,7 @@ if successfulReads {
     for attempt in 1...maxAttempts {
       do {
         if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+          || UserDefaults.standard.bool(forKey: .forceSynthesisFail)
         {
           throw NSError(
             domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
@@ -878,7 +878,7 @@ let browserConfigs = GmailSelectionStore.filter(
       )
       for email in feedEmails {
         let existing = merged[email.id]
-        if existing == nil || existing!.date < email.date {
+        if (existing?.date ?? .distantPast) < email.date {
           merged[email.id] = email
         }
       }

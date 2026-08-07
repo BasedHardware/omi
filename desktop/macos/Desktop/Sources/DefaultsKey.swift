@@ -73,6 +73,7 @@ enum DefaultsKey: String {
   case googleOauthPrimaryAccount = "googleOauthPrimaryAccount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  case forceSynthesisFail = "forceSynthesisFail"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
