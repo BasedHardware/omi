@@ -13,6 +13,11 @@ import XCTest
 /// edge is a hard-edged rectangle stamped on the user's wallpaper. `PageGlassLaneTests` holds it for
 /// the page panel; `ShellModalScrimTests` at the foot of this file holds it for the modal dim, off the
 /// same measurement rather than a second harness.
+///
+/// The class has a second mechanism, so there is a third guard here. A dim is a *fill*; a system
+/// focus effect is a *stroke*, drawn by AppKit around whatever holds keyboard focus. Around a page-
+/// scale container that is a 1 pt accent rectangle on the window's edges, which is the same wallpaper
+/// rectangle in outline — `ShellPageKeyboardTargetTests`.
 @MainActor
 final class PageGlassLaneTests: XCTestCase {
 
@@ -321,6 +326,108 @@ final class ShellModalScrimTests: XCTestCase {
     return recorder.bounds
   }
 
+}
+
+// MARK: - The page-scale keyboard target
+
+/// **A page may hold keyboard focus. It may not draw a focus ring around the window.**
+///
+/// The third member of this file's defect class and the one that is not a fill: a page that answers
+/// arrow keys anywhere on itself has to be `focusable()`, and AppKit strokes a focus effect around
+/// whatever holds focus. On a control that is the point of the effect; on a container the size of the
+/// shell's content area it is a 1 pt system-accent rectangle along the window's left, right and
+/// bottom edges with a full-width line under the top bar — reported from a live build as Rewind
+/// drawing a blue rectangle on the wallpaper, and in a hue this product uses nowhere (INV-UI-1).
+///
+/// Not measured on pixels, and deliberately so: `ImageRenderer` has no focus, so no offscreen render
+/// can show a focus ring whether or not one would be drawn. The seam that *is* real is the
+/// environment the effect reads, which is asserted here through a live layout pass — the same shape
+/// `testTheSurfaceTellsTheDimWhichSurfaceItIs` uses. Both directions are held: the page must not draw
+/// one, and a view that has not asked to be a page target must still get one, or the assertion above
+/// it would pass against a harness that never had focus effects at all.
+@MainActor
+final class ShellPageKeyboardTargetTests: XCTestCase {
+
+  func testAPageScaleKeyboardTargetDrawsNoSystemFocusEffect() {
+    XCTAssertEqual(
+      Self.focusEffectEnabled(pageTarget: true), false,
+      "the page draws AppKit's focus effect: at content-area scale that is an accent rectangle on "
+        + "the window's edges, which on this window is the user's wallpaper")
+  }
+
+  /// The control case. Without the modifier the effect is on, which is what makes the assertion
+  /// above a claim about `shellPageKeyboardTarget` rather than about the test host.
+  func testAnOrdinaryFocusableViewKeepsItsFocusEffect() {
+    XCTAssertEqual(
+      Self.focusEffectEnabled(pageTarget: false), true,
+      "focus effects are off everywhere in this harness, so the assertion above proves nothing")
+  }
+
+  /// Reads `\.isFocusEffectEnabled` out of a real environment through a real layout pass, from
+  /// exactly where the page's own content sits.
+  private static func focusEffectEnabled(pageTarget: Bool) -> Bool? {
+    let recorder = FocusEffectRecorder()
+    let host = NSHostingView(
+      rootView: ShellPageKeyboardTargetProbe(recorder: recorder, pageTarget: pageTarget)
+        .frame(width: 1_400, height: 800))
+    host.frame = NSRect(x: 0, y: 0, width: 1_400, height: 800)
+    host.layoutSubtreeIfNeeded()
+    return recorder.isFocusEffectEnabled
+  }
+}
+
+private final class FocusEffectRecorder: @unchecked Sendable {
+  private(set) var isFocusEffectEnabled: Bool?
+
+  func record(_ enabled: Bool) {
+    isFocusEffectEnabled = enabled
+  }
+}
+
+/// Owns the `@FocusState` the modifier binds, because a `FocusState.Binding` can only come from a
+/// view that declares one — the same constraint every page under test lives with.
+private struct ShellPageKeyboardTargetProbe: View {
+  let recorder: FocusEffectRecorder
+  let pageTarget: Bool
+  @FocusState private var focused: Bool
+
+  var body: some View {
+    if pageTarget {
+      FocusEffectReader(recorder: recorder).shellPageKeyboardTarget($focused)
+    } else {
+      FocusEffectReader(recorder: recorder).focusable().focused($focused)
+    }
+  }
+}
+
+private struct FocusEffectReader: View {
+  let recorder: FocusEffectRecorder
+  @Environment(\.isFocusEffectEnabled) private var isFocusEffectEnabled
+
+  var body: some View {
+    FocusEffectReaderLayout(recorder: recorder, enabled: isFocusEffectEnabled) { Color.clear }
+  }
+}
+
+private struct FocusEffectReaderLayout: Layout {
+  let recorder: FocusEffectRecorder
+  let enabled: Bool
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect,
+    proposal: ProposedViewSize,
+    subviews: Subviews,
+    cache: inout ()
+  ) {
+    recorder.record(enabled)
+    for subview in subviews {
+      subview.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+  }
 }
 
 // MARK: - Measuring what was painted

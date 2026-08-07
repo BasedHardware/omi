@@ -10,6 +10,14 @@
 //  This is the one element on the surface that carries a hue. Everything else — chips, cards,
 //  selection — answers in weight, because a second meaning-bearing colour is one more thing to learn.
 //
+//  **There is no `↵ Search` key hint, because searching is not a thing you commit to.**
+//  `RewindViewModel` subscribes to `$searchQuery` and runs `performSearch` 300 ms after you stop
+//  typing, so the results under the bar have already narrowed by the time a hand reaches Return. The
+//  hint was a button for a job that finished while you were reaching for it — and, since no call site
+//  ever passed `onSubmit`, a button that ran an empty closure. Same removal and the same reason as
+//  the home composer's (`QueryHeroBar`, 979a1101e1): a key that means nothing is not a key worth
+//  labelling.
+//
 
 import OmiTheme
 import SwiftUI
@@ -29,7 +37,6 @@ struct RewindSearchBar: View {
   /// rather than keeping a second one that could disagree.
   var focus: FocusState<Bool>.Binding
   var onClear: () -> Void = {}
-  var onSubmit: () -> Void = {}
 
   private var isTyped: Bool { !query.isEmpty }
 
@@ -65,8 +72,6 @@ struct RewindSearchBar: View {
         .buttonStyle(.plain)
         .help(Self.clearActionName)
         .accessibilityLabel(Text(Self.clearActionName))
-      } else {
-        keyboardHint
       }
     }
     .frame(height: RewindSearchLayout.barHeight)
@@ -110,7 +115,6 @@ struct RewindSearchBar: View {
           .font(.system(size: RewindSearchMetrics.queryFontSize, weight: .semibold))
           .foregroundStyle(Ink.primary)
           .focused(focus)
-          .onSubmit(onSubmit)
           .accessibilityLabel(Text(Self.searchActionName))
       }
       .padding(.leading, isTyped ? RewindSearchMetrics.chipPaddingHorizontal : 0)
@@ -121,24 +125,6 @@ struct RewindSearchBar: View {
     .omiAnimation(.easeOut(duration: InkMotion.press), value: isTyped)
   }
 
-  /// `↵  Search`, and it is also the control.
-  ///
-  /// The reference shows only the keycaps. A bar whose one action exists solely as a key press is
-  /// unusable to anyone who cannot press it, so the hint is a button — same glyphs, same weight, with
-  /// a target under them.
-  private var keyboardHint: some View {
-    Button(action: onSubmit) {
-      HStack(spacing: 6) {
-        Text("↵").inkStyle(.statusLabel, color: Ink.secondary)
-        Text("Search").inkStyle(.statusLabel, color: Ink.secondary)
-      }
-      .fixedSize()
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .help(Self.searchActionName)
-    .accessibilityLabel(Text(Self.searchActionName))
-  }
 }
 
 extension RewindSearchBar {

@@ -144,8 +144,12 @@ struct RewindPage: View {
       }
     }
     .glassContent()
-    .focusable()
-    .focused($isPageFocused)
+    // The page answers arrow keys and the scroll wheel wherever the pointer is, so it holds keyboard
+    // focus itself. It is not a control, though, and this container is the whole content area: the
+    // system focus effect around it was a 1 pt accent rectangle on the window's edges, which on a
+    // window with no visible extent is a blue rectangle on the wallpaper. See
+    // `shellPageKeyboardTarget`.
+    .shellPageKeyboardTarget($isPageFocused)
     .task {
       await viewModel.loadInitialData()
     }
@@ -608,17 +612,30 @@ struct RewindPage: View {
     let oldest = viewModel.oldestCapturedDay
     let older = viewModel.capturedDay(before: viewModel.selectedDate)
     let newer = viewModel.capturedDay(after: viewModel.selectedDate)
+    // "There is nowhere older to go": either the survey found no oldest day, or the day we are on is
+    // it. Bound once because the button below asks the same question twice — for `disabled` and for
+    // the dimming that shows it — and the two spellings drifting apart is a control that looks live
+    // and does nothing. It replaces `oldest == nil || …isDate(oldest!, …)`, which could not actually
+    // trap (`||` short-circuits before the unwrap) but made every reader re-derive that.
+    let atOldestCapture = oldest.map { Calendar.current.isDate($0, inSameDayAs: viewModel.selectedDate) } ?? true
 
     VStack(alignment: .leading, spacing: OmiSpacing.xs) {
       // `nil` here is "not surveyed yet", not "nothing captured" — the two claims are different and
       // the second one is a lie until the walk has finished.
+      //
+      // Two lines, two levels, and **on glass that separation is weight rather than a third colour
+      // rung.** The note under the span was set on the third rung, which measures under WCAG AA on
+      // this panel — the same illegibility class as the onboarding copy at 2.17:1. Promoting it to
+      // `Ink.secondary` alone would have flattened the pair into one voice, so the span it explains
+      // takes the rung above it and the medium weight instead: the answer reads first, its footnote
+      // second, and both are legible.
       Text(RewindHistoryReach.spanLabel(days: viewModel.capturedDays, surveyed: viewModel.didSurveyHistory))
-        .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.secondary)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(Ink.primary)
 
       Text(RewindHistoryReach.retentionNote(retentionDays: retentionDays))
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(Ink.tertiary)
+        .foregroundColor(Ink.secondary)
 
       HStack(spacing: OmiSpacing.sm) {
         Button {
@@ -650,9 +667,8 @@ struct RewindPage: View {
             .scaledFont(size: OmiType.caption)
         }
         .buttonStyle(.plain)
-        .disabled(oldest == nil || Calendar.current.isDate(oldest!, inSameDayAs: viewModel.selectedDate))
-        .opacity(
-          oldest == nil || Calendar.current.isDate(oldest!, inSameDayAs: viewModel.selectedDate) ? 0.35 : 1)
+        .disabled(atOldestCapture)
+        .opacity(atOldestCapture ? 0.35 : 1)
       }
       .foregroundColor(Ink.primary)
     }
