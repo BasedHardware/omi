@@ -12,11 +12,12 @@
     "lint": "echo testkit:no-lint-yet"
   },
   "dependencies": {
+    "@omi-core/adapters-legacy": "workspace:*",
+    "@omi-core/bridge-web": "workspace:*",
     "@omi-core/contracts": "workspace:*",
+    "@omi-core/domain": "workspace:*",
     "@omi-core/kernel": "workspace:*",
     "@omi-core/sync": "workspace:*",
-    "@omi-core/adapters-legacy": "workspace:*",
-    "@omi-core/domain": "workspace:*",
     "@omi-core/wire-listen": "workspace:*"
   },
   "devDependencies": {
