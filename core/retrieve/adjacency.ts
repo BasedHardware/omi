@@ -47,7 +47,8 @@ export const projectTypedAdjacency = (subgraph: SafeSubgraph, options: { tempora
     if (overlaps(a, b)) edges.push(...pair("when-adjacent", claimNode(a.revision_id), claimNode(b.revision_id)));
   }
   const entityMembers = new Map<string, string[]>();
-  for (const edge of subgraph.adjacency) entityMembers.set(edge.entity_id, [...(entityMembers.get(edge.entity_id) ?? []), edge.claim_revision_id]);
+  // Append in place; the rebuild-per-row form was O(rows^2) in memmove.
+  for (const edge of subgraph.adjacency) { const bucket = entityMembers.get(edge.entity_id); if (bucket) bucket.push(edge.claim_revision_id); else entityMembers.set(edge.entity_id, [edge.claim_revision_id]); }
   for (const [entity, members] of entityMembers) {
     const unique = [...new Set(members)].sort();
     // Keep the durable entity itself as a navigable anchor.  The claim-to-claim
@@ -61,7 +62,7 @@ export const projectTypedAdjacency = (subgraph: SafeSubgraph, options: { tempora
     edges.push({ kind: "evidence-lineage", from: claimNode(lineage.claim_revision_id), to: evidenceNode(lineage.evidence_id) });
     edges.push({ kind: "evidence-lineage", from: evidenceNode(lineage.evidence_id), to: eventNode(lineage.event_revision_id) });
     edges.push({ kind: "evidence-lineage", from: eventNode(lineage.event_revision_id), to: captureNode(lineage.capture_session_id) });
-    captureMembers.set(lineage.capture_session_id, [...(captureMembers.get(lineage.capture_session_id) ?? []), lineage.claim_revision_id]);
+    const bucket = captureMembers.get(lineage.capture_session_id); if (bucket) bucket.push(lineage.claim_revision_id); else captureMembers.set(lineage.capture_session_id, [lineage.claim_revision_id]);
   }
   for (const members of captureMembers.values()) {
     const unique = [...new Set(members)].sort();

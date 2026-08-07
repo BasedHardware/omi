@@ -1,6 +1,6 @@
 import { canonicalEntityIdsAt, project, type GraphSnapshot, type SafeSubgraph } from "./index";
 import { projectTypedAdjacency, type TypedAdjacencyKind } from "./adjacency";
-import { walk, type WalkPath } from "./walk";
+import { buildWalkIndex, walk, type WalkPath } from "./walk";
 
 export interface GraphComponent { nodes: readonly string[]; }
 export interface TrajectoryDiff {
@@ -18,10 +18,15 @@ const components = (subgraph: SafeSubgraph, relationKinds: readonly TypedAdjacen
   const edges = projectTypedAdjacency(subgraph, { temporal_proximity_window_ms: temporalWindow }).edges.filter((edge) => relationKinds.includes(edge.kind));
   const neighbors = new Map<string, Set<string>>();
   for (const claim of subgraph.claims) neighbors.set(`claim:${claim.revision_id}`, new Set());
-  for (const edge of edges) { neighbors.set(edge.from, new Set([...(neighbors.get(edge.from) ?? []), edge.to])); neighbors.set(edge.to, new Set([...(neighbors.get(edge.to) ?? []), edge.from])); }
+  // Insert into the existing Set: rebuilding it per edge made this O(edges^2).
+  const link = (from: string, to: string) => { const bucket = neighbors.get(from); if (bucket) bucket.add(to); else neighbors.set(from, new Set([to])); };
+  for (const edge of edges) { link(edge.from, edge.to); link(edge.to, edge.from); }
   const unseen = new Set(neighbors.keys()), output: GraphComponent[] = [];
   while (unseen.size) {
-    const first = [...unseen].sort()[0]!; const found = new Set([first]); const queue = [first]; unseen.delete(first);
+    // Lexicographic min, matching the previous [...unseen].sort()[0] without
+    // re-sorting the whole frontier every round.
+    let first: string | null = null; for (const node of unseen) if (first === null || node < first) first = node;
+    const found = new Set([first!]); const queue = [first!]; unseen.delete(first!);
     while (queue.length) for (const next of neighbors.get(queue.shift()!) ?? []) if (!found.has(next)) { found.add(next); unseen.delete(next); queue.push(next); }
     output.push({ nodes: [...found].sort() });
   }
@@ -40,23 +45,30 @@ export const diffGraphSnapshots = (before: GraphSnapshot, after: GraphSnapshot, 
   const relationKinds = options.relation_kinds ?? ["when-adjacent", "entity-shared", "evidence-lineage", "source-shared", "temporal-proximity"];
   const beforeSafe = ownerProjection(before), afterSafe = ownerProjection(after);
   const beforeGroups = entityGroups(before), afterGroups = entityGroups(after);
+  const canonicalBefore = canonicalEntityIdsAt(before), canonicalAfter = canonicalEntityIdsAt(after);
   const entities_merged = [...afterGroups].flatMap(([canonical_entity_id, entity_ids]) => {
-    const prior = new Set(entity_ids.map((id) => canonicalEntityIdsAt(before).get(id) ?? id));
+    const prior = new Set(entity_ids.map((id) => canonicalBefore.get(id) ?? id));
     return entity_ids.length > 1 && prior.size > 1 ? [{ canonical_entity_id, entity_ids }] : [];
   }).sort((left, right) => left.canonical_entity_id.localeCompare(right.canonical_entity_id));
   const entities_split = [...beforeGroups].flatMap(([previous_canonical_entity_id, entity_ids]) => {
-    const next = new Set(entity_ids.map((id) => canonicalEntityIdsAt(after).get(id) ?? id));
+    const next = new Set(entity_ids.map((id) => canonicalAfter.get(id) ?? id));
     return entity_ids.length > 1 && next.size > 1 ? [{ previous_canonical_entity_id, entity_ids }] : [];
   }).sort((left, right) => left.previous_canonical_entity_id.localeCompare(right.previous_canonical_entity_id));
   const priorAssertions = new Set((before.predicate_assertions ?? []).map((item) => item.assertion.assertion_id));
   const predicates_aliased = (after.predicate_assertions ?? []).filter((item) => item.assertion.relation === "alias_of" && item.assertion.lifecycle === "active" && item.assertion.admission === "accepted" && !priorAssertions.has(item.assertion.assertion_id)).map((item) => item.assertion.assertion_id).sort();
   const maxHops = options.max_hops ?? 3, pathCap = options.path_cap_per_anchor ?? 100;
   const collect = (subgraph: SafeSubgraph): readonly WalkPath[] => {
-    const anchors = [...new Set(projectTypedAdjacency(subgraph, { temporal_proximity_window_ms: options.temporal_proximity_window_ms }).edges.flatMap((edge) => [edge.from, edge.to]))].sort();
-    return anchors.flatMap((anchor) => walk(subgraph, { anchor, max_hops: maxHops, result_cap: pathCap, relation_kinds: relationKinds, temporal_proximity_window_ms: options.temporal_proximity_window_ms }).paths);
+    // One projection for every anchor. walk() used to rebuild the whole
+    // O(claims^2) adjacency projection per anchor, so a graph with thousands of
+    // anchors made this diff -- which runs at the end of EVERY dream cycle --
+    // cost anchors x claims^2 and never finish.
+    const index = buildWalkIndex(subgraph, { relation_kinds: relationKinds, temporal_proximity_window_ms: options.temporal_proximity_window_ms });
+    const anchors = [...new Set(index.edges.flatMap((edge) => [edge.from, edge.to]))].sort();
+    return anchors.flatMap((anchor) => walk(subgraph, { anchor, max_hops: maxHops, result_cap: pathCap, relation_kinds: relationKinds, temporal_proximity_window_ms: options.temporal_proximity_window_ms, index }).paths);
   };
   const beforePaths = new Set(collect(beforeSafe).map(pathSignature));
-  const paths_newly_walkable = collect(afterSafe).filter((path) => !beforePaths.has(pathSignature(path))).sort((left, right) => pathSignature(left).localeCompare(pathSignature(right)));
+  const paths_newly_walkable = collect(afterSafe).map((path) => ({ path, signature: pathSignature(path) })).filter((entry) => !beforePaths.has(entry.signature))
+    .sort((left, right) => left.signature.localeCompare(right.signature)).map((entry) => entry.path);
   const oldByRaw = new Map(before.claims.map((item) => [item.claim.proposition_key_raw, item.claim]));
   const claims_reprojected = after.claims.flatMap((item) => {
     const raw_key = item.claim.proposition_key_raw; const resolved_key = item.claim.proposition_key_resolved; const frontier = item.claim.predicate_alias_frontier;
