@@ -1,0 +1,52 @@
+desktop/macos/Desktop/Sources/Rewind/UI/RewindHistoryReach.swift
+  s_569f1df936cc22::t_902626c0151455 1-54
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_569f1df936cc22::t_4bc26f3ae13c7a 488-490,494
+  s_569f1df936cc22::t_b686471ee7a81b 491-493
+  s_569f1df936cc22::t_df9e05c6d42217 619-622
+  s_569f1df936cc22::t_e3058d102b00e2 30-32
+  s_569f1df936cc22::t_e94bfd43bad531 578-595,599-618,623-658
+  s_569f1df936cc22::t_7f45ce9fbcab7d 659-660
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_569f1df936cc22::t_200c5199cbad24 2923-2933,2945-2954,2961
+  s_569f1df936cc22::t_424b739882411a 3031-3076
+  s_569f1df936cc22::t_d5799c2d65f61a 3077-3078
+desktop/macos/changelog/unreleased/20260807-rewind-all-time.json
+  s_569f1df936cc22::t_86323e4871a520 1-3
+desktop/macos/Desktop/Tests/RewindAllTimeSearchTests.swift
+  s_569f1df936cc22::t_0a17b5c9cd9949 40,46-51
+  s_569f1df936cc22::t_b154862c0a71d9 109-144
+  s_569f1df936cc22::t_14a86c011ad030 1-39,41-45,52-108,145
+desktop/macos/Desktop/Tests/RewindHistoryReachTests.swift
+  s_569f1df936cc22::t_9918d9cfc309a0 1-90
+desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
+  s_569f1df936cc22::t_f3ac6a89321a5a 21-39
+  s_569f1df936cc22::t_5c672dd0b2707c 360,370-380
+  s_569f1df936cc22::t_eb118d1d514e9a 213-225,227-237
+  s_569f1df936cc22::t_8b099ea28d0b02 191-196
+  s_569f1df936cc22::t_395546eedce801 293-300,308-309,314-315
+  s_569f1df936cc22::t_b14460fbc5b705 206-212,226,238,240-258,381
+  s_569f1df936cc22::t_15be874dd2e970 197
+  s_569f1df936cc22::t_b64196ead6fd05 239
+  s_569f1df936cc22::t_c5be2bdc4b2889 382
+desktop/macos/Desktop/Sources/Rewind/Services/OCREmbeddingService.swift
+  s_569f1df936cc22::t_2d86ab095261f9 334-343,346-347,349-350
+  s_569f1df936cc22::t_d780089e3b1007 360,363,368,373
+  s_569f1df936cc22::t_29f9bcdc2a9954 387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2738856e7cd38d0a9a9e203e374cd9bfda4f0151",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
