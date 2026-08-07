@@ -2,6 +2,7 @@
   "files": {
     "backend/utils/apps.py": 1652,
     "backend/utils/conversations/process_conversation.py": 2016,
+    "backend/utils/retrieval/agentic.py": 1514,
     "backend/utils/memory/canonical_consolidation.py": 1935,
     "backend/utils/memory/canonical_memory_adapter.py": 2037,
     "backend/utils/memory/legacy_backfill.py": 1758,
