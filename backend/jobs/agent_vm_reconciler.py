@@ -726,8 +726,6 @@ async def _replace_stopped_boot_image_drift(
                 role="state",
                 owner_hash=owner_label,
             )
-        if state_disk is None:
-            raise RuntimeError("Agent VM state disk is unavailable")
         if cleanup_context is not None and not state_disk_reused:
             cleanup_context.update(
                 {

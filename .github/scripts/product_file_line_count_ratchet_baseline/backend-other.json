@@ -1,6 +1,6 @@
 {
   "files": {
-    "backend/jobs/agent_vm_reconciler.py": 1526,
+    "backend/jobs/agent_vm_reconciler.py": 1524,
     "backend/services/agent_vm_lifecycle.py": 1937,
     "backend/testing/listen_pusher_stack/run.py": 1790
   },
