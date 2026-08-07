@@ -92,7 +92,7 @@ WF_OUT="$OUT_WF/gcp_${MODULE_NAME}.yml"
 cat >"$ENTRY_OUT" <<EOF
 """Cloud Run Job entrypoint for ${JOB_NAME}.
 
-TODO: replace run_${SNAKE_NAME} with the real domain runner.
+Replace run_${SNAKE_NAME} with the real domain runner before use.
 Scheduler owns cadence — do not add hour-modulo gates here.
 """
 
@@ -201,7 +201,7 @@ runtime_env.yaml snippet shape (edit sources, then compose):
           SERVICE_ACCOUNT_JSON:
             secret: SERVICE_ACCOUNT_JSON
             version: latest
-          # TODO: domain secrets only
+          # Add only secrets required by this domain.
         env:
           OMI_ENV_STAGE:
             value: '{env}'
