@@ -11,6 +11,15 @@ struct SettingsPage: View {
   @Binding var highlightedSettingId: String?
   var chatProvider: ChatProvider? = nil
 
+  /// Whether the Reset Onboarding confirmation is up.
+  ///
+  /// It lives here rather than beside the card that raises it because a modal's dim is an overlay,
+  /// and an overlay's extent is the view it is attached to. The card is a row inside this page's
+  /// scroll view; attached there, the dim would darken one row and the dialog would centre on it.
+  /// This is the pane — the deepest surface in the shell that is a real, laid-out rectangle rather
+  /// than a scrolling column — so it is where the confirmation is mounted.
+  @State private var showResetOnboardingConfirm = false
+
   var body: some View {
     Group {
       if let page = selectedSection.presentedPage {
@@ -28,6 +37,25 @@ struct SettingsPage: View {
     // Deliberately no background: the window wears the glass, and the glass owns the ground. A fill
     // here — even a faint one — is a second ground painted over the material, which is how a
     // translucent window ends up looking opaque.
+    //
+    // Drawn by the shell rather than by `.alert`, which dims the *window* — and this window is a
+    // transparent rectangle larger than the panels in it, so that dim was a rounded rectangle on the
+    // user's wallpaper. See `ShellConfirmationDialog`.
+    .shellConfirmation(
+      isPresented: $showResetOnboardingConfirm,
+      title: "Reset Onboarding?",
+      message: "This will reset onboarding for this app build only, clear onboarding chat history, "
+        + "and restart the app without affecting the other installed build.",
+      confirmTitle: "Reset & Restart"
+    ) {
+      appState.resetOnboardingAndRestart()
+    }
+    // The settings section list is a sibling of this pane inside the panel, so it stays clickable
+    // while the confirmation is up. Leaving on it cancels rather than stranding a destructive
+    // confirmation over a page it no longer belongs to.
+    .onChange(of: selectedSection) { _, _ in
+      showResetOnboardingConfirm = false
+    }
     .onAppear {
       AnalyticsManager.shared.settingsPageOpened()
     }
@@ -71,7 +99,8 @@ struct SettingsPage: View {
             appState: appState,
             selectedSection: $selectedSection,
             highlightedSettingId: $highlightedSettingId,
-            chatProvider: chatProvider
+            chatProvider: chatProvider,
+            showResetOnboardingConfirm: $showResetOnboardingConfirm
           )
           .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
           .padding(.bottom, SettingsGlassMetrics.paneBottomPadding)
@@ -489,7 +518,9 @@ struct SettingsContentView: View {
     }
   }
 
-  @State var showResetOnboardingAlert: Bool = false
+  /// Raised by the Reset Onboarding card here; **presented by `SettingsPage`**, which owns a surface
+  /// this scrolling column does not — see the property there.
+  @Binding var showResetOnboardingConfirm: Bool
   @State var showRescanFilesAlert: Bool = false
   @State var showDeleteAccountAlert: Bool = false
 
@@ -525,12 +556,14 @@ struct SettingsContentView: View {
     appState: AppState,
     selectedSection: Binding<SettingsSection>,
     highlightedSettingId: Binding<String?> = .constant(nil),
-    chatProvider: ChatProvider? = nil
+    chatProvider: ChatProvider? = nil,
+    showResetOnboardingConfirm: Binding<Bool>
   ) {
     self.appState = appState
     self._selectedSection = selectedSection
     self._highlightedSettingId = highlightedSettingId
     self.chatProvider = chatProvider
+    self._showResetOnboardingConfirm = showResetOnboardingConfirm
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
     _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)

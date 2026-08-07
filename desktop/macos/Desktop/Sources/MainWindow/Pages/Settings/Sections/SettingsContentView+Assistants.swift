@@ -996,21 +996,14 @@ extension SettingsContentView {
 
           Spacer()
 
-          Button(action: { showResetOnboardingAlert = true }) {
+          // Raises the confirmation; `SettingsPage` presents it. `.alert` dims the *window*, and this
+          // window is a transparent rectangle larger than the panels in it, so the system's backdrop
+          // landed on the wallpaper — see `ShellConfirmationDialog`.
+          Button(action: { showResetOnboardingConfirm = true }) {
             Text("Reset")
           }
           .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
-      }
-      .alert("Reset Onboarding?", isPresented: $showResetOnboardingAlert) {
-        Button("Cancel", role: .cancel) {}
-        Button("Reset & Restart", role: .destructive) {
-          appState.resetOnboardingAndRestart()
-        }
-      } message: {
-        Text(
-          "This will reset onboarding for this app build only, clear onboarding chat history, and restart the app without affecting the other installed build."
-        )
       }
     }
   }

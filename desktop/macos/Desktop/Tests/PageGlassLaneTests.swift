@@ -11,8 +11,8 @@ import XCTest
 /// This file is the guard for one defect class: **nothing in the shell may paint at window scale.**
 /// The window has no ground and no visible extent (`ShellWindowChrome`), so anything drawn edge to
 /// edge is a hard-edged rectangle stamped on the user's wallpaper. `PageGlassLaneTests` holds it for
-/// the page panel; `ShellModalScrimTests` at the foot of this file holds it for the modal dim, off the
-/// same measurement rather than a second harness.
+/// the page panel; `ShellModalScrimTests` at the foot of this file holds it for the modal dim and for
+/// the confirmation drawn on it, off the same measurement rather than a second harness.
 ///
 /// The class has a second mechanism, so there is a third guard here. A dim is a *fill*; a system
 /// focus effect is a *stroke*, drawn by AppKit around whatever holds keyboard focus. Around a page-
@@ -301,6 +301,81 @@ final class ShellModalScrimTests: XCTestCase {
         - ShellModalScrimLayout.bottomInset(.wholeShell),
       accuracy: 1.5,
       "the dim does not reach from under the drag band to the panel's bottom margin")
+  }
+
+  // MARK: - The confirmation that used to be a system alert
+
+  /// **A confirmation the shell raises must be drawn by the shell.**
+  ///
+  /// `.alert` is presented by AppKit *against the host window*, and the backdrop it puts up is that
+  /// window's size. On a window whose frame is the app's edge that is right; on this one — a
+  /// transparent rectangle noticeably larger than the panels inside it — it is the whole defect, and
+  /// it arrives without any dim in this codebase being wrong. Measured live on Settings → Advanced →
+  /// Reset Onboarding: everything inside the window frame changed, including the wallpaper between
+  /// the panels, and nothing outside it did.
+  ///
+  /// Held on pixels rather than on presentation, which is what makes it catch the regression that
+  /// matters: a system alert paints **nothing at all** into the app's own render tree, so going back
+  /// to `.alert` fails the unwrap below, and deleting the dim instead of bounding it fails the width.
+  func testTheShellsConfirmationPaintsOnItsSurfaceAndNotOnTheWindow() throws {
+    for bounds in [ShellModalScrimBounds.wholeShell, .contentArea] {
+      for size in Self.windowSizes {
+        let painted = try XCTUnwrap(
+          PaintedExtent.of(Self.confirmation.shellModalScrimBounds(bounds), in: size),
+          "\(bounds) at \(size): the confirmation painted nothing into the app. A modal presented by "
+            + "the system draws its backdrop on the window instead — which is the desktop here")
+
+        for (edge, margin) in [
+          ("leading", painted.minX),
+          ("trailing", size.width - painted.maxX),
+          ("top", painted.minY),
+          ("bottom", size.height - painted.maxY),
+        ] {
+          XCTAssertGreaterThan(
+            margin, 0,
+            "\(bounds) at \(size): the confirmation painted to the \(edge) edge, which on this "
+              + "window is the user's wallpaper")
+        }
+
+        // …and it is still a modal. A card floating on an undimmed app would keep every margin
+        // above and say nothing about the app being unavailable, so the dim's own extent is asserted
+        // rather than merely "something was drawn".
+        XCTAssertEqual(
+          painted.width, ShellModalScrimLayout.laneWidth(for: size.width), accuracy: 1.5,
+          "the confirmation's card is drawn but its dim is not: at \(size) the paint is narrower "
+            + "than the shell's lane")
+      }
+    }
+  }
+
+  /// …and inside a page — where Settings raises this one — the dim is the panel's own extent,
+  /// exactly. The page is already the lane, so clamping again would leave an undimmed border of
+  /// glass and the confirmation would read as sitting *under* the page it is asking about.
+  func testTheShellsConfirmationInsideAPageFillsThatPanel() throws {
+    for size in Self.windowSizes {
+      let host = CGSize(
+        width: PageGlassLaneLayout.laneWidth(for: size.width),
+        height: size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap)
+      let painted = try XCTUnwrap(
+        PaintedExtent.of(Self.confirmation.shellModalScrimBounds(.ownSurface), in: host),
+        "no confirmation painted in a \(host) panel")
+
+      XCTAssertEqual(painted.minX, 0, accuracy: 0.5, "the panel keeps an undimmed leading border")
+      XCTAssertEqual(painted.minY, 0, accuracy: 0.5, "the panel keeps an undimmed top border")
+      XCTAssertEqual(painted.width, host.width, accuracy: 1.5)
+      XCTAssertEqual(painted.height, host.height, accuracy: 1.5)
+    }
+  }
+
+  /// The confirmation as a surface raises it: mounted on a host that paints nothing of its own, so
+  /// everything the measurement sees belongs to the modal.
+  private static var confirmation: some View {
+    Color.clear.shellConfirmation(
+      isPresented: .constant(true),
+      title: "Reset Onboarding?",
+      message: "This will reset onboarding for this app build only.",
+      confirmTitle: "Reset & Restart"
+    ) {}
   }
 
   // **Modality is deliberately not asserted here.** The scrim keeps an invisible, full-host barrier
