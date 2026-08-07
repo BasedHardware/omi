@@ -1,7 +1,7 @@
 {
   "files": {
     "backend/routers/apps.py": 2391,
-    "backend/routers/chat.py": 1634,
+    "backend/routers/chat.py": 1656,
     "backend/routers/developer.py": 2282,
     "backend/routers/mcp_sse.py": 1968,
     "backend/routers/sync.py": 2053,
@@ -9,7 +9,7 @@
   },
   "raise_justifications": {
     "backend/routers/apps.py": "POST /v1/apps/enable reads is_setup_completed through _setup_completed_from_response so a developer-controlled body that is non-JSON or not an object returns the intended 400 instead of a 500 (46 prod occurrences Jul 21-28); the guard stays in the route that owns the enable response contract. +5 keeps deleted-source rejection at the anonymous owner-migration admission boundary so a fresh UID cannot claim state from a fenced owner (SCA-280).",
-    "backend/routers/chat.py": "The HTTP and streaming PTT routes own the raw-audio and final-transcript boundaries; dev-only allowlisted capture therefore starts and persists at those two route seams while serialization, bounds, redaction, and export stay in testing.parity_pack_v0.live_capture.",
+    "backend/routers/chat.py": "The HTTP and streaming PTT routes own the raw-audio and final-transcript boundaries; dev-only allowlisted capture therefore starts and persists at those two route seams while serialization, bounds, redaction, and export stay in testing.parity_pack_v0.live_capture. +22 skips the generic canned stream fallback after a typed error: frame so timeout/gateway failures persist one coherent terminal answer (SCA-296).",
     "backend/routers/developer.py": "Developer memory create and batch routes must record their accepted write result at the authoritative API boundary; the shared dev-only allowlisted serializer/exporter lives in testing.parity_pack_v0.live_capture.",
     "backend/routers/mcp_sse.py": "The MCP SSE tool handler owns the successful memory-write response boundary; its one shared dev-only allowlisted capture call records accepted memory without duplicating serialization or export logic. +24 fences legacy-key, OAuth, and authorization-code issuance at the route's credential admission seams while offloading request validation, Firebase, and Firestore work to their owned executors (SCA-280). +42 keeps hosted MCP tool-call analytics at the authoritative execution boundary while the shared helper owns privacy filtering, PostHog delivery, and connector-ready operation mapping (SCA-294). +23 records every execution outcome and preserves authorization semantics independently of JSON-RPC error codes (SCA-294).",
     "backend/routers/sync.py": "Fresh Sync's daily ceiling remains beside the existing fresh-admission gates, before staged audio or durable worker work is created. Lifecycle-fenced workers are terminalized at this Cloud Tasks boundary so released WAL clients do not retry an owner they no longer own; +2 for the queued-dispatch-lost stale finalization path (#10033).",
