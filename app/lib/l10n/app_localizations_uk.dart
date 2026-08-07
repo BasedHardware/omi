@@ -439,6 +439,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get autoSyncDescription => 'Автоматично синхронізувати офлайн-записи під час підключення пристрою';
 
   @override
+  String get omiButtonActions => 'Дії кнопки Omi';
+
+  @override
   String get deviceSettings => 'Налаштування пристрою';
 
   @override

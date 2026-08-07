@@ -43,6 +43,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Timer? _micGainDebounce;
 
   bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
+  bool _omiButtonActionsEnabled = SharedPreferencesUtil().omiButtonActionsEnabled;
 
   Future _bleUnpairDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -703,13 +704,30 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     return level >= 0 && level < labels.length ? labels[level] : '';
   }
 
-  Widget _buildCustomizationSection() {
+  Widget _buildCustomizationSection(BtDevice? device) {
     final doubleTapAction = SharedPreferencesUtil().doubleTapAction;
 
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
+          if (device?.type == DeviceType.omi) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.handPointer,
+              title: context.l10n.omiButtonActions,
+              showChevron: false,
+              trailing: Switch(
+                value: _omiButtonActionsEnabled,
+                activeThumbColor: Colors.white,
+                activeTrackColor: const Color(0xFF8E8E93),
+                onChanged: (value) {
+                  setState(() => _omiButtonActionsEnabled = value);
+                  SharedPreferencesUtil().omiButtonActionsEnabled = value;
+                },
+              ),
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
           // Double Tap
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.handPointer,
@@ -917,7 +935,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 if (provider.isConnected) ...[
                   const SizedBox(height: 16),
                   _buildSectionHeader(context.l10n.customizationSection),
-                  _buildCustomizationSection(),
+                  _buildCustomizationSection(provider.pairedDevice),
                   const SizedBox(height: 32),
                   _buildSectionHeader(context.l10n.deviceInfoSection),
                   _buildDeviceInfoSection(provider.pairedDevice, provider),

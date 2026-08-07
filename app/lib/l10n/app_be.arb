@@ -557,6 +557,7 @@
     "offlineSync": "Аўтаномная сінхранізацыя",
     "autoSync": "Аўтасінхранізацыя",
     "autoSyncDescription": "Аўтаматычна сінхранізаваць офлайн-запісы пры падключэнні прылады",
+    "omiButtonActions": "Дзеянні кнопкі Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

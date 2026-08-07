@@ -438,6 +438,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get autoSyncDescription => 'Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse';
 
   @override
+  String get omiButtonActions => 'Omi-knaphandlinger';
+
+  @override
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override

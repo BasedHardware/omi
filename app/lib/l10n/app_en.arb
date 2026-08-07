@@ -572,6 +572,10 @@
     "@autoSyncDescription": {
         "description": "Subtitle explaining the Auto-Sync toggle in device settings"
     },
+    "omiButtonActions": "Omi Button Actions",
+    "@omiButtonActions": {
+        "description": "Toggle in device settings that controls whether the mobile app responds to Omi button actions"
+    },
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
