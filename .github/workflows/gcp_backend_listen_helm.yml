@@ -247,7 +247,7 @@ jobs:
           set -euo pipefail
           python3 -m pip install -q pyyaml
           ARGV_FILE="${RUNNER_TEMP}/listen-helm-env-overrides.argv"
-          python3 backend/scripts/listen_helm_env_overrides.py \
+          python3 .github/scripts/listen_helm_env_overrides.py \
             --values-file "$VALUES_FILE" \
             --output-argv-file "$ARGV_FILE" \
             --set "OMI_LLM_GATEWAY_FEATURE_MODE=${GATEWAY_FEATURE_MODE:-}" \

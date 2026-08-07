@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = ROOT / "backend" / "scripts" / "listen_helm_env_overrides.py"
+SCRIPT = ROOT / ".github" / "scripts" / "listen_helm_env_overrides.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "gcp_backend_listen_helm.yml"
 PROD_VALUES = ROOT / "backend" / "charts" / "backend-listen" / "prod_omi_backend_listen_values.yaml"
 
@@ -141,7 +141,7 @@ def test_workflow_exposes_optional_override_inputs_and_applies_them_on_both_helm
         "stt_service_models:",
         "translation_service_models:",
         "chart-default",
-        "backend/scripts/listen_helm_env_overrides.py",
+        ".github/scripts/listen_helm_env_overrides.py",
         'LISTEN_ENV_OVERRIDES=()',
         'done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"',
         '${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}',
