@@ -63,9 +63,9 @@ foundation gap, not your call to fill.
 11. **Adapter export names carry the domain in the identifier** — `sendTaskOp`,
     `fetchMemoryIdSnapshot`, `tasksTransport` — because the barrels re-export every
     domain with `export *` and bare names collide.
-    **Barrels are GENERATED**: never edit any `src/index.ts` by hand — run
-    `node scripts/gen-barrels.mjs` (CI runs `--check`). Adding a file to a package's
-    `src/` is all it takes to export it.
+    **Barrels are GENERATED**: never hand-edit a package's generated barrel —
+    run `node scripts/gen-barrels.mjs` (CI runs `--check`). Adding a file to a
+    package's source tree is all it takes to export it.
 
 12. **Snapshot honesty — `complete: true` is the exceptional claim.** Filtered sources
     are the NORM on this backend (2 of the first 4 domains filter server-side, one of
