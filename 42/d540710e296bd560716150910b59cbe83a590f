@@ -1,0 +1,19 @@
+desktop/macos/changelog/unreleased/20260807-onboarding-glass-ground.json
+  s_569f1df936cc22::t_7a432209325cc4 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "42d540710e296bd560716150910b59cbe83a590f",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
