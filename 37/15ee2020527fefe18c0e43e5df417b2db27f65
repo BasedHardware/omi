@@ -1,0 +1,33 @@
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_569f1df936cc22::t_7e378c8010c277 1228-1229
+desktop/macos/Desktop/Sources/MainWindow/ShellSummon.swift
+  s_569f1df936cc22::t_79d8e0250ca0ea 78-83
+  s_569f1df936cc22::t_0450d4fcd761c1 4-6
+  s_569f1df936cc22::t_960a4f5f66f78c 30-36
+desktop/macos/Desktop/Tests/ShellSummonTests.swift
+  s_569f1df936cc22::t_94816b3c2b7550 119-146
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_569f1df936cc22::t_72eec178a536bf 42-73
+  s_569f1df936cc22::t_b619b6cabafbdd 152-155
+  s_569f1df936cc22::t_5f0771677101de 90,92-93
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_569f1df936cc22::t_b608fcfe0af9ae 122-126,132-134,139-159,161-164,170-171
+desktop/macos/changelog/unreleased/20260807-shell-stays-in-front.json
+  s_569f1df936cc22::t_a84ae8dd214955 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3715ee2020527fefe18c0e43e5df417b2db27f65",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
