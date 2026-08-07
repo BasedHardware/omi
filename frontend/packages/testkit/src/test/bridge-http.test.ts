@@ -20,6 +20,7 @@ import {
   BRIDGE_HTTP_CHANNEL,
   BRIDGE_HTTP_FAILURE_STATUS,
   BRIDGE_HTTP_FORBIDDEN_HEADERS,
+  BRIDGE_HTTP_REPLY_FUNCTION,
   type BridgeHttpFailureReason,
   type BridgeHttpReply,
   type BridgeHttpRequest,
@@ -195,5 +196,199 @@ test("the forbidden-header list names every credential-bearing header the shell 
   }
   for (const h of BRIDGE_HTTP_FORBIDDEN_HEADERS) {
     assert.equal(h, h.toLowerCase(), "entries are lowercase for direct comparison after normalization");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Transport 2: ONE-WAY channel + reply function (iOS/Flutter, and the shape
+// Android would use). The channel carries strings surface->shell only, so the
+// shell delivers each reply by calling BRIDGE_HTTP_REPLY_FUNCTION with the
+// request id. This is the transport that makes the contract's `id` load-bearing.
+//
+// RED-PROOF (rule 14):
+//  - delete the `pending.delete(message.id)` + id lookup in installReplySink so
+//    any reply resolves any request => "concurrent one-way requests" fails;
+//  - remove the setTimeout guard in the one-way branch => "a lost reply" hangs
+//    and fails by test timeout;
+//  - reorder detectTransport to check the one-way channel first => "reply-capable
+//    transport wins" fails.
+// ---------------------------------------------------------------------------
+
+/** Install a fake one-way channel; the shell replies via the global sink. */
+function installOneWayShell(
+  onRequest: (req: BridgeHttpRequest, reply: (r: BridgeHttpReply | string) => void) => void,
+): { seen: BridgeHttpRequest[]; uninstall(): void } {
+  const seen: BridgeHttpRequest[] = [];
+  const g = globalThis as unknown as Record<string, unknown>;
+  const prevWebkit = g["webkit"];
+  const prevChannel = g[BRIDGE_HTTP_CHANNEL];
+  delete g["webkit"]; // force one-way detection
+  g[BRIDGE_HTTP_CHANNEL] = {
+    postMessage(raw: string): void {
+      const req = JSON.parse(raw) as BridgeHttpRequest;
+      seen.push(req);
+      const deliver = (r: BridgeHttpReply | string): void => {
+        const sink = g[BRIDGE_HTTP_REPLY_FUNCTION] as (id: string, json: unknown) => void;
+        sink(req.id, typeof r === "string" ? r : JSON.stringify(r));
+      };
+      onRequest(req, deliver);
+    },
+  };
+  return {
+    seen,
+    uninstall() {
+      if (prevWebkit === undefined) delete g["webkit"];
+      else g["webkit"] = prevWebkit;
+      if (prevChannel === undefined) delete g[BRIDGE_HTTP_CHANNEL];
+      else g[BRIDGE_HTTP_CHANNEL] = prevChannel;
+    },
+  };
+}
+
+test("a one-way channel is detected and round-trips through the reply function", async () => {
+  const shell = installOneWayShell((req, reply) =>
+    reply({ ok: true, response: { id: req.id, status: 200, body: JSON.stringify({ saw: req.path }) } }),
+  );
+  try {
+    assert.equal(isBridgeHttpAvailable(), true, "a one-way channel is a usable bridge");
+    const res = await bridgeHttpClient().request("GET", "/v1/action-items");
+    assert.equal(res.status, 200);
+    assert.deepEqual(res.json, { saw: "/v1/action-items" });
+    assert.equal(shell.seen.length, 1);
+    // The channel carries a STRING; nothing about the endpoint or a credential.
+    const wire = JSON.stringify(shell.seen[0]);
+    assert.ok(!/https?:\/\//.test(wire) && !/authorization|bearer/i.test(wire), wire);
+  } finally {
+    shell.uninstall();
+  }
+});
+
+test("concurrent one-way requests are correlated by id, not by arrival order", async () => {
+  const deferred: { req: BridgeHttpRequest; reply: (r: BridgeHttpReply) => void }[] = [];
+  const shell = installOneWayShell((req, reply) => deferred.push({ req, reply: reply as (r: BridgeHttpReply) => void }));
+  try {
+    const client = bridgeHttpClient();
+    const a = client.request("GET", "/v1/a");
+    const b = client.request("GET", "/v1/b");
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(deferred.length, 2, "both requests reached the shell");
+    // Reply out of order, and give each a distinguishable status.
+    const forA = deferred.find((d) => d.req.path === "/v1/a")!;
+    const forB = deferred.find((d) => d.req.path === "/v1/b")!;
+    forB.reply({ ok: true, response: { id: forB.req.id, status: 201, body: null } });
+    forA.reply({ ok: true, response: { id: forA.req.id, status: 202, body: null } });
+    assert.equal((await a).status, 202, "A got A's reply despite B answering first");
+    assert.equal((await b).status, 201, "B got B's reply");
+  } finally {
+    shell.uninstall();
+  }
+});
+
+test("an unknown or duplicate reply id is dropped, never applied to another request", async () => {
+  let captured: ((r: BridgeHttpReply) => void) | null = null;
+  let capturedId = "";
+  const shell = installOneWayShell((req, reply) => {
+    capturedId = req.id;
+    captured = reply as (r: BridgeHttpReply) => void;
+  });
+  try {
+    const client = bridgeHttpClient();
+    const p = client.request("GET", "/v1/only");
+    await new Promise((r) => setTimeout(r, 10));
+    const g = globalThis as unknown as Record<string, unknown>;
+    const sink = g[BRIDGE_HTTP_REPLY_FUNCTION] as (id: string, json: unknown) => void;
+    // A reply for an id nobody is waiting on must not disturb the pending call.
+    sink("h-nonexistent", JSON.stringify({ ok: true, response: { id: "h-nonexistent", status: 500, body: null } }));
+    captured!({ ok: true, response: { id: capturedId, status: 200, body: null } });
+    assert.equal((await p).status, 200, "the real reply won; the stray one was dropped");
+    // A second (duplicate) reply for a settled id must be a no-op, not a throw.
+    assert.doesNotThrow(() =>
+      sink(capturedId, JSON.stringify({ ok: true, response: { id: capturedId, status: 500, body: null } })),
+    );
+  } finally {
+    shell.uninstall();
+  }
+});
+
+test("a lost reply becomes a retryable transport failure instead of stalling the outbox", async () => {
+  const shell = installOneWayShell(() => {
+    /* deliberately never replies */
+  });
+  try {
+    const res = await bridgeHttpClient(40).request("GET", "/v1/action-items");
+    assert.equal(res.status, BRIDGE_HTTP_FAILURE_STATUS["shell-error"]);
+    assert.equal(classifyStatus(res, "lost reply").kind, "retryable", "the outbox must be able to retry, not hang");
+  } finally {
+    shell.uninstall();
+  }
+});
+
+test("an unparseable one-way reply degrades to retryable", async () => {
+  const shell = installOneWayShell((_req, reply) => reply("this is not json"));
+  try {
+    const res = await bridgeHttpClient(200).request("GET", "/v1/action-items");
+    assert.equal(res.status, BRIDGE_HTTP_FAILURE_STATUS["shell-error"]);
+    assert.equal(classifyStatus(res, "junk reply").kind, "retryable");
+  } finally {
+    shell.uninstall();
+  }
+});
+
+/**
+ * Precedence regression (wave-9, found on the simulator). webview_flutter
+ * implements its one-way channel on iOS as a NON-reply webkit.messageHandlers
+ * entry PLUS a window[CHANNEL] shim, so both look present. Preferring the
+ * WebKit handler mis-detects Flutter as reply-capable: postMessage returns
+ * undefined rather than a promise and every request silently degrades to a
+ * transport failure, stalling the outbox while the shell serves nothing.
+ *
+ * RED-PROOF: reorder detectTransport to check webkit.messageHandlers first and
+ * this test fails (it sees the reply-capable stub's 200 instead of the one-way
+ * shim's 201).
+ */
+test("the one-way shim wins when a host exposes both, because Flutter exposes both", async () => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  const prevWebkit = g["webkit"];
+  const prevChannel = g[BRIDGE_HTTP_CHANNEL];
+  // Emulate iOS exactly: a non-reply WebKit handler AND the forwarding shim.
+  let shimUsed = false;
+  g["webkit"] = {
+    messageHandlers: {
+      [BRIDGE_HTTP_CHANNEL]: {
+        postMessage(): void {
+          /* non-reply: returns undefined, exactly like Flutter's iOS handler */
+        },
+      },
+    },
+  };
+  g[BRIDGE_HTTP_CHANNEL] = {
+    postMessage(rawMsg: string): void {
+      shimUsed = true;
+      const req = JSON.parse(rawMsg) as BridgeHttpRequest;
+      const sink = g[BRIDGE_HTTP_REPLY_FUNCTION] as (id: string, json: unknown) => void;
+      sink(req.id, JSON.stringify({ ok: true, response: { id: req.id, status: 201, body: null } }));
+    },
+  };
+  try {
+    const res = await bridgeHttpClient(200).request("GET", "/v1/action-items");
+    assert.equal(shimUsed, true, "the discriminating shim must be used, not the ambiguous WebKit handler");
+    assert.equal(res.status, 201, "a 503 here means the non-reply handler was awaited and returned undefined");
+  } finally {
+    if (prevWebkit === undefined) delete g["webkit"];
+    else g["webkit"] = prevWebkit;
+    if (prevChannel === undefined) delete g[BRIDGE_HTTP_CHANNEL];
+    else g[BRIDGE_HTTP_CHANNEL] = prevChannel;
+  }
+});
+
+test("a reply-capable host with no shim is still detected as reply-capable (macOS shape)", async () => {
+  const g = globalThis as unknown as Record<string, unknown>;
+  delete g[BRIDGE_HTTP_CHANNEL]; // macOS installs no window[CHANNEL] global
+  const shell = installShell((req) => ({ ok: true, response: { id: req.id, status: 200, body: null } }));
+  try {
+    const res = await bridgeHttpClient().request("GET", "/v1/action-items");
+    assert.equal(res.status, 200, "macOS must keep using the promise-returning handler");
+  } finally {
+    shell.uninstall();
   }
 });

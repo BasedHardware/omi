@@ -11,8 +11,8 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "codegen": "node scripts/gen-bridge-swift.mjs",
-    "codegen:check": "node scripts/gen-bridge-swift.mjs --check",
-    "verify": "pnpm -r build && pnpm -r test && node scripts/check-isolation.mjs && node scripts/gen-barrels.mjs --check && node scripts/check-structure.mjs && node scripts/gen-bridge-swift.mjs --check"
+    "codegen": "node scripts/gen-bridge-swift.mjs && node scripts/gen-bridge-dart.mjs",
+    "codegen:check": "node scripts/gen-bridge-swift.mjs --check && node scripts/gen-bridge-dart.mjs --check",
+    "verify": "pnpm -r build && pnpm -r test && node scripts/check-isolation.mjs && node scripts/gen-barrels.mjs --check && node scripts/check-structure.mjs && node scripts/gen-bridge-swift.mjs --check && node scripts/gen-bridge-dart.mjs --check"
   }
 }

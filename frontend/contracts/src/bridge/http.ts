@@ -34,6 +34,24 @@ export type BridgeHttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 export const BRIDGE_HTTP_CHANNEL = "omiHttp";
 
 /**
+ * The global function the surface installs for shells whose channel cannot
+ * reply, and which such a shell calls to deliver one reply.
+ *
+ * Two transport shapes satisfy this contract, which is why `id` is part of the
+ * message rather than of a binding:
+ * - REPLY-CAPABLE (macOS `WKScriptMessageHandlerWithReply`): `postMessage`
+ *   returns a promise and this function is unused.
+ * - ONE-WAY (a Flutter `JavaScriptChannel`, an Android `addJavascriptInterface`):
+ *   the channel only carries strings surface→shell, so the shell delivers its
+ *   reply by invoking this function with the request `id` and the JSON-encoded
+ *   `BridgeHttpReply`. The surface correlates it to the pending request.
+ *
+ * A shell MUST deliver exactly one reply per `id`. A late or duplicate reply is
+ * dropped by the surface, never applied to a different request.
+ */
+export const BRIDGE_HTTP_REPLY_FUNCTION = "__omiHttpReply";
+
+/**
  * Header names a surface may NEVER set: the shell owns auth and identity.
  * The shell drops these (case-insensitively) instead of trusting callers —
  * a compromised or buggy surface must not be able to forge or override
