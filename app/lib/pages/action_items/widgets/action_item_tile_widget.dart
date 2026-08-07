@@ -18,6 +18,7 @@ import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
 import 'package:omi/services/integrations/google_tasks_service.dart';
 import 'package:omi/services/integrations/todoist_service.dart';
+import 'package:omi/utils/audio/ui_sounds.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -49,6 +50,10 @@ class ActionItemTileWidget extends StatefulWidget {
   State<ActionItemTileWidget> createState() => _ActionItemTileWidgetState();
 }
 
+/// Fill for a checked-off task. Green is the one place the app reads "done" as
+/// a colour; everything else stays neutral.
+const Color _completedGreen = Color(0xFF34C759);
+
 class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
   bool _isAnimating = false;
 
@@ -72,11 +77,18 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     );
 
     if (newState) {
+      // Sound and fill land together on the tap; the item is only handed to the
+      // provider (which moves it to Completed) once the user has seen the
+      // filled check and the struck-through text.
+      UiSounds.instance.playTaskComplete();
+
       setState(() {
         _isAnimating = true;
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
+
+      if (!mounted) return;
 
       widget.onToggle(newState);
 
@@ -943,24 +955,25 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                       onTap: _handleToggle,
                       child: Padding(
                         padding: const EdgeInsets.only(top: 5),
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: (widget.actionItem.completed || _isAnimating)
-                                  ? Colors.deepPurpleAccent
-                                  : Colors.grey.shade600,
-                              width: 2,
-                            ),
-                            color: (widget.actionItem.completed || _isAnimating)
-                                ? Colors.deepPurpleAccent
-                                : Colors.transparent,
-                          ),
-                          child: (widget.actionItem.completed || _isAnimating)
-                              ? const Icon(Icons.check, color: Colors.white, size: 16)
-                              : null,
+                        child: Builder(
+                          builder: (context) {
+                            final isDone = widget.actionItem.completed || _isAnimating;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOutBack,
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDone ? _completedGreen : Colors.grey.shade600,
+                                  width: 2,
+                                ),
+                                color: isDone ? _completedGreen : Colors.transparent,
+                              ),
+                              child: isDone ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+                            );
+                          },
                         ),
                       ),
                     ),

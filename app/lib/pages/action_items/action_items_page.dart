@@ -12,6 +12,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/utils/audio/ui_sounds.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -75,6 +76,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadTaskGoalLinks();
+    // Load the completion chime while the list is still rendering. Left to the
+    // first tap it would decode late and land after the check fills, reading as
+    // lag rather than feedback.
+    UiSounds.instance.warmUp();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
