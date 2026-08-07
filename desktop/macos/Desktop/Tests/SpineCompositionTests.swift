@@ -536,6 +536,62 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertEqual(SpineHourRail.headlineNumber(1_204), "1,204")
   }
 
+  /// **The rail counts one day; the panel's corner counts the whole account — and the reader could
+  /// not tell, twice.**
+  ///
+  /// The first fix gave the two counters different nouns, "screen moments" against "moments". The
+  /// same reader looked again at `0` beside `798` and asked what each was supposed to show, because
+  /// a different noun only separates them if you read both and infer a scope neither states. The
+  /// rail now names the day its number belongs to, above the number, so it is legible without the
+  /// other counter in view.
+  func testTheRailNamesTheDayItsNumberBelongsTo() {
+    XCTAssertEqual(SpineHourRail.headlineScope("Today"), "Today")
+    XCTAssertEqual(SpineHourRail.headlineScope("Wednesday 6 August"), "Wednesday 6 August")
+
+    XCTAssertNil(
+      SpineHourRail.headlineScope(""),
+      "An account with no days has no scope to claim, and must not invent one.")
+    XCTAssertNil(SpineHourRail.headlineScope("   "))
+  }
+
+  /// The day word used to be the tail of the footer, twenty-four bars below the number it scoped.
+  /// Moving it up must not leave it in both places: a scope stated twice is a scope nobody reads
+  /// once.
+  func testTheFooterNoLongerRepeatsTheDay() {
+    XCTAssertEqual(SpineHourRail.footer(conversationCount: 6), "6 conversations")
+    XCTAssertEqual(SpineHourRail.footer(conversationCount: 1), "1 conversation")
+    XCTAssertNil(
+      SpineHourRail.footer(conversationCount: 0),
+      "A day with no conversations drops the line rather than drawing a blank one.")
+  }
+
+  /// The rail is one accessibility element, so the spoken sentence is the only form of it a
+  /// screen-reader user gets — and comparing two counters across the width of the window, which is
+  /// what the written rail wrongly asked for, was never available to them at all.
+  func testTheSpokenRailLeadsWithItsScopeAndKeepsTheUnreadDayUnread() {
+    XCTAssertEqual(
+      SpineHourRail.readAloud(
+        momentCount: 0, dayTitle: "Today", conversationCount: 6, currentHour: nil),
+      "Today: 0 screen moments. 6 conversations.")
+
+    XCTAssertEqual(
+      SpineHourRail.readAloud(
+        momentCount: 1, dayTitle: "Yesterday", conversationCount: 1, currentHour: 15),
+      "Yesterday: 1 screen moment. 1 conversation. Reading 3 PM.")
+
+    XCTAssertEqual(
+      SpineHourRail.readAloud(
+        momentCount: nil, dayTitle: "Today", conversationCount: 6, currentHour: nil),
+      "Today: Counting screen moments. 6 conversations.",
+      "A day nobody has read yet must not be spoken as a confident zero.")
+
+    XCTAssertEqual(
+      SpineHourRail.readAloud(
+        momentCount: 1_204, dayTitle: "", conversationCount: 0, currentHour: nil),
+      "1,204 screen moments.",
+      "No day and no conversations still has to be a sentence, not one with holes in it.")
+  }
+
   func testHourLabelsAreTwelveHourAndNeverZero() {
     XCTAssertEqual(SpineFormat.hourLabel(0), "12 AM")
     XCTAssertEqual(SpineFormat.hourLabel(6), "6 AM")
