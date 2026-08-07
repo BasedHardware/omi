@@ -1,0 +1,34 @@
+desktop/macos/Desktop/Sources/Onboarding/SecondBrain/SBOnboardingIntroGate.swift
+  s_569f1df936cc22::t_fbebc6099a541f 5-6,12-19
+  s_569f1df936cc22::t_6eb457522ca2fd 49-51
+desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
+  s_569f1df936cc22::t_95ef8fbe5d2d85 184-194
+desktop/macos/changelog/unreleased/20260807-reset-onboarding-replays-intro.json
+  s_569f1df936cc22::t_cfc9774f553f81 1-3
+desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
+  s_569f1df936cc22::t_07e98947c18cdd 223-229
+  s_569f1df936cc22::t_4d6a64bed05af6 265-281
+desktop/macos/Desktop/Tests/SBOnboardingIntroGateTests.swift
+  s_569f1df936cc22::t_e71d6ef102a452 92-95
+  s_569f1df936cc22::t_b9e1261d27a415 65-73,78-91,96-105
+  s_569f1df936cc22::t_18033e769d8e9a 6-8,12-14
+  s_569f1df936cc22::t_393c3f31d7a161 31-33
+  s_569f1df936cc22::t_8cbbf61e6146e7 74-77
+  s_569f1df936cc22::t_782a50e6bb2878 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "9ebcc1fa1fc0dd4c884d2a26ac27d01e9e93f23d",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
