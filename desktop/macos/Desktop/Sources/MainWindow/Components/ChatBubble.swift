@@ -152,9 +152,9 @@ struct ChatBubble: View {
             alignment: message.sender == .user ? .trailing : .leading
           )
         }
+        // One hover region per row. The whole-row `onHover` below covers this
+        // one, so a nested duplicate only ever reported a false "left the row".
         .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
-        .contentShape(Rectangle())
-        .onHover { isRowHovering = $0 }
       }
     }
     .frame(
