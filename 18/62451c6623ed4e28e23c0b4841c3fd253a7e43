@@ -1,0 +1,25 @@
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_569f1df936cc22::t_857c9df9bfb900 4-5,7
+desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  s_569f1df936cc22::t_604b221a3343cf 1-163
+desktop/macos/Desktop/Sources/MainWindow/Pages/DismissableSheet.swift
+  s_569f1df936cc22::t_ee1f3fdfa515de 1-137
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryEditorSheets.swift
+  s_569f1df936cc22::t_26d385d8dbb124 1-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "1862451c6623ed4e28e23c0b4841c3fd253a7e43",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
