@@ -122,7 +122,9 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
   var usesLegacyHomeDesign: Bool
-  /// Redesigned Home stage mode: `hub`, `chat`, or `connect`. Nil when legacy home or not on Dashboard.
+  /// Home stage mode: `hub`, `chat`, or `connect`. Written only by `DashboardPage`, which is the only
+  /// view that renders the stage; nil whenever nothing on screen has one — which includes the whole
+  /// legacy shell, whose Home is the query surface. Never defaulted: see `HomeStageAutomationPolicy`.
   var homeMode: String?
   /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
   var shellVariant: String?

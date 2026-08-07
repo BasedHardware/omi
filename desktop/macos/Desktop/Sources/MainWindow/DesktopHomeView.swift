@@ -715,7 +715,6 @@ struct DesktopHomeView: View {
     let currentWindow = NSApp.windows.first(where: {
       $0.title.lowercased().hasPrefix("omi") && $0.isVisible
     })
-    let onDashboard = selectedIndex == SidebarNavItem.dashboard.rawValue
     let priorHomeMode = DesktopAutomationStateStore.shared.current().homeMode
     let chatFirstRoute = usesChatFirstShell ? chatFirstNavigation.route : nil
     let snapshot = DesktopAutomationSnapshot(
@@ -730,7 +729,12 @@ struct DesktopHomeView: View {
         : (isInSettings ? selectedSettingsSection.rawValue : nil),
       highlightedSettingId: highlightedSettingId,
       usesLegacyHomeDesign: !usesChatFirstShell && useLegacyHomeDesign,
-      homeMode: !usesChatFirstShell && onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
+      // Carried from `DashboardPage`, the stage's only writer, or nil when no surface renders one.
+      // Never defaulted — see `HomeStageAutomationPolicy`.
+      homeMode: HomeStageAutomationPolicy.reportedHomeMode(
+        usesChatFirstShell: usesChatFirstShell,
+        chatFirstRoute: chatFirstRoute,
+        lastPublishedMode: priorHomeMode),
       shellVariant: chatFirstCapabilitySample.variant.stableName,
       chatFirstRoute: chatFirstRoute?.stableName,
       visibleChatFirstRoute: usesChatFirstShell ? chatFirstNavigation.visibleRoute?.stableName : nil,

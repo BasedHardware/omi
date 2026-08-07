@@ -404,4 +404,71 @@ final class ChatFirstShellTests: XCTestCase {
       DesktopShellPresentationPolicy.usesChatFirst(false, .legacy)
     )
   }
+
+  /// **The legacy shell has no Home stage, and must not claim one.** Its Home is the query surface;
+  /// the only branch there that still mounts `DashboardPage` needs `useLegacyHomeDesign`, which
+  /// renders `legacyHome`. So no value of any input can make the legacy shell report a stage mode.
+  ///
+  /// The bug this replaces reported `hub` for exactly this shell, forever, because the guard was
+  /// written when the non-legacy legacy-shell Home *was* `DashboardPage`. It never read as broken:
+  /// `hub` is a legitimate mode, so `/state` looked healthy while describing a surface that was not
+  /// mounted, and a flow waiting for `chat` waited for a transition nothing could produce.
+  func testTheLegacyShellReportsNoHomeStageModeWhateverItWasLastTold() {
+    for route in [ChatFirstRoute.chat, .more(.dashboard), .tasks] {
+      XCTAssertNil(
+        HomeStageAutomationPolicy.reportedHomeMode(
+          usesChatFirstShell: false,
+          chatFirstRoute: route,
+          lastPublishedMode: "hub"),
+        "the legacy shell renders no stage, so it may not report one even with a route in hand")
+    }
+    XCTAssertNil(
+      HomeStageAutomationPolicy.reportedHomeMode(
+        usesChatFirstShell: false,
+        chatFirstRoute: nil,
+        lastPublishedMode: "connect"))
+  }
+
+  /// On the shell that *does* mount `DashboardPage`, the field carries what that page published —
+  /// unchanged, and `nil` until it has published anything. The shell is a courier here, not a source:
+  /// substituting a default is what turned a missing reading into a false one.
+  func testTheChatFirstShellCarriesTheStageOwnersValueWithoutInventingOne() {
+    for mode in ["hub", "chat", "connect"] {
+      XCTAssertEqual(
+        HomeStageAutomationPolicy.reportedHomeMode(
+          usesChatFirstShell: true,
+          chatFirstRoute: .chat,
+          lastPublishedMode: mode),
+        mode)
+    }
+    XCTAssertNil(
+      HomeStageAutomationPolicy.reportedHomeMode(
+        usesChatFirstShell: true,
+        chatFirstRoute: .chat,
+        lastPublishedMode: nil),
+      "before DashboardPage reports, the honest answer is 'not known', not 'hub'")
+  }
+
+  /// Only the two routes that mount `DashboardPage` have a stage. Navigating away publishes `nil`
+  /// rather than leaving the last mode standing, which is how the field stops describing a page that
+  /// is no longer on screen.
+  func testOnlyTheRoutesThatMountDashboardPageReportAStage() {
+    XCTAssertTrue(HomeStageAutomationPolicy.mountsHomeStage(.chat))
+    XCTAssertTrue(HomeStageAutomationPolicy.mountsHomeStage(.more(.dashboard)))
+
+    for route: ChatFirstRoute in [
+      .conversations, .tasks, .goals, .memories,
+      .more(.apps), .more(.rewind), .more(.settings), .more(.permissions), .more(.help),
+    ] {
+      XCTAssertFalse(
+        HomeStageAutomationPolicy.mountsHomeStage(route),
+        "\(route.stableName) does not render the stage")
+      XCTAssertNil(
+        HomeStageAutomationPolicy.reportedHomeMode(
+          usesChatFirstShell: true,
+          chatFirstRoute: route,
+          lastPublishedMode: "connect"),
+        "\(route.stableName) must not keep reporting the mode the stage had before we left it")
+    }
+  }
 }
