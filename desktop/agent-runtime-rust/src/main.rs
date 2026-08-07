@@ -611,6 +611,8 @@ impl Runtime {
         }
         self.sessions.remove(&session_id);
         self.surfaces.remove(&key);
+        self.context_sources
+            .retain(|(stored_session_id, _, _), _| stored_session_id != &session_id);
         self.emit(
             "session_invalidated",
             envelope(
@@ -2582,6 +2584,7 @@ mod tests {
         assert_eq!(invalidation.kind, "session_invalidated");
         assert_eq!(invalidation.fields["invalidated"], true);
         assert_eq!(invalidation.fields["sessionId"], session_id);
+        assert!(runtime.context_sources.is_empty());
     }
 
     #[tokio::test]
