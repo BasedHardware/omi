@@ -324,10 +324,22 @@ const extracted = await Promise.all(ingested.map(async ({ session, evidence }) =
         const dropped: { reason: string; relation: string | null }[] = [];
         const quality_findings: { code: string; detail: string }[] = [];
         const predicates: string[] = [];
-        for (let start = 0; start < evidence.length; start += EVIDENCE_EXTRACT_WINDOW) {
-          const window = evidence.slice(start, start + EVIDENCE_EXTRACT_WINDOW);
-          calls += 1;
-          const extraction = await withRetry(session.session_id, () => extractGrounded(model, { context, predicate_registry: context.predicate_signatures.map((signature) => signature.name), entity_registry: context.entity_candidates.map((candidate) => candidate.ref), evidence: window, version: "stage-a-grounded-v2" }));
+        // Windows are independent extract calls; fan out bounded, assemble in
+        // window order below so claim_index stays deterministic.
+        const windows: (typeof evidence)[] = [];
+        for (let start = 0; start < evidence.length; start += EVIDENCE_EXTRACT_WINDOW) windows.push(evidence.slice(start, start + EVIDENCE_EXTRACT_WINDOW));
+        calls += windows.length;
+        const windowConcurrency = Math.max(1, Number(process.env.OMI_EXTRACT_WINDOW_CONCURRENCY ?? 3) || 1);
+        const windowResults: Awaited<ReturnType<typeof extractGrounded>>[] = new Array(windows.length);
+        let windowCursor = 0;
+        await Promise.all(Array.from({ length: Math.min(windowConcurrency, windows.length) }, async () => {
+          while (windowCursor < windows.length) {
+            const index = windowCursor;
+            windowCursor += 1;
+            windowResults[index] = await withRetry(session.session_id, () => extractGrounded(model, { context, predicate_registry: context.predicate_signatures.map((signature) => signature.name), entity_registry: context.entity_candidates.map((candidate) => candidate.ref), evidence: windows[index]!, version: "stage-a-grounded-v2" }));
+          }
+        }));
+        for (const extraction of windowResults) {
           dropped.push(...extraction.dropped);
           quality_findings.push(...extraction.quality_findings);
           predicates.push(...extraction.claims.map((claim) => claim.predicate_ref));

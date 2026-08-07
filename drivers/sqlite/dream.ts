@@ -63,54 +63,58 @@ const promotionTransition = async (input: {
 }): Promise<{ promoted: number; deferred: readonly string[] }> => {
   let promoted = 0;
   const deferred: string[] = [];
-  for (const item of input.items) {
-    if (input.ledger.isProvisionalConsumed(item.claim.claim_revision_id)) {
-      deferred.push(item.id);
-      continue;
+  interface Judgment { disposition: "admit" | "defer_review"; trigger: "new_evidence" | "new_identity_evidence" | "boundary_reconsideration" | null; unitBoundaryDecision: "accept_ltm" | "abstain"; scopeLocality: "durable" | "source_local" | null; riskMarkers: ("new_entity" | "resolved_pronoun" | "low_margin")[] }
+  // Phase 1 — model judgments only: independent per item, fanned out under a
+  // bounded limiter. All ledger reads/writes stay in phase 2, in item order,
+  // because commits chain through graphHead.
+  const judgeItem = async (item: DurableStmItem): Promise<Judgment> => {
+    const judgment: Judgment = { disposition: "defer_review", trigger: "new_evidence", unitBoundaryDecision: "abstain", scopeLocality: null, riskMarkers: [] };
+    const sufficient = checkStmSufficiency(item.claim, item.evidence, item.claim.arguments.map((argument) => argument.slot_id));
+    if (!sufficient.ok) return judgment; // gate 1
+    if (!passesSubjectOrTrust(item)) return { ...judgment, trigger: "new_identity_evidence" };
+    try {
+      const boundary = await invokeUnitBoundaryStrategy(input.model, item.claim, item.evidence);
+      judgment.unitBoundaryDecision = boundary.decision;
+      if (boundary.margin === "low") judgment.riskMarkers = ["low_margin"];
+      if (boundary.decision !== "accept_ltm") return { ...judgment, trigger: "boundary_reconsideration" };
+      const scope = await invokeScopeStrategy(input.model, item.claim, input.entities, item.evidence);
+      judgment.scopeLocality = scope.scope?.locality ?? null;
+      if (scope.scope?.locality === "durable") return { ...judgment, disposition: "admit", trigger: null };
+      return { ...judgment, trigger: "boundary_reconsideration" };
+    } catch (error) {
+      // GlmModel already retried; leaving the item unconsumed would re-burn
+      // the same failing call every subsequent cycle. One-shot defer instead.
+      console.error(`dream promotion failed for ${item.id}: ${error instanceof Error ? error.message : error}`);
+      return { ...judgment, trigger: "boundary_reconsideration", unitBoundaryDecision: "abstain" };
     }
+  };
+  const alreadyDecided = (item: DurableStmItem): boolean =>
+    input.ledger.isProvisionalConsumed(item.claim.claim_revision_id) ||
     // Crash recovery: a prior cycle decided this item but died before STM drain.
     // Do not re-invoke models — the idempotency key has no cycle component.
-    if (input.ledger.findCommitByIdempotencyKey(promotionIdempotencyKey(input.owner, item.id))) {
+    Boolean(input.ledger.findCommitByIdempotencyKey(promotionIdempotencyKey(input.owner, item.id)));
+  const pending = input.items.filter((item) => !alreadyDecided(item));
+  const concurrency = Math.max(1, Number(process.env.OMI_DREAM_CONCURRENCY ?? 6) || 1);
+  const judgments = new Map<string, Judgment>();
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, async () => {
+    while (cursor < pending.length) {
+      const item = pending[cursor]!;
+      cursor += 1;
+      judgments.set(item.id, await judgeItem(item));
+    }
+  }));
+
+  // Phase 2 — serial commits in original item order.
+  for (const item of input.items) {
+    const judgment = judgments.get(item.id);
+    // Re-check consumption at commit time: covers items decided before this
+    // cycle and duplicate claim revisions consumed earlier in this loop.
+    if (!judgment || input.ledger.isProvisionalConsumed(item.claim.claim_revision_id) || input.ledger.findCommitByIdempotencyKey(promotionIdempotencyKey(input.owner, item.id))) {
       deferred.push(item.id);
       continue;
     }
-
-    const sufficient = checkStmSufficiency(item.claim, item.evidence, item.claim.arguments.map((argument) => argument.slot_id));
-    let disposition: "admit" | "defer_review" = "defer_review";
-    let trigger: "new_evidence" | "new_identity_evidence" | "boundary_reconsideration" | null = "new_evidence";
-    let unitBoundaryDecision: "accept_ltm" | "abstain" = "abstain";
-    let scopeLocality: "durable" | "source_local" | null = null;
-    let riskMarkers: ("new_entity" | "resolved_pronoun" | "low_margin")[] = [];
-
-    if (!sufficient.ok) {
-      // gate 1
-    } else if (!passesSubjectOrTrust(item)) {
-      trigger = "new_identity_evidence";
-    } else {
-      try {
-        const boundary = await invokeUnitBoundaryStrategy(input.model, item.claim, item.evidence);
-        unitBoundaryDecision = boundary.decision;
-        if (boundary.margin === "low") riskMarkers = ["low_margin"];
-        if (boundary.decision !== "accept_ltm") {
-          trigger = "boundary_reconsideration";
-        } else {
-          const scope = await invokeScopeStrategy(input.model, item.claim, input.entities, item.evidence);
-          scopeLocality = scope.scope?.locality ?? null;
-          if (scope.scope?.locality === "durable") {
-            disposition = "admit";
-            trigger = null;
-          } else {
-            trigger = "boundary_reconsideration";
-          }
-        }
-      } catch (error) {
-        // GlmModel already retried; leaving the item unconsumed would re-burn
-        // the same failing call every subsequent cycle. One-shot defer instead.
-        console.error(`dream promotion failed for ${item.id}: ${error instanceof Error ? error.message : error}`);
-        trigger = "boundary_reconsideration";
-        unitBoundaryDecision = "abstain";
-      }
-    }
+    const { disposition, trigger, unitBoundaryDecision, scopeLocality, riskMarkers } = judgment;
 
     validateAndAllocatePlacement({
       batch_id: `${input.cycleId}:${item.id}`,
