@@ -17,6 +17,7 @@ const BARRELS = [
   ["packages/testkit/src/index.ts", [""]],
   ["packages/kernel/src/index.ts", [""]],
   ["packages/sync/src/index.ts", [""]],
+  ["packages/wire-listen/src/index.ts", [""]],
 ];
 
 const check = process.argv.includes("--check");

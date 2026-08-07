@@ -1,0 +1,1108 @@
+{
+  "about": "Synthesized /listen frame-sequence corpus. Ported from prototypes/listen-schema/conformance/corpus.json with entitlement reserved-frame scenario added for WS-003. Every baseline frame shape is derived from a real emitter; entitlement frames are reserved (not yet emitted).",
+  "scenarios": [
+    {
+      "name": "native-happy-path",
+      "handshake": "native",
+      "query": "language=en&sample_rate=16000&codec=opus&channels=1&source=desktop&client_conversation_id=7c9a1f2e-3b4d-4a5e-8f60-1a2b3c4d5e6f",
+      "invariants": [
+        "no-transcript-before-ready",
+        "segment-id-dedupe",
+        "causal-segments-deleted",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "initiating",
+            "status_text": "Service Starting"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "last_memory",
+            "memory_id": "conv_prev_001"
+          },
+          "expect": "event:last_memory"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "in_progress_conversations_processing",
+            "status_text": "Processing Conversations"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "conversation_session",
+            "conversation_id": "conv_live_001",
+            "status": "in_progress",
+            "recording_session_id": "rec_001",
+            "lifecycle_version": 2,
+            "lifecycle_phase": "in_progress",
+            "lifecycle_sequence": 1
+          },
+          "expect": "event:conversation_session"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "stt_initiating",
+            "status_text": "STT Service Starting"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-1",
+              "text": "hey",
+              "speaker": "SPEAKER_00",
+              "speaker_id": 0,
+              "is_user": true,
+              "person_id": null,
+              "start": 0.0,
+              "end": 0.94,
+              "translations": [],
+              "speech_profile_processed": true,
+              "stt_provider": null
+            }
+          ],
+          "expect": "transcript_batch:1"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-1",
+              "text": "hey there",
+              "speaker": "SPEAKER_00",
+              "speaker_id": 0,
+              "is_user": true,
+              "person_id": null,
+              "start": 0.0,
+              "end": 1.4,
+              "translations": [],
+              "speech_profile_processed": true,
+              "stt_provider": null
+            },
+            {
+              "id": "seg-2",
+              "text": "can you hear me",
+              "speaker": "SPEAKER_01",
+              "speaker_id": 1,
+              "is_user": false,
+              "person_id": null,
+              "start": 1.6,
+              "end": 3.2,
+              "translations": [],
+              "speech_profile_processed": true,
+              "stt_provider": null
+            }
+          ],
+          "expect": "transcript_batch:2"
+        },
+        {
+          "json": {
+            "type": "speaker_label_suggestion",
+            "speaker_id": 1,
+            "person_id": "person_abc",
+            "person_name": "Dana",
+            "segment_id": "seg-2"
+          },
+          "expect": "event:speaker_label_suggestion"
+        },
+        {
+          "json": {
+            "type": "translating",
+            "segments": [
+              {
+                "id": "seg-2",
+                "text": "can you hear me",
+                "speaker": "SPEAKER_01",
+                "speaker_id": 1,
+                "is_user": false,
+                "person_id": "person_abc",
+                "start": 1.6,
+                "end": 3.2,
+                "translations": [
+                  {
+                    "lang": "es",
+                    "text": "puedes oirme"
+                  }
+                ],
+                "speech_profile_processed": true,
+                "stt_provider": null
+              }
+            ]
+          },
+          "expect": "event:translating"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "json": {
+            "type": "segments_deleted",
+            "segment_ids": [
+              "seg-1"
+            ]
+          },
+          "expect": "event:segments_deleted"
+        },
+        {
+          "json": {
+            "type": "memory_processing_started",
+            "memory": {
+              "id": "conv_live_001",
+              "status": "processing"
+            },
+            "messages": null,
+            "recording_session_id": "rec_001",
+            "conversation_id": "conv_live_001",
+            "lifecycle_version": 2,
+            "lifecycle_phase": "processing",
+            "lifecycle_sequence": 2
+          },
+          "expect": "event:memory_processing_started"
+        },
+        {
+          "json": {
+            "type": "memory_created",
+            "memory": {
+              "id": "conv_live_001",
+              "status": "completed",
+              "transcript_segments": []
+            },
+            "messages": [],
+            "recording_session_id": "rec_001",
+            "conversation_id": "conv_live_001",
+            "lifecycle_version": 2,
+            "lifecycle_phase": "completed",
+            "lifecycle_sequence": 3
+          },
+          "expect": "event:memory_created"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "web-handshake-auth-ok",
+      "handshake": "web",
+      "query": "language=multi&codec=pcm16&sample_rate=16000&client_conversation_id=1f0e2d3c-4b5a-4697-8899-aabbccddeeff",
+      "invariants": [
+        "no-transcript-before-ready",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "auth_response",
+            "success": true
+          },
+          "expect": "event:auth_response"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "initiating"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "in_progress_conversations_processing"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "stt_initiating"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        }
+      ],
+      "close": 1001
+    },
+    {
+      "name": "web-handshake-auth-rejected",
+      "handshake": "web",
+      "query": "language=en",
+      "frames": [
+        {
+          "json": {
+            "type": "auth_response",
+            "success": false
+          },
+          "expect": "event:auth_response"
+        }
+      ],
+      "close": 1008
+    },
+    {
+      "name": "heartbeat-only-then-idle-close",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=2a3b4c5d-6e7f-4081-9203-a4b5c6d7e8f9",
+      "invariants": [
+        "no-transcript-before-ready",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        }
+      ],
+      "close": 1001
+    },
+    {
+      "name": "stt-failure-midstream",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=3b4c5d6e-7f80-4192-a3b4-c5d6e7f80912",
+      "invariants": [
+        "stt-failed-precedes-1011",
+        "no-transcript-before-ready",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-9",
+              "text": "start of the meeting",
+              "speaker": "SPEAKER_00",
+              "speaker_id": 0,
+              "is_user": true,
+              "start": 0.0,
+              "end": 2.1,
+              "translations": []
+            }
+          ],
+          "expect": "transcript_batch:1"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "stt_failed",
+            "status_text": "STT provider terminated",
+            "outcome": "failure",
+            "provider": "deepgram",
+            "retryable": true,
+            "reason": "upstream_death"
+          },
+          "expect": "event:service_status"
+        }
+      ],
+      "close": 1011
+    },
+    {
+      "name": "NEGATIVE-1011-without-stt-failed",
+      "note": "A 1011 close with no preceding stt_failed. This is the shape a client currently cannot distinguish from a network drop; the invariant checker must flag it.",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=4c5d6e7f-8091-42a3-b4c5-d6e7f8091223",
+      "violates": [
+        "stt-failed-precedes-1011"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-11",
+              "text": "mid sentence",
+              "is_user": false,
+              "start": 0.0,
+              "end": 1.0
+            }
+          ],
+          "expect": "transcript_batch:1"
+        }
+      ],
+      "close": 1011
+    },
+    {
+      "name": "NEGATIVE-transcript-before-ready",
+      "note": "Transcript content delivered before the ready gate (INV-LISTEN-002).",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=5d6e7f80-9123-44b5-c6d7-e8f091223344",
+      "violates": [
+        "no-transcript-before-ready"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "initiating"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-early",
+              "text": "too early",
+              "is_user": true,
+              "start": 0.0,
+              "end": 0.5
+            }
+          ],
+          "expect": "transcript_batch:1"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "NEGATIVE-segments-deleted-unseen-id",
+      "note": "segments_deleted naming an id that was never delivered breaks the only ordering guarantee the spec claims for the best-effort group.",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=6e7f8091-2233-4455-a677-8899aabbccdd",
+      "violates": [
+        "causal-segments-deleted"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "segments_deleted",
+            "segment_ids": [
+              "seg-never-sent"
+            ]
+          },
+          "expect": "event:segments_deleted"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "NEGATIVE-missing-resume-key",
+      "note": "No client_conversation_id in the handshake: legal on the wire at baseline, non-conforming per INV-LISTEN-004 because a reconnect fragments the conversation.",
+      "handshake": "native",
+      "query": "language=en&sample_rate=8000&codec=pcm8",
+      "violates": [
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        }
+      ],
+      "close": 1001
+    },
+    {
+      "name": "unknown-event-injection",
+      "note": "Forward compatibility: three shapes a future server could send. All must fail open without disturbing the frames around them.",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=7f809122-3344-4556-8899-aabbccddeeff",
+      "invariants": [
+        "no-transcript-before-ready",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "conversation_summary_ready",
+            "conversation_id": "conv_x",
+            "summary": "..."
+          },
+          "expect": "unknown_event:conversation_summary_ready"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-20",
+              "text": "still flowing",
+              "is_user": true,
+              "start": 0.0,
+              "end": 1.0
+            }
+          ],
+          "expect": "transcript_batch:1"
+        },
+        {
+          "json": {
+            "type": "speaker_label_suggestion",
+            "speaker_id": 0,
+            "person_id": "user",
+            "person_name": "You",
+            "segment_id": "seg-20",
+            "confidence": 0.87
+          },
+          "expect": "event:speaker_label_suggestion"
+        },
+        {
+          "json": {
+            "type": "service_status",
+            "status": "degraded_provider_fallback",
+            "provider": "parakeet"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "unemitted-ping-envelope",
+      "note": "The declared-but-unemitted PingEvent shape. Accepted as a known reserved type so a future convergence onto the envelope is not a breaking change for clients built against this schema.",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=8091aabb-ccdd-4eef-9012-3344556677ff",
+      "invariants": [
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "ping"
+          },
+          "expect": "event:ping"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "malformed-and-hostile-frames",
+      "note": "Every frame here must produce a typed invalid/unknown result rather than an exception. This is the fail-open contract the three hand-written clients each implement differently.",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=9012aabb-ccdd-4eef-8123-445566778899",
+      "invariants": [
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "text": "not json{",
+          "expect": "invalid:not_json"
+        },
+        {
+          "text": "",
+          "expect": "invalid:empty"
+        },
+        {
+          "text": "null",
+          "expect": "invalid:not_an_object"
+        },
+        {
+          "text": "42",
+          "expect": "invalid:not_an_object"
+        },
+        {
+          "text": "\"pong\"",
+          "expect": "invalid:not_an_object"
+        },
+        {
+          "json": {
+            "status": "ready"
+          },
+          "expect": "invalid:no_type_field"
+        },
+        {
+          "json": {
+            "type": 7
+          },
+          "expect": "invalid:no_type_field"
+        },
+        {
+          "json": {
+            "type": "service_status"
+          },
+          "expect": "invalid:missing_required_fields"
+        },
+        {
+          "json": {
+            "type": "photo_described",
+            "photo_id": "p1"
+          },
+          "expect": "invalid:missing_required_fields"
+        },
+        {
+          "json": [],
+          "expect": "transcript_batch:0"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        }
+      ],
+      "close": 1001
+    },
+    {
+      "name": "trial-paywalled-at-connect",
+      "note": "Pre-emptive freemium push then a 1008 close, with no ready. The socket is accepted before admission, so a client sees a full open-then-close cycle.",
+      "handshake": "native",
+      "query": "language=en&source=desktop&client_conversation_id=aabbccdd-eeff-4001-8223-445566778899",
+      "invariants": [
+        "no-transcript-before-ready",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "freemium_threshold_reached",
+            "remaining_seconds": 0,
+            "action": "setup_on_device_stt"
+          },
+          "expect": "event:freemium_threshold_reached"
+        }
+      ],
+      "close": 1008
+    },
+    {
+      "name": "unsupported-audio-format",
+      "note": "Zero frames: 1003 at admission, after accept.",
+      "handshake": "native",
+      "query": "codec=lc3&sample_rate=8000&client_conversation_id=bbccddee-ff00-4112-8334-455667788990",
+      "invariants": [
+        "resume-key-required"
+      ],
+      "frames": [],
+      "close": 1003
+    },
+    {
+      "name": "freemium-threshold-midsession",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=ccddeeff-0011-4223-8445-566778899001",
+      "invariants": [
+        "no-transcript-before-ready",
+        "segment-id-dedupe",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-30",
+              "text": "a",
+              "is_user": true,
+              "start": 0.0,
+              "end": 1.0
+            }
+          ],
+          "expect": "transcript_batch:1"
+        },
+        {
+          "json": {
+            "type": "freemium_threshold_reached",
+            "remaining_seconds": 173,
+            "action": "setup_on_device_stt"
+          },
+          "expect": "event:freemium_threshold_reached"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-30",
+              "text": "a b",
+              "is_user": true,
+              "start": 0.0,
+              "end": 1.6
+            }
+          ],
+          "expect": "transcript_batch:1"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "onboarding-subprotocol",
+      "note": "The four raw-dict onboarding events. question_skipped is the one with no case in the Flutter dispatcher today.",
+      "handshake": "native",
+      "query": "language=en&onboarding=enabled&client_conversation_id=ddeeff00-1122-4334-8556-677889900112",
+      "invariants": [
+        "no-transcript-before-ready",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "onboarding_question",
+            "question": "What are you working on?",
+            "question_index": 0,
+            "total_questions": 5,
+            "question_segment_id": "seg-q0"
+          },
+          "expect": "event:onboarding_question"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-q0",
+              "text": "What are you working on?",
+              "is_user": false,
+              "start": 0.0,
+              "end": 2.0
+            }
+          ],
+          "expect": "transcript_batch:1"
+        },
+        {
+          "json": {
+            "type": "question_answered",
+            "question_index": 0,
+            "answered": true
+          },
+          "expect": "event:question_answered"
+        },
+        {
+          "json": {
+            "type": "onboarding_question",
+            "question": "Who do you work with?",
+            "question_index": 1,
+            "total_questions": 5,
+            "question_segment_id": "seg-q1"
+          },
+          "expect": "event:onboarding_question"
+        },
+        {
+          "json": {
+            "type": "question_skipped",
+            "question_index": 1
+          },
+          "expect": "event:question_skipped"
+        },
+        {
+          "json": {
+            "type": "onboarding_complete",
+            "answers_count": 4
+          },
+          "expect": "event:onboarding_complete"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "multichannel-rollover",
+      "note": "conversation_session re-issued on rollover, with memory_processing_started for the conversation being closed out.",
+      "handshake": "native",
+      "query": "language=multi&channels=2&conversation_timeout=-1&client_conversation_id=eeff0011-2233-4445-8667-788990011223",
+      "invariants": [
+        "no-transcript-before-ready",
+        "causal-segments-deleted",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "conversation_session",
+            "conversation_id": "conv_a",
+            "status": "in_progress",
+            "recording_session_id": "rec_mc",
+            "lifecycle_version": 2,
+            "lifecycle_phase": "in_progress",
+            "lifecycle_sequence": 1
+          },
+          "expect": "event:conversation_session"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-40",
+              "text": "channel zero",
+              "speaker": "SPEAKER_00",
+              "speaker_id": 0,
+              "is_user": true,
+              "start": 0.0,
+              "end": 1.0
+            },
+            {
+              "id": "seg-41",
+              "text": "channel one",
+              "speaker": "SPEAKER_01",
+              "speaker_id": 1,
+              "is_user": false,
+              "start": 0.2,
+              "end": 1.4
+            }
+          ],
+          "expect": "transcript_batch:2"
+        },
+        {
+          "json": {
+            "type": "memory_processing_started",
+            "memory": {
+              "id": "conv_a"
+            },
+            "recording_session_id": "rec_mc",
+            "conversation_id": "conv_a",
+            "lifecycle_version": 2,
+            "lifecycle_phase": "processing",
+            "lifecycle_sequence": 2
+          },
+          "expect": "event:memory_processing_started"
+        },
+        {
+          "json": {
+            "type": "conversation_session",
+            "conversation_id": "conv_b",
+            "status": "in_progress",
+            "recording_session_id": "rec_mc",
+            "lifecycle_version": 2,
+            "lifecycle_phase": "in_progress",
+            "lifecycle_sequence": 3
+          },
+          "expect": "event:conversation_session"
+        },
+        {
+          "json": {
+            "type": "memory_created",
+            "memory": {
+              "id": "conv_a"
+            },
+            "messages": [],
+            "recording_session_id": "rec_mc",
+            "conversation_id": "conv_a",
+            "lifecycle_version": 2,
+            "lifecycle_phase": "completed",
+            "lifecycle_sequence": 4
+          },
+          "expect": "event:memory_created"
+        },
+        {
+          "json": {
+            "type": "segments_deleted",
+            "segment_ids": [
+              "seg-41"
+            ]
+          },
+          "expect": "event:segments_deleted"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "photo-pipeline",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=ff001122-3344-4556-8778-899001122334",
+      "invariants": [
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": {
+            "type": "photo_processing",
+            "temp_id": "tmp_1",
+            "photo_id": "photo_1"
+          },
+          "expect": "event:photo_processing"
+        },
+        {
+          "json": {
+            "type": "photo_described",
+            "photo_id": "photo_1",
+            "description": "a whiteboard with a diagram",
+            "discarded": false
+          },
+          "expect": "event:photo_described"
+        },
+        {
+          "json": {
+            "type": "photo_processing",
+            "temp_id": "tmp_2",
+            "photo_id": "photo_2"
+          },
+          "expect": "event:photo_processing"
+        },
+        {
+          "json": {
+            "type": "photo_described",
+            "photo_id": "photo_2",
+            "description": "",
+            "discarded": true
+          },
+          "expect": "event:photo_described"
+        }
+      ],
+      "close": 1000
+    },
+    {
+      "name": "entitlement-paused-capture-continues",
+      "note": "Reserved WS-005 shape: transcription paused, capture continuing. Socket stays open (close 1000 only later). Distinct from close 4020.",
+      "handshake": "native",
+      "query": "language=en&client_conversation_id=11223344-5566-4778-8990-aabbccddeeff",
+      "invariants": [
+        "no-transcript-before-ready",
+        "resume-key-required"
+      ],
+      "frames": [
+        {
+          "json": {
+            "type": "service_status",
+            "status": "ready"
+          },
+          "expect": "event:service_status"
+        },
+        {
+          "json": [
+            {
+              "id": "seg-e1",
+              "text": "still talking",
+              "is_user": true,
+              "start": 0.0,
+              "end": 1.0
+            }
+          ],
+          "expect": "transcript_batch:1"
+        },
+        {
+          "json": {
+            "type": "entitlement",
+            "state": "transcription_paused_capture_continuing",
+            "reason": "free_tier_transcription_limit",
+            "usage": {
+              "used": 3600,
+              "limit": 3600,
+              "unit": "seconds"
+            },
+            "upgrade_target": "plans",
+            "capture_continues": true
+          },
+          "expect": "event:entitlement"
+        },
+        {
+          "text": "ping",
+          "expect": "heartbeat"
+        }
+      ],
+      "close": 1000
+    }
+  ],
+  "client_messages": [
+    {
+      "name": "image_chunk",
+      "json": {
+        "type": "image_chunk",
+        "id": "img_1",
+        "index": 0,
+        "total": 3,
+        "data": "aGVsbG8="
+      },
+      "valid": true
+    },
+    {
+      "name": "image_chunk-missing-data",
+      "json": {
+        "type": "image_chunk",
+        "id": "img_1",
+        "index": 0,
+        "total": 3
+      },
+      "valid": false
+    },
+    {
+      "name": "skip_question",
+      "json": {
+        "type": "skip_question"
+      },
+      "valid": true
+    },
+    {
+      "name": "suggested_transcript",
+      "json": {
+        "type": "suggested_transcript",
+        "segments": [
+          {
+            "id": "c-1",
+            "text": "local stt output",
+            "is_user": true,
+            "start": 0.0,
+            "end": 1.2
+          }
+        ],
+        "stt_provider": "whisper-local"
+      },
+      "valid": true
+    },
+    {
+      "name": "speaker_assigned",
+      "json": {
+        "type": "speaker_assigned",
+        "speaker_id": 2,
+        "person_id": "person_z",
+        "person_name": "Sam",
+        "segment_ids": [
+          "seg-1",
+          "seg-2"
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "speaker_assigned-missing-person",
+      "json": {
+        "type": "speaker_assigned",
+        "speaker_id": 2,
+        "segment_ids": [
+          "seg-1"
+        ]
+      },
+      "valid": false
+    },
+    {
+      "name": "auth-handshake-frame",
+      "json": {
+        "type": "auth",
+        "token": "eyJhbGciOi..."
+      },
+      "valid": true,
+      "handshake_only": "web"
+    },
+    {
+      "name": "unknown-client-type",
+      "json": {
+        "type": "pause_capture"
+      },
+      "valid": false,
+      "note": "Silently ignored by the server's text handler \u2014 no error, no ack. A client cannot tell an unsupported control message from a successful one."
+    }
+  ]
+}

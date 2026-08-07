@@ -16,7 +16,8 @@
     "@omi-core/kernel": "workspace:*",
     "@omi-core/sync": "workspace:*",
     "@omi-core/adapters-legacy": "workspace:*",
-    "@omi-core/domain": "workspace:*"
+    "@omi-core/domain": "workspace:*",
+    "@omi-core/wire-listen": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",
