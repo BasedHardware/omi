@@ -1,4 +1,5 @@
 packages:
+  - contracts
   - codegen
   - packages/*
   - shells/*
