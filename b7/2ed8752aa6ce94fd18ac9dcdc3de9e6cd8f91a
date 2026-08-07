@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_1786a731548ff4 111-116
+desktop/macos/changelog/unreleased/20260807-chat-follow-and-composer.json
+  s_569f1df936cc22::t_c2f090e8848732 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b72ed8752aa6ce94fd18ac9dcdc3de9e6cd8f91a",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
