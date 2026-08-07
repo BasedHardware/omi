@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_569f1df936cc22::t_f78fd4a20f684e 732-737
+desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
+  s_569f1df936cc22::t_acdb53d4b62f5f 8-56
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_569f1df936cc22::t_8c0ca95ff4f876 125-127
+desktop/macos/Desktop/Tests/ChatFirstShellTests.swift
+  s_569f1df936cc22::t_46e28356427ee5 407-473
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "5acaeca98602d7418405000a81adf274f2ce0161",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
