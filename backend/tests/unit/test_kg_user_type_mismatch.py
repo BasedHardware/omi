@@ -259,6 +259,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     subjects.infer_subject_from_segments = lambda segments: (None, None)
     for name in [
         "utils.conversations.factory",
+        "utils.conversations.transcript_for_llm",
         "utils.conversations.transcript_chunks",
         "utils.conversations.memory_extraction_telemetry",
         "utils.memory.canonical_activation",
