@@ -68,6 +68,7 @@ from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
+from utils.share_links import build_share_url
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.multipart import (
@@ -1600,7 +1601,7 @@ def share_chat_messages(
     if result is None:
         raise HTTPException(status_code=500, detail='Failed to create share link')
 
-    return {"url": f"https://h.omi.me/chat/{token}", "token": token}
+    return {"url": build_share_url(f"/chat/{token}"), "token": token}
 
 
 @router.get('/v2/messages/shared/{token}', tags=['chat'], response_model=SharedChatMessagesResponse)

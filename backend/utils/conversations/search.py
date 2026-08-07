@@ -7,6 +7,8 @@ from uuid import UUID
 
 import typesense
 
+from utils.share_links import accepted_share_hosts
+
 logger = logging.getLogger(__name__)
 
 
@@ -14,7 +16,6 @@ class ConversationSearchUnavailableError(Exception):
     """Raised when Typesense is unreachable or times out (transient upstream failure)."""
 
 
-_EXACT_CONVERSATION_HOST = 'h.omi.me'
 _EXACT_CONVERSATION_PATH_PREFIX = '/conversations/'
 
 
@@ -35,8 +36,9 @@ def parse_exact_conversation_reference(query: str) -> Optional[str]:
     """Extract a canonical conversation UUID from an ID or Omi share URL.
 
     Exact references intentionally accept only the two values Omi presents to users: a UUID or an
-    HTTPS URL on ``h.omi.me`` with the exact ``/conversations/<uuid>`` path. Anything else remains a
-    natural-language query so partial IDs and lookalike URLs cannot turn search into document probing.
+    HTTPS URL on the configured share host (default ``h.omi.me``) with the exact
+    ``/conversations/<uuid>`` path. Anything else remains a natural-language query so partial IDs
+    and lookalike URLs cannot turn search into document probing.
     """
     value = query.strip() if query else ''
     if exact_id := _canonical_conversation_uuid(value):
@@ -47,9 +49,13 @@ def parse_exact_conversation_reference(query: str) -> Optional[str]:
     except ValueError:
         return None
 
+    host = (parsed.hostname or '').lower()
     if (
         parsed.scheme.lower() != 'https'
-        or parsed.netloc.lower() != _EXACT_CONVERSATION_HOST
+        or host not in accepted_share_hosts()
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port is not None
         or parsed.query
         or parsed.fragment
         or not parsed.path.startswith(_EXACT_CONVERSATION_PATH_PREFIX)
