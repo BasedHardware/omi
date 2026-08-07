@@ -1,8 +1,9 @@
 # contracts/ — the single source of truth
 
-Pure declarations. Nothing in here executes; everything in here is compiled by
-`../codegen/` into TS types, Dart/Swift bridge stubs, and conformance fixtures, and any
-drift between a declaration and its generated output is a CI failure.
+Pure declarations. Nothing in here executes; everything in here is compiled by the
+generators in `../scripts/` (`gen-bridge-swift.mjs` today; Dart next) into native bridge
+stubs and conformance fixtures, and any drift between a declaration and its generated
+output is a CI failure (`--check` modes in the DoD loop).
 
 The backend rewrite and the client core both pivot on this directory: a domain's
 contract is ratified here **before** either end of the wire moves (WS-002's

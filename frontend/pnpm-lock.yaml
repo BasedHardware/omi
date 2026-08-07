@@ -19,6 +19,9 @@ importers:
       '@omi-core/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@omi-core/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@omi-core/sync':
         specifier: workspace:*
         version: link:../sync
@@ -29,9 +32,6 @@ importers:
 
   packages/bridge-web:
     dependencies:
-      '@omi-core/adapters-legacy':
-        specifier: workspace:*
-        version: link:../adapters-legacy
       '@omi-core/contracts':
         specifier: workspace:*
         version: link:../../contracts

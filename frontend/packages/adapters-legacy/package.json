@@ -2,7 +2,7 @@
   "name": "@omi-core/adapters-legacy",
   "version": "0.0.0",
   "private": true,
-  "description": "The designated graveyard: makes the OLD backend impersonate core/contracts, one domain at a time. Only ever shrinks — a domain's adapter is deleted when David's rewritten service passes that domain's conformance fixtures.",
+  "description": "The designated graveyard: makes the OLD backend impersonate core/contracts, one domain at a time. Only ever shrinks \u2014 a domain's adapter is deleted when David's rewritten service passes that domain's conformance fixtures.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@omi-core/contracts": "workspace:*",
+    "@omi-core/kernel": "workspace:*",
     "@omi-core/sync": "workspace:*"
   },
   "devDependencies": {

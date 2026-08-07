@@ -37,7 +37,8 @@
 import type { Folder, FolderIdSnapshot, FolderOp, FolderPatch } from "@omi-core/contracts";
 import { parseRecordId } from "@omi-core/contracts";
 import type { PendingOp } from "@omi-core/sync";
-import { classifyStatus, type HttpClient } from "./http.js";
+import type { HttpClient } from "@omi-core/contracts";
+import { classifyStatus } from "@omi-core/kernel";
 
 export type FolderSendResult =
   | { ok: true; serverRevision?: string; serverAssignedId?: string }

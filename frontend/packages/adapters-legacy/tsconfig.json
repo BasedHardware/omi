@@ -4,6 +4,18 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src"],
-  "references": [{ "path": "../../contracts" }, { "path": "../sync" }]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../contracts"
+    },
+    {
+      "path": "../sync"
+    },
+    {
+      "path": "../kernel"
+    }
+  ]
 }

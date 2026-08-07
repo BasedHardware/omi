@@ -19,8 +19,8 @@ import {
   fetchMemories,
   fetchMemoryIdSnapshot,
   memoriesTransport,
-  type HttpClient,
 } from "@omi-core/adapters-legacy";
+import type { HttpClient } from "@omi-core/contracts";
 import {
   buildCreateMemory,
   buildDeleteMemory,

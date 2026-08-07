@@ -19,8 +19,8 @@ import {
   fetchIdSnapshot,
   fetchTasks,
   tasksTransport,
-  type HttpClient,
 } from "@omi-core/adapters-legacy";
+import type { HttpClient } from "@omi-core/contracts";
 import type { DurableKv } from "@omi-core/contracts";
 import { buildCreateTask, buildDeleteTask, buildPatchTask, tasksCodec, taskToPendingOp } from "./tasks-codec.js";
 
