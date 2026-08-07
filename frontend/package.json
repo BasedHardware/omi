@@ -13,6 +13,6 @@
     "lint": "pnpm -r lint",
     "codegen": "node scripts/gen-bridge-swift.mjs && node scripts/gen-bridge-dart.mjs",
     "codegen:check": "node scripts/gen-bridge-swift.mjs --check && node scripts/gen-bridge-dart.mjs --check",
-    "verify": "pnpm -r build && pnpm -r test && node scripts/check-isolation.mjs && node scripts/gen-barrels.mjs --check && node scripts/check-structure.mjs && node scripts/gen-bridge-swift.mjs --check && node scripts/gen-bridge-dart.mjs --check"
+    "verify": "pnpm -r build && pnpm -r test && node scripts/check-i18n-parity.mjs && node scripts/check-isolation.mjs && node scripts/gen-barrels.mjs --check && node scripts/check-structure.mjs && node scripts/gen-bridge-swift.mjs --check && node scripts/gen-bridge-dart.mjs --check"
   }
 }
