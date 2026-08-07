@@ -60,6 +60,37 @@ void main() {
       expect(readiness.guidance, isNull);
     });
 
+    test('contains a failed enable request without reopening its guidance', () async {
+      final readiness = BluetoothReadiness(
+        readState: () async => 'off',
+        requestEnable: () async => throw StateError('platform channel unavailable'),
+        observeBridge: false,
+      );
+
+      await readiness.ensureReady(BluetoothUse.connection);
+
+      expect(await readiness.requestEnable(BluetoothUse.connection), isFalse);
+      expect(readiness.guidance, isNull);
+    });
+
+    test('contains a failed state refresh after an enable request', () async {
+      var reads = 0;
+      final readiness = BluetoothReadiness(
+        readState: () async {
+          reads++;
+          if (reads == 1) return 'off';
+          throw StateError('platform channel unavailable');
+        },
+        requestEnable: () async => true,
+        observeBridge: false,
+      );
+
+      await readiness.ensureReady(BluetoothUse.connection);
+
+      expect(await readiness.requestEnable(BluetoothUse.connection), isFalse);
+      expect(readiness.guidance, isNull);
+    });
+
     test('shares one guidance event across overlapping blocked operations', () async {
       final readiness = BluetoothReadiness(readState: () async => 'off', observeBridge: false);
 

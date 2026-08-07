@@ -301,10 +301,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
     }
 
-    if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
-      return;
-    }
-
     // Android 11 and below: location permission required for BLE scanning
     if (PlatformService.isAndroid) {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
@@ -316,6 +312,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
           return;
         }
       }
+    }
+
+    if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
+      return;
     }
 
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {

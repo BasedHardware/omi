@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/utils/logger.dart';
 
 enum BluetoothAdapterState { on, off, unauthorized, unsupported, resetting, unknown }
 
@@ -79,13 +80,20 @@ class BluetoothReadiness extends ChangeNotifier {
   /// Returns false and publishes one deduplicated guidance event when BLE is
   /// unavailable. Call this directly before beginning a BLE operation.
   Future<bool> ensureReady(BluetoothUse use) async {
-    final permissionState = await (_permissionState?.call(use) ?? _currentPermissionState(use));
-    if (permissionState != null) {
-      _applyState(permissionState, use: use);
+    try {
+      final permissionState = await (_permissionState?.call(use) ?? _currentPermissionState(use));
+      if (permissionState != null) {
+        _applyState(permissionState, use: use);
+        return false;
+      }
+      _applyState(parse(await _readState()), use: use);
+      return _state == BluetoothAdapterState.on;
+    } catch (error, stackTrace) {
+      Logger.warning('Bluetooth readiness check failed: $error');
+      Logger.debug('$stackTrace');
+      _applyState(BluetoothAdapterState.unknown, use: use);
       return false;
     }
-    _applyState(parse(await _readState()), use: use);
-    return _state == BluetoothAdapterState.on;
   }
 
   Future<BluetoothAdapterState?> _currentPermissionState(BluetoothUse use) async {
@@ -95,7 +103,11 @@ class BluetoothReadiness extends ChangeNotifier {
     if (!Platform.isAndroid) return null;
 
     final sdk = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
-    if (sdk < 31) return null;
+    if (sdk < 31) {
+      return use == BluetoothUse.discovery && !await Permission.locationWhenInUse.isGranted
+          ? BluetoothAdapterState.unauthorized
+          : null;
+    }
     final connectGranted = await Permission.bluetoothConnect.isGranted;
     final scanGranted = use == BluetoothUse.discovery ? await Permission.bluetoothScan.isGranted : true;
     return connectGranted && scanGranted ? null : BluetoothAdapterState.unauthorized;
@@ -106,10 +118,15 @@ class BluetoothReadiness extends ChangeNotifier {
   Future<bool> requestEnable(BluetoothUse use) async {
     try {
       await _requestEnable();
-    } finally {
+    } catch (error, stackTrace) {
+      Logger.warning('Bluetooth enable request failed: $error');
+      Logger.debug('$stackTrace');
+    }
+
+    try {
       final next = parse(await _readState());
       if (next == BluetoothAdapterState.on) {
-        _applyState(next);
+        _applyState(next, use: use);
       } else {
         // The system prompt was cancelled or declined. Suppress the same
         // guidance until the adapter changes state so it cannot immediately
@@ -119,6 +136,12 @@ class BluetoothReadiness extends ChangeNotifier {
         _applyState(next);
         notifyListeners();
       }
+    } catch (error, stackTrace) {
+      Logger.warning('Bluetooth state refresh after enable failed: $error');
+      Logger.debug('$stackTrace');
+      _dismissedBlockedState = _state;
+      _guidance = null;
+      notifyListeners();
     }
     return _state == BluetoothAdapterState.on;
   }

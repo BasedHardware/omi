@@ -23,7 +23,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
   @override
   Future<DeviceDiscoveryResult> discover({int timeout = 5}) async {
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
-      return const DeviceDiscoveryResult(devices: []);
+      return const DeviceDiscoveryResult(devices: [], isBlocked: true);
     }
     final List<BlePeripheral> results = [];
     final completer = Completer<void>();
