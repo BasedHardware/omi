@@ -49,7 +49,9 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-RUN apt-get update && apt-get -y install ffmpeg curl libjemalloc2 && \
+# Patch OS packages in this layer before installing runtime deps (#7136).
+RUN apt-get update && apt-get -y upgrade --no-install-recommends \
+    && apt-get -y install --no-install-recommends ffmpeg curl libjemalloc2 && \
     groupadd --system --gid 10001 pusher && \
     useradd --system --uid 10001 --gid 10001 --home-dir /app pusher && \
     mkdir -p _temp _samples _segments _speech_profiles && \

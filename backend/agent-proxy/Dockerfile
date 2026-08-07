@@ -17,6 +17,9 @@ FROM ${PYTHON_BASE_IMAGE}
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Patch OS packages in this layer (#7136). No extra apt packages in the final image.
+RUN apt-get update && apt-get -y upgrade --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/database/__init__.py ./database/__init__.py
 COPY backend/database/_client.py ./database/_client.py
