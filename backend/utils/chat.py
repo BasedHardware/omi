@@ -595,15 +595,17 @@ async def process_voice_message_segment_stream(
             if chunk:
                 if chunk.startswith('error: '):
                     streamed_terminal_error = True
-                    # Flutter returns on error without draining a later done: frame.
-                    # Persist/record the staged failure before yielding error so history
-                    # and fallback SLIs are not lost to disconnect cancellation.
+                    # Flutter returns on error without draining a later done: frame, and
+                    # also overwrites a preceding done: message when a plain-text error:
+                    # arrives. Persist/record the staged failure as done: and suppress the
+                    # error frame so history and UI stay on the typed terminal reply.
                     response = callback_data.get('answer')
                     if response and not answered:
                         done_frame, ai_message = await emit_voice_done_frame(response)
                         yield done_frame
                         answered = True
                         await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+                        continue
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
 

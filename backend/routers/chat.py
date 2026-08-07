@@ -422,7 +422,16 @@ def send_message(
         chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
-            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+            try:
+                record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+            except Exception as analytics_exc:
+                # Message is already durable; analytics must not change the client-visible id.
+                logger.error(
+                    'chat stream app usage recording failed for uid=%s message_id=%s: %s',
+                    uid,
+                    ai_message.id,
+                    type(analytics_exc).__name__,
+                )
 
         return ai_message, ask_for_nps
 
