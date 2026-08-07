@@ -1,3 +1,5 @@
+import AppKit
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
@@ -90,6 +92,104 @@ final class ChatBubbleMetadataRevealTests: XCTestCase {
       ChatBubbleMetadataReveal.isVisible(hovering: true, controlFocused: false, transientFeedback: false))
     XCTAssertTrue(
       ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: false, transientFeedback: true))
+  }
+}
+
+/// **Revealing the metadata band must not change what the transcript measures.**
+///
+/// The band was zero-height at rest and took its intrinsic height on reveal, so
+/// a hovered assistant row was ~16 pt taller than the same row unhovered, and
+/// every row below it moved. Scrolling happens with the pointer over the
+/// transcript, so rows entered and left hover continuously during a gesture and
+/// the document reflowed under the cursor — measured on the mounted transcript
+/// as a document height that oscillated between 7773 and 7789 pt depending on
+/// where the mouse was.
+///
+/// Both halves are asserted here because either one alone is satisfiable by a
+/// bug: a band that reserves its height keeps the row stable, and a band that
+/// never renders keeps it stable too.
+@MainActor
+final class ChatBubbleMetadataBandLayoutTests: XCTestCase {
+  private static let width: CGFloat = 480
+  /// The gap the transcript keeps after an assistant row, which is the space
+  /// the band draws into.
+  private static let gap = ChatTranscriptLayout.regularRowSpacing
+
+  func testRevealingTheMetadataBandDoesNotChangeTheRowHeight() {
+    XCTAssertEqual(
+      rowHeight(revealed: true),
+      rowHeight(revealed: false),
+      accuracy: 0.5,
+      "a revealed metadata band must add no layout height, or a hovered row pushes "
+        + "every row below it down and the document reflows under the pointer")
+  }
+
+  func testTheRevealedMetadataBandStillPaints() throws {
+    let revealed = try render(revealed: true)
+    let hidden = try render(revealed: false)
+
+    XCTAssertGreaterThan(
+      differingPixels(revealed, hidden), 20,
+      "the metadata band drew nothing when revealed — drawing out of a zero-height "
+        + "frame is what keeps the row stable, so losing the paint is the other failure")
+  }
+
+  private func bubble(revealed: Bool) -> ChatBubble {
+    var bubble = ChatBubble(
+      message: ChatMessage(
+        id: "assistant-band",
+        text: "A one-line answer.",
+        createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+        sender: .ai,
+        isSynced: true),
+      app: nil,
+      showsOmiMark: false,
+      onRate: { _ in })
+    bubble.metadataRevealOverrideForTesting = revealed
+    return bubble
+  }
+
+  private func rowHeight(revealed: Bool) -> CGFloat {
+    NSHostingView(rootView: bubble(revealed: revealed).frame(width: Self.width)).fittingSize.height
+  }
+
+  /// Renders the row plus the gap underneath it over an opaque mid-grey ground,
+  /// so the comparison holds whichever appearance the test host is in — chat ink
+  /// is near-white in one and near-black in the other.
+  private func render(revealed: Bool) throws -> NSBitmapImageRep {
+    let height = rowHeight(revealed: false) + Self.gap
+    let host = NSHostingView(
+      rootView: VStack(spacing: 0) {
+        bubble(revealed: revealed)
+        Spacer(minLength: 0)
+      }
+      .frame(width: Self.width, height: height, alignment: .top)
+    )
+    host.frame = NSRect(x: 0, y: 0, width: Self.width, height: height)
+
+    let ground = NSView(frame: host.frame)
+    ground.wantsLayer = true
+    ground.layer?.backgroundColor = NSColor(white: 0.5, alpha: 1).cgColor
+    ground.addSubview(host)
+    ground.layoutSubtreeIfNeeded()
+
+    let rep = try XCTUnwrap(ground.bitmapImageRepForCachingDisplay(in: ground.bounds))
+    ground.cacheDisplay(in: ground.bounds, to: rep)
+    return rep
+  }
+
+  private func differingPixels(_ lhs: NSBitmapImageRep, _ rhs: NSBitmapImageRep) -> Int {
+    guard lhs.pixelsWide == rhs.pixelsWide, lhs.pixelsHigh == rhs.pixelsHigh else { return 0 }
+    var differing = 0
+    for y in 0..<lhs.pixelsHigh {
+      for x in 0..<lhs.pixelsWide {
+        guard let left = lhs.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+          let right = rhs.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
+        else { continue }
+        if abs(left.brightnessComponent - right.brightnessComponent) > 0.02 { differing += 1 }
+      }
+    }
+    return differing
   }
 }
 

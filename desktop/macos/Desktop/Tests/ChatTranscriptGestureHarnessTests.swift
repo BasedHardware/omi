@@ -248,6 +248,18 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     )
   }
 
+  /// **Nothing a traversal touches may change what the transcript measures.**
+  ///
+  /// The first thing this caught was not row materialization, which is what it
+  /// used to claim: it was the pointer. An assistant row's hover-revealed
+  /// metadata band took its intrinsic height on reveal, so a hovered row was
+  /// ~16 pt taller than the same row unhovered and every row below it moved.
+  /// With the physical mouse over this window the document oscillated between
+  /// 7773 and 7789 pt across a traversal; with the mouse on another display
+  /// every sample was 7773 and the same binary passed. The band now draws out
+  /// of a zero-height frame (`ChatBubble.messageMetadataRow`), so height is
+  /// hover-invariant and this measurement no longer depends on where the
+  /// developer left the cursor.
   func testFastTraversalKeepsTheTranscriptDocumentHeightStable() throws {
     let harness = try makeHarness(messageCount: 120)
     defer { harness.tearDown() }
@@ -266,8 +278,9 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       maximumHeight,
       minimumHeight,
       accuracy: 4,
-      "materializing off-screen rows during a fast gesture must not re-estimate "
-        + "the transcript document height (observed \(minimumHeight)...\(maximumHeight))"
+      "a fast gesture must not change the transcript's document height — not by "
+        + "materializing off-screen rows, and not by passing the pointer over rows "
+        + "whose hover reveals something (observed \(minimumHeight)...\(maximumHeight))"
     )
   }
 

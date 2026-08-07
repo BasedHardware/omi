@@ -20,8 +20,16 @@ struct ChatBubble: View {
   /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
   /// only the capability-gated main shell is allowed to turn them into controls.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// Controllable seam for the metadata band's reveal state. Hover is not
+  /// drivable from a test process (it is never the active application), and the
+  /// invariant worth pinning — a revealed band adds no layout height — is only
+  /// observable with the band actually revealed. Nil everywhere in production.
+  var metadataRevealOverrideForTesting: Bool? = nil
 
   @State private var isRowHovering = false
+  /// The band draws outside the row's bounds, so it needs its own hover to stay
+  /// up while the pointer is on the controls.
+  @State private var isMetadataBandHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
@@ -469,11 +477,13 @@ struct ChatBubble: View {
 
   @ViewBuilder
   private func messageMetadataRow(includeRatingButtons: Bool, includeCopyButton: Bool) -> some View {
-    let isVisible = ChatBubbleMetadataReveal.isVisible(
-      hovering: isRowHovering,
-      controlFocused: isMetadataControlFocused,
-      transientFeedback: showRatingFeedback || showCopied || showInfoPopover
-    )
+    let isVisible =
+      metadataRevealOverrideForTesting
+      ?? ChatBubbleMetadataReveal.isVisible(
+        hovering: isRowHovering || isMetadataBandHovering,
+        controlFocused: isMetadataControlFocused,
+        transientFeedback: showRatingFeedback || showCopied || showInfoPopover
+      )
     // **One cluster under the message.** Controls far left and timestamp far right
     // of one line is how two halves of a row end up reading as page furniture.
     HStack(alignment: .center, spacing: OmiSpacing.sm) {
@@ -489,19 +499,35 @@ struct ChatBubble: View {
       ChatMessageTimestamp(date: message.createdAt)
       Spacer(minLength: 0)
     }
-    // **Costs nothing until you are on the message.** It was already invisible at
-    // rest, but an `opacity(0)` row still reserves its height, and ~20 pt on every
-    // assistant turn was most of the dead space between two one-line messages. The
-    // zero-height frame keeps it in the tree — hover, focus and hit testing behave
-    // normally — and lets it draw into the gap. It only grows downward, into a row
-    // the pointer is inside, so it cannot flicker.
     .frame(maxWidth: .infinity, alignment: .leading)
-    .frame(height: isVisible ? nil : 0, alignment: .top)
+    // The zero-height frame proposes zero height; take the band's own instead of
+    // letting the proposal squash it.
+    .fixedSize(horizontal: false, vertical: true)
+    // Hover has to survive the pointer reaching the controls. The band draws
+    // outside the row's bounds, so the row's own `onHover` reports a leave the
+    // moment the pointer moves down onto the buttons. Inside `allowsHitTesting`,
+    // so a hidden band cannot reveal itself — this only keeps a revealed one up.
+    .contentShape(Rectangle())
+    .onHover { isMetadataBandHovering = $0 }
+    // **Costs nothing at rest, and nothing when revealed either.** It was already
+    // invisible at rest, but an `opacity(0)` row still reserves its height, and
+    // ~20 pt on every assistant turn was most of the dead space between two
+    // one-line messages. So the band is *always* zero-height in layout and draws
+    // out of that frame into the 16 pt gap the transcript keeps after an
+    // assistant row (`ChatTranscriptLayout.regularRowSpacing`).
+    //
+    // Sizing it on reveal instead made document height a function of where the
+    // pointer was: a hovered row was ~16 pt taller, so every row below it shifted
+    // down — under the cursor, mid-scroll, since scrolling happens with the
+    // pointer over the transcript. Painting outside the frame was always the
+    // intent; only the layout height was wrong.
+    .frame(height: 0, alignment: .top)
     // Outside the zero-height frame, or the stack's 4 pt outlives the row it spaced.
-    .padding(.top, isVisible ? 0 : -OmiSpacing.xxs)
+    .padding(.top, -OmiSpacing.xxs)
     .opacity(isVisible ? 1 : 0)
     .allowsHitTesting(isVisible)
     .omiAnimation(.easeInOut(duration: 0.15), value: isRowHovering)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataBandHovering)
     .omiAnimation(.easeInOut(duration: 0.15), value: isMetadataControlFocused)
   }
 
