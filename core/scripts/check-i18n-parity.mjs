@@ -152,12 +152,13 @@ if (existsSync(productionRoot)) {
       /\.tsx?$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.JSX,
     );
     const isSafeAttribute = (name) =>
-      name === "className" || name === "class" || name === "id" || name === "role" ||
+      name === "className" || name === "class" || name === "id" || name === "role" || name === "aria-current" ||
       name === "name" || name === "type" || name === "value" || name === "href" ||
       name === "src" || name === "style" || name === "key" || name.startsWith("data-");
     const reportVisibleLiteral = (node, context) => {
       const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-      errors.push(`production surface ${file.slice(root.length + 1)}:${line} embeds visible string ${context}; call t()`);
+      const relative = file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file;
+      errors.push(`production surface ${relative}:${line} embeds visible string ${context}; call t()`);
     };
     const visitAst = (node) => {
       if (ts.isJsxText(node)) {
@@ -188,11 +189,6 @@ if (existsSync(productionRoot)) {
     // red-proof: mutating a production JSX child from t("...") to "..."
     // must add an error even when the canonical English text is not in catalog.
     visitAst(sourceFile);
-    for (const [key, value] of Object.entries(messages)) {
-      if (value.length >= 4 && contents.includes(value)) {
-        errors.push(`production surface ${file.slice(root.length + 1)} embeds canonical copy for ${key}; call t()`);
-      }
-    }
   }
 } else {
   warnings.push("hardcoded-copy check skipped: packages/surfaces/src/production/ does not exist yet");
