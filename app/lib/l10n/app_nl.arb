@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Vastzetten als basis",
     "unpinAsBaseline": "Losmaken van basis",
     "baselineMemory": "Basisherinnering",
-    "alwaysInContext": "Altijd in context"
+    "alwaysInContext": "Altijd in context",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

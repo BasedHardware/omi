@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Fest som grunnlag",
     "unpinAsBaseline": "Løsne fra grunnlag",
     "baselineMemory": "Grunnlagsminne",
-    "alwaysInContext": "Alltid i kontekst"
+    "alwaysInContext": "Alltid i kontekst",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

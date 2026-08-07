@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "Замацаваць як базавае",
     "unpinAsBaseline": "Адмацаваць ад базавага",
     "baselineMemory": "Базавая памяць",
-    "alwaysInContext": "Заўсёды ў кантэксце"
+    "alwaysInContext": "Заўсёды ў кантэксце",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

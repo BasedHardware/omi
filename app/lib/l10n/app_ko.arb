@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "기준으로 고정",
     "unpinAsBaseline": "기준에서 고정 해제",
     "baselineMemory": "기준 메모리",
-    "alwaysInContext": "항상 컨텍스트에 포함"
+    "alwaysInContext": "항상 컨텍스트에 포함",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

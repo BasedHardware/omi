@@ -3209,5 +3209,9 @@
     "pinAsBaseline": "आधार के रूप में पिन करें",
     "unpinAsBaseline": "आधार से अनपिन करें",
     "baselineMemory": "आधार मेमोरी",
-    "alwaysInContext": "हमेशा संदर्भ में"
+    "alwaysInContext": "हमेशा संदर्भ में",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "அடிப்படையாகப் பின் செய்",
     "unpinAsBaseline": "அடிப்படையிலிருந்து அகற்று",
     "baselineMemory": "அடிப்படை நினைவு",
-    "alwaysInContext": "எப்போதும் சூழலில்"
+    "alwaysInContext": "எப்போதும் சூழலில்",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

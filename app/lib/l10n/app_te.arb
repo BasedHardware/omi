@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "ఆధారంగా పిన్ చేయండి",
     "unpinAsBaseline": "ఆధారం నుండి అన్‌పిన్ చేయండి",
     "baselineMemory": "ఆధార మెమరీ",
-    "alwaysInContext": "ఎల్లప్పుడూ సందర్భంలో"
+    "alwaysInContext": "ఎల్లప్పుడూ సందర్భంలో",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

@@ -3209,5 +3209,9 @@
     "pinAsBaseline": "Fijar como base",
     "unpinAsBaseline": "Dejar de fijar como base",
     "baselineMemory": "Memoria base",
-    "alwaysInContext": "Siempre en contexto"
+    "alwaysInContext": "Siempre en contexto",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

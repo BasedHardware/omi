@@ -3230,5 +3230,9 @@
     "downgradeToFreemiumAction": "降级到免费版",
     "getFreeUnlimitedAccess": "免费获取无限访问权限",
     "shareDataForTraining": "共享数据用于训练",
-    "yourRequestUnderReview": "你的申请正在审核中"
+    "yourRequestUnderReview": "你的申请正在审核中",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

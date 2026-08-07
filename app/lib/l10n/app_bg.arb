@@ -3186,5 +3186,9 @@
     "pinAsBaseline": "Закачване като базово",
     "unpinAsBaseline": "Откачване от базово",
     "baselineMemory": "Базова памет",
-    "alwaysInContext": "Винаги в контекста"
+    "alwaysInContext": "Винаги в контекста",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

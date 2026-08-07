@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Fäst som utgångspunkt",
     "unpinAsBaseline": "Lossa från utgångspunkt",
     "baselineMemory": "Utgångsminne",
-    "alwaysInContext": "Alltid i kontexten"
+    "alwaysInContext": "Alltid i kontexten",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

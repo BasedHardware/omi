@@ -18,12 +18,15 @@ def build_chat_scope(context: Optional[PageContext]) -> Optional[Dict[str, Any]]
         return None
 
     scope: Dict[str, Any] = {}
-    if context.type == "conversation" and (context.id or "").strip():
-        scope["conversation_id"] = str(context.id).strip()
-    if (context.start_date or "").strip():
-        scope["start_date"] = str(context.start_date).strip()
-    if (context.end_date or "").strip():
-        scope["end_date"] = str(context.end_date).strip()
+    ctx_id = context.id if isinstance(context.id, str) else ""
+    if context.type == "conversation" and ctx_id.strip():
+        scope["conversation_id"] = ctx_id.strip()
+    start_date = context.start_date if isinstance(context.start_date, str) else ""
+    end_date = context.end_date if isinstance(context.end_date, str) else ""
+    if start_date.strip():
+        scope["start_date"] = start_date.strip()
+    if end_date.strip():
+        scope["end_date"] = end_date.strip()
 
     return scope or None
 

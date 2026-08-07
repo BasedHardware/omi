@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "הצמדה כבסיס",
     "unpinAsBaseline": "ביטול הצמדה מהבסיס",
     "baselineMemory": "זיכרון בסיס",
-    "alwaysInContext": "תמיד בהקשר"
+    "alwaysInContext": "תמיד בהקשר",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "بنیاد کے طور پر پن کریں",
     "unpinAsBaseline": "بنیاد سے ان پن کریں",
     "baselineMemory": "بنیادی یادداشت",
-    "alwaysInContext": "ہمیشہ سیاق میں"
+    "alwaysInContext": "ہمیشہ سیاق میں",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

@@ -3243,5 +3243,9 @@
     "pinAsBaseline": "Закрепить как базовое",
     "unpinAsBaseline": "Открепить от базового",
     "baselineMemory": "Базовая память",
-    "alwaysInContext": "Всегда в контексте"
+    "alwaysInContext": "Всегда в контексте",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

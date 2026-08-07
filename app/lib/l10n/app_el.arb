@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Καρφίτσωμα ως βάση",
     "unpinAsBaseline": "Ξεκαρφίτσωμα από τη βάση",
     "baselineMemory": "Μνήμη βάσης",
-    "alwaysInContext": "Πάντα στο πλαίσιο"
+    "alwaysInContext": "Πάντα στο πλαίσιο",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

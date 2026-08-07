@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Kiinnitä perustaksi",
     "unpinAsBaseline": "Irrota perustasta",
     "baselineMemory": "Perusmuisti",
-    "alwaysInContext": "Aina kontekstissa"
+    "alwaysInContext": "Aina kontekstissa",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

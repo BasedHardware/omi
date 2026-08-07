@@ -70,7 +70,6 @@ export function ChatPanel() {
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [selectedApp, setSelectedApp] = useState<App | null>(null);
-  const [timeframePreset, setTimeframePreset] = useState<'today' | 'week' | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -108,12 +107,36 @@ export function ChatPanel() {
 
   const quickPrompts = getQuickPrompts(currentContext?.type);
 
+  const activeTimeframePreset = (() => {
+    if (!currentContext?.start_date || !currentContext?.end_date) return null;
+    const start = new Date(currentContext.start_date);
+    const end = new Date(currentContext.end_date);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+    const sameDay =
+      Math.abs(start.getTime() - todayStart.getTime()) < 60_000 &&
+      Math.abs(end.getTime() - todayEnd.getTime()) < 60_000;
+    if (sameDay) return 'today' as const;
+    const day = now.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const weekStart = new Date(now);
+    weekStart.setDate(weekStart.getDate() + mondayOffset);
+    weekStart.setHours(0, 0, 0, 0);
+    const weekMatch =
+      Math.abs(start.getTime() - weekStart.getTime()) < 60_000 &&
+      Math.abs(end.getTime() - todayEnd.getTime()) < 60_000;
+    return weekMatch ? ('week' as const) : null;
+  })();
+
   const applyTimeframePreset = (preset: 'today' | 'week' | null) => {
-    setTimeframePreset(preset);
     if (!preset) {
       if (!currentContext) return;
       const { start_date: _s, end_date: _e, ...rest } = currentContext;
-      // Keep conversation/task context; drop only the date window.
+      // Keep conversation/task/memory context; drop only the date window.
       if (rest.type === 'recap' && !rest.id && (rest.title === 'Today' || rest.title === 'This week')) {
         setContext(null);
       } else {
@@ -141,14 +164,22 @@ export function ChatPanel() {
         ? currentContext
         : { type: 'recap' as const, title: preset === 'today' ? 'Today' : 'This week' };
 
+    const preserveTitle =
+      currentContext &&
+      (currentContext.type === 'conversation' ||
+        currentContext.type === 'task' ||
+        currentContext.type === 'memory') &&
+      currentContext.title;
+
     setContext({
       ...base,
-      title:
-        currentContext?.type === 'conversation'
-          ? currentContext.title
-          : preset === 'today'
+      title: preserveTitle
+        ? currentContext!.title
+        : base.type === 'recap'
+          ? preset === 'today'
             ? 'Today'
-            : 'This week',
+            : 'This week'
+          : base.title,
       start_date: start.toISOString(),
       end_date: end.toISOString(),
     });
@@ -350,11 +381,11 @@ export function ChatPanel() {
                 <span className="text-xs text-text-quaternary">Scope</span>
                 <button
                   type="button"
-                  onClick={() => applyTimeframePreset(timeframePreset === 'today' ? null : 'today')}
+                  onClick={() => applyTimeframePreset(activeTimeframePreset === 'today' ? null : 'today')}
                   className={cn(
                     'text-xs px-2.5 py-1 rounded-full border transition-colors',
-                    timeframePreset === 'today'
-                      ? 'border-purple-primary bg-purple-primary/20 text-purple-primary'
+                    activeTimeframePreset === 'today'
+                      ? 'border-text-secondary bg-bg-tertiary text-text-primary'
                       : 'border-bg-tertiary text-text-tertiary hover:text-text-secondary',
                   )}
                 >
@@ -362,17 +393,17 @@ export function ChatPanel() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => applyTimeframePreset(timeframePreset === 'week' ? null : 'week')}
+                  onClick={() => applyTimeframePreset(activeTimeframePreset === 'week' ? null : 'week')}
                   className={cn(
                     'text-xs px-2.5 py-1 rounded-full border transition-colors',
-                    timeframePreset === 'week'
-                      ? 'border-purple-primary bg-purple-primary/20 text-purple-primary'
+                    activeTimeframePreset === 'week'
+                      ? 'border-text-secondary bg-bg-tertiary text-text-primary'
                       : 'border-bg-tertiary text-text-tertiary hover:text-text-secondary',
                   )}
                 >
                   This week
                 </button>
-                {(timeframePreset || currentContext?.start_date) && (
+                {currentContext?.start_date && (
                   <button
                     type="button"
                     onClick={() => applyTimeframePreset(null)}

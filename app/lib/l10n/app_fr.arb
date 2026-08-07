@@ -3243,5 +3243,9 @@
     "pinAsBaseline": "Épingler comme référence",
     "unpinAsBaseline": "Détacher de la référence",
     "baselineMemory": "Mémoire de référence",
-    "alwaysInContext": "Toujours dans le contexte"
+    "alwaysInContext": "Toujours dans le contexte",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

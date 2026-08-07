@@ -3226,5 +3226,9 @@
     "pinAsBaseline": "Fastgør som baseline",
     "unpinAsBaseline": "Frigør fra baseline",
     "baselineMemory": "Baseline-hukommelse",
-    "alwaysInContext": "Altid i kontekst"
+    "alwaysInContext": "Altid i kontekst",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

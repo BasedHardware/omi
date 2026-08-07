@@ -746,7 +746,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            tooltip: 'Ask about this',
+                            tooltip: context.l10n.askAboutThisConversation,
                             onPressed: () {
                               HapticFeedback.mediumImpact();
                               final convo = provider.conversation;

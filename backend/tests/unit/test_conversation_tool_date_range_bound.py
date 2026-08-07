@@ -84,6 +84,23 @@ for _name, _attrs in {
     for _a in _attrs:
         setattr(_m, _a, MagicMock())
 
+
+def _apply_chat_scope_dates(scope, start_date, end_date):
+    """Pass-through stub: date-range bound tests do not exercise hard-scope intersection."""
+    return start_date, end_date, None
+
+
+def _chat_scope_from_config(configurable):
+    if not isinstance(configurable, dict):
+        return None
+    scope = configurable.get("chat_scope")
+    return scope if isinstance(scope, dict) and scope else None
+
+
+_chat_scope = _mod("utils.retrieval.chat_scope")
+_chat_scope.apply_chat_scope_dates = _apply_chat_scope_dates
+_chat_scope.chat_scope_from_config = _chat_scope_from_config
+
 ct = _load("utils.retrieval.tools.conversation_tools", "utils/retrieval/tools/conversation_tools.py")
 
 

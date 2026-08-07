@@ -3186,5 +3186,9 @@
     "pinAsBaseline": "Připnout jako základ",
     "unpinAsBaseline": "Odepnout ze základu",
     "baselineMemory": "Základní paměť",
-    "alwaysInContext": "Vždy v kontextu"
+    "alwaysInContext": "Vždy v kontextu",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Prisegti kaip pagrindą",
     "unpinAsBaseline": "Atsegti nuo pagrindo",
     "baselineMemory": "Pagrindinė atmintis",
-    "alwaysInContext": "Visada kontekste"
+    "alwaysInContext": "Visada kontekste",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

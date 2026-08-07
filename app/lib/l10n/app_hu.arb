@@ -3304,5 +3304,9 @@
     "pinAsBaseline": "Rögzítés alapként",
     "unpinAsBaseline": "Rögzítés feloldása alapként",
     "baselineMemory": "Alapmemória",
-    "alwaysInContext": "Mindig a kontextusban"
+    "alwaysInContext": "Mindig a kontextusban",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

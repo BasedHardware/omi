@@ -3184,5 +3184,9 @@
     "pinAsBaseline": "ベースラインに固定",
     "unpinAsBaseline": "ベースラインから解除",
     "baselineMemory": "ベースラインメモリ",
-    "alwaysInContext": "常にコンテキストに含む"
+    "alwaysInContext": "常にコンテキストに含む",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

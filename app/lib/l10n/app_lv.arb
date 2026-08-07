@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Piespraust kā pamatu",
     "unpinAsBaseline": "Atspraust no pamata",
     "baselineMemory": "Pamata atmiņa",
-    "alwaysInContext": "Vienmēr kontekstā"
+    "alwaysInContext": "Vienmēr kontekstā",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

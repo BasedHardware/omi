@@ -3213,5 +3213,9 @@
     "pinAsBaseline": "Ghim làm chuẩn",
     "unpinAsBaseline": "Bỏ ghim khỏi chuẩn",
     "baselineMemory": "Bộ nhớ chuẩn",
-    "alwaysInContext": "Luôn trong ngữ cảnh"
+    "alwaysInContext": "Luôn trong ngữ cảnh",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

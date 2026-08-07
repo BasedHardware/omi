@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "I-pin bilang baseline",
     "unpinAsBaseline": "Alisin sa baseline",
     "baselineMemory": "Baseline na memorya",
-    "alwaysInContext": "Palaging nasa konteksto"
+    "alwaysInContext": "Palaging nasa konteksto",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

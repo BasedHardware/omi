@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Sematkan sebagai asas",
     "unpinAsBaseline": "Nyahsemat daripada asas",
     "baselineMemory": "Memori asas",
-    "alwaysInContext": "Sentiasa dalam konteks"
+    "alwaysInContext": "Sentiasa dalam konteks",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

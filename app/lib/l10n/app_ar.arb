@@ -3184,5 +3184,9 @@
     "pinAsBaseline": "التثبيت كأساس",
     "unpinAsBaseline": "إلغاء التثبيت من الأساس",
     "baselineMemory": "ذاكرة أساسية",
-    "alwaysInContext": "دائمًا في السياق"
+    "alwaysInContext": "دائمًا في السياق",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

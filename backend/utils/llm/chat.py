@@ -616,11 +616,11 @@ Keep these goals in mind when giving advice or suggestions.
                 "HARD SCOPE: Answer ONLY using this conversation. Do not use other conversations, "
                 "memories, or time ranges. If the question is outside this conversation, say so."
             )
-        if (context.start_date or "").strip() or (context.end_date or "").strip():
+        start_date = context.start_date if isinstance(context.start_date, str) else ""
+        end_date = context.end_date if isinstance(context.end_date, str) else ""
+        if start_date.strip() or end_date.strip():
             hard_scope = True
-            window = " to ".join(
-                part for part in [(context.start_date or "").strip(), (context.end_date or "").strip()] if part
-            )
+            window = " to ".join(part for part in [start_date.strip(), end_date.strip()] if part)
             scope_lines.append(
                 f"HARD SCOPE timeframe: {window}. Answer ONLY using conversations inside this window. "
                 "If the answer is outside it, say so."

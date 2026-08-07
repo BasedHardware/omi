@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "ปักหมุดเป็นค่าพื้นฐาน",
     "unpinAsBaseline": "เลิกปักหมุดจากค่าพื้นฐาน",
     "baselineMemory": "หน่วยความจำพื้นฐาน",
-    "alwaysInContext": "อยู่ในบริบทเสมอ"
+    "alwaysInContext": "อยู่ในบริบทเสมอ",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

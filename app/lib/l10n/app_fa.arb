@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "سنجاق به‌عنوان مبنا",
     "unpinAsBaseline": "برداشتن سنجاق از مبنا",
     "baselineMemory": "حافظه مبنا",
-    "alwaysInContext": "همیشه در زمینه"
+    "alwaysInContext": "همیشه در زمینه",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

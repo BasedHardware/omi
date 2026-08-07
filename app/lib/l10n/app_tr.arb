@@ -3243,5 +3243,9 @@
     "pinAsBaseline": "Temel olarak sabitle",
     "unpinAsBaseline": "Temelden ayır",
     "baselineMemory": "Temel bellek",
-    "alwaysInContext": "Her zaman bağlamda"
+    "alwaysInContext": "Her zaman bağlamda",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

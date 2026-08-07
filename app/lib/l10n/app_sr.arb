@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "Закачи као основу",
     "unpinAsBaseline": "Откачи са основе",
     "baselineMemory": "Основна меморија",
-    "alwaysInContext": "Увек у контексту"
+    "alwaysInContext": "Увек у контексту",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

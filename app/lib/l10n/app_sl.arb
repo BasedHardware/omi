@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "Pripni kot osnovo",
     "unpinAsBaseline": "Odpni z osnove",
     "baselineMemory": "Osnovni spomin",
-    "alwaysInContext": "Vedno v kontekstu"
+    "alwaysInContext": "Vedno v kontekstu",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

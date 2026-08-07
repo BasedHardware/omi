@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Kinnita alusena",
     "unpinAsBaseline": "Eemalda aluselt",
     "baselineMemory": "Alusmälu",
-    "alwaysInContext": "Alati kontekstis"
+    "alwaysInContext": "Alati kontekstis",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

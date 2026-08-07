@@ -49,11 +49,20 @@ def _scoped_conversation_fetch(
     *,
     start_dt: Optional[datetime],
     end_dt: Optional[datetime],
+    include_discarded: bool = False,
+    statuses: Optional[List[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """Load one owned conversation and optionally enforce the timeframe window."""
+    """Load one owned conversation and enforce the same visibility filters as list fetch."""
     conv = conversations_db.get_conversation(uid, conversation_id)
     if not conv or conv.get('is_locked', False):
         return [], f"No accessible conversation found for scoped id {conversation_id}."
+    if not include_discarded and conv.get('discarded', False):
+        return [], f"No accessible conversation found for scoped id {conversation_id}."
+    if statuses:
+        raw_status = conv.get('status')
+        status_val = getattr(raw_status, 'value', raw_status)
+        if status_val is not None and str(status_val) not in statuses:
+            return [], f"No accessible conversation found for scoped id {conversation_id}."
     start_ts = int(start_dt.timestamp()) if start_dt is not None else None
     end_ts = int(end_dt.timestamp()) if end_dt is not None else None
     if start_ts is not None or end_ts is not None:
@@ -229,7 +238,12 @@ def get_conversations_tool(
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id:
         conversations_data, scoped_err = _scoped_conversation_fetch(
-            uid, str(scoped_id), start_dt=start_dt, end_dt=end_dt
+            uid,
+            str(scoped_id),
+            start_dt=start_dt,
+            end_dt=end_dt,
+            include_discarded=include_discarded,
+            statuses=status_list or None,
         )
         if scoped_err:
             logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
@@ -497,7 +511,12 @@ def search_conversations_tool(
         vector_ids: List[str] = []
         if scoped_id:
             conversations_data, scoped_err = _scoped_conversation_fetch(
-                uid, str(scoped_id), start_dt=start_dt, end_dt=end_dt
+                uid,
+                str(scoped_id),
+                start_dt=start_dt,
+                end_dt=end_dt,
+                include_discarded=False,
+                statuses=None,
             )
             if scoped_err:
                 logger.info(f"⚠️ search_conversations_tool - {scoped_err}")

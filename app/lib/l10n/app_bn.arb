@@ -10774,5 +10774,9 @@
     "pinAsBaseline": "বেসলাইন হিসেবে পিন করুন",
     "unpinAsBaseline": "বেসলাইন থেকে আনপিন করুন",
     "baselineMemory": "বেসলাইন মেমরি",
-    "alwaysInContext": "সর্বদা প্রসঙ্গে"
+    "alwaysInContext": "সর্বদা প্রসঙ্গে",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, List, Literal, Optional, Union
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ValidationInfo, field_validator, model_validator
 
 
 class MessageSender(str, Enum):
@@ -226,6 +226,38 @@ class PageContext(BaseModel):
     title: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+
+    @staticmethod
+    def _require_aware_iso(value: Optional[str], field_name: str) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be an ISO-8601 string with timezone offset")
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            parsed = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(
+                f"{field_name} must be ISO-8601 with timezone "
+                f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            ) from exc
+        if parsed.tzinfo is None:
+            raise ValueError(
+                f"{field_name} must include a timezone offset "
+                f"(YYYY-MM-DDTHH:MM:SS+HH:MM), got {value!r}"
+            )
+        return stripped
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _validate_scope_dates(cls, value: Any, info: ValidationInfo) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError(f"{info.field_name} must be an ISO-8601 string with timezone offset")
+        return cls._require_aware_iso(value, info.field_name)
 
 
 class SendMessageRequest(BaseModel):

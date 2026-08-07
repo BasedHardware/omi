@@ -3208,5 +3208,9 @@
     "pinAsBaseline": "Fixează ca referință",
     "unpinAsBaseline": "Anulează fixarea ca referință",
     "baselineMemory": "Memorie de referință",
-    "alwaysInContext": "Mereu în context"
+    "alwaysInContext": "Mereu în context",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }
