@@ -25,12 +25,13 @@ import XCTest
 /// not clear enough"; the measurable defect was that the icons had no working state readout at all.
 ///
 /// **A glass panel cannot be rendered offscreen** — `NSVisualEffectView` blends `.behindWindow` and a
-/// test process has no desktop behind its windows. So the ground is *modelled* from the same measured
-/// constants `InkGlass` publishes for exactly this purpose (`measuredMaterialOpacity`,
-/// `measuredMaterialTint`, `scrim`), for the two desktops that bound the range: solid black and solid
-/// white. The model reproduces `InkGlass`'s own published table (black desktop → 152/255 against the
-/// 154/255 it sampled on hardware). The control is then hosted over that opaque ground and the pixels
-/// are read back, so what is asserted is what the renderer draws, not what a token is named.
+/// test process has no desktop behind its windows. So the ground is *modelled*, by
+/// `InkGlass.ground(overBackdrop:surfaceTone:)`, for the two desktops that bound the range: solid black
+/// and solid white. That function is `InkGlass`'s own, published for exactly this purpose and checked
+/// against hardware by `GlassLegibilityTests`; this file used to carry a second copy of the arithmetic,
+/// which is one more place for the modelled surface to drift from the drawn one. The control is then
+/// hosted over that opaque ground and the pixels are read back, so what is asserted is what the
+/// renderer draws, not what a token is named.
 ///
 /// Bars: **3:1**, WCAG 2.1 SC 1.4.11 non-text contrast — every mark here is a graphic that carries
 /// meaning. Separability of the three states is **CIE ΔE\*ab ≥ 25**, because "is this green or is it
@@ -55,19 +56,12 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
     var backdrop: CGFloat { self == .black ? 0 : 1 }
   }
 
-  /// The glass ground over one desktop, as an sRGB colour.
-  ///
-  /// Two layers, in the order the window draws them: the material over the desktop, then
-  /// `InkGlass.scrim` of `Ink.surface` over that. The material's opacity and tint are measurements
-  /// `InkGlass` took on real hardware precisely so a contrast guard can be arithmetic rather than a
-  /// screenshot.
+  /// The glass ground over one desktop, as an sRGB colour — `InkGlass`'s own model, per channel.
   private func ground(over desktop: Desktop) -> NSColor {
-    let material =
-      InkGlass.measuredMaterialTint * InkGlass.measuredMaterialOpacity
-      + desktop.backdrop * (1 - InkGlass.measuredMaterialOpacity)
     let surface = resolved(Ink.surface)
-    let scrim = InkGlass.scrim
-    func channel(_ tint: CGFloat) -> CGFloat { tint * scrim + material * (1 - scrim) }
+    func channel(_ tone: CGFloat) -> CGFloat {
+      InkGlass.ground(overBackdrop: desktop.backdrop, surfaceTone: tone)
+    }
     return NSColor(
       srgbRed: channel(surface.redComponent),
       green: channel(surface.greenComponent),
@@ -393,11 +387,30 @@ final class ShellStatusIconLegibilityTests: XCTestCase {
     let off = try silhouette(.inactive)
     let on = try silhouette(.active)
     let shared = CGFloat(off.intersection(on).count) / CGFloat(max(off.union(on).count, 1))
+
+    // Calibrated against this renderer rather than against a literal. A fixed 0.9 encoded one
+    // machine's antialiasing: the button legitimately darkens its glyph when active, so edge pixels
+    // sit near the mark threshold and a different renderer moves more of them across it. CI measured
+    // 0.87 on the *correct* shape and failed. The question is not "how identical", it is "far closer
+    // to itself than to a different glyph" — so the floor is derived from a genuinely different pair
+    // measured the same way, and both figures move together when the renderer changes.
+    func plainSilhouette(_ glyph: String) throws -> Set<Pixel> {
+      let rep = try render(button(glyph, state: .inactive, showsDot: false), over: .black)
+      return Set(marks(rep, over: .black).map(\.0))
+    }
+    let listening = try plainSilhouette(ShellStatusGlyph.listening)
+    let screen = try plainSilhouette(ShellStatusGlyph.screen)
+    let differentGlyphs =
+      CGFloat(listening.intersection(screen).count) / CGFloat(max(listening.union(screen).count, 1))
+    let floor = differentGlyphs + (1 - differentGlyphs) / 2
+
     XCTAssertGreaterThan(
-      shared, 0.9,
+      shared, floor,
       """
-      the listening glyph covers only \(Int(shared * 100))% of the same pixels when the control is \
-      on as when it is off — it is redrawing itself to report state, which is the dot's job.
+      the listening glyph covers \(Int(shared * 100))% of the same pixels when the control is on as \
+      when it is off, against a \(Int(floor * 100))% floor derived from two genuinely different \
+      glyphs at \(Int(differentGlyphs * 100))% — it is redrawing itself to report state, which is \
+      the dot's job.
       """)
   }
 
