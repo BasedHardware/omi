@@ -115,6 +115,19 @@ def test_basic_plan_features_include_unlimited_memories(subscription_module):
     assert "Unlimited memories" in features
 
 
+def test_cancellation_is_pending_until_period_end(subscription_module):
+    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=200)
+
+    assert subscription_module.is_pending_cancellation(subscription, now=199)
+    assert not subscription_module.is_pending_cancellation(subscription, now=200)
+
+
+def test_missing_period_end_is_still_pending_cancellation(subscription_module):
+    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=None)
+
+    assert subscription_module.is_pending_cancellation(subscription, now=200)
+
+
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
     monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
