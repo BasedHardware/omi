@@ -130,6 +130,38 @@ const main = () => {
     return;
   }
 
+  // --over-budget characterises the clusters the payload budget cannot hold.
+  // Whole-cluster selection is the only reduction permitted (no intra-cluster
+  // pruning, no excerpt trimming), so the question is not "how do we shrink
+  // these" but "what are they, and what does refusing them cost".
+  if (process.argv.includes("--over-budget")) {
+    const surfaceKeys = new Set(surface.clusters.map(clusterKey));
+    const fat = blocked
+      .map((cluster) => ({ cluster, profiles: buildReferentProfiles(cluster, claims, evidence, events) }))
+      .map((entry) => ({ ...entry, cost: JSON.stringify(entry.profiles).length }))
+      .filter((entry) => entry.cost > budget)
+      .sort((left, right) => right.cost - left.cost);
+    console.log(`over-budget clusters: ${fat.length} (budget ${budget})`);
+    for (const entry of fat) {
+      const claimCounts = entry.profiles.map((profile) => profile.discriminating_claims.length);
+      const excerpts = entry.profiles.flatMap((profile) => profile.discriminating_claims.flatMap((claim) => claim.evidence_context.flatMap((item) => item.excerpt ? [item.excerpt.length] : [])));
+      console.log([
+        `  cost=${entry.cost}`,
+        `members=${entry.cluster.length}`,
+        `lane=${surfaceKeys.has(clusterKey(entry.cluster)) ? "surface" : "identity"}`,
+        `claims/referent max=${Math.max(...claimCounts)} total=${claimCounts.reduce((sum, value) => sum + value, 0)}`,
+        `excerpts=${excerpts.length}`,
+        `excerpt_chars=${excerpts.reduce((sum, value) => sum + value, 0)}`,
+        `surfaces=${JSON.stringify([...new Set(entry.cluster.map((mention) => mention.surface))].slice(0, 4))}`,
+      ].join(" "));
+    }
+    // What single budget would admit every cluster, if raising it were the answer?
+    const maxCost = Math.max(0, ...blocked.map((cluster) => JSON.stringify(buildReferentProfiles(cluster, claims, evidence, events)).length));
+    console.log(`budget that would admit every cluster: ${maxCost}`);
+    db.close();
+    return;
+  }
+
   if (process.argv.includes("--json")) console.log(JSON.stringify(report, null, 2));
   else for (const [k, v] of Object.entries(report)) console.log(`  ${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
   db.close();
