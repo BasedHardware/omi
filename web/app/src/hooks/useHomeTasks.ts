@@ -21,8 +21,13 @@ export interface UseHomeTasksReturn {
 }
 
 export function useHomeTasks(): UseHomeTasksReturn {
+  // Listed without `completed: false`: that is a server-side equality filter,
+  // and legacy documents whose `completed` field is missing or null are excluded
+  // by it even though every other surface treats them as open. The unfiltered
+  // list is active-first and includes those documents; openness is decided here
+  // the same way the Tasks page decides it.
   const { data, loading } = useAsyncResource('home:tasks', () =>
-    getActionItems({ limit: LIMIT, completed: false }),
+    getActionItems({ limit: LIMIT }),
   );
 
   // Completed ids are held here rather than refetching: the row should leave
@@ -30,7 +35,10 @@ export function useHomeTasks(): UseHomeTasksReturn {
   const [completedIds, setCompletedIds] = useState<string[]>([]);
 
   const items = useMemo(
-    () => (data?.items ?? []).filter((item) => !completedIds.includes(item.id)),
+    () =>
+      (data?.items ?? []).filter(
+        (item) => !item.completed && !completedIds.includes(item.id),
+      ),
     [data, completedIds],
   );
 

@@ -32,7 +32,12 @@ async function mountClientRoutes(): Promise<void> {
   const host = document.getElementById('moonshine-app');
   if (!host) return;
   const { createRoot } = await import('react-dom/client');
-  const runtime = createMoonshineRouter(window.location.pathname);
+  // The query is part of the initial location, not decoration: a deep link to
+  // `/conversations?recap=…`, `/settings?section=…` or an OAuth callback opens
+  // on the default view if the router starts from the pathname alone.
+  const runtime = createMoonshineRouter(
+    window.location.pathname + window.location.search,
+  );
   const routes = [...clientRoutes.values()].map((route) => ({
     id: route.path,
     path: route.path,

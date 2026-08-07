@@ -47,8 +47,14 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
-  const { isOpen, closeChat, currentContext, selectedAppId, clearAppContext } =
-    useChatContext();
+  const {
+    isOpen,
+    closeChat,
+    currentContext,
+    selectedAppId,
+    selectedChatSessionId,
+    clearAppContext,
+  } = useChatContext();
   const {
     messages,
     isLoading,
@@ -59,7 +65,10 @@ export function ChatPanel() {
     sendMessage,
     clearHistory,
     loadHistory,
-  } = useChat({ appId: selectedAppId || undefined });
+  } = useChat({
+    appId: selectedAppId || undefined,
+    chatSessionId: selectedChatSessionId,
+  });
 
   const [input, setInput] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
