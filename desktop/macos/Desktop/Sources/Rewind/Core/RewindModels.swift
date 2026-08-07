@@ -388,10 +388,43 @@ class RewindSettings: ObservableObject {
     "Keychain Access",  // macOS Keychain Access
   ]
 
+  /// The retention setting that means "never delete a captured frame".
+  ///
+  /// **This is what makes an all-time Rewind possible at all.** Every other value here is a
+  /// deletion window: the cleanup pass runs `DELETE FROM screenshots WHERE timestamp < cutoff` and
+  /// removes the backing video chunks from disk, so on the shipped 7-day default a Rewind timeline
+  /// physically cannot reach further back than a week no matter what the UI is willing to draw.
+  /// Zero is the sentinel rather than a large day count because "3,650 days" is still a promise the
+  /// cleanup would eventually break, and because it stores as a plain `Int` in the same key.
+  static let unlimitedRetentionDays = 0
+
   @Published var retentionDays: Int {
     didSet {
       defaults.set(retentionDays, forKey: "rewindRetentionDays")
     }
+  }
+
+  /// Whether capture is kept forever.
+  var keepsEverything: Bool { Self.isUnlimited(retentionDays: retentionDays) }
+
+  /// A retention day count that promises never to delete.
+  ///
+  /// Non-positive rather than `== 0` so a value that arrives from an older build, a corrupted
+  /// default, or a hand-edited plist can only ever fail *safe* — an unreadable retention setting
+  /// keeps the user's history instead of silently erasing it.
+  static func isUnlimited(retentionDays: Int) -> Bool { retentionDays <= unlimitedRetentionDays }
+
+  /// The instant before which capture may be deleted — or `nil` when nothing may be.
+  ///
+  /// Pure and static so the boundary between "keep everything" and "prune at N days" is testable
+  /// without a database, a clock, or the indexer that calls it.
+  static func retentionCutoff(
+    retentionDays: Int,
+    now: Date = Date(),
+    calendar: Calendar = .current
+  ) -> Date? {
+    guard !isUnlimited(retentionDays: retentionDays) else { return nil }
+    return calendar.date(byAdding: .day, value: -retentionDays, to: now)
   }
 
   @Published var captureInterval: Double {

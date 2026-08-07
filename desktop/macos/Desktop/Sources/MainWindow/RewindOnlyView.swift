@@ -225,7 +225,9 @@ struct RewindSettingsView: View {
         // Retention Period
         settingsRow(
           title: "Keep Screenshots For",
-          subtitle: "Older screenshots will be automatically deleted"
+          subtitle: RewindSettings.isUnlimited(retentionDays: retentionDays)
+            ? "Every screenshot is kept, so Rewind reaches back to your first capture"
+            : "Older screenshots will be automatically deleted"
         ) {
           SettingsMenuPicker(selection: $retentionDays) {
             Text("1 day").tag(1)
@@ -233,6 +235,7 @@ struct RewindSettingsView: View {
             Text("7 days").tag(7)
             Text("14 days").tag(14)
             Text("30 days").tag(30)
+            Text("Keep everything").tag(RewindSettings.unlimitedRetentionDays)
           }
         }
 

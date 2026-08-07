@@ -215,9 +215,13 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(Ink.primary)
 
-              Text("How long to keep screen recordings")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(Ink.secondary)
+              Text(
+                rewindSettings.keepsEverything
+                  ? "Rewind reaches back as far as you have been capturing"
+                  : "Older screen recordings are deleted, and Rewind cannot reach past them"
+              )
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
             }
 
             Spacer()
@@ -227,6 +231,7 @@ extension SettingsContentView {
               Text("7 days").tag(7)
               Text("14 days").tag(14)
               Text("30 days").tag(30)
+              Text("Keep everything").tag(RewindSettings.unlimitedRetentionDays)
             }
           }
         }
