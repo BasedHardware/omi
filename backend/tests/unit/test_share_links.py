@@ -31,9 +31,7 @@ def test_parse_exact_conversation_reference_accepts_configured_host(monkeypatch)
         == CONVERSATION_ID
     )
     # Production links still resolve for self-hosted deployments.
-    assert (
-        parse_exact_conversation_reference(f"https://h.omi.me/conversations/{CONVERSATION_ID}") == CONVERSATION_ID
-    )
+    assert parse_exact_conversation_reference(f"https://h.omi.me/conversations/{CONVERSATION_ID}") == CONVERSATION_ID
 
 
 def test_share_base_url_adds_https_when_scheme_missing(monkeypatch):
