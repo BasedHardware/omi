@@ -5,11 +5,11 @@ description: Gmail and Calendar connector reads use every active Google OAuth gr
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
-  - desktop/macos/Desktop/Sources/GmailReaderService.swift
-  - desktop/macos/Desktop/Sources/CalendarReaderService.swift
-  - desktop/macos/Desktop/Sources/GoogleOAuthConnection.swift
-  - desktop/macos/Desktop/Sources/GoogleOAuthFlow.swift
-  - desktop/macos/Desktop/Sources/GoogleOAuthReader.swift
+  - desktop/macos/Desktop/Sources/Integrations/GmailReaderService.swift
+  - desktop/macos/Desktop/Sources/Integrations/CalendarReaderService.swift
+  - desktop/macos/Desktop/Sources/Integrations/GoogleOAuthConnection.swift
+  - desktop/macos/Desktop/Sources/Integrations/GoogleOAuthFlow.swift
+  - desktop/macos/Desktop/Sources/Integrations/GoogleOAuthReader.swift
 preconditions:
   - automation_bridge_ready
 

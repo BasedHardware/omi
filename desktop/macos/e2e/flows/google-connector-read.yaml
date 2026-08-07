@@ -9,9 +9,9 @@ app: non-prod
 # native keychain access path resolves cookies and returns status: connected.
 covers:
   - desktop/macos/Desktop/Sources/BrowserGoogleSession.swift
-  - desktop/macos/Desktop/Sources/GmailReaderService.swift
-  - desktop/macos/Desktop/Sources/CalendarReaderService.swift
-  - desktop/macos/Desktop/Sources/GmailAccountSelection.swift
+  - desktop/macos/Desktop/Sources/Integrations/GmailReaderService.swift
+  - desktop/macos/Desktop/Sources/Integrations/CalendarReaderService.swift
+  - desktop/macos/Desktop/Sources/Integrations/GmailAccountSelection.swift
 preconditions:
   - automation_bridge_ready
 
