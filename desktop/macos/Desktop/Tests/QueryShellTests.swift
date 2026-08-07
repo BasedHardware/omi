@@ -184,6 +184,59 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(QueryShellKind.allCases.map(\.title).first, "All")
   }
 
+  // MARK: - Where Home's controls send you
+
+  /// **Home routes; it does not own.** Every row on this surface belongs to an established page, and
+  /// INV-NAV-1's rule is that a control here opens that page rather than growing a smaller version of
+  /// it in the panel. `QueryShellRoute` is that rule as a value, so this is the check that a control
+  /// added to Home later still lands somewhere real.
+  ///
+  /// `Brain Map ›` in the panel header is the newest of these and the one the rule is easiest to
+  /// break on: an atlas is a view, so drawing it inside the panel is a tempting one-line change, and
+  /// it would leave Home with a map that has none of the hub's camera, time cursor, evidence
+  /// inspector or cohort gate.
+  func testEveryWayOutOfHomeLandsOnThePageThatOwnsIt() {
+    for route in QueryShellRoute.allCases {
+      XCTAssertTrue(
+        TopNavigationRoutes.primaryItems.contains { $0.index == route.navItem.rawValue },
+        "\(route) leaves Home for a page the top bar has no pill for")
+    }
+
+    XCTAssertEqual(QueryShellRoute.conversation.navItem, .conversations)
+    XCTAssertEqual(QueryShellRoute.memories.navItem, .conversations)
+    XCTAssertEqual(QueryShellRoute.brainMap.navItem, .conversations)
+    XCTAssertEqual(QueryShellRoute.rewind.navItem, .rewind)
+  }
+
+  /// The three hub routes must each select a *different* one of the hub's own views, and Rewind must
+  /// select none — writing a Memory-hub destination on the way to Rewind is how the hub ends up on
+  /// whichever view the last unrelated navigation happened to leave behind.
+  func testTheThreeHubRoutesSelectTheHubsOwnThreeViews() {
+    XCTAssertEqual(
+      QueryShellRoute.allCases.compactMap(\.memoryDestination),
+      [.conversations, .memories, .brainMap],
+      "Home's hub routes no longer cover the hub's three views one-for-one")
+    XCTAssertNil(
+      QueryShellRoute.rewind.memoryDestination,
+      "a page of its own must not write the Memory hub's destination on the way there")
+
+    for route in QueryShellRoute.allCases {
+      guard let hubView = route.memoryDestination else { continue }
+      XCTAssertTrue(
+        MemoryHubDestination.switcherOrder.contains(hubView),
+        "\(route) selects a hub view the hub's own switcher does not show")
+    }
+  }
+
+  /// **The map has exactly one route out of Home.** The panel header's `Brain Map ›` and the spine's
+  /// end-of-day card are two controls; two routes would be two maps, and the second one is always the
+  /// one that stops matching the hub.
+  func testBothOfHomesWaysIntoTheMapAreTheSameRoute() {
+    XCTAssertEqual(QueryShellRoute.brainMap.memoryDestination, .brainMap)
+    XCTAssertEqual(
+      QueryShellRoute.allCases.filter { $0.memoryDestination == .brainMap }, [.brainMap])
+  }
+
   // MARK: - Chat capability on the one chat surface
 
   /// **The regression the deleted chat page left behind.** Clear and copy had their only call sites

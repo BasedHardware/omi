@@ -366,30 +366,33 @@ struct QueryShellHome: View {
   /// Opens the real Conversations page on the real conversation — never a copy of it here (INV-NAV-1).
   private func openConversation(_ id: String) {
     ConversationDetailAutomationState.shared.requestOpen(conversationId: id, showTranscript: false)
-    memoryDestinationRawValue = MemoryHubDestination.conversations.rawValue
-    navigate(to: .conversations)
+    navigate(.conversation)
   }
 
   private func openMemories() {
-    memoryDestinationRawValue = MemoryHubDestination.memories.rawValue
-    navigate(to: .conversations)
+    navigate(.memories)
   }
 
   /// Where both of Home's ways into the graph land — the spine's end-of-day card and the header's
-  /// `Brain Map ›` — and both go to the surface that owns it. The map is never a destination of this
-  /// shell (INV-NAV-1).
+  /// `Brain Map ›`. One route, so the two controls cannot drift apart, and it goes to the surface
+  /// that owns the map. The map is never a destination of this shell (INV-NAV-1).
   private func openBrainMap() {
-    memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
-    navigate(to: .conversations)
+    navigate(.brainMap)
   }
 
   private func openRewind() {
-    navigate(to: .rewind)
+    navigate(.rewind)
   }
 
-  private func navigate(to item: SidebarNavItem) {
+  /// The one place Home leaves Home. Every outbound control resolves its destination from
+  /// `QueryShellRoute` rather than restating a rail index and a hub raw value at its own call site —
+  /// which is how one of them ends up pointing somewhere the others do not.
+  private func navigate(_ route: QueryShellRoute) {
+    if let hubView = route.memoryDestination {
+      memoryDestinationRawValue = hubView.rawValue
+    }
     OmiUISound.play(.navigate)
-    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.rawValue }
+    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = route.navItem.rawValue }
   }
 
   // MARK: - The corpus

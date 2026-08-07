@@ -123,6 +123,48 @@ enum QueryShellSubmit: Equatable, Sendable {
   }
 }
 
+// MARK: - Where Home's controls send you
+
+/// **Every way out of Home, as a value.** Home shows rows it does not own: a conversation, a memory,
+/// a screen, and now the graph over all of them. Each of those has an established page that owns
+/// editing, search, folders, starring and the rest, and INV-NAV-1 is the rule that Home routes to
+/// that page instead of growing a smaller copy of it here.
+///
+/// It is a value because the rule is otherwise four separate two-line functions in a `body`, and
+/// "does this control still land on the real page" is then a claim nothing checks. `Brain Map ›` in
+/// the panel header is the fourth of these and the newest, so it is the one most likely to drift into
+/// rendering an atlas inside Home's panel — which would be the reduced copy the invariant forbids.
+enum QueryShellRoute: Equatable, CaseIterable, Sendable {
+  /// A conversation row, and the `Conversations` chip's underlying list.
+  case conversation
+  /// The answer thread's citations into what Omi kept.
+  case memories
+  /// The panel header's `Brain Map ›` **and** the spine's end-of-day card. One destination, so one
+  /// case: two controls that landed in different places would be two maps.
+  case brainMap
+  /// A screen row.
+  case rewind
+
+  /// The established page that owns this destination. Never a shell-local surface (INV-NAV-1).
+  var navItem: SidebarNavItem {
+    switch self {
+    case .conversation, .memories, .brainMap: return .conversations
+    case .rewind: return .rewind
+    }
+  }
+
+  /// Which of the Memory hub's own three views to select on arrival, for the three that share its
+  /// page. `nil` means the destination is a page of its own.
+  var memoryDestination: MemoryHubDestination? {
+    switch self {
+    case .conversation: return .conversations
+    case .memories: return .memories
+    case .brainMap: return .brainMap
+    case .rewind: return nil
+    }
+  }
+}
+
 // MARK: - Copy
 
 /// The one sentence in the panel's top-right corner.
