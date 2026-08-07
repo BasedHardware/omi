@@ -4,7 +4,13 @@ import Foundation
 // MARK: - Screenshot Model
 
 /// Represents a captured screenshot stored in the Rewind database
-struct Screenshot: Codable, FetchableRecord, PersistableRecord, Identifiable, Equatable {
+///
+/// **`MutablePersistableRecord`, deliberately.** `didInsert` is how this row learns the rowid
+/// SQLite generated for it, and capture keys everything that follows the insert — embeddings,
+/// canonical-memory linkage — to that id. `PersistableRecord` declares `didInsert` non-mutating
+/// and ships an empty default, so a `mutating func didInsert` on a `PersistableRecord` struct is
+/// not a witness for it: it compiles, never runs, and every insert quietly returns `id == nil`.
+struct Screenshot: Codable, FetchableRecord, MutablePersistableRecord, Identifiable, Equatable {
   /// Database row ID (auto-generated)
   var id: Int64?
 

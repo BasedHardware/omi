@@ -7,30 +7,72 @@ import XCTest
 /// not: a phrase read last week came back empty, indistinguishable from never having been read.
 ///
 /// These drive the two reads that the unclamped search now depends on, against real rows in an
-/// isolated throwaway user directory — no network, no embedding model, no clock.
+/// isolated throwaway storage root — no network, no embedding model, no clock.
 final class RewindAllTimeSearchTests: XCTestCase {
 
   private var testUserId: String!
+  private var storageRoot: URL!
   private var userDir: URL!
+  private var previousLocalProfile: String?
+  private var previousStorageName: String?
 
   override func setUp() async throws {
     try await super.setUp()
-    testUserId = "all-time-search-\(UUID().uuidString)"
-    RewindDatabase.currentUserId = testUserId
-    try await RewindDatabase.shared.initialize()
+
+    // Redirect the *whole* storage root, not just the user folder. Run through the documented
+    // `xcrun swift test --filter` command these suites write into the real
+    // `~/Library/Application Support/Omi/users/` tree, and anything that ends a test before
+    // `tearDown` (a trap in an assertion, a timeout) leaves a database behind in the user's own
+    // data directory. A throwaway top-level root is removed whole and can never name a real user.
+    previousLocalProfile = ProcessInfo.processInfo.environment["OMI_DESKTOP_LOCAL_PROFILE"]
+    previousStorageName = ProcessInfo.processInfo.environment["OMI_LOCAL_PROFILE_STORAGE_NAME"]
+    let storageName = "OmiTests-all-time-search-\(UUID().uuidString)"
+    setenv("OMI_DESKTOP_LOCAL_PROFILE", "1", 1)
+    setenv("OMI_LOCAL_PROFILE_STORAGE_NAME", storageName, 1)
 
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    storageRoot = appSupport.appendingPathComponent(storageName, isDirectory: true)
+
+    // Same lifecycle `RewindStorageTestIsolation` uses: the pool has to be closed and *retargeted*
+    // to this suite's user. Setting `currentUserId` alone is not enough — a `configuredUserId` left
+    // behind by an earlier suite in the same process outranks it, and the database would open for
+    // that user instead.
+    testUserId = "all-time-search-\(UUID().uuidString)"
+    await RewindDatabase.shared.close()
+    await RewindStorageTestIsolation.invalidateAllStorageCaches()
+    RewindDatabase.currentUserId = testUserId
+    await RewindDatabase.shared.configure(userId: testUserId)
+    try await RewindDatabase.shared.initialize()
+
     userDir =
-      appSupport
-      .appendingPathComponent("Omi", isDirectory: true)
+      storageRoot
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
+
+    // Fail loudly rather than quietly writing into the user's real Omi directory if the storage
+    // redirection ever stops working.
+    XCTAssertTrue(
+      FileManager.default.fileExists(atPath: userDir.appendingPathComponent("omi.db").path),
+      "the test database must live under the throwaway storage root, not in the user's Omi data")
   }
 
   override func tearDown() async throws {
-    if let userDir { try? FileManager.default.removeItem(at: userDir) }
+    await RewindDatabase.shared.close()
+    await RewindStorageTestIsolation.invalidateAllStorageCaches()
+    await RewindDatabase.shared.configure(userId: nil)
+    if let storageRoot { try? FileManager.default.removeItem(at: storageRoot) }
     RewindDatabase.currentUserId = nil
+    if let previousLocalProfile {
+      setenv("OMI_DESKTOP_LOCAL_PROFILE", previousLocalProfile, 1)
+    } else {
+      unsetenv("OMI_DESKTOP_LOCAL_PROFILE")
+    }
+    if let previousStorageName {
+      setenv("OMI_LOCAL_PROFILE_STORAGE_NAME", previousStorageName, 1)
+    } else {
+      unsetenv("OMI_LOCAL_PROFILE_STORAGE_NAME")
+    }
     try await super.tearDown()
   }
 
@@ -45,10 +87,32 @@ final class RewindAllTimeSearchTests: XCTestCase {
         frameOffset: 0,
         ocrText: text,
         isIndexed: true))
-    if let embedding, let id = inserted.id {
+    if let embedding {
+      let id = try XCTUnwrap(
+        inserted.id, "a freshly inserted screenshot must carry the row id its embedding is keyed by")
       try await RewindDatabase.shared.updateScreenshotEmbedding(id: id, embedding: embedding)
     }
     return inserted
+  }
+
+  // MARK: - An inserted frame carries the row id the rest of capture is keyed by
+
+  /// **This is what made the all-time semantic pass read an empty table.** `insertScreenshot`
+  /// returns the record it wrote so the caller can key follow-up work to the new row, and the whole
+  /// live embedding path is `if let id = inserted.id`. `Screenshot` declares
+  /// `mutating func didInsert` to capture the auto-generated rowid, but a `PersistableRecord`'s
+  /// `didInsert` requirement is non-mutating, so that method was never a witness for it: GRDB ran
+  /// its empty default instead and every insert returned `id == nil`. Embeddings were then written
+  /// only by the launch backfill, which marks itself complete — after which nothing newly captured
+  /// was ever embedded, and a newest-first semantic scan looks at exactly those frames.
+  func testInsertedScreenshotCarriesItsRowId() async throws {
+    let inserted = try await insert(daysAgo: 0, text: "a frame the rest of capture must be able to name")
+    let id = try XCTUnwrap(inserted.id, "insertScreenshot must return the row id it just generated")
+
+    let stored = try await RewindDatabase.shared.getScreenshot(id: id)
+    XCTAssertEqual(
+      stored?.ocrText, "a frame the rest of capture must be able to name",
+      "the returned row id must address the row that was just written")
   }
 
   // MARK: - Text search reaches past the day on screen
@@ -60,7 +124,8 @@ final class RewindAllTimeSearchTests: XCTestCase {
     // What the page now asks: no date bounds at all.
     let allTime = try await RewindDatabase.shared.search(query: "peregrine", startDate: nil, endDate: nil)
     XCTAssertEqual(allTime.count, 1, "an all-time search must reach a frame from three weeks ago")
-    XCTAssertTrue(allTime[0].ocrText?.contains("peregrine") == true)
+    let match = try XCTUnwrap(allTime.first)
+    XCTAssertTrue(match.ocrText?.contains("peregrine") == true)
 
     // What it used to ask, and why the phrase was unfindable.
     let calendar = Calendar.current
@@ -85,8 +150,9 @@ final class RewindAllTimeSearchTests: XCTestCase {
     let firstPage = try await RewindDatabase.shared.readEmbeddingBatch(
       startDate: nil, endDate: nil, limit: 1, offset: 0)
 
-    XCTAssertEqual(firstPage.count, 1)
-    let newest = try await RewindDatabase.shared.getScreenshot(id: try XCTUnwrap(firstPage[0].screenshotId))
+    XCTAssertEqual(firstPage.count, 1, "an unbounded range must read the stored embeddings, not nothing")
+    let newestRow = try XCTUnwrap(firstPage.first)
+    let newest = try await RewindDatabase.shared.getScreenshot(id: newestRow.screenshotId)
     XCTAssertEqual(
       newest?.ocrText, "newest",
       "a bounded scan of an all-time range must spend its budget on recent frames, not on 1970")
@@ -103,7 +169,8 @@ final class RewindAllTimeSearchTests: XCTestCase {
     let windowed = try await RewindDatabase.shared.readEmbeddingBatch(startDate: start, endDate: end)
 
     XCTAssertEqual(windowed.count, 1, "callers that pass a window must still get only that window")
-    let only = try await RewindDatabase.shared.getScreenshot(id: try XCTUnwrap(windowed[0].screenshotId))
+    let onlyRow = try XCTUnwrap(windowed.first)
+    let only = try await RewindDatabase.shared.getScreenshot(id: onlyRow.screenshotId)
     XCTAssertEqual(only?.ocrText, "oldest")
   }
 
