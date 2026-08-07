@@ -7,7 +7,7 @@ from uuid import UUID
 
 import typesense
 
-from utils.share_links import accepted_share_hosts
+from utils.share_links import accepted_share_hosts, share_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -50,19 +50,34 @@ def parse_exact_conversation_reference(query: str) -> Optional[str]:
         return None
 
     host = (parsed.hostname or '').lower()
+    try:
+        configured = urlsplit(share_base_url())
+        port = parsed.port
+        configured_port = configured.port
+    except ValueError:
+        return None
+    configured_host = (configured.hostname or '').lower()
+    if host == configured_host:
+        expected_port = configured_port
+        expected_path_prefix = f'{configured.path.rstrip("/")}{_EXACT_CONVERSATION_PATH_PREFIX}'
+    elif host == 'h.omi.me':
+        expected_port = None
+        expected_path_prefix = _EXACT_CONVERSATION_PATH_PREFIX
+    else:
+        return None
     if (
         parsed.scheme.lower() != 'https'
         or host not in accepted_share_hosts()
         or parsed.username is not None
         or parsed.password is not None
-        or parsed.port is not None
+        or port != expected_port
         or parsed.query
         or parsed.fragment
-        or not parsed.path.startswith(_EXACT_CONVERSATION_PATH_PREFIX)
+        or not parsed.path.startswith(expected_path_prefix)
     ):
         return None
 
-    return _canonical_conversation_uuid(parsed.path[len(_EXACT_CONVERSATION_PATH_PREFIX) :])
+    return _canonical_conversation_uuid(parsed.path[len(expected_path_prefix) :])
 
 
 def clamp_conversation_search_pagination(page: Optional[int], per_page: Optional[int]) -> tuple[int, int]:

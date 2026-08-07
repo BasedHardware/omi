@@ -25,13 +25,20 @@ def test_share_base_url_honors_env_override(monkeypatch):
 
 
 def test_parse_exact_conversation_reference_accepts_configured_host(monkeypatch):
-    monkeypatch.setenv("OMI_SHARE_BASE_URL", "https://share.example.com")
+    monkeypatch.setenv("OMI_SHARE_BASE_URL", "https://share.example.com:8443/omi/")
     assert (
-        parse_exact_conversation_reference(f"https://share.example.com/conversations/{CONVERSATION_ID}")
+        parse_exact_conversation_reference(f"https://share.example.com:8443/omi/conversations/{CONVERSATION_ID}")
         == CONVERSATION_ID
     )
     # Production links still resolve for self-hosted deployments.
+    monkeypatch.setenv("OMI_SHARE_BASE_URL", "https://share.example.com")
     assert parse_exact_conversation_reference(f"https://h.omi.me/conversations/{CONVERSATION_ID}") == CONVERSATION_ID
+
+
+def test_parse_exact_conversation_reference_rejects_malformed_port(monkeypatch):
+    monkeypatch.delenv("OMI_SHARE_BASE_URL", raising=False)
+    assert parse_exact_conversation_reference(f"https://h.omi.me:bad/conversations/{CONVERSATION_ID}") is None
+    assert parse_exact_conversation_reference(f"https://h.omi.me:99999/conversations/{CONVERSATION_ID}") is None
 
 
 def test_share_base_url_adds_https_when_scheme_missing(monkeypatch):
