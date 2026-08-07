@@ -1,0 +1,24 @@
+desktop/macos/e2e/CORE_E2E.md
+  s_569f1df936cc22::t_3723659d134e84 97
+  s_569f1df936cc22::t_14c11e9810f431 72
+desktop/macos/e2e/feature-vector.md
+  s_569f1df936cc22::t_3432c6ba67e74c 43
+desktop/macos/e2e/flows/home-stage.yaml
+  s_569f1df936cc22::t_9eefd67694193e 4-8,20-24,27-30,41-44,46,49-50,92-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "43034c35fcff3cf6f9bf0bfee8ea89c1f9321e18",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
