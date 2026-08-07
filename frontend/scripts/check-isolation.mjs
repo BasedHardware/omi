@@ -13,7 +13,7 @@ const ROOT = new URL("..", import.meta.url).pathname;
 const OLD_TREES = ["app/", "desktop/", "web/", "backend/", "sdks/", "plugins/"];
 const SOURCE_RE = /\.(ts|tsx|mts|cts|js|mjs|swift|dart|kt)$/;
 const IMPORT_RE = /(?:from\s+["']|import\s*\(\s*["']|require\s*\(\s*["'])([^"')]+)["']/g;
-const RAW_ENDPOINT_RE = /https?:\/\/[^"'` ]*(?:omi|based)[^"'` ]*\/v\d|\/v[12]\/(?:conversations|memories|action-items|messages|users|apps)\b/;
+const RAW_ENDPOINT_RE = /https?:\/\/[^"'` ]*(?:omi|based)[^"'` ]*\/v\d|\/v[0-9]\/(?:conversations|memories|action-items|messages|users|apps|folders|goals)\b/;
 
 const failures = [];
 
@@ -40,7 +40,10 @@ for (const file of walk(ROOT)) {
     if (escapes) failures.push(`${rel}: imports outside core/ — "${spec}" (rule 1)`);
   }
 
-  const inAdapterOrShell = rel.startsWith("packages/adapters-legacy/") || rel.startsWith("shells/");
+  const inAdapterOrShell =
+    rel.startsWith("packages/adapters-legacy/") ||
+    rel.startsWith("shells/") ||
+    rel.startsWith("packages/testkit/src/test/"); // tests may ASSERT the wire paths adapters speak
   if (!inAdapterOrShell && RAW_ENDPOINT_RE.test(text)) {
     failures.push(`${rel}: raw backend endpoint outside adapters-legacy//shells/ (rule 3)`);
   }
