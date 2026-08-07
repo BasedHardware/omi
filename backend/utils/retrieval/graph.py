@@ -377,27 +377,28 @@ async def execute_chat_stream(
     # 2. File attachments — classifier LLM call stays under the shared setup budget
     # so a stalled retrieve_is_file_question cannot keep SSE silent past setup_deadline_at.
     last_msg = messages[-1] if messages else None
-    try:
-        async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
-            use_file_chat = chat_session is not None and await _has_file_context(last_msg, chat_session)
-    except TimeoutError:
-        logger.error(
-            'chat stream setup timed out route=router uid=%s reason=setup_timeout',
-            uid,
-        )
-        callback_data['error'] = 'setup_timeout'
-        callback_data['route'] = 'router'
-        callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
-        yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
-        yield None
-        return
+    if chat_session is not None:
+        try:
+            async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
+                use_file_chat = await _has_file_context(last_msg, chat_session)
+        except TimeoutError:
+            logger.error(
+                'chat stream setup timed out route=router uid=%s reason=setup_timeout',
+                uid,
+            )
+            callback_data['error'] = 'setup_timeout'
+            callback_data['route'] = 'router'
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
+            yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+            yield None
+            return
 
-    if use_file_chat:
-        async for chunk in _execute_file_chat_stream(
-            uid, messages, chat_session, callback_data, current_datetime_block=current_datetime_block
-        ):
-            yield chunk
-        return
+        if use_file_chat:
+            async for chunk in _execute_file_chat_stream(
+                uid, messages, chat_session, callback_data, current_datetime_block=current_datetime_block
+            ):
+                yield chunk
+            return
 
     # 3. Default: Anthropic agentic chat
     # Claude decides implicitly whether to use tools — no requires_context() needed
