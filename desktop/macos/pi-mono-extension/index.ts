@@ -843,7 +843,7 @@ export default function omiProvider(pi: ExtensionAPI): void {
     models: [
       {
         id: "omi-sonnet",
-        name: "Omi Sonnet",
+        name: "Omi Luna",
         reasoning: true,
         input: ["text", "image"],
         contextWindow: 200_000,
