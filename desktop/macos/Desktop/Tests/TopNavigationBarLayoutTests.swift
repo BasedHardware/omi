@@ -254,6 +254,29 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       "without the Library pill the hub's three views have no way in")
   }
 
+  /// **Apps is the only door to connectors and exports, so it has to be in the model that guards
+  /// doors.** Home used to offer a second one — the ask bar's `Connect` tray, whose `More` opened the
+  /// same `AppsPage` as a bounded card — and it disappeared with the hub when Home became the query
+  /// surface. That cost nothing, because this pill was already here. But `Apps` was outside
+  /// `ShellDestination` at the time, so `unreachable()` could not have told anyone either way, and
+  /// deleting the pill would have stranded the catalog in silence. Both halves are asserted: it
+  /// routes to the established page, and removing the pill is now a failure.
+  func testAppsIsModelledSoItsPillCannotBeDeletedInSilence() {
+    XCTAssertEqual(ShellDestination.apps.reach, .topBar)
+    XCTAssertEqual(
+      ShellDestination.apps.navItem, .apps,
+      "Apps must route to the established catalog page, never a shell-local copy of it")
+    XCTAssertNil(ShellDestination.apps.memoryDestination)
+    XCTAssertNil(ShellDestination.apps.settingsSection)
+
+    let barWithoutApps = TopNavigationRoutes.primaryItems.filter {
+      $0.index != SidebarNavItem.apps.rawValue
+    }
+    XCTAssertEqual(
+      ShellDestination.unreachable(fromBarItems: barWithoutApps), [.apps],
+      "Apps lost its pill and nothing noticed — connectors and exports have no other door")
+  }
+
   /// The same negative proof for the Settings list, because that is how `PermissionsPage` and
   /// `HelpPage` got stranded in the first place: the surface that wrote to them stopped rendering
   /// and nothing said so. Both ways of losing the door have to be visible to the checker — the row

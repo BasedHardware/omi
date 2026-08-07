@@ -24,7 +24,7 @@
 - macOS chat-first shell
 - macOS legacy shell
 - Desktop top navigation
-- Tasks, Conversations, Memories, and Brain Map destinations
+- Tasks, Conversations, Memories, Brain Map, and Apps destinations
 
 ## Guard tests
 

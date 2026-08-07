@@ -52,6 +52,15 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   case brainMap
   case tasks
   case rewind
+  /// The app catalog — connectors in, MCP destinations out.
+  ///
+  /// It is modelled here because it is now the **only** door to them. Home used to carry a second,
+  /// smaller one: a `Connect` tray in the ask bar whose two `More` buttons opened this very page as a
+  /// bounded card. When Home became the query surface that tray went with it. Nothing was stranded,
+  /// because this pill was already on the bar — but nothing would have *said* so either, since `Apps`
+  /// was the one destination the bar reaches that this enum did not know about. Closing that gap is
+  /// the point of `reach`: the pill the user presses and the claim the test checks are now one thing.
+  case apps
   case permissions
   case help
 
@@ -83,6 +92,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .brainMap: return "Brain Map"
     case .tasks: return "Tasks"
     case .rewind: return "Rewind"
+    case .apps: return "Apps"
     case .permissions: return "Permissions"
     case .help: return "Help"
     }
@@ -95,6 +105,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .conversations, .memories, .brainMap: return .conversations
     case .tasks: return .tasks
     case .rewind: return .rewind
+    case .apps: return .apps
     case .permissions: return .permissions
     case .help: return .help
     }
@@ -106,7 +117,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .conversations: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
-    case .home, .tasks, .rewind, .permissions, .help: return nil
+    case .home, .tasks, .rewind, .apps, .permissions, .help: return nil
     }
   }
 
@@ -115,7 +126,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     switch self {
     case .permissions: return .permissions
     case .help: return .help
-    case .home, .conversations, .memories, .brainMap, .tasks, .rewind: return nil
+    case .home, .conversations, .memories, .brainMap, .tasks, .rewind, .apps: return nil
     }
   }
 
@@ -123,7 +134,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     switch self {
     case .conversations, .memories, .brainMap: return .memoryHubView
     case .permissions, .help: return .settingsSidebar
-    case .home, .tasks, .rewind: return .topBar
+    case .home, .tasks, .rewind, .apps: return .topBar
     }
   }
 
