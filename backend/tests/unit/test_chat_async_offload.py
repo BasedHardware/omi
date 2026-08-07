@@ -226,6 +226,30 @@ async def test_chat_router_passes_metadata_to_every_interactive_path():
     assert seen == [metadata, metadata, metadata]
 
 
+async def test_chat_router_and_agentic_share_one_setup_deadline():
+    """Router metadata must not stack a second full setup budget onto agentic setup."""
+    message = SimpleNamespace(sender='human', text='hello', files_id=[])
+    seen = {}
+
+    async def capture_agentic(*_args, **kwargs):
+        seen['setup_deadline_at'] = kwargs.get('setup_deadline_at')
+        yield None
+
+    before = asyncio.get_running_loop().time()
+    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
+        graph, 'execute_agentic_chat_stream', capture_agentic
+    ), patch.object(graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0), patch.object(
+        agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0
+    ):
+        assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message])] == [None]
+    after = asyncio.get_running_loop().time()
+
+    deadline = seen.get('setup_deadline_at')
+    assert isinstance(deadline, float)
+    # Absolute deadline is ~25s from router start, not ~50s (two stacked budgets).
+    assert before + 20.0 <= deadline <= after + 25.0
+
+
 def test_prompt_metadata_is_prepended_to_the_live_user_turn():
     assert graph._with_prompt_metadata('question', '<current_datetime>now</current_datetime>') == (
         '<current_datetime>now</current_datetime>\n\nquestion'

@@ -82,6 +82,7 @@ from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Feat
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
+from utils.observability.fallback import record_fallback
 from utils.observability.journeys import JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
@@ -434,6 +435,26 @@ def send_message(
         streamed_terminal_error = False
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
+
+        def emit_done_frame(response: str) -> str:
+            """Persist a terminal answer. Typed stream errors stay failed for journey/fallback SLIs."""
+            ai_message, ask_for_nps = process_message(response, callback_data)
+            response_message = ResponseMessage(**ai_message.model_dump())
+            response_message.ask_for_nps = ask_for_nps
+            encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
+            if callback_data.get('error'):
+                journey_attempt.finish('failure')
+                record_fallback(
+                    component='other',
+                    from_mode='llm_answer',
+                    to_mode='canned_reply',
+                    reason='other',
+                    outcome='degraded',
+                )
+            else:
+                journey_attempt.finish('success')
+            return f"done: {encoded_response}\n\n"
+
         try:
             async for chunk in execute_chat_stream(
                 uid,
@@ -453,17 +474,9 @@ def send_message(
                 else:
                     response = callback_data.get('answer')
                     if response:
-                        ai_message, ask_for_nps = process_message(response, callback_data)
-                        ai_message_dict = ai_message.model_dump()
-                        response_message = ResponseMessage(**ai_message_dict)
-                        response_message.ask_for_nps = ask_for_nps
-                        encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
-                            'utf-8'
-                        )
                         # This is the furthest server-observable client boundary:
                         # a yielded terminal frame is not a client-render acknowledgement.
-                        journey_attempt.finish('success')
-                        yield f"done: {encoded_response}\n\n"
+                        yield emit_done_frame(response)
                         answered = True
 
             if not answered:
@@ -473,15 +486,7 @@ def send_message(
                 # without setting ``callback_data['answer']`` (those still need ``done:``).
                 response = callback_data.get('answer')
                 if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.model_dump()
-                    response_message = ResponseMessage(**ai_message_dict)
-                    response_message.ask_for_nps = ask_for_nps
-                    encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
-                        'utf-8'
-                    )
-                    journey_attempt.finish('success')
-                    yield f"done: {encoded_response}\n\n"
+                    yield emit_done_frame(response)
                 else:
                     if streamed_terminal_error:
                         logger.error(

@@ -342,10 +342,11 @@ async def execute_chat_stream(
     - Everything else -> Anthropic agentic chat (Claude decides whether to use tools)
     """
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
-    # Router metadata (timezone/city) is pre-agentic Firestore/location I/O and must
-    # share the setup budget so a stalled lookup cannot leave the SSE stream silent.
+    # One absolute setup deadline covers router metadata and agentic prompt/tool
+    # load so the SSE body cannot stay silent for two stacked 25s budgets.
+    setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
     try:
-        async with asyncio.timeout(AGENT_STREAM_SETUP_TIMEOUT_SECONDS):
+        async with asyncio.timeout(max(0.0, setup_deadline_at - asyncio.get_running_loop().time())):
             current_datetime_block, tz = await _current_prompt_metadata(uid, platform)
     except TimeoutError:
         logger.error(
@@ -394,6 +395,7 @@ async def execute_chat_stream(
         platform=platform,
         current_datetime_block=current_datetime_block,
         tz=tz,
+        setup_deadline_at=setup_deadline_at,
     ):
         yield chunk
 

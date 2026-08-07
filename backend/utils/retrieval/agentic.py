@@ -1183,10 +1183,13 @@ async def execute_agentic_chat_stream(
     platform: Optional[str] = None,
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
+    setup_deadline_at: Optional[float] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
     Yields formatted chunks with "data: " or "think: " prefixes.
+    ``setup_deadline_at`` is an absolute loop-clock deadline shared with the
+    chat router so metadata + prompt/tool load use one setup budget.
     """
     # Guard against oversized input before any setup or model call. An extremely long message (or
     # a long history) would exceed the chat model's context window; the Anthropic call then raises
@@ -1214,8 +1217,13 @@ async def execute_agentic_chat_stream(
         # Resolve the user's timezone once and reuse it for both the system prompt and the
         # injected datetime block, avoiding a duplicate notification_db lookup per request.
         # These helpers perform Firestore and LangSmith I/O before the producer task exists,
-        # so they use the dedicated setup budget instead of the post-setup TTFT window.
-        async with asyncio.timeout(AGENT_STREAM_SETUP_TIMEOUT_SECONDS):
+        # so they use the remaining shared setup budget instead of a second full window.
+        if setup_deadline_at is None:
+            setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
+        setup_remaining = setup_deadline_at - asyncio.get_running_loop().time()
+        if setup_remaining <= 0:
+            raise asyncio.TimeoutError()
+        async with asyncio.timeout(setup_remaining):
             # Anthropic BYOK is an explicit direct-provider choice. It must not
             # enter the managed OpenAI-compatible lane, whose route override
             # would otherwise attach an Anthropic key to a Luna/OpenAI route.

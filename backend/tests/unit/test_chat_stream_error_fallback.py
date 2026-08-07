@@ -348,7 +348,10 @@ def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error():
         payload = _decode_done_frame(response.text)
         assert payload['text'] == 'The response took too long. Please try again.'
         assert chat_utils.CHAT_STREAM_ERROR_TEXT not in response.text
-        chat_utils.record_fallback.assert_not_called()
+        # Typed timeout still records the shared fallback + failure journey, but keeps
+        # the staged timeout copy instead of appending a second generic canned sorry.
+        chat_utils.record_fallback.assert_called_once()
+        assert chat_utils.record_fallback.call_args.kwargs['outcome'] == 'degraded'
     finally:
         _cleanup(saved)
 
