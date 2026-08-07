@@ -6,17 +6,25 @@ Looks up each env var by name in the chart values ``env`` list and emits
 literals without rewriting chart defaults on main.
 
 Blank override values are skipped (chart defaults win). Unknown names or
-secret/valueFrom entries fail closed.
+secret/valueFrom entries fail closed. Override values are constrained to a
+single-line safe literal alphabet and helm-special characters are escaped so
+comma-separated model lists and newline injection cannot widen the argv.
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 import sys
 from typing import Mapping
 
 import yaml
+
+# Single-line literals only. Newlines would split the argv file; other
+# control/separator characters are rejected rather than trusted through helm.
+_SAFE_OVERRIDE_VALUE = re.compile(r"^[A-Za-z0-9_.,+\-]+$")
+_HELM_SET_ESCAPE_CHARS = ("\\", ",", "{", "}", "[", "]", ".", "=")
 
 
 def load_values(path: Path) -> dict:
@@ -30,6 +38,22 @@ def env_name_indices(values: Mapping) -> dict[str, int]:
         if isinstance(entry, dict) and isinstance(entry.get("name"), str):
             indices[entry["name"]] = index
     return indices
+
+
+def validate_override_value(name: str, value: str) -> str:
+    if any(ch in value for ch in ("\n", "\r", "\0")):
+        raise ValueError(f"env {name} override contains a disallowed control character")
+    if not _SAFE_OVERRIDE_VALUE.fullmatch(value):
+        raise ValueError(f"env {name} override has disallowed characters: {value!r}")
+    return value
+
+
+def helm_escape_set_string(value: str) -> str:
+    """Escape characters helm still treats as --set/--set-string syntax."""
+    escaped = value
+    for ch in _HELM_SET_ESCAPE_CHARS:
+        escaped = escaped.replace(ch, f"\\{ch}")
+    return escaped
 
 
 def resolve_env_override_argv(
@@ -55,7 +79,13 @@ def resolve_env_override_argv(
         entry = env_entries[index]
         if not isinstance(entry, dict) or "value" not in entry:
             raise ValueError(f"env {name} is not a literal value entry")
-        argv.extend(["--set-string", f"env[{index}].value={value}"])
+        safe_value = validate_override_value(name, value)
+        argv.extend(
+            [
+                "--set-string",
+                f"env[{index}].value={helm_escape_set_string(safe_value)}",
+            ]
+        )
     return argv
 
 
@@ -110,7 +140,9 @@ def main(argv: list[str] | None = None) -> int:
             print(token)
 
     if resolved:
-        applied_names = [name for name, value in overrides.items() if value not in ("", "chart-default")]
+        applied_names = [
+            name for name, value in overrides.items() if value not in ("", "chart-default")
+        ]
         print(
             f"listen helm env overrides: {len(resolved) // 2} ({', '.join(applied_names)})",
             file=sys.stderr,

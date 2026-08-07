@@ -74,8 +74,47 @@ def test_allow_direct_and_model_route_overrides_resolve_by_name():
     assert argv.count("--set-string") == 3
     joined = " ".join(argv)
     assert "].value=true" in joined
-    assert "].value=dg-nova-3,modulate-velma-2,parakeet" in joined
-    assert "].value=nllb,google" in joined
+    # Helm --set-string treats commas as pair separators unless escaped.
+    assert "].value=dg-nova-3\\,modulate-velma-2\\,parakeet" in joined
+    assert "].value=nllb\\,google" in joined
+
+
+def test_comma_model_list_survives_helm_set_string_round_trip():
+    helm = __import__("shutil").which("helm")
+    if helm is None:
+        pytest.skip("helm is not installed")
+
+    values = _load_values(PROD_VALUES)
+    argv = HELPER.resolve_env_override_argv(
+        values,
+        {"STT_SERVICE_MODELS": "dg-nova-3,modulate-velma-2,parakeet"},
+    )
+    rendered = subprocess.run(
+        [
+            helm,
+            "template",
+            "backend-listen",
+            str(ROOT / "backend" / "charts" / "backend-listen"),
+            "-f",
+            str(PROD_VALUES),
+            "--set-string",
+            "image.tag=abc1234",
+            *argv,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert 'name: STT_SERVICE_MODELS\n              value: "dg-nova-3,modulate-velma-2,parakeet"' in rendered
+
+
+def test_newline_override_is_rejected():
+    values = _load_values(PROD_VALUES)
+    with pytest.raises(ValueError, match="disallowed control character"):
+        HELPER.resolve_env_override_argv(
+            values,
+            {"STT_SERVICE_MODELS": "dg-nova-3\n--set image.tag=evil"},
+        )
 
 
 def test_unknown_env_name_fails_closed():
