@@ -2,7 +2,7 @@
   "files": {
     "desktop/macos/Desktop/Sources/AuthService.swift": 2844,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
-    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4478,
+    "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4430,
     "desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift": 1515,
     "desktop/macos/Desktop/Sources/MemoryExportService.swift": 1575,
     "desktop/macos/Desktop/Sources/OmiApp.swift": 1555

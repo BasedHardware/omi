@@ -797,7 +797,7 @@ struct DesktopHomeView: View {
       default:
         chatFirstNavigation.selectPrimary(route)
       }
-    } else if let item = resolvedAutomationTarget(target) {
+    } else if let item = SidebarNavItem.automationDestination(named: target) {
       navigateToLegacyDestination(item)
     }
 
@@ -822,35 +822,6 @@ struct DesktopHomeView: View {
         activeCommand: automationPresentationCoordinator.activeCommand)
     else { return }
     handleAutomationPresentationCommand(command)
-  }
-
-  private func resolvedAutomationTarget(_ target: String) -> SidebarNavItem? {
-    let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
-    switch normalized {
-    // "chat" lands on Home because Home *is* the chat now — the same contract
-    // `.navigateToChat` already honours. There is no separate chat destination
-    // to route to any more.
-    case "dashboard", "home", "chat":
-      return .dashboard
-    case "conversations":
-      return .conversations
-    case "memories":
-      return .memories
-    case "tasks":
-      return .tasks
-    case "rewind":
-      return .rewind
-    case "apps", "integrations":
-      return .apps
-    case "settings":
-      return .settings
-    case "permissions":
-      return .permissions
-    case "help":
-      return .help
-    default:
-      return nil
-    }
   }
 
   /// Update store auto-refresh based on which page is visible

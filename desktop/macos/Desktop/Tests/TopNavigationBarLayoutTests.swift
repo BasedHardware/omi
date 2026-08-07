@@ -254,6 +254,28 @@ final class TopNavigationBarLayoutTests: XCTestCase {
       "without the Library pill the hub's three views have no way in")
   }
 
+  /// **The bridge's destination vocabulary, now that a test can reach it.** This mapping was a
+  /// `private func` inside `DesktopHomeView`, so the names `omi-ctl navigate` accepts were asserted
+  /// nowhere. `apps` and `integrations` both landing on the catalog matters most here: `Apps` is the
+  /// only door to connectors and exports, and the bridge is how an agent reaches it without a cursor.
+  func testTheBridgeResolvesEveryDestinationNameItAdvertises() {
+    XCTAssertEqual(SidebarNavItem.automationDestination(named: "apps"), .apps)
+    XCTAssertEqual(SidebarNavItem.automationDestination(named: "integrations"), .apps)
+    XCTAssertEqual(SidebarNavItem.automationDestination(named: "rewind"), .rewind)
+    XCTAssertEqual(SidebarNavItem.automationDestination(named: "tasks"), .tasks)
+    XCTAssertEqual(SidebarNavItem.automationDestination(named: "conversations"), .conversations)
+
+    // Home is the chat, so all three names resolve to it rather than to a destination that is gone.
+    for name in ["dashboard", "home", "chat"] {
+      XCTAssertEqual(SidebarNavItem.automationDestination(named: name), .dashboard, name)
+    }
+
+    // Case and separator folding is part of the contract callers rely on.
+    XCTAssertEqual(SidebarNavItem.automationDestination(named: "Brain-Map"), nil)
+    XCTAssertEqual(SidebarNavItem.automationDestination(named: "APPS"), .apps)
+    XCTAssertNil(SidebarNavItem.automationDestination(named: "nowhere"))
+  }
+
   /// **Apps is the only door to connectors and exports, so it has to be in the model that guards
   /// doors.** Home used to offer a second one — the ask bar's `Connect` tray, whose `More` opened the
   /// same `AppsPage` as a bounded card — and it disappeared with the hub when Home became the query
