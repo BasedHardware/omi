@@ -1,0 +1,35 @@
+desktop/macos/e2e/flows/rewind.yaml
+  s_569f1df936cc22::t_61e29ccf9cfcb4 72-93
+  s_569f1df936cc22::t_ccc55b5215c330 50-59
+  s_569f1df936cc22::t_725d8bc16a9e7d 23-32
+desktop/macos/e2e/flows/settings-basic.yaml
+  s_569f1df936cc22::t_b85ae884162315 91-102
+  s_569f1df936cc22::t_01d7a0dbbaa853 9-12
+desktop/macos/e2e/flows/memories.yaml
+  s_569f1df936cc22::t_2bea7830539de0 63-73,76
+  s_569f1df936cc22::t_10dda5d2028cd2 53
+  s_569f1df936cc22::t_faa81d172bf9ac 89-92
+  s_569f1df936cc22::t_4199d7dc268f7e 40-44
+  s_569f1df936cc22::t_371c7952a00ea1 9-12,16-18
+  s_569f1df936cc22::t_24a83ac3a7f997 99
+desktop/macos/e2e/flows/apps.yaml
+  s_569f1df936cc22::t_ebb30d386b6399 25
+  s_569f1df936cc22::t_491e527eec66a9 8-13
+  s_569f1df936cc22::t_85bd9a1ad4446d 55-75,77-78,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "677711249e81840740fc2f83de15ff0c268bb2b9",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
