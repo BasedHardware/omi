@@ -5,7 +5,11 @@ import { useParams } from '@tschk/moonshine-next/navigation';
 import { CaseStatusView } from '@/components/fair-use/CaseStatusView';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
+// This page runs entirely in the browser, on the web origin. The backend
+// allows no cross-origin callers by default (`CORS_ALLOWED_ORIGINS` is empty in
+// `backend/main.py`), so the status read goes through the same-origin public
+// passthrough rather than straight at the API.
+const PUBLIC_API_BASE_URL = '/api/proxy/public';
 
 interface CaseStatus {
   case_ref: string;
@@ -18,7 +22,7 @@ interface CaseStatus {
 async function getCaseStatus(ref: string): Promise<CaseStatus | null> {
   try {
     const res = await fetch(
-      `${API_BASE_URL}/v1/fair-use/case/${encodeURIComponent(ref)}/status`,
+      `${PUBLIC_API_BASE_URL}/v1/fair-use/case/${encodeURIComponent(ref)}/status`,
       {
         cache: 'no-store',
       },

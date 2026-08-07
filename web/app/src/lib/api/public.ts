@@ -7,6 +7,19 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
 
 /**
+ * Base URL for public reads.
+ *
+ * In a browser these pages run on the web origin, and the backend allows no
+ * cross-origin callers by default (`CORS_ALLOWED_ORIGINS` is empty in
+ * `backend/main.py`), so a direct call is blocked before it is sent. Go through
+ * the same-origin passthrough instead. On the server (build, sitemap, route
+ * handlers) there is no origin to be same as, so call the API directly.
+ */
+export function publicApiBaseUrl(): string {
+  return typeof window === 'undefined' ? API_BASE_URL : '/api/proxy/public';
+}
+
+/**
  * Fetch approved apps for the public marketplace
  * Cached and doesn't require authentication
  */
@@ -35,7 +48,9 @@ export async function getApprovedApps(): Promise<{
 }> {
   try {
     // Cache for 5 minutes
-    const response = await fetch(`${API_BASE_URL}/v1/approved-apps?include_reviews=true`);
+    const response = await fetch(
+      `${publicApiBaseUrl()}/v1/approved-apps?include_reviews=true`,
+    );
 
     if (!response.ok) {
       console.error('Failed to fetch approved apps:', response.status);
@@ -231,7 +246,7 @@ export interface V2SingleCapabilityResponse {
  */
 export async function getAppsV2(includeReviews = false): Promise<V2AppsResponse> {
   try {
-    const url = `${API_BASE_URL}/v2/apps${includeReviews ? '?include_reviews=true' : ''}`;
+    const url = `${publicApiBaseUrl()}/v2/apps${includeReviews ? '?include_reviews=true' : ''}`;
     // Cache for 5 minutes
     const response = await fetch(url);
 
@@ -278,7 +293,7 @@ export async function getAppsByCapability(
       params.append('include_reviews', 'true');
     }
 
-    const url = `${API_BASE_URL}/v2/apps?${params.toString()}`;
+    const url = `${publicApiBaseUrl()}/v2/apps?${params.toString()}`;
     // Cache for 5 minutes
     const response = await fetch(url);
 
