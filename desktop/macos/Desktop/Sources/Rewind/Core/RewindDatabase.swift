@@ -2920,7 +2920,17 @@ actor RewindDatabase {
   }
 
   /// Read screenshot embedding BLOBs in batches for disk-based vector search
-  func readEmbeddingBatch(startDate: Date, endDate: Date, appFilter: String? = nil, limit: Int = 5000, offset: Int = 0)
+  /// Reads embeddings newest-first, over an optionally unbounded range.
+  ///
+  /// **Newest-first, and the dates are optional, for the same reason.** The semantic pass over
+  /// these blobs is a linear scan the caller has to be able to stop early; ordering ascending meant
+  /// a bounded scan of an all-time range would spend its whole budget on the *oldest* frames in the
+  /// database and never reach anything the user might plausibly be looking for. Descending `id` is
+  /// capture order reversed — the same order the timeline reads in — so a caller that stops after N
+  /// batches has scanned the most recent N frames.
+  func readEmbeddingBatch(
+    startDate: Date? = nil, endDate: Date? = nil, appFilter: String? = nil, limit: Int = 5000, offset: Int = 0
+  )
     throws -> [(screenshotId: Int64, embedding: Data)]
   {
     guard let dbQueue = dbQueue else {
@@ -2931,16 +2941,24 @@ actor RewindDatabase {
       var sql = """
             SELECT id, embedding FROM screenshots
             WHERE embedding IS NOT NULL
-              AND timestamp >= ? AND timestamp <= ?
         """
-      var arguments: [DatabaseValueConvertible] = [startDate, endDate]
+      var arguments: [DatabaseValueConvertible] = []
+
+      if let startDate {
+        sql += " AND timestamp >= ?"
+        arguments.append(startDate)
+      }
+      if let endDate {
+        sql += " AND timestamp <= ?"
+        arguments.append(endDate)
+      }
 
       if let app = appFilter {
         sql += " AND appName = ?"
         arguments.append(app)
       }
 
-      sql += " ORDER BY id LIMIT ? OFFSET ?"
+      sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
       arguments.append(limit)
       arguments.append(offset)
 
@@ -3008,6 +3026,54 @@ actor RewindDatabase {
         .limit(limit)
         .fetchAll(db)
     }
+  }
+
+  /// How far back the captured-day walk below will go before it stops asking.
+  ///
+  /// Two years is already past any retention window this app offers and past any capture history
+  /// that exists, and it bounds the walk on a database whose oldest row is a decade old.
+  static let capturedDayCeiling = 800
+
+  /// Every local day that actually holds capture, newest first.
+  ///
+  /// **This is how Rewind knows how far back it goes.** The page shows one day at a time, so
+  /// without this the only way to reach an older day is to guess dates in a calendar that gives no
+  /// hint which of them hold anything — and the days that hold capture are not the days that hold
+  /// conversations, because a day spent entirely at the keyboard says nothing.
+  ///
+  /// It is a walk rather than a `GROUP BY date(timestamp)`: grouping reads the timestamp of every
+  /// frame in the database (hundreds of thousands of rows on a long capture history), whereas each
+  /// step here is a single index seek for the newest capture at or before the cursor. One seek per
+  /// day that exists, none for the days that do not — so the cost is the number of days you have
+  /// used the computer, not the number of frames.
+  ///
+  /// Returns local start-of-day instants. Bucketing in SQL would be wrong: GRDB stores `Date` as a
+  /// UTC string, so `date(timestamp)` puts the user's evening on the following day for most of the
+  /// world, and only `Calendar` gets a day with a DST transition in it right.
+  func capturedDayStarts(calendar: Calendar = .current, ceiling: Int = capturedDayCeiling) throws -> [Date] {
+    guard let dbQueue = dbQueue else {
+      throw RewindError.databaseNotInitialized
+    }
+
+    var days: [Date] = []
+    var cursor = Date()
+    while days.count < ceiling {
+      let upperBound = cursor
+      let newest = try dbQueue.read { db in
+        try Date.fetchOne(
+          db,
+          sql: "SELECT MAX(timestamp) FROM screenshots WHERE timestamp <= ?",
+          arguments: [upperBound]
+        )
+      }
+      guard let newest else { return days }
+      let day = calendar.startOfDay(for: newest)
+      days.append(day)
+      // Step to the instant before this day began, so the next seek can only land on an older day.
+      guard let previous = calendar.date(byAdding: .second, value: -1, to: day) else { return days }
+      cursor = previous
+    }
+    return days
   }
 
   /// Get screenshots sampled evenly across a date range, ordered ASC (oldest first).

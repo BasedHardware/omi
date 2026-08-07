@@ -27,6 +27,9 @@ struct RewindPage: View {
   @State var screenCaptureHealth: ScreenCaptureHealth = .stopped
   @State var isTogglingMonitoring = false
   @AppStorage("screenAnalysisEnabled") var screenAnalysisEnabled = true
+  /// Read here only to say *why* the history stops where it does — the setting itself lives in
+  /// Settings → Rewind.
+  @AppStorage("rewindRetentionDays") private var retentionDays = 7
 
   // Recording animation state
   @State private var isRecordingPulsing = false
@@ -482,6 +485,13 @@ struct RewindPage: View {
       selectedGroupIndex = groupIndex
       currentIndex = 0
       searchViewMode = .timeline
+      // Search now spans the whole history, so the opened group is frequently not from the day the
+      // page was showing. Move the day control onto it rather than leaving it asserting "today"
+      // over a frame from weeks ago — and so that clearing the search lands on that day.
+      let groups = viewModel.groupedSearchResults
+      if groups.indices.contains(groupIndex) {
+        viewModel.alignSelectedDay(to: groups[groupIndex].startTime)
+      }
       scheduleLoadCurrentFrame()
     }
     .onChange(of: selectedGroupIndex) { _, _ in
@@ -565,21 +575,87 @@ struct RewindPage: View {
   /// playback chrome — a page with a date control in the header *and* a timestamp on the picture is
   /// two answers to "when is this".
   private var dayPicker: some View {
-    DatePicker(
-      "",
-      selection: Binding(
-        get: { viewModel.selectedDate },
-        set: { newDate in
-          // Only reload if the selected day actually changed
-          guard !Calendar.current.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
-          Task { await viewModel.filterByDate(newDate) }
-        }
-      ),
-      displayedComponents: [.date]
-    )
-    .datePickerStyle(.graphical)
-    .labelsHidden()
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      DatePicker(
+        "",
+        selection: Binding(
+          get: { viewModel.selectedDate },
+          set: { newDate in
+            // Only reload if the selected day actually changed
+            guard !Calendar.current.isDate(newDate, inSameDayAs: viewModel.selectedDate) else { return }
+            Task { await viewModel.filterByDate(newDate) }
+          }
+        ),
+        displayedComponents: [.date]
+      )
+      .datePickerStyle(.graphical)
+      .labelsHidden()
+
+      historyReach
+    }
     .padding(14)
+  }
+
+  /// How far back Rewind actually goes, and one click to get there.
+  ///
+  /// **A calendar alone cannot answer "what do I still have".** Most days in it hold no capture —
+  /// the Mac was asleep, permission was off, or the retention window has already deleted them — and
+  /// stepping day by day through a month of empty ones to find the oldest is not navigation. These
+  /// controls move to the next day that *holds* capture, and the line above them states the real
+  /// span so the user never has to discover the boundary by hitting it.
+  @ViewBuilder
+  private var historyReach: some View {
+    let oldest = viewModel.oldestCapturedDay
+    let older = viewModel.capturedDay(before: viewModel.selectedDate)
+    let newer = viewModel.capturedDay(after: viewModel.selectedDate)
+
+    VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+      // `nil` here is "not surveyed yet", not "nothing captured" — the two claims are different and
+      // the second one is a lie until the walk has finished.
+      Text(RewindHistoryReach.spanLabel(days: viewModel.capturedDays, surveyed: viewModel.didSurveyHistory))
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+      Text(RewindHistoryReach.retentionNote(retentionDays: retentionDays))
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.tertiary)
+
+      HStack(spacing: OmiSpacing.sm) {
+        Button {
+          if let older { Task { await viewModel.filterByDate(older) } }
+        } label: {
+          Label("Older", systemImage: "chevron.left")
+            .scaledFont(size: OmiType.caption)
+        }
+        .buttonStyle(.plain)
+        .disabled(older == nil)
+        .opacity(older == nil ? 0.35 : 1)
+
+        Button {
+          if let newer { Task { await viewModel.filterByDate(newer) } }
+        } label: {
+          Label("Newer", systemImage: "chevron.right")
+            .scaledFont(size: OmiType.caption)
+        }
+        .buttonStyle(.plain)
+        .disabled(newer == nil)
+        .opacity(newer == nil ? 0.35 : 1)
+
+        Spacer(minLength: 0)
+
+        Button {
+          if let oldest { Task { await viewModel.filterByDate(oldest) } }
+        } label: {
+          Text("Oldest capture")
+            .scaledFont(size: OmiType.caption)
+        }
+        .buttonStyle(.plain)
+        .disabled(oldest == nil || Calendar.current.isDate(oldest!, inSameDayAs: viewModel.selectedDate))
+        .opacity(
+          oldest == nil || Calendar.current.isDate(oldest!, inSameDayAs: viewModel.selectedDate) ? 0.35 : 1)
+      }
+      .foregroundColor(Ink.primary)
+    }
   }
 
   // MARK: - Frame Display
