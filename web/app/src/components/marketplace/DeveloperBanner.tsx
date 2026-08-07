@@ -41,7 +41,7 @@ export function DeveloperBanner() {
         target="_blank"
         className="group block w-full transform transition-transform duration-300 hover:scale-[1.01]"
       >
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#2D1B69] to-[#6C2BD9] shadow-lg">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-bg-raised to-bg-quaternary shadow-lg">
           {/* Background pattern */}
           {BackgroundPattern}
 
