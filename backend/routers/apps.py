@@ -947,7 +947,7 @@ async def update_persona(
     if 'name' in data and data['name'] and data['name'] != persona.get('name'):
         # The name changed, so the generated description no longer matches it,
         # unless the caller supplied its own.
-        if not data.get('description'):
+        if 'description' not in data:
             data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
 
     # AppUpdate needs the identity fields even when the caller omitted them.
