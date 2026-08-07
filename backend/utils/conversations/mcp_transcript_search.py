@@ -47,8 +47,16 @@ def _seconds_to_ms(value: Any) -> Optional[int]:
         return None
 
 
+def _as_segment_dicts(segments: Sequence[Any]) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for s in segments:
+        if isinstance(s, dict):
+            out.append(s)
+    return out
+
+
 def build_transcript_match_snippets(
-    segments: Sequence[Dict[str, Any]],
+    segments: Sequence[Any],
     query: str,
     *,
     context_neighbors: int = 1,
@@ -64,7 +72,7 @@ def build_transcript_match_snippets(
     if not query_lower and not terms:
         return []
 
-    segs = [s for s in segments if isinstance(s, dict)]
+    segs = _as_segment_dicts(segments)
     if not segs:
         return []
 
@@ -133,7 +141,7 @@ def merge_summary_and_transcript_ids(
     out: List[str] = []
     seen: set[str] = set()
     for raw in list(transcript_conversation_ids) + list(summary_vector_ids):
-        cid = str(raw) if raw is not None else ""
+        cid = str(raw).strip()
         if not cid or cid in seen:
             continue
         seen.add(cid)
@@ -151,7 +159,7 @@ def resolve_mcp_conversation_search_ids(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     query_vectors: Callable[..., List[str]],
-    search_transcript_chunks: Callable[..., List[Dict[str, Any]]],
+    search_transcript_chunks: Callable[..., Any],
 ) -> List[str]:
     """Combine summary-vector search with transcript-chunk search (fail-open on chunks)."""
     limit = max(1, min(int(limit or 10), 100))
@@ -161,9 +169,8 @@ def resolve_mcp_conversation_search_ids(
     try:
         # Over-fetch chunks so multiple hits in one conversation still leave room for others.
         chunk_limit = min(max(limit * 3, limit), 60)
-        rows = search_transcript_chunks(uid, query, limit=chunk_limit, starts_at=starts_at, ends_at=ends_at) or []
-        if not isinstance(rows, list):
-            rows = []
+        rows_raw: Any = search_transcript_chunks(uid, query, limit=chunk_limit, starts_at=starts_at, ends_at=ends_at)
+        rows: List[Any] = rows_raw if isinstance(rows_raw, list) else []
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -181,7 +188,7 @@ def resolve_mcp_conversation_search_ids(
 
 
 def attach_match_snippets_to_conversations(
-    conversations: Sequence[Dict[str, Any]],
+    conversations: Sequence[Any],
     query: str,
 ) -> List[Dict[str, Any]]:
     """Copy conversations and attach ``match_snippets`` from transcript_segments."""
@@ -190,9 +197,8 @@ def attach_match_snippets_to_conversations(
         if not isinstance(conv, dict):
             continue
         item = dict(conv)
-        segments = item.get("transcript_segments") or []
-        if not isinstance(segments, list):
-            segments = []
+        segments_raw = item.get("transcript_segments") or []
+        segments: List[Any] = segments_raw if isinstance(segments_raw, list) else []
         item["match_snippets"] = build_transcript_match_snippets(segments, query)
         enriched.append(item)
     return enriched
