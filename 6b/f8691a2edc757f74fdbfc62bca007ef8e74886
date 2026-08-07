@@ -1,0 +1,58 @@
+desktop/macos/changelog/unreleased/20260807-chat-composer-inside-panel.json
+  s_569f1df936cc22::t_8272c5565d9bf3 1-3
+desktop/macos/Desktop/Tests/ChatSurfaceBoundsTests.swift
+  s_569f1df936cc22::t_283e049c309939 128,130,132,139-176,184,186,190-207,214-233,235-239,242-245,247-248,259-266,269-273
+desktop/macos/Desktop/Tests/QueryComposerTests.swift
+  s_569f1df936cc22::t_4bbfb664651642 395-400
+  s_569f1df936cc22::t_c05a02a705bef0 291,293
+  s_569f1df936cc22::t_a9aeb623c593fd 420,422-427,431,436,438,443-462,471-472,476-477
+  s_569f1df936cc22::t_6da738dee4ba85 152-153,157-158,161-227
+  s_569f1df936cc22::t_78423a3372eb0b 401-403
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
+  s_569f1df936cc22::t_214e7df01f280c 425-431,434-439
+  s_569f1df936cc22::t_46f7f657f4114d 451-459,462,465-468
+  s_569f1df936cc22::t_da0e6dcacff1fb 130-131,137-162
+  s_569f1df936cc22::t_6cf943b0475fb1 362-400
+  s_569f1df936cc22::t_df446b50e10d34 5-13
+  s_569f1df936cc22::t_c424f0caf616d8 163-164
+  s_569f1df936cc22::t_f9da01b37f2db0 401
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  s_569f1df936cc22::t_2f91deae19397b 105
+  s_569f1df936cc22::t_5c3bcd74fbce5b 68,70-77
+  s_569f1df936cc22::t_fbd18c2bc9c8a6 112-117,125-130,136-138
+  s_569f1df936cc22::t_89262f0b9ee5ae 544,546-548,550
+  s_569f1df936cc22::t_79f2e26a96122b 4-11
+  s_569f1df936cc22::t_d1f6e51a7c9a0e 218-244
+  s_569f1df936cc22::t_4465c4eca606e1 245-246
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  s_569f1df936cc22::t_1ef277f9afd8dd 78-84
+  s_569f1df936cc22::t_0493ec06e1cd92 103
+  s_569f1df936cc22::t_a92469c16e5ff6 56
+  s_569f1df936cc22::t_9015f92e734c15 185-187
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  s_569f1df936cc22::t_14bb4e00a2b6c3 86-89,91-146,157-163,169-176,188,194-195,204-206
+  s_569f1df936cc22::t_b5b6d3e6f933ff 242
+  s_569f1df936cc22::t_215eba2e8649f0 260-265
+  s_569f1df936cc22::t_20930de53d5b8d 207,294-314
+  s_569f1df936cc22::t_87069910558630 2-3,5-15
+  s_569f1df936cc22::t_7131282c5dfd96 66-69
+  s_569f1df936cc22::t_85dcf312868157 208-209,229,243,249,266
+desktop/macos/Desktop/Tests/QueryShellTests.swift
+  s_569f1df936cc22::t_e9c471282b5d7a 63-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "6bf8691a2edc757f74fdbfc62bca007ef8e74886",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
