@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_569f1df936cc22::t_4bae3e2c39448d 557-634
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
+  s_569f1df936cc22::t_83d9b5d7c176bd 17,40-57,91,151-165,171-188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "8c791e60226f38ac432ed6b7891b386b3db4cdfd",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
