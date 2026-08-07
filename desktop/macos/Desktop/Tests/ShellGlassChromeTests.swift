@@ -249,7 +249,6 @@ final class ShellGlassChromeTests: XCTestCase {
     "MainWindow/Components/CitationCardView.swift",
     "MainWindow/Components/OmiSearchField.swift",
     "MainWindow/SecondBrain/SBComponents.swift",
-    "MainWindow/SecondBrain/SBWallpaper.swift",
     "Chat/TypingIndicator.swift",
     "Chat/ChatOmiMark.swift",
   ]
