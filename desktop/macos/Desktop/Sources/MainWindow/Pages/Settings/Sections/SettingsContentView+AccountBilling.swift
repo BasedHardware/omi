@@ -77,14 +77,18 @@ extension SettingsContentView {
         }
       }
     }
+    .onAppear {
+      loadChannelStatus()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      loadChannelStatus()
+    }
   }
 
   func loadChannelStatus() {
     Task {
-      do {
-        channelStatus = try await APIClient.shared.getChannelStatus()
-      } catch {
-        channelStatus = nil
+      if let status = try? await APIClient.shared.getChannelStatus() {
+        channelStatus = status
       }
     }
   }
@@ -92,6 +96,7 @@ extension SettingsContentView {
   func generateChannelLink(_ channel: String) {
     channelLinkLoading = channel
     channelLinkError = nil
+    channelLink = nil
     Task {
       do {
         channelLink = try await APIClient.shared.createChannelLink(channel: channel)
