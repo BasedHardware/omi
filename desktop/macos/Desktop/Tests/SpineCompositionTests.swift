@@ -518,6 +518,24 @@ final class SpineCompositionTests: XCTestCase {
       "every step goes back in time, exactly as the list under it does")
   }
 
+  /// **A day nobody has read yet is not a day with nothing on it.**
+  ///
+  /// Screen days are read lazily, three at a time, and an empty result is deliberately never stored
+  /// — so "not queried yet" and "queried, found nothing" are the same absence in the store. The rail
+  /// printed a confident `0` for both, which is how the tester came to read "0 screen moments" next
+  /// to a five-figure account total and take it for a contradiction.
+  func testTheRailSaysItIsCountingRatherThanClaimingZero() {
+    XCTAssertEqual(SpineHourRail.headlineNumber(nil), "—")
+    XCTAssertEqual(SpineHourRail.headlineCaption(nil), "counting screen moments")
+
+    XCTAssertEqual(
+      SpineHourRail.headlineNumber(0), "0",
+      "A read that came back empty is a claim the rail is entitled to make.")
+    XCTAssertEqual(SpineHourRail.headlineCaption(0), "screen moments")
+    XCTAssertEqual(SpineHourRail.headlineCaption(1), "screen moment")
+    XCTAssertEqual(SpineHourRail.headlineNumber(1_204), "1,204")
+  }
+
   func testHourLabelsAreTwelveHourAndNeverZero() {
     XCTAssertEqual(SpineFormat.hourLabel(0), "12 AM")
     XCTAssertEqual(SpineFormat.hourLabel(6), "6 AM")

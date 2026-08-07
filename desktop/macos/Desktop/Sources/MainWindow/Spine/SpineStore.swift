@@ -211,7 +211,17 @@ final class SpineStore: ObservableObject {
     return counts.map { Double($0) / Double(peak) }
   }
 
-  func momentCount(for dayID: Date) -> Int { screen[dayID]?.total ?? 0 }
+  /// How much screen capture a day holds — `nil` until that day has actually been read.
+  ///
+  /// The two absences look identical in `screen` and are not the same claim. A day whose read came
+  /// back empty is deliberately not stored (so a scroll never re-queries it forever), and a day that
+  /// is still sitting in `screenQueue` is not stored yet either. Collapsing both to `0` is what let
+  /// the rail print a confident "0 screen moments" for a day it had not looked at. `loadedScreenDays`
+  /// already knows the difference; this is it, told.
+  func momentCount(for dayID: Date) -> Int? {
+    guard loadedScreenDays.contains(dayID) else { return nil }
+    return screen[dayID]?.total ?? 0
+  }
 
   // MARK: - Composition
 

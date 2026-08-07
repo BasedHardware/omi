@@ -22,8 +22,9 @@ struct SpineHourRail: View {
   let density: [Double]
   /// The hour under the top of the list, or nil before anything has been read.
   let currentHour: Int?
-  /// The headline: how much was captured on the day being read.
-  let momentCount: Int
+  /// The headline: how much screen capture the day being read holds, or `nil` while that day's index
+  /// is still being read. `nil` is not zero — see `headlineCaption`.
+  let momentCount: Int?
   /// The footer: what else that day held.
   let dayTitle: String
   let conversationCount: Int
@@ -43,7 +44,7 @@ struct SpineHourRail: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(SpineFormat.number(momentCount))
+        Text(Self.headlineNumber(momentCount))
           .inkStyle(.stepHeadline, color: Ink.primary)
           .lineLimit(1)
           .minimumScaleFactor(0.6)
@@ -64,12 +65,28 @@ struct SpineHourRail: View {
     .accessibilityLabel(Text(readAloud))
   }
 
-  /// **The rail counts one day; the panel's corner counts the whole account.** Both used to end in
-  /// "moments captured", 200 points apart, so a day with no capture read as "0 moments captured"
-  /// beside "446 moments captured" and looked like the rail had failed rather than like a quiet day.
-  /// Naming the thing being counted is what tells them apart — the number stays the number.
-  static func headlineCaption(_ count: Int) -> String {
-    count == 1 ? "screen moment" : "screen moments"
+  /// **The rail counts one day of screen capture; the panel's corner counts the whole account.**
+  /// Both used to end in "moments captured", 200 points apart, so a day with no capture read as
+  /// "0 moments captured" beside "446 moments captured" and looked like the rail had failed rather
+  /// than like a quiet day. Naming the thing being counted is what tells them apart.
+  ///
+  /// The remaining half of that defect was the number itself. Screen days are read lazily, three at
+  /// a time, and a day that has not been read yet is indistinguishable in the store from a day with
+  /// nothing on it — so the rail printed a confident `0` for a day it had not looked at, beside a
+  /// five-figure account total. `nil` now means "not read yet" and says so; `0` means the read came
+  /// back empty, which is a claim the rail is entitled to make.
+  /// `nonisolated` for the same reason `renderedHours` is: this is copy to read, not chrome to draw
+  /// with.
+  nonisolated static func headlineCaption(_ count: Int?) -> String {
+    guard let count else { return "counting screen moments" }
+    return count == 1 ? "screen moment" : "screen moments"
+  }
+
+  /// An em dash rather than a `0` for the uncounted case: a placeholder that cannot be misread as a
+  /// measurement.
+  nonisolated static func headlineNumber(_ count: Int?) -> String {
+    guard let count else { return "—" }
+    return SpineFormat.number(count)
   }
 
   private var footer: String {
@@ -81,8 +98,11 @@ struct SpineHourRail: View {
   }
 
   private var readAloud: String {
+    // The em dash is a visual placeholder; spoken, it has to be the sentence it stands for.
     var text =
-      "\(SpineFormat.number(momentCount)) \(Self.headlineCaption(momentCount)). \(footer)."
+      momentCount == nil
+      ? "Counting screen moments. \(footer)."
+      : "\(Self.headlineNumber(momentCount)) \(Self.headlineCaption(momentCount)). \(footer)."
     if let currentHour { text += " Reading \(SpineFormat.hourLabel(currentHour))." }
     return text
   }
