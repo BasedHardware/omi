@@ -231,7 +231,6 @@ struct QueryShellHome: View {
       isStopping: chatProvider.isStopping,
       mode: mode,
       attachments: chatProvider.pendingAttachments,
-      onSearch: search,
       onAsk: ask,
       onStop: { chatProvider.stopAgent(owner: .mainChat) },
       onAttachmentsAdded: stageAttachments,
@@ -422,21 +421,24 @@ struct QueryShellHome: View {
     showAnswer()
   }
 
-  // MARK: - The two keys
+  // MARK: - The one key
 
-  /// `⏎` — the panel is already filtering as you type, so this only has to put you back on the list.
-  private func search() { submit(commandHeld: false) }
-
-  /// `⌘⏎` — the same words, asked instead of matched.
+  /// **`⏎` — the words, asked.**
+  ///
+  /// There is no second key any more. Searching was never a key: the spine under the bar is rebuilt
+  /// from the live draft on every render, so it narrows as each character lands, and the `⏎ Search`
+  /// button that used to sit here committed to a filter the panel had already applied. `⌘⏎` is the
+  /// `keyboardShortcut` on the primary and lands in this same function.
   ///
   /// It sends through the one `ChatProvider` the composer and the floating bar send through, so the
-  /// answer lands in the single transcript rather than in a second one this surface would own.
-  private func ask() { submit(commandHeld: true) }
+  /// answer lands in the single transcript rather than in a second one this surface would own
+  /// (INV-6).
+  private func ask() { submit() }
 
-  /// Both keys, resolved by `QueryShellSubmission` rather than by two functions that each restate the
-  /// trim, the empty guard and the mode change — which is how they drift.
-  private func submit(commandHeld: Bool) {
-    let submission = QueryShellSubmission.resolve(text: chatProvider.draftText, commandHeld: commandHeld)
+  /// Resolved by `QueryShellSubmission` rather than restated here, so the trim, the empty guard and
+  /// the mode change cannot drift away from the value that defines them.
+  private func submit() {
+    let submission = QueryShellSubmission.resolve(text: chatProvider.draftText)
     if chatProvider.draftText != submission.text { chatProvider.draftText = submission.text }
     guard let next = submission.mode else { return }
     setMode(next)

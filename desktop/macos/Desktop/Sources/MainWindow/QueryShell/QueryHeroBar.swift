@@ -1,6 +1,5 @@
 //
-//  QueryHeroBar.swift — one field that searches, asks, or listens, standing wherever the mode needs
-//  it.
+//  QueryHeroBar.swift — one field you type into, standing wherever the mode needs it.
 //
 //  While you are searching it is the *first* of the surface's two glass objects, deliberately not
 //  welded to the second. A place you type and a place you look are different in kind; drawn as one
@@ -24,9 +23,12 @@
 //  onboarding `Continue` button already uses — never the accent, which was the only saturated colour
 //  in the frame and was spent on the least important control in it (INV-UI-1).
 //
-//  The two keyboard hints are real buttons, not legends. A hint that tells you about a key you could
-//  press but does nothing when you click it is the most reliably annoying control a search bar can
-//  have, and making them pressable costs one closure each.
+//  **There are no keyboard hints any more, because there is no longer a key to choose between.** The
+//  bar carried `⏎ Search` and `⌘⏎ Ask` as two labelled buttons, which asked the reader to pick a mode
+//  before they could press anything — and one of the two was never a decision: the list under the bar
+//  filters as you type, so `Search` committed to something that had already happened. Typing searches;
+//  `⏎` sends; the row's one button is the only thing with a choice behind it, which is exactly why it
+//  is the only loud one. `⌘⏎` still sends, unadvertised, for the muscle memory it built.
 //
 //  Push-to-talk is `PushToTalkMicButton` — the same trigger the composer and the floating bar click,
 //  entering the one `PushToTalkManager` turn. There is no second microphone here and no second
@@ -35,7 +37,7 @@
 //  **It is a composer, not just a search field.** This is now the app's only main-window composer,
 //  so the two things every other composer carries and this one shipped without are here: a paperclip
 //  (with the same drag-and-drop the floating bar and `ChatInputView` accept) and a Stop that takes
-//  the `⌘⏎ Ask` slot while a turn is in flight. A send button with no way to stop what it started is
+//  the primary's slot while a turn is in flight. A send button with no way to stop what it started is
 //  a control that only works when nothing has gone wrong.
 //
 //  The third thing it shipped without was **more than one line.** It was an `NSTextField` in a
@@ -51,9 +53,11 @@
 //  control, so a restored draft was invisible and a harness that set one was asserting on neither.
 //  The host hands this view the provider's draft through `ChatDraftScope`.
 //
-//  Brand: `Ink` semantics only. On the hero the single accent is spent on `⌘⏎ Ask` — and on the Stop
-//  that stands in for it, because they are the same slot and the same weight. In the panel nothing is
-//  accented at all: the row's one primary is a filled `Ink.primary` disc (INV-UI-1).
+//  Brand: `Ink` semantics only, and **no accent anywhere in this view**. The one saturated thing on
+//  the surface used to be the outlined blue `⌘⏎ Ask` / `⏎ Send` pill, which spent the palette's single
+//  accent on a control the reader was not meant to reach for first. Both rows' primary is now a filled
+//  `Ink.primary` disc under an `Ink.surface` glyph — the pair the onboarding `Continue` button uses
+//  (INV-UI-1).
 //
 
 import AppKit
@@ -70,19 +74,16 @@ struct QueryHeroBar: View {
   /// not reach — and because a flag that is already `true` cannot re-claim a caret AppKit has since
   /// given to something else. See `OmiTextEditor.focusRequest`.
   let caretClaim: Int
-  /// Quickens the mark while a turn is in flight, and swaps `⌘⏎ Ask` for Stop.
+  /// Quickens the mark while a turn is in flight, and swaps the primary for Stop.
   let isWorking: Bool
   /// Stop has been asked for and the runtime has not finished unwinding yet.
   var isStopping: Bool = false
-  /// The bar is the same object in both modes; what changes is where it stands and what `⏎` means.
-  /// While an answer is on screen the plain key **sends** — it continues the thread, because a bare
-  /// Return that quietly went back to filtering would throw away what you were in the middle of
-  /// asking, and because in chat mode there is no search bar left for it to mean anything else in.
+  /// The bar is the same object in both modes, and **`⏎` now means the same thing in both** — send.
+  /// All this selects is where the bar stands and what it is wearing (`QueryComposerPlacement`).
   let mode: QueryShellMode
   /// Files staged for the next send. Owned by `ChatProvider.pendingAttachments`; this bar only draws
   /// them, so a file staged by the automation bridge or by a drop on the floating bar shows up here.
   var attachments: [ChatAttachment] = []
-  let onSearch: () -> Void
   let onAsk: () -> Void
   var onStop: () -> Void = {}
   var onAttachmentsAdded: ([URL]) -> Void = { _ in }
@@ -116,8 +117,8 @@ struct QueryHeroBar: View {
       .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
     // **No tap gesture on the row itself.** A `contentShape` + `onTapGesture` wrapped around the
     // whole row is the outermost gesture, so it wins over the buttons inside it: the first version
-    // of this focused the field on every click and the `⌘⏎ Ask` button was unpressable. The field
-    // already fills the space between the mark and the hints, so clicking the row focuses it anyway.
+    // of this focused the field on every click and the primary was unpressable. The field already
+    // fills the space between the mark and the cluster, so clicking the row focuses it anyway.
   }
 
   /// The one thing the two placements really disagree about: what they are standing on.
@@ -184,7 +185,13 @@ struct QueryHeroBar: View {
     }
   }
 
-  /// The search bar's row: the query mark, the field, and the two keys it advertises.
+  /// **The search bar's row — the same three controls the panel's has, at the hero's own scale.**
+  ///
+  /// It used to carry two labelled keys, `⏎ Search` and `⌘⏎ Ask`, and they were a mode choice the
+  /// reader should never have been asked to make: the list under this bar **filters as you type**,
+  /// so `Search` committed to something that had already happened, and `Ask` was then the only key
+  /// with a decision behind it while being the second-billed of the two. Both are gone. Typing
+  /// searches; `⏎` sends; the one thing you can press is the one thing with a choice in it.
   private var heroRow: some View {
     HStack(spacing: QueryShellLayout.heroRowSpacing) {
       // The query mark belongs to the query. Inside the panel the transcript is already the record
@@ -194,39 +201,44 @@ struct QueryHeroBar: View {
 
       composer
 
-      attachButton(diameter: 28, glyphSize: OmiType.subheading)
+      attachButton(
+        diameter: QueryShellLayout.micDiameter, glyphSize: QueryShellLayout.heroGlyphSize)
 
-      // **The search affordance is the search surface's.** In chat mode there is no list under the
-      // composer to filter, so `⏎ Search` would be a key that does nothing, and `esc Results` would
-      // be a second way out sitting 12 pt under the `‹ Results` chip the panel header already has.
-      // Escape still leaves — `QueryShellHome` owns that key, not this label.
-      QueryKeyHint(label: searchHintLabel, isAccented: false, action: onSearch)
-        .accessibilityIdentifier("query-shell-search-hint")
+      // No ground under the mic any more. It carried one for being the row's only round target, and
+      // it is not: the send disc beside it is round, filled, and the thing the eye should land on.
+      PushToTalkMicButton(
+        diameter: QueryShellLayout.micDiameter, glyphSize: QueryShellLayout.heroGlyphSize
+      )
+      .accessibilityIdentifier("query-shell-push-to-talk")
 
       // Same slot, same weight. A primary that thins out the moment a turn starts is a button that
       // disappears exactly when it starts to matter — `HomeAskBarControls` already states this rule
       // for the other Home composer, and this bar is not allowed a second opinion about it.
       if isWorking {
-        QueryKeyHint(label: isStopping ? "Stopping…" : "Stop", isAccented: true, action: onStop)
+        heroPrimary(systemImage: "stop.fill", isProminent: !isStopping, action: onStop)
           .disabled(isStopping)
           .accessibilityIdentifier("query-shell-stop")
           .accessibilityLabel("Stop response")
           .help("Stop this response")
       } else {
-        QueryKeyHint(label: "⌘⏎ Ask", isAccented: true, action: onAsk)
+        heroPrimary(systemImage: "arrow.up", isProminent: canSend, action: onAsk)
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("query-shell-ask-hint")
+          .accessibilityLabel("Send")
+          .help("Send — ⏎")
       }
-
-      // The resting disc under it: the mic button draws nothing at rest by design (it also lives on
-      // the notch's black glass), and here it is the only round target, so it needs a ground to read
-      // as a button before you hover it.
-      PushToTalkMicButton(
-        diameter: QueryShellLayout.micDiameter, glyphSize: OmiType.subheading
-      )
-      .background(Circle().fill(Ink.rowFill))
-      .accessibilityIdentifier("query-shell-push-to-talk")
     }
+  }
+
+  private func heroPrimary(
+    systemImage: String, isProminent: Bool, action: @escaping () -> Void
+  ) -> some View {
+    primaryDisc(
+      systemImage: systemImage,
+      diameter: QueryShellLayout.micDiameter,
+      glyphSize: QueryShellLayout.heroPrimaryGlyphSize,
+      isProminent: isProminent,
+      action: action)
   }
 
   /// **The chat row: one leading affordance, the field, and one primary in a quiet trailing cluster.**
@@ -258,13 +270,13 @@ struct QueryHeroBar: View {
       // Same slot, same weight, same disc — see the hero's note. Stop is not a quieter control than
       // Send; it is the same control while a turn is in flight.
       if isWorking {
-        primaryDisc(systemImage: "stop.fill", isProminent: !isStopping, action: onStop)
+        panelPrimary(systemImage: "stop.fill", isProminent: !isStopping, action: onStop)
           .disabled(isStopping)
           .accessibilityIdentifier("query-shell-stop")
           .accessibilityLabel("Stop response")
           .help("Stop this response")
       } else {
-        primaryDisc(systemImage: "arrow.up", isProminent: canSend, action: onAsk)
+        panelPrimary(systemImage: "arrow.up", isProminent: canSend, action: onAsk)
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("query-shell-ask-hint")
           .accessibilityLabel("Send")
@@ -275,21 +287,33 @@ struct QueryHeroBar: View {
     }
   }
 
+  private func panelPrimary(
+    systemImage: String, isProminent: Bool, action: @escaping () -> Void
+  ) -> some View {
+    primaryDisc(
+      systemImage: systemImage,
+      diameter: QueryShellLayout.panelComposerControlDiameter,
+      glyphSize: QueryShellLayout.panelComposerGlyphSize,
+      isProminent: isProminent,
+      action: action)
+  }
+
   /// **The row's one filled control**, in the pair the onboarding `Continue` button uses:
   /// `Ink.primary` fill under an `Ink.surface` glyph. High-contrast in both appearances by
   /// construction, and — unlike the accent pill it replaces — not the only saturated thing in the
   /// frame (INV-UI-1).
+  ///
+  /// One function for both placements, at each one's own diameter: two rows that draw their primary
+  /// separately are two rows that end up with two primaries.
   private func primaryDisc(
-    systemImage: String, isProminent: Bool, action: @escaping () -> Void
+    systemImage: String, diameter: CGFloat, glyphSize: CGFloat, isProminent: Bool,
+    action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
       Image(systemName: systemImage)
-        .scaledFont(size: QueryShellLayout.panelComposerGlyphSize, weight: .semibold)
+        .scaledFont(size: glyphSize, weight: .semibold)
         .foregroundStyle(Ink.surface)
-        .frame(
-          width: QueryShellLayout.panelComposerControlDiameter,
-          height: QueryShellLayout.panelComposerControlDiameter
-        )
+        .frame(width: diameter, height: diameter)
         .background(Circle().fill(Ink.primary))
         .contentShape(Circle())
     }
@@ -328,9 +352,9 @@ struct QueryHeroBar: View {
       fontSize: round(fontSize * fontScale),
       textColor: Ink.nsPrimaryOnGlass,
       // Bare Return only. **A Command-modified key never reaches here** — AppKit routes it to
-      // key-equivalent handling first — so `⌘⏎` is a real `keyboardShortcut` on the Ask button below
-      // rather than a modifier read at the field. Shift-Return is the editor's own newline and never
-      // arrives as a submit (`OmiComposerReturnKey`).
+      // key-equivalent handling first — so `⌘⏎` is a real `keyboardShortcut` on the primary below
+      // rather than a modifier read at the field. Both keys send. Shift-Return is the editor's own
+      // newline and never arrives as a submit (`OmiComposerReturnKey`).
       textContainerInset: NSSize(width: 0, height: editorInsetVertical),
       onSubmit: submitFromReturnKey,
       // The caret is claimed explicitly by the host, so this editor must not also grab it — and must
@@ -356,17 +380,16 @@ struct QueryHeroBar: View {
     .accessibilityLabel(Text(placeholder))
   }
 
-  /// `⏎` in the composer means whatever this row's own accented hint says it means, so the key and
-  /// the label cannot disagree. `⌘⏎` never arrives here.
+  /// **`⏎` sends, wherever this bar is standing.**
   ///
-  /// On the hero it searches, because the list under it is already filtering as you type and the
-  /// plain key is how you commit to that. In the panel it **sends** — the composer is under a
-  /// transcript, there is no list left to filter, and the one thing a chat composer's Return has ever
-  /// meant is "send this".
+  /// It used to mean *search* on the hero and *send* in the panel, with `⌘⏎` as the escape hatch —
+  /// two keys, and a rule about which surface you were on before you could know what either did.
+  /// The list under the hero filters as you type, so the plain key was committing to a filter the
+  /// panel had already applied; there was never a second thing for it to mean. `⌘⏎` still sends: it
+  /// is the `keyboardShortcut` on the primary and never arrives here.
   private func submitFromReturnKey() {
-    switch QueryShellSubmit.resolve(text: text, commandHeld: mode == .answer) {
+    switch QueryShellSubmit.resolve(text: text) {
     case .ask: onAsk()
-    case .search: onSearch()
     case .none: break
     }
   }
@@ -391,8 +414,6 @@ struct QueryHeroBar: View {
   private var placeholder: String {
     mode == .answer ? "Ask a follow-up…" : RewindSearchMetrics.placeholder
   }
-
-  private var searchHintLabel: String { "⏎ Search" }
 
   private var fontSize: CGFloat {
     placement == .hero ? QueryShellLayout.queryFontSize : QueryShellLayout.panelComposerFontSize
@@ -435,34 +456,5 @@ struct QueryHeroBar: View {
       guard !urls.isEmpty else { return }
       onAttachmentsAdded(urls)
     }
-  }
-}
-
-/// One of the two keyboard hints. A pressable stadium, because everything pressable in this system is.
-private struct QueryKeyHint: View {
-  let label: String
-  let isAccented: Bool
-  let action: () -> Void
-
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: action) {
-      Text(label)
-        .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundStyle(isAccented ? Ink.accent : GlassShell.controlLabel(isProminent: isHovering))
-        .padding(.horizontal, 11)
-        .frame(height: 28)
-        .background(Capsule(style: .continuous).fill(isHovering ? Ink.rowFill : .clear))
-        .overlay(
-          Capsule(style: .continuous)
-            .strokeBorder(isAccented ? Ink.accent.opacity(0.35) : Ink.separator, lineWidth: 1)
-        )
-        .contentShape(Capsule(style: .continuous))
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .animation(InkReduceMotion.animation(.easeOut(duration: InkMotion.press)), value: isHovering)
-    .fixedSize()
   }
 }

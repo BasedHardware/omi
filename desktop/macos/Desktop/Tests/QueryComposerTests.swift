@@ -182,20 +182,25 @@ final class QueryComposerTests: XCTestCase {
     XCTAssertEqual(composer.provider.draftText, "typed under the transcript")
   }
 
-  /// **Bare `⏎` sends once a conversation is open.** On the list it commits the filter; in the panel
-  /// there is no list left under it to filter, so the only thing Return has ever meant in a chat
-  /// composer is what it means here. Driven through the editor's real `doCommandBy` seam rather than
-  /// asserted about a value, because the key press is what the reader actually performs.
-  func testBareReturnInTheInPanelComposerSends() throws {
-    let composer = try Composer(mode: .answer)
-    defer { composer.tearDown() }
+  /// **Bare `⏎` sends — in the panel, and on the hero above it.**
+  ///
+  /// It used to send in one placement and commit a filter in the other, which is the split the
+  /// reader asked us to drop: *"No need to separate search and ask. While typing its just search and
+  /// then if i press enter its chat."* Both placements are driven here, through the editor's real
+  /// `doCommandBy` seam rather than asserted about a value, because the key press is what the reader
+  /// actually performs — and the hero case is the one that changed.
+  func testBareReturnSendsInBothPlacements() throws {
+    for mode in [QueryShellMode.answer, .results] {
+      let composer = try Composer(mode: mode)
+      defer { composer.tearDown() }
 
-    composer.type("what did priya decide")
-    composer.pressReturn()
+      composer.type("what did priya decide")
+      composer.pressReturn()
 
-    XCTAssertEqual(
-      composer.surface.asks, 1, "Return under the transcript did not send the follow-up")
-    XCTAssertEqual(composer.surface.searches, 0, "Return in a conversation must not go back to filtering")
+      XCTAssertEqual(
+        composer.surface.asks, 1,
+        "Return did not send with the composer in \(mode) — it is the only thing the key means now")
+    }
   }
 
   /// It is a chat composer, so it rests at a chat composer's height — not at the 64 pt hero bar's.
@@ -285,12 +290,11 @@ final class QueryComposerTests: XCTestCase {
       "Return mid-composition commits the IME candidate; it is never the composer's key")
   }
 
-  /// `⏎` on the bar does what the bar's own hint says it does, in both modes, so the key and the
-  /// label cannot drift apart.
-  func testTheReturnKeyMeansWhateverTheBarsHintSays() {
-    XCTAssertEqual(QueryShellSubmit.resolve(text: "priya", commandHeld: false), .search)
-    XCTAssertEqual(QueryShellSubmit.resolve(text: "priya", commandHeld: true), .ask)
-    XCTAssertEqual(QueryShellSubmit.resolve(text: "  ", commandHeld: true), .none)
+  /// The bar no longer has a hint for the key to drift away from, because it no longer has a choice
+  /// to explain: `⏎` sends whatever the placement, and an empty field is inert.
+  func testTheReturnKeySendsOrDoesNothing() {
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "priya"), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "  "), .none)
   }
 
   // MARK: - Harness
@@ -466,7 +470,6 @@ final class QueryComposerTests: XCTestCase {
           caretClaim: surface.caretClaims,
           isWorking: false,
           mode: mode,
-          onSearch: { surface.searches += 1 },
           onAsk: { surface.asks += 1 }
         )
         .background {
@@ -486,12 +489,11 @@ final class QueryComposerTests: XCTestCase {
     var barHeight: CGFloat = 0
   }
 
-  /// `QueryShellHome`'s half of the arrangement: the caret claim it owns and hands down, and the two
-  /// submits it resolves — counted, so "what does `⏎` mean here" is answered by what was called.
+  /// `QueryShellHome`'s half of the arrangement: the caret claim it owns and hands down, and the one
+  /// submit it resolves — counted, so "what does `⏎` do here" is answered by what was called.
   @MainActor
   private final class Surface: ObservableObject {
     @Published var caretClaims = 0
     var asks = 0
-    var searches = 0
   }
 }

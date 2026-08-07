@@ -162,36 +162,46 @@ enum QueryComposerPlacement: Equatable, Sendable {
   }
 }
 
-/// What the two keyboard hints resolve to for a given key press. A pure function so "⌘⏎ asks and ⏎
-/// searches" is a test rather than a guess about SwiftUI's modifier reporting.
+/// What a key press resolves to. **There is only one thing a key does on this surface now.**
+///
+/// This used to be a choice between two, and the choice was the mistake. The surface offered `⏎
+/// Search` and `⌘⏎ Ask` as two buttons and two keys, so the reader had to decide which of two modes
+/// they were in before they could press anything — and one of the two was not a decision at all:
+/// **typing already filters the list in place**, live, as each character lands. A key that commits
+/// to a filter the panel has already applied is a button for a job that finished while you were
+/// reaching for it.
+///
+/// So searching stopped being a control. `⏎` sends, in both placements, and nothing has to be
+/// chosen. `⌘⏎` still sends — it is the `keyboardShortcut` on the same button, kept for the muscle
+/// memory it built — but it is no longer advertised, because it is now the harder of two identical
+/// routes.
 enum QueryShellSubmit: Equatable, Sendable {
-  /// Filter the panel body in place.
-  case search
-  /// Swap the panel body for the answer thread and send the query as a chat turn.
+  /// Swap the panel body for the answer thread and send the words as a chat turn.
   case ask
   /// Nothing to do — an empty field.
   case none
 
-  static func resolve(text: String, commandHeld: Bool) -> QueryShellSubmit {
-    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .none }
-    return commandHeld ? .ask : .search
+  /// No `commandHeld`. Which key was pressed stopped being information the moment both keys meant
+  /// the same thing; a parameter nothing branches on is the next thing to grow a branch back.
+  static func resolve(text: String) -> QueryShellSubmit {
+    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .none : .ask
   }
 }
 
 /// **One submit, resolved once — including what the field is left holding.**
 ///
-/// The bar does two jobs with one string, and every way this surface felt broken
-/// came from confusing them. In `.results` the text is a *filter* over the list
-/// under it, so submitting keeps it. In `.answer` the text is a *message*, and a
-/// composer that keeps the message it just sent is a composer you have to empty
-/// by hand before you can write the next one: the `Ask a follow-up…` placeholder
-/// was unreachable, a second `⏎` re-sent the question verbatim, and emptying the
-/// field to type a follow-up used to throw the whole conversation away because
-/// an empty field was read as "take me back to the list".
+/// The text is a *message*, and a composer that keeps the message it just sent is a composer you
+/// have to empty by hand before you can write the next one: the `Ask a follow-up…` placeholder was
+/// unreachable, a second `⏎` re-sent the question verbatim, and emptying the field to type a
+/// follow-up used to throw the whole conversation away because an empty field was read as "take me
+/// back to the list".
 ///
-/// So the field is emptied by the *send*, and nothing else reads emptiness as an
-/// instruction. The two labelled exits (`esc Results` on the bar, `‹ Results` in
-/// the panel header) are the only ways out of a conversation.
+/// So the field is emptied by the *send*, and nothing else reads emptiness as an instruction. `esc`
+/// and `‹ Results` in the panel header are the two ways out of a conversation.
+///
+/// **While you are on the list the same string is also a filter** — but it filters as you type, so
+/// no key has to say so. The one thing `⏎` can mean is therefore the same thing in both placements,
+/// which is why there is no longer a `commandHeld` to disambiguate.
 struct QueryShellSubmission: Equatable, Sendable {
   let action: QueryShellSubmit
   /// The trimmed question to send. Non-nil only for `.ask`.
@@ -202,12 +212,10 @@ struct QueryShellSubmission: Equatable, Sendable {
   /// inert key must never move the reader.
   let mode: QueryShellMode?
 
-  static func resolve(text: String, commandHeld: Bool) -> Self {
-    switch QueryShellSubmit.resolve(text: text, commandHeld: commandHeld) {
+  static func resolve(text: String) -> Self {
+    switch QueryShellSubmit.resolve(text: text) {
     case .none:
       return Self(action: .none, question: nil, text: text, mode: nil)
-    case .search:
-      return Self(action: .search, question: nil, text: text, mode: .results)
     case .ask:
       return Self(
         action: .ask,
@@ -345,6 +353,15 @@ enum QueryShellLayout {
   /// Between the hero row's controls. It is set at the query face, so it can afford more air than
   /// the chat row inside the panel, which uses `OmiSpacing.sm`.
   static let heroRowSpacing: CGFloat = 14
+
+  /// The glyph the hero's two quiet controls share — the paperclip and the mic, which are the same
+  /// kind of thing and must not be two sizes.
+  static var heroGlyphSize: CGFloat { OmiType.subheading }
+
+  /// The primary's glyph is heavier than the quiet ones in both rows, because it is the filled one:
+  /// roughly half its disc, which is the proportion that reads as a button rather than as an icon
+  /// with a circle behind it.
+  static var heroPrimaryGlyphSize: CGFloat { OmiType.heading }
 
   /// The query's point size. Visibly larger than every other run on the surface, and deliberately
   /// under `Font.inkDisplayThreshold` (22) so it resolves to the reading face rather than the display

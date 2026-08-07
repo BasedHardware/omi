@@ -8,20 +8,25 @@ import XCTest
 @MainActor
 final class QueryShellTests: XCTestCase {
 
-  // MARK: - The two keys
+  // MARK: - The one key
 
-  func testReturnSearchesAndCommandReturnAsks() {
-    XCTAssertEqual(QueryShellSubmit.resolve(text: "priya", commandHeld: false), .search)
-    XCTAssertEqual(QueryShellSubmit.resolve(text: "priya", commandHeld: true), .ask)
+  /// **`⏎` sends. There is nothing else for it to mean.**
+  ///
+  /// The surface used to answer this question with "it depends": `⏎` searched and `⌘⏎` asked, which
+  /// is why the bar carried two labelled buttons to explain itself. The reader looked at the running
+  /// build and said so — *"No need to separate search and ask. While typing its just search and then
+  /// if i press enter its chat."* Searching is not a key, because the list narrows as each character
+  /// lands; the only decision left is whether to send.
+  func testReturnSendsAndThereIsNoSecondThingItCouldMean() {
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "priya"), .ask)
   }
 
   /// The error path: an empty field must do nothing at all rather than send an empty chat turn,
   /// which `ChatProvider.sendMessage` silently drops — a key that appears to do nothing is worse
   /// than one that is inert on purpose.
-  func testAnEmptyOrBlankFieldSubmitsNothingOnEitherKey() {
+  func testAnEmptyOrBlankFieldSubmitsNothing() {
     for blank in ["", "   ", "\n \t"] {
-      XCTAssertEqual(QueryShellSubmit.resolve(text: blank, commandHeld: false), .none)
-      XCTAssertEqual(QueryShellSubmit.resolve(text: blank, commandHeld: true), .none)
+      XCTAssertEqual(QueryShellSubmit.resolve(text: blank), .none)
     }
   }
 
@@ -31,28 +36,30 @@ final class QueryShellTests: XCTestCase {
   /// unreachable, makes a second `⏎` re-send the question verbatim, and forces the reader to empty
   /// the field by hand before they can write the next one.
   func testAskingSendsTheTrimmedQuestionAndEmptiesTheComposer() {
-    let submission = QueryShellSubmission.resolve(text: "  what did I ship  ", commandHeld: true)
+    let submission = QueryShellSubmission.resolve(text: "  what did I ship  ")
     XCTAssertEqual(submission.action, .ask)
     XCTAssertEqual(submission.question, "what did I ship")
     XCTAssertEqual(submission.text, "", "the send consumes the message")
     XCTAssertEqual(submission.mode, .answer)
   }
 
-  /// The other half of the same rule: in results mode the text is a *filter* over the list it is
-  /// about to show, so submitting must not throw it away.
-  func testSearchingKeepsTheTermBecauseItIsTheFilterAndSendsNothing() {
-    let submission = QueryShellSubmission.resolve(text: "priya", commandHeld: false)
-    XCTAssertEqual(submission.action, .search)
-    XCTAssertNil(submission.question)
-    XCTAssertEqual(submission.text, "priya")
-    XCTAssertEqual(submission.mode, .results)
+  /// **A submit from the list is the same submit.** This replaces the assertion that `⏎` on the
+  /// hero kept the term and stayed on the results, which was the two-key contract the reader asked
+  /// us to drop: typing is what filters, so the only thing left for a key to do is send — and the
+  /// send takes the words with it, out of the field and into the conversation.
+  func testSubmittingFromTheListSendsRatherThanCommittingAFilter() {
+    let submission = QueryShellSubmission.resolve(text: "priya")
+    XCTAssertEqual(submission.action, .ask)
+    XCTAssertEqual(submission.question, "priya")
+    XCTAssertEqual(submission.text, "", "the send consumes the words wherever the bar is standing")
+    XCTAssertEqual(submission.mode, .answer)
   }
 
   /// An inert key must not move the reader. Before this, an empty field was itself read as "go back
   /// to the list", so emptying the bar to type a follow-up ejected you from the conversation.
   func testAnInertSubmitMovesNothingAndKeepsTheReaderInTheirConversation() {
     for blank in ["", "   ", "\n \t"] {
-      let submission = QueryShellSubmission.resolve(text: blank, commandHeld: true)
+      let submission = QueryShellSubmission.resolve(text: blank)
       XCTAssertEqual(submission.action, .none)
       XCTAssertNil(submission.question)
       XCTAssertNil(submission.mode, "an empty field is not an instruction to leave answer mode")
