@@ -18,7 +18,10 @@ export { goalEmoji, DEFAULT_GOAL_EMOJI } from '@/lib/goalEmoji';
 
 /** Trim the trailing `.0` the backend's float metrics produce for whole numbers. */
 export function formatMetricValue(value: number): string {
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(2)));
+  // `String` already drops a trailing `.0`; rounding here would rewrite the
+  // value a controlled target input then saves back as a change the user
+  // never made.
+  return String(value);
 }
 
 /**

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   OmiMarkGeometry,
+  omiBurstForTurn,
   omiDotPlacement,
   omiMotionForState,
   omiOrbPlacements,
@@ -47,10 +48,32 @@ const LAP_SECONDS: Record<OmiOrbMotion, number> = {
   successBurst: 2,
 };
 
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function')
     return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+/**
+ * Tracks the preference rather than sampling it once: a reader who turns
+ * reduced motion on mid-session is asking the animation already on screen to
+ * stop, and a value read at mount can never answer that.
+ */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(prefersReducedMotion);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia(REDUCED_MOTION_QUERY);
+    const update = () => setReduced(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  return reduced;
 }
 
 export function OmiOrb({
@@ -63,7 +86,7 @@ export function OmiOrb({
   paused = false,
 }: OmiOrbProps) {
   const active: OmiOrbMotion = motion ?? omiMotionForState(state, seed);
-  const reduced = useMemo(prefersReducedMotion, []);
+  const reduced = useReducedMotion();
 
   const dots = useRef<(SVGCircleElement | null)[]>([]);
   const levelRef = useRef(level);
@@ -103,6 +126,7 @@ export function OmiOrb({
           index: i,
           turn,
           level: levelRef.current,
+          burst: omiBurstForTurn(active, turn),
         });
         // Mutating attributes directly keeps the tree from re-rendering 60
         // times a second for what is purely a paint change.

@@ -18,14 +18,16 @@ export function ChatBubble() {
         'transition-colors duration-200',
         isOpen
           ? 'bg-bg-tertiary hover:bg-bg-quaternary'
-          : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
+          : 'bg-text-primary text-bg-primary hover:bg-text-primary/80',
       )}
       aria-label={isOpen ? 'Close chat' : 'Open chat'}
     >
       {isOpen ? (
         <X className="w-6 h-6 text-text-primary" />
       ) : (
-        <MessageCircle className="w-6 h-6 text-white" />
+        // The closed pill is white, so the icon has to be the dark token — a
+        // white icon on it is white on white.
+        <MessageCircle className="w-6 h-6 text-bg-primary" />
       )}
     </button>
   );
