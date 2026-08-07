@@ -32,6 +32,15 @@ const DEAD_LETTERS_KEY = "dead-letters";
 
 export class Outbox {
   private state: EngineState = INITIAL_STATE;
+  /** Fired after every state transition and terminal outcome — stores use it
+   * to re-render. Not a public event bus; one owner (the store) subscribes. */
+  public onChange: (() => void) | null = null;
+  /** Fired once per terminal outcome, with the op that reached it. Stores use
+   * confirmed creates/patches/deletes to fold optimistic state into the
+   * durable projection without waiting for a refresh. */
+  public onOutcome:
+    | ((op: PendingOp, outcome: import("@omi-core/contracts").OperationOutcome) => void | Promise<void>)
+    | null = null;
   private log!: DurableLog;
   private kv!: DurableKv;
   private cancelTimer: (() => void) | null = null;
@@ -84,10 +93,16 @@ export class Outbox {
     this.dispatch({ t: "auth-restored" });
   }
 
+  /** Snapshot of ops not yet at a terminal outcome, in send order. */
+  pendingOps(): readonly PendingOp[] {
+    return this.state.pending;
+  }
+
   private dispatch(event: Parameters<typeof step>[1]): void {
     const { state, effects } = step(this.state, event, this.env.now());
     this.state = state;
     for (const eff of effects) void this.interpret(eff);
+    this.onChange?.();
   }
 
   private async interpret(eff: Effect): Promise<void> {
@@ -117,8 +132,9 @@ export class Outbox {
         await this.log.append(
           JSON.stringify({ t: "tombstone", opId: eff.opId, outcome: eff.outcome } satisfies JournalEntry),
         );
-        if (eff.outcome.state === "dead" && eff.summaryForDeadLetter) {
-          const op = eff.summaryForDeadLetter;
+        await this.onOutcome?.(eff.op, eff.outcome);
+        if (eff.outcome.state === "dead") {
+          const op = eff.op;
           const letters = await this.deadLetters();
           letters.push({
             opId: op.opId,

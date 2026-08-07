@@ -134,3 +134,22 @@ export class ScriptedTransport {
     return next;
   }
 }
+
+/** Scriptable HttpClient for adapter/store tests: FIFO responses, call log. */
+export class ScriptedHttp {
+  public readonly calls: { method: string; path: string; body?: unknown }[] = [];
+  private script: import("@omi-core/adapters-legacy").HttpResponse[] = [];
+
+  respond(...responses: import("@omi-core/adapters-legacy").HttpResponse[]): void {
+    this.script.push(...responses);
+  }
+
+  async request(
+    method: "GET" | "POST" | "PATCH" | "DELETE",
+    path: string,
+    body?: unknown,
+  ): Promise<import("@omi-core/adapters-legacy").HttpResponse> {
+    this.calls.push(body === undefined ? { method, path } : { method, path, body });
+    return this.script.shift() ?? { status: 500, json: null };
+  }
+}

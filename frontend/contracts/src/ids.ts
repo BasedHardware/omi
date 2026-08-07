@@ -15,6 +15,16 @@ export const SLUG_PATTERN = /^[a-z]{2,12}(?:-[a-z]{2,12}){2,4}$/;
 export const LEGACY_UUID_PATTERN =
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+/**
+ * Server-assigned opaque ids (Firestore doc ids, content hashes) — the ids
+ * the legacy backend mints today. ADR-006 makes servers id-opaque, so the
+ * client boundary must ACCEPT them; the slug grammar governs only what WE
+ * generate. Safe charset, bounded length — no path or markup characters.
+ * (Found by the first store integration test: every real server row was
+ * being dropped as unparseable.)
+ */
+export const LEGACY_OPAQUE_PATTERN = /^[A-Za-z0-9_-]{4,128}$/;
+
 declare const RecordIdBrand: unique symbol;
 
 /**
@@ -24,12 +34,13 @@ declare const RecordIdBrand: unique symbol;
  */
 export type RecordId = string & { readonly [RecordIdBrand]: true };
 
-export type RecordIdKind = "slug" | "legacy-uuid";
+export type RecordIdKind = "slug" | "legacy-uuid" | "legacy-opaque";
 
 /** The one sanctioned way to obtain a RecordId from a raw string. */
 export function parseRecordId(raw: string): { id: RecordId; kind: RecordIdKind } | null {
   if (SLUG_PATTERN.test(raw)) return { id: raw as RecordId, kind: "slug" };
   if (LEGACY_UUID_PATTERN.test(raw)) return { id: raw as RecordId, kind: "legacy-uuid" };
+  if (LEGACY_OPAQUE_PATTERN.test(raw)) return { id: raw as RecordId, kind: "legacy-opaque" };
   return null;
 }
 

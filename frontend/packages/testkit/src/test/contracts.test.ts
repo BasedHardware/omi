@@ -8,8 +8,9 @@ import { ManualEnv } from "../fakes.js";
 test("id grammar: slugs and legacy UUIDs accepted, junk rejected (ADR-006 rollout rule)", () => {
   assert.equal(parseRecordId("flying-dragon-vibrant")?.kind, "slug");
   assert.equal(parseRecordId("2f1a6f0e-8f4b-4a4e-9c39-88b0d5e2a111")?.kind, "legacy-uuid");
-  assert.equal(parseRecordId("Flying-Dragon"), null, "case and word-count enforced");
-  assert.equal(parseRecordId("a-b-c"), null, "words are 2+ chars");
+  assert.equal(parseRecordId("Flying-Dragon")?.kind, "legacy-opaque", "not a slug, but a valid server-opaque id");
+  assert.equal(parseRecordId("a1b2C3dEf4")?.kind, "legacy-opaque", "Firestore-style ids accepted");
+  assert.equal(parseRecordId("ab"), null, "too short for any form");
   assert.equal(parseRecordId("../../etc/passwd"), null);
 });
 

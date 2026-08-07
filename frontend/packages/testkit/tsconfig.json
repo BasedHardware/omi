@@ -22,6 +22,9 @@
     },
     {
       "path": "../adapters-legacy"
+    },
+    {
+      "path": "../domain"
     }
   ]
 }
