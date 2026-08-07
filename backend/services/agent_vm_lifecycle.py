@@ -1469,9 +1469,8 @@ class GceAgentVmClient:
         first = interfaces[0] if isinstance(interfaces, list) and interfaces else None
         if not isinstance(first, Mapping) or not isinstance(first.get("network"), str):
             raise RuntimeError("predecessor network is unavailable")
-        interface: dict[str, Any] = {"network": first["network"]}
-        if isinstance(first.get("subnetwork"), str):
-            interface["subnetwork"] = first["subnetwork"]
+        subnet = first.get("subnetwork")
+        interface: dict[str, Any] = {"subnetwork": subnet} if isinstance(subnet, str) else {"network": first["network"]}
         if isinstance(first.get("accessConfigs"), list) and first["accessConfigs"]:
             interface["accessConfigs"] = [{"type": "ONE_TO_ONE_NAT", "name": "External NAT"}]
         predecessor_id = str(predecessor.get("id") or "")

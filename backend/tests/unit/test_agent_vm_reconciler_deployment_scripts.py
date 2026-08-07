@@ -147,14 +147,18 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
     assert "REFUSED:" in script
     assert (
-        "compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop,compute.subnetworks.use,compute.subnetworks.useExternalIp"
+        "compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
         in script
     )
+    assert 'subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"' in script
     assert "Agent VM reconciler instance scope" in script
     assert "Agent VM reconciler disk scope" in script
     assert "compute.googleapis.com/Disk" in script
     assert "disks/omi-agent-" in script
     assert "instances/omi-agent-" in script
+    assert "compute networks subnets add-iam-policy-binding default" in script
+    assert '--region="$region"' in script
+    assert '--role="$subnetwork_role"' in script
     assert "roles/storage.objectViewer" in script
     assert "roles/iam.serviceAccountUser" in script
     assert 'AGENT_VM_RECONCILER_DEPLOYER:-}' in script
@@ -232,6 +236,11 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "--role=projects/based-hardware-dev/roles/omiAgentVmReconcilerOperations --condition=None"
     ) in commands
     assert (
+        "compute networks subnets add-iam-policy-binding default --project=based-hardware-dev --region=us-central1 "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=projects/based-hardware-dev/roles/omiAgentVmReconcilerSubnetwork"
+    ) in commands
+    assert (
         "projects add-iam-policy-binding based-hardware-dev "
         "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
         "--role=roles/datastore.user --condition=None"
@@ -255,7 +264,9 @@ def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(t
 def test_dev_migration_activation_verifies_bucket_project_and_previous_snapshot():
     script = BACKEND_DIR / "scripts" / "activate-agent-vm-dev-migration.sh"
     text = script.read_text(encoding="utf-8")
-    assert "gcloud storage buckets describe" in text
+    assert "gcloud projects describe" in text
+    assert "https://storage.googleapis.com/storage/v1/b/" in text
+    assert "projectNumber" in text
     assert "refusing cross-environment activation" in text
     assert "previous.json" in text
     assert "rollback" in text or "Snapshot" in text or "snapshot" in text
