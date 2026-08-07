@@ -60,6 +60,34 @@ final class QueryShellTests: XCTestCase {
     }
   }
 
+  // MARK: - Where the composer stands
+
+  /// **A chat you have opened is not searching.** The field belongs above the rows it filters and
+  /// under the transcript it is replying to, and this is the one function that decides which — so
+  /// the chrome the composer draws and the room the panel reserves for it cannot describe two
+  /// different arrangements.
+  func testSearchingPutsTheComposerAboveThePanelAndChattingPutsItInside() {
+    XCTAssertEqual(QueryComposerPlacement.of(.results), .hero)
+    XCTAssertEqual(QueryComposerPlacement.of(.answer), .panelFooter)
+  }
+
+  /// The two placements rest at different heights on purpose: the hero is a place to type, the
+  /// in-panel composer is a chat input. A single resting height for both means one of them is
+  /// wearing the other's chrome.
+  func testTheTwoPlacementsRestAtTheirOwnHeights() {
+    XCTAssertEqual(
+      QueryShellLayout.composerContainerMinHeight(placement: .hero), QueryShellLayout.barMinHeight)
+    XCTAssertEqual(
+      QueryShellLayout.composerContainerMinHeight(placement: .panelFooter),
+      QueryShellLayout.panelComposerMinHeight)
+    XCTAssertLessThan(
+      QueryShellLayout.panelComposerMinHeight, QueryShellLayout.barMinHeight,
+      "the composer inside the panel must not be as tall as the hero bar it replaced")
+    XCTAssertLessThan(
+      QueryShellLayout.panelComposerFontSize, QueryShellLayout.queryFontSize,
+      "a query face under a conversation reads as a headline stacked on the end of it")
+  }
+
   // MARK: - The gap
 
   /// The single most important number on the surface: two panels 12 pt apart read as two objects,

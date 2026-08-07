@@ -125,14 +125,53 @@ final class ChatSurfaceBoundsTests: XCTestCase {
     for page in pageHeights(windowHeights: [ShellSummonPlacement.defaultSize.height, DesktopWindowLayoutPolicy.height])
     {
       for mode in [QueryShellMode.results, .answer] {
+        let composer = restingComposerHeight(mode: mode)
         let body = QueryShellLayout.panelBodyHeight(
-          availableHeight: page, heroBarHeight: QueryShellLayout.barMinHeight, mode: mode)
+          availableHeight: page, composerHeight: composer, mode: mode)
         XCTAssertLessThanOrEqual(
-          surfaceHeight(bodyHeight: body, heroBarHeight: QueryShellLayout.barMinHeight, mode: mode),
+          surfaceHeight(bodyHeight: body, composerHeight: composer, mode: mode),
           page,
           "the \(mode) panel still runs off a \(page) pt page")
       }
     }
+  }
+
+  /// **The composer is paid for exactly once, on the side of the panel it is standing on.**
+  ///
+  /// Searching pays for it above the panel: the hero bar plus the 12 pt of air under it. Chatting
+  /// pays for it inside, under the transcript, and pays nothing above — the bar is not there. Charge
+  /// it in both places and the panel stops short of the window; charge it in neither and you get the
+  /// overflow the three tests around this one exist for.
+  func testTheComposerIsPaidForOnTheSideOfThePanelItStandsOn() {
+    for page in pageHeights(windowHeights: [ShellSummonPlacement.defaultSize.height, DesktopWindowLayoutPolicy.height])
+    {
+      for mode in [QueryShellMode.results, .answer] {
+        let composer = restingComposerHeight(mode: mode)
+        let body = QueryShellLayout.panelBodyHeight(
+          availableHeight: page, composerHeight: composer, mode: mode)
+        XCTAssertEqual(
+          surfaceHeight(bodyHeight: body, composerHeight: composer, mode: mode), page,
+          accuracy: 0.5,
+          "the \(mode) surface leaves part of a \(page) pt page unspent")
+      }
+    }
+  }
+
+  /// **Opening chat spends the search bar's room on the conversation.** The bar and the gap under it
+  /// are 76 pt that stop existing; the composer costs 54 back inside the panel, so the transcript is
+  /// strictly better off than the list it replaced. If this ever inverts, the composer is being
+  /// reserved twice.
+  func testOpeningChatLeavesTheTranscriptMoreRoomThanTheListHad() {
+    let page = pageHeights(windowHeights: [ShellSummonPlacement.defaultSize.height])[0]
+
+    let list = QueryShellLayout.panelBodyHeight(
+      availableHeight: page, composerHeight: restingComposerHeight(mode: .results), mode: .results)
+    let chat = QueryShellLayout.panelBodyHeight(
+      availableHeight: page, composerHeight: restingComposerHeight(mode: .answer), mode: .answer)
+
+    XCTAssertGreaterThan(
+      chat, list,
+      "the conversation has less room than the list did — the hero bar is still being reserved for")
   }
 
   /// A staged file makes the bar taller. Reserving its resting height instead of its real one is how
@@ -142,36 +181,71 @@ final class ChatSurfaceBoundsTests: XCTestCase {
     let grown = QueryShellLayout.barMinHeight + 72
 
     let resting = QueryShellLayout.panelBodyHeight(
-      availableHeight: page, heroBarHeight: QueryShellLayout.barMinHeight, mode: .results)
+      availableHeight: page, composerHeight: QueryShellLayout.barMinHeight, mode: .results)
     let withAttachments = QueryShellLayout.panelBodyHeight(
-      availableHeight: page, heroBarHeight: grown, mode: .results)
+      availableHeight: page, composerHeight: grown, mode: .results)
 
     XCTAssertLessThan(withAttachments, resting)
     XCTAssertLessThanOrEqual(
-      surfaceHeight(bodyHeight: withAttachments, heroBarHeight: grown, mode: .results), page)
+      surfaceHeight(bodyHeight: withAttachments, composerHeight: grown, mode: .results), page)
+  }
+
+  /// The same rule from inside the panel: a five-line follow-up grows the composer, and that growth
+  /// has to come out of the transcript above it rather than off the bottom of the window. This is the
+  /// one the move actually risks — the composer is now *below* the thing whose height it changes.
+  func testAGrownInPanelComposerTakesItsSpaceFromTheTranscript() {
+    let page = pageHeights(windowHeights: [ShellSummonPlacement.defaultSize.height])[0]
+    let grown = QueryShellLayout.panelComposerMinHeight + 72
+
+    let resting = QueryShellLayout.panelBodyHeight(
+      availableHeight: page, composerHeight: restingComposerHeight(mode: .answer), mode: .answer)
+    let withLongDraft = QueryShellLayout.panelBodyHeight(
+      availableHeight: page, composerHeight: grown, mode: .answer)
+
+    XCTAssertLessThan(withLongDraft, resting)
+    XCTAssertLessThanOrEqual(
+      surfaceHeight(bodyHeight: withLongDraft, composerHeight: grown, mode: .answer), page)
   }
 
   /// The floor and the ceiling both still hold: a window too short for a panel gets a short panel
   /// rather than a negative one, and a tall display does not turn the second object on Home into the
   /// whole surface.
   func testTheBodyStaysBetweenItsFloorAndItsCeiling() {
-    XCTAssertEqual(
-      QueryShellLayout.panelBodyHeight(
-        availableHeight: 120, heroBarHeight: QueryShellLayout.barMinHeight, mode: .results),
-      QueryShellLayout.minimumBodyHeight)
-    XCTAssertEqual(
-      QueryShellLayout.panelBodyHeight(
-        availableHeight: 4000, heroBarHeight: QueryShellLayout.barMinHeight, mode: .results),
-      QueryShellLayout.maximumBodyHeight)
+    for mode in [QueryShellMode.results, .answer] {
+      let composer = restingComposerHeight(mode: mode)
+      XCTAssertEqual(
+        QueryShellLayout.panelBodyHeight(
+          availableHeight: 120, composerHeight: composer, mode: mode),
+        QueryShellLayout.minimumBodyHeight)
+      XCTAssertEqual(
+        QueryShellLayout.panelBodyHeight(
+          availableHeight: 4000, composerHeight: composer, mode: mode),
+        QueryShellLayout.maximumBodyHeight)
+    }
   }
 
-  /// Answer mode drops the type chips, so it has more room for the transcript than the list has for
-  /// its rows. The chrome measurement is what makes that true rather than a coincidence.
-  func testAnswerModeSpendsTheTypeChipsRowOnTheTranscript() {
+  /// Answer mode drops the type chips — there is nothing to narrow by type in a conversation — and
+  /// spends that row, plus the room the hero bar gave back, on the composer it now holds.
+  func testAnswerModeTradesTheTypeChipsRowForTheComposerItNowHolds() {
+    let composer = QueryShellLayout.panelComposerMinHeight
+    let list = QueryShellLayout.panelChromeHeight(mode: .results, composerHeight: composer)
+    let chat = QueryShellLayout.panelChromeHeight(mode: .answer, composerHeight: composer)
+
     XCTAssertEqual(
-      QueryShellLayout.panelChromeHeight(mode: .results)
-        - QueryShellLayout.panelChromeHeight(mode: .answer),
-      QueryShellLayout.chipHeight + QueryShellLayout.panelHeaderSpacing)
+      chat - list,
+      composer + QueryShellLayout.panelHeaderSpacing
+        - (QueryShellLayout.chipHeight + QueryShellLayout.panelHeaderSpacing),
+      "the conversation's chrome is the list's, less the chips, plus the composer")
+    XCTAssertGreaterThan(chat, list, "a panel that now holds a composer costs more chrome, not less")
+  }
+
+  /// The list's panel holds no composer, so its chrome must not move when one grows. Reading the
+  /// measured height in both modes is the mistake this guards: it would shrink the spine's rows every
+  /// time somebody typed a long question and went back to the list.
+  func testTheListsPanelReservesNothingForAComposerItDoesNotHold() {
+    XCTAssertEqual(
+      QueryShellLayout.panelChromeHeight(mode: .results, composerHeight: 240),
+      QueryShellLayout.panelChromeHeight(mode: .results, composerHeight: 0))
   }
 
   /// What Home's `GeometryReader` is actually handed: the window's content height less the traffic
@@ -182,11 +256,20 @@ final class ChatSurfaceBoundsTests: XCTestCase {
     return windowHeights.map { $0 - chrome }
   }
 
-  /// The whole surface, bottom to top, for a given body height.
-  private func surfaceHeight(bodyHeight: CGFloat, heroBarHeight: CGFloat, mode: QueryShellMode)
+  /// What the composer measures at rest wherever this mode puts it.
+  private func restingComposerHeight(mode: QueryShellMode) -> CGFloat {
+    QueryShellLayout.composerContainerMinHeight(placement: QueryComposerPlacement.of(mode))
+  }
+
+  /// The whole surface, bottom to top, for a given body height — including the hero bar and its gap
+  /// only in the mode that actually draws them.
+  private func surfaceHeight(bodyHeight: CGFloat, composerHeight: CGFloat, mode: QueryShellMode)
     -> CGFloat
   {
-    QueryShellLayout.surfaceTopInset + heroBarHeight + QueryShellLayout.panelGap
-      + QueryShellLayout.panelChromeHeight(mode: mode) + bodyHeight
+    let above =
+      QueryShellLayout.surfaceTopInset
+      + (QueryComposerPlacement.of(mode) == .hero ? composerHeight + QueryShellLayout.panelGap : 0)
+    return above
+      + QueryShellLayout.panelChromeHeight(mode: mode, composerHeight: composerHeight) + bodyHeight
   }
 }

@@ -53,7 +53,7 @@ extension View {
   }
 }
 
-struct QueryResultsPanel<Content: View, Accessory: View>: View {
+struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   @Binding var request: QueryShellRequest
   let mode: QueryShellMode
   /// The whole corpus, for the resting sentence. Nil while it is still being counted, which reads as
@@ -75,6 +75,13 @@ struct QueryResultsPanel<Content: View, Accessory: View>: View {
   /// hand this file a `HomeChatMenu`, which would make a panel that draws counts and time windows
   /// start knowing what chat is.
   @ViewBuilder var headerAccessory: () -> Accessory
+  /// **The slot under the body, for the composer once a conversation is open.**
+  ///
+  /// The chrome still learns nothing about the body or about chat: it knows there is something the
+  /// host wants pinned under the content and that the content's height was already reserved for it
+  /// (`QueryShellLayout.panelChromeHeight`). Empty on the list, where the field belongs above the
+  /// rows it filters. See `QueryComposerPlacement`.
+  @ViewBuilder var footer: () -> Footer
   @ViewBuilder var content: () -> Content
 
   @State private var matching: Int = 0
@@ -93,6 +100,7 @@ struct QueryResultsPanel<Content: View, Accessory: View>: View {
         )
         .onPreferenceChange(QueryShellMatchCount.self) { matching = $0 }
         .onPreferenceChange(QueryShellCorpusSettled.self) { corpusSettled = $0 }
+      footer()
     }
     .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
     .padding(.top, QueryShellLayout.panelPaddingTop)
@@ -174,7 +182,9 @@ struct QueryResultsPanel<Content: View, Accessory: View>: View {
       .glassChip(isActive: false)
     }
     .buttonStyle(.plain)
-    .help("Back to what you captured")
+    // The key is named here because the composer under the transcript no longer advertises it: a
+    // chat composer with an `esc Results` hint in it is a search control on a conversation.
+    .help("Back to what you captured — esc")
     .accessibilityIdentifier("query-shell-exit-answer")
   }
 

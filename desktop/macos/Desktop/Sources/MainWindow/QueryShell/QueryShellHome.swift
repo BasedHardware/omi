@@ -1,9 +1,14 @@
 //
 //  QueryShellHome.swift — Home, as a search surface.
 //
-//  **Two glass objects with twelve points of air between them**: a bar you type into, and a panel that
-//  answers. That gap is the design. Welded into one slab the surface reads as a form; apart, it reads
-//  as a query pointed at a corpus, which is what it is.
+//  **While you are searching: two glass objects with twelve points of air between them** — a bar you
+//  type into, and a panel that answers. That gap is the design. Welded into one slab the surface reads
+//  as a form; apart, it reads as a query pointed at a corpus, which is what it is.
+//
+//  **Once a conversation is open: one panel.** The bar comes down inside it and pins itself under the
+//  transcript, and the search affordance goes with it — a chat you have already opened is not
+//  searching, and an input above the thing it is replying to is not a chat. The top bar is untouched
+//  either way. It is the same composer in both, not two (`QueryComposerPlacement`).
 //
 //  Home was a hub of widgets with a chat under it. Search absorbs the hub — you do not browse a
 //  destination called Memory when the field in front of you already returns memories — so what is left
@@ -60,14 +65,16 @@ struct QueryShellHome: View {
   /// The last question that actually went. `Try again` re-sends *that* — the composer is emptied by
   /// the send now, so re-reading the bar would retry an empty string.
   @State private var lastAskedQuestion = ""
-  /// The hero bar's measured height, so the panel under it can end inside the window.
+  /// The composer's measured height, so the panel's body can end inside the window.
   ///
-  /// Measured rather than assumed: the bar is `barMinHeight` at rest but grows with a staged-file row
-  /// and with the reader's font scale, and a reserve that ignores that is a reserve that puts the
-  /// panel back off the bottom edge the first time somebody drops a file on it. The reporter is a
-  /// `background` `GeometryReader`, which cannot affect layout, and the value it feeds only ever flows
-  /// *downwards* — the bar's height never depends on the panel's — so there is no measurement loop.
-  @State private var heroBarHeight: CGFloat = QueryShellLayout.barMinHeight
+  /// Measured rather than assumed: the composer is at its resting height most of the time but grows
+  /// with a staged-file row, with a second line of draft and with the reader's font scale, and a
+  /// reserve that ignores that is a reserve that puts the panel back off the bottom edge the first
+  /// time somebody drops a file on it. The reporter is a `background` `GeometryReader`, which cannot
+  /// affect layout, and the value it feeds only ever flows *downwards* — the composer's height never
+  /// depends on the panel's — so there is no measurement loop. One state for both placements, because
+  /// there is only ever one composer on screen (`QueryComposerPlacement`).
+  @State private var composerHeight: CGFloat = QueryShellLayout.barMinHeight
   /// **The caret, as a claim rather than a flag.** Monotonic, and every increment lands the caret in
   /// the bar. `@FocusState` cannot do that job any more: the field is an `NSTextView` that SwiftUI's
   /// `.focused()` does not reach, and a flag already `true` could never re-claim a caret AppKit had
@@ -95,30 +102,19 @@ struct QueryShellHome: View {
       let lane = QueryShellLayout.laneWidth(for: proxy.size.width)
       let bodyHeight = QueryShellLayout.panelBodyHeight(
         availableHeight: proxy.size.height,
-        heroBarHeight: heroBarHeight,
+        composerHeight: composerHeight,
         mode: mode)
       // **Only this column is woken by a keystroke.** The composer draft is not published on
       // `ChatProvider` (see `ChatComposerDraft`), so subscribing to it here keeps typing out of the
       // shell and the transcript while still giving the bar — and the list it filters — the live text.
       ChatDraftScope(draft: chatProvider.composerDraft) { draft in
         VStack(spacing: QueryShellLayout.panelGap) {
-          QueryHeroBar(
-            text: draft,
-            caretClaim: caretClaims,
-            isWorking: chatProvider.isSending,
-            isStopping: chatProvider.isStopping,
-            mode: mode,
-            attachments: chatProvider.pendingAttachments,
-            onSearch: search,
-            onAsk: ask,
-            onStop: { chatProvider.stopAgent(owner: .mainChat) },
-            onAttachmentsAdded: stageAttachments,
-            onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) }
-          )
-          .background {
-            GeometryReader { bar in
-              Color.clear.preference(key: QueryHeroBarHeightKey.self, value: bar.size.height)
-            }
+          // **The search bar exists while you are searching.** In answer mode it is not hidden,
+          // moved or restyled in place — the same view is mounted inside the panel below instead, so
+          // the surface reads as one chat window with its input under the transcript rather than as
+          // a conversation with a search field parked on top of it.
+          if QueryComposerPlacement.of(mode) == .hero {
+            composerBar(draft: draft)
           }
           QueryResultsPanel(
             request: requestBinding(text: draft),
@@ -126,15 +122,20 @@ struct QueryShellHome: View {
             total: total,
             onExitAnswer: { showResults() },
             bodyHeight: bodyHeight,
-            headerAccessory: { headerAccessory }
+            headerAccessory: { headerAccessory },
+            footer: {
+              if QueryComposerPlacement.of(mode) == .panelFooter {
+                composerBar(draft: draft)
+              }
+            }
           ) {
             panelBody(request: QueryShellRequest(text: draft.wrappedValue, filters: filters))
           }
           Spacer(minLength: 0)
         }
-        .onPreferenceChange(QueryHeroBarHeightKey.self) { measured in
-          guard measured > 0, measured != heroBarHeight else { return }
-          heroBarHeight = measured
+        .onPreferenceChange(QueryComposerHeightKey.self) { measured in
+          guard measured > 0, measured != composerHeight else { return }
+          composerHeight = measured
         }
         .frame(width: lane)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -212,6 +213,35 @@ struct QueryShellHome: View {
     // off screen mid-edit, and the composer could never be cleared by the send either. `esc Results`
     // on the bar and `‹ Results` in the panel header are the two labelled ways out, and they are the
     // only two. See `QueryShellSubmission`.
+  }
+
+  /// **The one composer, built once and mounted wherever the mode puts it.**
+  ///
+  /// Two call sites, one function: a second `QueryHeroBar(...)` written out for the panel would be a
+  /// second set of closures wired to the same provider, and the first thing to drift would be which
+  /// of them still stages an attachment or still stops a turn. The caret claim, the draft binding and
+  /// the send are the same values in both placements — only `mode` differs, and it is read rather
+  /// than passed.
+  @ViewBuilder
+  private func composerBar(draft: Binding<String>) -> some View {
+    QueryHeroBar(
+      text: draft,
+      caretClaim: caretClaims,
+      isWorking: chatProvider.isSending,
+      isStopping: chatProvider.isStopping,
+      mode: mode,
+      attachments: chatProvider.pendingAttachments,
+      onSearch: search,
+      onAsk: ask,
+      onStop: { chatProvider.stopAgent(owner: .mainChat) },
+      onAttachmentsAdded: stageAttachments,
+      onAttachmentRemoved: { chatProvider.removePendingAttachment(id: $0) }
+    )
+    .background {
+      GeometryReader { composer in
+        Color.clear.preference(key: QueryComposerHeightKey.self, value: composer.size.height)
+      }
+    }
   }
 
   /// The seam value the panel and its body are handed, **assembled rather than stored**: the text
@@ -511,12 +541,13 @@ struct QueryShellHome: View {
   }
 }
 
-/// The hero bar's height, reported up to the surface that has to fit a panel underneath it.
+/// The composer's height, reported up to the surface that has to fit a panel around it.
 ///
-/// `max` rather than last-writer-wins: the bar reports once, but a preference that reduced to the
-/// newest value would let a transient zero from a view being torn down shrink the reserve and let the
+/// `max` rather than last-writer-wins: only one composer is mounted at a time, but a preference that
+/// reduced to the newest value would let a transient zero from a view being torn down — which is
+/// exactly what a mode change does to the placement it is leaving — shrink the reserve and let the
 /// panel run off the window for a frame.
-private struct QueryHeroBarHeightKey: PreferenceKey {
+private struct QueryComposerHeightKey: PreferenceKey {
   static let defaultValue: CGFloat = 0
   static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
     value = max(value, nextValue())

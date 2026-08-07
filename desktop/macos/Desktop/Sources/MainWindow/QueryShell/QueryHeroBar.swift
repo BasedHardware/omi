@@ -1,9 +1,18 @@
 //
-//  QueryHeroBar.swift — the hero: one field that searches, asks, or listens.
+//  QueryHeroBar.swift — one field that searches, asks, or listens, standing wherever the mode needs
+//  it.
 //
-//  It is the *first* of the surface's two glass objects and it is deliberately not welded to the
-//  second. A place you type and a place you look are different in kind; drawn as one tall block with a
-//  rule across it they claim to be the same object, and the surface stops reading as search.
+//  While you are searching it is the *first* of the surface's two glass objects, deliberately not
+//  welded to the second. A place you type and a place you look are different in kind; drawn as one
+//  tall block with a rule across it they claim to be the same object, and the surface stops reading
+//  as search.
+//
+//  **Once a conversation is open that arrangement is the wrong one, so this view moves.** In answer
+//  mode it is rendered *inside* the results panel, pinned under the transcript, wearing the app's
+//  shared `chatComposerShell` instead of its own glass — which is what every other chat in the world
+//  looks like, and what the person using this one asked for. It is the same view rather than a second
+//  composer: one `OmiTextEditor`, one `ChatProvider` draft, one caret claim, one send (INV-6). See
+//  `QueryComposerPlacement` for what the two placements actually differ by.
 //
 //  The two keyboard hints are real buttons, not legends. A hint that tells you about a key you could
 //  press but does nothing when you click it is the most reliably annoying control a search bar can
@@ -54,9 +63,10 @@ struct QueryHeroBar: View {
   let isWorking: Bool
   /// Stop has been asked for and the runtime has not finished unwinding yet.
   var isStopping: Bool = false
-  /// The bar is the same object in both modes; only what `⏎` means changes. While an answer is on
-  /// screen the plain key continues the thread, because a bare Return that quietly went back to
-  /// filtering would throw away what you were in the middle of asking.
+  /// The bar is the same object in both modes; what changes is where it stands and what `⏎` means.
+  /// While an answer is on screen the plain key **sends** — it continues the thread, because a bare
+  /// Return that quietly went back to filtering would throw away what you were in the middle of
+  /// asking, and because in chat mode there is no search bar left for it to mean anything else in.
   let mode: QueryShellMode
   /// Files staged for the next send. Owned by `ChatProvider.pendingAttachments`; this bar only draws
   /// them, so a file staged by the automation bridge or by a drop on the floating bar shows up here.
@@ -73,7 +83,67 @@ struct QueryHeroBar: View {
   @State private var hasMarkedText = false
   @Environment(\.fontScale) private var fontScale
 
+  /// One decision, taken in one place (`QueryComposerPlacement.of`), so the chrome this view draws
+  /// and the room `QueryShellLayout` reserves for it can never describe different arrangements.
+  private var placement: QueryComposerPlacement { .of(mode) }
+
   var body: some View {
+    ground
+      // **The composer is sized by what is in it; the panel is the flexible one.** Without this the
+      // column squeezes it — which has a range now that the editor grows — down to whatever is left
+      // after the results panel has taken its share, while the editor inside keeps the height it
+      // asked for and draws straight through the glass edge. Worse, the height the surface then
+      // *measures* off this view is the squeezed one, so the panel's own reserve is computed from a
+      // number this view never wanted, and the two settle on a wrong answer that neither can leave.
+      // `ChatInputView` pins itself the same way, for the same reason.
+      .fixedSize(horizontal: false, vertical: true)
+      .frame(maxWidth: .infinity)
+      .overlay(
+        RoundedRectangle(cornerRadius: groundCornerRadius, style: .continuous)
+          .strokeBorder(isDropTargeted ? Ink.accent : .clear, lineWidth: 2)
+      )
+      // Dropping onto the composer is the same staging path as the paperclip: both end at
+      // `ChatProvider.addAttachments`, which is what enforces the count cap.
+      .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
+    // **No tap gesture on the row itself.** A `contentShape` + `onTapGesture` wrapped around the
+    // whole row is the outermost gesture, so it wins over the buttons inside it: the first version
+    // of this focused the field on every click and the `⌘⏎ Ask` button was unpressable. The field
+    // already fills the space between the mark and the hints, so clicking the row focuses it anyway.
+  }
+
+  /// The one thing the two placements really disagree about: what they are standing on.
+  ///
+  /// `hero` is a glass object in its own right, with the surface's corner and its ambient shadow.
+  /// `panelFooter` is already *on* glass — it sits inside the results panel — so a second sheet of
+  /// it there would read as a panel inside a panel. It wears the app's shared composer shell
+  /// instead, which is the ground every other composer in this app sits on.
+  @ViewBuilder
+  private var ground: some View {
+    switch placement {
+    case .hero:
+      stack
+        .padding(.horizontal, QueryShellLayout.barPaddingHorizontal)
+        .padding(.vertical, QueryShellLayout.barPaddingVertical)
+        .frame(minHeight: QueryShellLayout.barMinHeight)
+        .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
+    case .panelFooter:
+      stack
+        .frame(
+          minHeight: QueryShellLayout.panelComposerMinHeight
+            - ChatComposerLayout.shellInset * 2
+        )
+        .chatComposerShell()
+    }
+  }
+
+  private var groundCornerRadius: CGFloat {
+    switch placement {
+    case .hero: return QueryShellLayout.panelCornerRadius
+    case .panelFooter: return ChatComposerLayout.shellRadius
+    }
+  }
+
+  private var stack: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       if !attachments.isEmpty {
         AttachmentPreviewRow(attachments: attachments, onRemove: onAttachmentRemoved)
@@ -81,42 +151,29 @@ struct QueryHeroBar: View {
       }
       inputRow
     }
-    .padding(.horizontal, QueryShellLayout.barPaddingHorizontal)
-    .padding(.vertical, QueryShellLayout.barPaddingVertical)
-    .frame(minHeight: QueryShellLayout.barMinHeight)
-    // **The bar is sized by what is in it; the panel below is the flexible one.** Without this the
-    // column squeezes the bar — which has a range now that the composer grows — down to whatever is
-    // left after the results panel has taken its share, while the composer inside keeps the height it
-    // asked for and draws straight through the glass edge. Worse, the height the surface then
-    // *measures* off this bar is the squeezed one, so the panel's own reserve is computed from a
-    // number the bar never wanted, and the two settle on a wrong answer that neither can leave.
-    // `ChatInputView` pins itself the same way, for the same reason.
-    .fixedSize(horizontal: false, vertical: true)
-    .frame(maxWidth: .infinity)
-    .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
-    .overlay(
-      RoundedRectangle(cornerRadius: QueryShellLayout.panelCornerRadius, style: .continuous)
-        .strokeBorder(isDropTargeted ? Ink.accent : .clear, lineWidth: 2)
-    )
-    // Dropping onto the bar is the same staging path as the paperclip: both end at
-    // `ChatProvider.addAttachments`, which is what enforces the count cap.
-    .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
-    // **No tap gesture on the bar itself.** A `contentShape` + `onTapGesture` wrapped around the
-    // whole row is the outermost gesture, so it wins over the buttons inside it: the first version
-    // of this focused the field on every click and the `⌘⏎ Ask` button was unpressable. The field
-    // already fills the space between the mark and the hints, so clicking the bar focuses it anyway.
   }
 
   private var inputRow: some View {
-    HStack(spacing: 14) {
-      OmiQueryDotMark(diameter: QueryShellLayout.markDiameter, isWorking: isWorking)
+    HStack(spacing: rowSpacing) {
+      // The query mark belongs to the query. Inside the panel the transcript is already the record
+      // of what was asked, and a second animated mark under it is one identity mark too many — the
+      // assistant's own is drawn in the transcript's gutter a few points above.
+      if placement == .hero {
+        OmiQueryDotMark(diameter: QueryShellLayout.markDiameter, isWorking: isWorking)
+      }
 
       composer
 
       attachButton
 
-      QueryKeyHint(label: searchHintLabel, isAccented: false, action: onSearch)
-        .accessibilityIdentifier("query-shell-search-hint")
+      // **The search affordance is the search surface's.** In chat mode there is no list under this
+      // composer to filter, so `⏎ Search` would be a key that does nothing, and `esc Results` would
+      // be a second way out sitting 12 pt under the `‹ Results` chip the panel header already has.
+      // Escape still leaves — `QueryShellHome` owns that key, not this label.
+      if placement == .hero {
+        QueryKeyHint(label: searchHintLabel, isAccented: false, action: onSearch)
+          .accessibilityIdentifier("query-shell-search-hint")
+      }
 
       // Same slot, same weight. A primary that thins out the moment a turn starts is a button that
       // disappears exactly when it starts to matter — `HomeAskBarControls` already states this rule
@@ -128,20 +185,26 @@ struct QueryHeroBar: View {
           .accessibilityLabel("Stop response")
           .help("Stop this response")
       } else {
-        QueryKeyHint(label: "⌘⏎ Ask", isAccented: true, action: onAsk)
+        QueryKeyHint(label: submitHintLabel, isAccented: true, action: onAsk)
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("query-shell-ask-hint")
       }
 
       // The resting disc under it: the mic button draws nothing at rest by design (it also lives on
-      // the notch's black glass), and on this bar it is the only round target, so it needs a ground
-      // to read as a button before you hover it.
+      // the notch's black glass), and here it is the only round target, so it needs a ground to read
+      // as a button before you hover it.
       PushToTalkMicButton(
         diameter: QueryShellLayout.micDiameter, glyphSize: OmiType.subheading
       )
       .background(Circle().fill(Ink.rowFill))
       .accessibilityIdentifier("query-shell-push-to-talk")
     }
+  }
+
+  /// The hero's row is set at the query face and can afford 14 pt between its controls; the panel's
+  /// is set at the chat face inside a tighter shell, so it uses the app's own composer gap.
+  private var rowSpacing: CGFloat {
+    placement == .hero ? 14 : OmiSpacing.sm
   }
 
   /// **The field, grown into a composer.**
@@ -163,7 +226,7 @@ struct QueryHeroBar: View {
   private var composer: some View {
     OmiTextEditor(
       text: $text,
-      fontSize: round(QueryShellLayout.queryFontSize * fontScale),
+      fontSize: round(fontSize * fontScale),
       textColor: Ink.nsPrimaryOnGlass,
       // Bare Return only. **A Command-modified key never reaches here** — AppKit routes it to
       // key-equivalent handling first — so `⌘⏎` is a real `keyboardShortcut` on the Ask button below
@@ -176,14 +239,14 @@ struct QueryHeroBar: View {
       focusOnAppear: false,
       onMarkedTextChange: { hasMarkedText = $0 },
       focusRequest: caretClaim,
-      minHeight: QueryShellLayout.composerMinHeight,
-      maxHeight: QueryShellLayout.composerMaxHeight
+      minHeight: minEditorHeight,
+      maxHeight: maxEditorHeight
     )
     .frame(maxWidth: .infinity)
     .overlay(alignment: .topLeading) {
       if text.isEmpty && !hasMarkedText {
         Text(placeholder)
-          .scaledFont(size: QueryShellLayout.queryFontSize, weight: .medium)
+          .scaledFont(size: fontSize, weight: .medium)
           .foregroundStyle(Ink.secondary)
           // Matches `textContainerInset` exactly, so the placeholder sits where the caret will.
           .padding(.vertical, QueryShellLayout.composerInsetVertical)
@@ -194,8 +257,13 @@ struct QueryHeroBar: View {
     .accessibilityLabel(Text(placeholder))
   }
 
-  /// `⏎` in the composer means whatever the bar's own hint says it means, so the key and the label
-  /// cannot disagree. `⌘⏎` never arrives here.
+  /// `⏎` in the composer means whatever this row's own accented hint says it means, so the key and
+  /// the label cannot disagree. `⌘⏎` never arrives here.
+  ///
+  /// On the hero it searches, because the list under it is already filtering as you type and the
+  /// plain key is how you commit to that. In the panel it **sends** — the composer is under a
+  /// transcript, there is no list left to filter, and the one thing a chat composer's Return has ever
+  /// meant is "send this".
   private func submitFromReturnKey() {
     switch QueryShellSubmit.resolve(text: text, commandHeld: mode == .answer) {
     case .ask: onAsk()
@@ -223,8 +291,27 @@ struct QueryHeroBar: View {
     mode == .answer ? "Ask a follow-up…" : RewindSearchMetrics.placeholder
   }
 
-  private var searchHintLabel: String {
-    mode == .answer ? "esc Results" : "⏎ Search"
+  private var searchHintLabel: String { "⏎ Search" }
+
+  /// The accented key, named for what it actually does where it is standing. `⌘⏎` still works in
+  /// both — it is the `keyboardShortcut` on this button — but in the panel the bare key does the same
+  /// thing, so labelling it `⌘⏎` would advertise the harder of two identical routes.
+  private var submitHintLabel: String {
+    placement == .hero ? "⌘⏎ Ask" : "⏎ Send"
+  }
+
+  private var fontSize: CGFloat {
+    placement == .hero ? QueryShellLayout.queryFontSize : QueryShellLayout.panelComposerFontSize
+  }
+
+  private var minEditorHeight: CGFloat {
+    placement == .hero
+      ? QueryShellLayout.composerMinHeight : QueryShellLayout.panelComposerMinEditorHeight
+  }
+
+  private var maxEditorHeight: CGFloat {
+    placement == .hero
+      ? QueryShellLayout.composerMaxHeight : QueryShellLayout.panelComposerMaxEditorHeight
   }
 
   /// The same content types `ChatInputView` accepts — one composer vocabulary, not two.

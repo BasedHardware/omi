@@ -149,16 +149,82 @@ final class QueryComposerTests: XCTestCase {
   }
 
   /// The line height the growth arithmetic is built on, checked against the platform's own metrics
-  /// for the bar's face rather than left as a number somebody once measured by eye.
-  func testTheComposersLineHeightIsTheOneTheQueryFaceActuallyLaysOut() {
+  /// for each face the composer is set in rather than left as a number somebody once measured by eye.
+  func testTheComposersLineHeightsAreTheOnesTheseFacesActuallyLayOut() {
     let layoutManager = NSLayoutManager()
-    let platform = layoutManager.defaultLineHeight(
-      for: .systemFont(ofSize: QueryShellLayout.queryFontSize))
 
     XCTAssertEqual(
-      QueryShellLayout.composerLineHeight, platform,
+      QueryShellLayout.composerLineHeight,
+      layoutManager.defaultLineHeight(for: .systemFont(ofSize: QueryShellLayout.queryFontSize)),
       "composerLineHeight has drifted from the line NSLayoutManager actually lays out — the ceiling "
         + "is a whole number of these, so an approximation shows as a half-drawn line at the glass edge")
+    XCTAssertEqual(
+      QueryShellLayout.panelComposerLineHeight,
+      layoutManager.defaultLineHeight(
+        for: .systemFont(ofSize: QueryShellLayout.panelComposerFontSize)),
+      "the in-panel composer's line height has drifted from its own face")
+  }
+
+  // MARK: - The composer inside the panel
+
+  /// **The chat composer is the same composer.** One `OmiTextEditor` over one `ChatProvider` draft,
+  /// mounted in the panel instead of above it — so the bridge's `set_chat_drafts` still lands in the
+  /// field the reader is looking at, which is the whole defect this file was opened for. A second
+  /// composer written for chat mode is how that comes back.
+  func testTheInPanelComposerDrawsTheSameOneDraft() throws {
+    let composer = try Composer(mode: .answer)
+    defer { composer.tearDown() }
+
+    composer.provider.draftText = "DRAFT-IN-PANEL-XYZ"
+    XCTAssertEqual(composer.visibleText, "DRAFT-IN-PANEL-XYZ")
+
+    composer.type("typed under the transcript")
+    XCTAssertEqual(composer.provider.draftText, "typed under the transcript")
+  }
+
+  /// **Bare `⏎` sends once a conversation is open.** On the list it commits the filter; in the panel
+  /// there is no list left under it to filter, so the only thing Return has ever meant in a chat
+  /// composer is what it means here. Driven through the editor's real `doCommandBy` seam rather than
+  /// asserted about a value, because the key press is what the reader actually performs.
+  func testBareReturnInTheInPanelComposerSends() throws {
+    let composer = try Composer(mode: .answer)
+    defer { composer.tearDown() }
+
+    composer.type("what did priya decide")
+    composer.pressReturn()
+
+    XCTAssertEqual(
+      composer.surface.asks, 1, "Return under the transcript did not send the follow-up")
+    XCTAssertEqual(composer.surface.searches, 0, "Return in a conversation must not go back to filtering")
+  }
+
+  /// It is a chat composer, so it rests at a chat composer's height — not at the 64 pt hero bar's.
+  /// A hero-sized block pinned under the transcript is the search bar in a different place, which is
+  /// the arrangement this change exists to remove.
+  func testTheInPanelComposerRestsAtItsOwnHeightRatherThanTheHeroBars() throws {
+    let composer = try Composer(mode: .answer)
+    defer { composer.tearDown() }
+
+    XCTAssertEqual(
+      composer.barHeight, QueryShellLayout.panelComposerMinHeight, accuracy: 1,
+      "the in-panel composer is not resting at the height the panel reserves for it")
+    XCTAssertLessThan(
+      composer.barHeight, QueryShellLayout.barMinHeight,
+      "the composer inside the panel is still as tall as the hero bar it replaced")
+  }
+
+  /// The same growth contract in the new place: it grows with the draft, stops at five lines, and
+  /// never draws outside its own shell.
+  func testTheInPanelComposerGrowsWithTheDraftAndStopsAtItsCeiling() throws {
+    let composer = try Composer(mode: .answer)
+    defer { composer.tearDown() }
+    let resting = composer.barHeight
+
+    composer.type((1...40).map { "line \($0)" }.joined(separator: "\n"))
+
+    XCTAssertGreaterThan(composer.barHeight, resting)
+    XCTAssertLessThanOrEqual(
+      composer.composerHeight, QueryShellLayout.panelComposerMaxEditorHeight)
   }
 
   // MARK: - The caret
@@ -222,9 +288,9 @@ final class QueryComposerTests: XCTestCase {
 
     let surface = Surface()
 
-    init(width: CGFloat = 768, height: CGFloat = 400) throws {
+    init(width: CGFloat = 768, height: CGFloat = 400, mode: QueryShellMode = .results) throws {
       provider = ChatProvider()
-      host = NSHostingView(rootView: Host(provider: provider, surface: surface))
+      host = NSHostingView(rootView: Host(provider: provider, surface: surface, mode: mode))
       host.frame = NSRect(x: 0, y: 0, width: width, height: height)
       window = NSWindow(
         contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -326,6 +392,15 @@ final class QueryComposerTests: XCTestCase {
       settle()
     }
 
+    /// Bare `⏎`, through the editor's own command seam — the exact call AppKit makes on the
+    /// delegate, so the production `OmiComposerReturnKey` decision and the bar's `onSubmit` closure
+    /// are both really exercised. With no shift held and no marked text this resolves to `.submit`.
+    func pressReturn() {
+      _ = textView.delegate?.textView?(
+        textView, doCommandBy: #selector(NSResponder.insertNewline(_:)))
+      settle()
+    }
+
     /// SwiftUI applies a state change on the next layout pass, so ask for one rather than wait.
     private func settle() {
       host.layoutSubtreeIfNeeded()
@@ -342,38 +417,48 @@ final class QueryComposerTests: XCTestCase {
     }
   }
 
-  /// The bar exactly as `QueryShellHome` mounts it: bound to the provider's one draft through
+  /// The composer exactly as `QueryShellHome` mounts it: bound to the provider's one draft through
   /// `ChatDraftScope`, never to a `@State` of its own, and in the surface's own shape — a column
-  /// with the bar at the top and everything else under it. The shape matters: a bar hosted on its
-  /// own is asked for its ideal height and always looks right.
+  /// with the composer in it and a body-sized block for company. The shape matters: a composer
+  /// hosted on its own is asked for its ideal height and always looks right.
+  ///
+  /// `mode` picks the placement, because `QueryComposerPlacement.of` is the one thing that decides
+  /// it — searching mounts the hero bar above the block, chatting mounts the chat composer under it,
+  /// which is the arrangement each is laid out in on screen.
   private struct Host: View {
     @ObservedObject var provider: ChatProvider
     @ObservedObject var surface: Surface
+    let mode: QueryShellMode
     let probe = HeightProbe()
 
     var body: some View {
       VStack(spacing: QueryShellLayout.panelGap) {
-        ChatDraftScope(draft: provider.composerDraft) { draft in
-          QueryHeroBar(
-            text: draft,
-            caretClaim: surface.caretClaims,
-            isWorking: false,
-            mode: .answer,
-            onSearch: {},
-            onAsk: {}
-          )
-          .background {
-            GeometryReader { bar in
-              Color.clear.onChange(of: bar.size.height, initial: true) { _, height in
-                probe.barHeight = height
-              }
-            }
-          }
-        }
+        if QueryComposerPlacement.of(mode) == .hero { composer }
         Color.clear.frame(height: QueryShellLayout.minimumBodyHeight)
+        if QueryComposerPlacement.of(mode) == .panelFooter { composer }
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var composer: some View {
+      ChatDraftScope(draft: provider.composerDraft) { draft in
+        QueryHeroBar(
+          text: draft,
+          caretClaim: surface.caretClaims,
+          isWorking: false,
+          mode: mode,
+          onSearch: { surface.searches += 1 },
+          onAsk: { surface.asks += 1 }
+        )
+        .background {
+          GeometryReader { bar in
+            Color.clear.onChange(of: bar.size.height, initial: true) { _, height in
+              probe.barHeight = height
+            }
+          }
+        }
+      }
     }
   }
 
@@ -383,9 +468,12 @@ final class QueryComposerTests: XCTestCase {
     var barHeight: CGFloat = 0
   }
 
-  /// `QueryShellHome`'s half of the arrangement: the caret claim it owns and hands down.
+  /// `QueryShellHome`'s half of the arrangement: the caret claim it owns and hands down, and the two
+  /// submits it resolves — counted, so "what does `⏎` mean here" is answered by what was called.
   @MainActor
   private final class Surface: ObservableObject {
     @Published var caretClaims = 0
+    var asks = 0
+    var searches = 0
   }
 }

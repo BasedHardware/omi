@@ -2,11 +2,15 @@
 //  QueryShellModel.swift — every decision the query shell makes, as values rather than statements
 //  inside a `body`.
 //
-//  The shell is **two glass objects with air between them**: a bar you type into and a panel you look
-//  at. They are different in kind, so they are drawn as two panels of the same width with a real gap,
-//  each wearing the app's one glass and its own ambient shadow. Welding them into one tall slab with a
-//  rule across the middle is the single change that would make this read as a form rather than as a
-//  search surface, so `panelGap` lives here where a test can hold it.
+//  While it is searching the shell is **two glass objects with air between them**: a bar you type into
+//  and a panel you look at. They are different in kind, so they are drawn as two panels of the same
+//  width with a real gap, each wearing the app's one glass and its own ambient shadow. Welding them
+//  into one tall slab with a rule across the middle is the single change that would make this read as
+//  a form rather than as a search surface, so `panelGap` lives here where a test can hold it.
+//
+//  With a conversation open it is **one** object: the composer comes down inside the panel and the gap
+//  it was on the other side of stops existing. `QueryComposerPlacement` is that decision, and
+//  `panelBodyHeight` is what spends the room it frees.
 //
 //  The gap, the lane, the count sentence and the type filter are all arithmetic or copy — none of them
 //  need a window to be true. A view is then left with nothing of its own to get wrong.
@@ -123,10 +127,39 @@ extension QueryShellRequest {
 }
 
 /// Which body the panel is hosting. **Asking is a mode of the same query, not a destination** — the
-/// query bar keeps its text, the panel keeps its frame, and only what is inside it swaps.
+/// window does not navigate, the panel keeps its frame and its corner, and only what is inside it
+/// swaps. What *does* move is the composer: see `QueryComposerPlacement`.
 enum QueryShellMode: Equatable, Sendable {
   case results
   case answer
+}
+
+/// **Where the one composer is standing.**
+///
+/// While you are searching, a field above the panel is the right arrangement: you type at the top
+/// and the rows underneath redraw, so the control sits above the thing it filters. Once you have
+/// asked something that arrangement is wrong in an ordinary way — every chat anyone has ever used
+/// puts its input *under* the transcript, because what you write next is a reply to what is already
+/// there. A search bar floating over a conversation is a control for a job you already finished.
+///
+/// So the composer stands in two places rather than existing twice. There is still one
+/// `OmiTextEditor`, one `ChatProvider` draft, one caret claim and one send (INV-6); this value is
+/// the entire difference between the two, and it is here so the arithmetic below can reserve room
+/// for the composer wherever it actually is.
+enum QueryComposerPlacement: Equatable, Sendable {
+  /// Above the panel, wearing the surface's second glass. The search bar.
+  case hero
+  /// Inside the panel, pinned under the transcript. Ordinary chat.
+  case panelFooter
+
+  /// Which placement a mode puts the composer in. One function, so the layout arithmetic and the
+  /// view cannot end up disagreeing about where the composer is.
+  static func of(_ mode: QueryShellMode) -> Self {
+    switch mode {
+    case .results: return .hero
+    case .answer: return .panelFooter
+    }
+  }
 }
 
 /// What the two keyboard hints resolve to for a given key press. A pure function so "⌘⏎ asks and ⏎
@@ -326,6 +359,46 @@ enum QueryShellLayout {
     composerLineHeight * composerMaxLines + composerInsetVertical * 2
   }
 
+  // The composer once it moves inside the panel (`QueryComposerPlacement.panelFooter`).
+  //
+  // Same editor, same draft, same send — a different *face* and a different ground, because down
+  // there it is no longer a hero.
+
+  /// **The chat face, not the query face.** In the panel the composer sits a few points under the
+  /// transcript it is replying to, and it is typed in the size that transcript is read in
+  /// (`ChatInputView`'s 14) rather than in the 21 pt a hero search field is set at. A query face
+  /// under a conversation reads as a second headline stacked on the end of it.
+  static let panelComposerFontSize: CGFloat = 14
+
+  /// One laid-out line of that face. Same contract as `composerLineHeight` and checked the same way
+  /// by `QueryComposerTests`: the ceiling is a whole number of these, so an approximation shows as a
+  /// half-drawn sixth line at the composer's own edge.
+  static let panelComposerLineHeight: CGFloat = 17
+
+  static var panelComposerMinEditorHeight: CGFloat {
+    panelComposerLineHeight + composerInsetVertical * 2
+  }
+
+  static var panelComposerMaxEditorHeight: CGFloat {
+    panelComposerLineHeight * composerMaxLines + composerInsetVertical * 2
+  }
+
+  /// **The resting height of the whole in-panel composer row.** The tallest thing in the row is the
+  /// push-to-talk disc, not the one-line editor, so that is what sets the row — plus the margin the
+  /// app's shared `chatComposerShell` puts around every composer that sits inside something else.
+  static var panelComposerMinHeight: CGFloat {
+    max(panelComposerMinEditorHeight, micDiameter) + ChatComposerLayout.shellInset * 2
+  }
+
+  /// The resting height of whichever container is holding the composer. The floor under the
+  /// measured value, so a reserve computed before the first measurement lands is still honest.
+  static func composerContainerMinHeight(placement: QueryComposerPlacement) -> CGFloat {
+    switch placement {
+    case .hero: return barMinHeight
+    case .panelFooter: return panelComposerMinHeight
+    }
+  }
+
   // The results panel.
 
   static let panelPaddingHorizontal: CGFloat = 16
@@ -349,11 +422,21 @@ enum QueryShellLayout {
   /// **The panel's own chrome, above and below whatever it is showing.**
   ///
   /// The header row is a chip plus its 2 pt of lift (`QueryPanelChipLabel`); the type chips exist only
-  /// on the list, because in answer mode there is nothing to narrow by type.
-  static func panelChromeHeight(mode: QueryShellMode) -> CGFloat {
+  /// on the list, because in answer mode there is nothing to narrow by type; and in answer mode the
+  /// composer is *inside* the panel, under the transcript, which is the row the chips paid for.
+  ///
+  /// The composer's own height is passed in rather than assumed, for the same reason the hero bar's
+  /// was: it grows with the draft and with a staged file, and a reserve that ignores that is a
+  /// reserve that walks the panel off the bottom edge the first time somebody writes two lines.
+  static func panelChromeHeight(mode: QueryShellMode, composerHeight: CGFloat) -> CGFloat {
     let headerRow = chipHeight + 2
     let typeChips = mode == .results ? chipHeight + panelHeaderSpacing : 0
-    return panelPaddingTop + headerRow + panelHeaderSpacing + typeChips + panelPaddingBottom
+    let composerRow =
+      QueryComposerPlacement.of(mode) == .panelFooter
+      ? panelHeaderSpacing + max(panelComposerMinHeight, composerHeight)
+      : 0
+    return panelPaddingTop + headerRow + panelHeaderSpacing + typeChips + composerRow
+      + panelPaddingBottom
   }
 
   /// **How tall the panel body may be, so the panel ends inside the window instead of past it.**
@@ -365,16 +448,24 @@ enum QueryShellLayout {
   /// part that was missing was outside the scroll view rather than below it.
   ///
   /// So the height is derived rather than declared: whatever the window has, less what is above the
-  /// body and the panel's own chrome, held between the floor and the ceiling. The hero bar is
-  /// measured rather than assumed — it grows when files are staged onto it, and reserving its minimum
-  /// would put the overflow straight back the first time somebody attached something.
+  /// body and the panel's own chrome, held between the floor and the ceiling. The composer is
+  /// measured rather than assumed — it grows when files are staged onto it and when the draft runs
+  /// past one line, and reserving its minimum would put the overflow straight back the first time
+  /// somebody attached something.
+  ///
+  /// **Which side of the panel that reserve falls on is the mode's decision.** In results mode the
+  /// composer is the hero bar above, so it costs the body its height *and* the gap under it. In
+  /// answer mode it is inside the panel, so it costs the body its height and nothing above the panel
+  /// at all — which is why the transcript ends up with slightly more room than the list, not less.
   static func panelBodyHeight(
     availableHeight: CGFloat,
-    heroBarHeight: CGFloat,
+    composerHeight: CGFloat,
     mode: QueryShellMode
   ) -> CGFloat {
-    let above = surfaceTopInset + max(barMinHeight, heroBarHeight) + panelGap
-    let room = availableHeight - above - panelChromeHeight(mode: mode)
+    let placement = QueryComposerPlacement.of(mode)
+    let composer = max(composerContainerMinHeight(placement: placement), composerHeight)
+    let above = surfaceTopInset + (placement == .hero ? composer + panelGap : 0)
+    let room = availableHeight - above - panelChromeHeight(mode: mode, composerHeight: composer)
     return min(maximumBodyHeight, max(minimumBodyHeight, room))
   }
 }
