@@ -143,7 +143,11 @@ test("id snapshot synthesizes a stable set version and is honest about incomplet
   const s2 = await fetchMemoryIdSnapshot(http, 500);
   const s3 = await fetchMemoryIdSnapshot(http, 500);
   assert.ok(s1 && s2 && s3);
-  assert.equal(s1.complete, true, "a short page under the requested limit means nothing was left unread");
+  assert.equal(
+    s1.complete,
+    false,
+    "the list endpoint hides user-rejected/invalidated rows and filters after the limit, so even a short page proves nothing",
+  );
   assert.equal(s1.setVersion, s2.setVersion, "order-independent");
   assert.notEqual(s1.setVersion, s3.setVersion, "content-sensitive");
 

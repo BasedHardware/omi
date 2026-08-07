@@ -16,12 +16,21 @@
  *   until a rewrite honors ADR-004 D2.
  * - There is no ids-only endpoint (tasks' `/v1/action-items/ids` has no
  *   memories analog; `database.memories.get_memory_ids` exists server-side
- *   but no router exposes it). `fetchMemoryIdSnapshot` synthesizes the closest
- *   honest snapshot: it fetches one bounded page of the full list endpoint
- *   and reports `complete: true` only when the page came back short of the
- *   requested limit — i.e. we know there was nothing left to page through.
- *   A full page is reported `complete: false` rather than guessed complete,
- *   so reconcile never deletes local rows on an under-read.
+ *   but no router exposes it), so the closest source is one bounded page of
+ *   the full list endpoint. That list is SERVER-SIDE FILTERED, in two ways
+ *   that both defeat a completeness claim:
+ *     - `database.memories.get_memories` drops user-rejected memories
+ *       (`user_review is not False`) and superseded/retracted ones
+ *       (`invalid_at is None`, since `include_invalidated` defaults false).
+ *     - Those drops happen in Python AFTER Firestore's `.limit()/.offset()`,
+ *       so a SHORT page does not even prove the set was exhausted: a full
+ *       page of 5000 with 4000 filtered out returns 1000 rows with more
+ *       still unread. The "short page = complete" heuristic is unsound here
+ *       on its own terms, independent of the filter rule.
+ *   Per hard rule 12 (and the conversations precedent, which hit the same
+ *   shape), `fetchMemoryIdSnapshot` therefore NEVER claims completeness: the
+ *   snapshot only ever ADDS knowledge and can never drive a reconcile delete.
+ *   An unfiltered ids endpoint is a backend-rewrite requirement.
  * - Patch is NOT one wire request. The exemplar (tasks) has a single PATCH
  *   endpoint that takes any subset of fields; memories fragments the same
  *   operation across three legacy endpoints with three different shapes:
@@ -37,6 +46,17 @@
  * - `category` has no update endpoint at all in the legacy router; the
  *   contract's `MemoryPatch` omits it for exactly that reason (see
  *   `contracts/src/domain/memories.ts`).
+ * - Locked memories are serialized with a TRUNCATED body: the list handler
+ *   rewrites `content` to `content[:70] + '...'` behind a paid-plan gate
+ *   (`backend/routers/memories.py`, the `is_locked` branch of the legacy list
+ *   path). The truncation is indistinguishable from real content at the type
+ *   level, so `wireToMemory` carries the `is_locked` signal through to
+ *   `Memory.locked` and the store refuses a `content` patch on such a row —
+ *   otherwise an editable surface writes the truncation back and destroys the
+ *   record. `is_locked` survives the API exposure contract
+ *   (`memory_api_contract.memory_api_payload` strips neither internal- nor
+ *   canonical-lifecycle-listed fields that would cover it), so this is a
+ *   signal we may rely on rather than infer.
  */
 
 import type { Memory, MemoryIdSnapshot, MemoryOp, MemoryPatch } from "@omi-core/contracts";
@@ -116,8 +136,9 @@ function wirePatchSteps(
 
 /**
  * Honest ids snapshot: no legacy endpoint returns ids alone, so we page the
- * list endpoint once and only claim completeness when the page came back
- * short of what we asked for (a full page means there may be more).
+ * list endpoint once — but that list is server-side filtered and the filter
+ * runs after the page limit (see the file header), so completeness is not
+ * observable from here at all.
  */
 export async function fetchMemoryIdSnapshot(http: HttpClient, limit = 5000): Promise<MemoryIdSnapshot | null> {
   const res = await http.request("GET", `/v3/memories?limit=${limit}&offset=0`);
@@ -129,7 +150,11 @@ export async function fetchMemoryIdSnapshot(http: HttpClient, limit = 5000): Pro
     const r = raw as Record<string, unknown>;
     if (typeof r["id"] === "string") ids.push(r["id"]);
   }
-  return { setVersion: contentHash(ids), complete: rows.length < limit, ids };
+  // Rule 12: the list endpoint hides user-rejected and invalidated memories,
+  // and filters after the limit, so neither a short page nor a full one
+  // proves we saw the whole set. A filtered source may NEVER back a complete
+  // snapshot — reconcile would delete the filtered-out rows locally.
+  return { setVersion: contentHash(ids), complete: false, ids };
 }
 
 export async function fetchMemories(http: HttpClient, limit = 500, offset = 0): Promise<Memory[] | null> {
@@ -161,6 +186,10 @@ export function wireToMemory(raw: unknown): Memory | null {
     createdAt: isoToMs(r["created_at"]) ?? 0,
     updatedAt: isoToMs(r["updated_at"]) ?? 0,
     revision: null,
+    // Absent/non-boolean `is_locked` means NOT locked: the field defaults to
+    // False server-side (`MemoryDB.is_locked`) and is not stripped by the API
+    // exposure contract, so its absence is a real "unlocked", not a gap.
+    locked: r["is_locked"] === true,
   };
 }
 
@@ -189,10 +218,16 @@ function contentHash(ids: readonly string[]): string {
 export function memoriesTransport(
   http: HttpClient,
   onServerAssignedId: (localId: string, serverId: string) => void,
+  /** Maps a local slug to the wire id the legacy server knows it by (the
+   * alias created when create returned serverAssignedId). Identity default. */
+  resolveWireId: (localId: string) => string = (id) => id,
 ): { send(op: PendingOp): Promise<MemorySendResult> } {
   return {
     async send(op: PendingOp): Promise<MemorySendResult> {
       const domainOp = JSON.parse(op.payload) as MemoryOp;
+      if (domainOp.op !== "create") {
+        (domainOp as { id: string }).id = resolveWireId(domainOp.id);
+      }
       const result = await sendMemoryOp(http, domainOp);
       if (result.ok && result.serverAssignedId !== undefined) {
         onServerAssignedId(domainOp.id, result.serverAssignedId);

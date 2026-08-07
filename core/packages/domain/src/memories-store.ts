@@ -1,32 +1,37 @@
 /**
- * TasksStore: the one object a surface talks to. Wires Outbox + Projection +
- * the legacy tasks adapter, owns the server-assigned-id alias map (the
+ * MemoriesStore: the one object a surface talks to. Wires Outbox + Projection +
+ * the legacy memories adapter, owns the server-assigned-id alias map (the
  * ADR-004 D2 gap), and exposes subscribe/read for any view layer.
  *
  * Alias protocol: the legacy backend ignores client ids on create and assigns
- * its own. We keep the LOCAL slug as the record's identity everywhere in the
- * client: server rows arriving under the server id are re-keyed to the local
- * slug on ingest, and outgoing patch/delete ops resolve local → wire id at
+ * a content-hash id. We keep the LOCAL slug as the record's identity everywhere
+ * in the client: server rows arriving under the server id are re-keyed to the
+ * local slug on ingest, and outgoing patch/delete ops resolve local → wire id at
  * the transport. When the rewritten backend honors client ids, the alias map
  * is empty and this machinery is inert.
  */
 
-import type { DeadLetter, RecordId, Task, TaskPatch } from "@omi-core/contracts";
+import type { DeadLetter, Memory, MemoryPatch, RecordId } from "@omi-core/contracts";
+import type { DurableKv, StorageBridge } from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
-import type { StorageBridge } from "@omi-core/contracts";
 import { Outbox, Projection } from "@omi-core/sync";
 import {
-  fetchIdSnapshot,
-  fetchTasks,
-  tasksTransport,
+  fetchMemories,
+  fetchMemoryIdSnapshot,
+  memoriesTransport,
   type HttpClient,
 } from "@omi-core/adapters-legacy";
-import type { DurableKv } from "@omi-core/contracts";
-import { buildCreateTask, buildDeleteTask, buildPatchTask, tasksCodec, taskToPendingOp } from "./tasks-codec.js";
+import {
+  buildCreateMemory,
+  buildDeleteMemory,
+  buildPatchMemory,
+  memoriesCodec,
+  memoryToPendingOp,
+} from "./memories-codec.js";
 
 const ALIAS_KEY = "id-aliases"; // { [serverId]: localSlug }
 
-export class TasksStore {
+export class MemoriesStore {
   private listeners = new Set<() => void>();
   private aliases: Record<string, string> = {};
 
@@ -34,28 +39,28 @@ export class TasksStore {
     private readonly env: Env,
     private readonly http: HttpClient,
     private readonly outbox: Outbox,
-    private readonly projection: Projection<Task>,
+    private readonly projection: Projection<Memory>,
     private readonly aliasKv: DurableKv,
   ) {}
 
-  static async open(bridge: StorageBridge, env: Env, http: HttpClient): Promise<TasksStore> {
-    const aliasKv = await bridge.openKv("tasks-aliases");
-    const projection = await Projection.open(await bridge.openKv("tasks-projection"), tasksCodec);
+  static async open(bridge: StorageBridge, env: Env, http: HttpClient): Promise<MemoriesStore> {
+    const aliasKv = await bridge.openKv("memories-aliases");
+    const projection = await Projection.open(await bridge.openKv("memories-projection"), memoriesCodec);
 
-    let store: TasksStore;
-    const transport = tasksTransport(
+    let store: MemoriesStore;
+    const transport = memoriesTransport(
       http,
       (localId, serverId) => void store.recordAlias(localId, serverId),
       (localId) => store.toWireId(localId),
     );
-    const outbox = await Outbox.open(bridge, env, transport, "tasks");
-    store = new TasksStore(env, http, outbox, projection, aliasKv);
+    const outbox = await Outbox.open(bridge, env, transport, "memories");
+    store = new MemoriesStore(env, http, outbox, projection, aliasKv);
     store.aliases = JSON.parse((await aliasKv.get(ALIAS_KEY)) ?? "{}") as Record<string, string>;
     outbox.onChange = () => store.notify();
     outbox.onOutcome = async (op, outcome) => {
       if (outcome.state !== "confirmed") return;
       const current = (await projection.read([])).find((r) => r.id === op.recordId) ?? null;
-      const next = tasksCodec.applyOp(op.payload, current);
+      const next = memoriesCodec.applyOp(op.payload, current);
       if (next === null) await projection.removeServerRow(op.recordId);
       else await projection.upsertServerRows([next]);
       store.notify();
@@ -69,10 +74,10 @@ export class TasksStore {
   }
 
   /** What the screen renders: durable server truth + pending overlays. */
-  async list(): Promise<Task[]> {
+  async list(): Promise<Memory[]> {
     const pending = this.outbox.pendingOps().map((o) => ({ recordId: o.recordId, payload: o.payload }));
     const rows = await this.projection.read(pending);
-    return rows.sort((a, b) => Number(a.completed) - Number(b.completed) || b.createdAt - a.createdAt);
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
   }
 
   pendingCount(): number {
@@ -87,18 +92,34 @@ export class TasksStore {
     return this.outbox.discardDeadLetter(opId);
   }
 
-  async create(description: string, dueAt?: number): Promise<void> {
-    await this.outbox.enqueue(taskToPendingOp(buildCreateTask(this.env, description, dueAt)));
+  async create(content: string, opts?: { category?: string; visibility?: "public" | "private" }): Promise<void> {
+    await this.outbox.enqueue(memoryToPendingOp(buildCreateMemory(this.env, content, opts)));
     this.notify();
   }
 
-  async patch(id: RecordId, patch: TaskPatch): Promise<void> {
-    await this.outbox.enqueue(taskToPendingOp(buildPatchTask(this.env, id, patch)));
+  /**
+   * A locked memory's `content` is a server-side truncation, not the record
+   * (see `Memory.locked`), so writing it back destroys the real content. The
+   * refusal lives HERE rather than in the surface because the store is the
+   * single mutation owner — a surface that forgets to render the row read-only
+   * must still be unable to corrupt it. Surfaces render `locked` read-only as
+   * UX; this is the invariant.
+   */
+  async patch(id: RecordId, patch: MemoryPatch): Promise<void> {
+    if (patch.content !== undefined) {
+      const row = (await this.projection.read([])).find((r) => r.id === id);
+      if (row?.locked === true) {
+        throw new Error(
+          `refusing to patch content of locked memory ${id}: the server sent a truncation, not the record`,
+        );
+      }
+    }
+    await this.outbox.enqueue(memoryToPendingOp(buildPatchMemory(this.env, id, patch)));
     this.notify();
   }
 
   async delete(id: RecordId): Promise<void> {
-    await this.outbox.enqueue(taskToPendingOp(buildDeleteTask(this.env, id)));
+    await this.outbox.enqueue(memoryToPendingOp(buildDeleteMemory(this.env, id)));
     this.notify();
   }
 
@@ -109,11 +130,11 @@ export class TasksStore {
   /** Pull server truth: rows + id reconcile. Safe to call on interval; all
    * failures are silent-degrade (offline reads keep serving the projection). */
   async refresh(): Promise<void> {
-    const rows = await fetchTasks(this.http);
+    const rows = await fetchMemories(this.http);
     if (rows) {
       await this.projection.upsertServerRows(rows.map((r) => this.rekeyed(r)));
     }
-    const snapshot = await fetchIdSnapshot(this.http);
+    const snapshot = await fetchMemoryIdSnapshot(this.http);
     if (snapshot) {
       const localIds = snapshot.ids.map((id) => this.aliases[id] ?? id);
       await this.projection.reconcile({ ...snapshot, ids: localIds });
@@ -121,7 +142,7 @@ export class TasksStore {
     this.notify();
   }
 
-  private rekeyed(row: Task): Task {
+  private rekeyed(row: Memory): Memory {
     const local = this.aliases[row.id];
     return local ? { ...row, id: local as RecordId } : row;
   }
