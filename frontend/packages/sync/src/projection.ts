@@ -8,7 +8,7 @@
  * this file knows nothing about any particular record shape.
  */
 
-import type { DurableKv, TaskIdSnapshot } from "@omi-core/contracts";
+import type { DurableKv, IdSnapshot } from "@omi-core/contracts";
 
 export interface ProjectionCodec<T> {
   id(record: T): string;
@@ -42,7 +42,7 @@ export class Projection<T> {
    * its setVersion is new to us. An incomplete snapshot may add knowledge,
    * never remove it — honest clients never delete on partial information.
    */
-  async reconcile(snapshot: TaskIdSnapshot): Promise<{ deletedIds: string[] }> {
+  async reconcile(snapshot: IdSnapshot): Promise<{ deletedIds: string[] }> {
     if (!snapshot.complete) return { deletedIds: [] };
     const seen = await this.kv.get(SET_VERSION_KEY);
     if (seen === snapshot.setVersion) return { deletedIds: [] };
