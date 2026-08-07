@@ -19,7 +19,7 @@ ENV BUN_INSTALL=/opt/bun
 ENV PATH="/opt/bun/bin:/opt/venv/bin:$PATH"
 
 # Patch OS packages before Playwright's --with-deps apt installs (#7136).
-RUN apt-get update && apt-get -y upgrade --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get -y dist-upgrade && rm -rf /var/lib/apt/lists/*
 
 COPY --from=bun /usr/local/bin/bun /opt/bun/bin/bun
 RUN ln -s bun /opt/bun/bin/bunx

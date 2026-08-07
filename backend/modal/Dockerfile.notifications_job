@@ -17,7 +17,7 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Patch OS packages in this layer before installing runtime deps (#7136).
-RUN apt-get update && apt-get -y upgrade --no-install-recommends \
+RUN apt-get update && apt-get -y dist-upgrade \
     && apt-get -y install --no-install-recommends ffmpeg curl unzip \
     && rm -rf /var/lib/apt/lists/*
 

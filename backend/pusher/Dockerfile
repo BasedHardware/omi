@@ -50,7 +50,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 # Patch OS packages in this layer before installing runtime deps (#7136).
-RUN apt-get update && apt-get -y upgrade --no-install-recommends \
+RUN apt-get update && apt-get -y dist-upgrade \
     && apt-get -y install --no-install-recommends ffmpeg curl libjemalloc2 && \
     groupadd --system --gid 10001 pusher && \
     useradd --system --uid 10001 --gid 10001 --home-dir /app pusher && \

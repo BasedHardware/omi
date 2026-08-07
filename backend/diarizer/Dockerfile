@@ -15,7 +15,7 @@ ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/lib/x86_
 
 # Install CUDA Runtime 13.2 Update 1 only; the pod runs inference and does not need build tools like nvcc.
 # Patch OS packages before installing runtime deps (#7136).
-RUN apt-get update && apt-get -y upgrade --no-install-recommends && \
+RUN apt-get update && apt-get -y dist-upgrade && \
 apt-get -y install --no-install-recommends build-essential ffmpeg curl unzip wget && \
 wget https://developer.download.nvidia.com/compute/cuda/13.2.1/local_installers/cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb && \
 dpkg -i cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb && \
