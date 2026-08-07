@@ -1,0 +1,33 @@
+/* Dev-harness + tasks-surface baseline styles. Deliberately minimal and
+   neutral (no purple — INV-UI-1); real design language arrives with the
+   design-system workstream. */
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+body { margin: 0; background: Canvas; color: CanvasText; }
+#root { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
+
+.dev-connect { display: flex; flex-direction: column; gap: 12px; }
+.dev-connect label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.dev-connect input { padding: 8px; font: inherit; }
+.dev-connect button { padding: 10px; font: inherit; cursor: pointer; }
+
+.tasks-surface header { display: flex; align-items: baseline; gap: 12px; }
+.badge.pending { font-size: 12px; opacity: 0.7; }
+.add-row { display: flex; gap: 8px; margin: 12px 0; }
+.add-row input { flex: 1; padding: 10px; font: inherit; }
+.add-row button { padding: 10px 16px; font: inherit; cursor: pointer; }
+.task-list { list-style: none; padding: 0; margin: 0; }
+.task-list li { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+.task-list li label { flex: 1; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.task-list li.done .desc { text-decoration: line-through; opacity: 0.55; }
+.task-list li.empty { opacity: 0.6; justify-content: center; border: none; }
+.task-list .due { font-size: 12px; opacity: 0.7; }
+.task-list .delete { border: none; background: none; font-size: 18px; cursor: pointer; opacity: 0.5; }
+.task-list .delete:hover { opacity: 1; }
+.dead-letters { margin-top: 24px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 8px; padding: 12px; }
+.dead-letters h2 { margin: 0 0 8px; font-size: 14px; }
+.dead-letters ul { list-style: none; padding: 0; margin: 0; }
+.dead-letters li { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; }
+.dead-letters .reason { opacity: 0.7; }
