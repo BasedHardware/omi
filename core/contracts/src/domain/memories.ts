@@ -61,8 +61,5 @@ export type MemoryOp =
  * consistent (red-team finding 9); deletion of local rows is permitted only
  * against a `complete: true` snapshot.
  */
-export interface MemoryIdSnapshot {
-  setVersion: string;
-  complete: boolean;
-  ids: readonly string[];
-}
+/** Alias of the shared IdSnapshot (wave-1 ratchet) — use IdSnapshot in new code. */
+export type MemoryIdSnapshot = import("../snapshot.js").IdSnapshot;

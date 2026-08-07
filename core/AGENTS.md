@@ -14,7 +14,7 @@ pnpm -r test         # hermetic; node:test; no network, no wall clock
 node scripts/check-isolation.mjs
 ```
 
-All three commands green = the baseline Definition of Done for any change here. Include
+All three commands green (plus `node scripts/gen-barrels.mjs --check`) = the baseline Definition of Done for any change here. During a concurrent wave, verify your own package scope (`pnpm --filter <pkg> build/test`) — sibling workers' unbarrelled files make the full `-r` check red until the orchestrator integrates; the orchestrator owns the integrated check. Include
 their output in your commit message evidence.
 
 ## The exemplar rule
@@ -52,16 +52,21 @@ gap, not your call to fill.
     apps) carry a `// core-seam:` marker comment at every call site.
 
 11. **Adapter export names carry the domain in the identifier** — `sendTaskOp`,
-    `fetchMemoryIdSnapshot`, `tasksTransport` — because `adapters-legacy/src/index.ts`
-    re-exports every domain with `export *` and bare names collide. (Rule added after the
-    first foundation test hit exactly this.)
+    `fetchMemoryIdSnapshot`, `tasksTransport` — because the barrels re-export every
+    domain with `export *` and bare names collide.
+    **Barrels are GENERATED**: never edit any `src/index.ts` by hand — run
+    `node scripts/gen-barrels.mjs` (CI runs `--check`). Adding a file to a package's
+    `src/` is all it takes to export it.
 
 12. **Snapshot honesty.** An id snapshot may claim `complete: true` only when the source
     provably returned the whole unfiltered set: a 200 with an unexpected body returns
     `null` (never a complete empty snapshot), a full page never claims completeness, and
     a list endpoint with ANY server-side filter may never back `complete: true` at all.
-    Wrong `complete: true` is user data loss via `Projection.reconcile` — the wave-1
-    review caught this live in two of three domains.
+    Wrong `complete: true` is user data loss via `Projection.reconcile`.
+    ENFORCED BY HARNESS: every new domain registers a `SnapshotDescriptor` in
+    `packages/testkit/src/test/snapshot-conformance.test.ts` — the shared law suite runs
+    it automatically (it caught this bug in 3 of the first 5 domains, including the
+    original exemplar).
 
 ## What you may do freely
 
