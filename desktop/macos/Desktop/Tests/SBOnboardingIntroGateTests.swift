@@ -88,6 +88,11 @@ final class SBOnboardingIntroGateTests: XCTestCase {
   /// A session expiring is not a request for cinema. Sign-out clears the rest of
   /// onboarding through the shared list and leaves the intro flag standing, so someone
   /// signing back in gets their app rather than 8.6 seconds of it.
+  ///
+  /// `@MainActor` because this reads `SBOnboardingModel.resumeStepKey`, and
+  /// `SBOnboardingModel` is a `@MainActor` class, so even its `static let` string keys
+  /// are main-actor isolated. The rest of the suite stays nonisolated.
+  @MainActor
   func testAReAuthClearsOnboardingWithoutReplayingTheIntro() throws {
     let suiteName = "SBOnboardingIntroGateTests.reauth.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
