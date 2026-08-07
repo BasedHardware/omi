@@ -1,0 +1,31 @@
+desktop/macos/Desktop/Tests/RewindRetentionCleanupTests.swift
+  s_569f1df936cc22::t_89ef5dcad11046 128,130-133,135-138,141-154
+  s_569f1df936cc22::t_e8da350582c396 92-110,112-114,116-127,129,134,139-140,155
+  s_569f1df936cc22::t_0b5bbec3837476 111,115
+desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
+  s_569f1df936cc22::t_f05bcd8281ecf4 592-598
+desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
+  s_569f1df936cc22::t_016453bb40152d 391-400,407-427
+  s_569f1df936cc22::t_bec7553961d03f 428-429
+desktop/macos/Desktop/Sources/MainWindow/RewindOnlyView.swift
+  s_569f1df936cc22::t_ff262a22dc8121 238
+  s_569f1df936cc22::t_d0aacc146e1dea 228-230
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
+  s_569f1df936cc22::t_b12294c83b4d2e 218-224,234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "3e610173c777630f294dc39be081dacd5b0b4278",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
