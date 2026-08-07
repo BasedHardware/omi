@@ -1,0 +1,29 @@
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_569f1df936cc22::t_8b41a091193ec1 539-594
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
+  s_569f1df936cc22::t_b07af442bc8c43 74-80
+  s_569f1df936cc22::t_d186b700091e69 49-53,64-68
+  s_569f1df936cc22::t_00305760894dc3 28-29,31
+  s_569f1df936cc22::t_14043fbc9a92eb 86-107,116-118,125-130
+  s_569f1df936cc22::t_fee212b992c105 119-124
+  s_569f1df936cc22::t_bfc4f2d8d5ebe5 140-149,152-162,164,166-169
+  s_569f1df936cc22::t_ea6dc71eabc46e 131-132
+desktop/macos/changelog/unreleased/20260807-hour-rail-scope.json
+  s_569f1df936cc22::t_e646d97be6a2ec 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "30d4f9d64062b820904b901434b0d3225ed5866e",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
