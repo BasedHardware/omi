@@ -8,6 +8,12 @@ export function shareBaseUrl(
   let value = (raw ?? '').trim()
   if (!value) value = DEFAULT_SHARE_BASE
   if (!value.includes('://')) value = `https://${value}`
+  try {
+    const parsed = new URL(value)
+    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname) return DEFAULT_SHARE_BASE
+  } catch {
+    return DEFAULT_SHARE_BASE
+  }
   return value.replace(/\/+$/, '')
 }
 

@@ -15,4 +15,9 @@ describe('shareLinks (#4339)', () => {
       'https://share.example.com/conversations/abc'
     )
   })
+
+  it('falls back for malformed or unsupported overrides', () => {
+    expect(shareBaseUrl('ftp://share.example.com')).toBe('https://h.omi.me')
+    expect(shareBaseUrl('not a url')).toBe('https://h.omi.me')
+  })
 })
