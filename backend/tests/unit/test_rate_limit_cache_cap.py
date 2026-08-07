@@ -2,7 +2,7 @@
 
 utils.other.endpoints.rate_limit_custom stores per-request state in the module-level `cached` dict
 keyed by "{endpoint}:{ip}". It was get/set only with no eviction, so a stream of distinct client IPs
-(ordinary traffic, or an attacker rotating IPs) grew the map without bound. _store_rate_limit caps it.
+(ordinary traffic, or an attacker rotating IPs) grew the map without bound. store_rate_limit caps it.
 """
 
 import pytest
@@ -20,7 +20,7 @@ def _clear():
 def test_rate_limit_cache_is_bounded_and_keeps_newest(monkeypatch):
     monkeypatch.setattr(endpoints, "_MAX_RATE_LIMIT_ENTRIES", 10)
     for i in range(40):
-        endpoints._store_rate_limit(f"rate_limit:ep:{i}", "{}")
+        endpoints.store_rate_limit(f"rate_limit:ep:{i}", "{}")
 
     assert len(endpoints.cached) <= 10
     assert "rate_limit:ep:39" in endpoints.cached  # newest retained
@@ -29,8 +29,8 @@ def test_rate_limit_cache_is_bounded_and_keeps_newest(monkeypatch):
 
 def test_updating_an_existing_key_does_not_grow(monkeypatch):
     monkeypatch.setattr(endpoints, "_MAX_RATE_LIMIT_ENTRIES", 10)
-    endpoints._store_rate_limit("k", "v1")
-    endpoints._store_rate_limit("k", "v2")
+    endpoints.store_rate_limit("k", "v1")
+    endpoints.store_rate_limit("k", "v2")
 
     assert len(endpoints.cached) == 1
     assert endpoints.cached["k"] == "v2"
