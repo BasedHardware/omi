@@ -98,8 +98,5 @@ export type ConversationOp =
  * `Projection.reconcile` is typed against `TaskIdSnapshot` today. Do not unify
  * here — that is an architect-level ratchet.
  */
-export interface ConversationIdSnapshot {
-  setVersion: string;
-  complete: boolean;
-  ids: readonly string[];
-}
+/** Alias of the shared IdSnapshot (wave-1 ratchet) — use IdSnapshot in new code. */
+export type ConversationIdSnapshot = import("../snapshot.js").IdSnapshot;
