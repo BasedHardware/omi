@@ -25,7 +25,6 @@ covers:
   - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
   - desktop/macos/Desktop/Sources/MainWindow/GlassShellChrome.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/GlassContentChrome.swift
-  - desktop/macos/Desktop/Sources/MainWindow/SecondBrain/SBWallpaper.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
 preconditions:
   - automation_bridge_ready
