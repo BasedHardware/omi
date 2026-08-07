@@ -1,0 +1,29 @@
+desktop/macos/Desktop/Tests/ChatTranscriptResetRevocationTests.swift
+  s_569f1df936cc22::t_2cf78b7cf3a536 1-90
+desktop/macos/changelog/unreleased/20260807-chat-stuck-sending-after-reset.json
+  s_569f1df936cc22::t_4535ab02455748 1-3
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_569f1df936cc22::t_0dd80d37603e4e 1813-1816
+  s_569f1df936cc22::t_221ef18f4f176f 3332-3347
+  s_569f1df936cc22::t_cbb1e8d7719666 3355-3367
+  s_569f1df936cc22::t_34b7b5abb976c7 5141-5145,5147-5150
+  s_569f1df936cc22::t_da3c226281794e 6559
+  s_569f1df936cc22::t_b498288990c1ab 1817
+  s_569f1df936cc22::t_4ead63586d0e1b 3007-3009
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f4b9d10da4d09e93116a7b7a1aa348a9d268d5b5",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
