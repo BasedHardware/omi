@@ -14,7 +14,8 @@
   "dependencies": {
     "@omi-core/contracts": "workspace:*",
     "@omi-core/kernel": "workspace:*",
-    "@omi-core/sync": "workspace:*"
+    "@omi-core/sync": "workspace:*",
+    "@omi-core/adapters-legacy": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",
