@@ -1,0 +1,20 @@
+{
+  "name": "@omi-core/bridge-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Web-tier StorageBridge binding: IndexedDB-backed DurableLog/DurableKv, namespaced by (uid, generation). Best-effort durability per ADR-008 §3 — the core never assumes browser storage is durable; native shells bind real stores instead.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "echo bridge-web:browser-only-covered-by-shell-e2e",
+    "lint": "echo bridge-web:no-lint-yet"
+  },
+  "dependencies": {
+    "@omi-core/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
