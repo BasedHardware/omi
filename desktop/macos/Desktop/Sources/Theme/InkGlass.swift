@@ -33,20 +33,37 @@
 //  bottoms out at 212.9 and the scrim is worth four points of ground in total; that is why two separate
 //  attempts to make these panels see-through changed nothing anybody could perceive.
 //
+//  **And "pick a different material" is not a second lever at all — it is this one, spelled worse.**
+//  Solve the table above for each material's own opacity and tint (`ground/black` is `tint·a`, `pass`
+//  is `1−a`) and every candidate comes back the *same near-white*: `hudWindow` 0.908, `popover` 0.909,
+//  `menu` 0.910, `sidebar` 0.911. They differ only in how much of it they lay down. So a material swap
+//  and a scrim change move one quantity — the ground — and the scrim moves it slightly more
+//  efficiently, because `Ink.surface` in `.aqua` is white where the materials are 232/255: matched at
+//  29.4% passthrough, `hudWindow` + scrim lands at 170.3/255 and bare `.popover` at 163.6/255, for
+//  5.18:1 against 4.95:1. There is nothing to go and measure. Change the scrim.
+//
 //  **But the material was never the binding constraint either — the bottom rung of the type ladder
 //  was.** Dark type needs a light ground, so the ground can only fall as far as the *faintest* thing
 //  anyone sets on it survives:
 //
 //      ladder on glass       ground over black   passthrough   bottom rung there
 //      three rungs                 205.5/255        17.0%      tertiary  4.56:1
-//      two rungs (this)            154.1/255        34.8%      secondary 4.58:1
+//      two rungs (this)            190.9/255        22.2%      secondary 5.89:1
 //
-//  Twice the desktop for the same legibility. The rule itself lives on `Ink.tertiary` — it is a rule
-//  about the *type*, not about the glass.
+//  The two-rung ladder still buys the panel a third more desktop than a three-rung one would, so
+//  `Ink.tertiary`'s "never on glass" rule is still earning its keep — at this ground that rung measures
+//  4.34:1, still under AA. The rule itself lives on `Ink.tertiary`; it is a rule about the *type*, not
+//  about the glass.
+//
+//  **What sets the ground now is not that rung's contrast, though — it is `interferenceRatio`.** AA on
+//  a uniform ground is satisfied at a much thinner scrim (0.14, which is what shipped and is what made
+//  the panel unreadable over a browser window). A ratio against a *uniform* background has nothing to
+//  say about a panel carrying a second image, and that is the case this app is now permanently in. See
+//  `scrim`.
 //
 //  Two cues cost no contrast at all and are therefore spent: the broad ambient shadow
-//  (`InkGlassShadow`) and the specular top edge (`sheenAlpha`). Both are worth more at a ground of 154
-//  than they were at 205, because there is real desktop moving under them.
+//  (`InkGlassShadow`) and the specular top edge (`sheenAlpha`). They matter more now, not less: they
+//  are most of what is left saying "floating" once the ground stops doing it.
 //
 //  Brand: neutrals and system semantics only (INV-UI-1). Nothing here reaches for `Ink.accent` at all —
 //  glass is defined by its brightness and its shadow, not by a hue.
@@ -126,31 +143,113 @@ package enum InkGlass {
   /// material with a different tint can be swapped in without rewriting the guard.
   package static let measuredMaterialTint: CGFloat = 0.909
 
-  /// `Ink.surface` at 0.14, painted over the material and under the content.
+  /// `Ink.surface` at 0.46, painted over the material and under the content.
   ///
   /// **This number is meaningless on its own and comparing it across materials is how this surface was
-  /// mistuned three times.** The quantity to reason about is the **ground**, and the quantity to judge
-  /// the design by is the **passthrough** — never this alpha.
+  /// mistuned three times.** The quantity to reason about is the **ground**; the quantities to judge
+  /// the design by are the **passthrough** and the **interference ratio** — never this alpha.
   ///
-  /// Measured on the real material over real backdrops (`.aqua`, `.behindWindow`, `.active`, a
-  /// full-screen banded desktop, sampled out of a `screencapture`):
+  /// | material / scrim | ground over black | passthrough | `secondary` on it | interference |
+  /// |---|---|---|---|---|
+  /// | `hudWindow` 0.14 — *what shipped* | 152.9/255 | 35.4% | 4.57:1 | **2.02 ✗** |
+  /// | `hudWindow` 0.41 — *the boundary* | 185.0/255 | 24.3% | 5.69:1 | 1.01 |
+  /// | **`hudWindow` 0.46** | **190.9/255** | **22.2%** | **5.89:1** | **0.88** |
+  /// | `hudWindow` 0.00 — *the material's own ceiling* | 136.2/255 | 41.2% | 3.96:1 | 2.45 |
   ///
-  /// | material / scrim | ground over black | passthrough | bottom rung on glass |
-  /// |---|---|---|---|
-  /// | `headerView` 0.10 (three-rung) | 217.0/255 | 14.5% | `tertiary` 4.74:1 |
-  /// | `hudWindow` 0.56 (three-rung) | 205.5/255 | 17.0% | `tertiary` 4.56:1 |
-  /// | `hudWindow` 0.115 | 151.2/255 | 35.9% | `secondary` 4.48:1 — **under AA** |
-  /// | **`hudWindow` 0.14** | **154.1/255** | **34.8%** | **`secondary` 4.58:1** |
-  /// | `hudWindow` 0.00 — *the material's own ceiling* | 136.2/255 | 41.2% | `secondary` 3.96:1 ✗ |
+  /// **This was tuned twice, against two different questions, and the second one is the real one.**
   ///
-  /// **The floor is the faintest rung the panel is allowed to carry, and on glass that is
-  /// `Ink.secondary`.** The remaining budget is under three points of ground: at 0.115 the panel is
-  /// illegible over a black desktop. This value sits a point above that boundary because the two-layer
-  /// model reproduces the sampled composite to about 3/255, so a scrim tuned to the last tenth would be
-  /// tuned to noise.
+  /// The first question was contrast against a *uniform* ground: how dark may the desktop be before
+  /// dark type stops clearing AA on the panel? That is what 0.14 answered, and it answered it
+  /// correctly — `Ink.secondary` measures 4.57:1 over a solid black desktop, eight hundredths above the
+  /// bar. Every number in the old table is still true.
   ///
-  /// Deliberately flat and full-bleed. A scrim only under the copy is a grey slab, drawn again.
-  package static let scrim: CGFloat = 0.14
+  /// It is the wrong question, because **a WCAG ratio is defined against a uniform background and the
+  /// ground under this panel is not uniform.** At 35.4% passthrough the ground travels 152.9 → 243.3
+  /// as the backdrop goes black → white, and a browser page puts both ends of that range *inside one
+  /// panel*: a white article beside a dark hero banner. The panel then carries a second image, and
+  /// nothing in a per-pixel contrast check can see it, because at every individual pixel the type still
+  /// clears AA. Measured on the frames a tester captured: the ground inside one results panel spanned
+  /// 157 → 240/255 over a browser page, against 141 → 192 over a wallpaper.
+  ///
+  /// So the quantity that decides this is the one below — `interferenceRatio`, the foreign image's
+  /// amplitude over the panel's own type's amplitude. It is 1 when the panel shows the other app
+  /// exactly as strongly as it shows its own words. Measured on those same frames: **1.00 on the
+  /// wallpaper the tester accepted, 1.62 on the browser page they called unreadable.** The bar is
+  /// therefore not invented here — it is where the accepted case already sat.
+  ///
+  /// **What changed underneath is not taste, it is what is behind the window.** The shell used to hide
+  /// on deactivate, so "the backdrop" was the wallpaper and tuning against one was reasonable. It now
+  /// floats permanently above other apps, so over-content is the *normal* case and a wallpaper is the
+  /// exception. 0.14 is the right answer to a question this app stopped asking.
+  ///
+  /// 0.46 clears the 0.4131 boundary by 12% rather than sitting on it. Three things all point the same
+  /// way and none of them is worth a tenth of a point of glass: the two-layer model reproduces the
+  /// sampled composite only to about 3/255; the banner in a real page is not pure black; and rendered
+  /// type never reaches full coverage, so measured amplitude runs a few percent under the ideal the
+  /// arithmetic assumes. **It costs a third of the passthrough** — 35.4% → 22.2%, ground 152.9 → 190.9
+  /// over a dark backdrop — and buys back nothing over a light one, where the ground moves
+  /// 243.3 → 247.6. The desktop still moves under the panel and still shows between the panels; it is a
+  /// quieter piece of glass, not an opaque one.
+  ///
+  /// Deliberately flat and full-bleed. A scrim only under the copy is a grey slab, drawn again — and
+  /// it would not have helped: every glass surface in this app carries type, including the top bar's
+  /// labels, so there is no chrome to leave thin. Two grounds on one desktop would also read as two
+  /// materials, which is the failure `cornerRadius` and `InkGlassShadow.ambient` are single values for.
+  package static let scrim: CGFloat = 0.46
+
+  /// The panel's ground over a backdrop of a given brightness, as a fraction of white.
+  ///
+  /// The two layers in the order the window draws them: the material over the desktop, then `scrim` of
+  /// `Ink.surface` over that. **Published rather than left for each caller to re-derive**, for the same
+  /// reason `measuredMaterialOpacity` is: a glass panel cannot be rendered offscreen — a test process
+  /// has no desktop behind its windows — so every legibility guard in this app models the ground, and
+  /// two copies of that arithmetic is two chances to guard a surface that does not exist.
+  ///
+  /// One channel at a time, so a caller with a tinted surface passes each of its components through.
+  /// Checked against the real thing at seven scrim values on three backdrops, the model reproduces the
+  /// sampled composite to under 3/255.
+  package static func ground(overBackdrop backdrop: CGFloat, surfaceTone: CGFloat = 1) -> CGFloat {
+    let material =
+      measuredMaterialTint * measuredMaterialOpacity + backdrop * (1 - measuredMaterialOpacity)
+    return surfaceTone * scrim + material * (1 - scrim)
+  }
+
+  /// The fraction of whatever is behind the window that survives to the eye.
+  ///
+  /// The number this design is actually judged by — "how see-through is it" — and the one to quote
+  /// when someone proposes moving `scrim`. It is *not* a legibility bound on its own; see
+  /// `interferenceRatio`, which is.
+  package static var backdropPassthrough: CGFloat {
+    (1 - scrim) * (1 - measuredMaterialOpacity)
+  }
+
+  /// WCAG 2.1 relative luminance of a neutral tone. Neutral, so the three channel weights sum to one
+  /// and the transfer function is the whole of it.
+  package static func luminance(_ tone: CGFloat) -> CGFloat {
+    tone <= 0.03928 ? tone / 12.92 : pow((tone + 0.055) / 1.055, 2.4)
+  }
+
+  /// How strongly the panel shows **what is behind it** against how strongly it shows **what is on
+  /// it** — the quantity `scrim` is actually set by.
+  ///
+  /// The numerator is the ground's whole travel between a black and a white backdrop: the amplitude of
+  /// the foreign image this panel carries, and a browser page reaches both ends of it inside one panel.
+  /// The denominator is the step a rung of type makes from the ground it sits on, taken at the darkest
+  /// ground where the panel is weakest: the amplitude of this app's own words.
+  ///
+  /// **At 1 the two are equal.** Above 1 the other app is the stronger mark on this surface, which is
+  /// what "the text interleaves with the page behind it" is, measured. A per-pixel contrast bar cannot
+  /// report this — it is a ratio against a *uniform* ground, and it stays satisfied at every pixel of a
+  /// panel that is unreadable as a whole.
+  ///
+  /// - Parameter typeAlpha: the rung's composited alpha over the ground. The glass pins `.aqua`, where
+  ///   `labelColor` is black at 0.85, so `Ink.secondary` (0.80 of it) is 0.68 and contributes no light
+  ///   of its own.
+  package static func interferenceRatio(typeAlpha: CGFloat) -> CGFloat {
+    let dark = ground(overBackdrop: 0)
+    let light = ground(overBackdrop: 1)
+    return (luminance(light) - luminance(dark)) / (luminance(dark) - luminance(dark * (1 - typeAlpha)))
+  }
 
   /// The corner every panel is cut to.
   ///

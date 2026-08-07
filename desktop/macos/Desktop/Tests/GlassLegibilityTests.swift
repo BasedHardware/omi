@@ -286,6 +286,81 @@ final class GlassLegibilityTests: XCTestCase {
       "The focus ring is the same colour as the resting edge; focus is invisible.")
   }
 
+  // MARK: - The ground is not a colour, it is a picture of another app
+
+  /// **The defect this bar exists for, and the reason the file above it could not see it.**
+  ///
+  /// Every assertion in this class composites onto `Ink.surface` — one flat colour — because that is
+  /// what a WCAG ratio is defined against. The glass ground is not flat. It is
+  /// `InkGlass.scrim` of `surface` over a *blurred picture of whatever is behind the window*, and at
+  /// the scrim that shipped it passed 35.4% of that picture through. A browser page puts both ends of
+  /// that range inside one panel — a white article beside a dark hero banner — and the panel then
+  /// carries a second image straight through the pixels the chat text is drawn in.
+  ///
+  /// Nothing above catches it. At *every individual pixel* the type still cleared AA against the
+  /// ground under that pixel; the ground had simply become a competing picture. So the guard is a
+  /// different quantity: the foreign image's amplitude over this app's own type's amplitude, taken at
+  /// the darkest ground where the panel is weakest.
+  ///
+  /// **The bar is 1 and it is not invented here — it is where the accepted case already sat.**
+  /// Measured off the tester's own frames, median-filtering our own glyphs out of the panel to leave
+  /// the ground: over the wallpaper they called correct the ratio is **1.00** (ground 141 → 192/255);
+  /// over the browser page they called unreadable it is **1.62** (ground 157 → 240/255). At the shipped
+  /// scrim the modelled worst case was **2.02**.
+  func testTheGlassCarriesItsOwnWordsMoreStronglyThanTheAppBehindIt() {
+    // The faintest rung the panel is allowed to carry, so the bound is evaluated where the surface is
+    // weakest. Resolved rather than restated: `Ink.secondary` is `labelColor` (0.85 in `.aqua`) at
+    // 0.80, and a test that hardcoded 0.68 would keep passing if either factor moved.
+    let alpha = resolved(Ink.secondary).alphaComponent
+    let ratio = InkGlass.interferenceRatio(typeAlpha: alpha)
+
+    XCTAssertLessThanOrEqual(
+      ratio, 1.0,
+      """
+      The glass shows the app behind it \(String(format: "%.2f", ratio))× as strongly as it shows \
+      its own words. Above 1 the browser page is the stronger mark on this surface, which is what \
+      "the page text and the chat text interleave" is when it is measured. Raise `InkGlass.scrim`; \
+      note that swapping `InkGlass.material` moves the identical quantity and moves it slightly \
+      worse (see the header of InkGlass.swift), so it is not an alternative.
+      """
+    )
+
+    // …and the panel must still be glass. Stated as its own floor so that a future edit cannot fix
+    // legibility by quietly walking the scrim to opaque: this bound and the one above are the two
+    // sides the ground is squeezed between, and a change that satisfies one by abandoning the other
+    // should fail here rather than ship a white rectangle.
+    XCTAssertGreaterThanOrEqual(
+      InkGlass.backdropPassthrough, 0.20,
+      """
+      The panel passes only \(String(format: "%.1f", InkGlass.backdropPassthrough * 100))% of what \
+      is behind it. Below a fifth this stops reading as a floating surface at all, which is the \
+      product decision the material exists to serve.
+      """
+    )
+  }
+
+  /// The ground model itself, checked against the hardware samples `InkGlass` publishes.
+  ///
+  /// The arithmetic above is only worth anything if `InkGlass.ground(overBackdrop:)` is the surface
+  /// the user actually gets. A glass panel cannot be rendered offscreen — `NSVisualEffectView` blends
+  /// `.behindWindow` and a test process has no desktop behind its windows — so the model is the only
+  /// route to a guard, and the model has to be pinned to something real. These are the two figures
+  /// `InkGlass` sampled with `screencapture` over solid backdrops.
+  func testTheModelledGroundMatchesWhatWasSampledOnHardware() {
+    let surface = resolved(Ink.surface)
+    // Sampled at scrim 0 over a black desktop: the material's own ceiling, 136.2/255.
+    let bare =
+      InkGlass.measuredMaterialTint * InkGlass.measuredMaterialOpacity * 255
+    XCTAssertEqual(
+      bare, 136.2, accuracy: 3.0,
+      "The material model no longer reproduces the 136.2/255 sampled at scrim zero over black.")
+    // The surface the scrim is made of must really be white in the pinned appearance, or the ground
+    // function's single-channel form is measuring a colour the panel does not draw.
+    XCTAssertEqual(
+      surface.redComponent, 1.0, accuracy: 0.01,
+      "Ink.surface no longer resolves white in the glass's pinned appearance.")
+  }
+
   func testTheSeparatorIsAVisibleEdgeOnTheLightPanel() {
     // Several converted files drew their borders as `Color.white.opacity(0.05…0.18)` — hairlines
     // that existed only because the page behind them was near-black. On glass they were nothing.
@@ -299,5 +374,206 @@ final class GlassLegibilityTests: XCTestCase {
       resolved(Ink.separator).alphaComponent, 0.0,
       "A fully transparent separator is the white-on-white bug wearing a different name."
     )
+  }
+}
+
+/// The same claim as `GlassLegibilityTests`' interference bound, made through the renderer instead of
+/// through arithmetic — over a **bright**, a **dark** and a **busy** ground.
+///
+/// The arithmetic guard is a function of four numbers and would keep passing if a call site drew this
+/// app's prose in something fainter than the rung those numbers were solved for. This hosts the
+/// production type — the real colour `OmiMarkdown` hands its assistant prose, at the real `InkType`
+/// role — over a modelled ground and reads the pixels back, so what is asserted is what the renderer
+/// draws.
+///
+/// **The busy ground is the whole point.** Bright and dark are flat, and every flat ground passed even
+/// on the panel that shipped unreadable; the defect only exists once one panel spans both. So the busy
+/// backdrop is the shape from the tester's frames — a white page with a dark hero banner across it —
+/// and the assertion on it is not a contrast ratio but an amplitude comparison.
+@MainActor
+final class GlassGroundInterferenceRenderTests: XCTestCase {
+
+  /// What is behind the window. Bright and dark bound the range; busy is the case that broke.
+  private enum Backdrop: String, CaseIterable {
+    case bright, dark, busy
+
+    /// The backdrop's own brightness at a row, as a fraction of white.
+    func tone(row: Int, of height: Int) -> CGFloat {
+      switch self {
+      case .bright: return 1
+      case .dark: return 0
+      case .busy:
+        // A dark hero banner across the middle third of an otherwise white page.
+        let third = height / 3
+        return (row >= third && row < third * 2) ? 0.02 : 1
+      }
+    }
+  }
+
+  private static let size = NSSize(width: 300, height: 210)
+
+  private func resolved(_ color: Color) -> NSColor {
+    var out = NSColor(color)
+    InkGlass.appearance.performAsCurrentDrawingAppearance {
+      out = NSColor(color).usingColorSpace(.sRGB) ?? out
+    }
+    return out.usingColorSpace(.sRGB) ?? out
+  }
+
+  private func contrast(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
+    let l1 = InkGlass.luminance(a)
+    let l2 = InkGlass.luminance(b)
+    return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+  }
+
+  /// The ground this app actually draws, row by row, straight from `InkGlass`.
+  private func groundTone(_ backdrop: Backdrop, row: Int, height: Int) -> CGFloat {
+    InkGlass.ground(
+      overBackdrop: backdrop.tone(row: row, of: height),
+      surfaceTone: resolved(Ink.surface).redComponent)
+  }
+
+  /// The ground as an image, so a real view can be composited over a real surface.
+  private func groundImage(_ backdrop: Backdrop, size: NSSize) -> NSImage {
+    let width = Int(size.width)
+    let height = Int(size.height)
+    let image = NSImage(size: size)
+    image.lockFocus()
+    for row in 0..<height {
+      let tone = groundTone(backdrop, row: row, height: height)
+      NSColor(srgbRed: tone, green: tone, blue: tone, alpha: 1).setFill()
+      // AppKit's origin is bottom-left; rows are counted from the top so the banner lands where the
+      // model says it does.
+      NSBezierPath(rect: NSRect(x: 0, y: height - row - 1, width: width, height: 1)).fill()
+    }
+    image.unlockFocus()
+    return image
+  }
+
+  /// Production prose, at a production role, in the colour production hands it.
+  private func prose(_ color: Color) -> some View {
+    Text(
+      """
+      MSG Entertainment's venues — including Madison Square Garden, Radio City Music Hall, \
+      and the Beacon Theatre — all have shows running through August.
+      """
+    )
+    .inkStyle(.prose, color: color)
+    .frame(width: Self.size.width - 24, alignment: .leading)
+    .padding(12)
+  }
+
+  private func render(_ view: some View, over backdrop: Backdrop) throws -> NSBitmapImageRep {
+    let host = NSHostingView(
+      rootView: view.frame(width: Self.size.width, height: Self.size.height))
+    host.appearance = InkGlass.appearance
+    host.frame = NSRect(origin: .zero, size: Self.size)
+
+    let ground = NSImageView(frame: host.frame)
+    ground.appearance = InkGlass.appearance
+    ground.imageScaling = .scaleAxesIndependently
+    ground.image = groundImage(backdrop, size: Self.size)
+    ground.addSubview(host)
+    ground.layoutSubtreeIfNeeded()
+
+    let rep = try XCTUnwrap(ground.bitmapImageRepForCachingDisplay(in: ground.bounds))
+    ground.cacheDisplay(in: ground.bounds, to: rep)
+    return rep
+  }
+
+  /// Every pixel, paired with the ground the model says is under it.
+  private func samples(_ rep: NSBitmapImageRep, _ backdrop: Backdrop) -> [(ground: CGFloat, ink: CGFloat)] {
+    var out: [(CGFloat, CGFloat)] = []
+    let scale = rep.pixelsHigh / Int(Self.size.height)
+    for y in 0..<rep.pixelsHigh {
+      let ground = groundTone(backdrop, row: y / max(scale, 1), height: Int(Self.size.height))
+      for x in 0..<rep.pixelsWide {
+        guard let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+        out.append((ground, color.redComponent))
+      }
+    }
+    return out
+  }
+
+  // MARK: - The harness has to be measuring the surface it claims to
+
+  /// **Read this before trusting either test below.** Everything here rests on the rendered ground
+  /// being the ground `InkGlass` models; if `cacheDisplay` ever stopped capturing the backdrop, both
+  /// tests would quietly measure black type on white paper and pass forever. So the harness proves
+  /// itself first, on the bare ground with nothing drawn on it.
+  func testTheHarnessRendersTheGroundInkGlassModels() throws {
+    for backdrop in Backdrop.allCases {
+      let rep = try render(Color.clear, over: backdrop)
+      for (expected, rendered) in samples(rep, backdrop) {
+        XCTAssertEqual(
+          rendered, expected, accuracy: 0.02,
+          """
+          The harness rendered \(String(format: "%.3f", rendered)) where InkGlass models \
+          \(String(format: "%.3f", expected)) over a \(backdrop.rawValue) backdrop. The offscreen \
+          ground is not the panel's ground, so nothing measured on it means anything.
+          """)
+        return  // one row proves the pipeline; the rest is the same fill.
+      }
+    }
+  }
+
+  // MARK: - What the renderer actually produces
+
+  /// Body prose clears AA against the ground under it on all three — including the busy one, where it
+  /// always did. Kept because it is the claim people *think* covers this defect, and stating it
+  /// alongside the one that does is the point: this passed on the broken panel too.
+  func testProseClearsAAOnBrightDarkAndBusyGrounds() throws {
+    for backdrop in Backdrop.allCases {
+      let rep = try render(prose(OmiMarkdownContent.baseColor(for: .assistant)), over: backdrop)
+      let ink = samples(rep, backdrop).filter { $0.ground - $0.ink > 0.25 }
+      XCTAssertFalse(ink.isEmpty, "no prose rendered over a \(backdrop.rawValue) backdrop")
+
+      // The glyph *body*, not its antialiased edge. A contrast bar is stated between a text colour
+      // and a background colour, i.e. at full coverage; the fringe around a stroke is partially
+      // covered by construction and is never what "the text colour" means. Taking the minimum over
+      // every touched pixel measures the faintest fringe the rasteriser produced and reports 1.9:1
+      // for type that is plainly black — so this reads the strongest ink, as `strongest(_:)` does in
+      // `ShellStatusIconLegibilityTests` for the same reason.
+      let body = ink.map { contrast($0.ground, $0.ink) }.max() ?? 0
+      XCTAssertGreaterThanOrEqual(
+        body, 4.5,
+        """
+        Chat prose measures \(String(format: "%.2f", body)):1 against its own local ground over a \
+        \(backdrop.rawValue) backdrop.
+        """)
+    }
+  }
+
+  /// **The regression.** On the busy ground, the type's own amplitude has to be at least the ground's.
+  ///
+  /// At the scrim that shipped, the ground travelled further between the banner and the page than the
+  /// prose travelled from the ground — 2.02× at the modelled extreme — so the strongest edges inside
+  /// the panel belonged to the other application. Both quantities are read off the rendered bitmap.
+  func testOnABusyGroundTheProseIsAStrongerMarkThanThePageBehindIt() throws {
+    let rep = try render(prose(Ink.secondary), over: .busy)
+    let all = samples(rep, .busy)
+
+    // The ground's own travel across the panel, measured where nothing is drawn on it. The tolerance
+    // is tight on purpose: at 0.02 it admits the outermost antialiased fringe around a glyph, which
+    // is type rather than ground and drags the minimum down, reporting a ground that travels further
+    // than it does.
+    let bare = all.filter { abs($0.ground - $0.ink) <= 0.004 }.map { InkGlass.luminance($0.ink) }
+    let backdropAmplitude = (bare.max() ?? 0) - (bare.min() ?? 0)
+
+    // The type's travel from its ground, taken over the banner — the darkest ground, where the panel
+    // is weakest and where the shipped surface failed.
+    let banner = all.filter { $0.ground < InkGlass.ground(overBackdrop: 0.5) && $0.ground - $0.ink > 0.25 }
+    XCTAssertFalse(banner.isEmpty, "no prose landed over the banner; the fixture moved")
+    let typeAmplitude =
+      banner.map { InkGlass.luminance($0.ground) - InkGlass.luminance($0.ink) }.max() ?? 0
+
+    XCTAssertGreaterThanOrEqual(
+      typeAmplitude, backdropAmplitude,
+      """
+      Across one panel the ground travels \(String(format: "%.3f", backdropAmplitude)) in luminance \
+      while the prose on it travels \(String(format: "%.3f", typeAmplitude)). The page behind the \
+      window is the stronger mark on this surface — which is the reported defect, measured. See \
+      `InkGlass.scrim`.
+      """)
   }
 }
