@@ -35,7 +35,6 @@ from services.agent_vm_read import (
     decide_agent_vm_read,
     demoted_updating_vm,
     reconcile_in_progress,
-    reconcile_lease_active,
 )
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
@@ -157,10 +156,6 @@ def _get_vm(uid: str) -> dict[str, Any] | None:
         return None
     vm = snapshot.to_dict().get("agentVm")
     return vm if isinstance(vm, dict) and vm.get("vmName") else None
-
-
-def _reconcile_lease_active(vm: dict[str, Any], now: float | None = None) -> bool:
-    return reconcile_lease_active(vm, now)
 
 
 def _reconcile_in_progress(vm: dict[str, Any], now: float | None = None) -> bool:
