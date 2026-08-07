@@ -218,8 +218,6 @@ Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.
 
 ## Testing
 
-Emulator commands require root Bun 1.3.14; run `bun install --frozen-lockfile --ignore-scripts` first.
-
 ```bash
 bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
