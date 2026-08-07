@@ -239,7 +239,37 @@ type BoundaryInput = { predicate: string; arguments: readonly { slot_id: string;
 /** The old prompt serialized the whole request, including a context_packet of
  * sha256 topic refs and `source-local:` argument values. None of it is
  * readable, and a sufficiency judgment made over ids is made over nothing. */
-const promptForBoundary = (input: BoundaryInput): string => JSON.stringify({
+/**
+ * v5. Scored against v4 on labelled abstentions from the coldrun-dev-v2 GLM
+ * lane, where 849/860 abstentions carried `unit_boundary_decision: "abstain"`
+ * and *every* one carried empty `risk_markers` — abstention was free and
+ * unarticulated. The recovered false negatives were all durable owner facts
+ * spoken inside casual conversation (`prefer I/Google Meet`, `live_in I/The US`,
+ * `use_platform [negative] I/Twitter`, `be_called I/Christina`), so the edge was
+ * grading the conversation's tone rather than the fact's lifetime.
+ *
+ * Two changes: a concrete standing-question retrieval test that names the
+ * durable categories, and a mandatory articulated reason on abstain (enforced in
+ * the parser) so the cheap default costs the model something.
+ */
+const promptForBoundaryV5 = (input: BoundaryInput): string => JSON.stringify({
+  task: "Judge whether this fact is standing knowledge worth keeping months from now — not merely whether the excerpt is locally intelligible.",
+  fact: { relation: input.predicate, roles: input.arguments.map((argument) => ({ role: argument.role, filler: argument.surface ?? (argument.value.kind === "literal" ? String(argument.value.value) : "unresolved reference") })), ambiguity_markers: input.ambiguity_markers },
+  excerpts: input.source_excerpts.map((item) => item.excerpt),
+  output_contract: { decision: "accept_ltm|abstain", risk_markers: ["string"] },
+  rules: [
+    "Return JSON only, with exactly the output_contract shape and no Markdown or prose.",
+    "Apply this test first. Months from now the owner asks a standing question about themselves: What do I use? Where do I live or work? What do I prefer or avoid? Who do I know and work with? What do I own or run? What am I called? If this fact would be a correct answer to such a question, return accept_ltm.",
+    "Judge the fact, not the conversation around it. Durable facts are almost always spoken in passing inside casual, transient talk — scheduling, banter, complaining, small talk. A casual or throwaway tone in the excerpt is NOT evidence that the fact is transient. Ask only whether the fact's referents and truth outlive the conversation.",
+    "Negative and habitual facts are durable in exactly the same way as positive ones: 'I don't use Twitter', 'I avoid Zoom', 'I never drink coffee' are standing self-knowledge, not residue.",
+    "Return decision=abstain for session residue: facts whose referents stop existing when the conversation ends — finished micro-tasks, in-the-moment logistics ('an order of fries', 'a team dinner tomorrow'), momentary states and reactions ('I'm tense right now', 'I like this plan'), ambient bystander chatter that is not about the owner, or facts whose referents/roles are pronouns the excerpts never resolve.",
+    "Only ambiguity_markers one_off or hedged are strong abstain signals. Ignore other marker names; do not invent abstain reasons from pronouns or self-reference.",
+    "Abstaining on a self-contained durable owner fact discards a real memory permanently — same severity as admitting sludge.",
+    "risk_markers is REQUIRED and must be non-empty when decision=abstain: name the specific reason this fact does not outlive the conversation, in a few words. An abstention you cannot justify in words is a wrong abstention — return accept_ltm instead. When decision=accept_ltm, return an empty array unless a genuine risk applies.",
+  ],
+}, null, 2);
+
+const promptForBoundary = (input: BoundaryInput, version?: string): string => version === "v5" ? promptForBoundaryV5(input) : JSON.stringify({
   task: "Judge whether this fact is standing knowledge worth keeping months from now — not merely whether the excerpt is locally intelligible.",
   fact: { relation: input.predicate, roles: input.arguments.map((argument) => ({ role: argument.role, filler: argument.surface ?? (argument.value.kind === "literal" ? String(argument.value.value) : "unresolved reference") })), ambiguity_markers: input.ambiguity_markers },
   excerpts: input.source_excerpts.map((item) => item.excerpt),
@@ -254,12 +284,17 @@ const promptForBoundary = (input: BoundaryInput): string => JSON.stringify({
   ],
 }, null, 2);
 
-const parseBoundaryResponse = (content: string): UnitBoundaryJudgment => {
+const parseBoundaryResponse = (content: string, version?: string): UnitBoundaryJudgment => {
   const root = parseJsonObject(content, "STM/LTM unit-boundary");
   assertKeys(root, ["decision"], ["risk_markers"], "STM/LTM unit-boundary");
   if (root.risk_markers !== undefined && (!Array.isArray(root.risk_markers) || root.risk_markers.some((marker) => typeof marker !== "string" || !marker.trim()))) throw new Error("GLM STM/LTM unit-boundary risk_markers must be an array of non-empty strings");
   const risk_markers = Array.isArray(root.risk_markers) ? root.risk_markers as readonly string[] : undefined;
   if (root.decision === "accept_ltm") return { decision: "accept_ltm", ...(risk_markers ? { risk_markers } : {}) };
+  // v5 makes the abstention reason mandatory: v4 returned empty risk_markers on
+  // every single one of 860 live abstentions, so "abstain" cost the model
+  // nothing and carried no diagnosis. Throwing here is deliberate — the retry
+  // appends a repair hint, so the model gets to justify itself or change answer.
+  if (root.decision === "abstain" && version === "v5" && !risk_markers?.length) throw new Error("GLM STM/LTM unit-boundary v5 requires non-empty risk_markers when decision is abstain");
   if (root.decision === "abstain") return { decision: "abstain", reason: risk_markers?.join("; ") || "GLM boundary sufficiency abstention", ...(risk_markers ? { risk_markers } : {}) };
   throw new Error('GLM STM/LTM unit-boundary decision must be "accept_ltm" or "abstain"');
 };
@@ -632,13 +667,13 @@ const parseRenderResponse = (content: string, input: RenderInput): { summary_tex
  * as data, and compose/render carry a per-run `model_version` that names the
  * model behind the port, not this prompt contract (see harness/recall.ts).
  */
-type GlmEdge = { versions: ReadonlySet<string> | null; prompt(input: unknown): string; parse(content: string, input: unknown): unknown };
+type GlmEdge = { versions: ReadonlySet<string> | null; prompt(input: unknown, version?: string): string; parse(content: string, input: unknown, version?: string): unknown };
 
 export const EDGES = {
   [entityStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForEntity(input as EntityResolutionRequest), parse: (content, input) => parseEntityProposal(content, input as EntityResolutionRequest) },
   [mentionStrategy]: { versions: new Set(["v1"]), prompt: (input) => promptForMention(input as MentionDetectionRequest), parse: (content, input) => parseMentionResponse(content, input as MentionDetectionRequest) },
   [scopeStrategy]: { versions: new Set(["v2"]), prompt: (input) => promptForScope(input as ScopeRoleRequest), parse: (content, input) => parseScopeResponse(content, input as ScopeRoleRequest) },
-  [boundaryStrategy]: { versions: new Set(["v4"]), prompt: (input) => promptForBoundary(input as BoundaryInput), parse: (content) => parseBoundaryResponse(content) },
+  [boundaryStrategy]: { versions: new Set(["v4", "v5"]), prompt: (input, version) => promptForBoundary(input as BoundaryInput, version), parse: (content, _input, version) => parseBoundaryResponse(content, version) },
   [groundedStrategy]: { versions: null, prompt: (input) => typeof (input as { prompt?: unknown }).prompt === "string" ? (input as { prompt: string }).prompt : JSON.stringify(input), parse: (content) => parseGroundedResponse(content) },
   [identityStrategy]: { versions: new Set(["dream-identity-v1"]), prompt: (input) => promptForIdentityAdjudication(input as { profiles?: readonly ReferentProfile[] }), parse: (content, input) => parseIdentityAdjudication(content, input as { profiles?: readonly ReferentProfile[] }) },
   [identityVerifyStrategy]: { versions: new Set(["dream-identity-verify-v2"]), prompt: (input) => promptForIdentityVerification(input as { who?: string | null; profiles?: readonly ReferentProfile[] }), parse: (content) => parseIdentityVerification(content) },
@@ -675,7 +710,7 @@ export class GlmModel implements ModelPort {
     let lastError: unknown;
     for (let attempt = 1; ; attempt += 1) {
       try {
-        const content = edge.prompt(input) + (attempt > 1 ? repairHint(lastError) : "");
+        const content = edge.prompt(input, version) + (attempt > 1 ? repairHint(lastError) : "");
         const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
           method: "POST",
           headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
@@ -686,7 +721,7 @@ export class GlmModel implements ModelPort {
         });
         if (!response.ok) throw new Error(`GLM chat completion failed (${response.status}): ${(await response.text()).slice(0, 500)}`);
         const payload = await response.json();
-        return edge.parse(readContent(payload), input);
+        return edge.parse(readContent(payload), input, version);
       } catch (error) {
         lastError = error;
         if (attempt >= attempts || !retryableGlmError(error)) throw error;

@@ -22,9 +22,18 @@ export const buildUnitBoundaryRequest = (claim: ProvisionalClaim, evidence: read
   return { claim_revision_id: claim.claim_revision_id, predicate: claim.predicate, arguments: claim.arguments, ambiguity_markers, context_packet: claim.context_packet, source_excerpts };
 };
 
+/** Default stays v4 so in-flight runs keep their contract; v5 is opt-in while it
+ * is being scored against v4 on labelled abstentions. */
+export const boundaryVersion = (): string => {
+  const requested = process.env.OMI_BOUNDARY_VERSION?.trim();
+  if (!requested) return "v4";
+  if (requested !== "v4" && requested !== "v5") throw new Error(`unsupported OMI_BOUNDARY_VERSION: ${requested}`);
+  return requested;
+};
+
 export const invokeUnitBoundaryStrategy = async (port: ModelPort, claim: ProvisionalClaim, evidence: readonly Evidence[]): Promise<UnitBoundaryJudgment> => {
   const input = buildUnitBoundaryRequest(claim, evidence);
-  const judged = await port.invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: {
+  const judged = await port.invoke({ strategy: "stm-ltm-unit-boundary", version: boundaryVersion(), input: {
     ...input,
   } });
   if (typeof judged !== "object" || judged === null || !["accept_ltm", "abstain"].includes((judged as { decision?: unknown }).decision as string)) throw new Error("invalid STM/LTM unit-boundary model judgment");

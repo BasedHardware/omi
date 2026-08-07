@@ -6,7 +6,7 @@ import type { PersistedValidTime, ProvisionalClaim } from "../../core/schema";
 import { SqliteLedger } from "../sqlite";
 import { DeterministicFakeModel } from "./port";
 import { commitSessionStmToLtmTransition } from "./stm-ltm-transition";
-import { buildUnitBoundaryRequest } from "./unit-boundary-edge";
+import { boundaryVersion, buildUnitBoundaryRequest } from "./unit-boundary-edge";
 import { EDGES, GlmModel } from "./glm";
 
 const claim = (id = "p-1", surface = "Alice"): ProvisionalClaim => ({
@@ -254,6 +254,59 @@ test("the boundary edge is asked about a readable fact, not about our bookkeepin
   for (const id of ["source-local:", "predicate:4c1e", "context_packet", "p-boundary"]) expect(prompt).not.toContain(id);
   expect(prompt).toContain("Alice works on atlas");
   expect(prompt).toContain("works_on");
+});
+
+test("boundary v5 makes the abstention reason mandatory, while v4 keeps accepting a bare abstain", async () => {
+  const boundaryRequest = buildUnitBoundaryRequest(claim(), evidenceFor(claim()));
+  const bare = '{"decision":"abstain"}';
+  // v4's free abstention is exactly what produced 860 empty risk_marker sets live.
+  await expect(modelFor(fixtureProvider(bare)).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest }))
+    .resolves.toEqual({ decision: "abstain", reason: "GLM boundary sufficiency abstention" });
+  // Retryable by design: each attempt appends a repair hint, so a model that
+  // keeps refusing to justify itself fails loudly rather than silently abstaining.
+  await expect(modelFor(fixtureProvider(bare, bare, bare)).invoke({ strategy: "stm-ltm-unit-boundary", version: "v5", input: boundaryRequest }))
+    .rejects.toThrow("v5 requires non-empty risk_markers");
+  // ...and a model that justifies itself on retry is taken at its word.
+  await expect(modelFor(fixtureProvider(bare, '{"decision":"abstain","risk_markers":["momentary_state"]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v5", input: boundaryRequest }))
+    .resolves.toEqual({ decision: "abstain", reason: "momentary_state", risk_markers: ["momentary_state"] });
+  // A justified v5 abstention still parses, and v5 never constrains accept_ltm.
+  await expect(modelFor(fixtureProvider('{"decision":"abstain","risk_markers":["one_off_logistics"]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v5", input: boundaryRequest }))
+    .resolves.toEqual({ decision: "abstain", reason: "one_off_logistics", risk_markers: ["one_off_logistics"] });
+  // v5 asks for an empty array on accept; it survives parse and is dropped by
+  // invokeUnitBoundaryStrategy, which only forwards non-empty risk_markers.
+  await expect(modelFor(fixtureProvider('{"decision":"accept_ltm","risk_markers":[]}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v5", input: boundaryRequest }))
+    .resolves.toEqual({ decision: "accept_ltm", risk_markers: [] });
+});
+
+test("boundary v5 asks about the fact's lifetime rather than the conversation's tone", async () => {
+  const boundaryRequest = buildUnitBoundaryRequest(claim(), evidenceFor(claim()));
+  const v4 = fixtureProvider('{"decision":"accept_ltm"}');
+  const v5 = fixtureProvider('{"decision":"accept_ltm","risk_markers":[]}');
+  await modelFor(v4).invoke({ strategy: "stm-ltm-unit-boundary", version: "v4", input: boundaryRequest });
+  await modelFor(v5).invoke({ strategy: "stm-ltm-unit-boundary", version: "v5", input: boundaryRequest });
+  const promptFor = (provider: { calls: unknown[] }) => (provider.calls[0] as { messages: { content: string }[] }).messages[0]!.content;
+  expect(promptFor(v5)).toContain("Judge the fact, not the conversation around it");
+  expect(promptFor(v5)).toContain("risk_markers is REQUIRED");
+  expect(promptFor(v4)).not.toContain("Judge the fact, not the conversation around it");
+});
+
+test("the boundary version is env-selectable and refuses versions the driver does not implement", async () => {
+  const previous = process.env.OMI_BOUNDARY_VERSION;
+  try {
+    delete process.env.OMI_BOUNDARY_VERSION;
+    expect(boundaryVersion()).toBe("v4");
+    process.env.OMI_BOUNDARY_VERSION = "v5";
+    expect(boundaryVersion()).toBe("v5");
+    process.env.OMI_BOUNDARY_VERSION = "v9";
+    expect(() => boundaryVersion()).toThrow("unsupported OMI_BOUNDARY_VERSION");
+  } finally {
+    if (previous === undefined) delete process.env.OMI_BOUNDARY_VERSION;
+    else process.env.OMI_BOUNDARY_VERSION = previous;
+  }
+  // Version drift past the registry must still be loud.
+  const boundaryRequest = buildUnitBoundaryRequest(claim(), evidenceFor(claim()));
+  await expect(modelFor(fixtureProvider('{"decision":"accept_ltm"}')).invoke({ strategy: "stm-ltm-unit-boundary", version: "v6", input: boundaryRequest }))
+    .rejects.toThrow("version mismatch");
 });
 
 test("identity-naming-check parses the contract key, the exact 'answer' alias, and string booleans; any other renamed key fails closed", async () => {
