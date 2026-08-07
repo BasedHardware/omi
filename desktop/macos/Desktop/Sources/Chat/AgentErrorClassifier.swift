@@ -99,6 +99,24 @@ enum AgentErrorClassifier {
         retryable: false)
     }
 
+    // The Omi-account proxy answers an exhausted billing lane with a bare 402
+    // and no body, so the raw transport string ("HTTP 402 status code (no
+    // body)") fell through to `unknown` and was shown verbatim — and, worse,
+    // marked retryable, which is the retry storm this classifier exists to
+    // prevent. Payment Required is never fixed by resending the same message.
+    // Matched on status shape rather than a bare `402` so a token count or cost
+    // that happens to contain those digits cannot claim this rule.
+    if lower.contains("payment required")
+      || lower.range(of: #"\bhttp[\s/]*402\b"#, options: .regularExpression) != nil
+      || lower.range(of: #"\b402\s+status\b"#, options: .regularExpression) != nil
+    {
+      return ClassifiedAgentError(
+        code: .providerBillingExhausted,
+        userMessage:
+          "Omi's AI service declined this request for billing reasons. "
+          + "Check Settings → Plan and Usage; resending the same message won't help.",
+        retryable: false)
+    }
     if lower.contains("credit balance is too low") {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,

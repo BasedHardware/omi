@@ -42,6 +42,37 @@ final class AgentErrorClassifierTests: XCTestCase {
     XCTAssertTrue(classified.userMessage.contains("credit balance"))
   }
 
+  /// Reproduced live: the Omi-account proxy answers an exhausted billing lane
+  /// with a bare 402 and no body. That fell through to `unknown`, so the raw
+  /// transport string was shown to the user verbatim *and* marked retryable —
+  /// inviting exactly the retry storm this classifier was built to stop.
+  func testBareHTTP402IsClassifiedAndNeverShownRaw() {
+    for raw in [
+      "HTTP 402 status code (no body)",
+      "402 Payment Required",
+      "Request failed: http/402",
+    ] {
+      let classified = AgentErrorClassifier.classify(raw)
+      XCTAssertEqual(classified.code, .providerBillingExhausted, "unclassified: \(raw)")
+      XCTAssertFalse(classified.retryable, "resending a 402 cannot clear it: \(raw)")
+      XCTAssertFalse(
+        classified.userMessage.contains("402"),
+        "raw transport status must not reach the user: \(raw)")
+      XCTAssertFalse(
+        classified.userMessage.lowercased().contains("try again"),
+        "copy must not prescribe retries for an unretryable billing error: \(raw)")
+    }
+  }
+
+  /// The status-shaped match must not swallow ordinary numbers that merely
+  /// contain 402 — those still deserve their own classification or fallback.
+  func testBillingRuleDoesNotClaimUnrelatedNumbers() {
+    XCTAssertNotEqual(
+      AgentErrorClassifier.classify("Connection error. after 402 tokens").code,
+      .providerBillingExhausted,
+      "a token count must not be read as Payment Required")
+  }
+
   func testAuthExpiryRoutesToReconnectNotGenericError() {
     for raw in [
       "401 \"invalid_token\"",
@@ -199,6 +230,7 @@ final class AgentErrorClassifierTests: XCTestCase {
       ("table adapter_bindings has no column named last_delivered_turn_created_at_ms", true, false),
       ("403 \"byok_validation_failed\"", true, false),
       ("Connection error.", true, true),
+      ("HTTP 402 status code (no body)", true, false),
     ]
     for (raw, mustNotBeUnknown, expectedRetryable) in corpus {
       let c = AgentErrorClassifier.classify(raw)
