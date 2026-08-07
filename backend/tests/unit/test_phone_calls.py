@@ -23,6 +23,9 @@ def _stub_phone_call_plan_guards(monkeypatch):
         MagicMock(return_value=SimpleNamespace(has_access=True, is_paid=False, max_duration_seconds=None)),
     )
     monkeypatch.setattr('routers.phone_calls.check_destination_allowed', MagicMock())
+    monkeypatch.setattr('utils.phone_registration.check_call_access', MagicMock())
+    # The verification attempt budget is shared process state; give each test its own window.
+    monkeypatch.setattr('utils.other.endpoints.cached', {})
 
 
 def _make_app():
@@ -81,8 +84,8 @@ def test_e164_pattern_invalid():
 # ---------------------------------------------------------------------------
 
 
-@patch('routers.phone_calls.phone_calls_db')
-@patch('routers.phone_calls.start_caller_id_verification')
+@patch('utils.phone_registration.phone_calls_db')
+@patch('utils.phone_registration.start_caller_id_verification')
 def test_verify_phone_number_success(mock_start, mock_db, client):
     mock_db.get_phone_number_by_number.return_value = None
     mock_db.set_pending_verification.return_value = None
@@ -101,14 +104,14 @@ def test_verify_phone_number_success(mock_start, mock_db, client):
     mock_db.set_pending_verification.assert_called_once_with(TEST_UID, '+15551234567')
 
 
-@patch('routers.phone_calls.phone_calls_db')
+@patch('utils.phone_registration.phone_calls_db')
 def test_verify_phone_number_invalid_format(mock_db, client):
     resp = client.post('/v1/phone/numbers/verify', json={'phone_number': '5551234567'})
     assert resp.status_code == 400
     assert 'E.164' in resp.json()['detail']
 
 
-@patch('routers.phone_calls.phone_calls_db')
+@patch('utils.phone_registration.phone_calls_db')
 def test_verify_phone_number_already_verified_locally(mock_db, client):
     mock_db.get_phone_number_by_number.return_value = {'id': 'abc', 'phone_number': '+15551234567'}
 
@@ -117,9 +120,9 @@ def test_verify_phone_number_already_verified_locally(mock_db, client):
     assert 'already verified' in resp.json()['detail']
 
 
-@patch('routers.phone_calls.phone_calls_db')
-@patch('routers.phone_calls.get_caller_id')
-@patch('routers.phone_calls.start_caller_id_verification')
+@patch('utils.phone_registration.phone_calls_db')
+@patch('utils.phone_registration.get_caller_id')
+@patch('utils.phone_registration.start_caller_id_verification')
 def test_verify_phone_number_already_verified_in_twilio(mock_start, mock_get_cid, mock_db, client):
     """User cannot claim a number that's already verified in Twilio by another user."""
     from twilio.base.exceptions import TwilioRestException

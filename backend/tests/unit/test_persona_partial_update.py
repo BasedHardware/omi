@@ -104,6 +104,14 @@ def test_a_caller_supplied_description_is_not_overwritten(calls):
     assert calls['updates'][0]['description'] == 'Mine, not the model’s.'
 
 
+def test_an_explicitly_cleared_description_is_not_regenerated(calls):
+    """Clearing the description is a field the caller sent; presence, not truthiness, decides."""
+    _patch({'name': 'Ada Lovelace', 'description': ''})
+
+    assert calls['descriptions'] == 0
+    assert calls['updates'][0]['description'] == ''
+
+
 def test_an_unchanged_username_is_not_reclaimed(calls):
     """Released clients resend the whole persona; that must not re-save the handle."""
     _patch({'name': 'Ada', 'username': 'ada'})
