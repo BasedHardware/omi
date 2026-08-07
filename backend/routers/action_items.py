@@ -269,13 +269,16 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
         updated_item = action_items_db.get_action_item(uid, update['id'])
         if updated_item is None:
             continue
-        sync_action_item_reminder(
-            user_id=uid,
-            action_item_id=update['id'],
-            description=updated_item.get('description', ''),
-            completed=bool(updated_item.get('completed')),
-            due_at=updated_item.get('due_at'),
-        )
+        try:
+            sync_action_item_reminder(
+                user_id=uid,
+                action_item_id=update['id'],
+                description=updated_item.get('description', ''),
+                completed=bool(updated_item.get('completed')),
+                due_at=updated_item.get('due_at'),
+            )
+        except Exception:
+            logger.warning('Failed to reconcile action item reminder for %s', update['id'], exc_info=True)
 
     return _batch_mutation_response(result, locked_ids=locked_ids)
 

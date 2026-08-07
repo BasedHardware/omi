@@ -766,3 +766,32 @@ class TestSyncBatchSkipsLocked:
             completed=False,
             due_at=None,
         )
+
+    def test_sync_batch_succeeds_when_reminder_reconciliation_fails(self):
+        batch_result = types.SimpleNamespace(
+            updated_ids=['t1'],
+            missing_ids=[],
+            noop_ids=[],
+            updated_count=1,
+        )
+        batch_result.model = lambda: {
+            'updated_count': 1,
+            'updated_ids': ['t1'],
+            'missing_ids': [],
+            'noop_ids': [],
+        }
+
+        with patch.object(action_items_router, 'action_items_db') as mock_db:
+            mock_db.get_action_item.side_effect = [
+                {'id': 't1', 'description': 'Finish the report', 'is_locked': False},
+                {'id': 't1', 'description': 'Finish the report', 'completed': True, 'due_at': None},
+            ]
+            mock_db.batch_sync_update_action_items.return_value = batch_result
+            request = action_items_router.SyncBatchRequest(
+                items=[action_items_router.SyncBatchItem.model_validate({'id': 't1', 'completed': True})]
+            )
+
+            with patch.object(action_items_router, 'sync_action_item_reminder', side_effect=RuntimeError('offline')):
+                result = action_items_router.sync_batch_update(request, uid='test-uid')
+
+        assert result == {'status': 'ok', 'updated_count': 1}
