@@ -267,18 +267,37 @@ enum QueryShellRoute: Equatable, CaseIterable, Sendable {
 /// It has two jobs and they are not the same sentence: at rest it says how much Omi is holding, and
 /// under a filter it says how much of that survived the filter. Collapsing them into one string is how
 /// a search surface ends up claiming "0 moments captured" the moment you type a letter.
+///
+/// **Every one of them names its scope, because there is a second counter on this page.** Home shows
+/// two numbers about 200 pt apart: the hour rail on the left counts *one day* of screen capture, and
+/// this corner counts the *whole account*. The reader looked at a large `0` beside `798 so far ·
+/// still counting` and asked what each one was supposed to be — as written, neither said.
+///
+/// This is the second attempt at that. The first gave the two counters different **nouns** (screen
+/// moments vs moments), which shipped and did not work: a different noun does not tell you that one
+/// covers a day and the other covers everything. The missing words were never nouns — they were
+/// "today" and "everything", so the scope is now stated outright in every branch. The rail says its
+/// own half.
 enum QueryShellCount {
+  /// **The scope this corner counts, in the app's own words.** Deliberately a phrase and not a
+  /// system word like "all" or "total": "in all" is what the line used to end in, and it reads as a
+  /// rhetorical flourish rather than as a claim about *which* moments were counted.
+  ///
+  /// It is one constant rather than three literals so the three branches cannot end up describing
+  /// three different corpora — which is the drift that produced the contradiction in the first place.
+  static let scope = "everything Omi has kept"
+
   /// - Parameter isSettled: whether `total` is a finished count. While the account is still paging
   ///   in, the number climbs under the reader — so it says that instead of presenting a moving
   ///   figure as a settled one.
   static func sentence(matching: Int, total: Int, isFiltering: Bool, isSettled: Bool) -> String {
     guard isFiltering else {
       guard isSettled else {
-        return "\(number(total)) so far · still counting"
+        return "\(number(total)) so far · still counting \(scope)"
       }
-      return "\(number(total)) moment\(total == 1 ? "" : "s") in all"
+      return "\(number(total)) moment\(total == 1 ? "" : "s") in \(scope)"
     }
-    return "\(number(matching)) result\(matching == 1 ? "" : "s") · of \(number(total)) in all"
+    return "\(number(matching)) result\(matching == 1 ? "" : "s") · of \(number(total)) in \(scope)"
   }
 
   /// Grouped digits, because the count is routinely five figures and an ungrouped one is unreadable

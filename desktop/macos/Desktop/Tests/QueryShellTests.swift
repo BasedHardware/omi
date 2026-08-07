@@ -169,13 +169,68 @@ final class QueryShellTests: XCTestCase {
   func testTheCountLineSaysTheCorpusAtRestAndTheFractionUnderAFilter() {
     XCTAssertEqual(
       QueryShellCount.sentence(matching: 0, total: 3_741, isFiltering: false, isSettled: true),
-      "3,741 moments in all")
+      "3,741 moments in everything Omi has kept")
     XCTAssertEqual(
       QueryShellCount.sentence(matching: 12, total: 3_741, isFiltering: true, isSettled: true),
-      "12 results · of 3,741 in all")
+      "12 results · of 3,741 in everything Omi has kept")
     XCTAssertEqual(
       QueryShellCount.sentence(matching: 1, total: 3_741, isFiltering: true, isSettled: true),
-      "1 result · of 3,741 in all")
+      "1 result · of 3,741 in everything Omi has kept")
+  }
+
+  /// **Every branch says what it counted.** There is a second counter on this page — the hour rail,
+  /// 200 pt to the left, counting *one day* of screen capture — and the reader could not tell which
+  /// number covered what: they looked at a large `0` beside `798 so far · still counting` and asked
+  /// what each was supposed to show.
+  ///
+  /// The first fix gave the two counters different nouns. That shipped and did not work, because a
+  /// noun is not a scope. So all four states are asserted here, including the one that names no
+  /// number worth reading (`still counting`) and the one where the filter matched nothing — the two
+  /// most likely to be written without a scope, because in both the number is the interesting part.
+  func testEveryStateOfTheCountLineNamesTheScopeItCounted() {
+    let states = [
+      QueryShellCount.sentence(matching: 0, total: 798, isFiltering: false, isSettled: true),
+      QueryShellCount.sentence(matching: 0, total: 798, isFiltering: false, isSettled: false),
+      QueryShellCount.sentence(matching: 12, total: 798, isFiltering: true, isSettled: true),
+      QueryShellCount.sentence(matching: 0, total: 798, isFiltering: true, isSettled: true),
+    ]
+
+    for sentence in states {
+      XCTAssertTrue(
+        sentence.contains(QueryShellCount.scope),
+        "\"\(sentence)\" does not say what it counted, so it only means something next to the rail")
+    }
+    XCTAssertEqual(
+      states[1], "798 so far · still counting everything Omi has kept",
+      "the unsettled line named no scope at all — it is the one the reader asked about")
+    XCTAssertEqual(states[3], "0 results · of 798 in everything Omi has kept")
+  }
+
+  /// **The corner has to say all of that inside the corner.** The count is set on one line
+  /// (`.lineLimit(1)`), so a sentence too long for the space is not wrapped — it is truncated from
+  /// the end, and the end is exactly the scope clause this line exists to carry. Measured in the
+  /// face the corner is actually set in, at the narrowest window the app opens at.
+  ///
+  /// The budget is half the panel's inner width: the other half belongs to the header's leading
+  /// controls (`Filter ›`, `Brain Map ›`, `Chat ›`), which is the widest that cluster ever gets.
+  func testEveryCountSentenceFitsTheCornerAtTheNarrowestWindow() {
+    let lane = QueryShellLayout.laneWidth(for: DesktopWindowLayoutPolicy.width)
+    let inner = lane - QueryShellLayout.panelPaddingHorizontal * 2
+    let budget = inner / 2
+    let attributes = [NSAttributedString.Key.font: NSFont.systemFont(ofSize: OmiType.caption)]
+
+    for sentence in [
+      QueryShellCount.sentence(matching: 0, total: 88_888, isFiltering: false, isSettled: true),
+      QueryShellCount.sentence(matching: 0, total: 88_888, isFiltering: false, isSettled: false),
+      QueryShellCount.sentence(matching: 88_888, total: 88_888, isFiltering: true, isSettled: true),
+      QueryShellCount.sentence(matching: 0, total: 88_888, isFiltering: true, isSettled: true),
+    ] {
+      let width = (sentence as NSString).size(withAttributes: attributes).width
+      XCTAssertLessThanOrEqual(
+        width, budget,
+        "\"\(sentence)\" is \(width)pt in a \(budget)pt corner — it will truncate, and the first "
+          + "thing an ellipsis eats is the scope")
+    }
   }
 
   /// Typing one letter must not make the surface claim the archive is empty. Collapsing the two
@@ -193,14 +248,14 @@ final class QueryShellTests: XCTestCase {
     let counting = QueryShellCount.sentence(
       matching: 0, total: 5_562, isFiltering: false, isSettled: false)
 
-    XCTAssertEqual(counting, "5,562 so far · still counting")
-    XCTAssertFalse(
-      counting.contains("in all"),
+    XCTAssertEqual(counting, "5,562 so far · still counting everything Omi has kept")
+    XCTAssertTrue(
+      counting.contains("so far"),
       "A count that is still climbing must not claim to be the whole account.")
 
     XCTAssertEqual(
       QueryShellCount.sentence(matching: 0, total: 7_311, isFiltering: false, isSettled: true),
-      "7,311 moments in all",
+      "7,311 moments in everything Omi has kept",
       "Once hydration finishes the same line settles into a total.")
   }
 
@@ -214,7 +269,9 @@ final class QueryShellTests: XCTestCase {
     let rail = SpineHourRail.headlineCaption(0)
 
     XCTAssertEqual(rail, "screen moments")
-    XCTAssertTrue(corner.hasSuffix("in all"), "The corner names its scope: the whole account.")
+    XCTAssertTrue(
+      corner.hasSuffix(QueryShellCount.scope),
+      "The corner names its scope out loud: everything, not a day.")
     XCTAssertFalse(
       corner.contains("screen"),
       "Only the rail counts screen capture; the corner counts three kinds of record.")
