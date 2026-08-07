@@ -295,8 +295,15 @@ struct ChatBubble: View {
       .frame(maxWidth: 280)
     }
 
-    if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed {
-      Text("Couldn't save this reply")
+    // A failed turn now carries its own reason as the row's text (see
+    // `ChatTurnFailureNotice`). The blanket "Couldn't save this reply" caption
+    // both duplicated that reason in different words and named the wrong
+    // cause — the turn failed, no save was attempted. Keep a stamp only for a
+    // failed row that has nothing of its own to say.
+    if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed
+      && message.text.isEmpty && message.contentBlocks.isEmpty
+    {
+      Text("This turn didn't finish")
         .scaledFont(size: OmiType.micro, weight: .medium)
         .foregroundColor(PageGlass.warning)
     }

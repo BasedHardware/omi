@@ -1219,6 +1219,17 @@ class ChatProvider: ObservableObject {
   /// later, healthy send #N+1. See sendMessage() and stopAgent().
   private var sendGeneration: Int = 0
   private var sendLockOwnership = ChatSendLockOwnership()
+
+  /// Whether a new turn can start right now. The bridge holds one message
+  /// continuation, so a second concurrent turn would have its response
+  /// consumed by the wrong caller. Exposed so a caller can ask before it
+  /// sends — and report the refusal — instead of discovering it as a `nil`.
+  var canAcceptSend: Bool { !isSending && !sendLockOwnership.isHeld }
+
+  /// Said, not swallowed: a refused send is the reader's message going
+  /// nowhere, so it needs an account of where it went.
+  static let sendRefusedWhileBusyMessage =
+    "Omi is still answering your last message. Send this once it finishes."
   private var activeBridgeSendGeneration: Int?
   private var activeChatTelemetryAttempt: (generation: Int, attempt: ChatQueryTelemetryAttempt)?
   private var activeChatTurnLifecycle: (generation: Int, lifecycle: ChatTurnLifecycle)?
@@ -4117,16 +4128,26 @@ class ChatProvider: ObservableObject {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedText.isEmpty || questionInteraction != nil || questionContinuation != nil else { return nil }
     var effectivePrompt = trimmedText
-    guard let capturedRuntimeOwnerID = runtimeOwnerId else {
-      errorMessage = "Sign in again to continue."
-      return nil
-    }
 
     // Guard against concurrent sendMessage calls.
     // The bridge uses a single message continuation, so concurrent queries
     // would cause responses to be consumed by the wrong caller.
-    guard !isSending, !sendLockOwnership.isHeld else {
+    //
+    // Checked before the owner guard: a turn in flight already has an owner,
+    // and "you are still answering the last one" is the more specific truth
+    // when both hold. Refusing has to be *said* — a silent `return nil` is a
+    // message the reader watched disappear with no account of where it went,
+    // and every caller (including the automation bridge) was left reporting a
+    // send that never happened. `canAcceptSend` is the same decision, readable
+    // before the call.
+    guard canAcceptSend else {
       log("ChatProvider: sendMessage called while already sending, ignoring")
+      errorMessage = Self.sendRefusedWhileBusyMessage
+      currentError = nil
+      return nil
+    }
+    guard let capturedRuntimeOwnerID = runtimeOwnerId else {
+      errorMessage = "Sign in again to continue."
       return nil
     }
 
@@ -5385,6 +5406,26 @@ class ChatProvider: ObservableObject {
         }
       }
 
+      // Record the failure on the turn that failed, before the journal is
+      // finalized, so the row persists with it. `errorMessage`/`currentError`
+      // are one provider-wide slot — dismissible, overwritten by the next turn
+      // and gone on relaunch — and an empty `.failed` row is deleted by
+      // `projectJournalTurns` as a placeholder. Together those are how six
+      // failed turns became six questions with no answers between them.
+      let failureNotice = ChatTurnFailureNotice.forTurn(
+        error: error,
+        watchdogFired: watchdogFired,
+        toolStallAbortFired: toolStallAbortFired,
+        timeoutMessage: Self.stoppedTurnErrorMessage(
+          watchdogFired: watchdogFired,
+          toolStallAbortFired: toolStallAbortFired
+        ),
+        providerAuthMessage: Self.providerAuthRequiredUserMessage(isUserClaudeMode: isUserClaudeMode)
+      )
+      if let failureNotice {
+        applyTurnFailureMarker(failureNotice, toAssistantMessage: aiMessageId)
+      }
+
       if !watchdogFired, !toolStallAbortFired, let explicitStopReason {
         telemetryAttempt.finish(
           stopReason: explicitStopReason,
@@ -5464,61 +5505,44 @@ class ChatProvider: ObservableObject {
         )
       }
 
-      // Show error to user (unless they intentionally stopped).
+      // Show the error once.
       //
-      // Prefer the structured ChatErrorState card when the error
-      // maps cleanly. Falls through to the legacy errorMessage
-      // banner for unmappable BridgeError cases (encodingError,
-      // quotaExceeded, .agentError with a free-form message).
-      // Both surfaces coexist — only one is active at a time per
-      // turn.
-      if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
-        // `.stopped` normally means the user pressed Stop (silent). But if the
-        // 180s watchdog fired for THIS send, the `.stopped` came from the
-        // watchdog's own interrupt() — the turn timed out, so surface it
-        // instead of letting the turn vanish (the watchdog's own error-set
-        // races this catch and bails once `isSending` is released here).
-        sendWatchdogFiredGeneration = nil
-        sendToolStallAbortGeneration = nil
-        if let timeoutMessage = ChatProvider.stoppedTurnErrorMessage(
-          watchdogFired: watchdogFired,
-          toolStallAbortFired: toolStallAbortFired
-        ) {
-          currentError = nil
-          errorMessage = timeoutMessage
-        } else if stopReason(for: sendGen) == .userStop, hadPartialResponse {
-          currentError = .interrupted
-          lastFailedPrompt = nil
-          errorMessage = nil
-        } else {
-          currentError = nil
-          lastFailedPrompt = nil
-          errorMessage = nil
-        }
-      } else if !ChatQueryFailureDisposition.classify(
-        error,
-        watchdogFired: watchdogFired,
-        toolStallAbortFired: toolStallAbortFired
-      ).presentsUserError {
+      // A failed turn now says so on its own row, so the transient surface
+      // state must not say it a second time in different words — that is the
+      // "persistent bubble plus a bottom card, two wordings at once" this
+      // branch used to produce. A `ChatErrorCard` survives only when it
+      // carries a recovery the transcript cannot offer (sign in, repair the
+      // install), and `ChatTurnFailureNotice` words the row from that same
+      // card so the two can never disagree.
+      sendWatchdogFiredGeneration = nil
+      sendToolStallAbortGeneration = nil
+      if let failureNotice {
+        currentError = ChatTurnFailureNotice.retainedCard(
+          (error as? BridgeError).flatMap(ChatErrorState.from)
+        )
+        errorMessage = nil
+        // The composer was emptied at journal acceptance, so a failed turn
+        // destroyed what the reader typed. Give it back — untouched typing
+        // always wins — and retrying becomes pressing return again.
+        // `trimmedText`, not `effectivePrompt`: a question-card continuation
+        // replaces the prompt with a canned answer the reader picked rather
+        // than typed, and that has no business landing in their composer.
+        restoreComposerAfterFailedTurn(trimmedText, turnOwner: turnOwner)
+        lastFailedPrompt = failureNotice.retryable ? effectivePrompt : nil
+      } else if let bridgeError = error as? BridgeError, case .stopped = bridgeError,
+        stopReason(for: sendGen) == .userStop, hadPartialResponse
+      {
+        // An intentional Stop that already delivered text is not a failure and
+        // gets no marker; the card is the acknowledgement.
+        currentError = .interrupted
+        lastFailedPrompt = nil
+        errorMessage = nil
+      } else {
+        // Every other ending here is a cancellation — a stop, a supersession,
+        // a revoked turn. Nothing to report.
         lastFailedPrompt = nil
         currentError = nil
         errorMessage = nil
-      } else if let bridgeError = error as? BridgeError,
-        case .agentRuntimeFailure(let failure) = bridgeError,
-        failure.failureCode == .authentication
-      {
-        currentError = nil
-        errorMessage = Self.providerAuthRequiredUserMessage(isUserClaudeMode: isUserClaudeMode)
-        lastFailedPrompt = trimmedText
-      } else if let bridgeError = error as? BridgeError,
-        let card = ChatErrorState.from(bridgeError)
-      {
-        currentError = card
-        lastFailedPrompt = effectivePrompt
-        errorMessage = nil
-      } else {
-        errorMessage = error.localizedDescription
-        currentError = nil  // ensure the card is dismissed if it was up
       }
     }
 
@@ -5673,6 +5697,26 @@ class ChatProvider: ObservableObject {
       .prefix(byteCount)
       .map { String(format: "%02x", $0) }
       .joined()
+  }
+
+  /// Write the marker onto the turn's own assistant row, before the journal is
+  /// finalized so `journalUpdate` carries it into the durable record. This is
+  /// what stops the row being an empty `.failed` placeholder that the journal
+  /// projection deletes, leaving the question with nothing under it.
+  func applyTurnFailureMarker(_ notice: ChatTurnFailureNotice, toAssistantMessage messageID: String) {
+    guard let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+    messages[index].text = notice.transcriptContent(partialText: messages[index].text)
+    messages[index].isStreaming = false
+    messages[index].journalStatus = .failed
+  }
+
+  /// Put a failed turn's prompt back in the composer it came from, so the
+  /// reader still has what they typed. Never overwrites live typing: a
+  /// non-empty composer means they have moved on, and their text wins.
+  func restoreComposerAfterFailedTurn(_ prompt: String, turnOwner: ChatTurnOwner) {
+    guard turnOwner == .mainChat, !isOnboarding else { return }
+    guard draftText.isEmpty, !prompt.isEmpty else { return }
+    draftText = prompt
   }
 
   @discardableResult

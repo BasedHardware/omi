@@ -1700,11 +1700,24 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
+      // Report the provider's own admission decision. This used to answer
+      // `sent` unconditionally, so a send the busy guard refused was reported
+      // as delivered and the refusal was invisible to every harness.
+      guard provider.canAcceptSend else {
+        return [
+          "accepted": "false",
+          "busy": "true",
+          "is_sending": provider.isSending ? "true" : "false",
+          "is_streaming": provider.messages.contains(where: { $0.isStreaming }) ? "true" : "false",
+          "reason": "already_sending",
+          "query": query,
+        ]
+      }
       let tracer = QueryTracer(query: query, inputMode: .text)
       await QueryTracerContext.$current.withValue(tracer) {
         _ = await provider.sendMessage(query)
       }
-      return ["sent": query]
+      return ["accepted": "true", "sent": query]
     }
 
     // Fire-and-forget main-chat send for race/busy probes. Returns before the
