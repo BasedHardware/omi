@@ -1810,6 +1810,11 @@ class ChatProvider: ObservableObject {
   }
 
   private func resetSessionStateForAuthChange() {
+    // Reachable without a real sign-out: a rejected token refresh or any API
+    // 401 invalidates the session, which moves the effective owner and posts
+    // `.runtimeOwnerDidChange`. Revoke first so the turn that was in flight
+    // for the previous owner cannot leave the composer latched busy.
+    revokeActiveTurn(reason: .superseded)
     kernelTurnProjection.invalidateOwnerState()
     journalWriteCoordinator.cancelAll()
     journalOwnerByMessageID.removeAll()
@@ -2999,6 +3004,9 @@ class ChatProvider: ObservableObject {
 
   /// Reinitialize after settings change
   func reinitialize() async {
+    // The `multiChatEnabled` observer fires on any write to the key, so this
+    // can land mid-turn. Revoke before the transcript goes away.
+    revokeActiveTurn(reason: .superseded)
     sessions = []
     messages = []
     resetMessagesPagination()
@@ -3321,6 +3329,22 @@ class ChatProvider: ObservableObject {
       log("ChatProvider: ignoring stop from non-owner turn")
       return false
     }
+    return revokeActiveTurn(reason: reason)
+  }
+
+  /// Revoke the in-flight turn through the one generation + send-lock authority
+  /// that `stopAgent` already owns.
+  ///
+  /// Every transcript reset must come through here before it blanks `messages`.
+  /// Clearing the transcript on its own leaves the send lock held, `isSending`
+  /// true, `activeTurnOwner` set and `sendGeneration` unchanged — so the
+  /// composer never frees up, `canInterruptActiveTurn` refuses every later
+  /// owner, and the dead turn's late result still satisfies
+  /// `ChatQueryResultAuthority` with no rows left to update (it then reports a
+  /// phantom `completed`). Supersession is a cancellation, never an error.
+  @discardableResult
+  private func revokeActiveTurn(reason: ChatTurnStopReason) -> Bool {
+    guard isSending else { return false }
     isStopping = true
     let stoppedGen = sendGeneration
     activeStopReason = (generation: stoppedGen, reason: reason)
@@ -3328,6 +3352,19 @@ class ChatProvider: ObservableObject {
       activeChatTurnLifecycle?.lifecycle.revoke(.stop(reason))
     }
     sendGeneration += 1
+    // No generation owns the bridge lock, so there is no outstanding query to
+    // interrupt and nothing to wait for. Releasing by generation would no-op
+    // here and leave `isSending` latched forever, so clear the presentation
+    // state now and keep the busy flag and the lock in lockstep.
+    guard sendLockOwnership.isHeld else {
+      finishActiveChatTelemetry(
+        generation: stoppedGen,
+        stopReason: reason,
+        partialResponse: false
+      )
+      clearSendLockState()
+      return true
+    }
     let myGen = sendGeneration
     Task {
       let shouldInterruptBridge = await MainActor.run { () -> Bool in
@@ -5101,9 +5138,16 @@ class ChatProvider: ObservableObject {
           scheduleJournal: false
         )
       } else {
-        // Message no longer in memory (user switched away from this session).
+        // The assistant row this turn owns is gone from the transcript while
+        // the turn is still authoritative. A session switch is only one way to
+        // get here; a transcript reset that failed to revoke the turn lands
+        // here too, and then reports a `completed` the user never saw. Name the
+        // condition, not one guessed cause.
         messageText = queryResult.text
-        log("Chat response arrived after session switch")
+        log(
+          "ChatProvider: assistant row \(aiMessageId) missing at completion "
+            + "(generation \(sendGen)); response not visible in the transcript"
+        )
       }
 
       // QueryTracer: success path — record the response, close the remaining
@@ -6512,6 +6556,7 @@ class ChatProvider: ObservableObject {
   /// Select a chat app and load its sessions
   func selectApp(_ appId: String?) async {
     guard selectedAppId != appId else { return }
+    revokeActiveTurn(reason: .superseded)
     selectedAppId = appId
     currentSession = nil
     messages = []
