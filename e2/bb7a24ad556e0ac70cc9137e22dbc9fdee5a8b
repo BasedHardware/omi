@@ -1,0 +1,51 @@
+desktop/macos/Desktop/Tests/ChatTurnFailureNoticeTests.swift
+  s_569f1df936cc22::t_076cc824991da9 1-107
+desktop/macos/Desktop/Sources/Chat/ChatTurnFailureNotice.swift
+  s_569f1df936cc22::t_7d4a9c52d30c9f 1-80,122-142
+  s_569f1df936cc22::t_bce2a7e99bb7e8 81-121
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-providers.json
+  s_569f1df936cc22::t_14aa2c90536b9b 7
+  s_569f1df936cc22::t_22174965e99649 3
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_569f1df936cc22::t_bcb9c482fc2383 298-306
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_569f1df936cc22::t_b29ee4c0d535a2 4135-4143,4145-4150
+  s_569f1df936cc22::t_336faf1a767716 1222-1232
+  s_569f1df936cc22::t_198d505f4c4467 5425-5426
+  s_569f1df936cc22::t_b0e6a18a3b06a7 5508,5510-5522,5524-5526,5531-5533,5535-5538,5541-5545
+  s_569f1df936cc22::t_2caefa8440e1a2 5713-5715,5717-5719
+  s_569f1df936cc22::t_cff2aa589a59cc 5527-5530
+  s_569f1df936cc22::t_0b153af9eb7944 5702-5712,5716,5720
+  s_569f1df936cc22::t_9cd6e823afd43c 5415,5418-5423
+  s_569f1df936cc22::t_00bbb817b416d3 5409-5414,5416-5417,5424
+  s_569f1df936cc22::t_3238429a10a7b4 5427-5428,5721
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_569f1df936cc22::t_3aadbce274a730 1703-1715,1720
+desktop/macos/changelog/unreleased/20260807-chat-failed-turn-marker.json
+  s_569f1df936cc22::t_7572870ee12dcc 1-3
+desktop/macos/Desktop/Tests/ChatTurnStateFailureTests.swift
+  s_569f1df936cc22::t_f93f4b04e2167b 198,200,203-225
+  s_569f1df936cc22::t_5c1ec405a61c77 71,76-79
+  s_569f1df936cc22::t_2b402ef7f89fba 1-70,72-75,80-164,167,177,179,181-184,186-187,193-197,199,201-202,226-227
+  s_569f1df936cc22::t_123680d71be4e2 165-166,168-176,178,180,185,188-192
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-mainwindow.json
+  s_569f1df936cc22::t_a89560045dc93a 3,14
+.github/scripts/product_file_line_count_ratchet_baseline/desktop-swift-root.json
+  s_569f1df936cc22::t_d1ec7d629e4a7c 5,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e2bb7a24ad556e0ac70cc9137e22dbc9fdee5a8b",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
