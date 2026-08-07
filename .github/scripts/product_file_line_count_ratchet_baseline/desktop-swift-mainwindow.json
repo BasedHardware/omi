@@ -1,10 +1,10 @@
 {
   "files": {
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1994,
-    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1825,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3558,
+    "desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift": 1666,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3433,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4318,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3612,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3468,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift": 4399,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift": 1636,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 6615,
