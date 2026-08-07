@@ -185,23 +185,52 @@ struct RewindTrackBar: View {
 /// The controls that sit **on** the frame: the segment chevrons on its edges, the timestamp pill at
 /// bottom-left and the zoom cluster at bottom-right.
 ///
+/// **They pin to the photograph, not to the stage, and that is the whole point of the type.** The
+/// chrome is an overlay on the stage, so it used to take the stage's edges — right only while the
+/// picture fills the stage, which it does not. Measured on the running app at its default 1450 pt
+/// window the stage is 2.55 wide against a capture's 1.81, so the picture is height-bound and there
+/// is a wide band of empty glass down each side of it. The left chevron therefore sat about 200 pt
+/// away from the frame it steps through, reading as a control floating on nothing rather than as the
+/// frame's own edge. `RewindStageFit` answers where the picture actually is and everything here is
+/// laid out inside that rectangle.
+///
 /// **The pill and the zoom buttons carry a material, and that is not the banned second material.**
 /// `GlassContentChromeTests` holds content pages to "InkGlass is the only material in this app",
-/// because a material stacked *inside* the panel reads as a muddy patch of the same glass. These two
+/// because a material stacked *inside* the panel reads as a muddy patch of the same glass. These
 /// controls are not on the panel — they are on a photograph of somebody's screen, which can be any
 /// colour at all, and a flat fill legible over a dark editor disappears over a white document. It is
 /// the same exemption `glassMediaMat` already carves out for the player, for the same reason: a
-/// viewport onto rendered media is not a glass surface. The chevrons, which sit on the stage's
-/// margin rather than over the picture, use `Ink.rowFill` like every other control on glass.
+/// viewport onto rendered media is not a glass surface. The chevrons take the material too now, for
+/// exactly that reason — they used to sit out on the stage's margin, where `Ink.rowFill` was correct,
+/// and they now sit on the picture, where it would not be.
 struct RewindStageChrome: View {
   let screenshots: [Screenshot]
   let currentIndex: Int
+  /// The decoded frame's own size, or nil before one has arrived. The chrome belongs to the picture,
+  /// so it cannot place itself without the picture's shape.
+  let imageSize: CGSize?
   @ObservedObject var window: RewindTrackWindowModel
   let onSelect: (Int) -> Void
   @Binding var showsDatePicker: Bool
   let datePicker: AnyView
 
   var body: some View {
+    GeometryReader { proxy in
+      // The overlay is applied after the stage's padding, so `proxy` is the *outer* stage and the
+      // fit has to cross both spaces. `pictureRectInStage` is that composition, so this cannot get
+      // half-applied.
+      let picture = RewindStageFit.pictureRectInStage(image: imageSize ?? .zero, stage: proxy.size)
+      controls
+        .frame(width: picture.width, height: picture.height)
+        .offset(x: picture.minX, y: picture.minY)
+        // Nothing to belong to yet. Hidden rather than parked somewhere plausible: chrome that
+        // shows up in a corner and then jumps onto the picture reads as a glitch.
+        .opacity(picture.isEmpty ? 0 : 1)
+        .accessibilityHidden(picture.isEmpty)
+    }
+  }
+
+  private var controls: some View {
     ZStack {
       // Chevrons sit on the frame's own left and right edges.
       HStack {
@@ -269,7 +298,7 @@ struct RewindStageChrome: View {
         .frame(width: 30, height: 44)
         .background(
           RoundedRectangle(cornerRadius: 8, style: .continuous)
-            .fill(Ink.rowFill)
+            .fill(.regularMaterial)
             .overlay(
               RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(Ink.hairline, lineWidth: 1)))

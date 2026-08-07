@@ -687,23 +687,11 @@ struct RewindPage: View {
       } else if let image = currentImage, image.size.height > 0, image.size.width > 0, geometry.size.height > 0,
         geometry.size.width > 0
       {
-        // Calculate size to fill container while maintaining aspect ratio
-        let imageAspect = image.size.width / image.size.height
-        let containerAspect = geometry.size.width / geometry.size.height
-
-        let displaySize: CGSize = {
-          if imageAspect > containerAspect {
-            // Wide image - fill width
-            let width = geometry.size.width
-            let height = width / imageAspect
-            return CGSize(width: max(1, width), height: max(1, height))
-          } else {
-            // Tall image - fill height
-            let height = geometry.size.height
-            let width = height * imageAspect
-            return CGSize(width: max(1, width), height: max(1, height))
-          }
-        }()
+        // Where the picture lands, asked of `RewindStageFit` rather than recomputed here. The chrome
+        // overlay below asks the same type the same question about the same frame, and two copies of
+        // this arithmetic drifting apart is a control that no longer sits on the picture it belongs
+        // to — which is the defect that put the type there.
+        let displaySize = RewindStageFit.pictureRect(image: image.size, in: geometry.size).size
 
         ZStack {
           Image(nsImage: image)
@@ -746,12 +734,15 @@ struct RewindPage: View {
         .frame(width: geometry.size.width, height: geometry.size.height)
       }
     }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 12)
+    .padding(.horizontal, RewindStageFit.horizontalInset)
+    .padding(.vertical, RewindStageFit.verticalInset)
     .overlay {
       RewindStageChrome(
         screenshots: activeScreenshots,
         currentIndex: currentIndex,
+        // The overlay lands on the *padded* stage, so the chrome re-derives the picture's rect in
+        // that space. It needs the frame's shape to do it.
+        imageSize: currentImage?.size,
         window: trackWindow,
         onSelect: { seekToIndex($0) },
         showsDatePicker: $showDatePicker,
