@@ -202,9 +202,19 @@ def filter_messages(messages, app_id):
 
 
 def _build_quota_exceeded_reply(
-    uid: str, data: SendMessageRequest, compat_app_id: Optional[str], detail: dict
+    uid: str,
+    data: SendMessageRequest,
+    compat_app_id: Optional[str],
+    detail: dict,
+    chat_session: Optional[ChatSession] = None,
 ) -> ResponseMessage:
     """Persist the user's question + a canned AI reply and return it.
+
+    Both messages join `chat_session` when the request named one. Without it the
+    turn is stored unthreaded: the client shows it optimistically against the
+    session the user is looking at, and then it disappears on the next history
+    load, because that read is scoped to the session and these rows belong to no
+    session at all.
 
     Mobile clients render the reply as a normal AI message, so users on
     older builds without structured 402 handling at least see *why* nothing
@@ -222,6 +232,8 @@ def _build_quota_exceeded_reply(
         app_id=compat_app_id,
     )
     chat_db.add_message(uid, user_msg.model_dump())
+    if chat_session:
+        chat_db.add_message_to_chat_session(uid, chat_session.id, user_msg.id)
 
     plan = detail.get('plan') or 'Free'
     unit = detail.get('unit')
@@ -255,6 +267,8 @@ def _build_quota_exceeded_reply(
         app_id=compat_app_id,
     )
     chat_db.add_message(uid, ai_msg.model_dump())
+    if chat_session:
+        chat_db.add_message_to_chat_session(uid, chat_session.id, ai_msg.id)
     return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
@@ -323,7 +337,17 @@ def send_message(
         _compat_id = app_id or plugin_id
         if _compat_id in ['null', '']:
             _compat_id = None
-        response_msg = _build_quota_exceeded_reply(uid, data, _compat_id, exc.detail)
+        # Resolved here rather than at the happy path's `_resolve_chat_session`
+        # below: quota enforcement returns before that line is ever reached, and
+        # the canned reply still belongs in the session the request named.
+        _quota_session = _resolve_chat_session(uid, _compat_id, chat_session_id)
+        response_msg = _build_quota_exceeded_reply(
+            uid,
+            data,
+            _compat_id,
+            exc.detail,
+            ChatSession(**_quota_session) if _quota_session else None,
+        )
 
         def _quota_exceeded_stream():
             encoded = base64.b64encode(bytes(response_msg.model_dump_json(), 'utf-8')).decode('utf-8')

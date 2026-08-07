@@ -663,24 +663,6 @@
           "order": "ASCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "chat_sessions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "plugin_id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "created_at",
-          "order": "DESCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "DESCENDING"
-        }
-      ]
     }
   ],
   "fieldOverrides": []

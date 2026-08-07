@@ -543,7 +543,11 @@ CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
     collection_group='chat_sessions',
     query_scope='COLLECTION',
     filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
-    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+    # No `created_at` ordering: Firestore omits documents that lack the ordered
+    # field, and a chat session with no timestamp is representable, so ordering
+    # in the query would hide a user's existing sessions. The caller reads this
+    # filter and picks the newest itself.
+    index_fields=(_asc('plugin_id'), _asc('__name__')),
 )
 
 
