@@ -17,8 +17,7 @@ SCHEDULER_JOB = "x-connector-sync-6h"
 CLOUD_RUN_JOB = "x-connector-sync-job"
 EXPECTED_RESOURCE_NAME = f"projects/{PROJECT}/locations/{REGION}/jobs/{SCHEDULER_JOB}"
 EXPECTED_TARGET_URI = (
-    f"https://run.googleapis.com/v2/projects/{PROJECT}"
-    f"/locations/{REGION}/jobs/{CLOUD_RUN_JOB}:run"
+    f"https://run.googleapis.com/v2/projects/{PROJECT}" f"/locations/{REGION}/jobs/{CLOUD_RUN_JOB}:run"
 )
 EXPECTED_SCHEDULER_SA = f"x-connector-sync-scheduler@{PROJECT}.iam.gserviceaccount.com"
 
