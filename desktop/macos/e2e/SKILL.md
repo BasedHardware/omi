@@ -432,9 +432,10 @@ agent-swift snapshot -i --json                       # see what's on screen
 ### Screen Map (v0.12.119+ redesign)
 ```
 Main Window — Top Navigation Bar (use `click` for all nav buttons)
-├── Home (DesktopHomeView.swift) — chat + insights + status banners
-│   ├── Chat input area (embedded, no separate Chat tab)
-│   ├── Insight cards (screen recording, tasks, observations)
+├── Home (DesktopHomeView.swift) — query bar + results panel + status banners
+│   ├── Query bar (embedded chat; ⏎ searches, ⌘⏎ asks — no separate Chat tab)
+│   ├── Results panel header — `Filter ›`, `Brain Map ›`, `Chat ›`, and the
+│   │   All / Conversations / Memories / Rewind chips over one merged spine
 │   └── Capture/Listening status (top-right)
 ├── Memory — 3 sub-tabs
 │   ├── Memories — search, filter (This device / All), memory list
@@ -515,7 +516,7 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 | Flow | Covers | Steps | Notes |
 |------|--------|-------|-------|
 | `flows/navigation.yaml` | Top nav bar, Home, Memory, Tasks, Apps, Settings | 8 | Core nav smoke — top nav buttons + gear icon + Rewind via View menu |
-| `flows/home.yaml` | Home tab, embedded chat, insights, status banners | 5 | Chat input, insight cards, Capture/Listening status |
+| `flows/home.yaml` | Home tab, embedded chat, panel header controls, status banners | 5 | Chat input, `Brain Map ›` into the hub, Capture/Listening status |
 | `flows/memories.yaml` | Memory tab — Memories, Conversations, Brain Map sub-tabs | 6 | Sub-tab switching, search, conversation list, brain map render |
 | `flows/tasks.yaml` | Tasks tab — search, Today/No Deadline sections | 5 | Task list, keyboard toolbar, task interactions |
 | `flows/apps-marketplace.yaml` | Apps tab — Imports, Exports, search, filters | 5 | Category filter, Installed view, Create App |

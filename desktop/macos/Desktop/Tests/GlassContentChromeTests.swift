@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// The content pages (conversations, memories, tasks, focus/insights, rewind) were restyled onto the
-/// glass panel. Two of that restyle's rules are not visible in a screenshot and are exactly the ones
-/// a later edit reintroduces by accident:
+/// The content pages (conversations, memories, tasks, rewind) were restyled onto the glass panel. Two
+/// of that restyle's rules are not visible in a screenshot and are exactly the ones a later edit
+/// reintroduces by accident:
 ///
 /// - **Glass carries two type rungs, never three.** `Ink.tertiary` measures under WCAG AA on the
 ///   panel (see `Ink.tertiary`), so a run that was tertiary on the dark chrome is `Ink.secondary`
@@ -121,17 +121,49 @@ final class GlassContentChromeTests: XCTestCase {
     "Rewind/UI/ScreenshotThumbnailView.swift",
   ]
 
-  private func source(_ relativePath: String) throws -> String {
+  private func sourceURL(_ relativePath: String) -> URL {
     let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let url =
+    return
       testsDirectory
       .deletingLastPathComponent()
       .appendingPathComponent("Sources")
       .appendingPathComponent(relativePath)
+  }
+
+  /// **A deleted page must fail this suite with an instruction, not an `NSCocoaErrorDomain` throw.**
+  ///
+  /// This has now bitten twice on the same branch: removing `FocusPage.swift` and then
+  /// `InsightPage.swift` each left this list naming a file that no longer existed. `String(contentsOf:)`
+  /// *throws* on a missing file, which aborts the test case at its first entry with "no such file"
+  /// and no hint that the fix is one line in an array two hundred lines away — and, worse, aborts
+  /// before checking any of the pages that do still exist, so the guard silently stops guarding.
+  ///
+  /// Checking first turns that into a named failure that says what to do.
+  private func source(_ relativePath: String) throws -> String {
+    let url = sourceURL(relativePath)
+    guard FileManager.default.fileExists(atPath: url.path) else {
+      XCTFail(
+        """
+        restyledSources names \(relativePath), which no longer exists. If the page was deleted, \
+        delete its line here too — a guard that names a missing file stops checking the pages that \
+        remain rather than reporting the deletion.
+        """)
+      throw CocoaError(.fileNoSuchFile)
+    }
     // omi-test-quality: source-inspection -- static contract: "which colour token a call site names"
     // is not observable from a running view without a window server and a screenshot diff, and the
     // decisions that *are* values are covered behaviorally above.
     return try String(contentsOf: url, encoding: .utf8)
+  }
+
+  /// The same claim once, up front, so a deletion is reported as one clear failure rather than as
+  /// whichever of the checkers below happened to run first.
+  func testEveryPageThisGuardNamesStillExists() {
+    for path in Self.restyledSources {
+      XCTAssertTrue(
+        FileManager.default.fileExists(atPath: sourceURL(path).path),
+        "restyledSources names \(path), which is not on disk — remove the line or restore the page")
+    }
   }
 
   func testStaticCheckerContentPagesNeverSetTheThirdTypeRungOnGlass() throws {

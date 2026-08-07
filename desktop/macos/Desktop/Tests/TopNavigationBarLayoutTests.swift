@@ -339,12 +339,27 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     guard let navigation = recorder.frame(of: .expanded) else {
       return XCTFail("the expanded destination row was never placed")
     }
-    // Fitting is only worth asserting if what fitted is a *row of named pills*. A row that squeezed
-    // itself under the width of the menu it replaces would satisfy `ViewThatFits` and prove nothing,
-    // so the measured row has to be wider than the compact alternative offered beside it.
+    // **Fitting only means something if what fitted is still a row of named pills.** `ViewThatFits`
+    // is satisfied by anything narrow enough, so a row that had quietly stopped drawing pills — or
+    // had been emptied down to one — would pass the check above and prove nothing. Deleting a pill
+    // makes this test *easier*, which is exactly when a floor is worth having: two pills were removed
+    // from this row (`Insights` here, `Chat` earlier) and the assertion did not notice either.
+    //
+    // The floor is derived from the row's own metrics rather than measured once and pinned, so it
+    // tracks the row instead of dating from the day it was written: each pill is at minimum its
+    // horizontal padding on both sides plus the fixed icon column, and the gaps are `itemSpacing`.
+    // Real pills are wider than that — they carry a word, and two carry a badge — so this is a strict
+    // lower bound that still fails the moment a pill stops being rendered.
+    let pills = CGFloat(TopNavigationRoutes.primaryItems.count)
+    let minimumPillWidth =
+      TopNavigationPillMetrics.horizontalPadding * 2 + TopNavigationPillMetrics.iconWidth
+    let floor = pills * minimumPillWidth + (pills - 1) * TopNavigationPillMetrics.itemSpacing
     XCTAssertGreaterThan(
-      navigation.width, 68,
-      "the row fitted by collapsing to less than the compact menu it is supposed to replace")
+      navigation.width, floor,
+      """
+      the row fitted by drawing fewer pills than `TopNavigationRoutes.primaryItems` has, so \
+      `ViewThatFits` chose it for the wrong reason
+      """)
     XCTAssertLessThanOrEqual(navigation.width, lane - inset * 2)
   }
 

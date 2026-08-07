@@ -4,7 +4,7 @@
 //  `OmiTheme`'s `Ink` / `InkGlass` own the *panel*: the material, the scrim, the corner, the pinned
 //  light appearance. This file owns what a **content page hosted inside that panel** is allowed to
 //  draw on it — the card, the row, the chip, the field, the scroll fade — so conversations, memories,
-//  tasks, focus/insights and rewind cannot each invent their own answer.
+//  tasks and rewind cannot each invent their own answer.
 //
 //  Three rules are load-bearing here, and every one of them was a defect in the dark chrome this
 //  replaced:

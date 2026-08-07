@@ -1458,9 +1458,9 @@ enum OmiDeviceImage {
 
 /// The thin, always-present left navigation rail for the redesigned app shell.
 /// Lives beside every page (not just Home) so you can move between Home, the
-/// memory/task surfaces, Insights, Rewind, and Apps without bouncing
-/// back through Home. Settings sits at the foot. Styled with the SB ink system
-/// so it matches the sign-in / onboarding aesthetic.
+/// memory/task surfaces and Apps without bouncing back through Home. Settings
+/// sits at the foot. Styled with the SB ink system so it matches the sign-in /
+/// onboarding aesthetic.
 struct AppNavRail: View {
   @Binding var selectedIndex: Int
   @State private var isExpanded = false
@@ -1476,8 +1476,8 @@ struct AppNavRail: View {
   }
 
   /// Simplified, merged navigation: "Memory" folds in Conversations + Memories,
-  /// Rewind moved off the rail (it opens from a right-click on Capture), and
-  /// Insights is hidden from navigation. Each entry drives selectedIndex.
+  /// and Rewind moved off the rail (it opens from a right-click on Capture).
+  /// Each entry drives selectedIndex.
   private var items: [RailItem] {
     [
       RailItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),

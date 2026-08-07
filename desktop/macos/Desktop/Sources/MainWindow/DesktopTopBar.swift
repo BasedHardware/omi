@@ -4,7 +4,7 @@ import SwiftUI
 /// The constant floating top bar.
 ///
 /// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Home`, `Library`, `Tasks`, `Rewind`, `Insights`. On the right, three wordless controls:
+/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, three wordless controls:
 /// microphone, screen capture, settings.
 ///
 /// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
@@ -25,7 +25,10 @@ import SwiftUI
 ///
 /// **Nothing became unreachable.** INV-NAV-1 is about the destination a shell routes to, not about how
 /// many pills the bar has: every established destination — Home, Conversations, Memories, Brain Map,
-/// Tasks, Rewind, Insights — still lands on its own feature-complete page.
+/// Tasks, Rewind — still lands on its own feature-complete page. `Insights` is not in that list
+/// because its page was deleted rather than rehoused: the invariant forbids *stranding* a destination
+/// behind a reduced copy, not retiring one. What the assistant produces still arrives, as memories and
+/// notifications, and Home's knows-list still reads its history (`InsightStorage`).
 ///
 /// **It is a panel, and it is the same panel as the two below it.** The window has no ground
 /// (`ShellWindowChrome`), so a bar drawn with nothing behind it is type hanging on the user's wallpaper
