@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Tests/PageGlassLaneTests.swift
+  s_569f1df936cc22::t_3e5fd12b8e8930 100-102,105-152
+  s_569f1df936cc22::t_4b55d4a8ffe9cc 103-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ae7e4ec4b54a86abd367d8d843718c3ec1e07cac",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
