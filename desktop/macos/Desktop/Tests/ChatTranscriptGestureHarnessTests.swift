@@ -177,7 +177,12 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     XCTAssertFalse(harness.isAtBottom, "precondition: the reader left the live edge")
 
     harness.togglePresentation()
-    harness.pump(1.0)
+    // CI can run slower across multiple SwiftUI layout turns. Wait until
+    // the re-presented transcript has settled back onto the live edge.
+    let deadline = Date().addingTimeInterval(2.0)
+    while Date() < deadline && !harness.isAtBottom {
+      harness.pump(0.05)
+    }
 
     XCTAssertTrue(
       harness.isAtBottom,
@@ -634,12 +639,29 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
 
     /// Removes the transcript from the hierarchy and puts it back, the way
     /// Home's stage transition does.
+    ///
+    /// Both halves wait on the hierarchy, not on a fixed pump. SwiftUI commits
+    /// the removal on its own update turn, and on a loaded machine that turn can
+    /// land after a fixed pump ends — the `false`/`true` flips then coalesce into
+    /// no change at all, so nothing unmounts, `onAppear` never runs, and the
+    /// caller silently measures the same transcript the reader already scrolled.
     func togglePresentation() {
       model.isPresented = false
-      pump(0.2)
+      waitForTranscript(mounted: false)
       model.isPresented = true
-      pump(0.2)
+      waitForTranscript(mounted: true)
       if let discovered = Self.firstScrollView(in: hostingView) { scrollView = discovered }
+    }
+
+    /// Pumps until the transcript's scroll view reaches `mounted`, then returns.
+    /// On timeout it returns anyway so the caller's assertion reports the real
+    /// state rather than this helper's own failure.
+    private func waitForTranscript(mounted: Bool, timeout: TimeInterval = 2) {
+      let deadline = Date().addingTimeInterval(timeout)
+      repeat {
+        pump(0.02)
+        if (Self.firstScrollView(in: hostingView) != nil) == mounted { return }
+      } while Date() < deadline
     }
 
     // MARK: Plumbing

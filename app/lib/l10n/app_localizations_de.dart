@@ -752,11 +752,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Ihr Plan verlängert sich am $date.';
-  }
-
-  @override
   String get basicPlan => 'Kostenloser Plan';
 
   @override
@@ -2145,16 +2140,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get editMemory => '✏️ Erinnerung bearbeiten';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Als Basis anheften';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Von Basis lösen';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Basis-Erinnerung';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Immer im Kontext';
 
   @override
   String get memoryContentHint => 'Ich esse gerne Eis...';
@@ -9856,4 +9851,54 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Zu alt für die Synchronisierung — Omi kann sie nicht annehmen';
+
+  @override
+  String get planSheetChooseYourPlan => 'Wähle deinen Tarif, um Omi unbegrenzt freizuschalten.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Verfügbar auf Mac, Mobilgerät und im Web';
+
+  @override
+  String get popularBadge => 'BELIEBT';
+
+  @override
+  String get worksOnDesktop => 'Funktioniert auf dem Desktop';
+
+  @override
+  String get noDesktopAccess => 'Funktioniert nicht auf dem Desktop';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months Monate / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Monate gratis',
+      one: '1 Monat gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi ist kostenlos, aber die Gratisversion hat Grenzen, die dein Erlebnis beeinflussen:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5–7 Sekunden Verzögerung (nicht in Echtzeit)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Auf Gratisversion wechseln';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Kostenlosen unbegrenzten Zugang erhalten';
+
+  @override
+  String get shareDataForTraining => 'Daten für das Training teilen';
+
+  @override
+  String get yourRequestUnderReview => 'Deine Anfrage wird geprüft';
 }

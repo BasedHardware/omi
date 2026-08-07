@@ -180,6 +180,53 @@ async def test_metadata_repair_can_restore_the_owner_fenced_auth_token():
     assert {item["key"]: item["value"] for item in captured["body"]["items"]}["auth-token"] == "owner-bearer"
 
 
+@pytest.mark.asyncio
+async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet_and_required_create_fields():
+    captured = {}
+
+    class Client(GceAgentVmClient):
+        async def _mutate(self, method, url, body=None):
+            captured.update({"method": method, "url": url, "body": body})
+
+    release = AgentVmRelease.from_mapping(RELEASE)
+    await Client("based-hardware-dev").create_replacement(
+        "omi-agent-user-m-migration",
+        {
+            "id": "predecessor-id",
+            "machineType": "zones/us-central1-a/machineTypes/e2-small",
+            "networkInterfaces": [
+                {
+                    "network": "projects/based-hardware-dev/global/networks/default",
+                    "subnetwork": "projects/based-hardware-dev/regions/us-central1/subnetworks/default",
+                    "accessConfigs": [{"type": "ONE_TO_ONE_NAT", "name": "External NAT"}],
+                }
+            ],
+        },
+        release,
+        "candidate-owner-bearer",
+        "migration-id",
+    )
+
+    body = captured["body"]
+    assert captured["method"] == "POST"
+    assert captured["url"].endswith("/zones/us-central1-a/instances")
+    assert body["networkInterfaces"] == [
+        {
+            "subnetwork": "projects/based-hardware-dev/regions/us-central1/subnetworks/default",
+            "accessConfigs": [{"type": "ONE_TO_ONE_NAT", "name": "External NAT"}],
+        }
+    ]
+    assert body["serviceAccounts"] == [
+        {"email": release.service_account, "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}
+    ]
+    assert body["tags"] == {"items": ["omi-agent-vm"]}
+    assert body["labels"] == {"omi-agent-migration": "migration-id", "omi-agent-predecessor": "predecessor-id"}
+    metadata = {item["key"]: item["value"] for item in body["metadata"]["items"]}
+    assert metadata["auth-token"] == "candidate-owner-bearer"
+    assert metadata["omi-agent-migration"] == "migration-id"
+    assert body["disks"][0]["initializeParams"]["sourceImage"] == release.boot_image
+
+
 def test_startup_wrapper_rejects_tampered_artifact_before_execution():
     wrapper = startup_wrapper("gs://bucket/releases/startup.sh", "d" * 64)
     assert "sha256sum /tmp/omi-startup.sh" in wrapper

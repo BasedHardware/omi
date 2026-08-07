@@ -209,7 +209,16 @@ class AppState: ObservableObject {
   @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
   // Transcription state
-  @Published var isTranscribing = false
+  @Published var isTranscribing = false {
+    didSet {
+      // Preferred-mic reconnect must track live Listening even when Settings is closed (#10921).
+      if isTranscribing {
+        preferredMicrophoneReconnectMonitor.start(observing: self)
+      } else {
+        preferredMicrophoneReconnectMonitor.stop()
+      }
+    }
+  }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
   /// continue into the WAL while the transport reconnects, so this stays
   /// visible until the backend is ready or the active session is reset.
@@ -354,6 +363,8 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
+  let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
   /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).

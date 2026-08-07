@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -37,6 +38,71 @@ def test_release_renderer_rejects_the_runtime_invalid_service_account_format():
 
     with pytest.raises(ValueError, match="serviceAccount"):
         release.validate_manifest(payload)
+
+
+def test_release_renderer_emits_a_hash_covered_dev_only_migration_plan(tmp_path):
+    release = _release_module()
+    output = tmp_path / "migration.json"
+    assert (
+        release.main(
+            [
+                "--output",
+                str(output),
+                "--environment",
+                "development",
+                "--source-sha",
+                "a" * 40,
+                "--image-digest",
+                f"gcr.io/project/agent-vm@sha256:{'b' * 64}",
+                "--startup-uri",
+                "gs://bucket/agent-vm/releases/startup.sh",
+                "--startup-sha256",
+                "c" * 64,
+                "--boot-image",
+                "projects/project/global/images/omi-agent-20260805",
+                "--service-account",
+                "omi-agent-vm-bootstrap@project.iam.gserviceaccount.com",
+                "--boot-image-migration-allowed-uid",
+                "dev-owner",
+                "--boot-image-migration-soak-seconds",
+                "60",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["bootImageMigration"] == {
+        "enabled": True,
+        "allowedUids": ["dev-owner"],
+        "maxConcurrency": 1,
+        "soakSeconds": 60,
+    }
+    release.validate_manifest(payload)
+    with pytest.raises(ValueError, match="development"):
+        release.render_manifest(
+            release.parser().parse_args(
+                [
+                    "--output",
+                    str(output),
+                    "--environment",
+                    "production",
+                    "--source-sha",
+                    "a" * 40,
+                    "--image-digest",
+                    f"gcr.io/project/agent-vm@sha256:{'b' * 64}",
+                    "--startup-uri",
+                    "gs://bucket/agent-vm/releases/startup.sh",
+                    "--startup-sha256",
+                    "c" * 64,
+                    "--boot-image",
+                    "projects/project/global/images/omi-agent-20260805",
+                    "--service-account",
+                    "omi-agent-vm-bootstrap@project.iam.gserviceaccount.com",
+                    "--boot-image-migration-allowed-uid",
+                    "dev-owner",
+                ]
+            )
+        )
 
 
 def test_desktop_workflows_guard_active_pointer_reads_writes_and_cleanup_rollbacks():
@@ -81,14 +147,18 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
     assert "REFUSED:" in script
     assert (
-        "compute.disks.get,compute.instances.get,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.start,compute.instances.stop"
+        "compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
         in script
     )
+    assert 'subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"' in script
     assert "Agent VM reconciler instance scope" in script
     assert "Agent VM reconciler disk scope" in script
     assert "compute.googleapis.com/Disk" in script
     assert "disks/omi-agent-" in script
     assert "instances/omi-agent-" in script
+    assert "compute networks subnets add-iam-policy-binding default" in script
+    assert '--region="$region"' in script
+    assert '--role="$subnetwork_role"' in script
     assert "roles/storage.objectViewer" in script
     assert "roles/iam.serviceAccountUser" in script
     assert 'AGENT_VM_RECONCILER_DEPLOYER:-}' in script
@@ -166,10 +236,41 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "--role=projects/based-hardware-dev/roles/omiAgentVmReconcilerOperations --condition=None"
     ) in commands
     assert (
+        "compute networks subnets add-iam-policy-binding default --project=based-hardware-dev --region=us-central1 "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=projects/based-hardware-dev/roles/omiAgentVmReconcilerSubnetwork"
+    ) in commands
+    assert (
         "projects add-iam-policy-binding based-hardware-dev "
         "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
         "--role=roles/datastore.user --condition=None"
     ) in commands
+
+
+def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(tmp_path):
+    script = BACKEND_DIR / "scripts" / "activate-agent-vm-dev-migration.sh"
+    text = script.read_text(encoding="utf-8")
+    assert 'AGENT_VM_MIGRATION_APPLY:-}' in text
+    assert 'project" != "based-hardware-dev"' in text
+    assert "gcloud storage cp --no-clobber" in text
+    assert "--if-generation-match" in text
+    assert "cmp -s" in text
+
+    refused = subprocess.run(["bash", str(script)], cwd=REPO_DIR, text=True, capture_output=True, check=False)
+    assert refused.returncode == 1
+    assert "REFUSED:" in refused.stderr
+
+
+def test_dev_migration_activation_verifies_bucket_project_and_previous_snapshot():
+    script = BACKEND_DIR / "scripts" / "activate-agent-vm-dev-migration.sh"
+    text = script.read_text(encoding="utf-8")
+    assert "gcloud projects describe" in text
+    assert "https://storage.googleapis.com/storage/v1/b/" in text
+    assert "projectNumber" in text
+    assert "refusing cross-environment activation" in text
+    assert "previous.json" in text
+    assert "rollback" in text or "Snapshot" in text or "snapshot" in text
+    assert "uid.strip()" in text
 
 
 def test_revoke_script_removes_all_conditional_bindings_and_verifies_absence():

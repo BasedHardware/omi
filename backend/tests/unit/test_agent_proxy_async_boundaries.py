@@ -3,6 +3,7 @@ import asyncio
 import importlib.util
 import json
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock
@@ -65,12 +66,13 @@ class _AsyncClient:
 
 
 class _AgentWebSocket:
-    headers = {"authorization": "Bearer firebase-token"}
+    headers = {"authorization": "Bearer firebase-token", "x-timezone": "America/New_York"}
 
-    def __init__(self):
+    def __init__(self, query='{"type":"query","prompt":"hello"}'):
         self.accepted = False
         self.sent = []
         self.closed = []
+        self.query = query
 
     async def accept(self):
         self.accepted = True
@@ -82,7 +84,7 @@ class _AgentWebSocket:
         self.closed.append((code, reason))
 
     async def iter_text(self):
-        yield '{"type":"query","prompt":"hello"}'
+        yield self.query
 
 
 class _VMProtocol:
@@ -175,8 +177,22 @@ class _IdleVMProtocol:
 
 
 @pytest.mark.asyncio
-async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy, monkeypatch):
-    phone_ws = _AgentWebSocket()
+@pytest.mark.parametrize(
+    ("query", "expected_prompt"),
+    [
+        (
+            '{"type":"query","prompt":"hello"}',
+            "# Current Time\n2026-07-30T22:30:45-04:00 (America/New_York)\n\nhello",
+        ),
+        (
+            '{"type":"query","prompt":"hello","time_zone":"America/Los_Angeles"}',
+            "# Current Time\n2026-07-30T19:30:45-07:00 (America/Los_Angeles)\n\nhello",
+        ),
+        ('{"type":"query","prompt":123}', 123),
+    ],
+)
+async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy, monkeypatch, query, expected_prompt):
+    phone_ws = _AgentWebSocket(query)
     vm_ws = _VMProtocol()
     _ProxyHTTPClient.post_calls = 0
     real_sleep = asyncio.sleep
@@ -187,6 +203,12 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
 
     async def connect(*_args, **_kwargs):
         return vm_ws
+
+    monkeypatch.setattr(
+        agent_proxy,
+        "_utc_now",
+        lambda: datetime(2026, 7, 31, 2, 30, 45, tzinfo=timezone.utc),
+    )
 
     async def no_retry_sleep(seconds):
         if seconds == 2:
@@ -212,10 +234,13 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     await agent_proxy.drain_background_tasks(timeout=1.0)
 
     assert phone_ws.accepted is True
-    # Query forwarded to the VM (empty history → prompt passes through unchanged; assert
-    # on parsed content, not exact serialization whitespace).
+    # Valid queries get authoritative context; malformed prompts remain untouched
+    # so the VM can return its protocol-level Invalid query response.
     assert len(vm_ws.sent) == 1
-    assert json.loads(vm_ws.sent[0]) == {"type": "query", "prompt": "hello"}
+    assert json.loads(vm_ws.sent[0]) == {
+        "type": "query",
+        "prompt": expected_prompt,
+    }
     assert vm_ws.closed is True
     assert _ProxyHTTPClient.post_calls == 2
     assert phone_ws.closed == [(1000, "Session ended")]

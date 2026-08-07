@@ -56354,6 +56354,22 @@
         "operationId": "delete_memories_v3_memories_delete",
         "parameters": [
           {
+            "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "Delete all memories or only default-access Short-term and Long-term memories.",
+              "enum": [
+                "all",
+                "default"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
