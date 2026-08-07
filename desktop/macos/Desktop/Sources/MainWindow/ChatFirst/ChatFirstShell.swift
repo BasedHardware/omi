@@ -289,8 +289,6 @@ struct ChatFirstShell: View {
         },
         selectedIndex: legacySelectionBinding
       )
-    case .insight:
-      InsightPage()
     case .rewind:
       ChatFirstRewindHost(appState: appState)
     case .apps:
@@ -337,7 +335,6 @@ struct ChatFirstShell: View {
     case .more(let page):
       switch page {
       case .dashboard: return .dashboard
-      case .insight: return .insight
       case .rewind: return .rewind
       case .apps: return .apps
       case .permissions: return .permissions
@@ -584,8 +581,6 @@ enum ChatFirstModernNavigationPolicy {
       case .apps: return SidebarNavItem.apps.rawValue
       case .settings: return SidebarNavItem.settings.rawValue
       case .rewind: return SidebarNavItem.rewind.rawValue
-      // Insights is a segment of the Focus page, so both light the same pill.
-      case .insight: return SidebarNavItem.insight.rawValue
       default: return SidebarNavItem.dashboard.rawValue
       }
     }
@@ -599,8 +594,6 @@ enum ChatFirstModernNavigationPolicy {
     case .apps: return .more(.apps)
     case .settings: return .more(.settings)
     case .rewind: return .more(.rewind)
-    // The bar carries `Insights` as a flat pill now; without this it pressed and nothing happened.
-    case .insight: return .more(.insight)
     default: return nil
     }
   }

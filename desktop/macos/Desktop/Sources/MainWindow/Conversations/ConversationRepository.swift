@@ -296,9 +296,12 @@ final class ConversationRepository {
 
   private static let pageSize = 50
 
-  private static func hasMorePages(loaded: Int, pageSize: Int, totalCount: Int?, received: Int) -> Bool {
-    guard received == pageSize else { return false }
-    return totalCount.map { loaded < $0 } ?? true
+  /// `pageSize` is no longer part of the decision: `GET /v1/conversations` post-filters each page
+  /// after Firestore has applied the limit, so a request for 50 answering with 47 is a full page and
+  /// not the last one. Only an empty page — or an authoritative count already reached — ends the
+  /// list. See `ServerPageEnd`.
+  private static func hasMorePages(loaded: Int, totalCount: Int?, received: Int) -> Bool {
+    ServerPageEnd.hasMore(received: received, loaded: loaded, total: totalCount)
   }
 
   func load(query: ConversationListQuery, includeCache: Bool = true) async {
@@ -369,7 +372,6 @@ final class ConversationRepository {
       nextPageOffset = server.count
       hasMore = Self.hasMorePages(
         loaded: nextPageOffset,
-        pageSize: Self.pageSize,
         totalCount: isCountAuthoritative ? count : nil,
         received: server.count
       )
@@ -421,7 +423,6 @@ final class ConversationRepository {
       nextPageOffset = offset + server.count
       hasMore = Self.hasMorePages(
         loaded: nextPageOffset,
-        pageSize: Self.pageSize,
         totalCount: isCountAuthoritative ? count : nil,
         received: server.count
       )

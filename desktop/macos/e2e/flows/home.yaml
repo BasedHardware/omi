@@ -1,7 +1,7 @@
 version: 2
 name: home
 tier: manual
-description: Home tab — embedded chat, insight cards, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+description: Home tab — the query bar, the results panel and its header controls, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
@@ -51,10 +51,11 @@ steps:
       interactive_count: { min: 2 }
 
   - id: S4
-    name: Verify insight cards
-    do: "Check the Home page content area for insight cards or status banners. These may include screen recording permission warnings, task suggestions, or conversation observations."
+    name: Reach the Brain Map from the panel's filter row
+    do: "In results mode, verify the panel header carries a 'Brain Map ›' control beside 'Filter ›' — in the header, not among the All / Conversations / Memories / Rewind chips, which only narrow the list in place. Click it and verify the app lands on the Library page with its Brain Map view selected (the hub's own switcher shows Brain Map as current). Press Escape to return Home."
     expect:
-      interactive_count: { min: 1 }
+      text_visible:
+        - Brain Map
 
   - id: S5
     name: Verify Settings gear accessible

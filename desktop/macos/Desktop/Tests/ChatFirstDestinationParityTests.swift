@@ -54,8 +54,5 @@ final class ChatFirstDestinationParityTests: XCTestCase {
         ChatFirstModernNavigationPolicy.topBarIndex(for: route), item.index,
         "\(item.title) does not light its own pill once selected")
     }
-    XCTAssertEqual(
-      ChatFirstModernNavigationPolicy.topBarIndex(for: .more(.insight)),
-      SidebarNavItem.insight.rawValue)
   }
 }

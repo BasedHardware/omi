@@ -9,7 +9,6 @@ struct SidebarView: View {
   @Binding var memoryDestinationRawValue: Int
   @ObservedObject var appState: AppState
   @ObservedObject private var authState = AuthState.shared
-  @ObservedObject private var insightStorage = InsightStorage.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
   @ObservedObject private var crispManager = CrispManager.shared
 
@@ -29,7 +28,6 @@ struct SidebarView: View {
   @State private var isRewindPageLoading = false
   @State private var isConversationsPageLoading = false
   @State private var isTasksPageLoading = false
-  @State private var isInsightPageLoading = false
   @State private var isAppsPageLoading = false
 
   // Drag state
@@ -150,7 +148,6 @@ struct SidebarView: View {
                   isSelected: !locked && selectedIndex == item.rawValue,
                   isCollapsed: isCollapsed,
                   iconWidth: iconWidth,
-                  badge: item == .insight ? insightStorage.unreadCount : 0,
                   isLoading: pageLoadingState(for: item),
                   isLocked: locked,
                   lockTooltip: locked ? "Unlocks at Tier \(item.requiredTier)" : nil,
@@ -320,9 +317,6 @@ struct SidebarView: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .tasksPageDidLoad)) { _ in
       isTasksPageLoading = false
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .insightPageDidLoad)) { _ in
-      isInsightPageLoading = false
     }
     .onReceive(NotificationCenter.default.publisher(for: .appsPageDidLoad)) { _ in
       isAppsPageLoading = false
@@ -942,7 +936,6 @@ struct SidebarView: View {
   private func pageLoadingState(for item: SidebarNavItem) -> Bool {
     switch item {
     case .tasks: return isTasksPageLoading
-    case .insight: return isInsightPageLoading
     case .apps: return isAppsPageLoading
     default: return false
     }
@@ -951,7 +944,6 @@ struct SidebarView: View {
   private func setPageLoading(for item: SidebarNavItem, loading: Bool) {
     switch item {
     case .tasks: isTasksPageLoading = loading
-    case .insight: isInsightPageLoading = loading
     case .apps: isAppsPageLoading = loading
     default: break
     }
@@ -968,7 +960,6 @@ struct NavItemView: View {
   let isSelected: Bool
   let isCollapsed: Bool
   let iconWidth: CGFloat
-  var badge: Int = 0
   var statusColor: Color? = nil
   var isLoading: Bool = false
   var isLocked: Bool = false
@@ -996,24 +987,6 @@ struct NavItemView: View {
               isLocked ? lockedColor : (isSelected ? Ink.primary : Ink.secondary)
             )
             .frame(width: iconWidth)
-        }
-
-        // Badge on icon (collapsed = dot, expanded = count)
-        if badge > 0 && !isLocked {
-          if isCollapsed {
-            Circle()
-              .fill(Ink.primary)
-              .frame(width: 8, height: 8)
-              .offset(x: 4, y: -4)
-          } else {
-            Text("\(badge)")
-              .font(.system(size: 9, weight: .bold))
-              .foregroundColor(Ink.surface)
-              .frame(minWidth: 14, minHeight: 14)
-              .background(Ink.primary)
-              .clipShape(Circle())
-              .offset(x: 6, y: -6)
-          }
         }
 
         // Status indicator when collapsed, hidden when locked

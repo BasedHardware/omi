@@ -49,7 +49,28 @@ final class SpineStore: ObservableObject {
 
   /// Days whose screen capture has been read, so a scroll never re-queries a day it already has.
   private var loadedScreenDays: Set<Date> = []
-  private var screenLoadsInFlight: Set<Date> = []
+  /// Days waiting to be read, newest first, and the few being read right now.
+  ///
+  /// **A queue rather than a fan-out.** This used to spawn one `Task` per missing day the moment it
+  /// heard about them, which was fine for the handful of days one page of conversations names and
+  /// is not fine now the spine loads the whole account: a year of history would put hundreds of
+  /// simultaneous reads on Rewind's pool, and the surface competing with them is the one the user is
+  /// scrolling.
+  private var screenQueue: [Date] = []
+  private var queuedScreenDays: Set<Date> = []
+  private var activeScreenLoads = 0
+  /// Three at a time: enough that the newest days land together, few enough that Rewind's pool is
+  /// never the reason a scroll stutters.
+  static let maximumConcurrentScreenLoads = 3
+
+  /// Whether the one-off walk over the capture database's own days has run.
+  private var didDiscoverCapturedDays = false
+
+  /// The coalescing window for recomposition. Composition is the expensive half of this store and
+  /// pages now land in a stream rather than one at a time, so a burst of arrivals is worth one
+  /// rebuild rather than one each. Short enough to read as immediate.
+  private static let recomposeCoalescingWindow: Duration = .milliseconds(120)
+  private var recomposeTask: Task<Void, Never>?
 
   private let calendar: Calendar
 
@@ -81,7 +102,7 @@ final class SpineStore: ObservableObject {
         conversationID: $0.conversationId
       )
     }
-    recompose()
+    recomposeSoon()
     loadScreenForVisibleDays()
   }
 
@@ -107,6 +128,10 @@ final class SpineStore: ObservableObject {
   ///
   /// Today is always included even when nothing was said: a day of nothing but screen is still a
   /// day, and it is the day the user is most likely looking for.
+  ///
+  /// Every conversation and memory the store holds names a day here, so as the spine pages the
+  /// account in, its screen capture follows it — the alternative is a spine that reaches back a
+  /// year with an empty hour rail on every day but this week's.
   func loadScreenForVisibleDays() {
     var wanted: Set<Date> = [calendar.startOfDay(for: Date())]
     for conversation in conversations {
@@ -115,15 +140,42 @@ final class SpineStore: ObservableObject {
     for memory in memories {
       wanted.insert(calendar.startOfDay(for: memory.timestamp))
     }
+    enqueueScreen(days: wanted)
+    discoverCapturedDays()
+  }
 
-    let missing = wanted.subtracting(loadedScreenDays).subtracting(screenLoadsInFlight)
+  /// Asks the capture database itself which days it holds, once.
+  ///
+  /// Days reach the queue above only by way of a conversation or a memory, so a day spent entirely
+  /// at the keyboard with nothing said and nothing learned would never be asked about at all. This
+  /// is the only path that can see one.
+  private func discoverCapturedDays() {
+    guard !didDiscoverCapturedDays else { return }
+    didDiscoverCapturedDays = true
+    Task { [weak self] in
+      guard let self else { return }
+      let days = await SpineScreenIndex.capturedDays(calendar: self.calendar)
+      self.enqueueScreen(days: Set(days))
+    }
+  }
+
+  private func enqueueScreen(days: Set<Date>) {
+    let missing = days.subtracting(loadedScreenDays).subtracting(queuedScreenDays)
     guard !missing.isEmpty else {
-      isPreparing = false
+      if screenQueue.isEmpty, activeScreenLoads == 0 { isPreparing = false }
       return
     }
+    queuedScreenDays.formUnion(missing)
     // Newest first: the day at the top of the spine is the one the user is reading.
-    for day in missing.sorted(by: >) {
-      screenLoadsInFlight.insert(day)
+    screenQueue.append(contentsOf: missing)
+    screenQueue.sort(by: >)
+    pumpScreenLoads()
+  }
+
+  private func pumpScreenLoads() {
+    while activeScreenLoads < Self.maximumConcurrentScreenLoads, !screenQueue.isEmpty {
+      let day = screenQueue.removeFirst()
+      activeScreenLoads += 1
       Task { [weak self] in
         guard let self else { return }
         let result = await SpineScreenIndex.load(day: day, calendar: self.calendar)
@@ -133,13 +185,14 @@ final class SpineStore: ObservableObject {
   }
 
   private func absorb(day: Date, result: SpineDayScreen) {
-    screenLoadsInFlight.remove(day)
+    activeScreenLoads -= 1
+    queuedScreenDays.remove(day)
     loadedScreenDays.insert(day)
     // A day with no capture still counts as read, so the spine does not re-query it forever.
     if result != .empty { screen[day] = result }
-    if screenLoadsInFlight.isEmpty { isPreparing = false }
-    guard result != .empty else { return }
-    recompose()
+    if screenQueue.isEmpty, activeScreenLoads == 0 { isPreparing = false }
+    if result != .empty { recomposeSoon() }
+    pumpScreenLoads()
   }
 
   // MARK: - Readouts
@@ -160,7 +213,31 @@ final class SpineStore: ObservableObject {
 
   // MARK: - Composition
 
+  /// Recompose, but at most once per coalescing window — unless there is nothing on screen yet.
+  ///
+  /// **First paint is never delayed.** An empty spine recomposes on the spot, because the whole
+  /// point of the store is that the first day is on screen before anything else has finished
+  /// loading. Every arrival after that is growth behind an already-readable list, and growth is
+  /// worth batching: hydration lands a page every few hundred milliseconds and screen capture lands
+  /// a day at a time, and rebuilding several thousand rows for each one is how a background fill
+  /// turns into a scroll that stutters.
+  private func recomposeSoon() {
+    guard !composed.isEmpty else {
+      recompose()
+      return
+    }
+    guard recomposeTask == nil else { return }
+    recomposeTask = Task { [weak self] in
+      try? await Task.sleep(for: Self.recomposeCoalescingWindow)
+      guard let self, !Task.isCancelled else { return }
+      self.recomposeTask = nil
+      self.recompose()
+    }
+  }
+
   private func recompose() {
+    recomposeTask?.cancel()
+    recomposeTask = nil
     composed = SpineComposer.compose(
       conversations: conversations,
       memories: memories,

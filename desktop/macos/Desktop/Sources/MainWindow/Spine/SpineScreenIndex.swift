@@ -73,6 +73,45 @@ enum SpineScreenIndex {
     }
   }
 
+  /// How many days back the discovery walk below will go. A year of capture is already far past
+  /// what any strip on this surface is read for, and it bounds the walk on a database whose oldest
+  /// row is a decade old.
+  static let capturedDayCeiling = 400
+
+  /// Every local day that actually holds capture, newest first.
+  ///
+  /// Without this the spine only ever asks about days it already knows from a conversation or a
+  /// memory — so **a day you only used the computer has no screen row at all**, and once the whole
+  /// conversation list is loaded that inconsistency is the one thing left making the spine partial.
+  ///
+  /// It is a walk rather than a `GROUP BY`: grouping means scanning the timestamp of every frame
+  /// (hundreds of thousands of rows on a real capture database), whereas each step here is a single
+  /// covering-index seek for the next captured instant at or before the cursor. One seek per day
+  /// that exists, none for the days that do not.
+  static func capturedDays(calendar: Calendar = .current, ceiling: Int = capturedDayCeiling) async -> [Date] {
+    guard let pool = await poolWhenReady() else { return [] }
+    var days: [Date] = []
+    var cursor = Date()
+    while days.count < ceiling {
+      let upperBound = cursor
+      let next: Date? = try? await pool.read { db in
+        try Date.fetchOne(
+          db,
+          sql: "SELECT MAX(timestamp) FROM screenshots WHERE timestamp <= ?",
+          arguments: [upperBound]
+        )
+      }
+      guard let next else { return days }
+      let day = calendar.startOfDay(for: next)
+      days.append(day)
+      // Step to the instant before this day began, so the next seek can only land on an older day.
+      guard let previous = calendar.date(byAdding: .second, value: -1, to: day) else { return days }
+      cursor = previous
+      if Task.isCancelled { return days }
+    }
+    return days
+  }
+
   /// Rewind's pool, once it is open — or `nil` once the wait is spent.
   ///
   /// Polled rather than awaited on a signal because `RewindDatabase` publishes none; the poll is

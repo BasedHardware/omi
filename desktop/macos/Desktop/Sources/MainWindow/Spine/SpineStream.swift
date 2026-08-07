@@ -102,6 +102,8 @@ struct SpineStream: View {
   let onOpenRewind: () -> Void
 
   @StateObject private var store = SpineStore()
+  /// Pages the rest of the account in behind the first paint. See `SpineHydration`.
+  @StateObject private var hydrator = SpineHydrator()
   @State private var viewport = SpineViewport()
   /// Which days are folded shut. Lives with the view rather than with the store because it is a
   /// reading position, not data: it is worth exactly as long as this list is on screen.
@@ -126,11 +128,15 @@ struct SpineStream: View {
     }
     .frame(height: SpineLayout.maximumHeight)
     .queryShellMatchCount(store.matchCount)
+    // First paint is the first page of each store and nothing else. Only once that is composed and
+    // on screen does hydration start walking the rest of the account in behind it.
     .task {
       if appState.conversations.isEmpty { await appState.loadConversations() }
       await memoriesViewModel.loadMemoriesIfNeeded()
       ingest()
+      hydrator.start(conversations: conversationPages, memories: memoryPages)
     }
+    .onDisappear { hydrator.stop() }
     .onReceive(appState.$conversations) { _ in ingest() }
     .onReceive(memoriesViewModel.$streamMemories) { _ in ingest() }
     .onChange(of: request) { _, newValue in store.apply(request: newValue) }
@@ -139,6 +145,28 @@ struct SpineStream: View {
   private func ingest() {
     store.ingest(conversations: appState.conversations, memories: memoriesViewModel.streamMemories)
     store.apply(request: request)
+    // A store that was hydrated and has since been truncated under us reopens its cursor; this is
+    // where the spine notices and goes back for the rest.
+    hydrator.resume()
+  }
+
+  /// The two paged stores, as the hydrator sees them. Neither is owned here — the spine reads the
+  /// same `loadMore` a scroll would have called, so there is no second cursor and no second cache.
+  private var conversationPages: SpinePageSource {
+    SpinePageSource(
+      hasMore: { appState.canLoadMoreConversations },
+      loadedCount: { appState.conversations.count },
+      total: { appState.totalConversationsCount },
+      loadMore: { await appState.loadMoreConversations() }
+    )
+  }
+
+  private var memoryPages: SpinePageSource {
+    SpinePageSource(
+      hasMore: { memoriesViewModel.hasMoreMemories },
+      loadedCount: { memoriesViewModel.memories.count },
+      loadMore: { await memoriesViewModel.loadMore() }
+    )
   }
 
   // MARK: The list
@@ -200,20 +228,31 @@ struct SpineStream: View {
     }
   }
 
-  /// The end of the loaded stream. Only offered when there is genuinely another page behind it and
-  /// nothing is narrowing the view — paging deeper to satisfy a filter would fetch the account one
-  /// page at a time to answer a question the server already answers.
+  /// What the end of the loaded stream is allowed to say.
   ///
-  /// It also withdraws while every loaded day is folded shut. The footer loads a page the *moment it
-  /// appears*, and a spine of nothing but headers puts it on screen immediately — which would page
-  /// the account away behind a surface with nothing on it to have reached the end of.
+  /// **It says the same thing under a filter as without one, which is the whole change.** The
+  /// footer used to withdraw entirely while anything was narrowing the view, on the reasoning that
+  /// paging deeper to satisfy a filter fetches the account one page at a time to answer a question
+  /// the server should answer. The reasoning was sound and the consequence was a lie: filtering to
+  /// Memories showed whatever happened to be loaded, with nothing on screen admitting there was
+  /// more. The account is now paged in whether or not a filter is on, so the honest report is the
+  /// same either way — filling, partial, or nothing at all.
   @ViewBuilder
   private var footer: some View {
-    if appState.canLoadMoreConversations, !request.isFiltering,
-      !collapse.containsEvery(store.days.map(\.id))
-    {
-      SpineLoadMoreFooter(isLoading: appState.isLoadingConversations) {
-        await appState.loadMoreConversations()
+    switch hydrator.state {
+    case .whole:
+      EmptyView()
+    case .filling(let conversations, let total):
+      SpineCorpusNote(text: SpineCorpusNote.filling(conversations: conversations, of: total))
+    case .partial:
+      // Hydration is not running and pages remain: it was abandoned, or the surface has only just
+      // opened. Either way the manual door has to be there — and unlike the old footer it does not
+      // fetch itself the instant it appears, so a spine of nothing but folded headers cannot page
+      // the account away behind a screen with nothing on it to have reached the end of.
+      if appState.canLoadMoreConversations {
+        SpineLoadMoreFooter(isLoading: appState.isLoadingConversations) {
+          await appState.loadMoreConversations()
+        }
       }
     }
   }
@@ -403,14 +442,16 @@ private struct SpineDayDisclosure: View {
 
 // MARK: - Load more
 
-/// Both a button and an automatic trigger: the button is what a keyboard reaches and what automation
-/// presses, scrolling to the end is what a pointer does, and both call the one guarded loader — so a
-/// page is never fetched twice.
+/// The manual door to the next page, for the case where the background fill is not running.
+///
+/// It no longer fetches itself the moment it appears. That trigger was how the spine paged at all,
+/// and it made the footer's mere presence a side effect — a folded spine, or a short filtered one,
+/// would put it on screen and page the account away behind a surface with nothing on it. Now that
+/// hydration owns the paging, the footer is only ever a button, which is also the only shape a
+/// keyboard and automation can reach reliably.
 struct SpineLoadMoreFooter: View {
   let isLoading: Bool
   let load: () async -> Void
-
-  @State private var hasRequested = false
 
   var body: some View {
     Button {
@@ -429,11 +470,34 @@ struct SpineLoadMoreFooter: View {
     .buttonStyle(.plain)
     .disabled(isLoading)
     .accessibilityIdentifier("spine-load-more")
-    .onAppear {
-      guard !hasRequested else { return }
-      hasRequested = true
-      Task { await load() }
+  }
+}
+
+/// One quiet line at the foot of the spine saying how much of the account is in it.
+///
+/// Two rungs of type on glass, so this is `Ink.secondary` and never a third rung (INV-UI-1).
+struct SpineCorpusNote: View {
+  let text: String
+
+  var body: some View {
+    HStack(spacing: 8) {
+      ProgressView().controlSize(.small)
+      Text(text)
+        .scaledFont(size: OmiType.caption, weight: .regular)
+        .foregroundStyle(Ink.secondary)
     }
-    .onDisappear { hasRequested = false }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, 14)
+    .accessibilityIdentifier("spine-corpus-note")
+  }
+
+  /// "Loading your history… 250 of 995 conversations".
+  ///
+  /// It counts conversations rather than everything because conversations are what the spine's
+  /// reach in *days* is made of, which is the part of the wait a person can actually feel. Without a
+  /// total the sentence drops the numbers rather than inventing a denominator.
+  static func filling(conversations: Int, of total: Int?) -> String {
+    guard let total, total > conversations else { return "Loading the rest of your history…" }
+    return "Loading your history… \(SpineFormat.number(conversations)) of \(SpineFormat.number(total)) conversations"
   }
 }

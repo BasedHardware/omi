@@ -195,16 +195,46 @@ struct QueryShellHome: View {
   private var headerAccessory: some View {
     switch mode {
     case .results:
-      if HomeChatReentry.isOffered(
-        messageCount: chatProvider.messages.count, isLoading: chatProvider.isLoading)
-      {
-        transcriptEntryButton
+      HStack(spacing: OmiSpacing.sm) {
+        brainMapButton
+        if HomeChatReentry.isOffered(
+          messageCount: chatProvider.messages.count, isLoading: chatProvider.isLoading)
+        {
+          transcriptEntryButton
+        }
       }
     case .answer:
       if menu.isPresentable {
         chatMenu
       }
     }
+  }
+
+  /// **The map, in the filter row — not a fifth chip.**
+  ///
+  /// The chips under this row all do one thing: narrow *these rows*, in place, leaving you on the
+  /// same list. The Brain Map is not a subset of those rows — it is a second drawing of the same
+  /// corpus, and it lives on a page that owns it. A control that sits among the chips, looks like
+  /// them, and then navigates somewhere is the worse of the two available mistakes: it teaches the
+  /// row a rule and then breaks it.
+  ///
+  /// So it goes in the header instead, where this panel already keeps the one other control that
+  /// leaves the list for a surface that owns something (`Chat ›`), and wears that control's exact
+  /// label. Leading rather than trailing so it never moves — `Chat ›` appears only once there is a
+  /// transcript to go back to.
+  ///
+  /// It opens the *real* Brain Map on the Library page (INV-NAV-1). The hub's own switcher is still
+  /// the mechanism that owns the destination; this is one more way in, never a smaller copy of it.
+  private var brainMapButton: some View {
+    Button(action: openBrainMap) {
+      QueryPanelChipLabel(
+        systemImage: "point.3.connected.trianglepath.dotted",
+        title: "Brain Map",
+        trailingSystemImage: "chevron.right")
+    }
+    .buttonStyle(.plain)
+    .help("See how everything Omi has kept connects")
+    .accessibilityIdentifier("query-shell-open-brain-map")
   }
 
   private var menu: HomeChatMenu {
@@ -345,8 +375,9 @@ struct QueryShellHome: View {
     navigate(to: .conversations)
   }
 
-  /// The spine's end-of-day card is the only way into the graph from here, and it goes to the
-  /// surface that owns it. The map is never a destination of this shell (INV-NAV-1).
+  /// Where both of Home's ways into the graph land — the spine's end-of-day card and the header's
+  /// `Brain Map ›` — and both go to the surface that owns it. The map is never a destination of this
+  /// shell (INV-NAV-1).
   private func openBrainMap() {
     memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
     navigate(to: .conversations)

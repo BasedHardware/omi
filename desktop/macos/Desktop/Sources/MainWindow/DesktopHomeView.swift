@@ -832,8 +832,6 @@ struct DesktopHomeView: View {
       return .memories
     case "tasks":
       return .tasks
-    case "insight":
-      return .insight
     case "rewind":
       return .rewind
     case "apps", "integrations":
@@ -1703,9 +1701,8 @@ private struct PageContentView: View {
 
   /// The list/detail pages (Conversations, Memories, Tasks, Apps) render their
   /// content in a centered, width-capped column so wide monitors get calm
-  /// gutters instead of a full-bleed stretch — matching the Insights
-  /// page, which already self-constrains. Pages paint a clear background, so the
-  /// gutters show the shell surface seamlessly.
+  /// gutters instead of a full-bleed stretch. Pages paint a clear background, so
+  /// the gutters show the shell surface seamlessly.
   @ViewBuilder
   private func constrainedListPage<V: View>(_ page: V) -> some View {
     page
@@ -1754,8 +1751,6 @@ private struct PageContentView: View {
             viewModel: viewModelContainer.tasksViewModel,
             chatCoordinator: viewModelContainer.taskChatCoordinator,
             chatProvider: viewModelContainer.chatProvider))
-      case 6:
-        InsightPage()
       case 7:
         RewindPage(appState: appState)
       case 8:

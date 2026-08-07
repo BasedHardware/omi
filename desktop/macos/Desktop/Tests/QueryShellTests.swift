@@ -171,6 +171,13 @@ final class QueryShellTests: XCTestCase {
 
   /// The chips are the only vocabulary the panel body is filtered by, so their identity is a
   /// contract with whatever occupies the seam.
+  ///
+  /// It is also the guard against the tempting fifth chip. The Brain Map is a control on this
+  /// surface, but it is not a *kind* of row: every chip here narrows the spine in place and leaves
+  /// you on the same list, and the map is a second drawing of the whole corpus on a page that owns
+  /// it. A chip that looks like its four neighbours and navigates instead teaches the row a rule and
+  /// then breaks it — so `Brain Map ›` lives in the panel header beside `Filter ›`, next to the one
+  /// other control that leaves the list (`Chat ›`), and `QueryShellKind` stays four.
   func testTheChipsAreTheFourTypesTheSpineMerges() {
     XCTAssertEqual(
       QueryShellKind.allCases.map(\.rawValue), ["all", "conversations", "memories", "rewind"])

@@ -286,12 +286,6 @@ struct SpineDayCollapse: Equatable {
 
   func contains(_ dayID: Date) -> Bool { folded.contains(dayID) }
 
-  /// True when every day given is folded — the state where the spine is a list of headers and there
-  /// is nothing below them to have reached the end of.
-  func containsEvery(_ dayIDs: [Date]) -> Bool {
-    !dayIDs.isEmpty && dayIDs.allSatisfy(folded.contains)
-  }
-
   mutating func toggle(_ dayID: Date) {
     if folded.contains(dayID) {
       folded.remove(dayID)
@@ -345,11 +339,21 @@ enum SpineComposer {
   ///   - memories: the loaded memories, any order.
   ///   - screen: per-day screen capture, keyed by the local start of the day.
   static func compose(
-    conversations: [ServerConversation],
-    memories: [SpineMemory],
+    conversations rawConversations: [ServerConversation],
+    memories rawMemories: [SpineMemory],
     screen: [Date: SpineDayScreen],
     calendar: Calendar = .current
   ) -> [SpineDay] {
+    // **Every row id below is derived from a record id, so a repeated record is a repeated
+    // `SwiftUI` identity** — which in a `ForEach` is not a cosmetic duplicate but undefined
+    // behaviour in the list's own diffing. The two stores upstream both page by offset against a
+    // list the server keeps re-sorting, so an overlapping page is a matter of timing rather than of
+    // correctness, and paging the whole account makes many more chances for it. The spine holds no
+    // authority over either store, but it does own its own row identities, so it keeps the first
+    // sighting of each and drops the rest here rather than rendering the same day twice.
+    let conversations = uniqued(rawConversations, by: \.id)
+    let memories = uniqued(rawMemories, by: \.id)
+
     // Memories that name a conversation we actually hold attach to it; everything else stands on
     // its own at the time it was made. A memory pointing at a conversation on a page we have not
     // loaded must not vanish — it becomes a standalone row rather than being dropped.
@@ -552,6 +556,16 @@ enum SpineComposer {
       conversationCount: conversations.count,
       rows: rows
     )
+  }
+
+  /// First sighting of each id wins, in the order given. Order is what the spine sorts by, so a
+  /// stable filter rather than a set round-trip.
+  static func uniqued<Element, Key: Hashable>(
+    _ elements: [Element], by key: KeyPath<Element, Key>
+  ) -> [Element] {
+    var seen = Set<Key>()
+    seen.reserveCapacity(elements.count)
+    return elements.filter { seen.insert($0[keyPath: key]).inserted }
   }
 
   /// Moves each attached row to sit immediately under its own conversation.

@@ -158,7 +158,6 @@ final class TopNavigationBarLayoutTests: XCTestCase {
         SidebarNavItem.conversations.rawValue,
         SidebarNavItem.tasks.rawValue,
         SidebarNavItem.rewind.rawValue,
-        SidebarNavItem.insight.rawValue,
         SidebarNavItem.apps.rawValue,
       ]
     )
@@ -181,7 +180,6 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(
       ShellDestination.allCases.filter { $0.reach == .memoryHubView }.compactMap(\.memoryDestination),
       [.conversations, .memories, .brainMap])
-    XCTAssertEqual(ShellDestination.insights.navItem, .insight)
     // Home is a peer pill, not a brand mark: the eight-dot mark belongs to the query bar, where it
     // animates while Omi is answering.
     XCTAssertEqual(ShellDestination.home.navItem, .dashboard)
@@ -240,12 +238,12 @@ final class TopNavigationBarLayoutTests: XCTestCase {
   /// A destination whose `reach` points at a page the bar does not have a pill for is exactly the
   /// stranding INV-NAV-1 forbids, so the checker has to *see* it rather than pass vacuously.
   func testTheReachabilityCheckerCatchesADestinationWhosePillWasRemoved() {
-    let barWithoutInsights = TopNavigationRoutes.primaryItems.filter {
-      $0.index != SidebarNavItem.insight.rawValue
+    let barWithoutRewind = TopNavigationRoutes.primaryItems.filter {
+      $0.index != SidebarNavItem.rewind.rawValue
     }
     XCTAssertEqual(
-      ShellDestination.unreachable(fromBarItems: barWithoutInsights), [.insights],
-      "Insights lost its pill and nothing noticed")
+      ShellDestination.unreachable(fromBarItems: barWithoutRewind), [.rewind],
+      "Rewind lost its pill and nothing noticed")
 
     let barWithoutLibrary = TopNavigationRoutes.primaryItems.filter {
       $0.index != SidebarNavItem.conversations.rawValue
@@ -291,7 +289,7 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.tasks.rawValue), 7)
     XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.apps.rawValue), 0)
     XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.rewind.rawValue), 0)
-    XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.insight.rawValue), 0)
+    XCTAssertEqual(badges.count(forNavItemIndex: SidebarNavItem.dashboard.rawValue), 0)
   }
 
   /// **The reason the flat row is allowed to exist.** A row of five named pills is only better than
@@ -341,7 +339,12 @@ final class TopNavigationBarLayoutTests: XCTestCase {
     guard let navigation = recorder.frame(of: .expanded) else {
       return XCTFail("the expanded destination row was never placed")
     }
-    XCTAssertGreaterThan(navigation.width, 0)
+    // Fitting is only worth asserting if what fitted is a *row of named pills*. A row that squeezed
+    // itself under the width of the menu it replaces would satisfy `ViewThatFits` and prove nothing,
+    // so the measured row has to be wider than the compact alternative offered beside it.
+    XCTAssertGreaterThan(
+      navigation.width, 68,
+      "the row fitted by collapsing to less than the compact menu it is supposed to replace")
     XCTAssertLessThanOrEqual(navigation.width, lane - inset * 2)
   }
 

@@ -81,7 +81,6 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
     case "dashboard", "home": return .more(.dashboard)
-    case "insight": return .more(.insight)
     case "rewind": return .more(.rewind)
     case "apps", "integrations": return .more(.apps)
     case "permissions": return .more(.permissions)
@@ -94,7 +93,6 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
 
 enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   case dashboard
-  case insight
   case rewind
   case apps
   case permissions
@@ -106,7 +104,6 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   var title: String {
     switch self {
     case .dashboard: return "Dashboard"
-    case .insight: return "Insights"
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
@@ -118,7 +115,6 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   var systemImage: String {
     switch self {
     case .dashboard: return "house.fill"
-    case .insight: return "lightbulb.fill"
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
     case .permissions: return "exclamationmark.triangle.fill"
@@ -385,7 +381,6 @@ final class ChatFirstShellNavigation: ObservableObject {
     case .conversations: selectPrimary(.conversations)
     case .memories: selectPrimary(.memories)
     case .tasks: selectPrimary(.tasks)
-    case .insight: selectMore(.insight)
     case .rewind: selectMore(.rewind)
     case .apps: selectMore(.apps)
     case .settings: selectMore(.settings)

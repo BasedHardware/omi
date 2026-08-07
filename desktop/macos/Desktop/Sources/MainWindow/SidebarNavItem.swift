@@ -4,7 +4,6 @@ enum SidebarNavItem: Int, CaseIterable {
   case conversations = 1
   case memories = 3
   case tasks = 4
-  case insight = 6
   case rewind = 7
   case apps = 8
   case settings = 9
@@ -16,7 +15,6 @@ enum SidebarNavItem: Int, CaseIterable {
     case .conversations: return "Conversations"
     case .memories: return "Memories"
     case .tasks: return "Tasks"
-    case .insight: return "Insights"
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .settings: return "Settings"
@@ -30,7 +28,6 @@ enum SidebarNavItem: Int, CaseIterable {
     case .conversations: return "text.bubble.fill"
     case .memories: return "brain"
     case .tasks: return "checklist"
-    case .insight: return "lightbulb.fill"
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
@@ -52,6 +49,6 @@ enum SidebarNavItem: Int, CaseIterable {
 
   /// Items shown in the main navigation (top section)
   static var mainItems: [SidebarNavItem] {
-    [.dashboard, .conversations, .memories, .tasks, .insight, .rewind, .apps]
+    [.dashboard, .conversations, .memories, .tasks, .rewind, .apps]
   }
 }

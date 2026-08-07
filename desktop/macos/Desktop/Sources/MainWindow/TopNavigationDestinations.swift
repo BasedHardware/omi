@@ -13,8 +13,8 @@
 //    three views (`MemoryHubDestination`). The bar was carrying a page's internal tabs, which is why
 //    it needed a menu to hold them. They now live on that page, in its own switcher — see
 //    `MemoryHubSwitcher`. The bar keeps one pill, `Library`, that opens the hub.
-//  - **The rest are genuinely separate views**, so they are flat pills: `Tasks`, `Rewind`, `Insights`,
-//    `Apps`. Always visible, one click, no disclosure, no hover.
+//  - **The rest are genuinely separate views**, so they are flat pills: `Tasks`, `Rewind`, `Apps`.
+//    Always visible, one click, no disclosure, no hover.
 //
 //  `Home` is a peer of those, with a magnifying glass for a glyph. It used to be the eight-dot Omi
 //  mark, and the mark also leads the query bar on Home — the same glyph twice on one screen, once
@@ -52,7 +52,6 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
   case brainMap
   case tasks
   case rewind
-  case insights
   case permissions
   case help
 
@@ -84,7 +83,6 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .brainMap: return "Brain Map"
     case .tasks: return "Tasks"
     case .rewind: return "Rewind"
-    case .insights: return "Insights"
     case .permissions: return "Permissions"
     case .help: return "Help"
     }
@@ -97,7 +95,6 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .conversations, .memories, .brainMap: return .conversations
     case .tasks: return .tasks
     case .rewind: return .rewind
-    case .insights: return .insight
     case .permissions: return .permissions
     case .help: return .help
     }
@@ -109,7 +106,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .conversations: return .conversations
     case .memories: return .memories
     case .brainMap: return .brainMap
-    case .home, .tasks, .rewind, .insights, .permissions, .help: return nil
+    case .home, .tasks, .rewind, .permissions, .help: return nil
     }
   }
 
@@ -118,7 +115,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     switch self {
     case .permissions: return .permissions
     case .help: return .help
-    case .home, .conversations, .memories, .brainMap, .tasks, .rewind, .insights: return nil
+    case .home, .conversations, .memories, .brainMap, .tasks, .rewind: return nil
     }
   }
 
@@ -126,7 +123,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     switch self {
     case .conversations, .memories, .brainMap: return .memoryHubView
     case .permissions, .help: return .settingsSidebar
-    case .home, .tasks, .rewind, .insights: return .topBar
+    case .home, .tasks, .rewind: return .topBar
     }
   }
 
@@ -208,9 +205,6 @@ enum TopNavigationRoutes {
     TopNavigationItem(
       index: SidebarNavItem.rewind.rawValue, title: "Rewind", icon: "clock.arrow.circlepath",
       tooltip: "Rewind — replay what was on your screen"),
-    TopNavigationItem(
-      index: SidebarNavItem.insight.rawValue, title: "Insights", icon: "lightbulb",
-      tooltip: "Insights — what Omi noticed across everything it kept"),
     TopNavigationItem(
       index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill",
       tooltip: "Apps — connectors, imports and exports"),

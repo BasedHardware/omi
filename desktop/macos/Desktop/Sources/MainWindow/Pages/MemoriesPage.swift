@@ -468,7 +468,7 @@ class MemoriesViewModel: ObservableObject {
           lifecycleExposed: canonicalLifecycleExposed
         )
         currentOffset = loaded.count
-        hasMoreMemories = loaded.count >= pageSize
+        hasMoreMemories = ServerPageEnd.hasMore(received: loaded.count)
         recomputeFilteredMemories()
       } catch {
         guard isCurrentScope(token) else { return }
@@ -702,7 +702,7 @@ class MemoriesViewModel: ObservableObject {
       )
       currentOffset = memories.count
       rawBackendOffset = apiMemories.count
-      hasMoreMemories = apiMemories.count >= reloadLimit
+      hasMoreMemories = ServerPageEnd.hasMore(received: apiMemories.count)
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
@@ -1053,7 +1053,7 @@ class MemoriesViewModel: ObservableObject {
         if !cachedMemories.isEmpty, isCurrentScope(token) {
           memories = displayCacheMemories(cachedMemories, for: token)
           currentOffset = cachedMemories.count
-          hasMoreMemories = cachedMemories.count >= pageSize
+          hasMoreMemories = ServerPageEnd.hasMore(received: cachedMemories.count)
           isLoading = false  // Show cached data immediately
           log("MemoriesViewModel: Loaded \(cachedMemories.count) memories from local cache")
         }
@@ -1124,7 +1124,7 @@ class MemoriesViewModel: ObservableObject {
         // hasMoreMemories from the filtered count would disable scrolling and
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
-        hasMoreMemories = fetchedMemories.count >= pageSize
+        hasMoreMemories = ServerPageEnd.hasMore(received: fetchedMemories.count)
         log(
           "MemoriesViewModel: Showing \(visibleMemories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
         )
@@ -1139,7 +1139,7 @@ class MemoriesViewModel: ObservableObject {
         )
         currentOffset = memories.count
         rawBackendOffset = fetchedMemories.count
-        hasMoreMemories = fetchedMemories.count >= pageSize
+        hasMoreMemories = ServerPageEnd.hasMore(received: fetchedMemories.count)
       }
     } catch {
       // Only show error if we don't have cached data
@@ -1344,7 +1344,7 @@ class MemoriesViewModel: ObservableObject {
           // has more cached rows to page; using the filtered count here disabled
           // scrolling and permanently hid those memories (the initial-load path
           // already documents this exact raw-vs-filtered pagination rule).
-          hasMoreMemories = moreFromCache.count >= pageSize
+          hasMoreMemories = ServerPageEnd.hasMore(received: moreFromCache.count)
           log(
             "MemoriesViewModel: Loaded \(visibleMemories.count) more from local cache (total: \(memories.count))"
           )
@@ -1391,7 +1391,7 @@ class MemoriesViewModel: ObservableObject {
       // Advance the raw backend cursor by the raw page size so the next fetch
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
-      hasMoreMemories = newMemories.count >= pageSize
+      hasMoreMemories = ServerPageEnd.hasMore(received: newMemories.count)
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )

@@ -73,12 +73,6 @@ enum ViewExporter {
       ),
 
       (
-        "06-insight",
-        { AnyView(InsightPage()) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
         "07-rewind",
         { AnyView(RewindPage()) },
         CGSize(width: 1000, height: 700)
@@ -325,7 +319,6 @@ enum ViewExporter {
               chatProvider: cp))
         }
       ),
-      ("full-insight", 6, { AnyView(InsightPage()) }),
       ("full-rewind", 7, { AnyView(RewindPage()) }),
       ("full-apps", 8, { AnyView(AppsPage(appProvider: AppProvider())) }),
       (

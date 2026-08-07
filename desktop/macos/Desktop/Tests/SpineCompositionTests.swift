@@ -411,18 +411,40 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertTrue(collapse.isEmpty)
   }
 
-  /// The footer loads a page the moment it appears, so "every day is folded" has to be a state the
-  /// stream can ask about rather than infer.
-  func testEveryDayFoldedIsOnlyTrueWhenItIs() {
-    var collapse = SpineDayCollapse()
-    let days = [date(6, 0), date(5, 0)].map { calendar.startOfDay(for: $0) }
+  // MARK: - Duplicate rows
 
-    XCTAssertFalse(collapse.containsEvery(days))
-    collapse.toggle(days[0])
-    XCTAssertFalse(collapse.containsEvery(days))
-    collapse.toggle(days[1])
-    XCTAssertTrue(collapse.containsEvery(days))
-    XCTAssertFalse(collapse.containsEvery([]), "no days is not every day")
+  /// The two stores behind the spine page by offset against a list the server keeps re-sorting, so
+  /// an overlapping page is a matter of timing — and paging the whole account makes far more chances
+  /// for one. Every row id here is derived from a record id, so a repeated record is a repeated
+  /// `ForEach` identity, which is not a cosmetic duplicate but undefined behaviour in the list.
+  func testARepeatedRecordProducesOneRowRatherThanTwoWithTheSameIdentity() {
+    let start = date(6, 20, 0)
+    let duplicated = conversation(id: "c1", start: start)
+    let memory = memory("m1", "Doors at 7.", at: date(6, 18), from: nil)
+
+    let days = SpineComposer.compose(
+      conversations: [duplicated, duplicated],
+      memories: [memory, memory],
+      screen: [:],
+      calendar: calendar
+    )
+
+    let ids = days.flatMap { $0.rows.map(\.id) }
+    XCTAssertEqual(ids.count, Set(ids).count, "no two rows may share a SwiftUI identity")
+    XCTAssertEqual(days[0].conversationCount, 1)
+    XCTAssertEqual(days[0].memoryCount, 1)
+  }
+
+  /// Deduplication keeps the first sighting so the spine's order is the order the stores published.
+  func testDeduplicationKeepsTheFirstSightingAndItsOrder() {
+    let ordered = SpineComposer.uniqued(
+      [("a", 1), ("b", 2), ("a", 3), ("c", 4)].map {
+        SpineMemory(id: $0.0, text: "\($0.1)", timestamp: .distantPast, conversationID: nil)
+      },
+      by: \.id
+    )
+    XCTAssertEqual(ordered.map(\.id), ["a", "b", "c"])
+    XCTAssertEqual(ordered.first?.text, "1")
   }
 
   // MARK: - The rail's direction
