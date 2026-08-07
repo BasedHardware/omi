@@ -46,6 +46,25 @@ class TranscriptMatchSnippet {
   }
 }
 
+/// Seek-to-moment args derived from search hit snippets (find-and-play).
+class SearchMomentSeek {
+  final double start;
+  final double end;
+
+  const SearchMomentSeek({required this.start, required this.end});
+}
+
+/// When search returned a timed transcript snippet, open the transcript tab at that moment.
+SearchMomentSeek? searchMomentSeekFromSnippets({
+  required List<TranscriptMatchSnippet> snippets,
+  required String searchQuery,
+}) {
+  if (searchQuery.trim().isEmpty || snippets.isEmpty) return null;
+  final start = snippets.first.start;
+  if (start == null) return null;
+  return SearchMomentSeek(start: start, end: snippets.first.end ?? start);
+}
+
 class CreateConversationResponse {
   final List<ServerMessage> messages;
   final ServerConversation? conversation;
@@ -438,20 +457,7 @@ class ServerConversation {
     bool deleted = false,
     List<TranscriptMatchSnippet>? matchSnippets,
   }) {
-    final snippets = matchSnippets ??
-        generated.matchSnippets
-            .map(
-              (s) => TranscriptMatchSnippet(
-                text: s.text,
-                segmentId: s.segmentId,
-                start: s.start,
-                end: s.end,
-                startMs: s.startMs,
-                endMs: s.endMs,
-                speakerId: s.speakerId,
-              ),
-            )
-            .toList();
+    final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
       id: generated.id,
       createdAt: generated.createdAt,

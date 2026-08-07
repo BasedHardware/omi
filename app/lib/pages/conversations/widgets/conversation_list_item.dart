@@ -128,20 +128,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
             String startingTitle = context.read<ConversationDetailProvider>().conversation.structured.title;
             provider.onConversationTap(widget.conversation.id);
 
-            final firstSnippet =
-                widget.conversation.matchSnippets.isNotEmpty ? widget.conversation.matchSnippets.first : null;
-            final seekStart = firstSnippet?.start;
-            final seekEnd = firstSnippet?.end ?? seekStart;
-            final openTranscript = searchQuery.isNotEmpty && seekStart != null;
+            final seek = searchMomentSeekFromSnippets(
+              snippets: widget.conversation.matchSnippets,
+              searchQuery: searchQuery,
+            );
 
             var result = await routeToPage(
               context,
               ConversationDetailPage(
                 conversation: widget.conversation,
                 isFromOnboarding: widget.isFromOnboarding,
-                initialTabIndex: openTranscript ? 0 : 1,
-                initialSeekStart: openTranscript ? seekStart : null,
-                initialSeekEnd: openTranscript ? seekEnd : null,
+                initialTabIndex: seek != null ? 0 : 1,
+                initialSeekStart: seek?.start,
+                initialSeekEnd: seek?.end,
               ),
             );
             if (context.mounted) {
@@ -518,11 +517,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
           const SizedBox(height: 10),
           Text(
             _searchSnippetText()!,
-            style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                  color: Colors.grey.shade400,
-                  height: 1.35,
-                  fontStyle: FontStyle.italic,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade400, height: 1.35, fontStyle: FontStyle.italic),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

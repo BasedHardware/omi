@@ -120,3 +120,29 @@ def test_attach_snippets_to_conversations():
     assert out[0]["id"] == "c1"
     assert len(out[0]["match_snippets"]) == 1
     assert "ACME contract" in out[0]["match_snippets"][0]["text"]
+
+
+def test_transcript_only_phrase_gets_timed_snippet_for_seek():
+    """Typesense title/overview miss spoken words; hydrated segments still yield seek times."""
+    out = attach_match_snippets_to_conversations(
+        [
+            {
+                "id": "spoken-only",
+                "structured": {"title": "Standup", "overview": "Team sync"},
+                "transcript_segments": [
+                    {
+                        "id": "s1",
+                        "text": "Ship the ACME contract by Friday",
+                        "start": 42.0,
+                        "end": 46.5,
+                    },
+                ],
+            }
+        ],
+        "ACME contract",
+    )
+    assert len(out) == 1
+    snippet = out[0]["match_snippets"][0]
+    assert snippet["start"] == 42.0
+    assert snippet["end"] == 46.5
+    assert snippet["start_ms"] == 42000

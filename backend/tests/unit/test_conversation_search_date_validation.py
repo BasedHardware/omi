@@ -445,6 +445,109 @@ def test_search_without_speaker_keeps_every_hydrated_conversation():
     assert [item['id'] for item in resp.json()['items']] == ['conv-1', 'conv-2']
 
 
+def test_search_drops_locked_conversations_before_snippets_can_leak():
+    """Locked rows are filtered after hydration so match_snippets never leave the API."""
+    from utils.conversations.mcp_transcript_search import attach_match_snippets_to_conversations as real_attach
+
+    def _redact(convs):
+        for c in convs:
+            if c.get('is_locked'):
+                c['match_snippets'] = []
+                c['transcript_segments'] = []
+        return convs
+
+    hydrated = [
+        {
+            **_conversation_dict('locked', [_segment()]),
+            'is_locked': True,
+            'transcript_segments': [
+                {'id': 's1', 'text': 'ACME contract secret', 'start': 1.0, 'end': 2.0, 'is_user': False}
+            ],
+        },
+        {
+            **_conversation_dict('open', [_segment()]),
+            'is_locked': False,
+            'transcript_segments': [
+                {'id': 's2', 'text': 'ACME contract public', 'start': 3.0, 'end': 4.0, 'is_user': False}
+            ],
+        },
+    ]
+    with (
+        patch.object(conv, 'attach_match_snippets_to_conversations', real_attach),
+        patch.object(conv, 'redact_conversations_for_list', _redact),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': 'locked'}, {'id': 'open'}],
+                'total_pages': 1,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+        patch.object(conv, 'search_transcript_conversation_ids', return_value=[]),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'ACME contract'})
+
+    assert resp.status_code == 200
+    items = resp.json()['items']
+    assert [item['id'] for item in items] == ['open']
+    assert items[0]['match_snippets']
+    assert 'ACME contract' in items[0]['match_snippets'][0]['text']
+    assert items[0]['match_snippets'][0]['start'] == 3.0
+
+
+def test_search_merges_transcript_only_hit_and_attaches_seek_snippet():
+    """Spoken-word ID missing from Typesense still appears with timed match_snippets."""
+    from utils.conversations.mcp_transcript_search import (
+        attach_match_snippets_to_conversations as real_attach,
+        merge_typesense_page_with_transcript_hits as real_merge,
+    )
+
+    def _redact(convs):
+        return convs
+
+    hydrated = [
+        {
+            **_conversation_dict('spoken-only', []),
+            'is_locked': False,
+            'structured': {'title': 'Standup', 'overview': 'Team sync'},
+            'transcript_segments': [
+                {
+                    'id': 's1',
+                    'text': 'Ship the ACME contract by Friday',
+                    'start': 42.0,
+                    'end': 46.5,
+                    'is_user': False,
+                },
+            ],
+        }
+    ]
+    with (
+        patch.object(conv, 'attach_match_snippets_to_conversations', real_attach),
+        patch.object(conv, 'merge_typesense_page_with_transcript_hits', real_merge),
+        patch.object(conv, 'redact_conversations_for_list', _redact),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ),
+        patch.object(conv, 'search_transcript_conversation_ids', return_value=['spoken-only']),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'ACME contract'})
+
+    assert resp.status_code == 200
+    items = resp.json()['items']
+    assert [item['id'] for item in items] == ['spoken-only']
+    snippet = items[0]['match_snippets'][0]
+    assert snippet['start'] == 42.0
+    assert snippet['end'] == 46.5
+
+
 def _process_result(result, *, persisted: bool):
     def process(*_args, persistence_observer=None, **_kwargs):
         assert persistence_observer is not None
