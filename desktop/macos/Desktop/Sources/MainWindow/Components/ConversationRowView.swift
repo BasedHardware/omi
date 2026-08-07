@@ -132,7 +132,7 @@ struct ConversationRowView: View {
         id: conversation.id, visibility: "shared")
 
       // Then copy the link
-      let link = "https://h.omi.me/conversations/\(conversation.id)"
+      let link = DesktopBackendEnvironment.conversationShareURL(id: conversation.id)
       let pasteboard = NSPasteboard.general
       pasteboard.clearContents()
       pasteboard.setString(link, forType: .string)
@@ -140,7 +140,7 @@ struct ConversationRowView: View {
     } catch {
       log("Failed to set conversation visibility: \(error)")
       // Still copy the link even if visibility fails - user might have shared it before
-      let link = "https://h.omi.me/conversations/\(conversation.id)"
+      let link = DesktopBackendEnvironment.conversationShareURL(id: conversation.id)
       let pasteboard = NSPasteboard.general
       pasteboard.clearContents()
       pasteboard.setString(link, forType: .string)

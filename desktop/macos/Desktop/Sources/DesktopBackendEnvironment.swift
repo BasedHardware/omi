@@ -5,6 +5,8 @@ enum DesktopBackendEnvironment {
   static let productionRustBackendURL = "https://desktop-backend-hhibjajaja-uc.a.run.app/"
   static let developmentPythonAPIURL = "https://api.omiapi.com/"
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
+  /// Public web share origin (conversation / chat / task links). Override with ``OMI_SHARE_BASE_URL``.
+  static let productionShareBaseURL = "https://h.omi.me"
 
   static var shouldUseDevelopmentBackends: Bool {
     shouldUseDevelopmentBackends(
@@ -149,6 +151,32 @@ enum DesktopBackendEnvironment {
     }
 
     return developmentRustBackendURL
+  }
+
+  /// Public share origin used when minting conversation links (#4339).
+  /// Matches backend ``OMI_SHARE_BASE_URL`` (default ``https://h.omi.me``).
+  static func shareBaseURL(
+    environmentValue: String? = currentEnvironmentValue("OMI_SHARE_BASE_URL")
+  ) -> String {
+    guard var raw = environmentValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !raw.isEmpty
+    else {
+      return productionShareBaseURL
+    }
+    if !raw.contains("://") {
+      raw = "https://\(raw)"
+    }
+    while raw.hasSuffix("/") {
+      raw.removeLast()
+    }
+    return raw
+  }
+
+  static func conversationShareURL(
+    id: String,
+    environmentValue: String? = currentEnvironmentValue("OMI_SHARE_BASE_URL")
+  ) -> String {
+    "\(shareBaseURL(environmentValue: environmentValue))/conversations/\(id)"
   }
 
   static func applyReleaseChannelDefaults() {
