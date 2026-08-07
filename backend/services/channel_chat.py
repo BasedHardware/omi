@@ -10,7 +10,7 @@ import database.chat as chat_db
 import database.llm_usage as llm_usage_db
 from models.chat import ChatSession, Message, MessageSender, MessageType
 from utils.conversation_helpers import extract_memory_ids
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.http_client import get_webhook_client
 from utils.llm.usage_tracker import Features, reset_usage_context, set_usage_context
 from utils.retrieval.graph import execute_chat_stream
@@ -375,10 +375,10 @@ def _persist_human_and_history(uid: str, channel: str, text: str) -> Tuple[List[
 async def generate_channel_reply(
     uid: str, channel: str, text: str, *, attachments: Optional[List[Dict[str, Any]]] = None
 ) -> str:
+    await run_blocking(db_executor, enforce_chat_quota, uid, platform=channel)
     media_context = await build_media_context(uid, attachments or [])
     if media_context:
         text = f'{text}\n\n{media_context}'.strip()
-    await run_blocking(db_executor, enforce_chat_quota, uid, platform=channel)
     messages, chat_session, message_id = await run_blocking(db_executor, _persist_human_and_history, uid, channel, text)
     await run_blocking(
         db_executor,
@@ -487,7 +487,7 @@ async def send_channel_message(
         )
     else:
         try:
-            await run_blocking(critical_executor, send_sms, channel_chat_id, text)
+            await run_blocking(postprocess_executor, send_sms, channel_chat_id, text)
         except Exception as exc:
             raise ChannelProviderError('Twilio SMS delivery failed') from exc
         return
