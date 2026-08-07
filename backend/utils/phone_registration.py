@@ -2,12 +2,14 @@ import json
 import re
 import time
 
-from twilio.base.exceptions import TwilioRestException
-
 import database.phone_calls as phone_calls_db
 from utils.other import endpoints
 from utils.phone_calls import check_call_access
-from utils.twilio_service import get_caller_id, start_caller_id_verification
+
+# TwilioRestException comes from twilio_service, which already resolves it behind a
+# fallback: the SDK's `twilio.base` subpackage is not importable in every
+# environment, and importing it raw here broke unrelated suites at collection.
+from utils.twilio_service import TwilioRestException, get_caller_id, start_caller_id_verification
 
 E164_PATTERN = re.compile(r'^\+[1-9]\d{1,14}$', re.ASCII)
 
@@ -76,7 +78,10 @@ def register_phone_verification(uid: str, phone_number: str) -> dict:
     except TwilioRestException as e:
         # Error 21450: a validation request already exists for this number.
         # This could mean (a) it's already verified by another user, or (b) a verification is still pending.
-        if e.code == 21450:
+        # getattr, matching twilio_service: TwilioRestException is typed
+        # type[BaseException] because it resolves to a fallback class when the
+        # SDK subpackage is missing, so the attribute is not statically known.
+        if getattr(e, 'code', None) == 21450:
             if get_caller_id(number):
                 raise PhoneVerificationError(
                     409,
