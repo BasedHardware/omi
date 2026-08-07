@@ -6,9 +6,23 @@
   font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 body { margin: 0; background: Canvas; color: CanvasText; }
-#root { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
+/* index.html sets viewport-fit=cover, so the page extends under the notch /
+   Dynamic Island and the home indicator: inset by the safe area or the first
+   row of UI sits underneath them (caught hosting this harness on an iPhone
+   simulator in wave 6). env() falls back to 0px on desktop. */
+#root {
+  max-width: 560px;
+  margin: 0 auto;
+  padding:
+    calc(24px + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    calc(24px + env(safe-area-inset-bottom, 0px))
+    calc(16px + env(safe-area-inset-left, 0px));
+}
 
-.dev-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+/* Four domain tabs do not fit one phone-width row — wrap instead of clipping
+   the last tab off-screen where it cannot be tapped. */
+.dev-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .dev-tabs button { padding: 8px 16px; font: inherit; cursor: pointer; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); background: transparent; border-radius: 6px; }
 .dev-tabs button.active { font-weight: 600; border-color: color-mix(in srgb, CanvasText 50%, transparent); }
 
