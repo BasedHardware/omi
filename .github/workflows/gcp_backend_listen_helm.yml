@@ -34,6 +34,34 @@ on:
         description: 'Helm revision to roll back to (blank = previous). See the Helm history step output.'
         required: false
         default: ''
+      gateway_feature_mode:
+        description: 'Optional OMI_LLM_GATEWAY_FEATURE_MODE override (chart-default = values file)'
+        required: false
+        default: chart-default
+        type: choice
+        options:
+          - chart-default
+          - off
+          - gateway
+      allow_direct_model_exception:
+        description: 'Optional OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION override (chart-default = values file)'
+        required: false
+        default: chart-default
+        type: choice
+        options:
+          - chart-default
+          - 'true'
+          - 'false'
+      stt_service_models:
+        description: 'Optional STT_SERVICE_MODELS override (blank = chart values file)'
+        required: false
+        default: ''
+        type: string
+      translation_service_models:
+        description: 'Optional TRANSLATION_SERVICE_MODELS override (blank = chart values file)'
+        required: false
+        default: ''
+        type: string
 
 # This chart path mutates backend-listen and shared backend-secrets, which are
 # also applied by the full backend deploy for the same environment.
@@ -207,9 +235,36 @@ jobs:
           set -euo pipefail
           python3 backend/scripts/ensure_dev_parity_pack_bucket.py
 
+      - name: Resolve optional listen env overrides
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        env:
+          VALUES_FILE: ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
+          GATEWAY_FEATURE_MODE: ${{ github.event.inputs.gateway_feature_mode }}
+          ALLOW_DIRECT_MODEL_EXCEPTION: ${{ github.event.inputs.allow_direct_model_exception }}
+          STT_SERVICE_MODELS: ${{ github.event.inputs.stt_service_models }}
+          TRANSLATION_SERVICE_MODELS: ${{ github.event.inputs.translation_service_models }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q pyyaml
+          ARGV_FILE="${RUNNER_TEMP}/listen-helm-env-overrides.argv"
+          python3 .github/scripts/listen_helm_env_overrides.py \
+            --values-file "$VALUES_FILE" \
+            --output-argv-file "$ARGV_FILE" \
+            --set "OMI_LLM_GATEWAY_FEATURE_MODE=${GATEWAY_FEATURE_MODE:-}" \
+            --set "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" \
+            --set "STT_SERVICE_MODELS=${STT_SERVICE_MODELS:-}" \
+            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}"
+          echo "LISTEN_HELM_ENV_OVERRIDES_ARGV=$ARGV_FILE" >> "$GITHUB_ENV"
+
       - name: Helm diff (dry run)
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         run: |
+          set -euo pipefail
+          LISTEN_ENV_OVERRIDES=()
+          while IFS= read -r _tok || [[ -n "${_tok:-}" ]]; do
+            [[ -z "${_tok}" ]] && continue
+            LISTEN_ENV_OVERRIDES+=("$_tok")
+          done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"
           echo "=== Current release values ==="
           helm -n ${{ vars.ENV }}-omi-backend get values ${{ vars.ENV }}-omi-backend-listen || echo "No existing release found"
           echo ""
@@ -221,6 +276,7 @@ jobs:
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
+            ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"} \
             --dry-run
 
       # The ExternalSecret resource (which tells external-secrets which GCP
@@ -242,13 +298,20 @@ jobs:
       - name: Upgrade backend-listen Helm chart
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         run: |
+          set -euo pipefail
+          LISTEN_ENV_OVERRIDES=()
+          while IFS= read -r _tok || [[ -n "${_tok:-}" ]]; do
+            [[ -z "${_tok}" ]] && continue
+            LISTEN_ENV_OVERRIDES+=("$_tok")
+          done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
             --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}"
+            --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
+            ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}
 
       - name: Roll back backend-listen Helm release
         if: ${{ github.event.inputs.mode == 'rollback' }}
