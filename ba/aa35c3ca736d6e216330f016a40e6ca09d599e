@@ -1,0 +1,26 @@
+desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
+  s_569f1df936cc22::t_870bb2cb7040e2 169
+desktop/macos/Desktop/Sources/Chat/TypingIndicator.swift
+  s_569f1df936cc22::t_24545986542c7f 70-89,92-93
+desktop/macos/Desktop/Tests/ChatWorkingIndicatorTests.swift
+  s_569f1df936cc22::t_dc6704e1800e6f 72-75,77
+  s_569f1df936cc22::t_a1a7ad46a61304 129-134,138,145,148,152,159-180,183-196
+desktop/macos/changelog/unreleased/20260807-chat-mark-still-during-tool-call.json
+  s_569f1df936cc22::t_aa7622890d1cba 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "baaa35c3ca736d6e216330f016a40e6ca09d599e",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
