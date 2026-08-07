@@ -34,6 +34,9 @@
     "drivers/model": {
       "name": "@platform/model-driver",
     },
+    "drivers/sqlite": {
+      "name": "@platform/sqlite",
+    },
     "harness": {
       "name": "@platform/harness",
     },
@@ -56,6 +59,8 @@
     "@platform/schema": ["@platform/schema@workspace:core/schema"],
 
     "@platform/scope": ["@platform/scope@workspace:core/scope"],
+
+    "@platform/sqlite": ["@platform/sqlite@workspace:drivers/sqlite"],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.34.52", "", {}, "sha512-XiMQh7qqVlxZzcVD+kkGMNGMzcTrDMLWI7S4x7z1MkCkbDPrekpZXEUK0eZqZFMuHQg2a2DZOcDIh9o5v3Gonw=="],
 
