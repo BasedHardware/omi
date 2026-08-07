@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
+  s_569f1df936cc22::t_a957dd74cc837f 7-13
+desktop/macos/changelog/unreleased/20260807-rewind-screenshot-embedding-rowid.json
+  s_569f1df936cc22::t_f217bd5be39052 1-3
+desktop/macos/Desktop/Tests/RewindAllTimeSearchTests.swift
+  s_569f1df936cc22::t_136fef8bcdb176 37-40,42-43,45
+  s_569f1df936cc22::t_7c1556f82afeea 10,14,16-17,21-36,49,52-57,61,64,66-75,90-92,98-117,127-128,153-155,172-173
+  s_569f1df936cc22::t_5549821c14983b 62-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "fc76e7c2b9c562ee0c06d237e64277b0ee45aded",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
