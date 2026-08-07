@@ -17,7 +17,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineScreenIndex.swift
   - desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHydration.swift
-  - desktop/macos/Desktop/Sources/MainWindow/ServerPageEnd.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ServerPaging.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryVisibilityGuardrails.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
 preconditions:
@@ -87,8 +87,31 @@ steps:
       Brain Map opens. Return Home and click a screen-moment thumbnail — Rewind opens.
 
   - id: S8
-    name: Paging deeper loads earlier days
+    name: The whole account loads itself, and says so while it does
     do: >-
-      Scroll to the bottom of the spine with no filter active. "Load earlier days" appears and
-      fetches the next page of conversations; older day headers appear below. The list stays
-      smooth over several pages.
+      Open Home and watch the foot of the spine without touching anything. It reads "Loading your
+      history… N of M conversations", the number climbs, and older day headers keep appearing
+      below without any clicking. First paint is unaffected — the newest day is readable before
+      the line appears. When the line disappears, the spine reaches back to the account's oldest
+      conversation and every day it spans has its own hour rail and screen strips, not just this
+      week's. Scrolling stays smooth throughout.
+    expect:
+      text_visible:
+        - Loading your history
+
+  - id: S9
+    name: A filter never hides the fact that pages are still arriving
+    do: >-
+      While the foot still reads "Loading your history…", click the "Memories" chip and type a
+      word into the query bar. The same line stays at the foot of the results — and if the filter
+      matches nothing yet, the panel reads "Nothing here yet — still loading." rather than
+      claiming nothing matched. Once loading finishes, the line goes away and an empty result is
+      allowed to say "Nothing captured matches …".
+
+  - id: S10
+    name: No row is ever drawn twice
+    do: >-
+      With the whole account loaded, scroll the full length of the spine. No day header appears
+      twice, and no conversation or memory appears twice within a day — the stores page by offset
+      against a list the server re-sorts, so an overlapping page is normal and must not become a
+      duplicate row.

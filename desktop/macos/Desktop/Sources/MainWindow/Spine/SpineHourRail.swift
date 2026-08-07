@@ -47,7 +47,7 @@ struct SpineHourRail: View {
           .inkStyle(.stepHeadline, color: Ink.primary)
           .lineLimit(1)
           .minimumScaleFactor(0.6)
-        Text(momentCount == 1 ? "moment captured" : "moments captured")
+        Text(Self.headlineCaption(momentCount))
           .inkStyle(.statusLabel, color: Ink.secondary)
       }
 
@@ -64,6 +64,14 @@ struct SpineHourRail: View {
     .accessibilityLabel(Text(readAloud))
   }
 
+  /// **The rail counts one day; the panel's corner counts the whole account.** Both used to end in
+  /// "moments captured", 200 points apart, so a day with no capture read as "0 moments captured"
+  /// beside "446 moments captured" and looked like the rail had failed rather than like a quiet day.
+  /// Naming the thing being counted is what tells them apart — the number stays the number.
+  static func headlineCaption(_ count: Int) -> String {
+    count == 1 ? "screen moment" : "screen moments"
+  }
+
   private var footer: String {
     var parts = [dayTitle]
     if conversationCount > 0 {
@@ -73,7 +81,8 @@ struct SpineHourRail: View {
   }
 
   private var readAloud: String {
-    var text = "\(SpineFormat.number(momentCount)) moments captured. \(footer)."
+    var text =
+      "\(SpineFormat.number(momentCount)) \(Self.headlineCaption(momentCount)). \(footer)."
     if let currentHour { text += " Reading \(SpineFormat.hourLabel(currentHour))." }
     return text
   }

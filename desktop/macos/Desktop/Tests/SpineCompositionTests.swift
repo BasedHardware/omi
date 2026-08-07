@@ -435,6 +435,64 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertEqual(days[0].memoryCount, 1)
   }
 
+  /// The real hazard, at the real size, in the exact shape that produces it.
+  ///
+  /// The memories loader carries two cursors — `currentOffset` over the visible/SQLite rows and
+  /// `rawBackendOffset` over the raw API page — and advancing only one re-requests part of the page
+  /// just read. The account behind this surface holds ~995 conversations and ~5,849 memories, so at
+  /// a page size of 50 and 100 that is twenty and fifty-nine seams; a defect at any one of them is a
+  /// day rendered twice. This composes the whole corpus with **every page seam overlapping** and
+  /// asserts the spine still holds each record exactly once.
+  func testTheWholeCorpusWithEveryPageSeamOverlappingStillRendersEachRecordOnce() {
+    let conversationPage = 50
+    let memoryPage = 100
+    let overlap = 7
+
+    var conversations: [ServerConversation] = []
+    for index in 0..<995 {
+      conversations.append(
+        conversation(id: "c\(index)", start: date(1 + index % 28, index % 24, index % 60)))
+      // The seam: the last `overlap` rows of each page arrive again at the head of the next one.
+      if index % conversationPage == conversationPage - 1 {
+        conversations.append(contentsOf: conversations.suffix(overlap))
+      }
+    }
+
+    var memories: [SpineMemory] = []
+    for index in 0..<5_849 {
+      memories.append(
+        memory(
+          "m\(index)", "Focused on Omi App: note \(index).",
+          at: date(1 + index % 28, index % 24, index % 60),
+          from: index % 3 == 0 ? "c\(index % 995)" : nil))
+      if index % memoryPage == memoryPage - 1 {
+        memories.append(contentsOf: memories.suffix(overlap))
+      }
+    }
+
+    XCTAssertGreaterThan(conversations.count, 995, "the fixture really does contain overlaps")
+    XCTAssertGreaterThan(memories.count, 5_849)
+
+    let days = SpineComposer.compose(
+      conversations: conversations, memories: memories, screen: [:], calendar: calendar)
+
+    let rowIDs = days.flatMap { $0.rows.map(\.id) }
+    XCTAssertEqual(rowIDs.count, Set(rowIDs).count, "no two rows may share a SwiftUI identity")
+    XCTAssertEqual(days.map(\.id).count, Set(days.map(\.id)).count, "no day may appear twice")
+    XCTAssertEqual(days.reduce(0) { $0 + $1.conversationCount }, 995)
+    XCTAssertEqual(days.reduce(0) { $0 + $1.memoryCount }, 5_849)
+
+    // And the same record cannot be carried by two different rows either — a memory that attached
+    // to a conversation must not also stand alone.
+    let memoryIDs = days.flatMap { day in
+      day.rows.flatMap { row -> [String] in
+        if case .memories(let carried) = row.content { return carried.map(\.id) }
+        return []
+      }
+    }
+    XCTAssertEqual(memoryIDs.count, Set(memoryIDs).count)
+  }
+
   /// Deduplication keeps the first sighting so the spine's order is the order the stores published.
   func testDeduplicationKeepsTheFirstSightingAndItsOrder() {
     let ordered = SpineComposer.uniqued(

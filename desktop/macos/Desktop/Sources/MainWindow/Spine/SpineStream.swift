@@ -239,22 +239,24 @@ struct SpineStream: View {
   /// same either way — filling, partial, or nothing at all.
   @ViewBuilder
   private var footer: some View {
-    switch hydrator.state {
-    case .whole:
+    switch foot {
+    case .nothing:
       EmptyView()
-    case .filling(let conversations, let total):
-      SpineCorpusNote(text: SpineCorpusNote.filling(conversations: conversations, of: total))
-    case .partial:
+    case .note(let text):
+      SpineCorpusNote(text: text)
+    case .loadMore:
       // Hydration is not running and pages remain: it was abandoned, or the surface has only just
       // opened. Either way the manual door has to be there — and unlike the old footer it does not
       // fetch itself the instant it appears, so a spine of nothing but folded headers cannot page
       // the account away behind a screen with nothing on it to have reached the end of.
-      if appState.canLoadMoreConversations {
-        SpineLoadMoreFooter(isLoading: appState.isLoadingConversations) {
-          await appState.loadMoreConversations()
-        }
+      SpineLoadMoreFooter(isLoading: appState.isLoadingConversations) {
+        await appState.loadMoreConversations()
       }
     }
+  }
+
+  private var foot: SpineFoot {
+    SpineFoot.resolve(corpus: hydrator.state, canLoadMore: appState.canLoadMoreConversations)
   }
 
   /// Folds one day shut, or opens it again.
@@ -276,16 +278,23 @@ struct SpineStream: View {
 
   /// Never an illustration and never a shrug — and it keeps the shell's other key in view, because
   /// "nothing matched" is exactly when asking is the better move.
+  ///
+  /// **It is also the second place a filter could lie, and the worse one.** A filter narrow enough
+  /// to match nothing in the pages loaded so far empties the list entirely, which takes the footer
+  /// off screen with it — so the surface answered "nothing matches" while pages that might match
+  /// were still arriving. The copy is resolved from the same `SpineFoot` the footer is, and the foot
+  /// is rendered here too, so the two can never disagree about whether the corpus is complete.
   private var emptyState: some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text(store.isPreparing ? "Reading your day…" : emptyHeadline)
+      Text(copy.headline)
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundStyle(Ink.primary)
-      if !store.isPreparing {
-        Text(emptyDetail)
+      if let detail = copy.detail {
+        Text(detail)
           .scaledFont(size: OmiType.caption, weight: .regular)
           .foregroundStyle(Ink.secondary)
       }
+      footer
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.vertical, OmiSpacing.lg)
@@ -293,14 +302,52 @@ struct SpineStream: View {
     .accessibilityIdentifier("query-shell-empty")
   }
 
-  private var emptyHeadline: String {
-    request.term.isEmpty
+  private var copy: SpineEmptyCopy {
+    SpineEmptyCopy.resolve(
+      isPreparing: store.isPreparing, request: request, kind: store.kind, foot: foot)
+  }
+}
+
+// MARK: - What an empty spine is allowed to say
+
+/// The two lines an empty spine shows, resolved from state rather than assembled in a `body`.
+///
+/// The rule worth stating: **"nothing matched" is a claim about the corpus, and it may only be made
+/// once the corpus is whole.** While pages are still arriving, an empty result is an unfinished
+/// answer, and saying so is the difference between a search surface you can trust and one that
+/// quietly under-reports the account.
+struct SpineEmptyCopy: Equatable, Sendable {
+  let headline: String
+  /// `nil` while the first day is still being read — there is nothing useful to add to "reading".
+  let detail: String?
+
+  static func resolve(
+    isPreparing: Bool, request: QueryShellRequest, kind: SpineKind, foot: SpineFoot
+  ) -> SpineEmptyCopy {
+    guard !isPreparing else {
+      return SpineEmptyCopy(headline: "Reading your day…", detail: nil)
+    }
+    // Still filling: the list being empty says nothing about the account yet.
+    if case .note(let progress) = foot {
+      return SpineEmptyCopy(headline: "Nothing here yet — still loading.", detail: progress)
+    }
+    let headline =
+      request.term.isEmpty
       ? "Nothing captured in this window yet." : "Nothing captured matches “\(request.text)”."
+    // Pages remain and nothing is fetching them: an empty list is a partial answer, and the button
+    // below is how it stops being one.
+    if foot == .loadMore {
+      return SpineEmptyCopy(
+        headline: headline, detail: "Some of your history isn’t loaded yet.")
+    }
+    guard request.term.isEmpty else {
+      return SpineEmptyCopy(headline: headline, detail: "Press ⌘⏎ to ask Omi instead.")
+    }
+    return SpineEmptyCopy(headline: headline, detail: emptyKindDetail(kind))
   }
 
-  private var emptyDetail: String {
-    guard request.term.isEmpty else { return "Press ⌘⏎ to ask Omi instead." }
-    switch store.kind {
+  private static func emptyKindDetail(_ kind: SpineKind) -> String {
+    switch kind {
     case .everything: return "Conversations, memories and screen moments appear here as they happen."
     case .conversations: return "Conversations appear here once Omi has heard one."
     case .memories: return "Memories appear here as Omi learns things worth keeping."
@@ -489,15 +536,5 @@ struct SpineCorpusNote: View {
     .frame(maxWidth: .infinity)
     .padding(.vertical, 14)
     .accessibilityIdentifier("spine-corpus-note")
-  }
-
-  /// "Loading your history… 250 of 995 conversations".
-  ///
-  /// It counts conversations rather than everything because conversations are what the spine's
-  /// reach in *days* is made of, which is the part of the wait a person can actually feel. Without a
-  /// total the sentence drops the numbers rather than inventing a denominator.
-  static func filling(conversations: Int, of total: Int?) -> String {
-    guard let total, total > conversations else { return "Loading the rest of your history…" }
-    return "Loading your history… \(SpineFormat.number(conversations)) of \(SpineFormat.number(total)) conversations"
   }
 }

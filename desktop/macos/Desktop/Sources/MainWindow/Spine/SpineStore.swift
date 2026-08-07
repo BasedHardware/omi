@@ -66,10 +66,16 @@ final class SpineStore: ObservableObject {
   /// Whether the one-off walk over the capture database's own days has run.
   private var didDiscoverCapturedDays = false
 
-  /// The coalescing window for recomposition. Composition is the expensive half of this store and
-  /// pages now land in a stream rather than one at a time, so a burst of arrivals is worth one
-  /// rebuild rather than one each. Short enough to read as immediate.
-  private static let recomposeCoalescingWindow: Duration = .milliseconds(120)
+  /// The coalescing window for recomposition.
+  ///
+  /// Composition is the expensive half of this store and its cost is the size of the corpus, not
+  /// the size of the page that arrived: measured in a debug build, composing the first page (50
+  /// conversations, 97 memories → 175 rows) takes 1.8 ms, and composing the whole account (995
+  /// conversations, 5,849 memories → 5,917 rows) takes 74 ms. Hydration lands roughly eighty pages,
+  /// so rebuilding per page would spend seconds of main-actor time behind a list the user may be
+  /// scrolling. 300 ms is long enough to absorb a page or two — they arrive every few hundred
+  /// milliseconds — and far too short to read as a delay on a list that is already on screen.
+  private static let recomposeCoalescingWindow: Duration = .milliseconds(300)
   private var recomposeTask: Task<Void, Never>?
 
   private let calendar: Calendar
@@ -103,7 +109,7 @@ final class SpineStore: ObservableObject {
       )
     }
     recomposeSoon()
-    loadScreenForVisibleDays()
+    discoverCapturedDays()
   }
 
   /// The shell's request: the term, the chip, the time window. Cheap enough to call on every
@@ -124,24 +130,20 @@ final class SpineStore: ObservableObject {
     }
   }
 
-  /// Reads the days the spine now spans, plus today, and fills in any screen capture it is missing.
+  /// Fills in screen capture for every day the spine now spans, plus today.
+  ///
+  /// **Driven off the composed days rather than off the records.** The obvious version walked every
+  /// conversation and memory asking `startOfDay` for each, which is fine for one page and is 6,800
+  /// calendar conversions per page once the whole account is paging in — eighty times over. The
+  /// composer has already grouped those records into at most a few hundred days, so reading its
+  /// answer costs one iteration per *day* and cannot drift from what the spine actually shows.
   ///
   /// Today is always included even when nothing was said: a day of nothing but screen is still a
   /// day, and it is the day the user is most likely looking for.
-  ///
-  /// Every conversation and memory the store holds names a day here, so as the spine pages the
-  /// account in, its screen capture follows it — the alternative is a spine that reaches back a
-  /// year with an empty hour rail on every day but this week's.
-  func loadScreenForVisibleDays() {
-    var wanted: Set<Date> = [calendar.startOfDay(for: Date())]
-    for conversation in conversations {
-      wanted.insert(calendar.startOfDay(for: conversation.startedAt ?? conversation.createdAt))
-    }
-    for memory in memories {
-      wanted.insert(calendar.startOfDay(for: memory.timestamp))
-    }
+  private func loadScreenForComposedDays() {
+    var wanted = Set(composed.map(\.id))
+    wanted.insert(calendar.startOfDay(for: Date()))
     enqueueScreen(days: wanted)
-    discoverCapturedDays()
   }
 
   /// Asks the capture database itself which days it holds, once.
@@ -245,6 +247,8 @@ final class SpineStore: ObservableObject {
       calendar: calendar
     )
     refilter()
+    // The days the spine now spans are exactly the days its screen capture has to cover.
+    loadScreenForComposedDays()
   }
 
   private func refilter() {
