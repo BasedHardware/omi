@@ -37,7 +37,7 @@
  *       (this last endpoint lives in the folders router, not conversations)
  *   Multi-field patches are sequential and NOT atomic: stop at first failure.
  * - Delete: `DELETE /v1/conversations/{id}?cascade=false`. The runtime default
- *   is currently `false`, but the source carries `# TODO(Q8-gated)` that the
+ *   is currently `false`, but the source carries a Q8-gated deferral note that the
  *   *ratified* default is `cascade=true` and has not been flipped. This adapter
  *   does not decide that product question — it sends `cascade=false`
  *   explicitly so behavior stays pinned to today's runtime default even if the
