@@ -46,7 +46,7 @@ def _enforce_phone_verify_limit(uid: str) -> None:
         remaining = PHONE_VERIFY_REQUESTS_PER_WINDOW
         timestamp = now
 
-    endpoints._store_rate_limit(key, json.dumps({"timestamp": timestamp, "remaining": remaining - 1}))
+    endpoints.store_rate_limit(key, json.dumps({"timestamp": timestamp, "remaining": remaining - 1}))
 
 
 def _redact_phone(phone_number: str) -> str:
