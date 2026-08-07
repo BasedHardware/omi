@@ -86,22 +86,59 @@ final class QueryShellTests: XCTestCase {
 
   func testTheCountLineSaysTheCorpusAtRestAndTheFractionUnderAFilter() {
     XCTAssertEqual(
-      QueryShellCount.sentence(matching: 0, total: 3_741, isFiltering: false),
-      "3,741 moments captured")
+      QueryShellCount.sentence(matching: 0, total: 3_741, isFiltering: false, isSettled: true),
+      "3,741 moments in all")
     XCTAssertEqual(
-      QueryShellCount.sentence(matching: 12, total: 3_741, isFiltering: true),
-      "12 results · of 3,741 captured")
+      QueryShellCount.sentence(matching: 12, total: 3_741, isFiltering: true, isSettled: true),
+      "12 results · of 3,741 in all")
     XCTAssertEqual(
-      QueryShellCount.sentence(matching: 1, total: 3_741, isFiltering: true),
-      "1 result · of 3,741 captured")
+      QueryShellCount.sentence(matching: 1, total: 3_741, isFiltering: true, isSettled: true),
+      "1 result · of 3,741 in all")
   }
 
   /// Typing one letter must not make the surface claim the archive is empty. Collapsing the two
   /// sentences into one is exactly how that happens.
   func testFilteringToNothingStillReportsTheWholeCorpus() {
-    let sentence = QueryShellCount.sentence(matching: 0, total: 3_741, isFiltering: true)
+    let sentence = QueryShellCount.sentence(
+      matching: 0, total: 3_741, isFiltering: true, isSettled: true)
     XCTAssertTrue(sentence.contains("3,741"))
     XCTAssertFalse(sentence.hasPrefix("0 moments"))
+  }
+
+  /// The corner climbed 5,562 → 7,310 → 7,311 while the tester watched it, presented throughout as a
+  /// settled total. A number still being assembled has to say so.
+  func testAnUnsettledCorpusSaysItIsStillCountingRatherThanNamingATotal() {
+    let counting = QueryShellCount.sentence(
+      matching: 0, total: 5_562, isFiltering: false, isSettled: false)
+
+    XCTAssertEqual(counting, "5,562 so far · still counting")
+    XCTAssertFalse(
+      counting.contains("in all"),
+      "A count that is still climbing must not claim to be the whole account.")
+
+    XCTAssertEqual(
+      QueryShellCount.sentence(matching: 0, total: 7_311, isFiltering: false, isSettled: true),
+      "7,311 moments in all",
+      "Once hydration finishes the same line settles into a total.")
+  }
+
+  /// **The two numbers on this panel count different things and must never wear the same noun.**
+  /// The rail counts one day of screen capture; the corner counts the whole account — conversations,
+  /// memories and screen together. The tester read "0 screen moments" beside "7,311 moments
+  /// captured" as a contradiction, because as written it was one.
+  func testTheCornerAndTheRailDoNotShareANoun() {
+    let corner = QueryShellCount.sentence(
+      matching: 0, total: 7_311, isFiltering: false, isSettled: true)
+    let rail = SpineHourRail.headlineCaption(0)
+
+    XCTAssertEqual(rail, "screen moments")
+    XCTAssertTrue(corner.hasSuffix("in all"), "The corner names its scope: the whole account.")
+    XCTAssertFalse(
+      corner.contains("screen"),
+      "Only the rail counts screen capture; the corner counts three kinds of record.")
+    XCTAssertFalse(
+      corner.contains(rail),
+      "\"\(corner)\" and \"\(rail)\" sit 200 pt apart and must not read as the same population.")
   }
 
   // MARK: - The request

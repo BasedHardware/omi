@@ -129,6 +129,9 @@ struct SpineStream: View {
     // `QueryShellLayout.panelBodyHeight` is the one place that number is decided now.
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .queryShellMatchCount(store.matchCount)
+    // The corner's count is a fraction of the corpus, so it has to know whether the corpus is done
+    // arriving. Same source as the foot of the spine, so the two can never disagree about it.
+    .queryShellCorpusSettled(hydrator.state == .whole)
     // First paint is the first page of each store and nothing else. Only once that is composed and
     // on screen does hydration start walking the rest of the account in behind it.
     .task {
