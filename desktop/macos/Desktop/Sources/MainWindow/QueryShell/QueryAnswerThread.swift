@@ -57,6 +57,17 @@ struct QueryAnswerThread: View {
         // bare text with no anchor while the user's keep their capsule. Asking for exactly the
         // gutter the mark needs is what makes the two sides read as a conversation.
         horizontalContentPadding: ChatOmiMarkPlacement.markGutter,
+        // **The compact window, which is the one written for this panel.**
+        // `ChatMessagesView` keeps its rows eagerly mounted on purpose — a lazy
+        // stack re-estimates off-screen rich-Markdown heights and hands AppKit
+        // the wrong anchor mid-gesture — so how many rows are mounted is the
+        // whole cost. It picks the compact window automatically only for a
+        // caller that passes a chat-first block context, and this surface has
+        // none, so Home was silently mounting the 500-row default into a panel
+        // 460 pt tall: 910 ms and 607 native views for 400 messages, against
+        // 114 ms and 84 for the same transcript compact. `Show older messages`
+        // is already the way back to the rest of it.
+        transcriptWindowPolicy: .compactHome,
         verticalContentPadding: OmiSpacing.sm,
         // **The one thing an empty transcript here is ever allowed to say.** The post-onboarding
         // opener is composed by the provider the moment onboarding finishes — a greeting by name

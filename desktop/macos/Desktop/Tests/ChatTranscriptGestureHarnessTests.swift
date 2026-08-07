@@ -56,6 +56,31 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     )
   }
 
+  /// **The compact window has to actually bound what gets mounted.**
+  ///
+  /// The transcript keeps its rows eagerly mounted on purpose, so the row count
+  /// *is* the cost: at 400 messages the 500-row default builds 607 native views
+  /// in 910 ms, against 84 in 114 ms compact — into a panel 460 pt tall. Home
+  /// asks for the compact window for that reason, and this pins that asking for
+  /// it still means something.
+  func testTheCompactWindowMountsAFractionOfTheHistory() throws {
+    let compact = try makeHarness(messageCount: 400, transcriptWindowPolicy: .compactHome)
+    defer { compact.tearDown() }
+    compact.settleInitialPlacement()
+    let compactHeight = compact.documentHeight
+
+    let standard = try makeHarness(messageCount: 400, transcriptWindowPolicy: .standard)
+    defer { standard.tearDown() }
+    standard.settleInitialPlacement()
+
+    XCTAssertGreaterThan(compactHeight, 0, "precondition: the compact window mounted something")
+    XCTAssertGreaterThan(
+      standard.documentHeight, compactHeight * 3,
+      "the compact window must mount a fraction of the transcript, not all of it "
+        + "(compact \(compactHeight) pt vs standard \(standard.documentHeight) pt)")
+    XCTAssertTrue(compact.isAtBottom, "and it must still open at the newest mounted message")
+  }
+
   func testStreamingDoesNotPullAFastScrollingReaderBackToTheLiveEdge() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }
