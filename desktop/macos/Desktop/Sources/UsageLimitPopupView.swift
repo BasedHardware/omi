@@ -36,11 +36,10 @@ struct UsageLimitPopupView: View {
 
   var body: some View {
     ZStack {
-      // The modal dim. `Ink.primary` rather than a literal black: it is `labelColor`, so it darkens
-      // this light-pinned page and would lighten a dark one — one value, and it can never invert.
-      Ink.primary.opacity(0.24)
-        .ignoresSafeArea()
-        .onTapGesture { onDismiss() }
+      // The modal dim, on the shell's own surface rather than on the window — see `ShellModalScrim`.
+      // This is an overlay on the whole main window, which has no visible extent, so a full-bleed dim
+      // here painted a hard-edged rectangle onto the user's wallpaper.
+      ShellModalScrim(onTap: onDismiss)
 
       // Centered card
       VStack(spacing: 0) {

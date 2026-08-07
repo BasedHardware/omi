@@ -41,9 +41,10 @@ struct TryAskingPopupView: View {
       let popupHeight = min(max(proxy.size.height - 80, 360), 520)
 
       ZStack {
-        Ink.primary.opacity(0.24)
-          .ignoresSafeArea()
-          .onTapGesture(perform: onDismiss)
+        // The dim belongs to the shell's surface, not to the window: this popup is an overlay on the
+        // whole main window, which is transparent and much larger than the panels inside it, so a
+        // full-bleed dim here was a dark rectangle stamped on the desktop. See `ShellModalScrim`.
+        ShellModalScrim(onTap: onDismiss)
 
         VStack {
           popupContent

@@ -14,10 +14,13 @@ struct GoalCelebrationView: View {
   var body: some View {
     ZStack {
       if showCelebration {
-        // Dim overlay
-        Color.black.opacity(phase == .dim ? 0.22 : (phase == .confetti || phase == .text ? 0.28 : 0))
-          .ignoresSafeArea()
-          .allowsHitTesting(false)
+        // The dim behind the confetti. Bounded to the shell's surface (`ShellModalScrim`): this view
+        // is an overlay on the whole transparent main window, so full-bleed it painted a dark
+        // rectangle over the desktop around the app. It takes no clicks — a celebration must not
+        // steal the pointer — and it ramps from nothing rather than between two near-equal values.
+        ShellModalScrim(
+          opacity: phase == .idle || phase == .fadeOut ? 0 : ShellModalScrimLayout.dim,
+          blocksInteraction: false)
 
         // Confetti burst
         if phase == .confetti || phase == .text {

@@ -101,7 +101,11 @@ struct PageGlassLane<Content: View>: View {
 
   var body: some View {
     if PageGlassLanePolicy.ownsItsPanels(selectedIndex: selectedIndex) {
+      // Handed the whole content area, so a modal dim mounted inside it has to take the lane rather
+      // than the surface it was given — see `ShellModalScrim`. Published here rather than chosen at
+      // each modal, because this is the one place that knows which of the two shapes it just built.
       content()
+        .shellModalScrimBounds(.contentArea)
     } else {
       panel
     }
@@ -114,6 +118,8 @@ struct PageGlassLane<Content: View>: View {
   private var panel: some View {
     GeometryReader { proxy in
       content()
+        // The page *is* the panel, so its modals fill it edge to edge and stop at its corner.
+        .shellModalScrimBounds(.ownSurface)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // The page scrolls *inside* the panel, so its rows have to stop at the corner. Without this a
         // list paints straight over the squircle and out onto the wallpaper, which is the clipped-view

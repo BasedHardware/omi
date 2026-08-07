@@ -416,8 +416,10 @@ struct DesktopHomeView: View {
           }
 
           if let policy = updatePolicyManager.visiblePolicy, policy.isRequired {
-            Color.black.opacity(0.62)
-              .ignoresSafeArea()
+            // The heaviest dim in the app, and the one that most needed bounding: mounted here it is
+            // over the whole (invisible) window, so full-bleed it was a black rectangle on the
+            // wallpaper. No dismiss gesture — a required update is required — but it still blocks.
+            ShellModalScrim(opacity: ShellModalScrimLayout.blocking)
               .zIndex(20)
             DesktopRequiredUpdatePrompt(
               policy: policy,

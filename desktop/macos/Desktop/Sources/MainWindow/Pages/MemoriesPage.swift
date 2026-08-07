@@ -1918,14 +1918,16 @@ struct MemoriesPage: View {
       undoDeleteToast
     }
     .overlay {
-      // Loading overlay for conversation fetch
+      // Loading overlay for conversation fetch. This page rides on `PageGlassLane`'s panel, so the
+      // dim fills that panel and stops at its corner. The `.ignoresSafeArea()` it replaces asked to
+      // bleed past exactly the surface the dim belongs to.
       if viewModel.isLoadingConversation {
-        Color.black.opacity(0.18)
-          .ignoresSafeArea()
+        ShellModalScrim()
           .overlay {
             ProgressView()
               .scaleEffect(1.2)
-              .tint(Ink.surface)
+              // Two rungs on glass: the dim sits on the panel, so the spinner is `Ink.primary`.
+              .tint(Ink.primary)
           }
       }
     }

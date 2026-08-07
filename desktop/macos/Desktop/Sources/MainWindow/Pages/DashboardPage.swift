@@ -461,7 +461,8 @@ struct DashboardPage: View {
       .overlay {
         if isLoadingCitation {
           ZStack {
-            Color.black.opacity(0.3)
+            // Home fills the content area, so this dim was window-wide too — the sweep missed it.
+            ShellModalScrim()
             VStack(spacing: OmiSpacing.md) {
               ProgressView()
               Text("Loading source...")
@@ -1446,12 +1447,10 @@ struct DashboardPage: View {
   ) -> some View {
     ZStack {
       if isShowingAppsPopup {
-        Color.black.opacity(0.16)
-          .ignoresSafeArea()
-          .contentShape(Rectangle())
-          .onTapGesture {
-            dismissAppsPopup()
-          }
+        // Home owns its panels, so this page is handed the whole content area — a full-bleed dim
+        // here reaches the window's edges, and the window is transparent. `ShellModalScrim` reads
+        // that from `PageGlassLane` and puts the dim on the lane Home's own panels take.
+        ShellModalScrim(onTap: dismissAppsPopup)
           .transition(.opacity)
           .zIndex(2)
 
@@ -1477,6 +1476,9 @@ struct DashboardPage: View {
         )
         .id(appsPopupPresentationID)
         .frame(width: popupSize.width, height: popupSize.height)
+        // The popup is a bounded card with its own ground, so a sheet opened *inside* it dims the
+        // card rather than the lane behind it.
+        .shellModalScrimBounds(.ownSurface)
         .background(Ink.surface)
         .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
         .overlay(
@@ -1512,12 +1514,8 @@ struct DashboardPage: View {
   ) -> some View {
     ZStack {
       if homeConnectSheetIsPresented {
-        Color.black.opacity(0.22)
-          .ignoresSafeArea()
-          .contentShape(Rectangle())
-          .onTapGesture {
-            dismissHomeConnectSheet()
-          }
+        // Same lane as the apps popup above it, for the same reason.
+        ShellModalScrim(onTap: dismissHomeConnectSheet)
           .transition(.opacity)
           .zIndex(4)
 
@@ -1525,6 +1523,8 @@ struct DashboardPage: View {
 
         homeConnectSheetContent()
           .frame(width: sheetSize.width, height: sheetSize.height)
+          // Same as the apps popup: a bounded card is its own surface.
+          .shellModalScrimBounds(.ownSurface)
           .background(Ink.surface)
           .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
           .overlay(
