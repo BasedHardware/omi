@@ -17,6 +17,8 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/HomeKnowsComposer.swift
   - desktop/macos/Desktop/Sources/MainWindow/MainChatNavigationRequest.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  # The five home_* actions every step below drives, lifted out of the registry.
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationHomeStageActions.swift
   # S1 is the guard: these decide whether a stage exists at all, and therefore whether
   # `state.homeMode` is a reading or a fabrication.
   - desktop/macos/Desktop/Sources/MainWindow/DesktopShellPresentationPolicy.swift
