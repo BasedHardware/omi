@@ -1024,6 +1024,7 @@ export interface Conversation {
   id: string;
   is_locked?: boolean;
   language?: string | null;
+  match_snippets?: Array<TranscriptMatchSnippet>;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
@@ -2980,6 +2981,7 @@ export interface SharedConversationResponse {
   id: string;
   is_locked?: boolean;
   language?: string | null;
+  match_snippets?: Array<TranscriptMatchSnippet>;
   people?: Array<Person>;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
@@ -3441,6 +3443,16 @@ export interface TokenResponse {
 export interface TrainingDataOptInResponse {
   opted_in: boolean;
   status?: string | null;
+}
+
+export interface TranscriptMatchSnippet {
+  end?: number | null;
+  end_ms?: number | null;
+  segment_id?: string | null;
+  speaker_id?: number | null;
+  start?: number | null;
+  start_ms?: number | null;
+  text: string;
 }
 
 export interface TranscriptSegment {
@@ -4353,6 +4365,7 @@ export interface OmiApiSchemas {
   "TesterAccessRequest": TesterAccessRequest;
   "TokenResponse": TokenResponse;
   "TrainingDataOptInResponse": TrainingDataOptInResponse;
+  "TranscriptMatchSnippet": TranscriptMatchSnippet;
   "TranscriptSegment": TranscriptSegment;
   "TranscriptionErrorDetail": TranscriptionErrorDetail;
   "TranscriptionErrorResponse": TranscriptionErrorResponse;

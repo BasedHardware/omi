@@ -41,6 +41,7 @@ __all__ = [
     'MergeConversationsResponse',
     'PluginResult',
     'SearchRequest',
+    'TranscriptMatchSnippet',
     'SharedConversationChatHistoryMessage',
     'SharedConversationChatRequest',
     'SharedConversationChatResponse',
@@ -156,6 +157,18 @@ class ConversationAudio(BaseModel):
     built_at: Optional[datetime] = None
 
 
+class TranscriptMatchSnippet(BaseModel):
+    """Grep-style transcript hit returned on conversation search for seek-to-moment UX."""
+
+    text: str
+    segment_id: Optional[str] = None
+    start: Optional[float] = None
+    end: Optional[float] = None
+    start_ms: Optional[int] = None
+    end_ms: Optional[int] = None
+    speaker_id: Optional[int] = None
+
+
 class Conversation(BaseModel):
     id: str
     created_at: datetime
@@ -212,6 +225,9 @@ class Conversation(BaseModel):
     # Capture-device provenance (optional; absent on legacy conversations).
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+
+    # Search-only: grep-style transcript evidence for find-and-play.
+    match_snippets: List[TranscriptMatchSnippet] = []
 
     def __init__(self, **data):
         raw_segments = data.get('transcript_segments')

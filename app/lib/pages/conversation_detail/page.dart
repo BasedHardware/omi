@@ -54,6 +54,9 @@ class ConversationDetailPage extends StatefulWidget {
   final bool isFromOnboarding;
   final bool openShareToContactsOnLoad;
   final int initialTabIndex;
+  /// When set (e.g. from search match snippet), open transcript and play this moment.
+  final double? initialSeekStart;
+  final double? initialSeekEnd;
 
   const ConversationDetailPage({
     super.key,
@@ -61,6 +64,8 @@ class ConversationDetailPage extends StatefulWidget {
     required this.conversation,
     this.openShareToContactsOnLoad = false,
     this.initialTabIndex = 1, // Default to summary tab
+    this.initialSeekStart,
+    this.initialSeekEnd,
   });
 
   @override
@@ -82,6 +87,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
   bool _providerInitialized = false;
+  bool _didInitialSeek = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -160,6 +166,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     super.initState();
 
     _controller = TabController(length: 3, vsync: this, initialIndex: widget.initialTabIndex);
+    selectedTab = switch (widget.initialTabIndex) {
+      0 => ConversationTab.transcript,
+      2 => ConversationTab.actionItems,
+      _ => ConversationTab.summary,
+    };
     _controller!.addListener(() {
       setState(() {
         String? tabName;
@@ -269,6 +280,26 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         return context.l10n.conversationTab;
       case ConversationTab.actionItems:
         return context.l10n.actionItemsTab;
+    }
+  }
+
+  Future<void> _maybePlayInitialSeek() async {
+    if (_didInitialSeek || !mounted) return;
+    final start = widget.initialSeekStart;
+    if (start == null || _seekToSegmentCallback == null) return;
+    _didInitialSeek = true;
+    final end = widget.initialSeekEnd ?? start;
+    if (selectedTab != ConversationTab.transcript) {
+      setState(() {
+        selectedTab = ConversationTab.transcript;
+      });
+      _controller?.animateTo(0);
+    }
+    try {
+      await _seekToSegmentCallback!(start, end);
+      if (mounted) HapticFeedback.lightImpact();
+    } catch (_) {
+      // Audio may be unavailable offline; search still opened the transcript tab.
     }
   }
 
@@ -1120,6 +1151,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               setState(() {
                                 _seekToSegmentCallback = seekFunction;
                               });
+                              _maybePlayInitialSeek();
                             }
                           });
                         },

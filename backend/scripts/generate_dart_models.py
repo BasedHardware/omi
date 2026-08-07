@@ -31,6 +31,7 @@ SCHEMA_GROUPS = {
             'ConversationAudioSpan',
             'ConversationAudio',
             'CalendarEventLink',
+            'TranscriptMatchSnippet',
             'Conversation',
             'ConversationTestPromptResponse',
             'MergeConversationsResponse',

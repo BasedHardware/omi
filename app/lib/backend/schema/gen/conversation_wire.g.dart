@@ -518,6 +518,50 @@ class GeneratedCalendarEventLink {
   }
 }
 
+class GeneratedTranscriptMatchSnippet {
+  final double? end;
+  final int? endMs;
+  final String? segmentId;
+  final int? speakerId;
+  final double? start;
+  final int? startMs;
+  final String text;
+
+  const GeneratedTranscriptMatchSnippet({
+    this.end,
+    this.endMs,
+    this.segmentId,
+    this.speakerId,
+    this.start,
+    this.startMs,
+    required this.text,
+  });
+
+  factory GeneratedTranscriptMatchSnippet.fromJson(Map<String, dynamic> json) {
+    return GeneratedTranscriptMatchSnippet(
+      end: _readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: false, nullable: true),
+      endMs: _readFieldValue<int>(_readField(json, const ["end_ms"]), "end_ms", _readInt, requiredField: false, nullable: true),
+      segmentId: _readFieldValue<String>(_readField(json, const ["segment_id"]), "segment_id", _readString, requiredField: false, nullable: true),
+      speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
+      start: _readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: false, nullable: true),
+      startMs: _readFieldValue<int>(_readField(json, const ["start_ms"]), "start_ms", _readInt, requiredField: false, nullable: true),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'end': end,
+      'end_ms': endMs,
+      'segment_id': segmentId,
+      'speaker_id': speakerId,
+      'start': start,
+      'start_ms': startMs,
+      'text': text,
+    };
+  }
+}
+
 class GeneratedConversation {
   final String? appId;
   final List<GeneratedAppResult> appsResults;
@@ -538,6 +582,7 @@ class GeneratedConversation {
   final String id;
   final bool isLocked;
   final String? language;
+  final List<GeneratedTranscriptMatchSnippet> matchSnippets;
   final List<GeneratedConversationPhoto> photos;
   final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
@@ -574,6 +619,7 @@ class GeneratedConversation {
     required this.id,
     this.isLocked = false,
     this.language,
+    this.matchSnippets = const [],
     this.photos = const [],
     this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
@@ -612,6 +658,7 @@ class GeneratedConversation {
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      matchSnippets: _required(_readFieldValue<List<GeneratedTranscriptMatchSnippet>>(_readField(json, const ["match_snippets"]), "match_snippets", (value) => _readObjectList(value, GeneratedTranscriptMatchSnippet.fromJson), requiredField: false, nullable: false, defaultValue: const []), "match_snippets"),
       photos: _required(_readFieldValue<List<GeneratedConversationPhoto>>(_readField(json, const ["photos"]), "photos", (value) => _readObjectList(value, GeneratedConversationPhoto.fromJson), requiredField: false, nullable: false, defaultValue: const []), "photos"),
       pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
@@ -651,6 +698,7 @@ class GeneratedConversation {
       'id': id,
       'is_locked': isLocked,
       'language': language,
+      'match_snippets': matchSnippets.map((value) => value.toJson()).toList(),
       'photos': photos.map((value) => value.toJson()).toList(),
       'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,

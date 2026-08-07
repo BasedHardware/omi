@@ -6535,6 +6535,14 @@
             ],
             "title": "Language"
           },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
+          },
           "photos": {
             "default": [],
             "items": {
@@ -18064,6 +18072,14 @@
             ],
             "title": "Language"
           },
+          "match_snippets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptMatchSnippet"
+            },
+            "title": "Match Snippets",
+            "type": "array"
+          },
           "people": {
             "default": [],
             "items": {
@@ -20885,6 +20901,86 @@
           "opted_in"
         ],
         "title": "TrainingDataOptInResponse",
+        "type": "object"
+      },
+      "TranscriptMatchSnippet": {
+        "description": "Grep-style transcript hit returned on conversation search for seek-to-moment UX.",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Id"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptMatchSnippet",
         "type": "object"
       },
       "TranscriptSegment": {

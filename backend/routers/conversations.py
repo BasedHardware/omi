@@ -11,6 +11,7 @@ import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
+import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -36,6 +37,11 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.render import conversation_to_dict
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    merge_typesense_page_with_transcript_hits,
+    search_transcript_conversation_ids,
+)
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
@@ -1295,12 +1301,35 @@ def search_conversations_endpoint(
         )
     except ConversationSearchUnavailableError:
         raise HTTPException(status_code=503, detail="Search temporarily unavailable")
-    conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    typesense_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
+    # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
+    # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
+    transcript_ids: List[str] = []
+    if (search_request.query or '').strip():
+        transcript_ids = search_transcript_conversation_ids(
+            uid,
+            search_request.query,
+            limit=effective_per_page,
+            starts_at=start_timestamp,
+            ends_at=end_timestamp,
+            search_transcript_chunks=vector_db.search_transcript_chunks,
+        )
+    conversation_ids = merge_typesense_page_with_transcript_hits(
+        typesense_ids,
+        transcript_ids,
+        page=effective_page,
+        per_page=effective_per_page,
+    )
     conversations = conversations_db.get_conversations_by_id_without_photos(
         uid,
         conversation_ids,
         include_discarded=bool(search_request.include_discarded),
     )
+    # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.
+    by_id = {c.get('id'): c for c in conversations if c.get('id')}
+    conversations = [by_id[cid] for cid in conversation_ids if cid in by_id]
     # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
     # so search never leaks that a locked conversation matched a query.
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
@@ -1312,13 +1341,15 @@ def search_conversations_endpoint(
         for conversation in conversations
         if conversation_matches_speaker(conversation, search_request.speaker_id)
     ]
+    # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
+    # clears segments on locked rows.
+    if (search_request.query or '').strip():
+        conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    effective_page = search_results.get('current_page', 1)
-    effective_per_page = search_results.get('per_page', 10)
     search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
     return search_results
 

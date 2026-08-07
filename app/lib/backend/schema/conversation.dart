@@ -13,6 +13,39 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 
+/// Grep-style transcript hit from conversation search (seek-to-moment).
+class TranscriptMatchSnippet {
+  final String text;
+  final String? segmentId;
+  final double? start;
+  final double? end;
+  final int? startMs;
+  final int? endMs;
+  final int? speakerId;
+
+  const TranscriptMatchSnippet({
+    required this.text,
+    this.segmentId,
+    this.start,
+    this.end,
+    this.startMs,
+    this.endMs,
+    this.speakerId,
+  });
+
+  factory TranscriptMatchSnippet.fromJson(Map<String, dynamic> json) {
+    return TranscriptMatchSnippet(
+      text: (json['text'] ?? '').toString(),
+      segmentId: json['segment_id']?.toString(),
+      start: (json['start'] as num?)?.toDouble(),
+      end: (json['end'] as num?)?.toDouble(),
+      startMs: (json['start_ms'] as num?)?.toInt(),
+      endMs: (json['end_ms'] as num?)?.toInt(),
+      speakerId: (json['speaker_id'] as num?)?.toInt(),
+    );
+  }
+}
+
 class CreateConversationResponse {
   final List<ServerMessage> messages;
   final ServerConversation? conversation;
@@ -331,6 +364,9 @@ class ServerConversation {
   String? folderId;
   ConversationVisibility visibility;
 
+  /// Search-only transcript evidence for find-and-play.
+  final List<TranscriptMatchSnippet> matchSnippets;
+
   // local label
   bool isNew = false;
 
@@ -358,6 +394,7 @@ class ServerConversation {
     this.starred = false,
     this.folderId,
     this.visibility = ConversationVisibility.private_,
+    this.matchSnippets = const [],
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -378,11 +415,19 @@ class ServerConversation {
       }).toList();
     }
     final generated = wire.GeneratedConversation.fromJson(normalized);
+    final rawSnippets = json['match_snippets'];
+    final snippets = rawSnippets is List
+        ? rawSnippets
+            .whereType<Map>()
+            .map((e) => TranscriptMatchSnippet.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : const <TranscriptMatchSnippet>[];
     return ServerConversation.fromGenerated(
       generated,
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      matchSnippets: snippets,
     );
   }
 
@@ -391,7 +436,22 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    List<TranscriptMatchSnippet>? matchSnippets,
   }) {
+    final snippets = matchSnippets ??
+        generated.matchSnippets
+            .map(
+              (s) => TranscriptMatchSnippet(
+                text: s.text,
+                segmentId: s.segmentId,
+                start: s.start,
+                end: s.end,
+                startMs: s.startMs,
+                endMs: s.endMs,
+                speakerId: s.speakerId,
+              ),
+            )
+            .toList();
     return ServerConversation(
       id: generated.id,
       createdAt: generated.createdAt,
@@ -425,6 +485,7 @@ class ServerConversation {
       starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
+      matchSnippets: snippets,
     );
   }
 
