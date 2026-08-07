@@ -151,11 +151,18 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   }
 
   Future<void> _generateChannelCode(String channel) async {
-    setState(() => _channelLoading = channel);
+    setState(() {
+      _channelLoading = channel;
+      _channelLink = null;
+    });
     try {
       final link = await createChannelLink(channel);
       if (!mounted) return;
-      setState(() => _channelLink = link);
+      if (link == null) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.error)));
+      } else {
+        setState(() => _channelLink = link);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(

@@ -181,11 +181,11 @@ extension APIClient {
   }
 
   func getChannelStatus() async throws -> ChannelStatusResponse {
-    return try await get("v1/channels")
+    return try await get("v1/channels", includeBYOK: false)
   }
 
   func createChannelLink(channel: String) async throws -> ChannelLinkResponse {
-    return try await post("v1/channels/\(channel)/link", body: EmptyBody())
+    return try await post("v1/channels/\(channel)/link", body: EmptyBody(), includeBYOK: false)
   }
 
   // MARK: - Assistant Settings API
