@@ -1,0 +1,9 @@
+{
+  "name": "feat-conv-012-conversation-create-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "node run.mjs",
+    "test": "node --test prototype.test.mjs"
+  }
+}

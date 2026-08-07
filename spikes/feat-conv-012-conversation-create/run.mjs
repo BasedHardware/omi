@@ -1,0 +1,38 @@
+import { ClientIdCreatePrototype } from "./prototypes/client-id-create.mjs";
+import { HybridPrototype } from "./prototypes/hybrid.mjs";
+import { PipelineEntryPrototype } from "./prototypes/pipeline-entry.mjs";
+
+const pipeline = new PipelineEntryPrototype();
+const captured = pipeline.capture("u1", [{ text: "captured online" }]);
+
+const clientId = new ClientIdCreatePrototype();
+const clientCreated = clientId.create("u1", {
+  opId: "create-1",
+  id: "quiet-river-stone",
+  segments: [{ text: "queued offline" }],
+  startedAt: 1,
+});
+
+const hybrid = new HybridPrototype();
+hybrid.createOffline("u1", { opId: "client-1", id: "gentle-meadow-stone", startedAt: 1 });
+
+console.log(
+  JSON.stringify(
+    {
+      pipelineEntry: { captured, finalized: pipeline.finalizeCurrent("u1") },
+      clientIdCreate: {
+        created: clientCreated,
+        processed: clientId.process("u1", { opId: "process-1", id: "quiet-river-stone" }),
+      },
+      hybrid: hybrid.ingestCapture("u1", {
+        opId: "ingest-1",
+        id: "gentle-meadow-stone",
+        captureId: "capture-1",
+        startedAt: 1,
+        segments: [{ text: "arrived from capture" }],
+      }),
+    },
+    null,
+    2,
+  ),
+);
