@@ -6,7 +6,7 @@ import uuid
 import re
 import base64
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 from pathlib import Path
 from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
 
@@ -312,6 +312,36 @@ def _resolve_chat_session(uid: str, app_id: Optional[str], chat_session_id: Opti
     return chat_db.get_chat_session(uid, app_id=app_id)
 
 
+class ResolvedChatTarget(NamedTuple):
+    """The session a request addresses, plus the app identity that session owns.
+
+    A session is created under one app and every message in it carries that
+    app's id. When the caller names a session explicitly, the session — not the
+    query string — is the authority on which app the turn belongs to: clients
+    address a thread by id and are not required to restate its app. Deriving the
+    app id from the query string instead let a request read, write, and delete
+    against the wrong app: history queries and the `plugin_id` delete filter are
+    both app-scoped, and the chat flow picks the persona from it.
+    """
+
+    session: Optional[dict]
+    app_id: Optional[str]
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self.session.get('id') if self.session else None
+
+
+def _resolve_chat_target(uid: str, app_id: Optional[str], chat_session_id: Optional[str]) -> ResolvedChatTarget:
+    session = _resolve_chat_session(uid, app_id, chat_session_id)
+    if chat_session_id and session:
+        session_app_id = session.get('app_id') or session.get('plugin_id')
+        if session_app_id in ['null', '']:
+            session_app_id = None
+        return ResolvedChatTarget(session, session_app_id)
+    return ResolvedChatTarget(session, app_id)
+
+
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
@@ -341,13 +371,13 @@ def send_message(
         # Resolved here rather than at the happy path's `_resolve_chat_session`
         # below: quota enforcement returns before that line is ever reached, and
         # the canned reply still belongs in the session the request named.
-        _quota_session = _resolve_chat_session(uid, _compat_id, chat_session_id)
+        _quota_target = _resolve_chat_target(uid, _compat_id, chat_session_id)
         response_msg = _build_quota_exceeded_reply(
             uid,
             data,
-            _compat_id,
+            _quota_target.app_id,
             exc.detail,
-            ChatSession(**_quota_session) if _quota_session else None,
+            ChatSession(**_quota_target.session) if _quota_target.session else None,
         )
 
         def _quota_exceeded_stream():
@@ -362,9 +392,10 @@ def send_message(
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get chat session
-    chat_session = _resolve_chat_session(uid, compat_app_id, chat_session_id)
-    chat_session = ChatSession(**chat_session) if chat_session else None
+    # get chat session — a named session also decides which app this turn runs as
+    target = _resolve_chat_target(uid, compat_app_id, chat_session_id)
+    compat_app_id = target.app_id
+    chat_session = ChatSession(**target.session) if target.session else None
 
     message = Message(
         id=str(uuid.uuid4()),
@@ -631,9 +662,13 @@ def clear_chat_messages(
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    # get the targeted chat session
-    chat_session = _resolve_chat_session(uid, compat_app_id, chat_session_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    # get the targeted chat session. Its own app id scopes the delete: the
+    # message rows carry the session's `plugin_id`, so filtering by the query
+    # string's app instead deletes the session record and orphans its messages.
+    target = _resolve_chat_target(uid, compat_app_id, chat_session_id)
+    compat_app_id = target.app_id
+    chat_session = target.session
+    chat_session_id = target.session_id
 
     err = chat_db.clear_chat(uid, app_id=compat_app_id, chat_session_id=chat_session_id)
     if err:
@@ -676,8 +711,9 @@ def get_messages(
     if compat_app_id in ['null', '']:
         compat_app_id = None
 
-    chat_session = _resolve_chat_session(uid, compat_app_id, chat_session_id)
-    chat_session_id = chat_session['id'] if chat_session else None
+    target = _resolve_chat_target(uid, compat_app_id, chat_session_id)
+    compat_app_id = target.app_id
+    chat_session_id = target.session_id
 
     messages = chat_db.get_messages(
         uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
@@ -692,7 +728,9 @@ def get_messages(
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
-        return [initial_message_util(uid, compat_app_id)]
+        # The greeting belongs to the session that was read, not to whatever
+        # session `acquire_chat_session` would pick for the app.
+        return [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
     return messages
 
 
