@@ -1,0 +1,69 @@
+desktop/macos/e2e/flows/home-spine.yaml
+  s_569f1df936cc22::t_5c730da843329c 90,92-117
+  s_739c5116e517ee::t_5ad3932bf04714 20
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHourRail.swift
+  s_569f1df936cc22::t_9e663db4a31170 50
+  s_569f1df936cc22::t_c7cbbc0a9f2961 67-74,84-85
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_569f1df936cc22::t_504597d94c0d54 438-495
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineHydration.swift
+  s_569f1df936cc22::t_22c2ef2b9c918c 143-145,157,159-174,179,181
+  s_569f1df936cc22::t_091797bf2b9dda 50-90
+  s_569f1df936cc22::t_6057ac039118f2 10-11,26-27,96-97,100,102,104,106,109-112,139-142,154,156,189-190,194-195,197-198,200-203,205,226-227,244-247,249
+  s_569f1df936cc22::t_2323e96d3c73da 1-9,12-25,28-49,91-95,98-99,101,103,105,107-108,113-138,146-153,155,158,180,182-188,191-193,196,199,204,206-209,211,217-225,228-231,236-243,248,250-251
+  s_569f1df936cc22::t_181587c7a6b6fd 232-235
+  s_569f1df936cc22::t_4bdadc32e0863e 175-178
+  s_569f1df936cc22::t_0c2c738c01984e 210,212-216
+desktop/macos/changelog/unreleased/20260806-home-spine-whole-history.json
+  s_569f1df936cc22::t_4f3cc7b0323aef 1-3
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStore.swift
+  s_569f1df936cc22::t_f3a5756330a0c8 112
+  s_569f1df936cc22::t_d6998fa11d7282 133-139,143-145
+  s_569f1df936cc22::t_a49ba5eeaa70f4 69-78
+  s_569f1df936cc22::t_064e80c4f2a3dc 250-251
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineStream.swift
+  s_569f1df936cc22::t_1883772268e9e2 242-243,245-247,252-253,258-259
+  s_569f1df936cc22::t_a323211f313c50 260,281-286,289,292-293,297,305-335,337-346,349-350
+  s_569f1df936cc22::t_ddd3ee78cd0f0c 261
+desktop/macos/Desktop/Sources/MainWindow/ServerPaging.swift
+  s_569f1df936cc22::t_7c50fe35f5adbd 2-54
+  s_569f1df936cc22::t_734ffb6ffc4aae 1
+  s_569f1df936cc22::t_d990cd43304edf 55
+desktop/macos/Desktop/Tests/SpineHydrationTests.swift
+  s_569f1df936cc22::t_d52c1882fccb1d 304-329,331,333-339
+  s_569f1df936cc22::t_16b586f511444a 39-137
+  s_569f1df936cc22::t_0c857087628cd2 159-164
+  s_569f1df936cc22::t_1006e11d2b76ec 330,332
+  s_569f1df936cc22::t_6c1a91bd59b6f4 182-188,195,197
+  s_569f1df936cc22::t_560dc316b2bff2 11,189,191-194,196,198-216,228-237,245-246,248,251,295-297,300-301
+  s_569f1df936cc22::t_dad7e2e6c43043 1-10,12-38,138-158,165-181,190,217-227,238-243,247,249-250,252-294,298-299,302-303,340
+  s_569f1df936cc22::t_d8f42570554948 244
+desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
+  s_569f1df936cc22::t_279322e23949b7 302,304
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  s_569f1df936cc22::t_b8f064042e76b4 471,705,1056,1127,1142,1335,1347,1389,1394
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "bb9c2dfb3bec5cfaf054b150432ec937d1d4346e",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_739c5116e517ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-ab74656d56b730efc",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
