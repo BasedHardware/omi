@@ -218,9 +218,12 @@ def _record_provider_missing_if_current_txn(
     if reconcile.get("state") == "missing":
         return True
     # A concurrent reconciler claim can land after the status path's
-    # reconcile_in_progress snapshot. Do not stomp an active lease to
-    # ``missing`` — that would let provision replace under the owner.
+    # reconcile_in_progress snapshot. Do not stomp an active lease or a
+    # reconciler-owned terminal/in-flight state to ``missing`` — that would let
+    # provision replace under the owner (including same-release quarantine).
     if reconcile_lease_active(vm, now):
+        return False
+    if reconcile.get("state") in {"quarantined", "claimed", "draining", "deferred"}:
         return False
     missing_since = reconcile.get("missingSince")
     recorded_missing_since = float(missing_since) if isinstance(missing_since, (int, float)) else now

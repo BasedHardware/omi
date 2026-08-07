@@ -763,8 +763,9 @@ async def get_agent_status(
             )
     if decision.queue_start:
         # Provider 404 / stopped / repairable running: queue fenced reconciler
-        # demand. Do not erase the owner pointer here — the reconciler owns
-        # missing/grace/session fences and eventual terminal cleanup.
+        # demand. Status also records ``missing`` (when allowed) so desktop
+        # provision can replace immediately; the reconciler still owns
+        # lease/quarantine fences and grace-period terminal cleanup as backstop.
         requested = await run_blocking(
             db_executor,
             request_vm_start,

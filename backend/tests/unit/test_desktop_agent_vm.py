@@ -141,6 +141,45 @@ def test_record_provider_missing_rejects_active_reconcile_lease(monkeypatch):
     assert database.transactions[-1].updates == []
 
 
+def test_record_provider_missing_rejects_quarantined_state():
+    from services import agent_vm_read
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    now = 1_700_000_000.0
+    database = StrictFirestore(
+        {
+            ("users", "uid"): {
+                "agentVm": {
+                    "vmName": "omi-agent-stale",
+                    "zone": "us-central1-a",
+                    "authToken": "token",
+                    "status": "ready",
+                    "reconcile": {"state": "quarantined", "releaseId": "rel-1"},
+                }
+            }
+        }
+    )
+    raw = getattr(
+        agent_vm_read._record_provider_missing_if_current_txn,
+        "to_wrap",
+        agent_vm_read._record_provider_missing_if_current_txn,
+    )
+
+    marked = raw(
+        database.transaction(),
+        database.collection("account_deletions").document("uid"),
+        database.collection("users").document("uid"),
+        "omi-agent-stale",
+        "us-central1-a",
+        "token",
+        now,
+    )
+
+    assert marked is False
+    assert database.rows[("users", "uid")]["agentVm"]["reconcile"]["state"] == "quarantined"
+    assert database.transactions[-1].updates == []
+
+
 @pytest.mark.asyncio
 async def test_status_keeps_demotion_when_start_request_loses_same_owner_race(monkeypatch):
     vm = {
