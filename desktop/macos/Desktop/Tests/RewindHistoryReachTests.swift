@@ -15,14 +15,17 @@ final class RewindHistoryReachTests: XCTestCase {
 
   private let calendar = Calendar(identifier: .gregorian)
 
-  private func day(_ year: Int, _ month: Int, _ dayOfMonth: Int) -> Date {
+  /// Throws rather than traps: an unresolvable fixture date is this test's own setup failing, and a
+  /// trap here takes the whole `xctest` process down with it and hides every result after it.
+  private func day(_ year: Int, _ month: Int, _ dayOfMonth: Int) throws -> Date {
     var components = DateComponents()
     components.year = year
     components.month = month
     components.day = dayOfMonth
     var calendar = self.calendar
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    return calendar.date(from: components)!
+    calendar.timeZone = .gmt
+    return try XCTUnwrap(
+      calendar.date(from: components), "\(year)-\(month)-\(dayOfMonth) must be a real date")
   }
 
   // MARK: - Unknown is never a confident zero
@@ -36,11 +39,11 @@ final class RewindHistoryReachTests: XCTestCase {
       "A day range that has not been read yet must not be reported as an absence of capture")
   }
 
-  func testUnsurveyedStateIsNotReachedOnceDaysAreKnown() {
+  func testUnsurveyedStateIsNotReachedOnceDaysAreKnown() throws {
     // The flag, not the emptiness, is what distinguishes the two. A populated list while the survey
     // is still running must still read as a real span, not as "checking".
     let label = RewindHistoryReach.spanLabel(
-      days: [day(2026, 8, 5)], surveyed: true, calendar: calendar)
+      days: [try day(2026, 8, 5)], surveyed: true, calendar: calendar)
 
     XCTAssertTrue(label.hasPrefix("1 day of capture"), "Got: \(label)")
   }
@@ -53,9 +56,9 @@ final class RewindHistoryReachTests: XCTestCase {
 
   // MARK: - The span is the real span
 
-  func testSpanNamesBothEndsAndTheDayCount() {
+  func testSpanNamesBothEndsAndTheDayCount() throws {
     // Newest first, as the walk produces them.
-    let days = [day(2026, 8, 5), day(2026, 8, 4), day(2026, 7, 2)]
+    let days = [try day(2026, 8, 5), try day(2026, 8, 4), try day(2026, 7, 2)]
 
     let label = RewindHistoryReach.spanLabel(days: days, surveyed: true, calendar: calendar)
 

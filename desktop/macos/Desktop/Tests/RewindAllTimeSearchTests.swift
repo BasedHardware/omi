@@ -10,9 +10,10 @@ import XCTest
 /// isolated throwaway storage root — no network, no embedding model, no clock.
 final class RewindAllTimeSearchTests: XCTestCase {
 
-  private var testUserId: String!
-  private var storageRoot: URL!
-  private var userDir: URL!
+  /// The only fixture `tearDown` needs back. The suite's user id and its user directory are used
+  /// where they are made, so they stay local to `setUp` rather than becoming implicitly unwrapped
+  /// state a later test could read before it was written.
+  private var storageRoot: URL?
   private var previousLocalProfile: String?
   private var previousStorageName: String?
 
@@ -30,22 +31,24 @@ final class RewindAllTimeSearchTests: XCTestCase {
     setenv("OMI_DESKTOP_LOCAL_PROFILE", "1", 1)
     setenv("OMI_LOCAL_PROFILE_STORAGE_NAME", storageName, 1)
 
-    let appSupport = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    storageRoot = appSupport.appendingPathComponent(storageName, isDirectory: true)
+    let appSupport = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+      "the user domain must have an Application Support directory to redirect storage into")
+    let storageRoot = appSupport.appendingPathComponent(storageName, isDirectory: true)
+    self.storageRoot = storageRoot
 
     // Same lifecycle `RewindStorageTestIsolation` uses: the pool has to be closed and *retargeted*
     // to this suite's user. Setting `currentUserId` alone is not enough — a `configuredUserId` left
     // behind by an earlier suite in the same process outranks it, and the database would open for
     // that user instead.
-    testUserId = "all-time-search-\(UUID().uuidString)"
+    let testUserId = "all-time-search-\(UUID().uuidString)"
     await RewindDatabase.shared.close()
     await RewindStorageTestIsolation.invalidateAllStorageCaches()
     RewindDatabase.currentUserId = testUserId
     await RewindDatabase.shared.configure(userId: testUserId)
     try await RewindDatabase.shared.initialize()
 
-    userDir =
+    let userDir =
       storageRoot
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -78,7 +81,7 @@ final class RewindAllTimeSearchTests: XCTestCase {
 
   @discardableResult
   private func insert(daysAgo: Int, text: String, embedding: Data? = nil) async throws -> Screenshot {
-    let stamp = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date())!
+    let stamp = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()))
     let inserted = try await RewindDatabase.shared.insertScreenshot(
       Screenshot(
         timestamp: stamp,
@@ -130,7 +133,7 @@ final class RewindAllTimeSearchTests: XCTestCase {
     // What it used to ask, and why the phrase was unfindable.
     let calendar = Calendar.current
     let todayStart = calendar.startOfDay(for: Date())
-    let todayEnd = calendar.date(byAdding: .day, value: 1, to: todayStart)!
+    let todayEnd = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: todayStart))
     let dayScoped = try await RewindDatabase.shared.search(
       query: "peregrine", startDate: todayStart, endDate: todayEnd)
     XCTAssertTrue(
@@ -164,8 +167,8 @@ final class RewindAllTimeSearchTests: XCTestCase {
     try await insert(daysAgo: 0, text: "newest", embedding: blob)
 
     let calendar = Calendar.current
-    let start = calendar.date(byAdding: .day, value: -60, to: Date())!
-    let end = calendar.date(byAdding: .day, value: -30, to: Date())!
+    let start = try XCTUnwrap(calendar.date(byAdding: .day, value: -60, to: Date()))
+    let end = try XCTUnwrap(calendar.date(byAdding: .day, value: -30, to: Date()))
     let windowed = try await RewindDatabase.shared.readEmbeddingBatch(startDate: start, endDate: end)
 
     XCTAssertEqual(windowed.count, 1, "callers that pass a window must still get only that window")
@@ -186,7 +189,7 @@ final class RewindAllTimeSearchTests: XCTestCase {
     for offset in offsets {
       try await insert(daysAgo: offset, text: "span \(offset)")
       // A second frame the same day must not produce a second day.
-      let stamp = calendar.date(byAdding: .day, value: -offset, to: Date())!
+      let stamp = try XCTUnwrap(calendar.date(byAdding: .day, value: -offset, to: Date()))
       _ = try await RewindDatabase.shared.insertScreenshot(
         Screenshot(
           timestamp: stamp.addingTimeInterval(120), appName: "AllTimeTest",
@@ -195,8 +198,8 @@ final class RewindAllTimeSearchTests: XCTestCase {
 
     let days = try await RewindDatabase.shared.capturedDayStarts()
 
-    let expected = offsets.map {
-      calendar.startOfDay(for: calendar.date(byAdding: .day, value: -$0, to: Date())!)
+    let expected = try offsets.map {
+      calendar.startOfDay(for: try XCTUnwrap(calendar.date(byAdding: .day, value: -$0, to: Date())))
     }
     XCTAssertEqual(days, expected, "captured days must be exactly the days that hold rows, newest first")
     XCTAssertEqual(Set(days).count, days.count, "a day with several frames must appear once")

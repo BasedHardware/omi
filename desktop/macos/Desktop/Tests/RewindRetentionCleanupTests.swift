@@ -13,7 +13,7 @@ import XCTest
 final class RewindRetentionCleanupTests: XCTestCase {
 
   private var testUserId: String!
-  private var storageRoot: URL!
+  private var storageRoot: URL?
   private var userDir: URL!
   private var savedRetentionDays: Int = 7
   private var previousLocalProfile: String?
@@ -33,7 +33,8 @@ final class RewindRetentionCleanupTests: XCTestCase {
 
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    storageRoot = appSupport.appendingPathComponent(storageName, isDirectory: true)
+    let storageRoot = appSupport.appendingPathComponent(storageName, isDirectory: true)
+    self.storageRoot = storageRoot
 
     // Same lifecycle `RewindStorageTestIsolation` uses: the pool has to be closed and *retargeted*
     // to this suite's user. Setting `currentUserId` alone is not enough — a `configuredUserId` left
@@ -146,7 +147,7 @@ final class RewindRetentionCleanupTests: XCTestCase {
 
     RewindSettings.shared.retentionDays = RewindSettings.unlimitedRetentionDays
 
-    let ancientDate = Calendar.current.date(byAdding: .day, value: -365, to: Date())!
+    let ancientDate = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -365, to: Date()))
     let ancientChunkRel = "1999-01-01/chunk_ancient.mp4"
     let full = videosDir.appendingPathComponent(ancientChunkRel)
     try fm.createDirectory(at: full.deletingLastPathComponent(), withIntermediateDirectories: true)
