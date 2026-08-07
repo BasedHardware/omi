@@ -183,6 +183,14 @@ struct QueryShellHome: View {
     // the legacy hub and have been inert since Home became this surface — the bridge answered "ok"
     // and nothing happened, which is worse than an error. Each one runs the exact function its
     // on-screen control runs.
+    //
+    // **`home_connect_toggle` is deliberately not among them.** It is the fifth of that set, and it
+    // is missing here because this surface has nothing for it to run: there is no Connect tray and no
+    // control that opens one, since connectors and export destinations live on the Apps page (its own
+    // pill, and `navigate apps` from the bridge). Handing it `navigate(.apps)` would put the "toggle"
+    // name over a different destination and let a flow assert a tray while watching another page, so
+    // the bridge refuses it here instead — keyed on the stage mode this surface never publishes.
+    // See `DesktopAutomationActionRegistry.registerBuiltins`.
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
       guard !useLegacyHomeDesign else { return }
       showAnswer()

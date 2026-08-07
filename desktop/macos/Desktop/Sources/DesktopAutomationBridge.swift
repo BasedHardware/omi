@@ -1553,10 +1553,31 @@ final class DesktopAutomationActionRegistry {
       return nil
     }
 
+    // The one `home_*` action with no counterpart on the query-shell Home. The other four were
+    // re-hosted there (`QueryShellHome`) because that surface still has the thing they act on — a
+    // chat to open, a panel to close, a question to send, a file to stage. It has no Connect tray
+    // and no control that opens one: connectors and export destinations moved to the Apps page,
+    // which the bar reaches with its own pill and the bridge reaches with `navigate apps`.
+    //
+    // So this refuses rather than pretending. Re-pointing it at the Apps page would keep the
+    // "toggle" name over a different destination, and a flow asserting a Connect tray would then
+    // watch the wrong surface and call it a pass — the same lie in new clothes.
     register(
       name: "home_connect_toggle",
-      summary: "Toggle the Connect tray on Home (same path as the ask-bar Connect button)"
+      summary:
+        "Toggle the Connect tray on the Home stage (same path as the ask-bar Connect button). "
+        + "Errors on shells whose Home has no stage; connectors live on the Apps page there."
     ) { _ in
+      // `homeMode` is the stage's own answer to "is there a Connect tray here". It is written only
+      // by the view that renders the stage and is nil everywhere else (`HomeStageAutomationPolicy`),
+      // so this cannot succeed silently on a Home that has no tray to toggle — which is exactly what
+      // it did, answering "ok" and doing nothing, from the query-shell Home landing until now.
+      guard DesktopAutomationStateStore.shared.current().homeMode != nil else {
+        return [
+          "error": "no Home stage on this shell, so there is no Connect tray to toggle — "
+            + "connectors and export destinations live on the Apps page (navigate apps)"
+        ]
+      }
       NotificationCenter.default.post(name: .homeStageToggleConnect, object: nil)
       return nil
     }

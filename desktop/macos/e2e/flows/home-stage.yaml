@@ -101,6 +101,16 @@ steps:
       state.homeMode: { exists: false }
 
   - id: S8
+    name: Connect toggle refuses once no stage is mounted
+    # S7 just proved there is no stage here, so this is the refusal path on a live bridge rather
+    # than a unit-test fixture: the action must report an error instead of answering "ok" and doing
+    # nothing. The wording it uses is asserted in HomeStageCloseSemanticsTests, not pinned here.
+    bridge.action:
+      name: home_connect_toggle
+    expect:
+      result.detail.error: { exists: true }
+
+  - id: S9
     name: Logs clean
     log.expect:
       absent:
