@@ -47,3 +47,25 @@ body { margin: 0; background: Canvas; color: CanvasText; }
 .memory-list .delete:hover { opacity: 1; }
 .memory-list li.locked .content { margin: 0; opacity: 0.7; font-style: italic; }
 .badge.locked { font-size: 12px; opacity: 0.7; white-space: nowrap; align-self: center; }
+
+.conversations-surface header { display: flex; align-items: baseline; gap: 12px; }
+.conversation-list { list-style: none; padding: 0; margin: 0; }
+.conversation-list li { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+.conversation-list li .title { flex: 1; padding: 6px; font: inherit; }
+.conversation-list li.locked .title { opacity: 0.7; font-style: italic; }
+.conversation-list .status { font-size: 12px; opacity: 0.7; white-space: nowrap; }
+.conversation-list .when { font-size: 12px; opacity: 0.6; white-space: nowrap; }
+.conversation-list li.empty { opacity: 0.6; justify-content: center; border: none; }
+.conversation-list .delete { border: none; background: none; font-size: 18px; cursor: pointer; opacity: 0.5; }
+.conversation-list .delete:hover { opacity: 1; }
+
+.folders-surface header { display: flex; align-items: baseline; gap: 12px; }
+.folder-list { list-style: none; padding: 0; margin: 0; }
+.folder-list li { display: flex; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid color-mix(in srgb, CanvasText 12%, transparent); }
+.folder-list li .name { flex: 1; padding: 6px; font: inherit; }
+.folder-list .icon { font-size: 14px; opacity: 0.8; white-space: nowrap; }
+.folder-list li.empty { opacity: 0.6; justify-content: center; border: none; }
+.folder-list .delete { border: none; background: none; font-size: 18px; cursor: pointer; opacity: 0.5; }
+.folder-list .delete:hover { opacity: 1; }
+.folder-list li.system .name { opacity: 0.85; }
+.badge.default { font-size: 12px; opacity: 0.7; white-space: nowrap; }

@@ -85,6 +85,16 @@ foundation gap, not your call to fill.
     origin (fixed port / custom scheme) is a storage-correctness invariant: an ephemeral
     port is a silent user-data wipe (IndexedDB is origin-keyed).
 
+14. **Invariant tests declare their red-proof.** A test that guards an invariant (data
+    loss, id routing, outcome folding, snapshot honesty, cross-domain isolation) carries
+    a `// red-proof:` comment naming the specific mutation that makes it fail, and the
+    reviewer applies that mutation before accepting the test. History: wave 5's
+    alias-fold test passed with rekeying replaced by the identity function — reconcile
+    masked the bug, so its assertions proved a different invariant than the one named.
+    Row-count assertions are the canonical decorative shape: assert the *content* only a
+    working mechanism can produce, not how many rows survived. Found by mutation, not by
+    reading — three review passes missed it.
+
 ## What you may do freely
 
 Add tests, extend the testkit's fakes with new fault modes, add a new domain following the

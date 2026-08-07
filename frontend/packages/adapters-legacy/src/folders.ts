@@ -164,10 +164,16 @@ function contentHash(ids: readonly string[]): string {
 export function foldersTransport(
   http: HttpClient,
   onServerAssignedId: (localId: string, serverId: string) => void,
+  /** Maps a local slug to the wire id the legacy server knows it by (the
+   * alias created when create returned serverAssignedId). Identity default. */
+  resolveWireId: (localId: string) => string = (id) => id,
 ): { send(op: PendingOp): Promise<FolderSendResult> } {
   return {
     async send(op: PendingOp): Promise<FolderSendResult> {
       const domainOp = JSON.parse(op.payload) as FolderOp;
+      if (domainOp.op !== "create") {
+        (domainOp as { id: string }).id = resolveWireId(domainOp.id);
+      }
       const result = await sendFolderOp(http, domainOp);
       if (result.ok && result.serverAssignedId !== undefined) {
         onServerAssignedId(domainOp.id, result.serverAssignedId);

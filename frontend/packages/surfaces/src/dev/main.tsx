@@ -1,14 +1,21 @@
 /**
  * DEV harness entry: token + base-URL form (persisted in localStorage), then
- * mounts TasksSurface and MemoriesSurface on real stores over the web storage
- * bridge. This file is the dev-mode "shell"; real shells replace everything here.
+ * mounts every surface on real stores over the web storage bridge. This file is
+ * the dev-mode "shell"; real shells replace everything here.
+ *
+ * All four stores open off ONE bridge and one http client, which is the shape a
+ * real shell has too — see the multi-store co-hosting test in testkit: each
+ * store must own a domain-namespaced outbox journal and projection, or they
+ * replay each other's ops through the wrong transport.
  */
 
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { realEnv } from "@omi-core/kernel";
 import { openWebStorageBridge } from "@omi-core/bridge-web";
-import { MemoriesStore, TasksStore } from "@omi-core/domain";
+import { ConversationsStore, FoldersStore, MemoriesStore, TasksStore } from "@omi-core/domain";
+import { ConversationsSurface } from "../conversations/ConversationsSurface.js";
+import { FoldersSurface } from "../folders/FoldersSurface.js";
 import { MemoriesSurface } from "../memories/MemoriesSurface.js";
 import { TasksSurface } from "../tasks/TasksSurface.js";
 import { devHttpClient } from "./http.js";
@@ -18,24 +25,42 @@ const LS_URL = "omi-dev-base-url";
 const LS_TOKEN = "omi-dev-token";
 const LS_UID = "omi-dev-uid";
 
-type DevTab = "tasks" | "memories";
+type DevTab = "tasks" | "memories" | "conversations" | "folders";
 
-type DevStores = { tasks: TasksStore; memories: MemoriesStore };
+const TAB_LABELS: Record<DevTab, string> = {
+  tasks: "Tasks",
+  memories: "Memories",
+  conversations: "Conversations",
+  folders: "Folders",
+};
+
+type DevStores = {
+  tasks: TasksStore;
+  memories: MemoriesStore;
+  conversations: ConversationsStore;
+  folders: FoldersStore;
+};
 
 function DevHarness({ stores }: { stores: DevStores }): React.JSX.Element {
   const [tab, setTab] = useState<DevTab>("tasks");
 
+  const surfaces: Record<DevTab, React.JSX.Element> = {
+    tasks: <TasksSurface store={stores.tasks} />,
+    memories: <MemoriesSurface store={stores.memories} />,
+    conversations: <ConversationsSurface store={stores.conversations} />,
+    folders: <FoldersSurface store={stores.folders} />,
+  };
+
   return (
     <>
       <nav className="dev-tabs" aria-label="Surface switcher">
-        <button type="button" className={tab === "tasks" ? "active" : ""} onClick={() => setTab("tasks")}>
-          Tasks
-        </button>
-        <button type="button" className={tab === "memories" ? "active" : ""} onClick={() => setTab("memories")}>
-          Memories
-        </button>
+        {(Object.keys(TAB_LABELS) as DevTab[]).map((t) => (
+          <button key={t} type="button" className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
+            {TAB_LABELS[t]}
+          </button>
+        ))}
       </nav>
-      {tab === "tasks" ? <TasksSurface store={stores.tasks} /> : <MemoriesSurface store={stores.memories} />}
+      {surfaces[tab]}
     </>
   );
 }
@@ -56,6 +81,8 @@ function DevApp(): React.JSX.Element {
     setStores({
       tasks: await TasksStore.open(bridge, env, http),
       memories: await MemoriesStore.open(bridge, env, http),
+      conversations: await ConversationsStore.open(bridge, env, http),
+      folders: await FoldersStore.open(bridge, env, http),
     });
   };
 
