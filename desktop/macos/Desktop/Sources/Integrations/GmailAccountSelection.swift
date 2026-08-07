@@ -99,8 +99,7 @@ enum GmailAccountProbe {
                       break
               except Exception:
                   continue
-          if email:
-              accounts.append({'name': browser['name'], 'db_path': browser['db_path'], 'email': email})
+          accounts.append({'name': browser['name'], 'db_path': browser['db_path'], 'email': email})
       write_json_result('omi_gmail_accounts_', {'ok': True, 'accounts': accounts})
       """
 
@@ -151,7 +150,7 @@ enum GmailAccountProbe {
     }
     return raw.compactMap { dict in
       guard let path = dict["db_path"] as? String, !path.isEmpty else { return nil }
-      guard let email = dict["email"] as? String, !email.isEmpty else { return nil }
+      let email = (dict["email"] as? String).flatMap { $0.isEmpty ? nil : $0 }
       return GmailAccountOption(
         id: path,
         browserName: dict["name"] as? String ?? "Browser",
