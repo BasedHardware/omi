@@ -98,6 +98,49 @@ def test_claim_allows_replacement_when_reconciler_marked_missing():
     assert database.transactions[-1].updates[-1][1] == {"agentVm": candidate}
 
 
+def test_record_provider_missing_rejects_active_reconcile_lease(monkeypatch):
+    from services import agent_vm_read
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    now = 1_700_000_000.0
+    database = StrictFirestore(
+        {
+            ("users", "uid"): {
+                "agentVm": {
+                    "vmName": "omi-agent-stale",
+                    "zone": "us-central1-a",
+                    "authToken": "token",
+                    "status": "ready",
+                    "reconcile": {
+                        "state": "claimed",
+                        "lease": {"owner": "worker-1", "expiresAt": now + 60},
+                    },
+                }
+            }
+        }
+    )
+    monkeypatch.setattr(agent_vm_read, "get_firestore_client", lambda: database)
+    raw = getattr(
+        agent_vm_read._record_provider_missing_if_current_txn,
+        "to_wrap",
+        agent_vm_read._record_provider_missing_if_current_txn,
+    )
+
+    marked = raw(
+        database.transaction(),
+        database.collection("account_deletions").document("uid"),
+        database.collection("users").document("uid"),
+        "omi-agent-stale",
+        "us-central1-a",
+        "token",
+        now,
+    )
+
+    assert marked is False
+    assert database.rows[("users", "uid")]["agentVm"]["reconcile"]["state"] == "claimed"
+    assert database.transactions[-1].updates == []
+
+
 @pytest.mark.asyncio
 async def test_status_keeps_demotion_when_start_request_loses_same_owner_race(monkeypatch):
     vm = {
@@ -372,6 +415,44 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
     assert response.ip is None
     assert requests == [("uid", "omi-agent-stale", "old-token")]
     assert marked == [("uid", "omi-agent-stale", "us-central1-a", "old-token")]
+
+
+@pytest.mark.asyncio
+async def test_status_queues_start_when_missing_marker_raises(monkeypatch):
+    vm = {
+        "vmName": "omi-agent-stale",
+        "zone": "us-central1-a",
+        "ip": "34.1.2.3",
+        "authToken": "old-token",
+        "status": "ready",
+        "createdAt": "2026-07-26T00:00:00Z",
+    }
+    requests = []
+    fallbacks = []
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    async def not_found(*_args):
+        return "NOT_FOUND", None
+
+    def boom(*_args):
+        raise RuntimeError("firestore unavailable")
+
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
+    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
+    monkeypatch.setattr(desktop_agent_vm, "record_provider_missing_if_current", boom)
+    monkeypatch.setattr(desktop_agent_vm, "record_fallback", lambda **fields: fallbacks.append(fields))
+
+    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
+
+    assert response.status == "updating"
+    assert response.ip is None
+    assert requests == [("uid", "omi-agent-stale", "old-token")]
+    assert fallbacks and fallbacks[0]["from_mode"] == "missing_marker"
 
 
 @pytest.mark.asyncio

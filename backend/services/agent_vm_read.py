@@ -217,6 +217,11 @@ def _record_provider_missing_if_current_txn(
     reconcile: dict[str, Any] = reconcile_raw if isinstance(reconcile_raw, dict) else {}
     if reconcile.get("state") == "missing":
         return True
+    # A concurrent reconciler claim can land after the status path's
+    # reconcile_in_progress snapshot. Do not stomp an active lease to
+    # ``missing`` — that would let provision replace under the owner.
+    if reconcile_lease_active(vm, now):
+        return False
     missing_since = reconcile.get("missingSince")
     recorded_missing_since = float(missing_since) if isinstance(missing_since, (int, float)) else now
     transaction.update(

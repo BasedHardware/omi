@@ -737,14 +737,30 @@ async def get_agent_status(
             )
     decision = decide_agent_vm_read(vm, observation, usable_cached_ip=usable_cached_ip)
     if decision.record_missing:
-        await run_blocking(
-            db_executor,
-            record_provider_missing_if_current,
-            uid,
-            str(vm["vmName"]),
-            str(vm.get("zone") or _ZONE),
-            str(vm.get("authToken") or ""),
-        )
+        try:
+            await run_blocking(
+                db_executor,
+                record_provider_missing_if_current,
+                uid,
+                str(vm["vmName"]),
+                str(vm.get("zone") or _ZONE),
+                str(vm.get("authToken") or ""),
+            )
+        except Exception as exc:
+            # Marker persistence is best-effort; still queue start demand so the
+            # reconciler can observe the 404 and persist missing itself.
+            logger.warning(
+                "Agent VM missing-state marker failed for uid=%s: %s",
+                uid,
+                exc,
+            )
+            record_fallback(
+                component="other",
+                from_mode="missing_marker",
+                to_mode="reconciler_demand",
+                reason="other",
+                outcome="degraded",
+            )
     if decision.queue_start:
         # Provider 404 / stopped / repairable running: queue fenced reconciler
         # demand. Do not erase the owner pointer here — the reconciler owns
