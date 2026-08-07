@@ -41,6 +41,13 @@ import 'package:omi/widgets/bottom_nav_bar.dart';
 
 enum _ChatScrollMode { followingBottom, freeScrolling }
 
+/// Gap the embedded composer leaves for the bottom nav, which floats over the
+/// body rather than taking layout space. Sized to the bar's opaque strip (80)
+/// plus a small breathing gap, so the composer sits just clear of it — the
+/// position the composer lands in when focused, which is the one that reads
+/// right.
+const double _kEmbeddedComposerClearance = 88;
+
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
   final String? autoMessage;
@@ -144,12 +151,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
             context.read<VoiceRecorderProvider>().startRecording();
           }
         });
-      } else if (_isInitialLoad && !widget.embedded) {
+      } else if (_isInitialLoad) {
         // Auto-focus the text field only on initial load, not on app switches.
-        // Never when embedded: as a tab body this fires at app launch, popping
-        // the keyboard over a screen the user never asked to type on — and the
-        // bottom nav hides itself while the field has focus, so the whole nav
-        // bar would vanish on startup.
+        // Kept for the embedded case too: Home opens ready to type, and since
+        // the layout no longer moves on focus there is nothing to jump.
         Future.delayed(const Duration(milliseconds: 300), () {
           if (!mounted) return;
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
@@ -235,6 +240,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: Theme.of(context).colorScheme.primary,
+          // Embedded, the layout must not move when the composer takes focus:
+          // Home *is* this screen, so a jump on tap reads as the app shifting
+          // under you. The host Scaffold already opts out of inset resizing,
+          // and the composer keeps a fixed clearance above the bottom nav.
+          resizeToAvoidBottomInset: !widget.embedded,
           appBar: widget.embedded ? null : _buildAppBar(context, provider),
           endDrawer: _buildChatAppsEndDrawer(context),
           onEndDrawerChanged: (isOpened) {
@@ -514,14 +524,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 top: provider.selectedFiles.isNotEmpty ? 0 : 8,
                                 // Embedded, the bottom nav floats over the body
                                 // (Align(bottomCenter) in a Stack, 100 tall) and
-                                // would draw on top of the composer. The nav no
-                                // longer hides on focus, so this clearance is
-                                // unconditional — making it depend on focus put
-                                // the composer back under the bar the moment it
-                                // was tapped, so only ever one of the two was
-                                // visible.
+                                // would draw on top of the composer, so the
+                                // composer reserves its height.
+                                //
+                                // Netted against the keyboard inset: this
+                                // Scaffold already resizes for the keyboard, so
+                                // a flat 100 gets counted twice once the
+                                // keyboard is up and the composer visibly jumps
+                                // on focus. As the keyboard rises it also covers
+                                // the nav bar, so the reservation it needs
+                                // shrinks by exactly the same amount.
                                 bottom: widget.embedded
-                                    ? 100
+                                    ? _kEmbeddedComposerClearance
                                     : widget.isPivotBottom
                                         ? 6
                                         : (textFieldFocusNode.hasFocus &&

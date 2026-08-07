@@ -755,11 +755,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 if (isRepeat) {
                                   _scrollToTop(index);
                                 } else {
-                                  // When tapping Conversations directly, reset to conversations view
-                                  if (index == 1) {
-                                    final cp = context.read<ConversationProvider>();
-                                    if (cp.showDailySummaries) cp.toggleDailySummaries();
-                                  }
                                   // The Brain page is built once by IndexedStack
                                   // and never "opens", so record the open here.
                                   if (index == 2) {
