@@ -19,7 +19,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from database.users import get_agent_vm
-from services.agent_vm_lifecycle import decide_agent_vm_read, reconcile_requested, request_vm_start
+from services.agent_vm_lifecycle import reconcile_requested, request_vm_start
+from services.agent_vm_read import decide_agent_vm_read
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary

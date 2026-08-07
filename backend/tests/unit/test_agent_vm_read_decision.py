@@ -1,6 +1,6 @@
 """Shared Agent VM status/read decisions for stale ready vs provider state."""
 
-from services.agent_vm_lifecycle import (
+from services.agent_vm_read import (
     apply_agent_vm_read_decision,
     classify_provider_observation,
     decide_agent_vm_read,

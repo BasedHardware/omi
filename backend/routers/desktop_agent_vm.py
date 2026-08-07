@@ -23,17 +23,19 @@ from database import users as users_db
 from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import (
-    apply_agent_vm_read_decision,
     claim_vm_lease,
-    classify_provider_observation,
     clear_vm_reconcile_lease_fields,
+    request_vm_start,
+    startup_wrapper,
+    update_vm_reconcile,
+)
+from services.agent_vm_read import (
+    apply_agent_vm_read_decision,
+    classify_provider_observation,
     decide_agent_vm_read,
     demoted_updating_vm,
     reconcile_in_progress,
     reconcile_lease_active,
-    request_vm_start,
-    startup_wrapper,
-    update_vm_reconcile,
 )
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid

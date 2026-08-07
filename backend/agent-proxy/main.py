@@ -40,12 +40,12 @@ from database.account_deletion_policy import account_deletion_blocks_access, nor
 from services.agent_vm_lifecycle import (
     SESSION_LEASE_TTL_SECONDS,
     claim_session_lease,
-    demoted_updating_vm,
     heartbeat_session_lease,
     reconcile_requested,
     release_session_lease,
     request_vm_start,
 )
+from services.agent_vm_read import demoted_updating_vm
 
 logger = logging.getLogger(__name__)
 
