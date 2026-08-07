@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TimelineDayGroup } from '@/lib/conversationTimeline';
@@ -46,6 +46,15 @@ export function ConversationGallery({
   // Guards against firing loadMore repeatedly for one scroll gesture while the
   // in-flight page has not yet grown the list.
   const loadRequestedRef = useRef(false);
+
+  // The guard is armed by a request and disarmed by that request settling.
+  // Clearing it only on scrolling away from the bottom means a page that
+  // failed, or came back too short to move the scroller, leaves the guard
+  // stuck on and the rest of the list permanently unreachable.
+  const itemCount = groups.reduce((total, group) => total + group.items.length, 0);
+  useEffect(() => {
+    if (!loading) loadRequestedRef.current = false;
+  }, [loading, itemCount]);
 
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {

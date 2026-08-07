@@ -678,6 +678,17 @@ export function omiDotPlacement({
 }
 
 /**
+ * The scatter progress a renderer should feed `motion` at lap position `turn`.
+ *
+ * `successBurst` is the one motion whose shape lives in `burst` rather than in
+ * `turn`: without this it is handed the settled default every frame and never
+ * scatters at all. Every other motion is unaffected and gets the settled 1.
+ */
+export function omiBurstForTurn(motion: OmiOrbMotion, turn: number): number {
+  return motion === 'successBurst' ? clamp01(turn) : 1;
+}
+
+/**
  * Every dot's placement for one frame of `motion`.
  *
  * `turn` is the position within the current lap, 0 to 1. `level` is the input

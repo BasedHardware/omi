@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Target } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useChat } from '@/hooks/useChat';
+import { useChat as useChatContext } from '@/components/chat/ChatContext';
 import { useGoals } from '@/hooks/useGoals';
 import { useHomeTasks } from '@/hooks/useHomeTasks';
 import { useScrollEdges } from '@/hooks/useScrollEdges';
@@ -44,6 +45,9 @@ function firstName(displayName: string | null | undefined): string | null {
 
 export function HomePage() {
   const { user } = useAuth();
+  // Home renders the same transcript the panel does, so it reads the same
+  // selected session rather than pinning itself to the shared thread.
+  const { selectedChatSessionId } = useChatContext();
   const {
     messages,
     isLoading,
@@ -53,7 +57,7 @@ export function HomePage() {
     error,
     sendMessage,
     loadHistory,
-  } = useChat();
+  } = useChat({ chatSessionId: selectedChatSessionId });
 
   const {
     state: recordingState,
@@ -261,6 +265,7 @@ export function HomePage() {
                 duration={duration}
                 level={micLevel}
                 isPaused={recordingState === 'paused'}
+                isInitializing={recordingState === 'initializing'}
                 onPause={pauseRecording}
                 onResume={resumeRecording}
                 onStop={() => void stopRecording()}

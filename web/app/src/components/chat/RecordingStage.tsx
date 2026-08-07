@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Pause, Play, Square } from 'lucide-react';
 import { OmiOrb } from '@/components/ui/OmiOrb';
@@ -28,6 +29,12 @@ interface RecordingStageProps {
   duration: number;
   level: number;
   isPaused: boolean;
+  /**
+   * Capture has been asked for but has not started yet — the permission prompt
+   * or the socket handshake is still outstanding. Both handlers no-op until it
+   * clears, so the stage must not offer them.
+   */
+  isInitializing?: boolean;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -38,10 +45,21 @@ export function RecordingStage({
   duration,
   level,
   isPaused,
+  isInitializing = false,
   onPause,
   onResume,
   onStop,
 }: RecordingStageProps) {
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+
+  // The transcript is capped, so without an anchor the stage keeps showing the
+  // first thing that was said instead of the thing being said now.
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ block: 'end' });
+  }, [segments]);
+
+  const status = isInitializing ? 'Starting...' : isPaused ? 'Paused' : 'Listening';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -56,16 +74,14 @@ export function RecordingStage({
     >
       <div className="flex items-center gap-4 px-5 py-4">
         <OmiOrb
-          state={isPaused ? 'idle' : 'listening'}
-          level={isPaused ? 0 : level}
+          state={isInitializing ? 'loading' : isPaused ? 'idle' : 'listening'}
+          level={isPaused || isInitializing ? 0 : level}
           size={44}
           className="flex-shrink-0 text-text-primary"
         />
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-text-primary">
-            {isPaused ? 'Paused' : 'Listening'}
-          </p>
+          <p className="text-sm font-medium text-text-primary">{status}</p>
           <p className="text-xs tabular-nums text-text-quaternary">
             {formatDuration(duration)}
           </p>
@@ -74,7 +90,8 @@ export function RecordingStage({
         <div className="flex items-center gap-1">
           <button
             onClick={isPaused ? onResume : onPause}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-white/[0.08] hover:text-text-primary"
+            disabled={isInitializing}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-white/[0.08] hover:text-text-primary disabled:pointer-events-none disabled:opacity-40"
             aria-label={isPaused ? 'Resume recording' : 'Pause recording'}
           >
             {isPaused ? (
@@ -85,7 +102,8 @@ export function RecordingStage({
           </button>
           <button
             onClick={onStop}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25"
+            disabled={isInitializing}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25 disabled:pointer-events-none disabled:opacity-40"
             aria-label="Stop recording"
           >
             <Square className="h-3.5 w-3.5 fill-current" />
@@ -98,7 +116,11 @@ export function RecordingStage({
       <div className="max-h-40 overflow-y-auto border-t border-stroke/60 px-5 py-3">
         {segments.length === 0 ? (
           <p className="text-sm text-text-quaternary">
-            {isPaused ? 'Paused.' : 'Listening for speech...'}
+            {isInitializing
+              ? 'Starting capture...'
+              : isPaused
+                ? 'Paused.'
+                : 'Listening for speech...'}
           </p>
         ) : (
           <div className="space-y-1.5">
@@ -107,6 +129,7 @@ export function RecordingStage({
                 {segment.text}
               </p>
             ))}
+            <div ref={transcriptEndRef} data-testid="transcript-end" />
           </div>
         )}
       </div>
