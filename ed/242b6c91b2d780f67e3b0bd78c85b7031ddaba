@@ -1,0 +1,37 @@
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_569f1df936cc22::t_ad7385e12fe353 615-620
+  s_569f1df936cc22::t_8c16c3bba2082b 627-628
+  s_569f1df936cc22::t_3657a99c2e3430 625-626,629-631,633-634,638
+  s_569f1df936cc22::t_7f92aca79eedf1 670-671
+  s_569f1df936cc22::t_f18fff06064275 147-152
+desktop/macos/Desktop/Tests/PageGlassLaneTests.swift
+  s_569f1df936cc22::t_f7c1ebd95b802e 16-18
+  s_569f1df936cc22::t_bf433bfc55fd8b 331-428,431
+  s_569f1df936cc22::t_1c8d08e984e3f8 19-20,429-430,432
+desktop/macos/Desktop/Sources/MainWindow/ShellPageKeyboardTarget.swift
+  s_569f1df936cc22::t_7f8f39f2d22938 1-54
+desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
+  s_569f1df936cc22::t_a5c18ba808c248 13-20
+desktop/macos/changelog/unreleased/20260807-rewind-focus-ring.json
+  s_569f1df936cc22::t_ff8798b5d14315 1-3
+desktop/macos/changelog/unreleased/20260807-rewind-history-legibility.json
+  s_569f1df936cc22::t_7e6926e6cbd35d 1-3
+desktop/macos/changelog/unreleased/20260807-rewind-search-hint.json
+  s_569f1df936cc22::t_1e95c6aff1de9d 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "ed242b6c91b2d780f67e3b0bd78c85b7031ddaba",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
