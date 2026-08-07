@@ -52,7 +52,7 @@ export type EngineEvent =
 export type Effect =
   | { t: "send"; op: PendingOp }
   | { t: "schedule-flush"; afterMs: number }
-  | { t: "outcome"; opId: string; outcome: OperationOutcome; summaryForDeadLetter?: PendingOp }
+  | { t: "outcome"; opId: string; outcome: OperationOutcome; op: PendingOp }
   | { t: "telemetry"; path: string; detail: string };
 
 /** Exponential backoff with cap; step 0 = immediate. */
@@ -74,6 +74,7 @@ export function step(state: EngineState, event: EngineEvent, now: number): { sta
 
     case "send-ok": {
       if (state.inFlight !== event.opId) return { state, effects: [] };
+      const op = state.pending.find((o) => o.opId === event.opId)!;
       const next: EngineState = {
         ...state,
         pending: state.pending.filter((o) => o.opId !== event.opId),
@@ -87,6 +88,7 @@ export function step(state: EngineState, event: EngineEvent, now: number): { sta
           outcome: event.serverRevision !== undefined
             ? { state: "confirmed", serverRevision: event.serverRevision }
             : { state: "confirmed" },
+          op,
         },
       ];
       if (next.pending.length > 0) effects.push({ t: "schedule-flush", afterMs: 0 });
@@ -109,7 +111,7 @@ export function step(state: EngineState, event: EngineEvent, now: number): { sta
             t: "outcome",
             opId: event.opId,
             outcome: { state: "dead", failure: f, deadAt: now },
-            summaryForDeadLetter: op,
+            op,
           },
           { t: "telemetry", path: "sync.outbox.dead-letter", detail: `${op.domain}/${op.recordId}: ${f.reason}` },
         ];

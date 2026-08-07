@@ -27,6 +27,25 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/domain:
+    dependencies:
+      '@omi-core/adapters-legacy':
+        specifier: workspace:*
+        version: link:../adapters-legacy
+      '@omi-core/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@omi-core/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@omi-core/sync':
+        specifier: workspace:*
+        version: link:../sync
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/kernel:
     dependencies:
       '@omi-core/contracts':
@@ -58,6 +77,9 @@ importers:
       '@omi-core/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@omi-core/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@omi-core/kernel':
         specifier: workspace:*
         version: link:../kernel

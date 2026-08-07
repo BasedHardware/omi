@@ -29,6 +29,12 @@ export class Projection<T> {
     return new Projection(kv, codec);
   }
 
+  /** Remove one confirmed-deleted row from server truth. */
+  async removeServerRow(id: string): Promise<void> {
+    const all = await this.serverRows();
+    if (all.delete(id)) await this.kv.set(ROWS_KEY, JSON.stringify([...all.values()]));
+  }
+
   /** Replace/insert confirmed server rows. */
   async upsertServerRows(rows: readonly T[]): Promise<void> {
     const all = await this.serverRows();
