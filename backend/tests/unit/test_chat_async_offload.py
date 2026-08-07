@@ -348,8 +348,9 @@ async def test_file_stream_deadline_fires_while_sync_assistants_stream_is_off_lo
         release_worker.set()
         await asyncio.wait_for(worker_finished.wait(), timeout=0.5)
 
-    assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}']
+    assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}', None]
     assert callback_data['error'] == 'stream_failure'
+    assert callback_data['answer'] == agentic.AGENT_STREAM_TIMEOUT_MESSAGE
 
 
 async def test_agentic_setup_reads_run_off_loop():
@@ -476,7 +477,9 @@ async def test_agentic_stream_cancels_a_silent_producer_before_the_proxy_deadlin
     ):
         chunks = await _collect_agentic_chunks(stalled_producer)
 
-    assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}']
+    assert chunks[0] == f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}'
+    assert f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}' in chunks
+    assert chunks[-1] is None
     assert cancelled.is_set()
 
 
@@ -497,6 +500,7 @@ async def test_agentic_stream_keeps_an_answer_streamed_before_the_deadline():
 
     # The terminal None is what makes the router persist instead of writing a
     # canned error over the streamed answer.
+    assert chunks[0] == f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}'
     assert chunks[-1] is None
     assert f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}' not in chunks
     assert callback_data['answer'] == 'the answer so far'
@@ -515,8 +519,13 @@ async def test_agentic_stream_still_errors_when_nothing_was_streamed():
     ):
         chunks = await _collect_agentic_chunks(stalled_producer, callback_data)
 
-    assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}']
-    assert 'answer' not in callback_data
+    assert chunks[0] == f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}'
+    assert f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}' in chunks
+    assert chunks[-1] is None
+    # Typed timeout is persisted through the normal done: contract so the router
+    # does not append the generic canned sorry bubble.
+    assert callback_data['answer'] == agentic.AGENT_STREAM_TIMEOUT_MESSAGE
+    assert callback_data['error'] == 'idle_timeout'
 
 
 async def test_agentic_stream_keeps_an_answer_streamed_before_a_producer_crash():
@@ -531,6 +540,7 @@ async def test_agentic_stream_keeps_an_answer_streamed_before_a_producer_crash()
 
     chunks = await _collect_agentic_chunks(crashes_after_answering, callback_data)
 
+    assert chunks[0] == f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}'
     assert chunks[-1] is None
     assert f'error: {agentic.AGENT_STREAM_FAILURE_MESSAGE}' not in chunks
     assert callback_data['answer'] == 'partial before crash'
@@ -545,7 +555,9 @@ async def test_agentic_stream_surfaces_a_producer_crash_without_waiting_for_idle
 
     chunks = await _collect_agentic_chunks(crashing_producer)
 
-    assert chunks == [f'error: {agentic.AGENT_STREAM_FAILURE_MESSAGE}']
+    assert chunks[0] == f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}'
+    assert f'error: {agentic.AGENT_STREAM_FAILURE_MESSAGE}' in chunks
+    assert chunks[-1] is None
 
 
 async def test_agentic_stream_treats_a_cancelled_producer_as_a_failure():
@@ -556,4 +568,81 @@ async def test_agentic_stream_treats_a_cancelled_producer_as_a_failure():
 
     chunks = await _collect_agentic_chunks(cancelled_producer)
 
-    assert chunks == [f'error: {agentic.AGENT_STREAM_FAILURE_MESSAGE}']
+    assert chunks[0] == f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}'
+    assert f'error: {agentic.AGENT_STREAM_FAILURE_MESSAGE}' in chunks
+    assert chunks[-1] is None
+
+
+async def test_agentic_setup_budget_does_not_consume_first_event_deadline():
+    """Multi-second setup must not silently exhaust the post-setup TTFT window."""
+    callback_data = {}
+    setup_delay = 0.05
+
+    def slow_tz(_uid):
+        import time
+
+        time.sleep(setup_delay)
+        return 'UTC'
+
+    async def quick_producer(*args, **_kwargs):
+        callback = args[4]
+        await callback.put_data('hello')
+        args[5].append('hello')
+        await callback.end()
+
+    with patch.object(agentic, 'get_user_timezone', slow_tz), patch.object(
+        agentic, '_get_agentic_qa_prompt', lambda *_args, **_kwargs: 'SYSTEM'
+    ), patch.object(agentic, 'load_app_tools', lambda _uid: []), patch.object(
+        agentic, 'get_current_datetime_block', lambda _uid, tz=None, location=None: ''
+    ), patch.object(
+        agentic, '_convert_tools', lambda _core, _app: ([], {})
+    ), patch.object(
+        agentic, '_messages_to_anthropic', lambda _messages: []
+    ), patch.object(
+        agentic, '_inject_current_datetime', lambda messages, _block: messages
+    ), patch.object(
+        agentic, '_run_anthropic_agent_stream', quick_producer
+    ), patch.object(
+        agentic, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 1.0
+    ), patch.object(
+        agentic, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.03
+    ):
+        # If setup shared the first-event clock, the 50ms setup would leave no
+        # budget for the producer and this would idle-timeout before 'hello'.
+        chunks = [
+            chunk
+            async for chunk in agentic.execute_agentic_chat_stream(
+                'uid1', [], app=None, callback_data=callback_data, chat_session=None
+            )
+        ]
+
+    assert chunks[0] == f'think: {agentic.AGENT_STREAM_SETUP_PROGRESS}'
+    assert 'data: hello' in chunks
+    assert callback_data.get('answer') == 'hello'
+    assert 'error' not in callback_data
+
+
+async def test_file_chat_gateway_block_is_typed_not_generic_canned():
+    """Under gateway feature mode, file chat must fail with a typed user-safe message."""
+    from utils.llm.gateway_client import GatewayDirectModelSurfaceBlocked
+
+    message = SimpleNamespace(files_id=['file1'], text='summarize')
+    session = SimpleNamespace(id='session1', file_ids=['file1'])
+    callback_data = {}
+
+    def blocked_tool(_uid, _session_id):
+        raise GatewayDirectModelSurfaceBlocked('file_chat.openai_files_assistants_vision')
+
+    with patch.object(graph, 'FileChatTool', blocked_tool):
+        chunks = [
+            chunk
+            async for chunk in graph._execute_file_chat_stream(
+                'uid-gateway', [message], session, callback_data=callback_data
+            )
+        ]
+
+    assert chunks == [f'error: {agentic.FILE_CHAT_GATEWAY_BLOCKED_MESSAGE}', None]
+    assert callback_data['error'] == 'file_chat_gateway_blocked'
+    assert callback_data['answer'] == agentic.FILE_CHAT_GATEWAY_BLOCKED_MESSAGE
+    assert callback_data['route'] == 'file'
+    assert agentic.AGENT_STREAM_FAILURE_MESSAGE not in (chunks[0] or '')

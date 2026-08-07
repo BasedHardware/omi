@@ -21,6 +21,7 @@ from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from utils.llm.chat import get_current_datetime_block, get_user_timezone, retrieve_is_file_question
 from utils.llm.clients import get_llm
+from utils.llm.gateway_client import GatewayDirectModelSurfaceBlocked
 from utils.llm.usage_tracker import Features, track_usage
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.other.chat_file import FileChatTool
@@ -31,6 +32,7 @@ from utils.retrieval.agentic import (
     AGENT_STREAM_PROGRESS_HEARTBEAT,
     AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS,
     AGENT_STREAM_TIMEOUT_MESSAGE,
+    FILE_CHAT_GATEWAY_BLOCKED_MESSAGE,
     AsyncStreamingCallback,
     cancel_stream_task,
     execute_agentic_chat_stream,
@@ -98,6 +100,10 @@ async def _drain_chat_callback(
     except asyncio.CancelledError:
         await cancel_stream_task(task)
         raise
+    except GatewayDirectModelSurfaceBlocked:
+        # Let the file-chat caller emit the typed user-safe failure + structured log.
+        await cancel_stream_task(task)
+        raise
     except Exception as error:
         logger.error('%s chat stream failed error_type=%s', route, type(error).__name__)
         await cancel_stream_task(task)
@@ -136,6 +142,9 @@ async def _execute_file_chat_stream(
     current_datetime_block: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Handle file chat with streaming."""
+    if callback_data is not None:
+        callback_data.setdefault('route', 'file')
+
     last_message = messages[-1] if messages else None
     question = _with_prompt_metadata(last_message.text if last_message else "", current_datetime_block or "")
 
@@ -161,9 +170,32 @@ async def _execute_file_chat_stream(
 
         async for chunk in _drain_chat_callback(callback, task, route='file'):
             if chunk and chunk.startswith('error: '):
+                # Prefer a typed gateway-block failure over the generic stream-failure
+                # copy when the producer was rejected by feature-mode guards.
+                producer_error = None
+                if task.done() and not task.cancelled():
+                    producer_error = task.exception()
+                if isinstance(producer_error, GatewayDirectModelSurfaceBlocked):
+                    error_code = producer_error.error_code
+                    logger.error(
+                        'file chat stream failed route=file uid=%s error_code=%s error_type=%s',
+                        uid,
+                        error_code,
+                        type(producer_error).__name__,
+                    )
+                    if callback_data is not None:
+                        callback_data['error'] = error_code
+                        callback_data['answer'] = FILE_CHAT_GATEWAY_BLOCKED_MESSAGE
+                    yield f'error: {FILE_CHAT_GATEWAY_BLOCKED_MESSAGE}'
+                    yield None
+                    return
                 if callback_data is not None:
                     callback_data['error'] = 'stream_failure'
+                    # Persist the typed failure so the router does not append the
+                    # generic canned sorry bubble as a second terminal answer.
+                    callback_data['answer'] = chunk[len('error: ') :]
                 yield chunk
+                yield None
                 return
             if chunk:
                 yield chunk
@@ -176,11 +208,29 @@ async def _execute_file_chat_stream(
             callback_data['ask_for_nps'] = True
 
         yield None
+    except GatewayDirectModelSurfaceBlocked as error:
+        logger.error(
+            'file chat stream failed route=file uid=%s error_code=%s error_type=%s',
+            uid,
+            error.error_code,
+            type(error).__name__,
+        )
+        if callback_data is not None:
+            callback_data['error'] = error.error_code
+            callback_data['answer'] = FILE_CHAT_GATEWAY_BLOCKED_MESSAGE
+        yield f'error: {FILE_CHAT_GATEWAY_BLOCKED_MESSAGE}'
+        yield None
     except Exception as error:
-        logger.error('file chat stream failed error_type=%s', type(error).__name__)
+        logger.error(
+            'file chat stream failed route=file uid=%s reason=stream_failure error_type=%s',
+            uid,
+            type(error).__name__,
+        )
         if callback_data is not None:
             callback_data['error'] = 'stream_failure'
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +248,8 @@ async def execute_persona_chat_stream(
     current_datetime_block: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Handle streaming chat responses for persona-type apps."""
+    if callback_data is not None:
+        callback_data.setdefault('route', 'persona')
     system_prompt = app.persona_prompt
     formatted_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
 

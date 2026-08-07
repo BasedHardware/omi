@@ -321,3 +321,33 @@ def test_build_stream_error_reply_persists_ai_message():
         assert persisted['text'] == chat_utils.CHAT_STREAM_ERROR_TEXT
     finally:
         _cleanup(saved)
+
+
+def test_v2_messages_does_not_double_emit_canned_after_typed_stream_error():
+    """A typed ``error:`` frame plus persisted answer must not also emit the canned sorry."""
+    client, router_module, chat_utils, chat_db, saved = _make_client()
+    try:
+
+        async def timeout_stream(*args, **kwargs):
+            kwargs['callback_data']['error'] = 'idle_timeout'
+            kwargs['callback_data']['route'] = 'agentic'
+            kwargs['callback_data']['answer'] = 'The response took too long. Please try again.'
+            yield 'error: The response took too long. Please try again.'
+            yield None
+
+        router_module.execute_chat_stream = timeout_stream
+
+        response = client.post(
+            '/v2/messages',
+            json={'text': 'hello', 'file_ids': []},
+            headers={'X-App-Platform': 'ios'},
+        )
+
+        assert response.status_code == 200
+        assert response.text.count('done: ') == 1
+        payload = _decode_done_frame(response.text)
+        assert payload['text'] == 'The response took too long. Please try again.'
+        assert chat_utils.CHAT_STREAM_ERROR_TEXT not in response.text
+        chat_utils.record_fallback.assert_not_called()
+    finally:
+        _cleanup(saved)

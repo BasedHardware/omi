@@ -431,6 +431,7 @@ def send_message(
         callback_data = {}
         answered = False
         stream_exhausted = False
+        streamed_terminal_error = False
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
         try:
@@ -445,6 +446,8 @@ def send_message(
                 platform=x_app_platform,
             ):
                 if chunk:
+                    if chunk.startswith('error: '):
+                        streamed_terminal_error = True
                     msg = chunk.replace("\n", "__CRLF__")
                     yield f'{msg}\n\n'
                 else:
@@ -464,9 +467,28 @@ def send_message(
                         answered = True
 
             if not answered:
-                yield await emit_stream_error_fallback(
-                    uid, app_id_from_app, chat_session, label='chat', error_recorded=bool(callback_data.get('error'))
-                )
+                # A typed ``error:`` frame (timeout / gateway block / stream failure) already
+                # gave the client a coherent failure. Do not also persist the generic canned
+                # sorry bubble as a second terminal answer. Prefer the typed answer when the
+                # stream set one; otherwise skip the canned fallback entirely.
+                if streamed_terminal_error:
+                    logger.error(
+                        'chat stream ended without an answer uid=%s reason=%s route=%s (error=%s)',
+                        uid,
+                        callback_data.get('error') or 'stream_failure',
+                        callback_data.get('route') or 'unknown',
+                        True,
+                    )
+                else:
+                    yield await emit_stream_error_fallback(
+                        uid,
+                        app_id_from_app,
+                        chat_session,
+                        label='chat',
+                        error_recorded=bool(callback_data.get('error')),
+                        reason=callback_data.get('error'),
+                        route=callback_data.get('route'),
+                    )
             stream_exhausted = True
         except asyncio.CancelledError:
             journey_attempt.finish('cancelled')
