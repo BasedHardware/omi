@@ -76,6 +76,35 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       "streaming must not move a reader who owns the viewport")
   }
 
+  /// **A streaming answer must stay in view, not be abandoned and then snapped
+  /// back.**
+  ///
+  /// `ChatProvider` flushes streamed text every 35 ms
+  /// (`ChatStreamingBuffer(flushInterval: 0.035)`). The follow scroll used to
+  /// cancel and reschedule itself 80 ms out on every one of those flushes, so it
+  /// never ran while the answer was arriving: measured here, the live edge ran
+  /// 387 pt past a 600 pt viewport for the whole stream and only caught up once
+  /// the tokens stopped. Drift is asserted **during** the stream for that
+  /// reason — a check after the stream ends passes either way.
+  func testStreamingKeepsAFollowingReaderAtTheLiveEdge() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    XCTAssertTrue(harness.isAtBottom, "precondition: the transcript opens at the live edge")
+
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) with enough prose to grow the row. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+
+    XCTAssertLessThan(
+      worstDrift, 120,
+      "a reader who never touched the viewport must keep the live edge in view while it streams "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
+  }
+
   func testAnArrivingTurnDoesNotPullTheReaderBack() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }

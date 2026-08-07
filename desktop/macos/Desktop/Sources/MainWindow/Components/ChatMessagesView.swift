@@ -310,6 +310,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Throttle token for scrollToBottom — prevents the streaming + scroll
   /// detection feedback loop from saturating the main thread.
   @State private var scrollThrottleWorkItem: DispatchWorkItem?
+  /// When the transcript last re-reached the live edge, and whether one run is
+  /// already queued for the current window. See `ChatScrollFollowThrottle`.
+  @State private var lastFollowScrollTime: TimeInterval?
+  @State private var hasQueuedFollowScroll = false
   /// True when the user is actively scrolling via scroll wheel/trackpad.
   /// Set immediately by the scroll wheel monitor to win the race against
   /// throttled programmatic scrolls during streaming.
@@ -699,6 +703,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   private func cancelAllPendingScrolls() {
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
+    // The queued run is gone, so the throttle must stop reporting one as
+    // pending — otherwise every later request answers `.alreadyScheduled` and
+    // the transcript never follows again for this view's lifetime. Written only
+    // when it changes: this runs on every scroll event, and an unconditional
+    // `@State` write there is a body invalidation per event.
+    if hasQueuedFollowScroll { hasQueuedFollowScroll = false }
     userScrollEndWorkItem?.cancel()
     userScrollEndWorkItem = nil
     for item in initialScrollWorkItems {
@@ -934,18 +944,31 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     proxy.scrollTo("bottom-anchor", anchor: .bottom)
   }
 
-  /// Throttled version of scrollToBottom — coalesces rapid calls (e.g. during
-  /// streaming) so we scroll at most once per ~80ms instead of every token.
-  /// This prevents the scroll → notify → state update → re-render → scroll
-  /// feedback loop from saturating the main thread.
+  /// Rate-limited version of scrollToBottom: at most one follow per
+  /// `ChatScrollFollowThrottle.interval`, and **at least** one per window for as
+  /// long as content keeps arriving. Cancelling and rescheduling on every change
+  /// instead — which is what this used to do — meant a stream flushing faster
+  /// than the window never scrolled once.
   private func throttledScrollToBottom(proxy: ScrollViewProxy) {
     guard !userIsScrolling else { return }
-    // Cancel any pending scroll — we'll schedule a fresh one
-    scrollThrottleWorkItem?.cancel()
-    let workItem = DispatchWorkItem { [self] in
+    let now = ProcessInfo.processInfo.systemUptime
+    switch ChatScrollFollowThrottle.decide(
+      now: now, lastRun: lastFollowScrollTime, hasQueuedRun: hasQueuedFollowScroll)
+    {
+    case .alreadyScheduled:
+      return
+    case .now:
+      lastFollowScrollTime = now
       scrollToBottom(proxy: proxy)
+    case .schedule(let delay):
+      hasQueuedFollowScroll = true
+      let workItem = DispatchWorkItem { [self] in
+        hasQueuedFollowScroll = false
+        lastFollowScrollTime = ProcessInfo.processInfo.systemUptime
+        scrollToBottom(proxy: proxy)
+      }
+      scrollThrottleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
-    scrollThrottleWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
   }
 }

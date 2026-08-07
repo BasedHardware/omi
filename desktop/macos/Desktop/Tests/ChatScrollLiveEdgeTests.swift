@@ -101,6 +101,68 @@ final class ChatScrollLiveEdgeTests: XCTestCase {
     )
   }
 
+  // MARK: - Following a stream
+
+  func testTheFirstFollowRequestRunsImmediately() {
+    XCTAssertEqual(
+      ChatScrollFollowThrottle.decide(now: 100, lastRun: nil, hasQueuedRun: false),
+      .now
+    )
+  }
+
+  /// The defect this replaced: the provider flushes streamed text every 35 ms,
+  /// and a trailing debounce cancelled its pending scroll on each flush, so a
+  /// continuous stream never scrolled at all. A throttle must keep answering
+  /// `.alreadyScheduled` — never "cancel and start the window again".
+  func testAStreamFasterThanTheWindowStillGetsExactlyOneQueuedFollow() {
+    let flushInterval: TimeInterval = 0.035
+    var lastRun: TimeInterval? = 100
+    var hasQueuedRun = false
+    var queuedRuns = 0
+
+    for flush in 1...10 {
+      let now = 100 + Double(flush) * flushInterval
+      switch ChatScrollFollowThrottle.decide(now: now, lastRun: lastRun, hasQueuedRun: hasQueuedRun) {
+      case .now:
+        lastRun = now
+      case .schedule(let after):
+        queuedRuns += 1
+        hasQueuedRun = true
+        XCTAssertEqual(after, ChatScrollFollowThrottle.interval - (now - 100), accuracy: 0.0001)
+      case .alreadyScheduled:
+        continue
+      }
+    }
+
+    XCTAssertEqual(
+      queuedRuns, 1,
+      "a burst inside one window must queue one follow, not re-arm the window on every token")
+  }
+
+  func testAFollowRunsAgainOnceTheWindowHasElapsed() {
+    XCTAssertEqual(
+      ChatScrollFollowThrottle.decide(now: 100.2, lastRun: 100, hasQueuedRun: false),
+      .now
+    )
+    guard
+      case .schedule(let after) = ChatScrollFollowThrottle.decide(
+        now: 100.04, lastRun: 100, hasQueuedRun: false)
+    else {
+      return XCTFail("a request inside the window must queue one follow")
+    }
+    XCTAssertEqual(after, ChatScrollFollowThrottle.interval - 0.04, accuracy: 0.0001)
+  }
+
+  /// A clock that does not advance must not park the transcript in a window that
+  /// never expires — the failure mode is a transcript that silently stops
+  /// following for the rest of its life.
+  func testANonAdvancingClockStillFollows() {
+    XCTAssertEqual(
+      ChatScrollFollowThrottle.decide(now: 100, lastRun: 200, hasQueuedRun: false),
+      .now
+    )
+  }
+
   func testExplicitJumpSettlesAfterTheNextLayoutTurn() {
     XCTAssertEqual(ChatScrollLiveEdge.explicitJumpSettlingDelay, 0.05)
   }

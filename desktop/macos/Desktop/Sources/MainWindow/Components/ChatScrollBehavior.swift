@@ -62,6 +62,49 @@ enum ChatScrollLiveEdge {
   }
 }
 
+/// **How often a following transcript re-reaches the live edge while an answer
+/// streams.** A rate limiter, not a quiet period.
+///
+/// The previous implementation cancelled its pending scroll on every content
+/// change and rescheduled it 80 ms out. That is a trailing debounce wearing a
+/// throttle's name, and it has one behaviour that matters here: while the input
+/// keeps arriving faster than the window, the scroll never runs at all.
+/// `ChatProvider` flushes streamed text every 35 ms
+/// (`ChatStreamingBuffer(flushInterval: 0.035)`), which is exactly that case —
+/// so a following reader was abandoned for the entire answer and then snapped
+/// back the instant the stream stopped. Measured on the mounted transcript, the
+/// live edge ran 387 pt past a 600 pt viewport and never once caught up.
+///
+/// A throttle instead: the first request runs immediately, and any request
+/// inside the window queues **one** run at the window's end without pushing that
+/// deadline back. Continuous streaming therefore follows at a steady ~12 Hz.
+enum ChatScrollFollowThrottle {
+  /// One follow per frame-ish. Small enough that the live edge never visibly
+  /// falls behind, large enough that a token burst cannot saturate the main
+  /// thread with `scrollTo` + layout.
+  static let interval: TimeInterval = 0.08
+
+  enum Decision: Equatable {
+    /// Run the scroll on this turn.
+    case now
+    /// A run is already queued for this window — adding another would be the
+    /// debounce again.
+    case alreadyScheduled
+    /// Queue exactly one run this far ahead.
+    case schedule(after: TimeInterval)
+  }
+
+  static func decide(now: TimeInterval, lastRun: TimeInterval?, hasQueuedRun: Bool) -> Decision {
+    guard !hasQueuedRun else { return .alreadyScheduled }
+    guard let lastRun else { return .now }
+    let elapsed = now - lastRun
+    // A clock that went backwards (or an unchanged timestamp) must not strand
+    // the transcript in a window that never expires.
+    guard elapsed >= 0, elapsed < interval else { return .now }
+    return .schedule(after: interval - elapsed)
+  }
+}
+
 /// A stable representable host that tells its coordinator when SwiftUI moves it
 /// between transcript hierarchies. The enclosing NSScrollView is not guaranteed
 /// to survive a lazy document replacement, especially during a fast gesture.
@@ -479,6 +522,8 @@ struct ChatScrollContainer<Content: View>: View {
   @State private var userScrollEndWorkItem: DispatchWorkItem?
   @State private var settleWorkItems: [DispatchWorkItem] = []
   @State private var lastViewportSize: CGSize = .zero
+  @State private var lastFollowScrollTime: TimeInterval?
+  @State private var hasQueuedFollowScroll = false
 
   var body: some View {
     ScrollViewReader { proxy in
@@ -639,19 +684,35 @@ struct ChatScrollContainer<Content: View>: View {
     }
   }
 
+  /// Same contract and same reason as `ChatMessagesView`: this is a throttle, so
+  /// a stream that never pauses still reaches the live edge every window.
   private func throttledScrollToBottom(proxy: ScrollViewProxy) {
     guard !userIsScrolling else { return }
-    scrollThrottleWorkItem?.cancel()
-    let workItem = DispatchWorkItem {
+    let now = ProcessInfo.processInfo.systemUptime
+    switch ChatScrollFollowThrottle.decide(
+      now: now, lastRun: lastFollowScrollTime, hasQueuedRun: hasQueuedFollowScroll)
+    {
+    case .alreadyScheduled:
+      return
+    case .now:
+      lastFollowScrollTime = now
       scrollToBottom(proxy: proxy, animated: true)
+    case .schedule(let delay):
+      hasQueuedFollowScroll = true
+      let workItem = DispatchWorkItem {
+        hasQueuedFollowScroll = false
+        lastFollowScrollTime = ProcessInfo.processInfo.systemUptime
+        scrollToBottom(proxy: proxy, animated: true)
+      }
+      scrollThrottleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
-    scrollThrottleWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
   }
 
   private func cancelAllPendingScrolls() {
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
+    if hasQueuedFollowScroll { hasQueuedFollowScroll = false }
     userScrollEndWorkItem?.cancel()
     userScrollEndWorkItem = nil
     for item in settleWorkItems {
