@@ -16,9 +16,56 @@ import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
-// ISR configuration
-export const revalidate = 300; // Revalidate every 5 minutes
-export const dynamicParams = true; // Allow non-pre-rendered app pages
+/**
+ * moonshine emits its own `<head>` and has no per-route metadata hook — its own
+ * adopt check rejects `generateMetadata` with "Moonshine emits its own <head>",
+ * and both `renderPage` and `renderSpaShell` in `@tschk/moonshine-react` build
+ * a head of module preloads only. These routes also compile to `spa` mode, so
+ * nothing about them is server-rendered. Writing the tags from the client after
+ * the app loads is therefore the whole of what this runtime allows; crawlers
+ * that execute JS pick them up, ones that do not see only the shell.
+ */
+export function applyAppDetailMetadata(app: {
+  id: string;
+  name: string;
+  description: string;
+  image?: string;
+}): void {
+  if (typeof document === 'undefined') return;
+  document.title = `${app.name} — Omi App Store`;
+  const url = `${window.location.origin}/apps/${app.id}`;
+
+  const setMeta = (selector: string, attr: string, key: string, content: string) => {
+    let el = document.head.querySelector<HTMLMetaElement>(selector);
+    if (!el) {
+      el = document.createElement('meta');
+      el.setAttribute(attr, key);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', content);
+  };
+
+  setMeta('meta[name="description"]', 'name', 'description', app.description);
+  setMeta('meta[property="og:title"]', 'property', 'og:title', app.name);
+  setMeta(
+    'meta[property="og:description"]',
+    'property',
+    'og:description',
+    app.description,
+  );
+  setMeta('meta[property="og:url"]', 'property', 'og:url', url);
+  if (app.image) {
+    setMeta('meta[property="og:image"]', 'property', 'og:image', app.image);
+  }
+
+  let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (!canonical) {
+    canonical = document.createElement('link');
+    canonical.rel = 'canonical';
+    document.head.appendChild(canonical);
+  }
+  canonical.href = url;
+}
 
 // Helper function to format category name
 const formatCategoryName = (category: string): string => {
@@ -41,13 +88,6 @@ function formatDate(dateString: string | null | undefined): string | null {
   });
 }
 
-// Pre-render only popular apps at build time
-export async function generateStaticParams() {
-  const { groups } = await getAppsV2();
-  const popularGroup = groups.find((g) => g.capability.id === 'popular');
-  return popularGroup?.data.map((app) => ({ id: app.id })) || [];
-}
-
 export default function PluginDetailPage() {
   const { id = '' } = useParams();
   const [plugin, setPlugin] = useState<Awaited<ReturnType<typeof findAppById>>>(null);
@@ -63,6 +103,7 @@ export default function PluginDetailPage() {
       if (!active) return;
       setPlugin(app);
       if (app) {
+        applyAppDetailMetadata(app);
         // Flatten all apps from groups
         const rawPlugins: V2AppData[] = response.groups.flatMap((group) => group.data);
         // Get related apps based on category
@@ -84,7 +125,26 @@ export default function PluginDetailPage() {
   }, [id]);
 
   if (!loaded) return <div className="min-h-screen bg-[#0B0F17]" />;
-  if (!plugin) return <div className="min-h-screen bg-[#0B0F17]" />;
+  // An unknown id used to be a 404. moonshine's `notFound()` throws, and a
+  // client route has no boundary to catch it, so the reachable equivalent is a
+  // rendered not-found state with a way back to the marketplace.
+  if (!plugin) {
+    return (
+      <div
+        data-testid="app-not-found"
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0B0F17] px-6 text-center"
+      >
+        <h1 className="text-3xl font-bold text-white">App not found</h1>
+        <p className="text-gray-400">We couldn&apos;t find an app with the id “{id}”.</p>
+        <Link
+          href="/apps"
+          className="rounded-xl bg-[#6C8EEF] px-6 py-3 text-base font-medium text-white transition-all hover:bg-[#5A7DE8]"
+        >
+          Browse the App Store
+        </Link>
+      </div>
+    );
+  }
 
   const categoryName = formatCategoryName(plugin.category);
   const capabilities = plugin.capabilities || [];
