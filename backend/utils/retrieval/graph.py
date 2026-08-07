@@ -352,10 +352,9 @@ async def execute_chat_stream(
             'chat stream setup timed out route=router uid=%s reason=setup_timeout',
             uid,
         )
-        if callback_data is not None:
-            callback_data['error'] = 'setup_timeout'
-            callback_data['route'] = 'router'
-            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
+        callback_data['error'] = 'setup_timeout'
+        callback_data['route'] = 'router'
+        callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
         yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
         yield None
         return
