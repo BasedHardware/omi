@@ -1,3 +1,4 @@
+// domain-pending(DIV-DOMCORE-012)
 // domain-pending(DIV-DOMX-001)
 import { sha256CanonicalRedacted } from "../ledger";
 import type { PolicyClass, TreeInputSnapshot } from "./index";

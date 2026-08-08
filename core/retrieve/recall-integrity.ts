@@ -1,3 +1,4 @@
+// domain-pending(DIV-DOMTASK-004)
 import { compareStrings } from "../order";
 
 const INTERNAL_REF = /^[\x21-\x7e]{1,512}$/;

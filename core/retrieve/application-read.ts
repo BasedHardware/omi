@@ -1,6 +1,8 @@
 // domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-012)
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMTASK-004)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-DOMX-001)
