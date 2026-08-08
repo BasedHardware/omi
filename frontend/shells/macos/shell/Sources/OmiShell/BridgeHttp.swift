@@ -66,6 +66,15 @@ enum BridgeHttpPolicyDecision {
 enum BridgeHttpPolicy {
   static let followsRedirects = false
 
+  /// Header carrying the per-run client identity (`OMI_RUN_CLIENT_ID`), so a
+  /// launcher's served-read count on the backend is joinable to the exact run
+  /// that made it, not just any client hitting the same endpoint. Confirmed
+  /// NOT present in `BridgeHttpContract.forbiddenHeaders` (that generated set
+  /// is authorization/cookie/proxy-authorization only) — so unlike those,
+  /// this file must do its own case-insensitive strip of caller-supplied
+  /// copies below, rather than relying on the generated contract to do it.
+  static let clientIdHeader = "x-omi-client-id"
+
   /// Apply the exact request mutation sequence used by the live URLSession
   /// factory. The recorder in the generated conformance runner observes the
   /// calls; production passes URLRequest's setters.
@@ -120,7 +129,8 @@ enum BridgeHttpPolicy {
     headers: [String: String],
     body: String?,
     baseURL: URL,
-    token: String?
+    token: String?,
+    clientId: String? = nil
   ) -> BridgeHttpPolicyDecision {
     guard ["GET", "POST", "PATCH", "DELETE"].contains(method) else {
       return .failure(.shellError, "missing or unsupported method/path")
@@ -136,11 +146,20 @@ enum BridgeHttpPolicy {
     }
 
     var outbound: [String: String] = [:]
-    for (name, value) in headers where !BridgeHttpContract.forbiddenHeaders.contains(name.lowercased()) {
+    for (name, value) in headers
+    where !BridgeHttpContract.forbiddenHeaders.contains(name.lowercased())
+      && name.lowercased() != clientIdHeader {
       outbound[name] = value
     }
     if body != nil {
       outbound["content-type"] = "application/json"
+    }
+    // Set with the same precedence as `authorization` below: AFTER the page's
+    // headers are copied in (and with any page-supplied copy of this same
+    // header — any casing — already excluded by the loop above), so a page
+    // can neither forge nor suppress the run's real client id.
+    if let clientId, !clientId.isEmpty {
+      outbound[clientIdHeader] = clientId
     }
     outbound["authorization"] = "Bearer \(token)"
     return .dispatch(BridgeHttpPreparedRequest(id: id, method: method, url: url, headers: outbound, body: body))
@@ -201,6 +220,10 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
 
   private let baseURL: URL
   private let token: String?
+  /// Per-run client identity (`OMI_RUN_CLIENT_ID`), threaded in at init so
+  /// `BridgeHttpPolicy.prepare` stays a pure function the generated
+  /// host-conformance runner can call without reading the environment itself.
+  private let clientId: String?
   private let sessionDelegate: BridgeHttpURLSessionDelegate
   private let session: URLSession
 
@@ -231,9 +254,10 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
     return out
   }
 
-  init(baseURL: URL, token: String?) {
+  init(baseURL: URL, token: String?, clientId: String? = nil) {
     self.baseURL = baseURL
     self.token = (token?.isEmpty ?? true) ? nil : token
+    self.clientId = (clientId?.isEmpty ?? true) ? nil : clientId
     let cfg = BridgeHttpPolicy.sessionConfiguration()
     let sessionDelegate = BridgeHttpURLSessionDelegate()
     self.sessionDelegate = sessionDelegate
@@ -269,7 +293,7 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
     let bodyString = body["body"] as? String
     let decision = BridgeHttpPolicy.prepare(
       id: id, method: method, path: path, headers: headers, body: bodyString,
-      baseURL: baseURL, token: token)
+      baseURL: baseURL, token: token, clientId: clientId)
     guard case let .dispatch(prepared) = decision else {
       if case let .failure(reason, detail) = decision {
         replyHandler(failure(id, reason, detail), nil)

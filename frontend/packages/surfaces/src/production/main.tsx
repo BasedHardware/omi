@@ -146,6 +146,11 @@ type OmiRuntimeState = {
   rejected: typeof generationRejected;
   rendered: { surface: string; memoriesGeneration: "legacy" | "platform" } | null;
   mismatch: string | null;
+  // The artifact I measured is the artifact I edited: `__OMI_BUILD_STAMP__` is baked in
+  // at build time (vite.config.ts's provenance plugin), so a shell or reviewer can read
+  // this bundle's exact source tree without trusting a separate "when was this built"
+  // claim. See integration/lib/provenance.mjs for what treeHash actually is.
+  stamp: typeof __OMI_BUILD_STAMP__;
 };
 const runtimeState: OmiRuntimeState = {
   route,
@@ -153,6 +158,7 @@ const runtimeState: OmiRuntimeState = {
   rejected: generationRejected,
   rendered: null,
   mismatch: null,
+  stamp: __OMI_BUILD_STAMP__,
 };
 (globalThis as { __OMI_RUNTIME_STATE__?: OmiRuntimeState }).__OMI_RUNTIME_STATE__ = runtimeState;
 document.documentElement.dataset["generationMemories"] = generationSelection.memories;
@@ -176,6 +182,12 @@ const markRendered = (surface: string, memoriesGeneration: "legacy" | "platform"
   }
 };
 
+// `unavailable` on the stamp (git missing at build time, e.g. a tarball checkout) must
+// read as visibly different from a real one here too — a log line that always has the
+// same shape trains scrapers to stop looking at it.
+const stampSummary = (stamp: typeof __OMI_BUILD_STAMP__): string =>
+  "unavailable" in stamp ? "unavailable" : `${stamp.commit.slice(0, 12)}/${stamp.treeHash.slice(0, 12)}`;
+
 let readyLogged = false;
 const emitReady = (state: string): void => {
   if (readyLogged) return;
@@ -186,7 +198,8 @@ const emitReady = (state: string): void => {
     + ` generation.memories=${generationSelection.memories}`
     + ` rendered=${rendered ? rendered.surface : "none"}`
     + ` rendered.memories=${rendered ? rendered.memoriesGeneration : "none"}`
-    + ` mismatch=${runtimeState.mismatch === null ? "no" : "yes"}`,
+    + ` mismatch=${runtimeState.mismatch === null ? "no" : "yes"}`
+    + ` stamp=${stampSummary(runtimeState.stamp)}`,
   );
 };
 
