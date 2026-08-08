@@ -36,6 +36,16 @@ test("tasks derive UTC calendar groups and preserve no-due tasks in Later", asyn
   // unscheduled rows in Today and make the fixture matrix visually untestable.
 });
 
+test("task discovery filters the loaded snapshot without claiming backend search", async () => {
+  const source = await read("src/production/TasksProduction.tsx");
+  assert.match(source, /type="search"/);
+  assert.match(source, /tasks\.filterSavedPlaceholder/);
+  assert.match(source, /task\.description\.toLocaleLowerCase\(locale\)\.includes\(needle\)/);
+  assert.doesNotMatch(source, /store\.search|searchTasks|fetchSearch/);
+  // red-proof: routing the field through a fabricated store.search capability
+  // fails this test because the ratified task store only exposes list/create/patch/delete.
+});
+
 test("task actions stay within the task contract", async () => {
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /store\.create\(description, dueAt\)/);

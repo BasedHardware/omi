@@ -8,6 +8,7 @@
 }
 
 * { box-sizing: border-box; }
+.visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
 body { margin: 0; min-width: 320px; overflow-x: hidden; color: var(--content-primary); background: var(--surface-canvas); }
 button, textarea, select { font: inherit; }
 button, select { min-height: var(--min-tap-target); border: 1px solid var(--border); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-md); color: var(--content-primary); background: var(--surface-raised); cursor: pointer; }
@@ -108,3 +109,210 @@ html[data-platform="mobile"] .memory-card { padding: var(--space-lg); }
 html[data-platform="mobile"] .memory-card-header { display: block; }
 html[data-platform="mobile"] .memory-provenance { display: inline-flex; margin-bottom: var(--space-sm); }
 html[data-platform="mobile"] .memory-actions button { flex: 1 1 auto; }
+
+/* Desktop Ink composition --------------------------------------------------
+ * Two independent glass islands mirror the native Swift redesign: a compact
+ * global bar and a scrollable content panel. The native shell supplies the
+ * material; these colors are the browser/Screenshot Lab fallback. */
+html[data-platform="desktop"] {
+  --desktop-gutter: 16px;
+  --desktop-top: 18px;
+  --desktop-nav-height: 52px;
+  --desktop-panel-gap: 16px;
+  --desktop-bottom: 20px;
+  background:
+    radial-gradient(circle at 16% 12%, rgba(255,255,255,.82), transparent 32%),
+    radial-gradient(circle at 82% 86%, rgba(151,191,222,.38), transparent 37%),
+    linear-gradient(138deg, #d9e9f3 0%, #f1ede9 48%, #c5dce8 100%);
+  color-scheme: light;
+}
+html[data-platform="desktop"],
+html[data-platform="desktop"] body,
+html[data-platform="desktop"] #root { width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+html[data-platform="desktop"] body { background: transparent; }
+html[data-platform="desktop"] #root { padding: 0; }
+html[data-platform="desktop"] .production-shell,
+html[data-platform="desktop"] .production-shell.tasks-production-shell {
+  position: relative;
+  display: grid;
+  grid-template-rows: var(--desktop-nav-height) var(--desktop-panel-gap) minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  padding: var(--desktop-top) var(--desktop-gutter) var(--desktop-bottom);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+html[data-platform="desktop"] .production-nav:first-child {
+  grid-row: 1;
+  z-index: 3;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,.42);
+  border-radius: 26px;
+  background: rgba(246,248,250,.58);
+  box-shadow: 0 14px 38px rgba(27,38,51,.12), inset 0 1px 0 rgba(255,255,255,.64);
+  -webkit-backdrop-filter: blur(28px) saturate(1.28);
+  backdrop-filter: blur(28px) saturate(1.28);
+}
+html[data-platform="desktop"] .nav-desktop { height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+html[data-platform="desktop"] .nav-primary,
+html[data-platform="desktop"] .nav-utilities { display: flex; align-items: center; gap: 2px; }
+html[data-platform="desktop"] .production-nav:first-child .nav-primary > span,
+html[data-platform="desktop"] .production-nav:first-child .nav-primary > a {
+  min-height: 40px;
+  padding: 0 13px;
+  border-radius: 20px;
+  color: rgba(25,29,35,.72);
+  font-size: 13px;
+  font-weight: 520;
+  letter-spacing: -.1px;
+}
+html[data-platform="desktop"] .production-nav:first-child .nav-primary > [aria-current="page"] {
+  color: rgba(17,20,25,.96);
+  background: rgba(255,255,255,.68);
+  box-shadow: 0 2px 8px rgba(34,43,55,.09), inset 0 0 0 1px rgba(255,255,255,.52);
+}
+html[data-platform="desktop"] .nav-icon { width: 17px; height: 17px; margin-right: 7px; stroke-width: 1.75; }
+html[data-platform="desktop"] .nav-icon-control {
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 19px;
+  color: rgba(25,29,35,.62);
+}
+html[data-platform="desktop"] .nav-icon-control .nav-icon { margin: 0; }
+html[data-platform="desktop"] .nav-utilities .nav-icon-control:last-child { background: rgba(255,255,255,.42); }
+html[data-platform="desktop"] .desktop-page-panel {
+  grid-row: 3;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 23px 24px 74px;
+  border: 1px solid rgba(255,255,255,.38);
+  border-radius: 22px;
+  background: rgba(244,247,249,.57);
+  box-shadow: 0 22px 56px rgba(30,42,55,.14), inset 0 1px 0 rgba(255,255,255,.58);
+  -webkit-backdrop-filter: blur(30px) saturate(1.25);
+  backdrop-filter: blur(30px) saturate(1.25);
+  scrollbar-color: rgba(50,58,68,.18) transparent;
+  scrollbar-width: thin;
+}
+html[data-platform="desktop"] .desktop-page-panel::-webkit-scrollbar { width: 7px; }
+html[data-platform="desktop"] .desktop-page-panel::-webkit-scrollbar-thumb { border-radius: 4px; background: rgba(50,58,68,.18); }
+html[data-platform="desktop"] .desktop-library-segment {
+  display: flex;
+  gap: 2px;
+  width: fit-content;
+  margin: 0 0 16px;
+  padding: 3px;
+  border: 1px solid rgba(41,48,58,.07);
+  border-radius: 12px;
+  background: rgba(68,75,86,.075);
+}
+html[data-platform="desktop"] .desktop-library-segment span,
+html[data-platform="desktop"] .desktop-library-segment a {
+  min-height: 32px;
+  padding: 0 17px;
+  border-radius: 9px;
+  color: rgba(36,41,48,.58);
+  font-size: 13px;
+  font-weight: 520;
+}
+html[data-platform="desktop"] .desktop-library-segment [aria-current="page"] {
+  color: rgba(19,22,27,.94);
+  background: rgba(255,255,255,.76);
+  box-shadow: 0 2px 8px rgba(30,37,46,.09), inset 0 0 0 1px rgba(255,255,255,.5);
+}
+html[data-platform="desktop"] .desktop-library-segment [aria-disabled="true"] { opacity: .52; }
+html[data-platform="desktop"] .production-header,
+html[data-platform="desktop"] .tasks-header {
+  align-items: flex-end;
+  margin: 0 0 14px;
+}
+html[data-platform="desktop"] .production-header .eyebrow,
+html[data-platform="desktop"] .tasks-eyebrow { display: none; }
+html[data-platform="desktop"] .production-header h1,
+html[data-platform="desktop"] .tasks-header h1 {
+  margin: 0 0 3px;
+  font-family: "Open Runde", ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -.8px;
+}
+html[data-platform="desktop"] .production-header p,
+html[data-platform="desktop"] .tasks-header p { margin: 0; color: rgba(38,43,50,.54); font-size: 13px; }
+html[data-platform="desktop"] button,
+html[data-platform="desktop"] select { min-height: 32px; padding: 5px 11px; border-color: rgba(39,46,55,.09); background: rgba(255,255,255,.48); }
+html[data-platform="desktop"] .qa-label { display: none; }
+html[data-platform="desktop"] .status-notice,
+html[data-platform="desktop"] .queue-notice,
+html[data-platform="desktop"] .operation-error {
+  margin: 0 0 10px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.46);
+  font-size: 12px;
+}
+html[data-platform="desktop"] .memory-grid { gap: 8px; }
+html[data-platform="desktop"] .memory-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 15px 15px;
+  border: 1px solid rgba(42,49,58,.055);
+  border-radius: 13px;
+  background: rgba(255,255,255,.33);
+  box-shadow: none;
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+html[data-platform="desktop"] .memory-card:hover,
+html[data-platform="desktop"] .memory-card:focus-within { background: rgba(255,255,255,.58); box-shadow: 0 5px 18px rgba(31,40,50,.055); }
+html[data-platform="desktop"] .memory-card-header { order: 2; margin: 7px 0 0; }
+html[data-platform="desktop"] .memory-provenance {
+  padding: 3px 7px;
+  color: rgba(45,94,150,.86);
+  background: rgba(88,139,197,.105);
+  font-size: 9px;
+  letter-spacing: .25px;
+}
+html[data-platform="desktop"] .memory-meta { font-size: 9px; }
+html[data-platform="desktop"] .memory-content { order: 1; max-width: 94%; font-size: 14px; line-height: 1.42; letter-spacing: -.08px; }
+html[data-platform="desktop"] .memory-actions { position: absolute; right: 10px; bottom: 8px; margin: 0; opacity: 0; transition: opacity 120ms ease; }
+html[data-platform="desktop"] .memory-card:hover .memory-actions,
+html[data-platform="desktop"] .memory-card:focus-within .memory-actions { opacity: 1; }
+html[data-platform="desktop"] .memory-actions button { min-height: 28px; padding: 3px 8px; font-size: 10px; }
+html[data-platform="desktop"] .memory-create { margin-bottom: 12px; padding: 10px; border-radius: 12px; background: rgba(255,255,255,.42); }
+html[data-platform="desktop"] .header-actions { align-items: center; gap: 6px; }
+html[data-platform="desktop"] .memory-create-trigger,
+html[data-platform="desktop"] .memory-more-trigger { width: 42px; min-width: 42px; min-height: 42px; padding: 0; border-radius: 21px; font-size: 18px; line-height: 1; }
+html[data-platform="desktop"] .memory-more-trigger { font-size: 11px; letter-spacing: 1px; opacity: .62; }
+html[data-platform="desktop"] .memory-controls { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; margin: 0 0 12px; }
+html[data-platform="desktop"] .memory-search { position: relative; min-width: 0; }
+html[data-platform="desktop"] .memory-search::before { position: absolute; left: 13px; top: 13px; width: 11px; height: 11px; border: 1.5px solid rgba(37,43,51,.45); border-radius: 50%; content: ""; }
+html[data-platform="desktop"] .memory-search::after { position: absolute; left: 23px; top: 24px; width: 5px; border-top: 1.5px solid rgba(37,43,51,.45); content: ""; transform: rotate(45deg); }
+html[data-platform="desktop"] .memory-search input { width: 100%; min-height: 42px; border: 1px solid rgba(39,46,55,.07); border-radius: 12px; padding: 9px 13px 9px 37px; color: var(--content-primary); background: rgba(255,255,255,.42); font: inherit; font-size: 12px; }
+html[data-platform="desktop"] .memory-search input::placeholder { color: var(--content-tertiary); }
+html[data-platform="desktop"] .memory-filter { display: flex; gap: 4px; }
+html[data-platform="desktop"] .memory-toolbar-actions { display: flex; gap: 5px; }
+html[data-platform="desktop"] .memory-filter button { min-height: 42px; border-radius: 21px; color: var(--content-secondary); font-size: 11px; }
+html[data-platform="desktop"] .memory-filter button[aria-pressed="true"] { color: rgba(29,66,114,.94); background: rgba(99,150,211,.14); }
+
+/* WKWebView lets AppKit own the true material while the DOM remains a semantic
+ * and testable overlay. Browser captures retain the fallback glass above. */
+html[data-platform="desktop"][data-native-glass="true"] { background: transparent; }
+html[data-platform="desktop"][data-native-glass="true"] .production-nav:first-child,
+html[data-platform="desktop"][data-native-glass="true"] .desktop-page-panel {
+  border-color: rgba(255,255,255,.16);
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

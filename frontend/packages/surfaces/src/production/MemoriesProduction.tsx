@@ -3,7 +3,7 @@ import type { Memory } from "@omi-core/contracts";
 import { formatDate, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionMemoryStore } from "./memory-fixtures.js";
-import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
@@ -111,6 +111,8 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
   const [draft, setDraft] = useState("");
   const [draftVisibility, setDraftVisibility] = useState<"public" | "private">("private");
   const [composerOpen, setComposerOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "public" | "private">("all");
   const [operationError, setOperationError] = useState<string | null>(null);
   const readyRef = useRef(false);
   const onReadyRef = useRef(onReady);
@@ -179,15 +181,23 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
       setComposerOpen(false);
     }
   };
+  const visibleRows = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase(locale);
+    return rows.filter((memory) => {
+      if (visibilityFilter !== "all" && memory.visibility !== visibilityFilter) return false;
+      return !needle || memory.content.toLocaleLowerCase(locale).includes(needle);
+    });
+  }, [locale, query, rows, visibilityFilter]);
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
       <ProductionChrome locale={locale} active="memories" placement="top" />
+      <section className="desktop-page-panel">
+      <ProductionLibrarySegment locale={locale} active="memories" />
       <header className="production-header memories-header">
         <div><p className="eyebrow">{t(locale, "nav.memories")}</p><h1>{t(locale, "memories.title")}</h1><p>{t(locale, "memories.subtitle")}</p></div>
         <div className="header-actions">
           {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>{t(locale, "common.retry")}</button>}
-          <button className="memory-create-trigger" type="button" aria-expanded={composerOpen} onClick={() => setComposerOpen((open) => !open)}>{composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")}</button>
         </div>
       </header>
       <div className="surface-notices" aria-live="polite">
@@ -206,8 +216,19 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
         </label>
         <button type="submit" disabled={!draft.trim()}>{t(locale, "common.save")}</button>
       </form>}
-      {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "memories.emptyBody")}</p> : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{rows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
+      <div className="memory-controls">
+        <label className="memory-search"><span className="visually-hidden">{t(locale, "memories.filterSavedPlaceholder")}</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t(locale, "memories.filterSavedPlaceholder")} /></label>
+        <div className="memory-filter" aria-label={t(locale, "memories.visibility")}>
+          {(["all", "private", "public"] as const).map((value) => <button key={value} type="button" aria-pressed={visibilityFilter === value} onClick={() => setVisibilityFilter(value)}>{value === "all" ? t(locale, "memories.all") : value === "private" ? t(locale, "memories.private") : t(locale, "memories.public")}</button>)}
+        </div>
+        <div className="memory-toolbar-actions">
+          <button className="memory-create-trigger" type="button" aria-expanded={composerOpen} aria-label={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} title={composerOpen ? t(locale, "common.cancel") : t(locale, "memories.create")} onClick={() => setComposerOpen((open) => !open)}>{composerOpen ? "×" : "+"}</button>
+          <button className="memory-more-trigger" type="button" disabled aria-label={t(locale, "common.more")} title={t(locale, "common.more")}>•••</button>
+        </div>
+      </div>
+      {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "memories.emptyBody")}</p> : visibleRows.length === 0 ? <p className="empty-state">{t(locale, "common.noResults")}</p> : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{visibleRows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
       {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(letter.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
+      </section>
       <ProductionChrome locale={locale} active="memories" placement="bottom" />
     </main>
   );

@@ -73,6 +73,31 @@ function baseRows(): Conversation[] {
       startedAt: CONVERSATION_FIXED_NOW - 25 * 60 * 60 * 1000,
       finishedAt: CONVERSATION_FIXED_NOW - 24 * 60 * 60 * 1000,
     }),
+    conversation({
+      id: id("steady-conversation-three"), title: "Desktop design review",
+      overview: "Reviewed the glass hierarchy and compact list rhythm.", folderId: folderId("work-folder-one"),
+      startedAt: CONVERSATION_FIXED_NOW - 2 * 60 * 60 * 1000, finishedAt: CONVERSATION_FIXED_NOW - 90 * 60 * 1000,
+    }),
+    conversation({
+      id: id("bright-conversation-four"), title: "Weekly team sync",
+      overview: "Decisions, open questions, and owners for the next iteration.", starred: true,
+      startedAt: CONVERSATION_FIXED_NOW - 4 * 60 * 60 * 1000, finishedAt: CONVERSATION_FIXED_NOW - 3.4 * 60 * 60 * 1000,
+    }),
+    conversation({
+      id: id("open-conversation-seven"), title: "Product direction notes",
+      overview: "Captured the strongest options and the decision still to make.",
+      startedAt: CONVERSATION_FIXED_NOW - 6 * 60 * 60 * 1000, finishedAt: CONVERSATION_FIXED_NOW - 5.3 * 60 * 60 * 1000,
+    }),
+    conversation({
+      id: id("clear-conversation-five"), title: "Customer feedback notes",
+      overview: "Themes from the latest product feedback session.",
+      startedAt: CONVERSATION_FIXED_NOW - 26 * 60 * 60 * 1000, finishedAt: CONVERSATION_FIXED_NOW - 25.2 * 60 * 60 * 1000,
+    }),
+    conversation({
+      id: id("kind-conversation-six"), title: "Launch checklist",
+      overview: "A final pass through the launch and rollback checklist.", folderId: folderId("work-folder-one"),
+      startedAt: CONVERSATION_FIXED_NOW - 27 * 60 * 60 * 1000, finishedAt: CONVERSATION_FIXED_NOW - 26.4 * 60 * 60 * 1000,
+    }),
   ];
 }
 

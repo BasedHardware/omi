@@ -35,6 +35,7 @@ const set = (name: string, value: string | number): void => rootStyle.setPropert
 
 document.documentElement.dataset["platform"] = platform;
 document.documentElement.dataset["theme"] = themeName;
+document.documentElement.dataset["nativeGlass"] = query.get("nativeGlass") === "1" ? "true" : "false";
 set("--surface-canvas", theme.colors.surface.canvas);
 set("--surface-raised", theme.colors.surface.raised);
 set("--surface-elevated", theme.colors.surface.elevated);
