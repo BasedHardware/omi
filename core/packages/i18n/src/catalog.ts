@@ -292,7 +292,6 @@ export const EN_MESSAGES = {
   "memoriesPlatform.recallUnknownTitle": "Nothing loaded yet",
   "memoriesPlatform.recallUnknownBody": "Omi has not received an answer for this view yet, so it cannot say whether there is anything to show.",
   "memoriesPlatform.completenessLabel": "Recall completeness",
-  "memoriesPlatform.unrecognizedReasons": "{count} further limitations were reported that this version cannot describe.",
   "memoriesPlatform.completeness.complete": "Complete — the whole accepted projection was searched.",
   "memoriesPlatform.completeness.incomplete": "Incomplete — accepted work is still being consolidated.",
   "memoriesPlatform.completeness.degraded": "Degraded — this projection is not currently authoritative.",
