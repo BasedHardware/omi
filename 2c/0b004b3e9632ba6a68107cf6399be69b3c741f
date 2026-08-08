@@ -1,0 +1,47 @@
+.github/failure-classes/FC-hosted-control-window-drag-ownership.json
+  s_6ee6c64dccc4f3::t_e7a26d13ce954f 1-4,6-10,13-19
+  s_6ee6c64dccc4f3::t_8355402a34a59e 5
+  s_6ee6c64dccc4f3::t_eaa2f162ff578b 11-12
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 53,54
+  s_6ee6c64dccc4f3::t_f1e1367f0764e4 47
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_6ee6c64dccc4f3::t_38480473197a77 251
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 162-163,165,212,218,223-225,228,231,252,254,258
+  s_6ee6c64dccc4f3::t_6dad677d4de97a 34-35
+  s_6ee6c64dccc4f3::t_d03d698eced9f0 249-250
+  s_6ee6c64dccc4f3::t_8355402a34a59e 33,36-37,164,219,221,226-227,232,234,236-247
+  s_6ee6c64dccc4f3::t_4a425a37b90d9b 222
+  s_6ee6c64dccc4f3::t_b9e85bb80c95ae 235
+  s_6ee6c64dccc4f3::t_f1e1367f0764e4 220
+  s_6ee6c64dccc4f3::t_aa04eb2eb1df25 229-230,233,248,253,255-257
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 107,127-128
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 95,103,109,121,123,124-126,252
+  s_6ee6c64dccc4f3::t_6b5f2274e1a33c 108
+  s_6ee6c64dccc4f3::t_6b37bb2f87db34 110-120,122
+  s_6ee6c64dccc4f3::t_6dad677d4de97a 106,219
+  s_6ee6c64dccc4f3::t_f1e1367f0764e4 94,130-132,134
+  s_6ee6c64dccc4f3::t_8355402a34a59e 129,133
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_6ee6c64dccc4f3::t_aa04eb2eb1df25 22
+  s_6ee6c64dccc4f3::t_8355402a34a59e 426-428
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_6ee6c64dccc4f3::t_aa04eb2eb1df25 392
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "2c0b004b3e9632ba6a68107cf6399be69b3c741f",
+  "prompts": {},
+  "sessions": {
+    "s_6ee6c64dccc4f3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7a-616d-7510-bb06-c7599e02c6e2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
