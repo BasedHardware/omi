@@ -4,7 +4,11 @@ import Foundation
 // MARK: - Database Record
 
 /// Database record for AI-generated user profile history
-struct AIUserProfileRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
+// `MutablePersistableRecord` — not `PersistableRecord` — because the rowid is
+// captured by a `mutating didInsert`. `PersistableRecord`'s requirement is
+// non-mutating, so a mutating declaration silently witnesses nothing and the
+// empty default runs instead, leaving `id` nil after every insert.
+struct AIUserProfileRecord: Codable, FetchableRecord, MutablePersistableRecord, Identifiable {
   var id: Int64?
   var profileText: String
   var dataSourcesUsed: Int
@@ -60,6 +64,20 @@ actor AIUserProfileService {
     _dbQueue = db
     _dbGeneration = generation
     return db
+  }
+
+  /// Insert a profile row and return it carrying its persisted rowid.
+  ///
+  /// Every caller hands the returned record's `id` to a `WHERE id = ?` consumer
+  /// (the backend-sync flag update, Settings edit/delete), so the insert must go
+  /// through the mutating path that runs `didInsert`.
+  func insertProfile(_ record: AIUserProfileRecord) async throws -> AIUserProfileRecord {
+    let db = try await ensureDB()
+    return try await db.write { database in
+      var inserted = record
+      try inserted.insert(database)
+      return inserted
+    }
   }
 
   // MARK: - Public Interface
@@ -145,10 +163,6 @@ actor AIUserProfileService {
 
   /// Save exploration text as a new profile record (when no profile exists yet)
   func saveExplorationAsProfile(text: String) async -> Bool {
-    guard let db = try? await ensureDB() else {
-      log("AIUserProfileService: DB not available for saving exploration profile")
-      return false
-    }
     let generatedAt = Date()
     let record = AIUserProfileRecord(
       profileText: String(text.prefix(maxProfileLength)),
@@ -157,11 +171,7 @@ actor AIUserProfileService {
       generatedAt: generatedAt
     )
     do {
-      let insertedId = try await db.write { database -> Int64? in
-        let mutableRecord = record
-        try mutableRecord.insert(database)
-        return mutableRecord.id
-      }
+      let insertedId = try await insertProfile(record).id
       log("AIUserProfileService: Saved exploration as new profile (\(record.profileText.count) chars)")
 
       // Sync to backend (fire-and-forget)
@@ -329,16 +339,13 @@ actor AIUserProfileService {
     let generatedAt = Date()
 
     // 6. Save to database
-    let db = try await ensureDB()
-    let record = AIUserProfileRecord(
-      profileText: truncated,
-      dataSourcesUsed: dataSourcesUsed,
-      backendSynced: false,
-      generatedAt: generatedAt
-    )
-    try await db.write { database in
-      try record.insert(database)
-    }
+    let record = try await insertProfile(
+      AIUserProfileRecord(
+        profileText: truncated,
+        dataSourcesUsed: dataSourcesUsed,
+        backendSynced: false,
+        generatedAt: generatedAt
+      ))
 
     // 7. Sync to backend (fire-and-forget)
     let recordId = record.id
