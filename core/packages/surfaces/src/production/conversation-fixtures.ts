@@ -1,24 +1,7 @@
-import { parseRecordId, type Conversation, type ConversationPatch, type DeadLetter, type Folder } from "@omi-core/contracts";
+import { parseRecordId, type Conversation, type DeadLetter, type Folder } from "@omi-core/contracts";
 import type { QueuePhase, QueueStatus } from "@omi-core/sync";
 import type { RefreshPhase, StoreStatus } from "@omi-core/domain";
-
-export type ProductionConversationStore = {
-  list(): Promise<Conversation[]>;
-  status(): StoreStatus;
-  deadLetters(): Promise<DeadLetter[]>;
-  subscribe(listener: () => void): () => void;
-  refresh(): Promise<void>;
-  patch(id: Conversation["id"], patch: ConversationPatch): Promise<void>;
-  delete(id: Conversation["id"]): Promise<void>;
-  discardDeadLetter(opId: string): Promise<void>;
-};
-
-export type ProductionFolderStore = {
-  list(): Promise<Folder[]>;
-  status(): StoreStatus;
-  subscribe(listener: () => void): () => void;
-  refresh(): Promise<void>;
-};
+import type { ProductionConversationStore, ProductionFolderStore } from "./ProductionStores.js";
 
 export const CONVERSATION_FIXED_NOW = Date.UTC(2026, 7, 7, 12, 0, 0);
 

@@ -4,7 +4,7 @@ import { t } from "@omi-core/i18n";
 import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
-import { ConversationsStore, FoldersStore, MemoriesStore, TasksStore } from "@omi-core/domain";
+import { createLegacyProductionStoreFactory } from "./ProductionStores.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
@@ -140,24 +140,26 @@ if (query.get("lab") === "1") {
       try {
         const bridge = await openWebStorageBridge(profile);
         const http = bridgeHttpClient();
+        const env = realEnv();
+        const stores = createLegacyProductionStoreFactory(bridge, env, http);
         if (route === "home") {
-          const env = realEnv();
           const [memories, conversations] = await Promise.all([
-            MemoriesStore.open(bridge, env, http),
-            ConversationsStore.open(bridge, env, http),
+            stores.openMemories(),
+            stores.openConversations(),
           ]);
           await Promise.allSettled([memories.refresh(), conversations.refresh()]);
           root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "tasks") {
-          const env = realEnv();
-          const store = await TasksStore.open(bridge, env, http);
+          const store = await stores.openTasks();
           root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "conversations") {
-          const store = await ConversationsStore.open(bridge, realEnv(), http);
-          const foldersStore = await FoldersStore.open(bridge, realEnv(), http);
+          const [store, foldersStore] = await Promise.all([
+            stores.openConversations(),
+            stores.openFolders(),
+          ]);
           root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else {
-          const store = await MemoriesStore.open(bridge, realEnv(), http);
+          const store = await stores.openMemories();
           root.render(<StrictMode><MemoriesProduction store={store} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         }
       } catch {

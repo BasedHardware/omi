@@ -1,18 +1,7 @@
-import { parseRecordId, type DeadLetter, type Memory, type MemoryPatch } from "@omi-core/contracts";
+import { parseRecordId, type DeadLetter, type Memory } from "@omi-core/contracts";
 import type { QueuePhase, QueueStatus } from "@omi-core/sync";
 import type { RefreshPhase, StoreStatus } from "@omi-core/domain";
-
-export type ProductionMemoryStore = {
-  list(): Promise<Memory[]>;
-  status(): StoreStatus;
-  deadLetters(): Promise<DeadLetter[]>;
-  subscribe(listener: () => void): () => void;
-  refresh(): Promise<void>;
-  create(content: string, opts?: { visibility?: "public" | "private" }): Promise<void>;
-  patch(id: Memory["id"], patch: MemoryPatch): Promise<void>;
-  delete(id: Memory["id"]): Promise<void>;
-  discardDeadLetter(opId: string): Promise<void>;
-};
+import type { ProductionMemoryStore } from "./ProductionStores.js";
 
 const FIXED_NOW = Date.UTC(2026, 7, 7, 12, 0, 0);
 function id(value: string): Memory["id"] {
