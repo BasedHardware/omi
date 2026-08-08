@@ -1,0 +1,64 @@
+[
+  {
+    "name": "strict complete page",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [{
+        "id": "retrieval-node-v1:fixture",
+        "text": "Synthesized result",
+        "citations": ["citation-v1:fixture"],
+        "provenance": {"synthesisVersion": "v1", "inputDigest": "sha256:input", "outputDigest": "sha256:output"}
+      }],
+      "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
+      "completeness": {
+        "version": "recall-completeness-v1", "status": "complete", "reasons": [],
+        "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}
+      },
+      "absence": null
+    },
+    "safe": true
+  },
+  {
+    "name": "nested raw evidence rejected",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [{"id": "retrieval-node-v1:fixture", "text": "Synthesized result", "evidence": "raw"}],
+      "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "absence": null
+    },
+    "safe": false
+  },
+  {
+    "name": "legacy editable field rejected",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [{"id": "retrieval-node-v1:fixture", "text": "Synthesized result", "content": "legacy"}],
+      "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "absence": null
+    },
+    "safe": false
+  },
+  {
+    "name": "empty branded strings rejected",
+    "page": {
+      "contractVersion": "1.0.0",
+      "items": [{"id": "", "text": ""}],
+      "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": "frontier-v1:included", "missingStmFrontierReason": null}},
+      "absence": null
+    },
+    "safe": false
+  },
+  {
+    "name": "extra nested completeness key rejected",
+    "page": {
+      "contractVersion": "1.0.0", "items": [],
+      "window": {"status": "complete", "complete": true, "hasMore": false, "nextCursor": null},
+      "completeness": {"version": "recall-completeness-v1", "status": "complete", "reasons": [], "frontiers": {"declaredFrontier": "frontier-v1:declared", "newestIncludedStmFrontier": null, "missingStmFrontierReason": "no_eligible_stm"}, "raw": "unsafe"},
+      "absence": {"kind": "query_gap"}
+    },
+    "safe": false
+  }
+]

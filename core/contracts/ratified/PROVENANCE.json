@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@omi-core/ratified-contracts",
+    "version": "0.1.0"
+  },
+  "repository": "BasedHardware/omi",
+  "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
+  "rulings": [
+    "ADR-004",
+    "WS-006",
+    "M-001",
+    "DIV-MEM-004",
+    "FEAT-MEM-001",
+    "FEAT-MEM-002",
+    "FC-AUTH-003",
+    "FEAT-AUTH-011"
+  ],
+  "compiler": {
+    "name": "typescript",
+    "version": "5.9.3"
+  },
+  "inputs": [
+    {
+      "path": "fixtures/clean-consumer/conformance.mjs",
+      "sha256": "7267cb4dcc5e286a1ad107360f19cb73ab9e4855645bb133ed94a144e9b067f1",
+      "bytes": 452
+    },
+    {
+      "path": "fixtures/clean-consumer/consumer.ts",
+      "sha256": "575814e8b9627575806fb5a94c41a215594462adbfb9afcb732ef4cf1ad7134b",
+      "bytes": 5120
+    },
+    {
+      "path": "fixtures/clean-consumer/tsconfig.json",
+      "sha256": "d4aa4e8b31dcbec3294d703a579ca0c463d6548cf56c516204934901bedb8e63",
+      "bytes": 171
+    },
+    {
+      "path": "fixtures/forbidden-public-fields.mjs",
+      "sha256": "a7282e3827ade03cd349f488190e4f094a4199f07bfd4483ab1edb1c536dbaf6",
+      "bytes": 532
+    },
+    {
+      "path": "fixtures/manifest.json",
+      "sha256": "3d210d8174aa07f175b7d160085734cd082b629668557f9e25003f69a57ab7c8",
+      "bytes": 158
+    },
+    {
+      "path": "fixtures/page-conformance.json",
+      "sha256": "8570300b00490ea07d7c999f67941362d88927fe728c8b7de76bce81ad69f604",
+      "bytes": 3031
+    },
+    {
+      "path": "fixtures/read-page-windows.json",
+      "sha256": "466b00612556effa080ec5da78048061b2d2472edcb0263936aeb6b6ebfe36ec",
+      "bytes": 1057
+    },
+    {
+      "path": "fixtures/recall-completeness.json",
+      "sha256": "11251f8c567ae16b04d64426cbc7e87a5e9ada0090c133297b63c020a752aa74",
+      "bytes": 4960
+    },
+    {
+      "path": "fixtures/recall-trace.json",
+      "sha256": "344f666fa69dbd06bff13688d65a98278213b39be9a3776b40fdd2da56af7eea",
+      "bytes": 3495
+    },
+    {
+      "path": "package.json",
+      "sha256": "c8000a499b090eb15d8ee9081da1edae76b0cbadeddc75eab0989dfc5c27087f",
+      "bytes": 1804
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "9747995ee6c20d5990a84006b6353d66070f7a2bb23b92133c1c81e02a1e5693",
+      "bytes": 439
+    },
+    {
+      "path": "README.md",
+      "sha256": "aa4c2e92ec7db876d26036bc079ff19d7dc9e3946816a919038d2514277ed00b",
+      "bytes": 2423
+    },
+    {
+      "path": "scripts/check-domain-markers.mjs",
+      "sha256": "6e0a4b7fc605d7bc53a5e9b479ac4c5542beefb7ab456c698131c55a8e13d18f",
+      "bytes": 1876
+    },
+    {
+      "path": "scripts/clean.mjs",
+      "sha256": "fc3d04823ac4badd5fbeecee577dedeb6af4480d1c5e9965dde0d4dedbb14135",
+      "bytes": 155
+    },
+    {
+      "path": "scripts/package-boundary.mjs",
+      "sha256": "7c1b4cb7325c8b245638d535d5699e69da04674e5c6ace86b177a6e343e37636",
+      "bytes": 7736
+    },
+    {
+      "path": "scripts/provenance.mjs",
+      "sha256": "bed4d7c9e03167325db54846c7c6650b4c6bec960c7282bed01ba280392a2b44",
+      "bytes": 2460
+    },
+    {
+      "path": "scripts/verify-ci.mjs",
+      "sha256": "c4177c11bc430dd1dc943ced4b672bbfa9c0ea95df8aa199496f23316b41346f",
+      "bytes": 819
+    },
+    {
+      "path": "src/pagination/cursor.ts",
+      "sha256": "b112180e017c4ea4f62dd531e2a57e3a14f29848abf4436378cf0be64f9fe894",
+      "bytes": 508
+    },
+    {
+      "path": "src/projections/synthesized.ts",
+      "sha256": "ed2d27ff6d286891d8b0251fd54410c2cdaec45cfd223de61686f682e2ccc89e",
+      "bytes": 12564
+    },
+    {
+      "path": "src/recall/trace.ts",
+      "sha256": "92a167ebe9cb357c190eba0def6f15983143b6700387f78ed19dfdb5b56349e7",
+      "bytes": 4204
+    },
+    {
+      "path": "test/contracts.test.mjs",
+      "sha256": "7ffba1ad5c872b724c18a6fba9c53f3608c026bfbe45fdd28269b7a3cfbbe4e6",
+      "bytes": 3131
+    },
+    {
+      "path": "tsconfig.base.json",
+      "sha256": "834b77bf73d7d71ed7fa4d80e77a395b902cdcc66f1612def5a6c4febe5ecb93",
+      "bytes": 518
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "008e71c487fb6040ef87de46b534f669bf75f21ebeb69429a77fec61ba6e75aa",
+      "bytes": 133
+    }
+  ],
+  "sourceDigest": "3fadfc26e9facef4ab06d6388a5056c4c943f376c88517102b0be5e3e0fa51b1"
+}

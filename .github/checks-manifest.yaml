@@ -81,6 +81,12 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
+  - id: ratified-core-contracts
+    command: ["corepack", "pnpm", "--dir", "core/contracts/ratified", "--ignore-workspace", "run", "verify:ci"]
+    triggers: ["core/contracts/ratified/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "ADR-004 ratified cursor and synthesized-read boundaries stay narrow, reproducible, and consumable without the broader core package"
   - id: backend-production-release-vector-guards
     command: ["python3", ".github/scripts/check_release_rings.py"]
     triggers: [".github/workflows/gcp_backend.yml", ".github/actions/deploy-backend-stack/**", ".github/scripts/check_release_rings.py", ".github/scripts/workflow_composite_contract.py", ".github/checks-manifest.yaml"]
