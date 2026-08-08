@@ -38,12 +38,35 @@ export type WriteFailure =
   | {
       /**
        * The server will never accept this operation (validation, oversize,
-       * unresolvable conflict, entitlement denial). Retrying is forbidden;
-       * the operation moves to the dead-letter surface where the user can
-       * see, copy out, and discard it.
+       * unresolvable conflict, entitlement denial, a stale account epoch).
+       * Retrying is forbidden; the operation moves to the dead-letter surface
+       * where the user can see, copy out, and discard it.
+       *
+       * `stale_epoch` — COORD-write-path-rulings B2, RATIFIED.
+       *
+       * A straggler: an op created under an account epoch the server has since
+       * advanced past, refused by the server-owned account epoch fence
+       * (`backend:ADR-010`). It is preserved for MANUAL resolution and is NOT
+       * user-retryable — refreshing control state and retrying, which
+       * ADR-010's generic client guidance suggests, is wrong for an op the
+       * fence will never accept.
+       *
+       * It must NEVER be reported as `conflict` or `gone`. Those say something
+       * specific and false: `conflict` says another edit won a race, `gone`
+       * says the record is not there. Neither happened. The refusal is about
+       * the generation the op was authored in, and telling a person their edit
+       * conflicted when it did not is exactly the class of false report this
+       * taxonomy exists to prevent. The wire keeps them separable — the
+       * stale-epoch refusal and the conflict error share HTTP 409 and are
+       * distinguished by body, never by status.
+       *
+       * The user-facing COPY for this outcome is deliberately not decided
+       * anywhere in this repo: it is owner-signed and is owed to David.
+       * Surfaces render `summary`/`detail`; nothing maps this reason to a
+       * catalog string yet, and nothing should until that copy exists.
        */
       kind: "permanent";
-      reason: "validation" | "oversize" | "conflict" | "entitlement" | "gone";
+      reason: "validation" | "oversize" | "conflict" | "entitlement" | "gone" | "stale_epoch";
       detail: string;
     };
 

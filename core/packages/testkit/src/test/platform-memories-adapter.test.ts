@@ -160,6 +160,14 @@ test("the ratified fixture manifest names exactly the corpora this suite runs", 
       "recall-completeness.json",
       "recall-trace.json",
       "status-matrix.json",
+      // The write seam's two files. They are NOT run by this test — this file
+      // is the memory READ consumer — but they must be named here or the
+      // exact-equality check below stops being exact. Their consumer is
+      // `write-ops-conformance.test.ts`, in this same suite, and the
+      // `ratified-write-ops` row in `core/scripts/check-wire-conformance.mjs`
+      // is what mechanically requires that consumer to exist and read them.
+      "write-ops-conformance.json",
+      "write-ops-outcomes.json",
     ],
     "a corpus was added or renamed upstream and this suite does not run it",
   );

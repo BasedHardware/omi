@@ -12,6 +12,7 @@ const inputs = [
   "src/projections/synthesized.ts",
   "src/recall/trace.ts",
   "src/wire/json.ts",
+  "src/write/ops.ts",
   "fixtures/clean-consumer/consumer.ts",
   "fixtures/clean-consumer/conformance.mjs",
   "fixtures/clean-consumer/tsconfig.json",
@@ -21,6 +22,8 @@ const inputs = [
   "fixtures/recall-trace.json",
   "fixtures/page-conformance.json",
   "fixtures/status-matrix.json",
+  "fixtures/write-ops-outcomes.json",
+  "fixtures/write-ops-conformance.json",
   "fixtures/manifest.json",
   "test/contracts.test.mjs",
   "scripts/check-domain-markers.mjs",
@@ -47,14 +50,18 @@ const provenance = {
   package: { name: manifest.name, version: manifest.version },
   repository: "BasedHardware/omi",
   baselineCommit: "e5deec43d8814191b90d3e3db46e99bec29ae724",
-  // "COORD-contract-evolution-policy" is a PROVISIONAL ruling id: the policy
-  // it cites requires "a ratified ruling id" here (§3) but never defines an
-  // id grammar for COORD-prefixed decisions the way ADR-/FEAT-/WS-/DIV-/FC-
-  // ids are defined elsewhere. This bump exists BECAUSE that document
-  // ratifies it (its §4 names this exact header as the first thing that must
-  // land) so citing its slug is the closest mechanical match available - see
-  // the CONTRACT-lane report in data/run-2026-08-08b/ for the open question.
-  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy"],
+  // COORD-prefixed ids are cross-cutting decisions in data/*/decisions/, cited
+  // by document slug. That grammar was an open question at the 0.2.0 bump and
+  // is now settled: COORD-contract-evolution-policy's "First exercise" section
+  // fixes it ("a cross-cutting ruling is cited by its document slug, prefixed
+  // COORD-"), so the slug below is the defined form, not a best guess.
+  //
+  // 0.3.0 adds "COORD-write-path-rulings" — the RATIFIED write-path rulings
+  // (B1 minted write_id, B2 stale_epoch as its own refusal outcome, B4
+  // POST /v1/{domain}/ops, B6 tasks-first but domain-generic). Per the
+  // evolution policy §3 a bump is valid only if this array gains a ratified
+  // ruling id the previous version did not carry; that is what this line is.
+  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings"],
   compiler: { name: "typescript", version: manifest.devDependencies.typescript },
   inputs: entries,
   sourceDigest,

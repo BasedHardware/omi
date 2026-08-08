@@ -5,6 +5,8 @@
     "recall-completeness.json",
     "recall-trace.json",
     "page-conformance.json",
-    "status-matrix.json"
+    "status-matrix.json",
+    "write-ops-outcomes.json",
+    "write-ops-conformance.json"
   ]
 }

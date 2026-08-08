@@ -14,17 +14,25 @@ const provenance = JSON.parse(provenanceBytes);
  * COORD-contract-evolution-policy.md §1: "The version number is an
  * identifier. The compatibility class is the contract" - checked mechanically,
  * declared explicitly in ARTIFACT.json rather than inferred from semver.
- * Exactly two values exist; there is no third. This bump is `additive`: it
- * adds one optional request header (APP_CONTRACT_VERSION_HEADER) and three
- * new exports to an already-public subpath. Every client built against 0.1.1
- * keeps working unchanged - nothing about the existing wire shape moved.
+ * Exactly two values exist; there is no third.
+ *
+ * 0.3.0 is `additive`. It adds ONE new export subpath (`./write/ops`) and two
+ * new fixture corpora. It removes nothing, narrows nothing, requires nothing
+ * new of anyone, and changes the meaning of no existing field: every client
+ * built against 0.2.0 keeps working unchanged, which is the definition.
+ *
+ * The one classification that needed thought is `stale_epoch`. It is a NEW
+ * refusal outcome on a NEW route, so no existing response can begin carrying
+ * it and no existing client can begin seeing it — additive. It would have
+ * been `breaking` had it been added to an outcome set some already-shipped
+ * client exhaustively switches over, and it is deliberately not that.
  */
 const COMPATIBILITY_CLASS = "additive";
 if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
   throw new Error("compatibility class must be exactly 'additive' or 'breaking'");
 }
 
-const expectedExports = ["./pagination/cursor", "./projections/synthesized", "./recall/trace"];
+const expectedExports = ["./pagination/cursor", "./projections/synthesized", "./recall/trace", "./write/ops"];
 const expectedManifestFiles = [
   "dist/pagination/cursor.js",
   "dist/pagination/cursor.d.ts",
@@ -34,12 +42,16 @@ const expectedManifestFiles = [
   "dist/recall/trace.d.ts",
   "dist/wire/json.js",
   "dist/wire/json.d.ts",
+  "dist/write/ops.js",
+  "dist/write/ops.d.ts",
   "fixtures/manifest.json",
   "fixtures/read-page-windows.json",
   "fixtures/recall-completeness.json",
   "fixtures/recall-trace.json",
   "fixtures/page-conformance.json",
   "fixtures/status-matrix.json",
+  "fixtures/write-ops-outcomes.json",
+  "fixtures/write-ops-conformance.json",
   "PROVENANCE.json",
 ];
 const expectedTarFiles = [
@@ -53,18 +65,22 @@ const expectedTarFiles = [
   "package/dist/recall/trace.js",
   "package/dist/wire/json.d.ts",
   "package/dist/wire/json.js",
+  "package/dist/write/ops.d.ts",
+  "package/dist/write/ops.js",
   "package/fixtures/manifest.json",
   "package/fixtures/read-page-windows.json",
   "package/fixtures/recall-completeness.json",
   "package/fixtures/recall-trace.json",
   "package/fixtures/page-conformance.json",
   "package/fixtures/status-matrix.json",
+  "package/fixtures/write-ops-conformance.json",
+  "package/fixtures/write-ops-outcomes.json",
   "package/package.json",
 ].sort();
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.2.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.3.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");

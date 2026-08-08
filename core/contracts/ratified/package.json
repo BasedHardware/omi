@@ -1,6 +1,6 @@
 {
   "name": "@omi-core/ratified-contracts",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Reviewed Omi client/backend contract seam",
   "packageManager": "pnpm@10.0.0",
@@ -17,6 +17,10 @@
     "./recall/trace": {
       "types": "./dist/recall/trace.d.ts",
       "import": "./dist/recall/trace.js"
+    },
+    "./write/ops": {
+      "types": "./dist/write/ops.d.ts",
+      "import": "./dist/write/ops.js"
     }
   },
   "files": [
@@ -28,12 +32,16 @@
     "dist/recall/trace.d.ts",
     "dist/wire/json.js",
     "dist/wire/json.d.ts",
+    "dist/write/ops.js",
+    "dist/write/ops.d.ts",
     "fixtures/manifest.json",
     "fixtures/read-page-windows.json",
     "fixtures/recall-completeness.json",
     "fixtures/recall-trace.json",
     "fixtures/page-conformance.json",
     "fixtures/status-matrix.json",
+    "fixtures/write-ops-outcomes.json",
+    "fixtures/write-ops-conformance.json",
     "PROVENANCE.json"
   ],
   "scripts": {
