@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-superseded-windows-sync-pr-lifecycle",
+  "violated_contract": "Only the newest unmerged Windows release version-sync PR remains actionable; once a replacement PR exists, older same-repository sync PRs must stop competing for review.",
+  "canonical_prevention": "The Windows release workflow confirms its current same-repository main-targeting sync PR, then retires only strictly older exact-semver release/windows-v* PRs without deleting release state or blocking publication.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/retire_superseded_windows_sync_prs.py",
+    ".github/scripts/test_retire_superseded_windows_sync_prs.py"
+  ],
+  "evidence_prs": [
+    10729
+  ],
+  "scope_hints": [
+    ".github/workflows/desktop_windows_release.yml",
+    ".github/scripts/retire_superseded_windows_sync_prs.py"
+  ],
+  "status": "open"
+}

@@ -204,6 +204,15 @@ jobs:
           fi
 
           if [ -n "$PR_NUMBER" ]; then
+            # A newer tag makes every older version-stamp PR obsolete. Confirm
+            # the replacement PR before closing only older same-repo sync PRs;
+            # cleanup never deletes tags, releases, or branches and is non-fatal.
+            python3 .github/scripts/retire_superseded_windows_sync_prs.py \
+              --repository "$GITHUB_REPOSITORY" \
+              --current-pr "$PR_NUMBER" \
+              --current-version "$VERSION" || \
+              echo "Could not retire superseded Windows sync PRs (non-fatal)."
+
             gh pr merge "$PR_NUMBER" --merge --admin || \
             gh pr merge "$PR_NUMBER" --merge --auto || \
             gh pr merge "$PR_NUMBER" --merge || \
