@@ -236,17 +236,20 @@ extension SBOnboardingModel {
   /// The "Waiting for macOS…" button, which used to be `.disabled` for the
   /// entire poll — a user who had already granted had no way to say so.
   func recheckPermission(_ key: String) {
-    Task { [weak self] in
+    pollTasks[key]?.cancel()
+    let task: Task<Void, Never> = Task { [weak self] in
       guard let self else { return }
       await self.recheckPermission(key, refresh: { await self.refreshPermCheckOffMain($0) })
     }
+    pollTasks[key] = task
   }
 
   /// Adopt a grant that has landed. Asks macOS for nothing — the user's click
   /// already did that — so it is safe on every reactivation and every press.
   func recheckPermission(_ key: String, refresh: (String) async -> Void) async {
+    guard !Task.isCancelled, permissionKey(for: step) == key else { return }
     await refresh(key)
-    guard isGranted(key) else { return }
+    guard !Task.isCancelled, permissionKey(for: step) == key, isGranted(key) else { return }
     setPermOn(key)
     // `autoAdvanceIfCurrent` is the fence: a probe that finishes after the user
     // has moved on must redraw at most, never yank the flow forward.
@@ -276,7 +279,9 @@ extension SBOnboardingModel {
     autoState = .waiting
     return Task { [weak self] in
       let outcome = await Task.detached(priority: .userInitiated) { consent() }.value
-      guard let self, !Task.isCancelled else { return }
+      guard let self, !Task.isCancelled, self.permissionKey(for: self.step) == "automation" else {
+        return
+      }
       let status = outcome.status
       if outcome.usedAppleEventFallback {
         DesktopDiagnosticsManager.shared.recordFallback(

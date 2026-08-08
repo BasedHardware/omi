@@ -87,10 +87,6 @@ struct OmiSoundAssetLocator: Sendable {
   /// Searched in order; the first readable match wins.
   let roots: [URL]
 
-  init(roots: [URL]) {
-    self.roots = roots
-  }
-
   func url(for asset: OmiSoundAsset) -> URL? {
     for root in roots {
       let candidate = root.appendingPathComponent(asset.fileName)
@@ -258,8 +254,10 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
   private var buffers: [OmiSoundAsset: AVAudioPCMBuffer] = [:]
 
   private var isWired = false
-  /// Latched: once the engine has refused to start, stop asking on every click.
+  /// Permanent silence is reserved for an invalid graph/format. A transient engine-start failure
+  /// remains retryable after the output device or audio configuration changes.
   private var isSilenced = false
+  private var didLogEngineStartFailure = false
   private var loopingAsset: OmiSoundAsset?
   private var fadeTimer: DispatchSourceTimer?
   private var configurationObserver: NSObjectProtocol?
@@ -404,10 +402,13 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
     guard !engine.isRunning else { return true }
     do {
       try engine.start()
+      didLogEngineStartFailure = false
       return true
     } catch {
-      isSilenced = true
-      logError("onboarding sound: audio engine would not start; onboarding runs silent", error: error)
+      if !didLogEngineStartFailure {
+        didLogEngineStartFailure = true
+        logError("onboarding sound: audio engine would not start; will retry", error: error)
+      }
       return false
     }
   }

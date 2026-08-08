@@ -270,11 +270,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
   private var appLifecycleMaintenanceTask: Task<Void, Never>?
   private var didScheduleInitialSettingsSync = false
   private var initialSettingsSyncTask: Task<Void, Never>?
-
   func applicationWillFinishLaunching(_ notification: Notification) {
     // Publish the live delegate instance for callers that can't rely on
     // `NSApp.delegate as? AppDelegate` (nil under SwiftUI's delegate adaptor).
     AppDelegate.shared = self
+    OmiFontRegistration.registerAll()
     if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB

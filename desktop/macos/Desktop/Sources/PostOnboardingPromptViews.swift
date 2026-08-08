@@ -28,7 +28,12 @@ struct TryAskingPopupView: View {
   private var cues: [SBOrientationCue] {
     var setup = SBSetupSnapshot()
     setup.canHear = AudioCaptureService.checkPermission()
-    setup.listening = AssistantSettings.shared.systemAudioCaptureMode == .always ? .continuous : .meetingsOnly
+    let systemAudioMode =
+      AppState.current?.effectiveSystemAudioMode.rawValue
+      ?? AssistantSettings.shared.systemAudioCaptureMode.rawValue
+    setup.listening = SBSetupSnapshot.Listening(
+      systemAudioModeRaw: systemAudioMode,
+      canHear: setup.canHear)
     return SBPostOnboardingGuidance.orientationCues(
       openShortcutTokens: ShortcutSettings.shared.askOmiShortcut.displayTokens,
       talkShortcutTokens: ShortcutSettings.shared.pttShortcut.displayTokens,

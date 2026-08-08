@@ -231,4 +231,28 @@ final class SBPostOnboardingGuidanceTests: XCTestCase {
       SBPostOnboardingGuidance.listeningCue(for: setup).title,
       "I'll start listening when your meetings start.")
   }
+
+  func testNeverSystemAudioMeansMicrophoneOnly() {
+    XCTAssertEqual(
+      SBSetupSnapshot.Listening(systemAudioModeRaw: "never", canHear: true),
+      .microphoneOnly,
+      "Never disables system audio, not microphone capture")
+
+    var setup = SBSetupSnapshot()
+    setup.canHear = true
+    setup.listening = .microphoneOnly
+
+    let cue = SBPostOnboardingGuidance.listeningCue(for: setup)
+    XCTAssertEqual(cue.title, "I'm listening through your microphone only.")
+    XCTAssertFalse(cue.title.lowercased().contains("meeting"))
+  }
+
+  func testUnavailableMicrophoneProducesDisabledListeningCue() {
+    let setup = SBSetupSnapshot()
+
+    XCTAssertEqual(
+      SBSetupSnapshot.Listening(systemAudioModeRaw: "always", canHear: false),
+      .disabled)
+    XCTAssertEqual(SBPostOnboardingGuidance.listeningCue(for: setup).symbol, "mic.slash")
+  }
 }

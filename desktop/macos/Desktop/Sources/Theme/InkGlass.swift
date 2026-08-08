@@ -96,6 +96,59 @@
 import AppKit
 import SwiftUI
 
+/// Publishes the system Reduce Transparency setting to SwiftUI surfaces.
+///
+/// AppKit panels can observe `NSWorkspace.accessibilityDisplayOptionsDidChangeNotification` directly,
+/// but a SwiftUI modifier that reads `InkReduceTransparency.isEnabled` as a default argument only sees
+/// the value when its body is rebuilt for some unrelated reason. Keeping the notification seam in an
+/// observable object gives every already-mounted glass surface an invalidation path of its own.
+@MainActor
+package final class InkReduceTransparencyObserver: ObservableObject {
+  package static let shared = InkReduceTransparencyObserver()
+
+  @Published package private(set) var isEnabled: Bool
+
+  private let readIsEnabled: @MainActor @Sendable () -> Bool
+  private let observation: InkReduceTransparencyObservation
+
+  /// The injectable reader keeps the notification-to-publication transition hermetic in tests while
+  /// the shared instance uses the real system setting.
+  package init(
+    notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+    readIsEnabled: @escaping @MainActor @Sendable () -> Bool = { InkReduceTransparency.isEnabled }
+  ) {
+    self.readIsEnabled = readIsEnabled
+    self.isEnabled = readIsEnabled()
+    self.observation = InkReduceTransparencyObservation(notificationCenter: notificationCenter)
+    observation.token = notificationCenter.addObserver(
+      forName: InkReduceTransparency.didChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refresh() }
+    }
+  }
+
+  package func refresh() {
+    isEnabled = readIsEnabled()
+  }
+}
+
+/// Owns notification teardown outside the main-actor-isolated observer's `deinit`.
+private final class InkReduceTransparencyObservation: @unchecked Sendable {
+  let notificationCenter: NotificationCenter
+  var token: NSObjectProtocol?
+
+  init(notificationCenter: NotificationCenter) {
+    self.notificationCenter = notificationCenter
+  }
+
+  deinit {
+    guard let token else { return }
+    notificationCenter.removeObserver(token)
+  }
+}
+
 // MARK: - The values
 
 /// Everything the glass is made of, as values rather than as statements inside a view.
@@ -668,21 +721,36 @@ package struct InkGlassSurface: NSViewRepresentable {
   }
 }
 
-extension View {
-  /// Wears the glass: material, scrim, corner, faint edge, ambient shadow — and the light appearance,
-  /// forced into the environment so `Ink`'s dynamic colours resolve dark on it.
-  ///
-  /// - Parameter reduceTransparency: passed in rather than read, for the same reason
-  ///   `InkGlassView.apply(reduceTransparency:)` takes it — see that method.
+/// Applies the SwiftUI half of the glass and observes accessibility changes while it is mounted.
+package struct InkGlassPanelModifier: ViewModifier {
+  let cornerRadius: CGFloat
+  let shadow: InkGlassShadow?
+  let requestedReduceTransparency: Bool?
+  @ObservedObject private var reduceTransparencyObserver: InkReduceTransparencyObserver
+
+  package init(
+    cornerRadius: CGFloat,
+    shadow: InkGlassShadow?,
+    reduceTransparency: Bool? = nil,
+    observer: InkReduceTransparencyObserver = .shared
+  ) {
+    self.cornerRadius = cornerRadius
+    self.shadow = shadow
+    self.requestedReduceTransparency = reduceTransparency
+    _reduceTransparencyObserver = ObservedObject(wrappedValue: observer)
+  }
+
   @ViewBuilder
-  package func inkGlassPanel(
-    cornerRadius: CGFloat = InkGlass.cornerRadius,
-    shadow: InkGlassShadow? = .ambient,
-    reduceTransparency: Bool = InkReduceTransparency.isEnabled
-  ) -> some View {
+  package func body(content: Content) -> some View {
+    let reduceTransparency = requestedReduceTransparency ?? reduceTransparencyObserver.isEnabled
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-    self
+
+    // Clip the caller's returned tree before adding the glass background. This keeps content and
+    // overlays attached before `inkGlassPanel` inside the panel while leaving the panel's shadow — and
+    // overlays attached after this modifier, such as an outer glow — outside that clip.
+    content
       .environment(\.colorScheme, .light)
+      .clipShape(shape)
       .background {
         ZStack(alignment: .top) {
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
@@ -717,5 +785,25 @@ extension View {
           radius: (shadow?.radius ?? 0) / 2,
           y: -(shadow?.offsetY ?? 0))
       }
+  }
+}
+
+extension View {
+  /// Wears the glass: material, scrim, corner, faint edge, ambient shadow — and the light appearance,
+  /// forced into the environment so `Ink`'s dynamic colours resolve dark on it.
+  ///
+  /// - Parameter reduceTransparency: passed in rather than read, for the same reason
+  ///   `InkGlassView.apply(reduceTransparency:)` takes it — see that method.
+  @ViewBuilder
+  package func inkGlassPanel(
+    cornerRadius: CGFloat = InkGlass.cornerRadius,
+    shadow: InkGlassShadow? = .ambient,
+    reduceTransparency: Bool? = nil
+  ) -> some View {
+    modifier(
+      InkGlassPanelModifier(
+        cornerRadius: cornerRadius,
+        shadow: shadow,
+        reduceTransparency: reduceTransparency))
   }
 }

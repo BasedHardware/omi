@@ -20,7 +20,7 @@ enum HomePalette {
   static let secondary = Ink.secondary
   static let muted = Ink.secondary
   static let faint = Ink.secondary
-  static let hairline = Ink.separator
+  static let hairline = Ink.hairline
   static let green = Ink.listeningGreen
 
   /// Home's emphasis colour — what a hover, a focus ring, or a lit-up glyph moves *toward*.

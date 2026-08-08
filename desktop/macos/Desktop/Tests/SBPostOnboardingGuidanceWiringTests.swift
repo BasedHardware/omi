@@ -91,6 +91,35 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(setup.connectedAgentNames.isEmpty)
   }
 
+  func testSetupSnapshotUsesMicrophoneOnlyForNeverSystemAudio() {
+    let model = makeModel()
+    appState?.hasMicrophonePermission = true
+    let previousMode = AssistantSettings.shared.systemAudioCaptureMode
+    AssistantSettings.shared.systemAudioCaptureMode = .never
+    defer { AssistantSettings.shared.systemAudioCaptureMode = previousMode }
+
+    XCTAssertEqual(model.postOnboardingSetup.listening, .microphoneOnly)
+  }
+
+  func testSetupSnapshotRejectsStaleOrBrokenScreenCapture() {
+    let model = makeModel()
+    appState?.hasScreenRecordingPermission = true
+    model.scrState = .on
+
+    XCTAssertTrue(model.postOnboardingSetup.canSeeScreen)
+
+    appState?.isScreenRecordingStale = true
+    XCTAssertFalse(
+      model.postOnboardingSetup.canSeeScreen,
+      "A stale TCC grant must not unlock a screen question")
+
+    appState?.isScreenRecordingStale = false
+    appState?.isScreenCaptureKitBroken = true
+    XCTAssertFalse(
+      model.postOnboardingSetup.canSeeScreen,
+      "A broken ScreenCaptureKit path must not unlock a screen question")
+  }
+
   // MARK: - Both exit paths produce the guidance
 
   func testSkipSavesSetupAwareGuidanceAndArmsTheDashboardSurfaces() {

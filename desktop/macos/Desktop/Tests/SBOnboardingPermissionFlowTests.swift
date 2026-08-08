@@ -26,6 +26,38 @@ private final class ProbeRecorder: @unchecked Sendable {
   }
 }
 
+/// Holds a detached probe open while the main-actor state changes. This makes
+/// the Automation -600 merge test deterministic without a wall-clock sleep.
+private final class BlockingProbeGate: @unchecked Sendable {
+  let release = DispatchSemaphore(value: 0)
+  private let lock = NSLock()
+  private var didEnter = false
+  private var enteredContinuation: CheckedContinuation<Void, Never>?
+
+  func waitUntilReleased() {
+    lock.lock()
+    didEnter = true
+    let continuation = enteredContinuation
+    enteredContinuation = nil
+    lock.unlock()
+    continuation?.resume()
+    release.wait()
+  }
+
+  func waitUntilEntered() async {
+    await withCheckedContinuation { continuation in
+      lock.lock()
+      if didEnter {
+        lock.unlock()
+        continuation.resume()
+      } else {
+        enteredContinuation = continuation
+        lock.unlock()
+      }
+    }
+  }
+}
+
 /// Mirrors `SBOnboardingModel.resumeStepKey`, which is main-actor isolated and so
 /// unreachable from XCTest's nonisolated `setUp`/`tearDown`.
 private let resumeStepDefaultsKey = "sbOnboardingResumeStep"
@@ -196,7 +228,7 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 
     XCTAssertEqual(
       model.step, .automation, "a late answer for an abandoned step must not advance the flow")
-    XCTAssertEqual(model.micState, .on, "reflecting the grant is still correct")
+    XCTAssertEqual(model.micState, .ask, "an abandoned step must not adopt a late row result")
   }
 
   func testReactivationIgnoresStepsThatGateOnNoPermission() {
@@ -212,6 +244,7 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 
   func testAutomationConsentRunsOffTheMainThreadAndAdoptsItsOwnAnswer() async {
     let model = makeModel()
+    model.step = .automation
     model.appState.hasAutomationPermission = false
     let recorder = ProbeRecorder()
 
@@ -240,6 +273,7 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 
   func testDeniedAutomationOpensSettingsInsteadOfRearmingASpentPrompt() async {
     let model = makeModel()
+    model.step = .automation
     model.appState.hasAutomationPermission = false
     var openedSettings = false
 
@@ -257,6 +291,7 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 
   func testUndeterminedTccRequestFallsBackToTheRawAppleEventSend() async {
     let model = makeModel()
+    model.step = .automation
     model.appState.hasAutomationPermission = false
 
     await model.beginAutomationRequest(
@@ -275,6 +310,7 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
 
   func testAutomationRequestThatNeverReachedSystemEventsPreservesTheKnownGrant() async {
     let model = makeModel()
+    model.step = .automation
     model.appState.hasAutomationPermission = true
     var openedSettings = false
 
@@ -288,6 +324,29 @@ final class SBOnboardingPermissionFlowTests: XCTestCase {
       "a target that never started is not evidence the permission was revoked")
     XCTAssertEqual(model.autoState, .on)
     XCTAssertFalse(openedSettings, "nobody was asked anything, so nothing was denied")
+  }
+
+  func testAbandonedAutomationRequestCannotOpenSettingsOrWriteItsRow() async {
+    let model = makeModel()
+    model.step = .automation
+    let gate = BlockingProbeGate()
+    var openedSettings = false
+
+    let request = model.beginAutomationRequest(
+      consent: {
+        gate.waitUntilReleased()
+        return SBAutomationConsent.Outcome(status: -1743)
+      },
+      openSettings: { openedSettings = true }
+    )
+
+    await gate.waitUntilEntered()
+    model.step = .shortcutOpen
+    gate.release.signal()
+    await request.value
+
+    XCTAssertFalse(openedSettings, "an abandoned permission step must not steal focus with Settings")
+    XCTAssertEqual(model.autoState, .waiting, "an abandoned request must not write its late row result")
   }
 }
 
@@ -328,6 +387,28 @@ final class AppStatePermissionProbeTests: XCTestCase {
     })
 
     XCTAssertFalse(recorder.ranOnMainThread)
+  }
+
+  func testAutomationProcNotFoundPreservesTheLatestMainActorGrantAfterAwait() async {
+    let appState = AppState()
+    appState.hasAutomationPermission = false
+    let gate = BlockingProbeGate()
+
+    let refresh = Task {
+      await appState.refreshAutomationPermission(query: {
+        gate.waitUntilReleased()
+        return -600
+      })
+    }
+
+    await gate.waitUntilEntered()
+    appState.hasAutomationPermission = true
+    gate.release.signal()
+
+    let granted = await refresh.value
+    XCTAssertTrue(granted, "-600 must merge with the current grant, not the pre-await snapshot")
+    XCTAssertTrue(appState.hasAutomationPermission)
+    XCTAssertEqual(appState.automationPermissionError, -600)
   }
 
   // MARK: - Defect 6: expensive probes leave the main actor
@@ -395,5 +476,21 @@ final class AppStatePermissionProbeTests: XCTestCase {
       AccessibilityProbeSignals(tccTrusted: false, eventTapWorks: false, axCallsWork: false))
     XCTAssertFalse(projection.hasPermission)
     XCTAssertFalse(projection.isBroken, "not granted is not the same as broken")
+  }
+
+  func testFirstUnaskedScanAwaitsItsCurrentOffMainProbeBeforeSkipping() async {
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    var probedKeys: [String] = []
+
+    let target = await model.firstUnaskedStepAwaitingCurrentProbes(from: .automation) { key in
+      probedKeys.append(key)
+      await Task.yield()
+      model.appState.hasAutomationPermission = true
+    }
+
+    XCTAssertEqual(probedKeys, ["automation"])
+    XCTAssertEqual(target, .shortcutOpen)
+    XCTAssertEqual(model.autoState, .on)
   }
 }

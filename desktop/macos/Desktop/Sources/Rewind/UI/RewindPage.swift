@@ -1061,7 +1061,7 @@ struct RewindPage: View {
         } label: {
           Text("Rebuild Index")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.primary)
+            .foregroundColor(PageGlass.primaryActionLabel)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xxs)
             .background(Ink.primary)
@@ -1154,7 +1154,7 @@ struct RewindPage: View {
           Text("Retry")
         }
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.primary)
+        .foregroundColor(PageGlass.primaryActionLabel)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
         .background(Ink.primary)

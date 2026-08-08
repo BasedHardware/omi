@@ -1,5 +1,6 @@
 import CoreText
 import Foundation
+import OmiTheme
 
 /// Registers the bundled display and UI faces with CoreText at launch so the design
 /// systems resolve them by family name: Geist / Geist Mono (`Font.geist` /
@@ -47,5 +48,9 @@ enum OmiFontRegistration {
         NSLog("OmiFontRegistration: \(url.lastPathComponent) not registered (\(message))")
       }
     }
+
+    // A launch seam may have resolved a role before CoreText registration completed. Never retain
+    // that system-font fallback once the bundled display faces are available.
+    InkFonts.invalidate()
   }
 }

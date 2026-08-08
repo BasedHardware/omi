@@ -203,7 +203,7 @@ final class OmiCinematicDirectorTests: XCTestCase {
     XCTAssertEqual(cues.plays.last, .chime)
   }
 
-  func testTheBedIsWarmedStartedOnceAndFadedOutRatherThanCut() async {
+  func testTheBedIsWarmedStartedOnceAndCarriesIntoTheCompletedHandoff() async {
     let cues = RecordingCues()
     let director = OmiCinematicDirector(timing: .standard, cues: cues, sleep: Self.instantSleep)
 
@@ -212,7 +212,7 @@ final class OmiCinematicDirectorTests: XCTestCase {
 
     XCTAssertEqual(cues.events.first, .prepare, "decoders are warmed before the first cue")
     XCTAssertEqual(cues.events.filter { $0 == .startMusic }.count, 1)
-    XCTAssertEqual(cues.stopFades, [OmiCinematicDirector.completedFadeOut])
+    XCTAssertTrue(cues.stopFades.isEmpty, "completed onboarding keeps the same ambient loop alive")
   }
 
   // MARK: - Interruption
@@ -228,9 +228,7 @@ final class OmiCinematicDirectorTests: XCTestCase {
 
     XCTAssertEqual(ended, .skipped(.prompt))
     XCTAssertEqual(cues.stopFades, [OmiCinematicDirector.interruptedFadeOut])
-    XCTAssertLessThan(
-      OmiCinematicDirector.interruptedFadeOut, OmiCinematicDirector.completedFadeOut,
-      "an abort should feel like a stop, a completed run like an ending")
+    XCTAssertGreaterThan(OmiCinematicDirector.interruptedFadeOut, 0, "an abort fades rather than cuts")
     // No beat after the one that was interrupted.
     XCTAssertEqual(director.visitedBeats.last, .prompt)
   }
@@ -264,7 +262,7 @@ final class OmiCinematicDirectorTests: XCTestCase {
 
     director.skip()
     XCTAssertEqual(handoffs, 1)
-    XCTAssertEqual(cues.stopFades, [OmiCinematicDirector.completedFadeOut])
+    XCTAssertTrue(cues.stopFades.isEmpty)
   }
 
   func testStartIsIdempotent() async {

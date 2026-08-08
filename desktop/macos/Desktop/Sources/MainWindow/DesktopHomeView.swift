@@ -438,9 +438,6 @@ struct DesktopHomeView: View {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
-      // Register Geist/Geist Mono for the sign-in + conversational onboarding surfaces.
-      // (Kept out of OmiApp to respect the product-file line-count ratchet.)
-      OmiFontRegistration.registerAll()
       // Drive the notch "moments" (live receipts + conversation-end) off real state.
       NotchMomentsCoordinator.shared.start(appState: appState)
       // Force dark appearance and disable minSize computation on NSHostingView.

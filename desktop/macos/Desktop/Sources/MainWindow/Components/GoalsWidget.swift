@@ -707,7 +707,7 @@ struct GoalEditSheet: View {
       .padding(OmiSpacing.xl)
     }
     .frame(width: 400, height: isNewGoal ? 320 : 420)
-    .background(Ink.rowFill)
+    .background(Ink.surface)
     .onAppear {
       if let goal = goal {
         title = goal.title
@@ -872,7 +872,7 @@ struct GoalInsightSheet: View {
       .padding(OmiSpacing.xl)
     }
     .frame(width: 400, height: 380)
-    .background(Ink.rowFill)
+    .background(Ink.surface)
     .onAppear {
       loadInsight()
     }

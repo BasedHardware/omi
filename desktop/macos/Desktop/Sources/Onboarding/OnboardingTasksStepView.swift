@@ -102,17 +102,20 @@ struct OnboardingTasksStepView: View {
 
         // Task cards — real onboarding tasks, or the placeholder when none exist yet
         if showTasks {
-          VStack(spacing: OmiSpacing.sm) {
-            ForEach(Array(displayTasks.enumerated()), id: \.offset) { index, task in
-              mockTaskRow(title: task.0, subtitle: task.1, checked: task.2)
-                .transition(
-                  .asymmetric(
-                    insertion: .move(edge: .bottom).combined(with: .opacity),
-                    removal: .opacity
-                  ))
+          ScrollView {
+            LazyVStack(spacing: OmiSpacing.sm) {
+              ForEach(Array(displayTasks.enumerated()), id: \.offset) { index, task in
+                mockTaskRow(title: task.0, subtitle: task.1, checked: task.2)
+                  .transition(
+                    .asymmetric(
+                      insertion: .move(edge: .bottom).combined(with: .opacity),
+                      removal: .opacity
+                    ))
+              }
             }
           }
-          .frame(maxWidth: 420)
+          .scrollIndicators(.never)
+          .frame(maxWidth: 420, maxHeight: 180)
         }
       }
       .padding(.horizontal, OmiSpacing.page)

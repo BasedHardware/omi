@@ -75,6 +75,11 @@ final class GlassContentChromeTests: XCTestCase {
     XCTAssertEqual(PageGlass.starred, PageGlass.warning)
   }
 
+  func testPrimaryFilledActionsUseTheInverseSurfaceInk() {
+    XCTAssertEqual(PageGlass.primaryActionLabel, Ink.surface)
+    XCTAssertNotEqual(PageGlass.primaryActionLabel, Ink.primary)
+  }
+
   func testSpeakerTintsAreWashesRatherThanTheOldOpaqueNearBlacks() {
     // The dark chrome's six speaker colours were hand-mixed near-blacks that were only ever
     // distinguishable because the page behind them was `0x0F0F0F`. On glass a bubble has to stay a

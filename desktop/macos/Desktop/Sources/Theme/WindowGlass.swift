@@ -94,10 +94,13 @@ package enum WindowGlass {
     window.hasShadow = drawsSystemShadow(kind)
 
     guard hasTitlebar(kind) else { return }
-    // `.fullSizeContentView` — which the caller sets, because it is part of what the window *is* — plus
-    // a transparent title bar is what lets the glass run edge to edge underneath it. The separator is a
-    // hairline drawn straight across the panel and belongs to a window with a toolbar; on glass it
-    // reads as a crack.
+    // A transparent title bar only extends the content beneath the title-bar band when the window
+    // carries this style bit. Enforce the pairing here so a caller that constructs a plain `.titled`
+    // window cannot silently get a transparent title bar with content still inset below it.
+    window.styleMask.insert(.fullSizeContentView)
+    // `.fullSizeContentView` plus a transparent title bar is what lets the glass run edge to edge
+    // underneath it. The separator is a hairline drawn straight across the panel and belongs to a
+    // window with a toolbar; on glass it reads as a crack.
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
     window.titlebarSeparatorStyle = .none

@@ -40,7 +40,7 @@ class FeedbackWindow {
     // inside this sheet resolves `labelColor` against the machine's appearance and renders near-white
     // type on the near-white panel.
     WindowGlass.wear(newWindow, as: .titled)
-    newWindow.setContentSize(NSSize(width: 400, height: 300))
+    newWindow.setContentSize(NSSize(width: 400, height: 340))
     newWindow.center()
     newWindow.makeKeyAndOrderFront(nil)
     newWindow.level = .floating
@@ -147,7 +147,7 @@ struct FeedbackView: View {
     .padding(OmiSpacing.xl)
     // Clear of the traffic lights, which `.fullSizeContentView` puts over the content.
     .padding(.top, OmiSpacing.lg)
-    .frame(width: 400, height: 300)
+    .frame(width: 400, height: 340)
     // The sheet paints no ground of its own; the glass owns it, full bleed because the window frame
     // already carries the corner and the shadow.
     .inkGlassPanel(cornerRadius: 0, shadow: nil)

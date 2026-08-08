@@ -10,13 +10,22 @@ extension SBOnboardingModel {
   /// first are cross-process, so the click dispatches onto the model's actor
   /// rather than blocking the button.
   func requestPerm(_ key: String) {
-    Task { [weak self] in await self?.performPermissionRequest(key) }
+    // The same task owns the preflight and the request. Leaving the row can
+    // cancel it through `pollTasks`, and the step guards below cover callers
+    // that navigate without going through the normal teardown path.
+    pollTasks[key]?.cancel()
+    let task: Task<Void, Never> = Task { [weak self] in
+      guard let self else { return }
+      await self.performPermissionRequest(key)
+    }
+    pollTasks[key] = task
   }
 
   func performPermissionRequest(_ key: String) async {
     // The user may have changed a grant in System Settings while this step was
     // onscreen. Re-check it before opening another pane or asking macOS again.
     await refreshPermCheckOffMain(key)
+    guard !Task.isCancelled, permissionKey(for: step) == key else { return }
     if isGranted(key) {
       setPermOn(key)
       autoAdvanceIfCurrent(key)
@@ -59,7 +68,12 @@ extension SBOnboardingModel {
       appState.triggerAccessibilityPermission()
       pollPermission(key)
     case "automation":
-      beginAutomationRequest()
+      let request = beginAutomationRequest()
+      await withTaskCancellationHandler {
+        await request.value
+      } onCancel: {
+        request.cancel()
+      }
     default: break
     }
   }
@@ -90,9 +104,9 @@ extension SBOnboardingModel {
     pollTasks[key] = Task { [weak self] in
       for _ in 0..<40 {  // ~20s
         try? await Task.sleep(nanoseconds: 500_000_000)
-        guard let self, !Task.isCancelled else { return }
+        guard let self, !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
         await self.refreshPermCheckOffMain(key)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
         if self.isGranted(key) {
           self.setPermOn(key)
           // Auto-advance once the grant lands — the user shouldn't have to click
@@ -100,7 +114,7 @@ extension SBOnboardingModel {
           // advance if they're still on this permission's step (a late poll for a
           // step already left must never yank the flow forward).
           try? await Task.sleep(nanoseconds: 600_000_000)
-          guard !Task.isCancelled else { return }
+          guard !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
           self.autoAdvanceIfCurrent(key)
           return
         }
@@ -110,7 +124,7 @@ extension SBOnboardingModel {
       // authenticate → toggle), and a grant made in that window is picked up by
       // `recheckActivePermission()` when the user switches back to Omi. Re-arm
       // the Allow button so the row is never stranded on "macOS…".
-      guard let self, !Task.isCancelled else { return }
+      guard let self, !Task.isCancelled, self.permissionKey(for: self.step) == key else { return }
       self.resetPermToAsk(key)
     }
   }
@@ -146,9 +160,10 @@ extension SBOnboardingModel {
             return
           }
 
+          guard self.step == .systemAudio else { return }
           self.setPermOn("system_audio")
           try? await Task.sleep(nanoseconds: 600_000_000)
-          guard !Task.isCancelled else { return }
+          guard !Task.isCancelled, self.step == .systemAudio else { return }
           self.autoAdvanceIfCurrent("system_audio")
           return
         }
@@ -156,7 +171,7 @@ extension SBOnboardingModel {
         try? await Task.sleep(nanoseconds: 500_000_000)
       }
 
-      guard let self, !Task.isCancelled else { return }
+      guard let self, !Task.isCancelled, self.step == .systemAudio else { return }
       self.resetPermToAsk("system_audio")
     }
   }
@@ -183,15 +198,21 @@ extension SBOnboardingModel {
   /// grants are folded in live rather than from a snapshot, so a reinstall
   /// cannot leave a "Granted" row above a step that still wants an answer.
   func precheckPerm(_ key: String) {
-    Task { [weak self] in await self?.precheckPermOffMain(key) }
+    pollTasks[key]?.cancel()
+    let task: Task<Void, Never> = Task { [weak self] in
+      guard let self else { return }
+      await self.precheckPermOffMain(key)
+    }
+    pollTasks[key] = task
   }
 
   func precheckPermOffMain(_ key: String) async {
+    guard !Task.isCancelled, permissionKey(for: step) == key else { return }
     await refreshPermCheckOffMain(key)
     // The probe can outlive the step that started it (Automation's Apple Event
     // lookup takes a round trip). Writing a permission row for a page the user
     // already left is how a late answer used to land on the wrong step.
-    guard permissionKey(for: step) == key else { return }
+    guard !Task.isCancelled, permissionKey(for: step) == key else { return }
     if isGranted(key) {
       setPermOn(key)
     } else if key == "system_audio", appState.hasScreenRecordingPermission,
@@ -377,15 +398,48 @@ extension SBOnboardingModel {
     }
   }
 
-  /// Starting at `target`, skip past any permission step whose permission is
-  /// already granted — so the user is never asked for something they've already
-  /// given (matches the legacy onboarding's live permission detection). Refreshes
-  /// each permission's TCC state before deciding, and reflects the grant so the
-  /// row is already ✓ if we ever land on it. Returns the first step to actually ask.
+  /// Starting at `target`, skip past any permission step whose cached permission
+  /// is already granted. The synchronous compatibility path is intentionally
+  /// limited to the state already available on the main actor; callers that
+  /// need a current TCC answer must use `firstUnaskedStepAwaitingCurrentProbes`.
   func firstUnaskedStep(from target: Step) -> Step {
     var step = target
     while let key = permissionKey(for: step) {
-      refreshPermCheck(key)
+      // These probes are local/cheap. The cross-process probes intentionally
+      // stay out of this synchronous compatibility path and are awaited by the
+      // async entry point below.
+      if ["microphone", "system_audio", "screen_recording"].contains(key) {
+        refreshPermCheck(key)
+      }
+      // A pre-granted FDA permission must still visit Files once so this flow
+      // performs the required scan and aggregate-memory formation.
+      if step == .files, isGranted(key), !localFileProfileState.isTerminal {
+        setPermOn(key)
+        break
+      }
+      guard isGranted(key), let next = Step(rawValue: step.rawValue + 1) else { break }
+      setPermOn(key)
+      step = next
+    }
+    return step
+  }
+
+  /// First-unasked scan for entry points that need a current permission answer.
+  /// Every TCC/AX/Apple Events probe is awaited through the off-main refresh
+  /// seam, so this scan never blocks the main actor while deciding where to land.
+  func firstUnaskedStepAwaitingCurrentProbes(
+    from target: Step,
+    refresh: ((String) async -> Void)? = nil
+  ) async -> Step {
+    var step = target
+    while let key = permissionKey(for: step) {
+      if let refresh {
+        await refresh(key)
+      } else {
+        await refreshPermCheckOffMain(key)
+      }
+      guard !Task.isCancelled else { return step }
+
       // A pre-granted FDA permission must still visit Files once so this flow
       // performs the required scan and aggregate-memory formation.
       if step == .files, isGranted(key), !localFileProfileState.isTerminal {

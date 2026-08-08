@@ -81,7 +81,6 @@ final class OmiCinematicDirector: ObservableObject {
 
   /// How the bed leaves. Longer than `OmiOnboardingMusic.defaultFadeOut` when the run completed,
   /// because then it is dissolving into onboarding rather than being cut short.
-  static let completedFadeOut: TimeInterval = 2.0
   static let interruptedFadeOut: TimeInterval = OmiOnboardingMusic.defaultFadeOut
 
   /// Every fourth character. At ~38 ms per character that is a keystroke every 150 ms — texture,
@@ -379,9 +378,11 @@ final class OmiCinematicDirector: ObservableObject {
     watchdogTask?.cancel()
     watchdogTask = nil
 
-    // Never a cut, on any path. An abort mid-beat fades faster than a completed run, which is the
-    // difference between "stop" and "that's the end of it".
-    cues.stopMusic(fadeOut: end.wasInterrupted ? Self.interruptedFadeOut : Self.completedFadeOut)
+    // An interrupted intro must fade out cleanly. A completed intro hands the same ambient bed to
+    // chat onboarding, whose idempotent start call keeps it playing without restarting the loop.
+    if end.wasInterrupted {
+      cues.stopMusic(fadeOut: Self.interruptedFadeOut)
+    }
 
     log(
       "cinematic ended \(end.wasInterrupted ? "early" : "complete") after "

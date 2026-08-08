@@ -362,9 +362,12 @@ extension AppState {
   func refreshAutomationPermission(
     query: @escaping @Sendable () -> OSStatus = { AppState.queryAutomationPermissionStatus() }
   ) async -> Bool {
-    let previousValue = hasAutomationPermission
     let status = await Task.detached(priority: .userInitiated) { query() }.value
-    return applyAutomationPermissionStatus(status, previousPermission: previousValue)
+    // Read the grant only after the detached probe returns. A user can grant
+    // Automation while the probe is in flight; preserving the value captured
+    // before the await would overwrite that newer main-actor state when the
+    // result is -600 (System Events was not running).
+    return applyAutomationPermissionStatus(status)
   }
 
   /// Project one observed `OSStatus` onto the shared automation permission
@@ -436,7 +439,12 @@ extension AppState {
   /// AXIsProcessTrusted() can return stale data after macOS updates or app re-signs,
   /// so we also do a functional AX test to detect the "broken" state.
   func checkAccessibilityPermission() {
-    applyAccessibilitySignals(Self.probeAccessibilitySignals(targets: accessibilityProbeTargets()))
+    // AXUIElement/CGEvent calls can synchronously cross the WindowServer. Keep
+    // the fire-and-forget API non-blocking for legacy callers; callers that
+    // need the answer must await `refreshAccessibilityPermission()`.
+    Task { [weak self] in
+      _ = await self?.refreshAccessibilityPermission()
+    }
   }
 
   /// Off-main accessibility refresh, for callers that probe repeatedly.
@@ -452,16 +460,20 @@ extension AppState {
   func refreshAccessibilityPermission(
     probe: (@Sendable () -> AccessibilityProbeSignals)? = nil
   ) async -> Bool {
-    let targets = accessibilityProbeTargets()
-    let resolved = probe ?? { Self.probeAccessibilitySignals(targets: targets) }
-    let signals = await Task.detached(priority: .userInitiated) { resolved() }.value
+    let signals = await Task.detached(priority: .userInitiated) {
+      let resolved =
+        probe ?? {
+          Self.probeAccessibilitySignals(targets: Self.accessibilityProbeTargets())
+        }
+      return resolved()
+    }.value
     applyAccessibilitySignals(signals)
     return hasAccessibilityPermission
   }
 
   /// AppKit lookups the probe needs. Cheap, cached by AppKit, and main-actor
   /// bound — so they are read here and handed to the probe as plain values.
-  func accessibilityProbeTargets() -> AccessibilityProbeTargets {
+  nonisolated static func accessibilityProbeTargets() -> AccessibilityProbeTargets {
     let frontmost = NSWorkspace.shared.frontmostApplication
     let finder = NSRunningApplication.runningApplications(
       withBundleIdentifier: "com.apple.finder"
@@ -540,7 +552,12 @@ extension AppState {
   /// The TCC database query is unreliable on macOS 15+ (schema changes, ad-hoc signing),
   /// so we probe actual protected directories instead.
   func checkFullDiskAccess() {
-    applyFullDiskAccess(Self.probeFullDiskAccessGranted())
+    // The file-system probe can synchronously cross tccd. Keep this API
+    // compatible for passive callers without making their actor pay that
+    // round-trip; callers that need the answer must await the refresh below.
+    Task { [weak self] in
+      _ = await self?.refreshFullDiskAccess()
+    }
   }
 
   /// Off-main Full Disk Access refresh. `contentsOfDirectory` on a

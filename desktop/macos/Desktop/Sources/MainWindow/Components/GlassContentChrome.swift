@@ -54,6 +54,12 @@ enum PageGlass {
   /// to pass under one legibly.
   static let bottomFade: CGFloat = 30
 
+  /// Foreground for a control filled with `Ink.primary`.
+  ///
+  /// A primary-on-primary pairing erases the control's label. Keep the inverse ink named once so
+  /// custom page actions cannot drift away from the shared button-style contrast contract.
+  static let primaryActionLabel = Ink.surface
+
   // The two states `Ink` deliberately has no token for. `Ink` carries `errorRed` and
   // `listeningGreen` because those are the only two states the *shell* raises its voice for; a
   // content page also has "overdue / needs attention" and "starred", which are one step below an

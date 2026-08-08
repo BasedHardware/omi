@@ -43,6 +43,11 @@ final class OnboardingGlassChromeTests: XCTestCase {
     "Onboarding/OnboardingGlassChrome.swift",
   ]
 
+  /// The signed-in onboarding flow mounted by `DesktopHomeView`. `OnboardingView` is retained for
+  /// export previews and already owns the legacy `OnboardingProgressBar`; this is the production
+  /// current-step container that must consume the shared glass transition and reserved band.
+  private static let liveOnboardingSource = "Onboarding/SecondBrain/SBOnboardingView.swift"
+
   // MARK: - Behaviour: the progress band
 
   /// The current dot outranks the rest, and the rest are a *fill* rather than a rung of the ladder.
@@ -107,6 +112,25 @@ final class OnboardingGlassChromeTests: XCTestCase {
       XCTAssertNotEqual(OnboardingGlass.stepOffset(inHeight: 900), 0)
       XCTAssertNotNil(OnboardingGlass.stepAnimation)
     }
+  }
+
+  /// The shared helpers must be consumed by the live Second Brain panel. Keeping the band as a
+  /// sibling of its scroll view reserves the tested strip without adding a second progress control to
+  /// the legacy export-only wizard.
+  func testLiveOnboardingConsumesTheSharedStepChrome() throws {
+    let body = try code(Self.liveOnboardingSource)
+    XCTAssertTrue(
+      body.contains("panel(in: panelSize)"),
+      "the live onboarding view must pass its actual fixed panel height to the step container")
+    XCTAssertTrue(
+      body.contains(".transition(.onboardingStep(in: panelSize))"),
+      "the current step must consume the height-relative transition")
+    XCTAssertTrue(
+      body.contains("OnboardingProgressBand("),
+      "the live current-step container must consume the fixed progress reservation")
+    XCTAssertFalse(
+      body.contains("Color.clear.frame(height: 14)"),
+      "the old ad hoc footer is not the tested fixed progress band")
   }
 
   /// One corner for every panel in this system — a first-run card and the window it floats in must

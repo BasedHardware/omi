@@ -16,13 +16,14 @@ import SwiftUI
 struct FloatingBackgroundModifier: ViewModifier {
   let cornerRadius: CGFloat
   @ObservedObject private var settings = ShortcutSettings.shared
+  @ObservedObject private var reduceTransparency = InkReduceTransparencyObserver.shared
 
   func body(content: Content) -> some View {
     // The user's own opt-out, honoured through the same seam Reduce Transparency uses rather than as
     // a second background branch: "solid" and "the accessibility setting is on" are the same request.
     content.notchGlassPanel(
       cornerRadius: cornerRadius,
-      reduceTransparency: settings.solidBackground || InkReduceTransparency.isEnabled)
+      reduceTransparency: settings.solidBackground || reduceTransparency.isEnabled)
   }
 }
 

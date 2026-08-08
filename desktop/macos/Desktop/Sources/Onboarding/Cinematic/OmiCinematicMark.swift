@@ -281,7 +281,8 @@ struct OmiCinematicVessel: View {
   /// before a letter of it is legible.
   private func wordmark(_ m: OmiCinematicVesselMetrics) -> some View {
     Text(verbatim: "omi")
-      .geist(size: 40, weight: .semibold, tracking: 1.5)
+      .font(.openRunde(40, .semiBold))
+      .tracking(1.5)
       .foregroundStyle(OmiCinematicPalette.ink)
       .opacity(draw.wordmark * m.wordmarkOpacity)
       // Resolves *out* of a blur rather than out of nothing: at this size a plain opacity ramp
@@ -304,7 +305,7 @@ struct OmiCinematicVessel: View {
   private func questionField(_ m: OmiCinematicVesselMetrics) -> some View {
     HStack(alignment: .center, spacing: 3) {
       Text(verbatim: question)
-        .geist(size: OmiCinematicCaret.questionPointSize, weight: .regular)
+        .font(.openRunde(OmiCinematicCaret.questionPointSize))
         .foregroundStyle(OmiCinematicPalette.ink)
         .fixedSize()
       OmiCinematicCaret(visible: showsCaret, animated: animatesCaret)

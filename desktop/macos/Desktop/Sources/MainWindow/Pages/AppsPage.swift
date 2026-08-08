@@ -3096,13 +3096,13 @@ struct AddReviewSheet: View {
               if isSubmitting {
                 ProgressView()
                   .scaleEffect(0.8)
-                  .tint(Ink.primary)
+                  .tint(PageGlass.primaryActionLabel)
               } else {
                 Text(existingReview != nil ? "Update Review" : "Submit Review")
                   .scaledFont(size: OmiType.body, weight: .semibold)
               }
             }
-            .foregroundColor(Ink.primary)
+            .foregroundColor(PageGlass.primaryActionLabel)
             .frame(maxWidth: .infinity)
             .frame(height: 44)
             .background(isFormValid ? Ink.primary : Ink.primary.opacity(0.45))

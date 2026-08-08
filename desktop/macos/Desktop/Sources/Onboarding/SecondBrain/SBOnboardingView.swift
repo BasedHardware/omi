@@ -62,7 +62,7 @@ struct SBOnboardingView: View {
   var body: some View {
     GeometryReader { geometry in
       let panelSize = SBOnboardingPanelLayout.size(in: geometry.size)
-      panel
+      panel(in: panelSize)
         .frame(width: panelSize.width, height: panelSize.height)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -112,7 +112,7 @@ struct SBOnboardingView: View {
     .onDisappear { model.disarmShortcutSummon() }
   }
 
-  private var panel: some View {
+  private func panel(in panelSize: CGSize) -> some View {
     VStack(spacing: 0) {
       ScrollViewReader { proxy in
         ScrollView {
@@ -130,7 +130,7 @@ struct SBOnboardingView: View {
               }
             }
             if model.showWidget {
-              widget.padding(.leading, 26).padding(.top, 2)
+              currentStepContainer(in: panelSize)
                 .id("widget")
             }
             Color.clear.frame(height: 4).id("bottom")
@@ -159,15 +159,31 @@ struct SBOnboardingView: View {
         // card's lower edge and the step reads as having no way forward.
         .onChange(of: model.widgetShape) { _, _ in scrollDown(proxy) }
       }
-      // No progress dots — the user shouldn't count steps or feel a finish line. The strip is still
-      // reserved rather than drawn over, which is the part that matters: a foot the column cannot
-      // grow into (see `OnboardingProgressBand`).
-      Color.clear.frame(height: 14)
+      // The band is a sibling of the scroll view, not an overlay on its content. It always claims the
+      // same height, including while a step is streaming, so the current-step column never jumps when
+      // one widget is replaced by the next.
+      OnboardingProgressBand(
+        total: SBOnboardingModel.Step.allCases.count,
+        current: model.step.rawValue
+      )
     }
     // One shadow, and it is `InkGlassShadow.ambient` — the same broad, diffuse one every floating
     // panel in this app casts, drawn by `onboardingCard`. Not the 60 pt black drop this used to carry
     // inside itself, which read as depth on the dark art and as dirt on glass.
     .onboardingCard()
+  }
+
+  /// The one current-step container. `model.step` is the live onboarding identity; giving the widget
+  /// that identity lets SwiftUI run the shared height-relative transition when the model advances or
+  /// goes back, while the fixed panel size keeps the visual drift proportional across window sizes.
+  @ViewBuilder
+  private func currentStepContainer(in panelSize: CGSize) -> some View {
+    widget
+      .padding(.leading, 26).padding(.top, 2)
+      .id(model.step)
+      .transition(.onboardingStep(in: panelSize))
+      .animation(OnboardingGlass.stepAnimation, value: model.step)
+      .animation(OnboardingGlass.stepAnimation, value: model.showWidget)
   }
 
   /// Back and Skip sit **outside** the card, in the window's top-right corner, so unlike everything

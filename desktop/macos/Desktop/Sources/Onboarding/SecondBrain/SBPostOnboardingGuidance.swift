@@ -13,8 +13,33 @@ import Foundation
 /// ask something it cannot answer.
 struct SBSetupSnapshot: Equatable, Sendable {
   enum Listening: String, Equatable, Sendable {
+    case disabled
     case continuous
     case meetingsOnly
+    case microphoneOnly
+
+    /// Keeps the setup snapshot independent of the live settings object while
+    /// preserving the capture semantics users see elsewhere in the app:
+    /// `.never` disables system audio, but leaves the microphone listening.
+    init(systemAudioModeRaw: String, canHear: Bool) {
+      guard canHear else {
+        self = .disabled
+        return
+      }
+      switch systemAudioModeRaw {
+      case AssistantSettings.SystemAudioCaptureMode.always.rawValue:
+        self = .continuous
+      case AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue:
+        self = .meetingsOnly
+      case AssistantSettings.SystemAudioCaptureMode.never.rawValue:
+        self = .microphoneOnly
+      default:
+        // An unknown persisted value is not evidence for a more permissive
+        // mode. AssistantSettings normally heals this before it reaches us,
+        // but the snapshot should remain conservative if it does not.
+        self = .disabled
+      }
+    }
   }
 
   /// The answer to "what do your days look like" — a picked chip ("Founder")
@@ -22,7 +47,7 @@ struct SBSetupSnapshot: Equatable, Sendable {
   var role: String = ""
   /// The capture mode the user chose on the last step. `skip()` leaves whatever
   /// was already configured, which is exactly what should be described.
-  var listening: Listening = .meetingsOnly
+  var listening: Listening = .disabled
   /// Screen Recording *granted*, not merely offered.
   var canSeeScreen: Bool = false
   /// Microphone *granted*, not merely offered.
@@ -190,7 +215,7 @@ enum SBPostOnboardingGuidance {
   }
 
   static func listeningCue(for setup: SBSetupSnapshot) -> SBOrientationCue {
-    guard setup.canHear else {
+    guard setup.canHear, setup.listening != .disabled else {
       return SBOrientationCue(
         id: "listening",
         symbol: "mic.slash",
@@ -198,6 +223,12 @@ enum SBPostOnboardingGuidance {
         keys: [])
     }
     switch setup.listening {
+    case .disabled:
+      return SBOrientationCue(
+        id: "listening",
+        symbol: "mic.slash",
+        title: "I can't hear yet. Turn on the microphone in Settings whenever you want me to.",
+        keys: [])
     case .continuous:
       return SBOrientationCue(
         id: "listening",
@@ -209,6 +240,12 @@ enum SBPostOnboardingGuidance {
         id: "listening",
         symbol: "calendar",
         title: "I'll start listening when your meetings start.",
+        keys: [])
+    case .microphoneOnly:
+      return SBOrientationCue(
+        id: "listening",
+        symbol: "mic",
+        title: "I'm listening through your microphone only.",
         keys: [])
     }
   }
@@ -242,11 +279,17 @@ extension SBOnboardingModel {
   /// can lag: the step state is only ever set from a real `isGranted` check,
   /// and `AppState` is authoritative for a grant made outside this flow.
   var postOnboardingSetup: SBSetupSnapshot {
-    SBSetupSnapshot(
+    let canHear = micState == .on || appState.hasMicrophonePermission
+    return SBSetupSnapshot(
       role: role ?? roleDraft,
-      listening: AssistantSettings.shared.systemAudioCaptureMode == .always ? .continuous : .meetingsOnly,
-      canSeeScreen: scrState == .on || appState.hasScreenRecordingPermission,
-      canHear: micState == .on || appState.hasMicrophonePermission,
+      listening: SBSetupSnapshot.Listening(
+        systemAudioModeRaw: appState.effectiveSystemAudioMode.rawValue,
+        canHear: canHear),
+      // Match the dashboard's capture health contract. TCC can remain granted
+      // after signing changes or a ScreenCaptureKit failure, so permission or
+      // the onboarding row alone is not enough to promise screen access.
+      canSeeScreen: CaptureListeningLogic.captureStatus(appState: appState, isCaptureMonitoring: false) != .blocked,
+      canHear: canHear,
       connectedContextIDs: Set(contextStates.filter { $0.value == "on" }.map(\.key)),
       connectedAgentNames: agentRows.filter { agentStates[$0.id] == "on" }.map(\.name)
     )

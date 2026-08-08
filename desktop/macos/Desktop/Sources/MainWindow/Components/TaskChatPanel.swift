@@ -111,7 +111,10 @@ struct TaskChatPanel: View {
               placeholder: "Continue this work...",
               mode: $taskState.chatMode,
               pendingText: $coordinator.pendingInputText,
-              inputText: $taskState.draftText
+              inputText: $taskState.draftText,
+              // Task-thread voice routing is not wired yet; keep the shared
+              // composer from exposing the global push-to-talk route here.
+              showsPushToTalk: false
             )
             .padding(OmiSpacing.md)
           }

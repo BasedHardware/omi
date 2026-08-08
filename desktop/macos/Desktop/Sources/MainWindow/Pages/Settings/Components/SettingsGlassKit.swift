@@ -197,6 +197,7 @@ struct SettingsGlassRow<Control: View>: View {
     .padding(.vertical, SettingsGlassMetrics.rowVerticalPadding)
     .padding(.horizontal, SettingsGlassMetrics.rowHorizontalPadding)
     .opacity(isEnabled ? 1 : 0.55)
+    .disabled(!isEnabled)
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }

@@ -6469,17 +6469,17 @@ struct UndoToastView: View {
     HStack(spacing: OmiSpacing.md) {
       Image(systemName: "trash")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.secondary)
+        .foregroundColor(PageGlass.primaryActionLabel.opacity(0.78))
 
       Text("Task deleted")
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.primary)
+        .foregroundColor(PageGlass.primaryActionLabel)
         .lineLimit(1)
 
       if undoCount > 1 {
         Text("(\(undoCount))")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.secondary)
+          .foregroundColor(PageGlass.primaryActionLabel.opacity(0.78))
       }
 
       Spacer()

@@ -18,6 +18,23 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertFalse(source.contains("ThinkingBlock("))
   }
 
+  func testTaskChatPanelDisablesPushToTalkUntilTaskThreadRoutingExists() throws {
+    let source = try sourceFile("MainWindow/Components/TaskChatPanel.swift")
+
+    // omi-test-quality: source-inspection -- static contract: this caller must
+    // opt out of ChatInputView's global PTT route until task-thread voice
+    // routing is implemented.
+    let inputStart = try XCTUnwrap(source.range(of: "            ChatInputView("))
+    let inputEnd = try XCTUnwrap(
+      source.range(of: "\n            )", range: inputStart.upperBound..<source.endIndex)
+    )
+    let inputCall = source[inputStart.lowerBound..<inputEnd.lowerBound]
+    XCTAssertTrue(
+      inputCall.contains("showsPushToTalk: false"),
+      "TaskChatPanel must explicitly disable the shared composer's PTT control"
+    )
+  }
+
   func testSharedChatViewsRemainDocumentedForMainAndTaskChat() throws {
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
     let inputSource = try sourceFile("MainWindow/Components/ChatInputView.swift")
