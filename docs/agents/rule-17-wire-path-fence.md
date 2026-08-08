@@ -5,12 +5,15 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL**, landed 2026-08-08 with the W4 rebuild. It runs
-immediately. Per the swarm protocol §8 a new fence stays provisional until
-someone **who did not write it** has read the check against the English
-statement above and audited its false positives. The DOOR lane wrote it, so the
-DOOR lane cannot promote it. If it fires on another lane, that is a swarm-wide
-blocker, never something to route around.
+Status: **PROVISIONAL, HELD.** Landed 2026-08-08 with the W4 rebuild; it runs
+immediately, per §8, and continues to run at full strength while held —
+holding is not disabling. AUDIT-17 (non-author, 2026-08-08) completed the §8
+audit and found the fence sound on every case DOOR checked, but found the
+escape hatch's file-wide scope exploitable rather than merely imprecise; see
+**AUDIT-17** below for the finding, the mutation that demonstrates it, and
+exactly what unblocks promotion. The DOOR lane wrote it, so the DOOR lane
+cannot promote it. If it fires on another lane, that is a swarm-wide blocker,
+never something to route around, regardless of held status.
 
 Implementation: `WIRE_PATH_REGISTRY` in the platform repo's
 scripts/lint-import-graph.ts, which runs in `bun test` and in `make l0`.
@@ -145,8 +148,103 @@ neither is a door. The reason is inline at the probe.
    exemption is doing work rather than sitting next to a check that would pass
    anyway. Restored; green.
 
-Not claimed: the comment-stripping half has **no** applied red-proof here. No
-file in the tree today names a registered wire path only in prose while also
-constructing a server, so the exemption is currently unexercised. It is
-inherited from rule 16's shape rather than independently demonstrated, and an
-auditor should treat it as unproven.
+5. **The comment-stripping exemption — resolved by AUDIT-17.** DOOR flagged
+   this as unproven: no file in the tree named a registered wire path only in
+   prose while also constructing a server. AUDIT-17 constructed exactly that
+   fixture (a server, plus `/v1/memories` appearing only inside a `//`
+   comment, with the server's real routes pointing elsewhere) and confirmed
+   two things by experiment, not by reading the regex: lint stays green
+   against the real checker, and the identical fixture **fails** lint when
+   `withoutComments()` is bypassed for rule 17's block only. The exemption is
+   load-bearing, not decorative. Mechanised in
+   scripts/lint-import-graph.test.ts ("rule 17 does not fire when the file
+   only names the path in a comment").
+
+## AUDIT-17 — non-author audit, 2026-08-08
+
+Per §8, this fence stayed PROVISIONAL until a non-author read it against the
+English statement above and audited its false positives. AUDIT-17 did that
+work in an isolated lane worktree (`bin/omi-lane start audit17 platform`),
+hand-applying every mutation below to the real source and to disposable
+fixtures, watching lint fire or fail to fire, then reverting. DOOR's own four
+red-proofs (retired door, unmounted door, stale row, hatch-is-load-bearing)
+were re-run by hand against the real files and confirmed to still hold; they
+are now also mechanised in scripts/lint-import-graph.test.ts alongside the
+comment-stripping proof above.
+
+**Verdict: HOLD.** Everything the doc claims is true — the checker enforces
+exactly the English statement for every case DOOR's audit covered, the
+one hatch in the tree (integration/adversarial/live-server.ts) is a real
+client-plus-unrelated-probe, not a hole, and DOOR's nine-row false-positive
+audit is complete for the platform tree (independently re-derived by grepping
+every non-test `.ts`/`.tsx` file for the four server-construction forms:
+same seven server-constructing files, same verdicts). But AUDIT-17 found one
+new gap serious enough to hold promotion on, plus one lower-severity one
+worth recording:
+
+**1. The escape hatch is FILE-scoped, and that is exploitable, not just
+imprecise (holds promotion).** The doc defends file-scoping as deliberate:
+"the finding is file-scoped." That is true of the finding that earns a hatch,
+but the hatch itself is checked with `text.includes(wirePathAllowMarker)` —
+anywhere in the file, unconditionally, forever. Demonstrated: starting from
+the real integration/adversarial/live-server.ts (which legitimately carries
+`// wire-path-ok(...)` on its free-port probe), AUDIT-17 edited the *same*
+probe's `fetch` handler to actually answer `/v1/memories` with a raw fixture
+id — the exact defect class rule 17 exists to catch — while leaving the
+existing, unrelated hatch comment untouched elsewhere in the file. Lint
+stayed green. Reverted after confirming (`git diff` against the pre-mutation
+file showed byte-identical restoration). Contrast with rule 16's
+`port-composition-ok`, which is checked per construction-site line
+(`hatched(index)`, the line or the line above) — a rule 16 hatch cannot mask
+a second, unrelated violation added later in the same file; a rule 17 hatch
+can, permanently, for every future edit to that file. This is the same shape
+as the two defects this program has already found in guards: a compensating
+mechanism (the hatch) that is not as strong, on the axis that matters
+(scope), as the check it compensates for.
+  - **What would unblock promotion:** scope the hatch to the server
+    construction site, the same way rule 16 scopes `port-composition-ok` —
+    require the marker on or adjacent to the matched `Bun.serve(`/`new
+    Hono(`/etc. line, not merely present anywhere in the file. Re-run this
+    same mutation (real handler added to an already-hatched file) against the
+    tightened check and confirm it now fires while `live-server.ts` itself
+    stays green.
+
+**2. Substring match with no path-boundary awareness (recorded, not
+blocking).** `code.includes(row.wirePath)` is a plain substring test.
+Constructed fixture: a server answering a *different*, unregistered path,
+`/v1/memories-legacy-export`, that merely contains `/v1/memories` as a
+substring, with no import of the registered route. Lint fired, naming that
+file as if it served the registered path. This is a false positive in the
+same family as rule 16's banned-English-word defect, but weaker: no file in
+the tree today has a path that collides this way, and the fix at the call
+site is one `// wire-path-ok(<reason>)`. Recorded as a known limit, not a
+promotion blocker on its own — it does not let a real door through, unlike
+finding 1.
+
+**3. Confirmed, not new: the fragment-assembly gap is real.** Constructed
+`const path = "/v1/" + "memories"` inside a `Bun.serve` fixture that answers
+that path with a raw fixture id and imports nothing from the registered
+route. Lint stayed green — a true false negative, exactly as the "Known
+limits" section already discloses with a citation to documented precedent of
+an agent doing this to a regex elsewhere in this program. Not new, but
+independently re-verified rather than taken on faith.
+
+**Blast radius if this HOLD is wrong** (i.e., if finding 1 should not have
+blocked promotion): the fix is a small, additive change to one helper
+function in scripts/lint-import-graph.ts (mirroring code that already
+exists for rule 16), verified by the same mutation used to find the gap. It
+does not touch what the fence catches today — every case DOOR audited and
+every case AUDIT-17 re-verified keeps firing exactly as it does now. Nothing
+downstream depends on the *current* hatch granularity: the only hatch in the
+tree today (`live-server.ts`) sits on the file's only server-construction
+site, so tightening the scope from file to construction-site does not change
+its outcome.
+
+**What would unblock promotion:** land the construction-site-scoped hatch
+described in finding 1, re-run finding 1's mutation and confirm it now fires,
+re-run all existing red-proofs (mechanised in
+scripts/lint-import-graph.test.ts) and confirm they still pass, then a
+non-author re-reads the diff. Finding 2 does not block promotion but should
+be noted in the same pass since the fix (a boundary-aware match, e.g. requiring
+the character after the match to be `/`, a quote, or end-of-string) is cheap
+and adjacent.
