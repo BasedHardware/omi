@@ -262,14 +262,14 @@ open https://crepuscularity.tsc.hk
 
 1. **Host-Level Evaluation**: Tests validate C++ C ABI memory boundaries and TypeScript domain logic natively on the host platform without bundling native Objective-C/Swift/Java/Kotlin JSI boilerplate.
 2. **Package-Free Zero-Dependency Scope**: Uses Node 22 native `--experimental-strip-types` and built-in `node:test` test runner alongside ISO C++17 and CMake 4.4.0. No external NPM packages or Metro/BLE native drivers were added.
-3. **Architecture Fit**: Confirms that keeping C++ strictly for narrow native capabilities (checksum calculation, packet normalization, data boundary protection) allows TypeScript to handle 95%+ of device connection lifecycle, UI state, and transport routing without C++ cross-compilation overhead in React Native.
+3. **Architecture Fit**: Demonstrates a narrow native-function boundary while TypeScript handles the simulated device lifecycle, UI state, and transport routing. It does not prove the proportion or cost of a production implementation.
 4. **Benchmark Limitations**:
    - Measures adapter/controller overhead ONLY — not UI, browser, or ASR performance
    - Synthetic deterministic inputs — not real device packets
    - Simulated JSI/TurboModule bridge — not actual native module calls
    - Moonshine boundary is a typed stub — not real speech processing
    - Node.js `perf_hooks` timing — not React Native runtime timing
-5. **External URL**: `https://crepuscularity.tsc.hk` was HTTP-reachable at authoring time. Content is a WASM-rendered landing page for a multi-target UI framework. The benchmark models its adapter contract shape without fetching or depending on it.
+5. **External URL**: `https://crepuscularity.tsc.hk` returned HTTP 403 to this environment. Its content and runtime were not treated as verified. The benchmark models only a requested web TypeScript adapter boundary without fetching or depending on it.
 6. **No Omi-v4 Concepts**: This spike contains no Omi-v4 production code, no production integration patterns, and no references to production worktrees.
 
 ---
@@ -277,6 +277,6 @@ open https://crepuscularity.tsc.hk
 ## 8. Framework Decision & Conclusion
 
 **Decision**: **Bare React Native + TypeScript**  
-**Conclusion**: **VALIDATED**
+**Conclusion**: **PARTIAL — local boundary shape validated; real RN/web/ASR runtime unvalidated**
 
-The benchmark confirms that adapter shape choice (current TS, RN native bridge, web TS) does not meaningfully differentiate at this boundary. The TypeScript-first architecture with a narrow C++ native function boundary remains the recommended path.
+The local benchmark shows no meaningful difference between the three simulated adapter shapes at this synthetic boundary. It does not measure React Native, browser, Moonshine, or real C++ module runtime performance. The TypeScript-first architecture with a narrow C++ native-function boundary remains the recommended PoC direction.
