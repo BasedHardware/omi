@@ -4,6 +4,10 @@
  * Both are authorization oracles: they leak the existence of data the caller
  * is not allowed to know exists. Neither is visible to an in-process test,
  * because both are properties of the response BYTES.
+ *
+ * Since the W4 rebuild these run against the REGISTERED composition rather than
+ * a harness-authored one, so a leak found here is a leak in the shipped read
+ * path — which is the entire reason the harness was rebound.
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -18,7 +22,15 @@ import {
   type LiveServer,
 } from "./live-server";
 
-const HIDDEN_ID = "retrieval-node-v1:seed-0003";
+/** Visible memories in both fixture worlds. */
+const VISIBLE = 7;
+/**
+ * Hidden-but-present memories in the "hidden" world. The seeder places each on
+ * a local day it SHARES with a visible memory, so the served day-node exists in
+ * both worlds and only its membership differs — the case where a leak would
+ * actually show up in the synthesized text rather than only in a row count.
+ */
+const HIDDEN = 2;
 
 let server: LiveServer;
 
@@ -32,30 +44,33 @@ afterAll(async () => {
 
 describe("trap 1 — an authorization-hidden record is byte-identical to an absent one", () => {
   /**
-   * red-proof: in qa-store.ts `read()`, move the authorization filter to AFTER
-   * the slice — i.e. paginate over `this.#rows` and filter the resulting page.
-   * The hidden variant then returns 2 items where the absent variant returns 3,
-   * and the continuation cursors diverge. This test fails on the first page.
-   *
-   * A second, subtler mutation this also catches: computing `hasMore` from
-   * `this.#rows.length` instead of `visible.length` leaves the item arrays
-   * equal but flips `status`/`nextCursor` on the final page.
+   * red-proof: in `apps/service/composition/memory-read.ts`, derive the
+   * declared frontier from the loader's coherent snapshot instead of the
+   * authorized projection —
+   *   `const declaredFrontier = encodeFrontier(`durable:${load.durable_snapshot.graph_generation}`)`
+   * — i.e. from a value that counts rows this reader may not see. APPLIED: the
+   * two worlds then emit different `completeness.frontiers.declaredFrontier`
+   * on every page and the byte-identity assertion below fails on page 1 while
+   * `itemIds` still matches, which is exactly the shape of the real leak.
    */
   test("full paginated wire transcripts are identical", async () => {
-    await control(server.baseUrl, `/qa/reset?seed=7&hidden=${encodeURIComponent(HIDDEN_ID)}`);
+    await control(server.baseUrl, `/qa/reset?seed=${VISIBLE}&hidden=${HIDDEN}`);
     const hiddenTranscript = await paginateAll(server.baseUrl);
 
-    await control(server.baseUrl, `/qa/absent?seed=7&omit=${encodeURIComponent(HIDDEN_ID)}`);
+    await control(server.baseUrl, `/qa/absent?seed=${VISIBLE}`);
     const absentTranscript = await paginateAll(server.baseUrl);
 
-    // The mechanism only a correct implementation produces: the caller sees
-    // six propositions, and cannot tell which world it is in.
+    // The mechanism only a correct implementation produces: the caller sees the
+    // visible memories and cannot tell which world it is in. Asserting the
+    // COUNT (not merely "the hidden id is absent") is what makes this survive
+    // opaque, reader-scoped item ids — there is no public name for a hidden
+    // record to be absent from.
     expect(hiddenTranscript.pages.length).toBeGreaterThan(1);
-    expect(hiddenTranscript.itemIds).not.toContain(HIDDEN_ID);
-    expect(absentTranscript.itemIds).not.toContain(HIDDEN_ID);
+    expect(hiddenTranscript.itemIds).toHaveLength(VISIBLE);
+    expect(absentTranscript.itemIds).toHaveLength(VISIBLE);
     expect(hiddenTranscript.itemIds).toEqual(absentTranscript.itemIds);
 
-    // Byte identity, page by page, including cursors and envelope.
+    // Byte identity, page by page, including cursors, completeness and envelope.
     expect(hiddenTranscript.pages).toEqual(absentTranscript.pages);
   });
 
@@ -80,13 +95,14 @@ describe("trap 2 — no raw data leaks through error paths", () => {
    * Error paths are where raw data leaks, because error construction is the
    * one place that tends to interpolate the offending value.
    *
-   * red-proof: in compose.ts `readPage`, change the thrown error to
-   * `new Error("bad cursor " + input.cursor)` and let protocol.ts surface it,
-   * or have validatePage return the page object in its message. Either makes
-   * a forbidden substring appear and this test fails.
+   * red-proof: in `integration/server/compose.ts`'s `readPage`, replace the
+   * `isInvalidMcpCursorError` re-throw with
+   * `throw new Error("bad cursor " + input.cursor)`. The forged and
+   * cross-owner cursors are then echoed back inside the error envelope and
+   * this fails on the echo check as well as on `qa-cursor-key-1`.
    */
   test("invalid, forged and cross-owner cursors reveal nothing", async () => {
-    await control(server.baseUrl, "/qa/reset?seed=7");
+    await control(server.baseUrl, `/qa/reset?seed=${VISIBLE}`);
 
     const first = await callTool(server.baseUrl, { limit: 2 });
     const firstPage = pageTextOf(first.text);
@@ -99,7 +115,9 @@ describe("trap 2 — no raw data leaks through error paths", () => {
       "not-a-cursor",
       "",
       forged,
-      // A structurally valid cursor minted for a different owner identity.
+      // A structurally valid cursor minted for a different owner identity. The
+      // reader-scoped codecs and the 15-field binding make it unredeemable
+      // here; what this checks is that the REFUSAL says nothing.
       (await mintOtherOwnerCursor(server.baseUrl)) ?? "mcp1.qa-cursor-key-1.x.y",
     ];
 
@@ -110,34 +128,41 @@ describe("trap 2 — no raw data leaks through error paths", () => {
   });
 
   /**
-   * red-proof: make the QA store's UnknownVisibleKeyError message include the
-   * key, and stop translating it to InvalidMcpCursorError in compose.ts, so
-   * the internal `vk1_...` handle reaches the client. This fails.
+   * red-proof: in `apps/service/composition/memory-read.ts`'s `readMemoryPage`,
+   * delete the `isSyntacticallyRedeemableCursor` pre-check and let the core's
+   * `TypeError` surface. The refusal becomes an internal-error envelope
+   * carrying the core's message instead of the one invalid-cursor shape, and
+   * the "Invalid cursor" assertion below fails.
    */
   test("internal store coordinates never reach the wire", async () => {
-    await control(server.baseUrl, "/qa/reset?seed=7");
+    await control(server.baseUrl, `/qa/reset?seed=${VISIBLE}`);
     const response = await callTool(server.baseUrl, { cursor: "vk1_deadbeef", limit: 2 });
 
-    expect(response.text).not.toContain("vk1_");
-    expect(response.text).not.toContain("sortKey");
-    expect(response.text).not.toContain("visibleTo");
-    expect(response.text).not.toContain("qa-owner-");
+    assertNoRawLeak(response.text, "vk1_deadbeef");
     // The error must still be a real, specific refusal.
     expect(response.text).toContain("Invalid cursor");
   });
 });
 
+/**
+ * The forbidden substrings are the CURRENT fixture's internal spellings, not
+ * the retired store's. `entity:qa:` and `claim:qa:` are the seeded corpus's
+ * internal identifiers and `entity:qa:` also appears inside a served item's
+ * synthesized text — so on an ERROR path, where no item may exist at all,
+ * either one appearing is a leak.
+ */
 function assertNoRawLeak(responseText: string, offendingInput: string): void {
   const forbidden = [
-    "Synthesized proposition", // item text
-    "retrieval-node-v1:seed-", // internal-ish row ids
-    "vk1_", // opaque visible-keyset handle
-    "sortKey",
-    "visibleTo",
-    "qa-owner-",
+    "claim:qa:", // internal claim revision ids
+    "entity:qa:", // internal entity ids, and the served item text
+    "evidence:qa:",
+    "commit:qa:",
+    "vk1_", // opaque visible-keyset handle — internal, never public
+    "qa-owner-", // reader identity
     "qa-cursor-key-1", // signing key id
     "/Users/", // filesystem paths from stack traces
     "integration/server", // module paths
+    "apps/service", // module paths
   ];
   for (const needle of forbidden) {
     expect({ needle, responseText }).toMatchObject({

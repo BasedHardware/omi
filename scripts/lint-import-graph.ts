@@ -133,6 +133,87 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
       + "everything below them is shared.",
   },
 ];
+/**
+ * ── RULE 17: THE WIRE-PATH FENCE ─────────────────────────────────────────────
+ *
+ * **A settled wire path is SERVED by exactly one route module.** A file that
+ * both stands up an HTTP server and names a registered wire path in code must
+ * reach that path through the registered route module — it may not answer the
+ * path itself.
+ *
+ * PROVISIONAL — landed 2026-08-08 with the W4 rebuild. Per §8 it runs
+ * immediately and is PROVISIONAL until a NON-AUTHOR has read it against the
+ * English statement above and audited its false positives. If it fires on
+ * another lane, that is a swarm-wide blocker, never something to route around.
+ *
+ * WHY RULE 16 COULD NOT SEE THE DEFECT THIS EXISTS FOR. Rule 16 keys on
+ * REGISTERED PORT TYPES. `integration/server/serve.ts` answered `/v1/memories`
+ * — the settled client recall route, the one `make stack` and HOW-TO-RUN.md
+ * boot — from a hand-rolled handler over a hand-rolled `McpProtocolPorts`. It
+ * composed no registered port, so it was invisible to rule 16 BY
+ * CONSTRUCTION, and the checker was green the entire time the door was serving
+ * raw fixture row ids as public item ids. A door that composes nothing
+ * registered is exactly the door a port registry cannot see; the wire path is
+ * the coordinate that catches it. (fable, W4: "key the fence on the wire path
+ * as well as the port type".)
+ *
+ * WHAT TRIGGERS IT — BOTH halves, on COMMENT-STRIPPED text:
+ *   1. the file constructs an HTTP server (`Bun.serve(`, `new Hono(`,
+ *      `Deno.serve(`, `createServer(`), AND
+ *   2. it names a registered wire path.
+ * A file that only CALLS the path is a client, not a door, and is not the
+ * defect class: `apps/service/bin/boot-acceptance.ts` fetches `/v1/memories`
+ * all day and can never serve anyone a divergent id.
+ *
+ * WHAT SATISFIES IT: being the registered route module itself, or importing it
+ * (directly, or through a server factory registered in `boundVia`). That is
+ * deliberately an IMPORT check rather than a behavioural one — a pin on
+ * behaviour is rule 16's rejected alternative restated one layer up, and the
+ * W4 ruling rejected it again for exactly this door.
+ *
+ * COMMENTS ARE EXEMPT WHOLESALE, and TESTS ARE EXEMPT — same reasons as rule
+ * 16. Prose cannot serve a byte, and a test double is a second implementation
+ * on purpose. Whether the doors actually agree is an assertion, not a fence
+ * question, and it lives in
+ * `integration/adversarial/cross-door-identity.test.ts`.
+ *
+ * ESCAPE HATCH: `// wire-path-ok(<reason>)` anywhere in the file. It is
+ * file-scoped because the finding is file-scoped — "this file stands up a
+ * server AND names a registered path" is a statement about the file, so the
+ * justification belongs at that granularity.
+ */
+interface WirePathRegistryRow {
+  /** The settled path, spelled exactly as the route registers it. */
+  readonly wirePath: string;
+  /** The one module that owns this path's request handling. */
+  readonly servedBy: string;
+  /**
+   * Import-specifier fragments that count as reaching the registered route:
+   * the route module itself, plus the server factories that mount it.
+   */
+  readonly boundVia: readonly string[];
+  readonly reason: string;
+}
+const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
+  {
+    wirePath: "/v1/memories",
+    servedBy: "apps/service/routes/memories.ts",
+    boundVia: ["routes/memories", "app-facing"],
+    reason:
+      "The integration harness served this path from a hand-rolled handler that minted "
+      + "public item ids from raw fixture row ids, while the registered route minted "
+      + "reader-scoped opaque refs. Both were green; the harness was the door humans "
+      + "dogfooded. Rule 16 could not see it because it composed no registered port.",
+  },
+];
+const wirePathAllowMarker = "wire-path-ok(";
+const serverConstructionPatterns: readonly RegExp[] = [
+  /\bBun\.serve\s*\(/,
+  /\bDeno\.serve\s*\(/,
+  /\bnew\s+Hono\s*\(/,
+  /\bcreateServer\s*\(/,
+];
+
 const portCompositionAllowMarker = "port-composition-ok(";
 const portConstructionPatterns = (portType: string): readonly RegExp[] => [
   new RegExp(`:\\s*${portType}\\s*=\\s*\\{`),
@@ -162,6 +243,8 @@ const failures: string[] = [];
 const portConstructionSites = new Map<string, string[]>(
   PORT_REGISTRY.map((row) => [row.portType, []]),
 );
+/** Rule 17 bookkeeping: whether each registered path was seen in its own route module. */
+const wirePathServedBySeen = new Set<string>();
 for (const file of files(root)) {
   const text = readFileSync(file, "utf8");
   const shown = relative(root, file);
@@ -193,6 +276,32 @@ for (const file of files(root)) {
       });
     }
   }
+  // ── Rule 17: a settled wire path is served by exactly one route module ────
+  if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
+    const code = withoutComments(text);
+    const hatched = text.includes(wirePathAllowMarker);
+    const standsUpAServer = serverConstructionPatterns.some((pattern) => pattern.test(code));
+    for (const row of WIRE_PATH_REGISTRY) {
+      if (shown === row.servedBy && code.includes(row.wirePath)) {
+        wirePathServedBySeen.add(row.wirePath);
+      }
+      if (!standsUpAServer || !code.includes(row.wirePath)) continue;
+      if (shown === row.servedBy || hatched) continue;
+      const reachesRegisteredRoute = row.boundVia.some((specifier) =>
+        new RegExp(`from\\s+["'][^"']*${specifier}["']`).test(code));
+      if (reachesRegisteredRoute) continue;
+      failures.push(
+        `${shown}: stands up an HTTP server and names the registered wire path `
+        + `\`${row.wirePath}\` without reaching its registered route module `
+        + `(${row.servedBy}). A settled wire path is SERVED by exactly one route module `
+        + `(rule 17). ${row.reason} `
+        + `Import and register the real route instead of answering the path here. If this `
+        + `file genuinely does not serve that path, justify it with `
+        + `// ${wirePathAllowMarker}<reason>) anywhere in the file.`,
+      );
+    }
+  }
+
   // The fence protects WIRE COMPOSITION. Two exemptions, both principled rather
   // than convenient:
   //
@@ -267,6 +376,20 @@ for (const row of PORT_REGISTRY) {
         + "disables rule 16 for this port.",
       );
     }
+  }
+}
+
+// Same staleness rule as rule 16's, for the same reason: a row whose declared
+// route module no longer names the path silently disables the fence for that
+// path, and a fence that has quietly stopped fencing is worse than none.
+for (const row of WIRE_PATH_REGISTRY) {
+  if (!wirePathServedBySeen.has(row.wirePath)) {
+    failures.push(
+      `WIRE_PATH_REGISTRY row \`${row.wirePath}\` declares ${row.servedBy} as its route `
+      + "module, but that file does not name the path. Either the route moved (update the "
+      + "row) or the path is gone (delete the row) — a stale row silently disables rule 17 "
+      + "for this path.",
+    );
   }
 }
 

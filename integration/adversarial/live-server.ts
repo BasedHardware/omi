@@ -60,6 +60,10 @@ export async function startLiveServer(): Promise<LiveServer> {
 }
 
 async function freePort(): Promise<number> {
+  // wire-path-ok(this is a port probe that answers a constant empty body to every
+  // request and is stopped before it is used; the `/v1/memories` reference below is
+  // this file CALLING the route as a client. Nothing here serves that path, and a
+  // test-support client cannot hand anyone a divergent public id.)
   const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
   const port = probe.port;
   await probe.stop(true);
@@ -162,7 +166,12 @@ export async function recall(
     readonly clientId?: string;
   } = {},
 ): Promise<{ status: number; text: string }> {
-  const headers: Record<string, string> = { authorization: options.key ?? QA_KEY };
+  // `Bearer ` is not optional on this route. The registered route
+  // (`apps/service/routes/memories.ts`) extracts the token with a strict
+  // prefix check and answers 401 without it — the retired hand-rolled door
+  // accepted a bare key, which is one more way it was not interchangeable with
+  // the real backend "by base URL alone".
+  const headers: Record<string, string> = { authorization: `Bearer ${options.key ?? QA_KEY}` };
   if (options.clientId !== undefined) {
     headers["x-omi-client-id"] = options.clientId;
   }

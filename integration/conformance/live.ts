@@ -1,4 +1,27 @@
 /**
+ * ⚠ UNREFERENCED, AND WRITTEN AGAINST A RETIRED FIXTURE GRAMMAR.
+ *
+ * Two facts, both established by grep across `platform/` and
+ * `core-foundation/` on 2026-08-08, neither one a judgement:
+ *
+ *  1. Nothing imports `runLiveConformance` or any other export of
+ *     `integration/conformance/`. No test, script, Makefile target,
+ *     `dev-stack.sh` path or lane runs it. `integration/adversarial/
+ *     corpus-oracle.test.ts` covers the (A) oracle self-check and the (B)
+ *     live-wire negative check this file's header describes.
+ *  2. Its `/qa/*` calls below use the RETIRED door's control-plane grammar
+ *     (`hidden=<row id>`, `omit=<row id>`, `/qa/insert?id=&sortKey=`) and its
+ *     `retrieval-node-v1:seed-NNNN` item ids. The W4 rebuild replaced both:
+ *     the harness now serves the registered composition, whose public item ids
+ *     are reader-scoped opaque refs, and the control plane is counted
+ *     (`hidden=<count>`, `/qa/grow?by=`).
+ *
+ * So this cannot run as written, and the DOOR lane deliberately did not
+ * "fix" it: repairing 800 lines of a runner nobody executes would produce an
+ * unverified claim, which is the thing this program exists to stop. Flagged
+ * for delete-or-revive as its own work item. Do not cite it as evidence.
+ */
+/**
  * Half (B): live-wire conformance.
  *
  * Drives a real HTTP server, takes response bytes, and feeds them through the

@@ -3,11 +3,34 @@
  * Live backend-under-test for the integration harness. Port 4851 (INTEGRATION's
  * registry allocation). Loopback only — board ruling PR-4.
  *
- * Serves the real Hono composition shell (`apps/service/app.ts`) over the real
- * MCP protocol seam (`apps/mcp/protocol.ts`) via the real Bun adapter
- * (`apps/mcp/bun-http.ts`), with the deterministic QA store behind it. The only
- * harness-authored part of the request path is the store; every byte of
- * transport, envelope, and validation is the code under test.
+ * WHAT IS ACTUALLY THE CODE UNDER TEST, STATED PRECISELY
+ * -----------------------------------------------------
+ * This file's previous header claimed "every byte of transport, envelope, and
+ * validation is the code under test." That sentence was FALSE for
+ * `/v1/memories`: the recall route was hand-rolled here, over a hand-rolled
+ * read composition in `compose.ts`. A mechanism whose self-description is wrong
+ * is its own defect class (swarm protocol §8), so the sentence is replaced with
+ * the inventory below rather than merely made true.
+ *
+ *   the Hono shell            apps/service/app.ts              — real
+ *   the recall route          apps/service/routes/memories.ts  — real
+ *   the read composition      apps/service/composition/
+ *                             memory-read.ts                   — real, registered
+ *   the MCP protocol seam     apps/mcp/protocol.ts             — real
+ *   the Bun MCP adapter       apps/mcp/bun-http.ts             — real
+ *   the served-read counter   apps/service/observability/
+ *                             served-count.ts                  — real
+ *
+ *   the fixture corpus        apps/service/qa/seed.ts over SQLite — harness
+ *   the credential table      compose.ts                          — harness
+ *   origin list, rate limit,
+ *   trace sink                compose.ts                          — harness
+ *   the /qa/* control plane   this file                           — harness
+ *   the per-client counter    client-counter.ts                   — harness
+ *
+ * Everything in the first block is the shipped binding; everything in the
+ * second is a faked port. That is the shape `apps/service/app-facing.ts`
+ * already uses, and fable's W4 ruling required this harness to match it.
  *
  * A `/qa/*` control plane exists for seed/reset/stats. It is deliberately
  * mounted on the SAME server so the served-request counter observes the same
@@ -16,94 +39,80 @@
  */
 
 import { createBunMcpHttpHandler } from "../../apps/mcp/bun-http";
-import { createMcpProtocolHandler, SYNTHESIZED_MEMORY_READ_DEPENDENCY } from "../../apps/mcp/protocol";
+import { createMcpProtocolHandler } from "../../apps/mcp/protocol";
 import { createServiceApp } from "../../apps/service/app";
+import {
+  createServedCounter,
+  reset as resetServedCounter,
+} from "../../apps/service/observability/served-count";
+import { registerMemoryRoutes } from "../../apps/service/routes/memories";
 
-import { createQaPorts } from "./compose";
+import { createClientReadCounter } from "./client-counter";
+import { createQaBackend, type QaFixturePlan } from "./compose";
 import { assertFixtureTimezone } from "./fixture-clock";
 import { BACKEND_PROCESS_STAMP } from "./provenance";
-import { QaStore } from "./qa-store";
 
-/** Request header a launcher sends on every bridge request so served reads are joinable to the run that made them — see provenance.ts and qa-store.ts `countClientRead`. */
+/** Request header a launcher sends on every bridge request so served reads are joinable to the run that made them — see provenance.ts and client-counter.ts. */
 const CLIENT_ID_HEADER = "x-omi-client-id";
 
 const DEFAULT_PORT = 4851;
 const HOSTNAME = "127.0.0.1";
+const DEFAULT_PLAN: QaFixturePlan = Object.freeze({ visibleCount: 7, hiddenCount: 0 });
 
 const timezone = assertFixtureTimezone();
 
-const store = new QaStore();
-store.seed(7);
-
-const ports = createQaPorts({ store });
-const mcpHandler = createBunMcpHttpHandler(createMcpProtocolHandler(ports));
-const app = createServiceApp(mcpHandler);
+const backend = createQaBackend();
+backend.reseed(DEFAULT_PLAN);
 
 /**
- * The settled client recall route: `GET /v1/memories?limit=&cursor=` with
- * `Authorization: Bearer <token>`, agreed between FE-CORE and BE-SURFACE
- * (2026-08-08). Serving it here is what makes this instance interchangeable
- * with BE-SURFACE's 4811 and the dev stub on 4821 **by base URL alone**.
- *
- * It deliberately reuses the SAME ports object as the MCP path, so the two
- * transports cannot drift into serving different data from the same store.
+ * The REAL served counter, driven by the REAL route. `domainReadsServed` moves
+ * only after a domain response body exists — counting earlier is the wave-9 bug
+ * where a served count moved while the backend served nothing.
  */
-const PLATFORM_RECALL_PATH = "/v1/memories";
-const DEFAULT_LIMIT = 25;
-const MAX_LIMIT = 100;
+const counter = createServedCounter();
+const clientReads = createClientReadCounter();
 
-async function handleRecallRoute(url: URL, request: Request): Promise<Response> {
-  const credential = await ports.authenticate({
-    apiKeyHeader: request.headers.get("authorization") ?? undefined,
-    requiredKind: "mcp_api_key",
-  });
-  if (credential === null) {
-    return json({ error: "authentication_required" }, 401);
-  }
+const mcpHandler = createBunMcpHttpHandler(createMcpProtocolHandler(backend.mcpPorts));
+const app = createServiceApp(mcpHandler);
+/**
+ * The settled client recall route: `GET /v1/memories?limit=&cursor=` with
+ * `Authorization: Bearer <token>`. Registered — not re-implemented — so this
+ * instance is interchangeable with the dev server by base URL alone, including
+ * its method fence, trailing-slash strictness, duplicate-parameter refusal,
+ * fixed failure bodies and cursor grammar.
+ *
+ * It reuses the SAME composition as the `/mcp` path over the same fixture and
+ * the same principal identity, so the two transports cannot drift into serving
+ * different ids for the same memory.
+ */
+registerMemoryRoutes(app, {
+  resolvePrincipal: backend.resolvePrincipal,
+  prepareRead: backend.prepareRead,
+  counter,
+});
 
-  const decision = await ports.authorize({
-    credential,
-    tool: { name: "read_synthesized_memory", dependency: SYNTHESIZED_MEMORY_READ_DEPENDENCY },
-  });
-  if (decision.allowed !== true) {
-    // Same body and status as an unknown route would produce for a caller who
-    // may not know this collection exists.
-    return json({ error: "not_found" }, 404);
-  }
+const RECALL_PATHS = new Set(["/v1/memories", "/v1/memories/recall"]);
+const MCP_PATH = "/mcp";
 
-  const rawLimit = Number(url.searchParams.get("limit") ?? DEFAULT_LIMIT);
-  const limit = Number.isSafeInteger(rawLimit) && rawLimit >= 1
-    ? Math.min(rawLimit, MAX_LIMIT)
-    : DEFAULT_LIMIT;
-  const cursor = url.searchParams.get("cursor");
+/**
+ * Domain requests observed at dispatch. This is a DISPATCH-side number and is
+ * reported as such: it answers "did anything reach me?", never "did I serve
+ * it?". The verdict-grade counters are `servedReads` and `servedReadsByClient`,
+ * both of which move only after response bytes exist.
+ */
+let domainRequests = 0;
 
-  store.countRequest();
-  store.countClientRead(request.headers.get(CLIENT_ID_HEADER));
-
-  let page: unknown;
+/** True when this MCP response actually carried a page, read off the bytes. */
+async function mcpServedAPage(response: Response): Promise<boolean> {
+  if (response.status !== 200) return false;
   try {
-    page = await ports.readPage({
-      authorization: decision.readAuthorization,
-      cursor: cursor === null || cursor === "" ? null : cursor,
-      limit,
-    });
+    const envelope = JSON.parse(await response.clone().text()) as {
+      result?: { content?: readonly { text?: unknown }[] };
+    };
+    return typeof envelope.result?.content?.[0]?.text === "string";
   } catch {
-    // Public shape for every client-controlled cursor failure. It must not
-    // distinguish "forged", "expired", "other owner's" or "unknown".
-    return json({ error: "invalid_cursor" }, 400);
+    return false;
   }
-
-  const validated = await ports.validatePage(page);
-  if (typeof validated !== "string") {
-    return json({ error: "internal_server_error" }, 500);
-  }
-
-  // Emit the validated canonical text verbatim. Re-serializing would defeat
-  // the client's strong `canonical-json-text` parse boundary.
-  return new Response(validated, {
-    status: 200,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
-  });
 }
 
 const port = Number(process.env.OMI_INTEGRATION_PORT ?? DEFAULT_PORT);
@@ -118,72 +127,85 @@ const server = Bun.serve({
       return handleQaControl(url, request);
     }
 
-    // METHOD, not just path. This route is documented two screens up as
-    // "`GET /v1/memories`", and dispatching on the path alone made this harness
-    // answer POST/PUT/PATCH/DELETE with 200 and the full read payload while the
-    // real route (`apps/service/routes/memories.ts`, GET-only, pinned by
-    // `route-hardening.test.ts`) correctly refused them. A client with a method
-    // bug would have looked healthy here and failed against production — this
-    // harness's entire job is to be interchangeable with the real backend by
-    // base URL alone, and it was not.
-    //
-    // The refusal must be the real route's refusal, byte for byte: 404 with the
-    // fixed `not_found` body, never a 405. A distinct method-not-allowed status
-    // would confirm the collection exists to a caller who may not be allowed to
-    // know that, which is the authorization oracle this file's own comment at
-    // `handleRecallRoute`'s authorize branch is already careful about.
-    if (url.pathname === PLATFORM_RECALL_PATH) {
-      if (request.method !== "GET") {
-        return json({ error: "not_found" }, 404);
+    const clientId = request.headers.get(CLIENT_ID_HEADER);
+
+    if (RECALL_PATHS.has(url.pathname)) {
+      domainRequests += 1;
+      // The route's OWN counter decides whether this was served. Reading it
+      // before and after is a consumer-side observation of the producer-side
+      // number, which is what makes the per-client tally joinable rather than
+      // merely correlated: a request the route denied cannot inflate it.
+      const before = counter.snapshot().domainReadsServed;
+      const response = await app.fetch(request);
+      if (counter.snapshot().domainReadsServed > before) {
+        clientReads.record(clientId);
       }
-      return handleRecallRoute(url, request);
+      return response;
     }
 
-    // Count every domain-path request that reaches the app under test.
-    if (url.pathname === "/mcp") {
-      store.countRequest();
-      store.countClientRead(request.headers.get(CLIENT_ID_HEADER));
+    if (url.pathname === MCP_PATH) {
+      domainRequests += 1;
+      const response = await app.fetch(request);
+      if (await mcpServedAPage(response)) {
+        clientReads.record(clientId);
+        counter.recordDomainRead("served");
+      }
+      return response;
     }
+
     return app.fetch(request);
   },
 });
 
 function handleQaControl(url: URL, request: Request): Response {
+  void request;
   switch (url.pathname) {
     case "/qa/reset": {
-      store.reset();
-      const count = Number(url.searchParams.get("seed") ?? "7");
-      const hiddenParam = url.searchParams.get("hidden");
-      const hiddenIds = hiddenParam === null || hiddenParam === ""
-        ? []
-        : hiddenParam.split(",");
-      store.seed(count, { hiddenIds });
-      return json({ status: "reset", seeded: count, hiddenIds });
+      // `seed` is the number of VISIBLE memories; `hidden` is how many
+      // additional hidden-but-present rows to seed alongside them. Each hidden
+      // memory shares a local day with a visible one, so the served day-node
+      // exists in both fixture worlds and only its membership differs.
+      const plan = planFrom(url, "seed", "hidden");
+      backend.reseed(plan);
+      resetCounters();
+      return json({ status: "reset", seeded: plan.visibleCount, hidden: plan.hiddenCount });
     }
     case "/qa/absent": {
-      // Seeds a corpus where the named rows are PHYSICALLY ABSENT rather than
-      // authorization-hidden. The harness fetches the same page from this
-      // variant and from /qa/reset?hidden=<same ids> and asserts the two wire
-      // responses are byte-identical. Any difference — ordering, count,
-      // envelope, cursor — is an authorization oracle.
-      const count = Number(url.searchParams.get("seed") ?? "7");
-      const omitParam = url.searchParams.get("omit");
-      const omit = new Set(omitParam === null || omitParam === "" ? [] : omitParam.split(","));
-      seedSubset(store, count, omit);
-      return json({ status: "absent", seeded: store.allRowIds().length, omitted: [...omit] });
+      // The counterpart world: the same visible memories, with the hidden rows
+      // PHYSICALLY ABSENT rather than authorization-hidden. The harness fetches
+      // the same page from this variant and from /qa/reset?hidden=<same count>
+      // and asserts the two wire transcripts are byte-identical. Any difference
+      // — ordering, count, envelope, cursor, completeness — is an
+      // authorization oracle.
+      const plan = { visibleCount: countFrom(url, "seed", 7), hiddenCount: 0 };
+      backend.reseed(plan);
+      resetCounters();
+      return json({ status: "absent", seeded: plan.visibleCount, hidden: 0 });
     }
-    case "/qa/insert": {
-      const id = url.searchParams.get("id") ?? "retrieval-node-v1:inserted";
-      const sortKey = url.searchParams.get("sortKey") ?? "s00000005";
-      store.insert({ sortKey, id, text: `Inserted proposition ${id}`, visibleTo: null });
-      return json({ status: "inserted", id, sortKey });
+    case "/qa/grow": {
+      // Grows the corpus MID-PAGINATION without resetting the counters, for the
+      // concurrent-change proof. The seeder is a pure function of the memory
+      // index, so rows already served keep byte-identical content and only the
+      // snapshot generation moves.
+      const by = countFrom(url, "by", 2);
+      const current = backend.plan();
+      const grown = {
+        visibleCount: current.visibleCount + by,
+        hiddenCount: current.hiddenCount,
+      };
+      backend.reseed(grown);
+      return json({ status: "grown", seeded: grown.visibleCount, hidden: grown.hiddenCount });
     }
     case "/qa/stats": {
+      const served = counter.snapshot();
       return json({
-        servedRequests: store.servedRequests,
-        servedReads: store.servedReads,
-        servedReadsByClient: store.servedReadsByClient,
-        rows: store.allRowIds().length,
+        // Dispatch-side: requests that reached a domain path, any outcome.
+        servedRequests: domainRequests,
+        // Verdict-grade: pages that actually left this process.
+        servedReads: served.domainReadsServed,
+        servedReadsByClient: clientReads.snapshot(),
+        memories: backend.plan().visibleCount,
+        hiddenMemories: backend.plan().hiddenCount,
         fixtureTimezone: timezone,
         stamp: BACKEND_PROCESS_STAMP,
       });
@@ -193,21 +215,28 @@ function handleQaControl(url: URL, request: Request): Response {
   }
 }
 
-/** Seeds the standard corpus minus the omitted ids, which are never inserted. */
-function seedSubset(target: QaStore, count: number, omitIds: ReadonlySet<string>): void {
-  target.reset();
-  for (let index = 0; index < count; index += 1) {
-    const id = `retrieval-node-v1:seed-${String(index).padStart(4, "0")}`;
-    if (omitIds.has(id)) {
-      continue;
-    }
-    target.insert({
-      sortKey: `s${String(index * 10).padStart(8, "0")}`,
-      id,
-      text: `Synthesized proposition ${index}`,
-      visibleTo: null,
-    });
-  }
+/**
+ * Zeroes every counter between fixture worlds. Uses the served counter's own
+ * QA reset seam rather than replacing the instance, because the registered
+ * route captured the instance at registration time.
+ */
+function resetCounters(): void {
+  domainRequests = 0;
+  clientReads.reset();
+  resetServedCounter(counter);
+}
+
+function planFrom(url: URL, visibleParam: string, hiddenParam: string): QaFixturePlan {
+  const visibleCount = countFrom(url, visibleParam, 7);
+  const hiddenCount = Math.min(countFrom(url, hiddenParam, 0), visibleCount);
+  return { visibleCount, hiddenCount };
+}
+
+function countFrom(url: URL, name: string, fallback: number): number {
+  const raw = url.searchParams.get(name);
+  if (raw === null || raw === "") return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
 }
 
 function json(body: unknown, status = 200): Response {

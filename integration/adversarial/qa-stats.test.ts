@@ -66,11 +66,10 @@ describe("/qa/stats provenance stamp", () => {
 
 describe("/qa/stats servedReadsByClient — a joinable per-client counter", () => {
   /**
-   * red-proof: in serve.ts, delete the `store.countClientRead(...)` call
-   * that sits next to `store.countRequest()` in `handleRecallRoute` (leave
-   * the `/mcp` one in place). `servedReadsByClient` then only ever grows
-   * from `run-c` below and "run-a"/"run-b" never appear — this fails on the
-   * first `expect(byClient["run-a"])`.
+   * red-proof: in serve.ts, delete the `clientReads.record(clientId)` call
+   * from the recall-path branch of `fetch` (leave the `/mcp` one in place).
+   * "run-a"/"run-b" then never appear and this fails on the first
+   * `expect(byClient["run-a"])`.
    *
    * This is the load-bearing assertion: it checks the CONTENT two distinct
    * ids each land under their own key with their own count, not merely that
@@ -93,7 +92,7 @@ describe("/qa/stats servedReadsByClient — a joinable per-client counter", () =
   });
 
   /**
-   * red-proof: in serve.ts, delete the `store.countClientRead(...)` call in
+   * red-proof: in serve.ts, delete the `clientReads.record(clientId)` call in
    * the `/mcp` branch of the top-level `fetch` handler (leave the recall
    * route's call in place). `servedReadsByClient["mcp-run"]` then stays
    * undefined and this fails.
@@ -113,7 +112,7 @@ describe("/qa/stats servedReadsByClient — a joinable per-client counter", () =
   });
 
   /**
-   * red-proof: in qa-store.ts `sanitizeClientId`, delete the
+   * red-proof: in client-counter.ts `sanitizeClientId`, delete the
    * `rawClientId.length > MAX_CLIENT_ID_LENGTH` check (keep only the charset
    * regex). The 500-char id then survives sanitization verbatim and becomes
    * its own map key instead of folding into "anonymous" — this fails because
@@ -140,9 +139,9 @@ describe("/qa/stats servedReadsByClient — a joinable per-client counter", () =
   });
 
   /**
-   * red-proof: in qa-store.ts `countClientRead`, drop the
-   * `this.#servedReadsByClient.size < MAX_DISTINCT_CLIENT_KEYS` branch
-   * entirely (always use the sanitized id as the key). Every one of the 70
+   * red-proof: in client-counter.ts `record`, drop the
+   * `counts.size < MAX_DISTINCT_CLIENT_KEYS` branch entirely (always use the
+   * sanitized id as the key). Every one of the 70
    * distinct ids below then gets its own key, "overflow" never appears, and
    * `Object.keys(byClient).length` exceeds `MAX_DISTINCT_CLIENT_KEYS + 2`.
    */
