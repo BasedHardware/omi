@@ -10,7 +10,7 @@ on:
 concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
   # cancel the exact-SHA evidence consumed by desktop release planning.
-  group: desktop-swift-${{ github.event.pull_request.number || github.sha }}
+  group: desktop-swift-${{ (github.event.action == 'closed' && github.event.pull_request.merged && format('merged-{0}', github.event.pull_request.number)) || github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

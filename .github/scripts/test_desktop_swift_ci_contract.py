@@ -132,6 +132,8 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         changes = self.jobs["changes"]
 
         self.assertRegex(workflow, r"types:\s*\[[^]]*closed[^]]*\]")
+        self.assertIn("github.event.action == 'closed' && github.event.pull_request.merged", workflow)
+        self.assertIn("format('merged-{0}', github.event.pull_request.number)", workflow)
         self.assertIn("github.event.pull_request.number || github.sha", workflow)
         self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
         self.assertIn("github.event.action != 'closed'", changes)
@@ -223,7 +225,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         # push gets an immutable group and therefore runs its own exact-SHA
         # Build & Tests and Release Compile checks to a terminal conclusion.
         self.assertIn(
-            "group: desktop-swift-${{ github.event.pull_request.number || github.sha }}",
+            "group: desktop-swift-${{ (github.event.action == 'closed' && github.event.pull_request.merged && format('merged-{0}', github.event.pull_request.number)) || github.event.pull_request.number || github.sha }}",
             concurrency,
         )
         self.assertIn(
