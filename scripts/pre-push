@@ -225,7 +225,14 @@ check_optional_formatters() {
     [ -f "$file" ] || continue
     case "$file" in
       *.dart)
-        if [[ "$file" != *.gen.dart && "$file" != *.g.dart ]]; then
+        # Generated Dart is never hand-formatted (docs/agents/formatting.md). The
+        # `.g.dart` / `.gen.dart` suffixes cover most of it, but a GENERATED TEST cannot
+        # use them — Dart discovers tests by the `_test.dart` suffix, so a generated test
+        # must end in `_test.dart` and the exclusion above misses it. Its formatting is
+        # owned by its generator and enforced by the codegen drift check
+        # (`core/scripts/gen-bridge-http-conformance.mjs --check`); running dart format
+        # over it makes those two gates permanently contradict each other.
+        if [[ "$file" != *.gen.dart && "$file" != *.g.dart && "$file" != *_generated_test.dart ]]; then
           dart_files+=("$file")
         fi
         ;;

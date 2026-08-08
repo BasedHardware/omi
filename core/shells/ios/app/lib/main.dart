@@ -68,9 +68,7 @@ class SurfaceHost extends StatefulWidget {
   State<SurfaceHost> createState() => _SurfaceHostState();
 }
 
-class _SurfaceHostState extends State<SurfaceHost>
-    with WidgetsBindingObserver
-    implements OmiShellBridgeHandler {
+class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver implements OmiShellBridgeHandler {
   late final WebViewController _controller;
   late final OmiShellBridge _bridge;
   BridgeHttpHost? _http;
@@ -125,7 +123,8 @@ class _SurfaceHostState extends State<SurfaceHost>
     _acceptanceFallback?.cancel();
     _acceptanceFallback = null;
     _acceptanceEmitted = true;
-    final line = 'ACCEPTANCE phase=$phase bridge=${_http == null ? 'disabled' : 'enabled'} '
+    final line =
+        'ACCEPTANCE phase=$phase bridge=${_http == null ? 'disabled' : 'enabled'} '
         'servedCount=$served profileProvided=${_surfaceProfile.trim().isNotEmpty} '
         'status=${served > 0 ? 'PASS' : 'FAIL'}';
     debugPrint(line);
@@ -134,11 +133,11 @@ class _SurfaceHostState extends State<SurfaceHost>
   }
 
   SurfaceMode get _mode => switch (_modeFlag) {
-        'dev' => SurfaceMode.dev,
-        'loop' => SurfaceMode.loop,
-        'scheme' => SurfaceMode.scheme,
-        _ => SurfaceMode.ship,
-      };
+    'dev' => SurfaceMode.dev,
+    'loop' => SurfaceMode.loop,
+    'scheme' => SurfaceMode.scheme,
+    _ => SurfaceMode.ship,
+  };
 
   @override
   void initState() {
@@ -149,8 +148,10 @@ class _SurfaceHostState extends State<SurfaceHost>
     final apiBase = Uri.tryParse(_apiBaseUrl);
     if (_apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
       _http = BridgeHttpHost(baseUrl: apiBase, token: _apiToken);
-      debugPrint('[bridge-http] enabled for ${apiBase.scheme}://${apiBase.host} '
-          '(token ${_http!.hasCredential ? "present" : "absent"})');
+      debugPrint(
+        '[bridge-http] enabled for ${apiBase.scheme}://${apiBase.host} '
+        '(token ${_http!.hasCredential ? "present" : "absent"})',
+      );
     } else {
       debugPrint('[bridge-http] disabled (set OMI_API_BASE_URL to enable privileged HTTP)');
     }
@@ -174,27 +175,29 @@ class _SurfaceHostState extends State<SurfaceHost>
           }
         }
       })
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (url) {
-          _scheme?.log('PAGE-FINISHED ${_redactedUrl(url)}');
-          if (const bool.fromEnvironment('AUTODRIVE')) {
-            unawaited(_autodrive());
-          } else {
-            if (_acceptance || _acceptanceExit) {
-              // Surface store refresh is asynchronous; page-finished alone is
-              // not evidence of bridge traffic. The marker above wins, while
-              // this bounded fallback keeps a hung surface fail-capable.
-              _acceptanceFallback ??= Timer(const Duration(seconds: 5), () {
-                _acceptanceFallback = null;
-                unawaited(_emitAcceptance('ready-timeout'));
-              });
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (url) {
+            _scheme?.log('PAGE-FINISHED ${_redactedUrl(url)}');
+            if (const bool.fromEnvironment('AUTODRIVE')) {
+              unawaited(_autodrive());
+            } else {
+              if (_acceptance || _acceptanceExit) {
+                // Surface store refresh is asynchronous; page-finished alone is
+                // not evidence of bridge traffic. The marker above wins, while
+                // this bounded fallback keeps a hung surface fail-capable.
+                _acceptanceFallback ??= Timer(const Duration(seconds: 5), () {
+                  _acceptanceFallback = null;
+                  unawaited(_emitAcceptance('ready-timeout'));
+                });
+              }
             }
-          }
-        },
-        onWebResourceError: (e) {
-          _scheme?.log('WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}');
-        },
-      ));
+          },
+          onWebResourceError: (e) {
+            _scheme?.log('WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}');
+          },
+        ),
+      );
     _bridge = OmiShellBridge(_controller, this);
     _boot();
   }
@@ -233,8 +236,10 @@ class _SurfaceHostState extends State<SurfaceHost>
       case SurfaceMode.scheme:
         _scheme = SchemeSpike();
         await _scheme!.init();
-        await _scheme!.log('BOOT scheme mode, shell contract $kBridgeContractVersion, '
-            'bundle=$_schemeBundle, bundles installed under ${_scheme!.docsDir}/bundles');
+        await _scheme!.log(
+          'BOOT scheme mode, shell contract $kBridgeContractVersion, '
+          'bundle=$_schemeBundle, bundles installed under ${_scheme!.docsDir}/bundles',
+        );
         // Probe phase machine only for the original v1/v2/v3 suite.
         _schemePhase = _schemeBundle == 'v1' ? 1 : 0;
         await _mountBundle(_schemeBundle);
@@ -251,18 +256,25 @@ class _SurfaceHostState extends State<SurfaceHost>
     final s = _scheme!;
     final gate = await s.gateCheck(version, kBridgeContractVersion);
     if (!gate.ok) {
-      await s.log('GATE-BLOCKED bundle=$version bundleId=${gate.bundleId} '
-          'bundleContract=${gate.bundleContract} shellContract=$kBridgeContractVersion '
-          '— navigation NOT attempted');
-      setState(() => _blocked = 'Bundle "$version" refused: it requires bridge contract '
-          '${gate.bundleContract}, this shell speaks $kBridgeContractVersion.');
+      await s.log(
+        'GATE-BLOCKED bundle=$version bundleId=${gate.bundleId} '
+        'bundleContract=${gate.bundleContract} shellContract=$kBridgeContractVersion '
+        '— navigation NOT attempted',
+      );
+      setState(
+        () => _blocked =
+            'Bundle "$version" refused: it requires bridge contract '
+            '${gate.bundleContract}, this shell speaks $kBridgeContractVersion.',
+      );
       return false;
     }
     await s.setActiveBundle(version);
     setState(() => _blocked = null);
     final target = 'omi-ui://local/index.html$_surfaceQuerySuffix';
-    await s.log('NAVIGATE bundle=$version -> omi-ui://local/index.html '
-        'queryPresent=${_surfaceQuerySuffix.isNotEmpty}');
+    await s.log(
+      'NAVIGATE bundle=$version -> omi-ui://local/index.html '
+      'queryPresent=${_surfaceQuerySuffix.isNotEmpty}',
+    );
     await _controller.loadRequest(Uri.parse(target));
     return true;
   }
@@ -285,23 +297,29 @@ class _SurfaceHostState extends State<SurfaceHost>
         await s.log('PHASE 2 complete (v2 after swap). Attempting v3 (bad contract).');
         _schemePhase = 3;
         final mounted = await _mountBundle('v3');
-        await s.log(mounted
-            ? 'PHASE 3 UNEXPECTED: v3 mounted despite contract mismatch'
-            : 'PHASE 3 ok: v3 refused by gate; error surface shown. Rolling back to v2 in 2s.');
+        await s.log(
+          mounted
+              ? 'PHASE 3 UNEXPECTED: v3 mounted despite contract mismatch'
+              : 'PHASE 3 ok: v3 refused by gate; error surface shown. Rolling back to v2 in 2s.',
+        );
         await Future<void>.delayed(const Duration(seconds: 2));
         _schemePhase = 4;
         await _mountBundle('v2');
       case 4:
-        await s.log('PHASE 4 complete (v2 rollback remount). SPIKE-DONE. '
-            'Opening suspend window: will renavigate to v1 in 3s — background the app '
-            'right after the SUSPEND-WINDOW line to test suspension mid-navigation.');
+        await s.log(
+          'PHASE 4 complete (v2 rollback remount). SPIKE-DONE. '
+          'Opening suspend window: will renavigate to v1 in 3s — background the app '
+          'right after the SUSPEND-WINDOW line to test suspension mid-navigation.',
+        );
         _schemePhase = 5;
         await Future<void>.delayed(const Duration(seconds: 3));
         await s.log('SUSPEND-WINDOW navigating v1 now');
         await _mountBundle('v1');
       case 5:
-        await s.log('PHASE 5 complete: navigation opened in the suspend window '
-            'finished and the probe suite ran. SUSPEND-NAV-COMPLETE.');
+        await s.log(
+          'PHASE 5 complete: navigation opened in the suspend window '
+          'finished and the probe suite ran. SUSPEND-NAV-COMPLETE.',
+        );
       default:
         await s.log('PROBE all-done in unexpected phase $_schemePhase');
     }
@@ -323,7 +341,6 @@ class _SurfaceHostState extends State<SurfaceHost>
     await _controller.loadRequest(Uri.parse('http://127.0.0.1:${_loopB!.port}/'));
   }
 
-
   // AUTODRIVE custody probes for the privileged-HTTP bridge (wave 9), mirroring
   // the macOS wave-7 set. PROTOTYPE-ONLY SCAFFOLDING: this drives the raw channel
   // with deliberately hostile inputs and must never exist on a production path
@@ -334,7 +351,8 @@ class _SurfaceHostState extends State<SurfaceHost>
   // surface's own reply sink rather than replacing it, so the harness keeps
   // working while the probe runs.
   Future<void> _autodriveBridgeProbes() async {
-    await _controller.runJavaScript(r"""
+    await _controller.runJavaScript(
+      r"""
       window.__w9 = (function () {
         var pend = new Map();
         var prev = window.__omiHttpReply;
@@ -365,7 +383,9 @@ class _SurfaceHostState extends State<SurfaceHost>
       console.log('W9 probe-ready channelPresent=' + !!window[%CHANNEL%] +
         ' transport=' + ((document.querySelector('[data-transport]') || {}).getAttribute
           ? document.querySelector('[data-transport]').getAttribute('data-transport') : 'none'));
-    """.replaceAll('%CHANNEL%', "'${BridgeHttpContract.channel}'"));
+    """
+          .replaceAll('%CHANNEL%', "'${BridgeHttpContract.channel}'"),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 400));
 
     await _controller.runJavaScript(r"""
@@ -525,10 +545,12 @@ class _SurfaceHostState extends State<SurfaceHost>
       ''');
       final seedText = _addTask.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
       for (final route in const ['tasks', 'memories', 'folders', 'conversations']) {
-        await _controller.runJavaScript("console.log('AUTODRIVE route-open $route=' + window.__ad.openTab('$route'));" );
+        await _controller.runJavaScript("console.log('AUTODRIVE route-open $route=' + window.__ad.openTab('$route'));");
         await Future<void>.delayed(const Duration(milliseconds: 700));
         if (seedText.isNotEmpty && route != 'conversations') {
-          await _controller.runJavaScript("console.log('AUTODRIVE seed $route ' + window.__ad.seed('$route', '$seedText'));" );
+          await _controller.runJavaScript(
+            "console.log('AUTODRIVE seed $route ' + window.__ad.seed('$route', '$seedText'));",
+          );
           await Future<void>.delayed(const Duration(milliseconds: 1200));
         }
         await _controller.runJavaScript(
@@ -592,12 +614,14 @@ class _SurfaceHostState extends State<SurfaceHost>
         t.cancel();
         return;
       }
-      _bridge.transcriptEvent(TranscriptEvent(
-        sessionId: id,
-        text: words.sublist(0, i + 1).join(' '),
-        isFinal: i == words.length - 1,
-        shellSentAtMs: DateTime.now().millisecondsSinceEpoch,
-      ));
+      _bridge.transcriptEvent(
+        TranscriptEvent(
+          sessionId: id,
+          text: words.sublist(0, i + 1).join(' '),
+          isFinal: i == words.length - 1,
+          shellSentAtMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
       i++;
     });
     return ListenSession(sessionId: id);
@@ -623,9 +647,11 @@ class _SurfaceHostState extends State<SurfaceHost>
                 color: const Color(0xE61C0B0B),
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(24),
-                child: Text('UPDATE BLOCKED\n\n$_blocked',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14, color: Color(0xFFFF453A))),
+                child: Text(
+                  'UPDATE BLOCKED\n\n$_blocked',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Color(0xFFFF453A)),
+                ),
               ),
           ],
         ),
