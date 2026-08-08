@@ -1,0 +1,37 @@
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_6ee6c64dccc4f3::t_aa04eb2eb1df25 22
+  s_6ee6c64dccc4f3::t_8355402a34a59e 426-428
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_6ee6c64dccc4f3::t_f1e1367f0764e4 94,130-132,134
+  s_6ee6c64dccc4f3::t_8355402a34a59e 129,133
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_6ee6c64dccc4f3::t_f1e1367f0764e4 47
+.github/failure-classes/FC-hosted-control-window-drag-ownership.json
+  s_6ee6c64dccc4f3::t_8355402a34a59e 5
+  s_6ee6c64dccc4f3::t_eaa2f162ff578b 11-12
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_6ee6c64dccc4f3::t_aa04eb2eb1df25 435
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_6ee6c64dccc4f3::t_d03d698eced9f0 249-250
+  s_6ee6c64dccc4f3::t_8355402a34a59e 33,36-37,164,219,221,226-227,232,234,236-247
+  s_6ee6c64dccc4f3::t_4a425a37b90d9b 222
+  s_6ee6c64dccc4f3::t_b9e85bb80c95ae 235
+  s_6ee6c64dccc4f3::t_f1e1367f0764e4 220
+  s_6ee6c64dccc4f3::t_aa04eb2eb1df25 229-230,233,248,253,255-257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "58e6e2f92ab9b8f6e2c1323a316dd1ad107bc87b",
+  "prompts": {},
+  "sessions": {
+    "s_6ee6c64dccc4f3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7a-616d-7510-bb06-c7599e02c6e2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
