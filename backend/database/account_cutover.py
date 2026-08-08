@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from database._client import get_firestore_client
 from database.read_boundary import parse_snapshot_strict
@@ -177,7 +177,7 @@ def cas_set_account_cutover_record(
             ) from error
 
         @transactional
-        def _txn(transaction) -> AccountCutoverRecord:
+        def _txn(transaction: Any) -> AccountCutoverRecord:
             snapshot = doc_ref.get(transaction=transaction)
             current_generation, current_token = _read_current_generation_and_token(
                 snapshot,
@@ -192,7 +192,7 @@ def cas_set_account_cutover_record(
             transaction.set(doc_ref, payload)
             return record
 
-        return _txn(transaction_factory())
+        return cast(Any, _txn)(transaction_factory())
 
     raise AccountCutoverConcurrencyError(
         'firestore client does not support transactional/locked cutover CAS',

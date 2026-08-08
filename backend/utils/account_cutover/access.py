@@ -79,7 +79,7 @@ def parse_account_generation_header(headers: Mapping[str, str]) -> Optional[int]
     return value if value >= 0 else None
 
 
-def _deny_generation_mismatch(record, *, client_generation: Optional[int]) -> None:
+def _deny_generation_mismatch(record: AccountCutoverRecord, *, client_generation: Optional[int]) -> None:
     raise AccountCutoverAccessDenial(
         code='account_generation_mismatch',
         client_action=AccountCutoverClientAction.none,

@@ -43,7 +43,7 @@ def minimum_builds_projection(
     merged = dict(MINIMUM_SUPPORTED_BUILDS)
     if overrides:
         for platform, build in overrides.items():
-            if isinstance(build, int) and build >= 0:
+            if build >= 0:
                 merged[str(platform).strip().lower()] = build
     return tuple(
         PlatformMinimumBuild(platform=platform, minimum_supported_build=build)
