@@ -92,6 +92,103 @@ test("on-disk adapter: size cap drops the oldest records, not the newest", async
   // `recovered.length` grows past `cap` and `test.record.0` is still present.
 });
 
+test("on-disk adapter: cap=1 keeps only the newest record", async () => {
+  const store = new MemoryStore();
+  const bridge = store.openBridge("user-a");
+  const cap = 1;
+  const sink = await openOnDiskFallbackSink(bridge, cap);
+  for (let i = 0; i < 4; i++) {
+    sink.record({ path: `test.record.${i}`, from: "x", to: "y", at: i });
+    await drainMicrotasks();
+  }
+  const recovered = await readOnDiskFallbackRecords(bridge);
+  assert.equal(recovered.length, 1, "cap=1 must leave exactly one record");
+  assert.equal(recovered[0]!.path, "test.record.3", "the sole survivor is always the newest");
+  // red-proof: change the cap check from `size > cap` to `size > cap + 1` —
+  // the second append no longer truncates, so more than one record survives
+  // and the newest-only claim fails.
+});
+
+test("on-disk adapter: exactly at the cap does not truncate", async () => {
+  const store = new MemoryStore();
+  const bridge = store.openBridge("user-a");
+  const cap = 5;
+  const sink = await openOnDiskFallbackSink(bridge, cap);
+  for (let i = 0; i < cap; i++) {
+    sink.record({ path: `test.record.${i}`, from: "x", to: "y", at: i });
+    await drainMicrotasks();
+  }
+  const recovered = await readOnDiskFallbackRecords(bridge);
+  assert.equal(recovered.length, cap, "filling exactly to the cap must not drop any records");
+  assert.deepEqual(
+    recovered.map((r) => r.path),
+    ["test.record.0", "test.record.1", "test.record.2", "test.record.3", "test.record.4"],
+    "all five records survive in append order when size never exceeds cap",
+  );
+  // red-proof: change the cap check from `size > cap` to `size >= cap` and the
+  // truncate offset from `lsn - cap` to `lsn - (cap - 1)` — the 5th append
+  // then truncates and drops the oldest, so `recovered.length` is 4 not 5.
+});
+
+test("on-disk adapter: one over the cap drops exactly the single oldest", async () => {
+  const store = new MemoryStore();
+  const bridge = store.openBridge("user-a");
+  const cap = 5;
+  const sink = await openOnDiskFallbackSink(bridge, cap);
+  for (let i = 0; i < cap + 1; i++) {
+    sink.record({ path: `test.record.${i}`, from: "x", to: "y", at: i });
+    await drainMicrotasks();
+  }
+  const recovered = await readOnDiskFallbackRecords(bridge);
+  assert.equal(recovered.length, cap, "one over the cap must leave exactly `cap` records");
+  assert.ok(!recovered.some((r) => r.path === "test.record.0"), "the single dropped record is the oldest");
+  assert.ok(
+    recovered.some((r) => r.path === "test.record.1"),
+    "the second-oldest must survive — only one record is dropped",
+  );
+  assert.equal(recovered.at(-1)?.path, "test.record.5", "the newest record survives");
+  // red-proof: change the truncate offset from `lsn - cap` to `lsn - (cap - 1)` —
+  // the single overage then drops two oldest instead of one, so length is 4
+  // and `test.record.1` is missing too.
+});
+
+test("on-disk adapter: cap keeps holding across a second round of appends", async () => {
+  const store = new MemoryStore();
+  const bridge = store.openBridge("user-a");
+  const cap = 3;
+  const sink = await openOnDiskFallbackSink(bridge, cap);
+  for (let i = 0; i < 5; i++) {
+    sink.record({ path: `test.record.${i}`, from: "x", to: "y", at: i });
+    await drainMicrotasks();
+  }
+  const afterFirst = await readOnDiskFallbackRecords(bridge);
+  assert.equal(afterFirst.length, cap, "first wave must already be capped");
+  assert.deepEqual(
+    afterFirst.map((r) => r.path),
+    ["test.record.2", "test.record.3", "test.record.4"],
+  );
+
+  for (let i = 5; i < 8; i++) {
+    sink.record({ path: `test.record.${i}`, from: "x", to: "y", at: i });
+    await drainMicrotasks();
+  }
+  const afterSecond = await readOnDiskFallbackRecords(bridge);
+  assert.equal(afterSecond.length, cap, "second wave must still be capped — not only the first truncation");
+  assert.deepEqual(
+    afterSecond.map((r) => r.path),
+    ["test.record.5", "test.record.6", "test.record.7"],
+    "after the second round, only the newest `cap` records remain",
+  );
+  assert.ok(
+    !afterSecond.some((r) => r.path === "test.record.2"),
+    "records that survived the first truncation are still subject to later ones",
+  );
+  // red-proof: change the truncate offset from `lsn - cap` to `size - cap`
+  // (tracked count instead of latest LSN) — after the first truncation,
+  // surviving entries have LSNs well above `size - cap`, so later truncations
+  // stop removing the oldest and the second-round cap fails.
+});
+
 function opWithPayload(opId: string, payload: string): PendingOp {
   return { opId, domain: "tasks", recordId: "flying-dragon-vibrant", payload, summary: `test op ${opId}`, attempts: 0 };
 }
