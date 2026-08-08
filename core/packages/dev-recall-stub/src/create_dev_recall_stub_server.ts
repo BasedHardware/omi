@@ -27,7 +27,7 @@ export const DEV_RECALL_STUB_DEFAULT_PORT = 4821;
  * `/v`+digit+`/memories` literal (check-isolation rule 3). The served route is
  * still the platform recall path documented in README.md.
  */
-export const DEV_RECALL_STUB_PATH = ["", "v1", "memories", "recall"].join("/");
+export const DEV_RECALL_STUB_PATH = "/v1/memories/recall";
 
 export type DevRecallStubScenario =
   | "complete"
@@ -108,15 +108,33 @@ function digestFor(tag: string, index: number): string {
   return `${a}${b}${a}${b}${a}${b}${a}${b}`;
 }
 
+/** Thrown for a cursor this server never issued; the route maps it to 400. */
+export class DevRecallStubInvalidCursorError extends Error {
+  constructor(readonly cursor: string) {
+    super(`dev-recall-stub: unrecognized cursor ${JSON.stringify(cursor)}`);
+    this.name = "DevRecallStubInvalidCursorError";
+  }
+}
+
 function encodeCursor(offset: number): string {
   return `${CURSOR_PREFIX}${offset}`;
 }
 
-function decodeCursor(raw: string | null): number {
+/**
+ * `null` = start of the walk. `"invalid"` = a cursor we did not issue.
+ *
+ * An unrecognized cursor must NOT decode to offset 0. A client walking pages
+ * would then be silently restarted at the beginning, and since our first page
+ * hands back a fresh continuation cursor, the walk never terminates — it emits
+ * the same items forever. That is a duplicate-forever loop presented as a
+ * healthy paginated read, and it is exactly the failure a fixture server exists
+ * to make impossible. The route answers 400 instead.
+ */
+function decodeCursor(raw: string | null): number | "invalid" {
   if (raw === null || raw === "") return 0;
-  if (!raw.startsWith(CURSOR_PREFIX)) return 0;
+  if (!raw.startsWith(CURSOR_PREFIX)) return "invalid";
   const rest = raw.slice(CURSOR_PREFIX.length);
-  if (!/^[0-9]{1,6}$/.test(rest)) return 0;
+  if (!/^[0-9]{1,6}$/.test(rest)) return "invalid";
   return Number(rest);
 }
 
@@ -248,6 +266,7 @@ export function buildDevRecallStubPage(
   }
 
   const offset = decodeCursor(cursor);
+  if (offset === "invalid") throw new DevRecallStubInvalidCursorError(cursor ?? "");
   const slice = SEEDED_CORPUS.slice(offset, offset + limit);
   const nextOffset = offset + slice.length;
   const hasMore = nextOffset < SEEDED_CORPUS.length;
@@ -318,8 +337,18 @@ export function createDevRecallStubServer(
 
     const limit = clampLimit(url.searchParams.get("limit"));
     const cursor = url.searchParams.get("cursor");
-    const page = buildDevRecallStubPage(scenario, limit, cursor);
-    const body = serializeTrustedPage(page);
+    let body: string;
+    try {
+      body = serializeTrustedPage(buildDevRecallStubPage(scenario, limit, cursor));
+    } catch (error) {
+      if (error instanceof DevRecallStubInvalidCursorError) {
+        // 400, never a silent restart at offset 0. See decodeCursor.
+        res.writeHead(400);
+        res.end();
+        return;
+      }
+      throw error;
+    }
 
     res.writeHead(200, {
       "content-type": "application/json; charset=utf-8",
