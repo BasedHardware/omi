@@ -14,4 +14,7 @@ func TestStripPacketHeader(t *testing.T) {
 	if AudioDataUUID == "" || ServiceUUID == "" {
 		t.Fatal("uuids empty")
 	}
+	if CodecOpus != 20 || CodecOpusFS320 != 21 {
+		t.Fatalf("unexpected codec ids: opus=%d, opusFS320=%d", CodecOpus, CodecOpusFS320)
+	}
 }

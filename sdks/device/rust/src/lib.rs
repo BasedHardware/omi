@@ -27,6 +27,37 @@ pub fn strip_packet_header(packet: &[u8]) -> &[u8] {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BleAudioCodec {
+    Pcm16,
+    Pcm8,
+    Opus,
+    OpusFs320,
+    Unknown(u8),
+}
+
+impl BleAudioCodec {
+    pub const fn from_id(id: u8) -> Self {
+        match id {
+            0 => Self::Pcm16,
+            1 => Self::Pcm8,
+            20 => Self::Opus,
+            21 => Self::OpusFs320,
+            other => Self::Unknown(other),
+        }
+    }
+
+    pub const fn to_id(self) -> u8 {
+        match self {
+            Self::Pcm16 => 0,
+            Self::Pcm8 => 1,
+            Self::Opus => 20,
+            Self::OpusFs320 => 21,
+            Self::Unknown(id) => id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SttEngine {
     Deepgram,
     Whisper,
@@ -105,5 +136,14 @@ mod tests {
             parakeet_ws_url("https://parakeet.example/", 16000),
             "wss://parakeet.example/v3/stream?sample_rate=16000"
         );
+    }
+
+    #[test]
+    fn codec_ids() {
+        assert_eq!(BleAudioCodec::from_id(0), BleAudioCodec::Pcm16);
+        assert_eq!(BleAudioCodec::from_id(1), BleAudioCodec::Pcm8);
+        assert_eq!(BleAudioCodec::from_id(20), BleAudioCodec::Opus);
+        assert_eq!(BleAudioCodec::from_id(21), BleAudioCodec::OpusFs320);
+        assert_eq!(BleAudioCodec::from_id(99), BleAudioCodec::Unknown(99));
     }
 }

@@ -18,7 +18,8 @@ Shared contract for device SDKs (`sdks/python`, `sdks/swift`, `sdks/react-native
 |----|-------|
 | 0 | PCM 16-bit |
 | 1 | PCM 8-bit |
-| 20 / `0x14` | Opus (common on Friend/Omi) |
+| 20 / `0x14` | Opus / 10ms (common on DevKit) |
+| 21 / `0x15` | opusFS320 / 20ms (Omi CV1, 50 fps) |
 
 Default stream assumption in thin SDKs: **Opus @ 16 kHz mono**, frame size **960 samples**.
 
