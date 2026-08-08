@@ -76,7 +76,6 @@ _STATE_PREFIX = 'x_oauth_state:'
 # them without a collection-group query/index. Written on connect, removed on
 # disconnect.
 _REGISTRY_COLLECTION = 'x_connector_users'
-SYNC_JOB_INTERVAL_HOURS = 6  # background sync cadence (the cron fires hourly)
 _SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 
 # Cap how much we pull per sync to stay well within X rate limits.
@@ -576,25 +575,32 @@ def disconnect(uid: str) -> None:
 
 
 # ----------------------------------------------------------------------------
-# Periodic background sync (driven by the hourly cron in modal/job.py)
+# Periodic background sync (hosted by x-connector-sync-job; Scheduler owns cadence)
 # ----------------------------------------------------------------------------
-
-
-def should_run_x_sync_job() -> bool:
-    """Gate the sync to every SYNC_JOB_INTERVAL_HOURS (the cron fires hourly)."""
-    return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
 
 
 async def run_x_sync_job() -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
-    a slow/failed account never blocks the others."""
+    a slow/failed account never blocks the others.
+
+    The summary always includes ``failed`` and ``errors``. Global listing
+    failures populate ``errors`` so the Cloud Run entrypoint can exit non-zero
+    instead of looking healthy to Scheduler (#9298 / #11183).
+    """
     try:
         uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
     except Exception as e:
         logger.error(f'x_connector: sync job could not list users: {e}')
-        return {'users': 0, 'synced': 0, 'new_posts': 0}
+        return {
+            'users': 0,
+            'synced': 0,
+            'new_posts': 0,
+            'failed': 0,
+            'errors': [f'list_users: {type(e).__name__}: {e}'],
+        }
 
     synced = 0
+    failed = 0
     new_posts = 0
     for uid in uids:
         try:
@@ -602,9 +608,39 @@ async def run_x_sync_job() -> Dict:
             if result.get('success'):
                 synced += 1
                 new_posts += int(result.get('new_posts', 0))
+            else:
+                failed += 1
         except Exception as e:
+            failed += 1
             logger.warning(f'x_connector: sync job failed for uid={uid}: {e}')
         await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)
 
-    logger.info(f'x_connector: sync job done — users={len(uids)} synced={synced} new_posts={new_posts}')
-    return {'users': len(uids), 'synced': synced, 'new_posts': new_posts}
+    logger.info(
+        f'x_connector: sync job done — users={len(uids)} synced={synced} ' f'failed={failed} new_posts={new_posts}'
+    )
+    return {
+        'users': len(uids),
+        'synced': synced,
+        'new_posts': new_posts,
+        'failed': failed,
+        'errors': [],
+    }
+
+
+def raise_if_x_sync_job_failed(summary: Dict) -> None:
+    """Fail the Cloud Run Job when the scheduled sync contract could not complete.
+
+    Mirrors memory-maintenance-job: inspect the summary and raise so Scheduler /
+    Cloud Run show a failed execution instead of a silent healthy no-op.
+    """
+    errors = list(summary.get('errors') or [])
+    if errors:
+        raise RuntimeError(f"x-connector-sync-job failed: {'; '.join(str(e) for e in errors)}")
+
+    users = int(summary.get('users') or 0)
+    synced = int(summary.get('synced') or 0)
+    failed = int(summary.get('failed') or 0)
+    # Empty registry is a valid healthy run. Total failure across every connected
+    # user means the sync contract did not complete even though listing worked.
+    if users > 0 and synced == 0 and failed >= users:
+        raise RuntimeError(f"x-connector-sync-job failed: synced 0/{users} connected user(s) (failed={failed})")

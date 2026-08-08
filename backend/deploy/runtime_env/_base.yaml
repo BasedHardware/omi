@@ -495,11 +495,41 @@ environment_shared:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
             version: latest
+        env:
+          OMI_ENV_STAGE:
+            value: '{env}'
+            category: runtime_identity
+      x-connector-sync-job:
+        secrets:
+          OPENAI_API_KEY:
+            secret: OPENAI_API_KEY
+            version: latest
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
+          ENCRYPTION_SECRET:
+            secret: ENCRYPTION_SECRET
+            version: latest
           PINECONE_API_KEY:
             secret: PINECONE_API_KEY
             version: latest
+          X_OAUTH_CLIENT_SECRET:
+            secret: X_OAUTH_CLIENT_SECRET
+            version: latest
+          RAPID_API_KEY:
+            secret: RAPID_API_KEY
+            version: latest
         env:
           PINECONE_INDEX_NAME:
+            category: integrations
+          X_OAUTH_CLIENT_ID:
+            env_var: X_OAUTH_CLIENT_ID
+            category: oauth_metadata
+          X_OAUTH_REDIRECT_URI:
+            env_var: X_OAUTH_REDIRECT_URI
+            category: oauth_metadata
+          RAPID_API_HOST:
+            env_var: RAPID_API_HOST
             category: integrations
           OMI_ENV_STAGE:
             value: '{env}'

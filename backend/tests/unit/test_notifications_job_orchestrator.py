@@ -1,4 +1,4 @@
-"""notifications-job orchestrator no longer hosts memory maintenance."""
+"""notifications-job orchestrator hosts push/daily summary only (not X sync / memory)."""
 
 from __future__ import annotations
 
@@ -39,6 +39,34 @@ def test_start_job_source_does_not_invoke_memory_maintenance():
 
     assert "run_canonical_short_term_maintenance_cron" not in imported_names
     assert "run_canonical_short_term_maintenance_cron" not in source
+
+
+def test_start_job_source_does_not_import_x_connector():
+    jobs_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "jobs.py"
+    source = jobs_path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "utils.x_connector":
+            raise AssertionError("jobs.py must not import utils.x_connector")
+
+    assert "run_x_sync_job" not in source
+    assert "should_run_x_sync_job" not in source
+
+
+def test_x_connector_sync_job_entrypoint_calls_runner_without_hour_modulo():
+    entry_path = Path(__file__).resolve().parents[2] / "modal" / "x_connector_sync_job.py"
+    source = entry_path.read_text(encoding="utf-8")
+    assert "run_x_sync_job" in source
+    assert "raise_if_x_sync_job_failed" in source
+    assert "should_run_x_sync_job" not in source
+    assert "from utils.other.jobs import start_job" not in source
+    assert "asyncio.run(" in source
+    assert 'if __name__ == "__main__":' in source
+    assert "def main() -> None:" in source
+    assert "firebase_admin.initialize_app" in source
+    # Deploy readiness: Cloud Run must see non-zero exit on sync-contract failure.
+    assert "raise_if_x_sync_job_failed(summary)" in source
 
 
 def test_memory_maintenance_job_entrypoint_calls_cron_runner():

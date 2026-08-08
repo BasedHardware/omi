@@ -143,6 +143,28 @@
             }
         },
         {
+            "name": "x-connector-sync-job",
+            "dockerfile": "backend/modal/Dockerfile.x_connector_sync_job",
+            "deployment_workflows": [
+                ".github/workflows/gcp_x_connector_sync_job.yml"
+            ],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend/modal",
+            "workdir": "/app",
+            "entrypoints": ["x_connector_sync_job"],
+            "image_import_smoke": true,
+            "smoke_environment": {
+                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef",
+                "OPENAI_API_KEY": "fake-x-connector-sync-image-smoke-only"
+            },
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
+            }
+        },
+        {
             "name": "notifications-job",
             "dockerfile": "backend/modal/Dockerfile.notifications_job",
             "deployment_workflows": [".github/workflows/gcp_notifications_job.yml"],
