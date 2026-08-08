@@ -8,6 +8,7 @@ import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -49,9 +50,9 @@ class _MobileAppState extends State<MobileApp> {
           }
           if (SharedPreferencesUtil().onboardingCompleted) {
             if (!SharedPreferencesUtil().permissionsCompleted) {
-              return const _PermissionsGate();
+              return const AccountCutoverBlockingGate(child: _PermissionsGate());
             }
-            return const HomePageWrapper();
+            return const AccountCutoverBlockingGate(child: HomePageWrapper());
           } else {
             return const OnboardingWrapper();
           }

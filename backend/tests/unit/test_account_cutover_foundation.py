@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from database import account_cutover as account_cutover_db
+from database.read_boundary import MalformedDocError
 from models.account_cutover import (
     AccountCutoverCheckpointPhase,
     AccountCutoverClientAction,
@@ -18,6 +17,7 @@ from models.account_cutover import (
     OfflineQueueInstruction,
 )
 from routers import account_cutover as account_cutover_router
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.account_cutover.access import (
     AccountCutoverAccessDenial,
     evaluate_account_cutover_access,
@@ -34,53 +34,20 @@ from utils.account_cutover.state import AccountCutoverTransitionError, apply_cut
 from utils.other import endpoints as auth
 
 
-class _FakeSnapshot:
-    def __init__(self, data=None):
-        self._data = data
-        self.exists = data is not None
-
-    def to_dict(self):
-        return dict(self._data) if self._data is not None else None
-
-
-class _FakeDoc:
-    def __init__(self, store, path):
-        self._store = store
-        self._path = path
-
-    def get(self):
-        return _FakeSnapshot(self._store.get(self._path))
-
-    def set(self, payload):
-        self._store[self._path] = dict(payload)
-
-    def collection(self, name):
-        return _FakeCollection(self._store, f'{self._path}/{name}')
-
-
-class _FakeCollection:
-    def __init__(self, store, path):
-        self._store = store
-        self._path = path
-
-    def document(self, doc_id):
-        return _FakeDoc(self._store, f'{self._path}/{doc_id}')
-
-    def collection(self, name):
-        return _FakeCollection(self._store, f'{self._path}/{name}')
-
-
-class _FakeDb:
-    def __init__(self):
-        self._store = {}
-
-    def collection(self, name):
-        return _FakeCollection(self._store, name)
+@pytest.fixture
+def fake_db():
+    return StrictFirestore()
 
 
 @pytest.fixture
-def fake_db():
-    return _FakeDb()
+def enroll_uid(monkeypatch):
+    def _enroll(uid: str):
+        monkeypatch.setattr(
+            'utils.account_cutover.coordinator.is_account_cutover_cohort_member',
+            lambda value: value == uid,
+        )
+
+    return _enroll
 
 
 def test_legal_transitions_cover_accepted_cutover_graph():
@@ -91,7 +58,7 @@ def test_legal_transitions_cover_accepted_cutover_graph():
     assert AccountCutoverState.legacy not in legal_transitions(AccountCutoverState.new)
 
 
-def test_transition_bumps_generation_and_sets_offline_drain(fake_db):
+def test_transition_bumps_generation_and_quarantines_at_fence():
     record = AccountCutoverRecord(uid='u1')
     next_record = apply_cutover_transition(
         record,
@@ -103,7 +70,7 @@ def test_transition_bumps_generation_and_sets_offline_drain(fake_db):
     )
     assert next_record.state == AccountCutoverState.migrating
     assert next_record.account_generation == 1
-    assert next_record.offline_queue_instruction == OfflineQueueInstruction.drain
+    assert next_record.offline_queue_instruction == OfflineQueueInstruction.quarantine
 
 
 def test_lossy_rollback_marks_stranded_data():
@@ -151,7 +118,7 @@ def test_control_projection_force_upgrade_when_below_floor():
     assert control.auth_bootstrap_reachable is True
 
 
-def test_control_projection_migration_maintenance():
+def test_control_projection_migration_maintenance_quarantines():
     record = AccountCutoverRecord(
         uid='u1',
         state=AccountCutoverState.migrating,
@@ -160,7 +127,7 @@ def test_control_projection_migration_maintenance():
     )
     control = build_account_cutover_control(record, platform='macos', client_build=100)
     assert control.client_action == AccountCutoverClientAction.migration_maintenance
-    assert control.offline_queue_instruction == OfflineQueueInstruction.drain
+    assert control.offline_queue_instruction == OfflineQueueInstruction.quarantine
     assert control.legacy_writes_allowed is False
 
 
@@ -181,8 +148,108 @@ def test_generation_fence_blocks_migrating_writes():
     assert background_job_should_skip_account(record) is True
 
 
-def test_coordinator_begin_is_idempotent(fake_db, monkeypatch):
-    monkeypatch.setattr(account_cutover_db, 'get_firestore_client', lambda: fake_db)
+def test_malformed_cutover_document_fails_closed(fake_db):
+    path = ('users', 'broken-uid', 'account_cutover', 'state')
+    fake_db.rows[path] = {'schema_version': 1, 'uid': 'broken-uid', 'state': 'not-a-real-state'}
+    with pytest.raises(MalformedDocError):
+        account_cutover_db.get_account_cutover_record('broken-uid', firestore_client=fake_db)
+
+
+def test_access_fails_closed_on_malformed_cutover_document(monkeypatch, fake_db):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+
+    def _boom(uid, firestore_client=None):
+        raise MalformedDocError(
+            document_path='users/u1/account_cutover/state', error_types=('enum',), error_fields=('state',)
+        )
+
+    monkeypatch.setattr(account_cutover_db, 'get_account_cutover_record', _boom)
+    with pytest.raises(AccountCutoverAccessDenial) as exc:
+        evaluate_account_cutover_access(
+            'u1',
+            method='POST',
+            path='/v1/conversations',
+            headers={'X-App-Platform': 'ios', 'X-App-Build': '99'},
+            force=True,
+        )
+    assert exc.value.code == 'account_cutover_state_unavailable'
+
+
+def test_positive_generation_requires_matching_header_on_mutations(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(
+        uid='u1',
+        state=AccountCutoverState.legacy,
+        account_generation=2,
+    )
+    monkeypatch.setattr(
+        account_cutover_db,
+        'get_account_cutover_record',
+        lambda uid, firestore_client=None: record,
+    )
+    with pytest.raises(AccountCutoverAccessDenial) as missing:
+        evaluate_account_cutover_access(
+            'u1',
+            method='POST',
+            path='/v1/conversations',
+            headers={'X-App-Platform': 'ios', 'X-App-Build': '99'},
+            force=True,
+        )
+    assert missing.value.code == 'account_generation_mismatch'
+
+    with pytest.raises(AccountCutoverAccessDenial) as stale:
+        evaluate_account_cutover_access(
+            'u1',
+            method='POST',
+            path='/v1/conversations',
+            headers={
+                'X-App-Platform': 'ios',
+                'X-App-Build': '99',
+                'X-Account-Generation': '1',
+            },
+            force=True,
+        )
+    assert stale.value.code == 'account_generation_mismatch'
+
+    evaluate_account_cutover_access(
+        'u1',
+        method='POST',
+        path='/v1/conversations',
+        headers={
+            'X-App-Platform': 'ios',
+            'X-App-Build': '99',
+            'X-Account-Generation': '2',
+        },
+        force=True,
+    )
+
+
+def test_generation_zero_remains_compatible_without_header(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(uid='u1')
+    monkeypatch.setattr(
+        account_cutover_db,
+        'get_account_cutover_record',
+        lambda uid, firestore_client=None: record,
+    )
+    evaluate_account_cutover_access(
+        'u1',
+        method='POST',
+        path='/v1/conversations',
+        headers={'X-App-Platform': 'android', 'X-App-Build': '12'},
+        force=True,
+    )
+
+
+def test_coordinator_begin_requires_explicit_enrollment(fake_db):
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    with pytest.raises(AccountCutoverTransitionError) as exc:
+        coordinator.begin('user-abc')
+    assert exc.value.code == 'cutover_not_enrolled'
+
+
+def test_coordinator_begin_is_idempotent(fake_db, enroll_uid):
+    enroll_uid('user-abc')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
     first = coordinator.begin('user-abc')
     second = coordinator.begin('user-abc')
@@ -190,9 +257,24 @@ def test_coordinator_begin_is_idempotent(fake_db, monkeypatch):
     assert second.resumed is True
     assert first.record.manifest_id == second.record.manifest_id
     assert first.record.state == AccountCutoverState.migrating
+    assert first.record.offline_queue_instruction == OfflineQueueInstruction.quarantine
 
 
-def test_coordinator_refuses_import_without_destination_binding(fake_db):
+def test_prepare_offline_drain_only_before_fence(fake_db, enroll_uid):
+    enroll_uid('user-drain')
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    drained = coordinator.prepare_offline_drain('user-drain')
+    assert drained.state == AccountCutoverState.legacy
+    assert drained.offline_queue_instruction == OfflineQueueInstruction.drain
+    begun = coordinator.begin('user-drain')
+    assert begun.record.offline_queue_instruction == OfflineQueueInstruction.quarantine
+    with pytest.raises(AccountCutoverTransitionError) as exc:
+        coordinator.prepare_offline_drain('user-drain')
+    assert exc.value.code == 'offline_drain_after_fence'
+
+
+def test_coordinator_refuses_import_without_destination_binding(fake_db, enroll_uid):
+    enroll_uid('user-xyz')
     coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
     begun = coordinator.begin('user-xyz')
     coordinator.checkpoint(
@@ -209,6 +291,20 @@ def test_coordinator_refuses_import_without_destination_binding(fake_db):
             'user-xyz',
             phase=AccountCutoverCheckpointPhase.importing,
             expected_checkpoint_token=exporting.checkpoint_token,
+        )
+    assert exc.value.code == 'destination_backend_unbound'
+
+
+def test_bind_product_generations_refuses_without_destination(fake_db, enroll_uid):
+    enroll_uid('user-bind')
+    coordinator = AccountCutoverCoordinator(firestore_client=fake_db)
+    begun = coordinator.begin('user-bind')
+    with pytest.raises(AccountCutoverTransitionError) as exc:
+        coordinator.bind_destination_product_generations(
+            'user-bind',
+            ui_generation=1,
+            api_generation=1,
+            expected_account_generation=begun.record.account_generation,
         )
     assert exc.value.code == 'destination_backend_unbound'
 
@@ -232,7 +328,11 @@ def test_access_denies_migrating_product_traffic(monkeypatch, fake_db):
             'u1',
             method='POST',
             path='/v1/conversations',
-            headers={'X-App-Platform': 'ios', 'X-App-Build': '99'},
+            headers={
+                'X-App-Platform': 'ios',
+                'X-App-Build': '99',
+                'X-Account-Generation': '1',
+            },
             force=True,
         )
     assert exc.value.code == 'migration_maintenance'
@@ -263,3 +363,12 @@ def test_control_endpoint_projects_legacy_default(monkeypatch):
     assert body['product_traffic_allowed'] is True
     assert body['auth_bootstrap_reachable'] is True
     assert body['migration']['destination_backend_bound'] is False
+
+
+def test_direct_auth_call_api_preserved(monkeypatch):
+    monkeypatch.setattr(auth, 'verify_token', lambda _token: 'direct-uid')
+    monkeypatch.setattr(auth, 'get_user_deletion_wipe_status', lambda _uid: None)
+    monkeypatch.setattr(auth, 'record_user_platform', lambda *args, **kwargs: None)
+    monkeypatch.setattr(auth, 'record_client_device', lambda *args, **kwargs: None)
+    monkeypatch.setattr(auth, 'validate_byok_request', lambda *args, **kwargs: None)
+    assert auth.get_current_user_uid(authorization='Bearer token') == 'direct-uid'

@@ -34,7 +34,11 @@ class AccountCutoverState(str, Enum):
 
 
 class OfflineQueueInstruction(str, Enum):
-    """Server instruction for legacy offline/outbox queues on clients."""
+    """Server instruction for legacy offline/outbox queues on clients.
+
+    ``drain`` is only legal before the migration fence (legacy plane still
+    writable). ``quarantine`` applies once the account enters ``migrating``.
+    """
 
     none = 'none'
     drain = 'drain'

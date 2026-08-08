@@ -70,7 +70,9 @@ def apply_cutover_transition(
     if request.offline_queue_instruction is not None:
         offline = request.offline_queue_instruction
     elif request.target_state == AccountCutoverState.migrating:
-        offline = OfflineQueueInstruction.drain
+        # Quarantine at the migration fence. Drain is only legal beforehand via
+        # prepare_offline_drain while the account remains on the legacy plane.
+        offline = OfflineQueueInstruction.quarantine
     elif request.target_state in {AccountCutoverState.new, AccountCutoverState.rolled_back_stranded}:
         offline = OfflineQueueInstruction.quarantine
     elif request.target_state == AccountCutoverState.legacy:

@@ -9,14 +9,6 @@ from utils.other import endpoints
 from database import users
 
 
-def _request():
-    request = MagicMock()
-    request.method = "GET"
-    request.url.path = "/v1/users"
-    request.headers = {}
-    return request
-
-
 @pytest.fixture(autouse=True)
 def _quiet_auth_side_effects(monkeypatch):
     monkeypatch.setattr(endpoints, "verify_token", lambda _token: "old-uid")
@@ -30,7 +22,7 @@ def test_http_auth_fences_every_actionable_deletion_state(monkeypatch, status):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: status)
 
     with pytest.raises(HTTPException) as error:
-        endpoints.get_current_user_uid(request=_request(), authorization="Bearer token")
+        endpoints.get_current_user_uid(authorization="Bearer token")
 
     assert error.value.status_code == 403
     assert error.value.detail == {
@@ -46,7 +38,7 @@ def test_http_auth_fences_every_actionable_deletion_state(monkeypatch, status):
 def test_terminal_or_pre_acceptance_state_allows_auth(monkeypatch, status):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: status)
 
-    assert endpoints.get_current_user_uid(request=_request(), authorization="Bearer token") == "old-uid"
+    assert endpoints.get_current_user_uid(authorization="Bearer token") == "old-uid"
 
 
 def test_same_provider_fresh_uid_has_no_old_uid_marker(monkeypatch):
@@ -54,9 +46,7 @@ def test_same_provider_fresh_uid_has_no_old_uid_marker(monkeypatch):
     monkeypatch.setattr(endpoints, "verify_token", lambda _token: "fresh-firebase-uid")
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", statuses.get)
 
-    assert (
-        endpoints.get_current_user_uid(request=_request(), authorization="Bearer fresh-token") == "fresh-firebase-uid"
-    )
+    assert endpoints.get_current_user_uid(authorization="Bearer fresh-token") == "fresh-firebase-uid"
 
 
 def test_deletion_state_read_failure_fails_closed(monkeypatch):
@@ -66,7 +56,7 @@ def test_deletion_state_read_failure_fails_closed(monkeypatch):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", unavailable)
 
     with pytest.raises(HTTPException) as error:
-        endpoints.get_current_user_uid(request=_request(), authorization="Bearer token")
+        endpoints.get_current_user_uid(authorization="Bearer token")
 
     assert error.value.status_code == 503
     assert error.value.detail == {"code": "account_deletion_state_unavailable", "retryable": True}

@@ -85,6 +85,13 @@ struct OmiHTTPTransport {
       "X-Desktop-Request-ID": UUID().uuidString,
     ]
 
+    let accountGeneration = await MainActor.run {
+      AccountCutoverControlManager.shared.control.accountGeneration
+    }
+    if accountGeneration > 0 {
+      headers["X-Account-Generation"] = String(accountGeneration)
+    }
+
     if requireAuth {
       if let testHeader = testAuthHeader {
         headers["Authorization"] = testHeader

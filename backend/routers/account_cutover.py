@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from database import account_cutover as account_cutover_db
+from database.read_boundary import MalformedDocError
 from models.account_cutover import AccountCutoverControl
 from utils.account_cutover.control import build_account_cutover_control
 from utils.executors import db_executor, run_blocking
@@ -27,13 +28,20 @@ async def get_account_cutover_control(
 
     Always reachable for signed-in users, including while product traffic is
     fenced for migrating / force-upgrade / stranded states. Does not migrate
-    any account; absent documents project as legacy.
+    any account; absent documents project as legacy. Malformed authoritative
+    documents fail closed.
     """
 
     del request  # Request retained for OpenAPI/middleware parity with other control routes.
 
     def _load() -> AccountCutoverControl:
-        record = account_cutover_db.get_account_cutover_record(uid)
+        try:
+            record = account_cutover_db.get_account_cutover_record(uid)
+        except MalformedDocError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={'code': 'account_cutover_state_unavailable', 'retryable': True},
+            ) from error
         return build_account_cutover_control(
             record,
             platform=x_app_platform,

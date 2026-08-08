@@ -253,6 +253,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     ApiClient.dispose();
   }
 
+  Future<void> _refreshAccountCutoverControl() async {
+    if (!AuthService.instance.isSignedIn()) return;
+    final cutoverControl = await AccountCutoverControlClient().fetchControl();
+    AccountCutoverRuntime.instance.apply(cutoverControl);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -261,6 +267,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // Resume the upload reconciler at fast cadence and check immediately.
       SyncReconciler.instance.onForeground();
       SyncUploadGate.instance.reconcileFairUseStatus();
+      unawaited(_refreshAccountCutoverControl());
     } else if (state == AppLifecycleState.paused) {
       SyncReconciler.instance.onBackground();
       _onAppPaused();

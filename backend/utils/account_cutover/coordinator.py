@@ -6,6 +6,11 @@ This coordinator owns checkpoint/manifest identity on the legacy side only. It
 does not implement the destination backend, dual-write, or reverse
 reconciliation. ``destination_backend_bound`` remains false until a later PR
 binds an external importer.
+
+Offline-queue protocol (accepted bounded loss): clients may ``drain`` only
+while the account remains on the legacy plane (pre-migration fence). Entering
+``migrating`` quarantines offline queues immediately because server enforcement
+blocks product mutations and a client cannot honestly finish a drain.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ import secrets
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from config.account_cutover import is_account_cutover_cohort_member
 from database import account_cutover as account_cutover_db
 from models.account_cutover import (
     AccountCutoverCheckpointPhase,
@@ -110,7 +116,55 @@ class AccountCutoverCoordinator:
     def __init__(self, *, firestore_client: Any = None):
         self._firestore_client = firestore_client
 
+    def _persist_cas(
+        self,
+        uid: str,
+        next_record: AccountCutoverRecord,
+        *,
+        expected_account_generation: int,
+        expected_checkpoint_token: Optional[str] = None,
+        require_existing: bool = False,
+    ) -> AccountCutoverRecord:
+        return account_cutover_db.cas_set_account_cutover_record(
+            uid,
+            next_record,
+            expected_account_generation=expected_account_generation,
+            expected_checkpoint_token=expected_checkpoint_token,
+            require_existing=require_existing,
+            firestore_client=self._firestore_client,
+        )
+
+    def prepare_offline_drain(self, uid: str, *, reason: str = 'prepare_offline_drain') -> AccountCutoverRecord:
+        """Ask bridge clients to drain while the account is still on the legacy plane.
+
+        Drain is illegal once ``migrating`` begins because product mutations are
+        fenced. Undrained items after ``begin`` are accepted bounded loss.
+        """
+
+        current = account_cutover_db.get_account_cutover_record(uid, firestore_client=self._firestore_client)
+        if current.state not in {AccountCutoverState.legacy, AccountCutoverState.rolled_back_stranded}:
+            raise AccountCutoverTransitionError(
+                'offline drain is only allowed before the migration fence',
+                code='offline_drain_after_fence',
+            )
+        if current.offline_queue_instruction == OfflineQueueInstruction.drain:
+            return current
+        updated = current.model_copy(update={'offline_queue_instruction': OfflineQueueInstruction.drain})
+        return self._persist_cas(
+            uid,
+            updated,
+            expected_account_generation=current.account_generation,
+            expected_checkpoint_token=current.checkpoint_token,
+            require_existing=False,
+        )
+
     def begin(self, uid: str, *, reason: str = 'begin_forward_migration') -> CoordinatorResult:
+        if not is_account_cutover_cohort_member(uid):
+            raise AccountCutoverTransitionError(
+                'uid is not explicitly enrolled in ACCOUNT_CUTOVER_COHORT',
+                code='cutover_not_enrolled',
+            )
+
         current = account_cutover_db.get_account_cutover_record(uid, firestore_client=self._firestore_client)
         if current.state == AccountCutoverState.migrating and current.manifest_id:
             return CoordinatorResult(record=current, created=False, resumed=True)
@@ -125,20 +179,27 @@ class AccountCutoverCoordinator:
         request = AccountCutoverTransitionRequest(
             target_state=AccountCutoverState.migrating,
             expected_account_generation=current.account_generation,
-            offline_queue_instruction=OfflineQueueInstruction.drain,
+            # Quarantine at the fence: drain was only legal before begin.
+            offline_queue_instruction=OfflineQueueInstruction.quarantine,
             checkpoint_phase=AccountCutoverCheckpointPhase.inventory,
             checkpoint_token=token,
             manifest_id=manifest_id,
             reason=reason[:64],
         )
         next_record = apply_cutover_transition(current, request)
-        account_cutover_db.set_account_cutover_record(uid, next_record, firestore_client=self._firestore_client)
+        persisted = self._persist_cas(
+            uid,
+            next_record,
+            expected_account_generation=current.account_generation,
+            expected_checkpoint_token=current.checkpoint_token,
+            require_existing=False,
+        )
         record_cutover_transition(
             from_state=current.state.value,
-            to_state=next_record.state.value,
+            to_state=persisted.state.value,
             reason=reason[:64],
         )
-        return CoordinatorResult(record=next_record, created=True, resumed=False)
+        return CoordinatorResult(record=persisted, created=True, resumed=False)
 
     def checkpoint(
         self,
@@ -181,8 +242,57 @@ class AccountCutoverCoordinator:
                 'checkpoint_token': next_checkpoint_token or current.checkpoint_token or secrets.token_hex(8),
             }
         )
-        account_cutover_db.set_account_cutover_record(uid, updated, firestore_client=self._firestore_client)
-        return updated
+        return self._persist_cas(
+            uid,
+            updated,
+            expected_account_generation=current.account_generation,
+            expected_checkpoint_token=current.checkpoint_token,
+            require_existing=True,
+        )
+
+    def bind_destination_product_generations(
+        self,
+        uid: str,
+        *,
+        ui_generation: int,
+        api_generation: int,
+        expected_account_generation: int,
+    ) -> AccountCutoverRecord:
+        """Advance ui/api generations only after an honest destination binding.
+
+        Until ``destination_backend_bound`` is true, these fields stay at the
+        legacy defaults and this seam refuses to invent a future product plane.
+        """
+
+        if ui_generation < 0 or api_generation < 0:
+            raise AccountCutoverTransitionError(
+                'product generations must be nonnegative',
+                code='invalid_product_generation',
+            )
+        current = account_cutover_db.get_account_cutover_record(uid, firestore_client=self._firestore_client)
+        if current.account_generation != expected_account_generation:
+            raise AccountCutoverTransitionError(
+                'account generation fence mismatch',
+                code='account_generation_mismatch',
+            )
+        if current.destination_backend_bound is not True:
+            raise AccountCutoverTransitionError(
+                'destination backend binding required before ui/api generation advance',
+                code='destination_backend_unbound',
+            )
+        if ui_generation < current.ui_generation or api_generation < current.api_generation:
+            raise AccountCutoverTransitionError(
+                'product generations must not regress',
+                code='product_generation_regression',
+            )
+        updated = current.model_copy(update={'ui_generation': ui_generation, 'api_generation': api_generation})
+        return self._persist_cas(
+            uid,
+            updated,
+            expected_account_generation=current.account_generation,
+            expected_checkpoint_token=current.checkpoint_token,
+            require_existing=True,
+        )
 
     def complete_to_new(self, uid: str, *, expected_account_generation: int) -> AccountCutoverRecord:
         current = account_cutover_db.get_account_cutover_record(uid, firestore_client=self._firestore_client)
@@ -204,13 +314,19 @@ class AccountCutoverCoordinator:
             reason='complete_forward_migration',
         )
         next_record = apply_cutover_transition(current, request)
-        account_cutover_db.set_account_cutover_record(uid, next_record, firestore_client=self._firestore_client)
+        persisted = self._persist_cas(
+            uid,
+            next_record,
+            expected_account_generation=current.account_generation,
+            expected_checkpoint_token=current.checkpoint_token,
+            require_existing=True,
+        )
         record_cutover_transition(
             from_state=current.state.value,
-            to_state=next_record.state.value,
+            to_state=persisted.state.value,
             reason='complete_forward_migration',
         )
-        return next_record
+        return persisted
 
     def rollback_lossy(
         self,
@@ -228,13 +344,19 @@ class AccountCutoverCoordinator:
             reason='lossy_rollback',
         )
         next_record = apply_cutover_transition(current, request)
-        account_cutover_db.set_account_cutover_record(uid, next_record, firestore_client=self._firestore_client)
+        persisted = self._persist_cas(
+            uid,
+            next_record,
+            expected_account_generation=current.account_generation,
+            expected_checkpoint_token=current.checkpoint_token,
+            require_existing=True,
+        )
         record_cutover_transition(
             from_state=current.state.value,
-            to_state=next_record.state.value,
+            to_state=persisted.state.value,
             reason='lossy_rollback',
         )
-        return next_record
+        return persisted
 
 
 def begin_forward_migration(uid: str, *, firestore_client: Any = None) -> CoordinatorResult:

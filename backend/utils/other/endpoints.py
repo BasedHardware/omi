@@ -144,12 +144,30 @@ def verify_token(token: str) -> str:
         raise
 
 
+def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:
+    """Apply cutover fencing only when FastAPI injected a Request.
+
+    Direct unit-test / helper callers keep the established
+    ``get_current_user_uid(authorization=...)`` API. Request-aware enforcement
+    runs for real HTTP dependency injection without rewriting those callers.
+    """
+
+    if request is None or not cutover_enforcement_enabled():
+        return
+    enforce_account_cutover_http_access(
+        uid,
+        method=request.method,
+        path=request.url.path,
+        headers=request.headers,
+    )
+
+
 def get_current_user_uid(
-    request: Request,
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
 ) -> str:
     """FastAPI dependency for HTTP endpoints with Authorization header.
 
@@ -177,13 +195,7 @@ def get_current_user_uid(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
     enforce_account_deletion_http_access(uid)
-    if cutover_enforcement_enabled():
-        enforce_account_cutover_http_access(
-            uid,
-            method=request.method,
-            path=request.url.path,
-            headers=request.headers,
-        )
+    _enforce_cutover_http_if_request(uid, request)
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -215,11 +227,11 @@ def get_current_user_uid(
 
 
 def get_current_user_uid_no_byok_validation(
-    request: Request,
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
     x_app_version: str = Header(None, alias='X-App-Version'),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
 ) -> str:
     """Auth dependency that skips BYOK fingerprint validation.
 
@@ -244,13 +256,7 @@ def get_current_user_uid_no_byok_validation(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
     enforce_account_deletion_http_access(uid)
-    if cutover_enforcement_enabled():
-        enforce_account_cutover_http_access(
-            uid,
-            method=request.method,
-            path=request.url.path,
-            headers=request.headers,
-        )
+    _enforce_cutover_http_if_request(uid, request)
 
     try:
         record_user_platform(uid, x_app_platform)

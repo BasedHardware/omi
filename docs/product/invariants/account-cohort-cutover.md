@@ -26,6 +26,9 @@ migration-maintenance before product traffic.
 - Dual-write, auto-reconcile reverse migration, or silently drop the stranded
   new-data signal after lossy rollback.
 - Migrate any user by merging an empty default cohort enrollment.
+- Project a malformed cutover control document as implicit legacy.
+- Advertise `offline_queue_instruction=drain` after the account has entered
+  `migrating` (drain is only legal before the migration fence).
 
 ## Surfaces
 

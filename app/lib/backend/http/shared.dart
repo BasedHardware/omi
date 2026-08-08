@@ -10,6 +10,7 @@ import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
@@ -122,6 +123,13 @@ Future<Map<String, String>> buildHeaders({
     'X-App-Build': PlatformManager.instance.appBuild,
     ...fromHeaders,
   };
+
+  final accountGeneration = AccountCutoverRuntime.instance.control.accountGeneration;
+  // Generation-zero remains compatible without the header; positive generations
+  // must present matching metadata on mutating requests.
+  if (accountGeneration > 0) {
+    headers['X-Account-Generation'] = accountGeneration.toString();
+  }
 
   if (requireAuthCheck) {
     // Authenticated requests must never degrade into anonymous traffic. A

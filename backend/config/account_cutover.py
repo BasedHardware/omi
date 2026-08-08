@@ -11,7 +11,8 @@ migrates a user by itself.
 from __future__ import annotations
 
 # Empty by design: enrollment is an explicit operator/ceremony action outside
-# this foundation PR. Membership here would migrate users.
+# this foundation PR. ``AccountCutoverCoordinator.begin`` refuses any uid that
+# is not a member, so an empty set migrates no user.
 ACCOUNT_CUTOVER_COHORT: frozenset[str] = frozenset()
 
 # Per-platform integer build floors. Zero means no force-upgrade for that

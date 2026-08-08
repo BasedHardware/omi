@@ -26,8 +26,34 @@ void main() {
     expect(gate.shouldUploadOfflineQueues(control), isFalse);
   });
 
-  test('migration maintenance drains then blocks product traffic', () {
+  test('migration maintenance quarantines offline queues', () {
     final control = AccountCutoverControl.fromJson({
+      'state': 'migrating',
+      'account_generation': 2,
+      'client_action': 'migration_maintenance',
+      'offline_queue_instruction': 'quarantine',
+      'product_traffic_allowed': false,
+      'legacy_writes_allowed': false,
+      'auth_bootstrap_reachable': true,
+    });
+    expect(gate.decide(control), AccountCutoverGateDecision.migrationMaintenance);
+    expect(gate.shouldUploadOfflineQueues(control), isFalse);
+    expect(gate.shouldQuarantineOfflineQueues(control), isTrue);
+  });
+
+  test('drain only while product traffic remains allowed', () {
+    final drainLegacy = AccountCutoverControl.fromJson({
+      'state': 'legacy',
+      'account_generation': 0,
+      'client_action': 'none',
+      'offline_queue_instruction': 'drain',
+      'product_traffic_allowed': true,
+      'legacy_writes_allowed': true,
+      'auth_bootstrap_reachable': true,
+    });
+    expect(gate.shouldUploadOfflineQueues(drainLegacy), isTrue);
+
+    final drainWhileBlocked = AccountCutoverControl.fromJson({
       'state': 'migrating',
       'account_generation': 2,
       'client_action': 'migration_maintenance',
@@ -36,9 +62,7 @@ void main() {
       'legacy_writes_allowed': false,
       'auth_bootstrap_reachable': true,
     });
-    expect(gate.decide(control), AccountCutoverGateDecision.migrationMaintenance);
-    expect(gate.shouldUploadOfflineQueues(control), isTrue);
-    expect(gate.shouldQuarantineOfflineQueues(control), isFalse);
+    expect(gate.shouldUploadOfflineQueues(drainWhileBlocked), isFalse);
   });
 
   test('quarantine instruction blocks offline uploads', () {

@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from fastapi import WebSocketException
 
 from database import account_cutover as account_cutover_db
+from database.read_boundary import MalformedDocError
 from models.account_cutover import AccountCutoverClientAction, AccountCutoverState
 from utils.account_cutover.control import build_account_cutover_control, parse_client_build
 from utils.account_cutover.telemetry import record_cutover_access_decision
@@ -64,6 +65,34 @@ def _headers_get(headers: Mapping[str, str], name: str) -> Optional[str]:
     return None
 
 
+def parse_account_generation_header(headers: Mapping[str, str]) -> Optional[int]:
+    raw = _headers_get(headers, 'X-Account-Generation')
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    try:
+        value = int(text)
+    except ValueError:
+        return None
+    return value if value >= 0 else None
+
+
+def _deny_generation_mismatch(record, *, client_generation: Optional[int]) -> None:
+    raise AccountCutoverAccessDenial(
+        code='account_generation_mismatch',
+        client_action=AccountCutoverClientAction.none,
+        detail={
+            'code': 'account_generation_mismatch',
+            'state': record.state.value,
+            'account_generation': record.account_generation,
+            'client_account_generation': client_generation,
+            'retryable': False,
+        },
+    )
+
+
 def evaluate_account_cutover_access(
     uid: str,
     *,
@@ -81,7 +110,28 @@ def evaluate_account_cutover_access(
     if is_cutover_control_path(path):
         return
 
-    record = account_cutover_db.get_account_cutover_record(uid, firestore_client=firestore_client)
+    try:
+        record = account_cutover_db.get_account_cutover_record(uid, firestore_client=firestore_client)
+    except MalformedDocError as error:
+        raise AccountCutoverAccessDenial(
+            code='account_cutover_state_unavailable',
+            client_action=AccountCutoverClientAction.migration_maintenance,
+            detail={
+                'code': 'account_cutover_state_unavailable',
+                'retryable': True,
+            },
+        ) from error
+
+    client_generation = parse_account_generation_header(headers)
+    mutating = method.upper() in _MUTATING_METHODS
+
+    # Generation-zero legacy remains compatible without the header. Once the
+    # account generation is positive, mutating callers must present a matching
+    # X-Account-Generation value.
+    if mutating and record.account_generation > 0:
+        if client_generation is None or client_generation != record.account_generation:
+            _deny_generation_mismatch(record, client_generation=client_generation)
+
     # Default legacy accounts with no floors keep main behavior.
     if record.state == AccountCutoverState.legacy and record.account_generation == 0:
         # Still enforce force-upgrade when operators configure a nonzero floor.
@@ -90,7 +140,7 @@ def evaluate_account_cutover_access(
             _headers_get(headers, 'X-App-Version')
         )
         control = build_account_cutover_control(record, platform=platform, client_build=build)
-        if control.client_action == AccountCutoverClientAction.force_upgrade and method.upper() in _MUTATING_METHODS:
+        if control.client_action == AccountCutoverClientAction.force_upgrade and mutating:
             raise AccountCutoverAccessDenial(
                 code='force_upgrade_required',
                 client_action=control.client_action,
@@ -138,7 +188,7 @@ def evaluate_account_cutover_access(
             },
         )
 
-    if record.state == AccountCutoverState.new and method.upper() in _MUTATING_METHODS:
+    if record.state == AccountCutoverState.new and mutating:
         # New accounts must not mutate the legacy product plane. Auth/control
         # paths already returned above. Destination backend writes are out of
         # scope for this legacy foundation.
@@ -176,7 +226,12 @@ def enforce_account_cutover_http_access(
             decision=denial.code,
             client_action=denial.client_action.value,
         )
-        status_code = 426 if denial.code == 'force_upgrade_required' else 403
+        if denial.code == 'force_upgrade_required':
+            status_code = 426
+        elif denial.code == 'account_cutover_state_unavailable':
+            status_code = 503
+        else:
+            status_code = 403
         raise HTTPException(status_code=status_code, detail=denial.detail) from denial
 
 
@@ -233,4 +288,5 @@ __all__ = [
     'enforce_account_cutover_ws_access',
     'evaluate_account_cutover_access',
     'is_cutover_control_path',
+    'parse_account_generation_header',
 ]

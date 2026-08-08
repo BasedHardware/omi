@@ -25,15 +25,16 @@ class AccountCutoverGate {
     return AccountCutoverGateDecision.allowProductTraffic;
   }
 
-  /// Offline WAL / sync queues: drain completes uploads; quarantine blocks them.
+  /// Offline WAL / sync queues: drain only while product traffic is still
+  /// allowed (pre-migration fence). Quarantine always blocks uploads.
   bool shouldUploadOfflineQueues(AccountCutoverControl control) {
     switch (control.offlineQueueInstruction) {
       case OfflineQueueInstruction.quarantine:
         return false;
       case OfflineQueueInstruction.drain:
+        return decide(control) == AccountCutoverGateDecision.allowProductTraffic;
       case OfflineQueueInstruction.none:
-        return decide(control) == AccountCutoverGateDecision.allowProductTraffic ||
-            control.offlineQueueInstruction == OfflineQueueInstruction.drain;
+        return decide(control) == AccountCutoverGateDecision.allowProductTraffic;
     }
   }
 

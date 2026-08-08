@@ -1133,13 +1133,8 @@ class TestAuthDependencyBYOKIntegration:
         self, _mock_verify, _mock_platform, _mock_deletion, mock_validate
     ):
         from utils.other.endpoints import get_current_user_uid
-        from unittest.mock import MagicMock
 
-        request = MagicMock()
-        request.method = 'GET'
-        request.url.path = '/v1/users'
-        request.headers = {}
-        uid = get_current_user_uid(request=request, authorization='Bearer fake-token')
+        uid = get_current_user_uid(authorization='Bearer fake-token')
         assert uid == 'uid-123'
         mock_validate.assert_called_once_with('uid-123')
 
@@ -1149,14 +1144,9 @@ class TestAuthDependencyBYOKIntegration:
     def test_no_byok_validation_skips_validate(self, _mock_verify, _mock_platform, _mock_deletion):
         """get_current_user_uid_no_byok_validation must NOT call validate_byok_request."""
         from utils.other.endpoints import get_current_user_uid_no_byok_validation
-        from unittest.mock import MagicMock
 
-        request = MagicMock()
-        request.method = 'GET'
-        request.url.path = '/v1/users'
-        request.headers = {}
         with patch('utils.other.endpoints.validate_byok_request') as mock_validate:
-            uid = get_current_user_uid_no_byok_validation(request=request, authorization='Bearer fake-token')
+            uid = get_current_user_uid_no_byok_validation(authorization='Bearer fake-token')
             assert uid == 'uid-456'
             mock_validate.assert_not_called()
 

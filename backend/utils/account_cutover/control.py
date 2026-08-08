@@ -118,8 +118,10 @@ def build_account_cutover_control(
         api_generation = DEFAULT_API_GENERATION
 
     offline = record.offline_queue_instruction
-    if offline == OfflineQueueInstruction.none and record.state == AccountCutoverState.migrating:
-        offline = OfflineQueueInstruction.drain
+    if record.state == AccountCutoverState.migrating and offline != OfflineQueueInstruction.quarantine:
+        # Migrating always projects quarantine so clients do not attempt a drain
+        # that server enforcement cannot accept.
+        offline = OfflineQueueInstruction.quarantine
 
     return AccountCutoverControl(
         state=record.state,

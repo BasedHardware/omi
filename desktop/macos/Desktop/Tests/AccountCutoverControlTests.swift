@@ -20,15 +20,28 @@ final class AccountCutoverControlTests: XCTestCase {
     XCTAssertFalse(gate.shouldUploadOfflineQueues(control))
   }
 
-  func testMigrationMaintenanceDrainsQueues() {
+  func testMigrationMaintenanceQuarantinesQueues() {
     let gate = AccountCutoverGate()
     var control = AccountCutoverControl.legacyDefault
     control.state = .migrating
     control.clientAction = .migrationMaintenance
     control.productTrafficAllowed = false
-    control.offlineQueueInstruction = .drain
+    control.offlineQueueInstruction = .quarantine
     XCTAssertEqual(gate.decide(control), .migrationMaintenance)
+    XCTAssertFalse(gate.shouldUploadOfflineQueues(control))
+    XCTAssertTrue(gate.shouldQuarantineOfflineQueues(control))
+  }
+
+  func testDrainOnlyWhileProductTrafficAllowed() {
+    let gate = AccountCutoverGate()
+    var control = AccountCutoverControl.legacyDefault
+    control.offlineQueueInstruction = .drain
     XCTAssertTrue(gate.shouldUploadOfflineQueues(control))
+
+    control.clientAction = .migrationMaintenance
+    control.productTrafficAllowed = false
+    control.state = .migrating
+    XCTAssertFalse(gate.shouldUploadOfflineQueues(control))
   }
 
   func testQuarantineBlocksOfflineQueuesAndSurfacesStrandedData() {
@@ -51,13 +64,13 @@ final class AccountCutoverControlTests: XCTestCase {
       control.state = .migrating
       control.clientAction = .migrationMaintenance
       control.productTrafficAllowed = false
-      control.offlineQueueInstruction = .drain
+      control.offlineQueueInstruction = .quarantine
       control.accountGeneration = 2
       return control
     }
     await manager.refresh()
     XCTAssertEqual(manager.decision, .migrationMaintenance)
     XCTAssertEqual(manager.control.accountGeneration, 2)
-    XCTAssertTrue(manager.allowsOfflineQueueUpload)
+    XCTAssertFalse(manager.allowsOfflineQueueUpload)
   }
 }

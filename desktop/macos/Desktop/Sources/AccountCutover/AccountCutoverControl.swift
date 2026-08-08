@@ -87,9 +87,7 @@ struct AccountCutoverGate: Sendable {
     if control.offlineQueueInstruction == .quarantine {
       return false
     }
-    if control.offlineQueueInstruction == .drain {
-      return true
-    }
+    // Drain is only honest before the migration fence (product traffic still allowed).
     return decide(control) == .allowProductTraffic
   }
 

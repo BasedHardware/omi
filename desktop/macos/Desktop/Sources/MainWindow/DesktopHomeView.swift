@@ -209,6 +209,8 @@ struct DesktopHomeView: View {
         }
         .onAppear {
           log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
+          // Refresh cutover before product traffic settles; overlay can block
+          // while initial load is still visible.
           updatePolicyManager.refresh(force: true)
           Task { await AccountCutoverControlManager.shared.refresh() }
           // Check all permissions on launch
@@ -287,6 +289,7 @@ struct DesktopHomeView: View {
             Task { await appState.refreshConversations() }
           }
           updatePolicyManager.refresh()
+          Task { await AccountCutoverControlManager.shared.refresh() }
           // Reconcile persisted intent after returning from System Settings or
           // after a runtime service stopped while the app was inactive.
           restorePersistedCaptureServices(reason: "app active")
@@ -465,6 +468,9 @@ struct DesktopHomeView: View {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
       )
+      if authState.isSignedIn {
+        Task { await AccountCutoverControlManager.shared.refresh() }
+      }
       // Register Geist/Geist Mono for the sign-in + conversational onboarding surfaces.
       // (Kept out of OmiApp to respect the product-file line-count ratchet.)
       OmiFontRegistration.registerAll()
