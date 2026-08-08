@@ -1,3 +1,0 @@
-{
-  "change": "Fixed chat scrolling stalling for the whole of a streamed answer and then jumping, the ask bar keeping the question you just sent, and the caret going missing after Escape or coming back to Omi"
-}

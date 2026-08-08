@@ -1,3 +1,0 @@
-{
-  "change": "Fixed chat getting stuck on \"sending\" — with no way back except relaunching — when your session was refreshed or chat settings changed while a reply was still coming in"
-}
