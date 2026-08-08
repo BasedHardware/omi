@@ -8,6 +8,10 @@ export { restrictivePolicyJoin, validateRestrictiveJoin } from "./policy";
 
 export type RenderStatus = "ready" | "empty" | "failed";
 export interface RenderNode {
+  owner_account_id: string;
+  graph_generation: string;
+  reader_projection_digest: string | null;
+  projection_authorization_digest: string | null;
   node_id: string;
   policy_partition_label: string;
   render_generation: string;
@@ -41,8 +45,10 @@ export const withChildRenderHashes = (tree: StructuralTree, renders: readonly Re
 };
 
 export const renderStructuralTree = async (tree: StructuralTree, input: TreeInputSnapshot, model: RenderModelPort, options: RenderOptions, cache: RenderCache = new Map()): Promise<readonly RenderNode[]> => {
+  if (tree.input_generation !== input.graph_generation) throw new Error("render tree/input generation mismatch");
   const rendered = new Map<string, RenderNode>();
   const visit = async (node: StructuralNode): Promise<RenderNode> => {
+    if (node.graph_generation !== input.graph_generation) throw new Error(`render node/input generation mismatch for ${node.node_id}`);
     const existing = rendered.get(node.node_id);
     if (existing) return existing;
     const children = await Promise.all(node.child_node_ids.map((id) => visit(tree.nodes.find((item) => item.node_id === id)!)));
@@ -52,22 +58,33 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
     // dependency record used for later parent invalidation, not a request-only copy.
     const nodeWithChildHashes = withChildRenderHashes({ ...tree, nodes: [node] }, children).nodes[0]!;
     const manifest = node.dependency_manifest;
-    const rendered_from_digest = sha256CanonicalRedacted({ node_id: node.node_id, manifest, strategy: options.strategy, model_version: options.model_version, prompt_version: options.prompt_version, policy_version: options.policy_version, schema_version: options.schema_version });
+    const rendered_from_digest = sha256CanonicalRedacted({ owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
+      reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
+      node_id: node.node_id, manifest, strategy: options.strategy, model_version: options.model_version, prompt_version: options.prompt_version, policy_version: options.policy_version, schema_version: options.schema_version });
     if (!validateRestrictiveJoin(effective, claims.map((claim) => claim.policy_class))) throw new Error(`restrictive policy join failed for ${node.node_id}`);
     const cached = cache.get(rendered_from_digest);
-    if (cached) { rendered.set(node.node_id, cached); return cached; }
+    if (cached && cached.owner_account_id === input.owner_account_id && cached.graph_generation === input.graph_generation
+      && cached.reader_projection_digest === input.reader_projection_digest && cached.projection_authorization_digest === input.projection_authorization_digest
+      && cached.node_id === node.node_id && cached.rendered_from_digest === rendered_from_digest) { rendered.set(node.node_id, cached); return cached; }
     const childStale = manifest.child_render_hashes.some((hash) => hash === "missing-child-render" || children.some((child) => child.render_hash === hash && (child.stale || child.status === "failed")));
     try {
       const response = await model.render({ strategy: options.strategy, version: options.model_version, input: { node: nodeWithChildHashes, claims, child_summaries: children.map((child) => child.summary_text) } });
       const status: RenderStatus = response.summary_text ? "ready" : "empty";
-      const render_hash = sha256CanonicalRedacted({ rendered_from_digest, summary_text: response.summary_text, citations: [...response.citations].sort() });
-      const result: RenderNode = { node_id: node.node_id, policy_partition_label: node.policy_partition_label,
+      const render_hash = sha256CanonicalRedacted({ owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
+        reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
+        node_id: node.node_id, rendered_from_digest, rendered_from_manifest: manifest, summary_text: response.summary_text,
+        citations: [...response.citations].sort(), effective_policy: effective });
+      const result: RenderNode = { owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
+        reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
+        node_id: node.node_id, policy_partition_label: node.policy_partition_label,
         render_generation: `render-v1:${render_hash}`, summary_text: response.summary_text || null, citations: [...response.citations].sort(), model_version: options.model_version,
         rendered_from_digest, rendered_from_manifest: manifest, render_hash, effective_policy: effective, status, failure: null,
         stale: childStale, source_language: claims[0]?.source_language ?? "und" };
       rendered.set(node.node_id, result); return result;
     } catch (error) {
-      const result: RenderNode = { node_id: node.node_id, policy_partition_label: node.policy_partition_label, render_generation: `render-v1:failed:${rendered_from_digest}`,
+      const result: RenderNode = { owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
+        reader_projection_digest: input.reader_projection_digest, projection_authorization_digest: input.projection_authorization_digest,
+        node_id: node.node_id, policy_partition_label: node.policy_partition_label, render_generation: `render-v1:failed:${rendered_from_digest}`,
         summary_text: null, citations: [], model_version: options.model_version, rendered_from_digest, rendered_from_manifest: manifest, render_hash: null,
         effective_policy: effective, status: "failed", failure: error instanceof Error ? error.message : String(error), stale: true, source_language: claims[0]?.source_language ?? "und" };
       rendered.set(node.node_id, result); return result;

@@ -11,6 +11,8 @@ export * from "./grant";
 export * from "./adjacency";
 export * from "./walk";
 export * from "./trajectory";
+export * from "./projection-boundary";
+export * from "./authorization-boundary";
 
 export interface CommittedClaim {
   revision_id: string;
@@ -119,6 +121,10 @@ export interface LiveClaimView {
 export interface TreeInputSnapshot {
   owner_account_id: string;
   graph_generation: string;
+  /** Exact reader/grant projection provenance; null only for unprojected owner/internal views. */
+  reader_projection_digest: string | null;
+  /** Set only by the application authorization boundary after its grant gate succeeds. */
+  projection_authorization_digest: string | null;
   account_timezone: string;
   claims: readonly LiveClaimView[];
   identity_constraints: readonly IdentityConstraint[];
@@ -399,8 +405,16 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
       policy_labels: item.claim.policy_labels, policy_class, placement_status: item.placement_status,
     } satisfies LiveClaimView;
   });
-  const generationSeed = { graph: options.graph_generation ?? snapshot.graph_generation ?? "snapshot", classifier: classifier.version, liveness_hook: "d35-liveness-v1", timezone: options.account_timezone, reader: options.request_context?.reader_account_id ?? snapshot.owner_account_id };
-  return { owner_account_id: snapshot.owner_account_id, graph_generation: sha256CanonicalRedacted(generationSeed), account_timezone: options.account_timezone,
+  const readerProjectionSeed = options.request_context ? {
+    owner_account_id: snapshot.owner_account_id,
+    reader_account_id: options.request_context.reader_account_id,
+    grant_id: options.request_context.grant.grant_id,
+    policy_classes: options.request_context.grant.policy_classes.map((policy) => ({ ...policy }))
+      .sort((left, right) => compareStrings(`${left.subject_class}\u0000${left.sensitivity}\u0000${left.capture_class}`, `${right.subject_class}\u0000${right.sensitivity}\u0000${right.capture_class}`)),
+  } : null;
+  const reader_projection_digest = readerProjectionSeed === null ? null : sha256CanonicalRedacted(readerProjectionSeed);
+  const generationSeed = { graph: options.graph_generation ?? snapshot.graph_generation ?? "snapshot", classifier: classifier.version, liveness_hook: "d35-liveness-v1", timezone: options.account_timezone, reader_projection_digest };
+  return { owner_account_id: snapshot.owner_account_id, graph_generation: sha256CanonicalRedacted(generationSeed), reader_projection_digest, projection_authorization_digest: null, account_timezone: options.account_timezone,
     claims, identity_constraints: snapshot.identity_constraints?.map((item) => item.constraint) ?? [], evidence_index: spans,
     policy_classes: Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, claim.policy_class])),
     liveness_hook_version: generationSeed.liveness_hook, classifier_version: classifier.version, diagnostics };
