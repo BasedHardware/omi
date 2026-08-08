@@ -19,7 +19,7 @@ import SwiftUI
 /// pixel-exact hit testing during a drag, a scroll wheel that pans, and a hover tooltip that has to
 /// be able to escape the window's rounded bounds without being clipped.
 @MainActor
-final class RewindTrackNSView: NSView, ShellWindowDragExcluding {
+final class RewindTrackNSView: NSView {
 
   /// Total height of the control: the bar, plus room for the badges that straddle it and the hour
   /// labels beneath.
@@ -433,13 +433,9 @@ final class RewindTrackNSView: NSView, ShellWindowDragExcluding {
 
   /// **The scrubber keeps its own drags.**
   ///
-  /// `NSView`'s default answer to this is yes for any view that is not opaque, and the shell's window
-  /// is `isMovableByWindowBackground` (see `ShellWindowChrome`) so that the parts of a mostly-desktop
-  /// window that are not a control drag it. This *is* a control, and it is the one control in the app
-  /// whose entire gesture is a drag: without opting out, `mouseDown` seeks once and then AppKit takes
-  /// the first `mouseDragged` to move the window, so dragging the playhead walks the whole window
-  /// sideways and never advances the day. A click still seeks, which is what makes the failure look
-  /// like a rendering quirk rather than a dead gesture.
+  /// This *is* a control, and it is the one control in the app whose entire gesture is a drag. Keep
+  /// its AppKit ownership explicit so a future change to shell movement cannot let the first
+  /// `mouseDragged` walk the whole window sideways instead of advancing the day.
   override var mouseDownCanMoveWindow: Bool { false }
 
   override func resetCursorRects() {

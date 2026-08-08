@@ -2,6 +2,11 @@ import OmiSupport
 import OmiTheme
 import SwiftUI
 
+enum ConversationDetailPane: Equatable {
+  case summary
+  case transcript
+}
+
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
   let conversation: ServerConversation
@@ -23,11 +28,9 @@ struct ConversationDetailView: View {
   @State private var isReprocessing = false
   @State private var selectedAppForReprocess: OmiApp?
 
-  // Transcript drawer state (replaces tab system)
+  // Transcript presentation state. Summary and transcript are exclusive panes so neither one is
+  // compressed into an unreadable split view at the minimum window width.
   @State private var showTranscriptDrawer = false
-  // When expanded, the transcript drawer fills the window (the summary pane
-  // collapses) for full-width reading; collapsed it's the fixed side drawer.
-  @State private var isTranscriptExpanded = false
 
   // Entry animation
   @State private var hasAppeared = false
@@ -115,63 +118,56 @@ struct ConversationDetailView: View {
     return "\(dateStr) at \(startStr)"
   }
 
+  static func visiblePane(transcriptOpen: Bool) -> ConversationDetailPane {
+    transcriptOpen ? .transcript : .summary
+  }
+
   var body: some View {
-    HStack(spacing: 0) {
-      // Main content (always visible)
-      VStack(alignment: .leading, spacing: 0) {
-        headerView
+    Group {
+      switch Self.visiblePane(transcriptOpen: showTranscriptDrawer) {
+      case .summary:
+        VStack(alignment: .leading, spacing: 0) {
+          headerView
 
-        ScrollView {
-          // Card container wrapping summary content
-          VStack(alignment: .leading, spacing: 0) {
-            // Card header bar
-            HStack(spacing: OmiSpacing.sm) {
-              Image(systemName: "doc.text")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-              Text("Conversation Details")
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(Ink.secondary)
-              Spacer()
+          ScrollView {
+            // Card container wrapping summary content
+            VStack(alignment: .leading, spacing: 0) {
+              // Card header bar
+              HStack(spacing: OmiSpacing.sm) {
+                Image(systemName: "doc.text")
+                  .scaledFont(size: OmiType.caption)
+                  .foregroundColor(Ink.secondary)
+                Text("Conversation Details")
+                  .scaledFont(size: OmiType.body, weight: .medium)
+                  .foregroundColor(Ink.secondary)
+                Spacer()
+              }
+              .padding(.horizontal, OmiSpacing.lg)
+              .padding(.vertical, OmiSpacing.sm)
+              .background(Ink.rowFillHover.opacity(0.4))
+
+              VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+                summaryContent
+              }
+              .padding(OmiSpacing.xxl)
             }
-            .padding(.horizontal, OmiSpacing.lg)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(Ink.rowFillHover.opacity(0.4))
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
-              summaryContent
+            .glassCard(cornerRadius: OmiChrome.controlRadius)
+            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
+            .overlay(alignment: .top) {
+              if isEnrichingDeferred {
+                deferredProcessingSection
+                  .padding(OmiSpacing.xxl)
+                  .allowsHitTesting(false)
+              }
             }
             .padding(OmiSpacing.xxl)
           }
-          .glassCard(cornerRadius: OmiChrome.controlRadius)
-          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
-          .overlay(alignment: .top) {
-            if isEnrichingDeferred {
-              deferredProcessingSection
-                .padding(OmiSpacing.xxl)
-                .allowsHitTesting(false)
-            }
-          }
-          .padding(OmiSpacing.xxl)
+          .glassScrollFade()
         }
-        .glassScrollFade()
-      }
-      // Collapses to zero width when the transcript is expanded so the drawer
-      // can fill the window; otherwise it's the greedy main pane.
-      .frame(maxWidth: isTranscriptExpanded ? 0 : .infinity)
-      .opacity(isTranscriptExpanded ? 0 : 1)
-      .clipped()
-
-      // Transcript drawer (slides in from right; expands to fill on demand)
-      if showTranscriptDrawer {
-        if !isTranscriptExpanded {
-          Rectangle()
-            .fill(Ink.separator)
-            .frame(width: 1)
-        }
-
+        .transition(.move(edge: .leading))
+      case .transcript:
         transcriptDrawerView
-          .frame(maxWidth: isTranscriptExpanded ? .infinity : 450)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
           .transition(.move(edge: .trailing))
       }
     }
@@ -389,23 +385,21 @@ struct ConversationDetailView: View {
   private var viewTranscriptButton: some View {
     Button(action: {
       OmiMotion.withGated(.easeInOut(duration: 0.25)) {
-        showTranscriptDrawer.toggle()
+        showTranscriptDrawer = true
       }
     }) {
       HStack(spacing: OmiSpacing.xs) {
         Image(systemName: "text.quote")
           .scaledFont(size: OmiType.caption)
-        Text(showTranscriptDrawer ? "Hide Transcript" : "View Transcript")
+        Text("View Transcript")
           .scaledFont(size: OmiType.caption, weight: .medium)
       }
-      .foregroundColor(showTranscriptDrawer ? Ink.surface : Ink.secondary)
+      .foregroundColor(Ink.secondary)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.xs)
-      // On = the inverted label ladder, the one emphatic fill this system has. It was
-      // `Ink.accent`, which put a saturated blue pill in a toolbar of neutral glass chips.
       .background(
         Capsule()
-          .fill(showTranscriptDrawer ? Ink.primary : Ink.rowFillHover)
+          .fill(Ink.rowFillHover)
       )
     }
     .buttonStyle(.plain)
@@ -650,24 +644,6 @@ struct ConversationDetailView: View {
 
         Spacer()
 
-        // Expand / collapse the drawer to fill the window for full-width reading
-        Button(action: {
-          OmiMotion.withGated(.easeInOut(duration: 0.25)) {
-            isTranscriptExpanded.toggle()
-          }
-        }) {
-          Image(
-            systemName: isTranscriptExpanded
-              ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
-          )
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 28, height: 28)
-          .background(Circle().fill(Ink.rowFillHover))
-        }
-        .buttonStyle(.plain)
-        .help(isTranscriptExpanded ? "Collapse transcript" : "Expand transcript")
-
         // Copy button
         Button(action: copyTranscript) {
           Image(systemName: "doc.on.doc")
@@ -686,7 +662,6 @@ struct ConversationDetailView: View {
         Button(action: {
           OmiMotion.withGated(.easeInOut(duration: 0.25)) {
             showTranscriptDrawer = false
-            isTranscriptExpanded = false
           }
         }) {
           Image(systemName: "xmark")

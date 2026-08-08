@@ -598,6 +598,7 @@ async def _replace_stopped_boot_image_drift(
     api: GceAgentVmClient,
     cleanup_context: dict[str, str] | None = None,
     recovery_journal: Mapping[str, Any] | None = None,
+    predecessor_drained_at: float | None = None,
 ) -> ReconcileResult:
     """Create and cut over a stopped, explicitly allowlisted predecessor.
 
@@ -689,6 +690,12 @@ async def _replace_stopped_boot_image_drift(
             "targetBootImage": release.boot_image,
             "targetReleaseManifest": release.to_mapping(),
             "soakSeconds": plan.soak_seconds,
+            "retentionSeconds": plan.retention_seconds or plan.soak_seconds,
+            **(
+                {"predecessorDrainedAt": predecessor_drained_at}
+                if isinstance(predecessor_drained_at, (int, float))
+                else {}
+            ),
             "stateDiskName": state_disk_name,
             "stateDiskReused": state_disk_reused,
             "sourceCloneDiskName": source_clone_name,
@@ -1106,7 +1113,11 @@ async def _retire_soaked_boot_image_predecessor(
     if retirement is None:
         return ReconcileResult(uid, "stale", "migration retirement fence changed")
     if retirement.get("state") == "soaking":
-        return ReconcileResult(uid, "soaking", "replacement candidate is within its journaled soak")
+        return ReconcileResult(uid, "soaking", "replacement candidate is within its admission soak")
+    if retirement.get("state") == "admitted":
+        return ReconcileResult(uid, "admitted", "replacement candidate admitted; predecessor retained")
+    if retirement.get("state") == "retained":
+        return ReconcileResult(uid, "retained", "replacement candidate healthy; predecessor retained")
     source_clone_name = migration.get("sourceCloneDiskName")
     source_clone_id = migration.get("sourceCloneDiskId")
     if isinstance(source_clone_name, str) and source_clone_name:
@@ -1330,12 +1341,15 @@ async def reconcile_one(
             soak_seconds = durable_migration.get("soakSeconds")
             if not isinstance(soak_seconds, int) or soak_seconds < 60:
                 raise RuntimeError("durable boot-image migration journal has an invalid soak period")
+            retention_seconds = durable_migration.get("retentionSeconds", soak_seconds)
+            if not isinstance(retention_seconds, int) or retention_seconds < soak_seconds:
+                raise RuntimeError("durable boot-image migration journal has an invalid retention period")
             recovery = await _replace_stopped_boot_image_drift(
                 uid,
                 vm,
                 instance,
                 release,
-                BootImageMigrationPlan(frozenset({uid}), 1, soak_seconds),
+                BootImageMigrationPlan(frozenset({uid}), 1, soak_seconds, False, retention_seconds),
                 owner=owner,
                 api=api,
                 cleanup_context=failed_candidate,
@@ -1354,6 +1368,55 @@ async def reconcile_one(
             # A mutable, malformed, or unreadable source is a fail-closed
             # observation, never permission to replace an instance.
             if boot_image_migration is not None and reason == "boot_image_recreate_required":
+                predecessor_drained_at: float | None = None
+                status = str(instance.get("status") or "UNKNOWN")
+                if status == "RUNNING" and boot_image_migration.drain_running:
+                    if start_requested:
+                        return ReconcileResult(uid, "deferred", "start demand blocks boot-image migration drain")
+                    predecessor_drained_at = time.time()
+                    if not await _update_reconcile(
+                        uid,
+                        vm_name,
+                        auth_token,
+                        owner,
+                        {
+                            "state": "draining",
+                            "drainRequested": True,
+                            "drainRequestedAt": predecessor_drained_at,
+                            "migrationDrainRelease": release.release_id,
+                            "driftReasons": [reason],
+                        },
+                    ):
+                        return ReconcileResult(uid, "stale", "owner lease lost while requesting migration drain")
+                    active = await asyncio.to_thread(active_session_count, uid, vm_name)
+                    if active:
+                        if not await _update_reconcile(
+                            uid,
+                            vm_name,
+                            auth_token,
+                            owner,
+                            {"state": "deferred", "retryAt": time.time() + 120, "activeSessionCount": active},
+                        ):
+                            return ReconcileResult(uid, "stale", "owner lease lost while deferring migration drain")
+                        return ReconcileResult(uid, "deferred", f"{active} active session(s)")
+                    if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
+                        return ReconcileResult(uid, "stale", "owner lease lost before migration stop")
+                    await api.stop(vm_name)
+                    stopped = await api.get_instance(vm_name)
+                    if stopped is None or str(stopped.get("id") or "") != str(instance.get("id") or ""):
+                        raise RuntimeError("predecessor identity changed during migration drain")
+                    if str(stopped.get("status") or "") not in {"TERMINATED", "STOPPED"}:
+                        raise RuntimeError("predecessor did not stop for boot-image migration")
+                    instance = stopped
+                elif status in {"TERMINATED", "STOPPED"} and boot_image_migration.drain_running:
+                    drain_release = reconcile_state.get("migrationDrainRelease")
+                    drain_requested_at = reconcile_state.get("drainRequestedAt")
+                    if (
+                        bool(reconcile_state.get("drainRequested"))
+                        and drain_release == release.release_id
+                        and isinstance(drain_requested_at, (int, float))
+                    ):
+                        predecessor_drained_at = float(drain_requested_at)
                 migration = await _replace_stopped_boot_image_drift(
                     uid,
                     vm,
@@ -1363,6 +1426,7 @@ async def reconcile_one(
                     owner=owner,
                     api=api,
                     cleanup_context=failed_candidate,
+                    predecessor_drained_at=predecessor_drained_at,
                 )
                 if migration.state != "recreate_required":
                     return migration
@@ -1649,10 +1713,11 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
                 _select_reconcile_owners(owners, release.release_id, target_percent), key=lambda item: item[0]
             )
             # An explicit boot-image migration allowlist is independent of the
-            # ordinary release rollout cohort.  A stopped allowlisted VM that is
-            # not in the current cohort must still be selected so its drift can
-            # be replaced.  Rollout advancement only consumes rollout_selected
-            # results, so these extra owners never advance the rollout phase.
+            # ordinary release rollout cohort. A stopped owner or an explicitly
+            # drainable ready owner that is not in the current cohort must still
+            # be selected so its drift can be replaced. Rollout advancement only
+            # consumes rollout_selected results, so these extra owners never
+            # advance the rollout phase.
             if migration_plan is not None:
                 selected_uids = {uid for uid, _ in selected}
                 migration_candidates = [
@@ -1660,7 +1725,11 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
                     for uid, vm in owners
                     if uid not in selected_uids
                     and uid in migration_plan.allowed_uids
-                    and (str(vm.get("status") or "") == "stopped" or _active_migration_candidate(vm))
+                    and (
+                        str(vm.get("status") or "") == "stopped"
+                        or (migration_plan.drain_running and str(vm.get("status") or "") == "ready")
+                        or _active_migration_candidate(vm)
+                    )
                 ]
                 selected.extend(migration_candidates)
             # A migration plan has its own explicit maxConcurrency contract and

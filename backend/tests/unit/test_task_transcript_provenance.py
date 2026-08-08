@@ -1,5 +1,9 @@
 from types import SimpleNamespace
 
+import pytest
+from pydantic import ValidationError
+
+from models.action_item import EvidenceRef
 from models.structured_extraction import ActionItemsExtraction
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcript_for_llm
@@ -50,3 +54,11 @@ def test_extracted_segment_ids_survive_into_grounded_task_provenance():
     assert evidence['transcript_segment_ids'] == ['seg-2', 'seg-3']
     assert evidence['start_seconds'] == 12.5
     assert evidence['end_seconds'] == 16.25
+
+
+@pytest.mark.parametrize('field', ['start_seconds', 'end_seconds'])
+def test_task_provenance_rejects_non_finite_timestamps(field):
+    with pytest.raises(ValidationError):
+        EvidenceRef.model_validate(
+            {'kind': 'conversation', 'id': 'conversation-1', 'scope': 'canonical', field: float('inf')}
+        )

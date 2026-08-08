@@ -1,4 +1,4 @@
-"""Development Agent VM boot-image migration control and supersession fences."""
+"""Agent VM boot-image migration control and supersession fences."""
 
 from __future__ import annotations
 
@@ -16,6 +16,9 @@ from services.agent_vm_lifecycle import AgentVmRelease, DEFAULT_ZONE, clear_vm_r
 from utils.executors import db_executor, run_blocking
 
 _MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
+PRODUCTION_MIGRATION_APPROVAL_POLICY = "state-preserving-v1"
+PRODUCTION_MIGRATION_MIN_ADMISSION_SOAK_SECONDS = 10 * 60
+PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS = 7 * 24 * 60 * 60
 
 
 def _store():
@@ -24,31 +27,65 @@ def _store():
 
 @dataclass(frozen=True)
 class BootImageMigrationPlan:
-    """An explicit, development-only plan for stopped boot-image drift."""
+    """An explicit, environment-fenced plan for boot-image drift."""
 
     allowed_uids: frozenset[str]
     max_concurrency: int
     soak_seconds: int
+    drain_running: bool = False
+    retention_seconds: int | None = None
 
 
 def boot_image_migration_plan(raw: Mapping[str, Any], release: AgentVmRelease) -> BootImageMigrationPlan | None:
     migration = raw.get("bootImageMigration")
     if not isinstance(migration, Mapping) or migration.get("enabled") is not True:
         return None
-    if release.environment != "development" or os.getenv("AGENT_VM_ENVIRONMENT", "").strip() != "development":
-        raise ValueError("boot-image migration is development-only")
-    if os.getenv("GCE_PROJECT_ID", "").strip() != "based-hardware-dev":
-        raise ValueError("boot-image migration requires the approved development project")
+    environment = os.getenv("AGENT_VM_ENVIRONMENT", "").strip()
+    project = os.getenv("GCE_PROJECT_ID", "").strip()
+    if release.environment != environment:
+        raise ValueError("boot-image migration release and job environments must match")
+    if environment == "development":
+        if project != "based-hardware-dev":
+            raise ValueError("boot-image migration requires the approved development project")
+    elif environment == "production":
+        if project != "based-hardware":
+            raise ValueError("boot-image migration requires the approved production project")
+    else:
+        raise ValueError("boot-image migration requires an approved environment")
     owners = migration.get("allowedUids")
     if not isinstance(owners, list) or not owners or not all(isinstance(uid, str) and uid.strip() for uid in owners):
         raise ValueError("boot-image migration requires a non-empty allowedUids list")
     max_concurrency = migration.get("maxConcurrency", 1)
     soak_seconds = migration.get("soakSeconds", 600)
+    retention_seconds = migration.get("retentionSeconds", soak_seconds)
+    drain_running = migration.get("drainRunning", False)
     if not isinstance(max_concurrency, int) or max_concurrency != 1:
         raise ValueError("boot-image migration maxConcurrency must be exactly 1")
     if not isinstance(soak_seconds, int) or soak_seconds < 60:
         raise ValueError("boot-image migration soakSeconds must be at least 60")
-    return BootImageMigrationPlan(frozenset(uid.strip() for uid in owners), max_concurrency, soak_seconds)
+    if not isinstance(retention_seconds, int) or retention_seconds < soak_seconds:
+        raise ValueError("boot-image migration retentionSeconds must be at least soakSeconds")
+    if not isinstance(drain_running, bool):
+        raise ValueError("boot-image migration drainRunning must be a boolean")
+    normalized_owners = frozenset(uid.strip() for uid in owners)
+    if environment == "production":
+        if migration.get("approvalPolicy") != PRODUCTION_MIGRATION_APPROVAL_POLICY:
+            raise ValueError("production boot-image migration requires the approved state-preserving policy")
+        if len(normalized_owners) != 1:
+            raise ValueError("production boot-image migration requires exactly one allowlisted canary owner")
+        if soak_seconds < PRODUCTION_MIGRATION_MIN_ADMISSION_SOAK_SECONDS:
+            raise ValueError("production boot-image migration requires at least ten minutes of admission soak")
+        if retention_seconds < PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS:
+            raise ValueError("production boot-image migration requires at least seven days of rollback retention")
+        if not drain_running:
+            raise ValueError("production boot-image migration requires fenced running-owner drain")
+    return BootImageMigrationPlan(
+        normalized_owners,
+        max_concurrency,
+        soak_seconds,
+        drain_running,
+        retention_seconds,
+    )
 
 
 def boot_image_migration_id(uid: str, vm_name: str, instance_id: str, release_id: str) -> str:
@@ -270,6 +307,9 @@ async def supersede_rolled_back_boot_image_migration(
 
 __all__ = [
     "BootImageMigrationPlan",
+    "PRODUCTION_MIGRATION_APPROVAL_POLICY",
+    "PRODUCTION_MIGRATION_MIN_ADMISSION_SOAK_SECONDS",
+    "PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS",
     "boot_image_candidate_name",
     "boot_image_migration_id",
     "boot_image_migration_plan",

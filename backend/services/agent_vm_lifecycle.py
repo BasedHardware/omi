@@ -672,6 +672,7 @@ def clear_vm_reconcile_lease_fields() -> dict[str, Any]:
         "startRequestedAt": sentinels.DELETE,
         "drainRequested": sentinels.DELETE,
         "drainRequestedAt": sentinels.DELETE,
+        "migrationDrainRelease": sentinels.DELETE,
     }
 
 
@@ -685,6 +686,7 @@ def _migration_matches(
     now: float,
     instance_id: str | None = None,
     allow_drain_requested: bool = False,
+    allow_start_requested: bool = False,
 ) -> bool:
     """Validate the active pointer and reconciler lease for a migration CAS."""
     reconcile = vm.get("reconcile")
@@ -694,7 +696,7 @@ def _migration_matches(
         or (vm.get("zone") or DEFAULT_ZONE) != zone
         or vm.get("authToken") != auth_token
         or (instance_id is not None and str(vm.get("instanceId") or "") != instance_id)
-        or bool(reconcile.get("startRequested"))
+        or (bool(reconcile.get("startRequested")) and not allow_start_requested)
         or (bool(reconcile.get("drainRequested")) and not allow_drain_requested)
     ):
         return False
@@ -772,6 +774,13 @@ def _begin_boot_image_migration_txn(
         and current.get("candidateAuthToken") == migration.get("candidateAuthToken")
         and current.get("targetBootImage") == migration.get("targetBootImage")
     )
+    initial_migration_drain = (
+        not existing.exists
+        and isinstance(reconcile, Mapping)
+        and bool(reconcile.get("drainRequested"))
+        and reconcile.get("migrationDrainRelease") == migration.get("targetRelease")
+        and isinstance(migration.get("predecessorDrainedAt"), (int, float))
+    )
     if not isinstance(vm, dict) or not _migration_matches(
         vm,
         vm_name=vm_name,
@@ -779,7 +788,8 @@ def _begin_boot_image_migration_txn(
         auth_token=auth_token,
         owner=owner,
         now=now,
-        allow_drain_requested=recovering_pre_cutover,
+        allow_drain_requested=recovering_pre_cutover or initial_migration_drain,
+        allow_start_requested=initial_migration_drain,
     ):
         return None
     old_instance_id = str(migration.get("oldInstanceId") or "")
@@ -804,6 +814,7 @@ def _begin_boot_image_migration_txn(
                     "agentVm.reconcile.state": "migration_claimed",
                     "agentVm.reconcile.drainRequested": sentinels.DELETE,
                     "agentVm.reconcile.drainRequestedAt": sentinels.DELETE,
+                    "agentVm.reconcile.migrationDrainRelease": sentinels.DELETE,
                 },
             )
         # A terminal candidate cleanup is explicitly retryable.  Reuse the
@@ -818,10 +829,20 @@ def _begin_boot_image_migration_txn(
         return current
     record = {**migration, "state": "candidate_creating", "createdAt": now, "updatedAt": now}
     tx.set(migration_path, record)
-    update = {
+    update: dict[str, Any] = {
         "agentVm.reconcile.state": "migration_claimed",
         "agentVm.reconcile.durableMigration": durable_migration_id,
     }
+    if initial_migration_drain:
+        # Exchange the explicit running-owner drain for the durable migration
+        # journal in one transaction. Admission remains closed throughout.
+        update.update(
+            {
+                "agentVm.reconcile.drainRequested": sentinels.DELETE,
+                "agentVm.reconcile.drainRequestedAt": sentinels.DELETE,
+                "agentVm.reconcile.migrationDrainRelease": sentinels.DELETE,
+            }
+        )
     if not recorded_instance_id:
         # Legacy owner records predate the explicit GCE ID field. Bind it only
         # inside this stopped-only, owner-token-and-lease CAS, then every
@@ -1183,7 +1204,13 @@ def _cutover_boot_image_migration_txn(
     ) != candidate.get("instanceId"):
         return False
     soak_seconds = migration.get("soakSeconds")
-    if not isinstance(soak_seconds, int) or soak_seconds < 60:
+    retention_seconds = migration.get("retentionSeconds", soak_seconds)
+    if (
+        not isinstance(soak_seconds, int)
+        or soak_seconds < 60
+        or not isinstance(retention_seconds, int)
+        or retention_seconds < soak_seconds
+    ):
         return False
     tx.update(user_path, {"agentVm": dict(candidate)})
     tx.update(
@@ -1191,7 +1218,8 @@ def _cutover_boot_image_migration_txn(
         {
             "state": "cutover",
             "cutoverAt": now,
-            "retireAfter": now + soak_seconds,
+            "admitAfter": now + soak_seconds,
+            "retireAfter": now + retention_seconds,
             "updatedAt": now,
         },
     )
@@ -1240,15 +1268,42 @@ def _claim_boot_image_migration_retirement_txn(
             owner=owner,
             now=now,
             instance_id=candidate_instance_id,
+            allow_start_requested=True,
         )
     ):
         return None
-    if migration.get("state") == "cutover":
+    if migration.get("state") in {"cutover", "retained"}:
+        admit_after = migration.get("admitAfter", migration.get("retireAfter"))
         retire_after = migration.get("retireAfter")
-        if not isinstance(retire_after, (int, float)):
+        if not isinstance(admit_after, (int, float)) or not isinstance(retire_after, (int, float)):
             return None
-        if now < float(retire_after):
+        if migration.get("state") == "cutover" and now < float(admit_after):
             return {**migration, "state": "soaking"}
+        if now < float(retire_after):
+            if migration.get("state") == "cutover":
+                tx.update(
+                    user_path,
+                    {
+                        "agentVm.reconcile.state": "ready",
+                        "agentVm.reconcile.lease": sentinels.DELETE,
+                        "agentVm.reconcile.startRequested": sentinels.DELETE,
+                        "agentVm.reconcile.startRequestedAt": sentinels.DELETE,
+                        "agentVm.reconcile.migration.state": "retained",
+                        "agentVm.reconcile.migration.cutoverPending": sentinels.DELETE,
+                    },
+                )
+                tx.update(migration_path, {"state": "retained", "admittedAt": now, "updatedAt": now})
+                return {**migration, "state": "admitted"}
+            tx.update(
+                user_path,
+                {
+                    "agentVm.reconcile.state": "ready",
+                    "agentVm.reconcile.lease": sentinels.DELETE,
+                    "agentVm.reconcile.startRequested": sentinels.DELETE,
+                    "agentVm.reconcile.startRequestedAt": sentinels.DELETE,
+                },
+            )
+            return {**migration, "state": "retained"}
         tx.update(migration_path, {"state": "retiring", "retirementClaimedAt": now, "updatedAt": now})
         return {**migration, "state": "retiring"}
     return migration if migration.get("state") == "retiring" else None
