@@ -46,6 +46,7 @@ for (const file of walk(ROOT)) {
   const inAdapterOrShell =
     rel.startsWith("packages/adapters-legacy/") ||
     rel.startsWith("packages/adapters-platform/") ||
+    rel.startsWith("packages/dev-recall-stub/") || // dev fixture SERVER: it serves the route it names
     rel.startsWith("shells/") ||
     rel.startsWith("packages/testkit/src/test/"); // tests may ASSERT the wire paths adapters speak
   if (!inAdapterOrShell && RAW_ENDPOINT_RE.test(text)) {
