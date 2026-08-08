@@ -1,0 +1,83 @@
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  s_768c88a02ae202::t_8384f65fcaaa90 148-149
+  s_768c88a02ae202::t_ff8a8673eba144 825-827
+  s_768c88a02ae202::t_64041fa0dce635 2,196-203,208-213,298-299,764,900-901
+  s_768c88a02ae202::t_eb005f0cd1fee1 902-905
+  s_768c88a02ae202::t_ec78afb112aebf 296-297,581-582,584,636,646,658,769-770,898-899,906
+  s_768c88a02ae202::t_da2a374ef3f49f 907
+  s_768c88a02ae202::t_a0103d06db68b8 490,894
+  s_6ee6c64dccc4f3::t_7f83da8d0497e8 214
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_768c88a02ae202::t_168668fda332a6 16
+  s_768c88a02ae202::t_4135b5d9ec8f6e 57-59,378-379,394-399,476-480
+  s_768c88a02ae202::t_c74d2d6b4c7c9a 481-482
+desktop/macos/Desktop/Tests/RewindHistoryReachTests.swift
+  s_768c88a02ae202::t_b424f7cfae80ab 5-6
+desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
+  s_768c88a02ae202::t_e588182fc13458 85,88,139-140,214-215,359-361,380-384,394-396,399-400,403-404,407,413-414,450-452,454-456,458-459,462-465,467-471,473-474,476-478,481-492,494,501
+  s_768c88a02ae202::t_168668fda332a6 176
+  s_768c88a02ae202::t_70270b8d2a0896 25,28-30,83-84,86-87,196,200-201,212,216,228,230,280,283,355,376-379,385-387,389-393,397-398,401-402,405-406,408-412,421,453
+  s_768c88a02ae202::t_676ceb62932088 388
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_768c88a02ae202::t_cdbc83862117e9 2943
+  s_768c88a02ae202::t_e55bde9f61fbfe 2975-2979
+  s_768c88a02ae202::t_7ed4205ccafa17 2974,2980-2983
+desktop/macos/changelog/unreleased/20260807-rewind-all-time-timeline.json
+  s_768c88a02ae202::t_01e157a63f8d94 1,3
+  s_768c88a02ae202::t_676ceb62932088 2
+desktop/macos/Desktop/Sources/Rewind/UI/RewindPlaybackChrome.swift
+  s_768c88a02ae202::t_bffc8c79835925 77
+  s_768c88a02ae202::t_eb005f0cd1fee1 143-145
+  s_768c88a02ae202::t_97cda8be816dad 97,171,184,193-194
+  s_768c88a02ae202::t_a0103d06db68b8 146
+  s_768c88a02ae202::t_2c89a6c242cfc6 16,28-31,33,35,37-38,60-73,92,135-136,148,179,189
+desktop/macos/Desktop/Tests/RewindAllTimeSearchTests.swift
+  s_768c88a02ae202::t_c02d5306ee2fa4 215,217,220,222,224,228,259-276
+  s_768c88a02ae202::t_438d170102bf6c 223,225,227,229
+  s_569f1df936cc22::t_14a86c011ad030 277
+  s_768c88a02ae202::t_4775a77e74f289 216,218-219,221,226,230-258
+desktop/macos/e2e/flows/rewind.yaml
+  s_768c88a02ae202::t_f6ba36fe45f63c 30-31,46,68,86-87
+  s_768c88a02ae202::t_eb005f0cd1fee1 56
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrackModel.swift
+  s_768c88a02ae202::t_559688758bee19 40
+  s_768c88a02ae202::t_676ceb62932088 19-36,50-57,95
+  s_569f1df936cc22::t_66c73c2942d684 58
+  s_768c88a02ae202::t_4275eb798fe0d7 17-18,37-39
+  s_768c88a02ae202::t_168668fda332a6 82
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_768c88a02ae202::t_be4975d3956e4b 167-176,178-179,186-188,193-195,200-201,203,207-208,211-212
+  s_768c88a02ae202::t_88468440f1ec2d 177,180-185,189-192,196-199,202,204-206,209-210,215,218,223,229,231-233,241-242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "753d041298b00a955ecc2a923abea821c4cda119",
+  "prompts": {},
+  "sessions": {
+    "s_569f1df936cc22": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e2d59a4a-9b1c-439d-8bf5-31cad702b901",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_6ee6c64dccc4f3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7a-616d-7510-bb06-c7599e02c6e2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_768c88a02ae202": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf5c-1a56-7530-81a8-4d8c09e07356",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
