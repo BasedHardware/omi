@@ -71,12 +71,30 @@ def _is_forbidden_database_member(name: str) -> bool:
     # ``from database import sentinels`` reaches the Firestore SDK sentinels (use
     # ``database.store.sentinels`` instead). The remaining blessed ``database.*`` ports
     # (document_store, firestore_errors, document_ids, store, …) stay allowed.
-    return (
-        name == '_client'
-        or name.startswith('_client.')
-        or name == 'sentinels'
-        or name.startswith('sentinels.')
-    )
+    return name == '_client' or name.startswith('_client.') or name == 'sentinels' or name.startswith('sentinels.')
+
+
+def _forbidden_dynamic_import(node: ast.Call) -> bool:
+    """A literal dynamic import of a forbidden module: ``importlib.import_module('X')``,
+    ``import_module('X')`` (bare, from ``from importlib import import_module``) or ``__import__('X')``.
+
+    The attribute form is restricted to ``importlib.import_module`` so an unrelated helper method named
+    ``import_module`` is not a false positive. The module name is taken from the first positional
+    argument or, if absent, the ``name=`` keyword — so a keyword-form call cannot dodge the check.
+    Mirrors the object-store boundary guard so a runtime caller cannot load ``database._client`` /
+    the Firestore SDK dynamically and bypass the persistence-boundary gate.
+    """
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        if not (func.attr == 'import_module' and isinstance(func.value, ast.Name) and func.value.id == 'importlib'):
+            return False
+    elif isinstance(func, ast.Name):
+        if func.id not in ('import_module', '__import__'):
+            return False
+    else:
+        return False
+    arg = node.args[0] if node.args else next((kw.value for kw in node.keywords if kw.arg == 'name'), None)
+    return isinstance(arg, ast.Constant) and isinstance(arg.value, str) and _is_forbidden_import_module(arg.value)
 
 
 class _BoundaryVisitor(ast.NodeVisitor):
@@ -105,6 +123,8 @@ class _BoundaryVisitor(ast.NodeVisitor):
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
         if isinstance(node.func, ast.Attribute) and node.func.attr in _FORBIDDEN_OP_METHODS:
+            self.count += 1
+        elif _forbidden_dynamic_import(node):
             self.count += 1
         self.generic_visit(node)
 

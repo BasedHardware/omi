@@ -62,76 +62,122 @@ def _forbidden_dynamic_import(node: ast.Call, is_forbidden) -> bool:
     return isinstance(arg, ast.Constant) and isinstance(arg.value, str) and is_forbidden(arg.value)
 
 
-def _firebase_admin_aliases(tree: ast.AST) -> set[str]:
-    """Local names bound to the ``firebase_admin`` package by ``import`` statements.
+class _Count:
+    __slots__ = ('n',)
 
-    ``import firebase_admin`` / ``import firebase_admin as fb`` / ``import firebase_admin.auth``
-    all bind a name that can then reach the auth surface via ``<name>.auth`` — an alias must not
-    let ``fb.auth.verify_id_token(...)`` slip past the boundary. ``firebase_admin`` is always
-    recognised so a raw ``firebase_admin.auth`` attribute access is caught even in a snippet that
-    imports the submodule directly.
-    """
-    aliases = {'firebase_admin'}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name == 'firebase_admin' or alias.name.startswith('firebase_admin.'):
-                    aliases.add(alias.asname or alias.name.split('.', 1)[0])
-    # Propagated aliases: ``fb2 = fb`` (or ``x = firebase_admin``) rebinds the package to another
-    # name that can still reach ``.auth``. Iterate to a fixpoint so chains (a = fb; b = a) are covered.
-    changed = True
-    while changed:
-        changed = False
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name) and node.value.id in aliases:
-                for target in node.targets:
-                    if isinstance(target, ast.Name) and target.id not in aliases:
-                        aliases.add(target.id)
-                        changed = True
-    return aliases
+    def __init__(self) -> None:
+        self.n = 0
 
 
-class _BoundaryVisitor(ast.NodeVisitor):
-    def __init__(self, aliases: set[str]) -> None:
-        self.count = 0
-        self._aliases = aliases
+def _scan_expr(node: ast.AST, aliases: set[str], count: _Count) -> None:
+    """Count auth-surface accesses inside a single expression: a ``<alias>.auth`` attribute (where
+    ``alias`` is currently bound to ``firebase_admin`` in this scope) or a literal dynamic import of
+    ``firebase_admin.auth``. Expressions never open a statement scope, so a plain walk is safe here —
+    only *statements* rebind names, and scope/order tracking happens in ``_scan_stmt``."""
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Attribute):
+            if sub.attr == 'auth' and isinstance(sub.value, ast.Name) and sub.value.id in aliases:
+                count.n += 1
+        elif isinstance(sub, ast.Call) and _forbidden_dynamic_import(sub, _is_forbidden_import_module):
+            count.n += 1
 
-    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802 - AST visitor name
-        for alias in node.names:
+
+def _scan_scope(statements: list[ast.stmt], inherited: set[str], count: _Count) -> None:
+    """Walk one lexical scope's statements *in order*, tracking which names are bound to the
+    ``firebase_admin`` package. Seeded from a snapshot of the enclosing scope so a nested function
+    still sees a module-level ``import firebase_admin as fb``; a local rebind (``fb = build_client()``)
+    then drops ``fb`` for the rest of *this* scope, so a legitimate ``fb.auth`` on an unrelated object
+    is not a false positive. Compound statements (if/for/while/with/try/match) share this same scope."""
+    aliases = set(inherited)
+    for stmt in statements:
+        _scan_stmt(stmt, aliases, count)
+
+
+def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
+    if isinstance(stmt, ast.Import):
+        for alias in stmt.names:
             if _is_forbidden_import_module(alias.name):
-                self.count += 1
-        self.generic_visit(node)
+                count.n += 1
+            if alias.name == 'firebase_admin' or alias.name.startswith('firebase_admin.'):
+                aliases.add(alias.asname or alias.name.split('.', 1)[0])
+            elif alias.asname:
+                # A non-firebase import shadowing a name that was an alias clears it.
+                aliases.discard(alias.asname)
+        return
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802 - AST visitor name
+    if isinstance(stmt, ast.ImportFrom):
         # ``from firebase_admin.auth import X``.
-        if _is_forbidden_import_module(node.module):
-            self.count += 1
+        if _is_forbidden_import_module(stmt.module):
+            count.n += 1
         # ``from firebase_admin import auth``.
-        elif node.module == 'firebase_admin' and any(alias.name == 'auth' for alias in node.names):
-            self.count += 1
-        self.generic_visit(node)
+        elif stmt.module == 'firebase_admin' and any(a.name == 'auth' for a in stmt.names):
+            count.n += 1
+        # ``from firebase_admin import X`` binds the *submodule* firebase_admin.X, not the package, so
+        # ``X.auth`` is never firebase_admin.auth — such a name must not become a package alias. A
+        # from-import that reuses an alias name shadows it.
+        for a in stmt.names:
+            aliases.discard(a.asname or a.name)
+        return
 
-    def visit_Attribute(self, node: ast.Attribute) -> None:  # noqa: N802 - AST visitor name
-        # ``<firebase_admin-alias>.auth`` attribute access (catches fb.auth.verify_id_token(...) after
-        # ``import firebase_admin as fb`` as well as the plain ``import firebase_admin`` form).
-        # initialize_app / messaging / firestore are allowed.
-        if node.attr == 'auth' and isinstance(node.value, ast.Name) and node.value.id in self._aliases:
-            self.count += 1
-        self.generic_visit(node)
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        # Decorators / default values / base classes are evaluated in the *enclosing* scope.
+        for child in ast.iter_child_nodes(stmt):
+            if isinstance(child, ast.arguments):
+                for default in [*child.defaults, *(d for d in child.kw_defaults if d is not None)]:
+                    _scan_expr(default, aliases, count)
+            elif isinstance(child, ast.expr):
+                _scan_expr(child, aliases, count)
+        _scan_scope(stmt.body, aliases, count)  # body opens a fresh scope seeded from this snapshot
+        aliases.discard(stmt.name)  # the def/class name is a non-alias binding in this scope
+        return
 
-    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802 - AST visitor name
-        # Literal ``importlib.import_module('firebase_admin.auth')`` / ``__import__(...)`` that dodges
-        # the static ``import`` (mirrors the vector/object guards).
-        if _forbidden_dynamic_import(node, _is_forbidden_import_module):
-            self.count += 1
-        self.generic_visit(node)
+    if isinstance(stmt, ast.Assign):
+        _scan_expr(stmt.value, aliases, count)
+        rhs_is_alias = isinstance(stmt.value, ast.Name) and stmt.value.id in aliases
+        for target in stmt.targets:
+            if isinstance(target, ast.Name):
+                if rhs_is_alias:
+                    aliases.add(target.id)  # ``fb2 = fb`` propagates the package alias
+                else:
+                    aliases.discard(target.id)  # ``fb = <non-alias>`` clears it for the rest of scope
+            else:
+                _scan_expr(target, aliases, count)
+        return
+
+    if isinstance(stmt, ast.AnnAssign):
+        if stmt.value is not None:
+            _scan_expr(stmt.value, aliases, count)
+        if isinstance(stmt.target, ast.Name):
+            if stmt.value is not None and isinstance(stmt.value, ast.Name) and stmt.value.id in aliases:
+                aliases.add(stmt.target.id)
+            elif stmt.value is not None:
+                aliases.discard(stmt.target.id)
+        _scan_expr(stmt.annotation, aliases, count)
+        return
+
+    # Generic statement (Expr / Return / AugAssign / If / For / While / With / Try / match / …): scan
+    # its expression children here and recurse into any sub-statement bodies as the *same* scope, in
+    # order, so alias rebinds inside a branch/loop are seen by later statements.
+    for child in ast.iter_child_nodes(stmt):
+        if isinstance(child, ast.stmt):
+            _scan_stmt(child, aliases, count)
+        elif isinstance(child, ast.excepthandler):
+            if child.type is not None:
+                _scan_expr(child.type, aliases, count)
+            _scan_scope(child.body, aliases, count)
+        elif child.__class__.__name__ == 'match_case':  # ast.match_case (3.10+)
+            _scan_scope(child.body, aliases, count)
+        elif isinstance(child, ast.expr):
+            _scan_expr(child, aliases, count)
 
 
 def count_boundary_violations(source: str, filename: str = '<unknown>') -> int:
     tree = ast.parse(source, filename=filename)
-    visitor = _BoundaryVisitor(_firebase_admin_aliases(tree))
-    visitor.visit(tree)
-    return visitor.count
+    count = _Count()
+    # ``firebase_admin`` is always recognised at module scope so a raw ``firebase_admin.auth`` is
+    # caught even in a file that only imports the submodule directly.
+    _scan_scope(tree.body, {'firebase_admin'}, count)
+    return count.n
 
 
 def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
