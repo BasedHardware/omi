@@ -5,15 +5,19 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL, HELD.** Landed 2026-08-08 with the W4 rebuild; it runs
-immediately, per §8, and continues to run at full strength while held —
-holding is not disabling. AUDIT-17 (non-author, 2026-08-08) completed the §8
-audit and found the fence sound on every case DOOR checked, but found the
-escape hatch's file-wide scope exploitable rather than merely imprecise; see
-**AUDIT-17** below for the finding, the mutation that demonstrates it, and
-exactly what unblocks promotion. The DOOR lane wrote it, so the DOOR lane
-cannot promote it. If it fires on another lane, that is a swarm-wide blocker,
-never something to route around, regardless of held status.
+Status: **PROVISIONAL, HELD (round 2).** Landed 2026-08-08 with the W4
+rebuild; it runs immediately, per §8, and continues to run at full strength
+while held — holding is not disabling. AUDIT-17 round 1 held on a file-wide
+escape hatch; `fd38dc5e33` fixed that (per-server-construction-site scoping),
+and AUDIT-17 round 2 re-verified it and found a **different, more severe**
+gap in the new implementation: the construction-line half of the hatch check
+is not comment-aware, so any string literal containing the marker text on the
+server's own construction line hatches it — no `//`, no real justification,
+no pre-existing hatch required. See **AUDIT-17 — round 2** below. The DOOR
+lane wrote the original; a non-author (the coordinator) wrote the fix, and
+said so explicitly rather than promoting their own work. If it fires on
+another lane, that is a swarm-wide blocker, never something to route around,
+regardless of held status.
 
 Implementation: `WIRE_PATH_REGISTRY` in the platform repo's
 scripts/lint-import-graph.ts, which runs in `bun test` and in `make l0`.
@@ -248,3 +252,167 @@ non-author re-reads the diff. Finding 2 does not block promotion but should
 be noted in the same pass since the fix (a boundary-aware match, e.g. requiring
 the character after the match to be `/`, a quote, or end-of-string) is cheap
 and adjacent.
+
+*(Superseded by round 2, below: both items were landed in `fd38dc5e33`, and
+round 2 found a new defect in the mechanism that landed them.)*
+
+## AUDIT-17 — round 2, non-author re-audit of `fd38dc5e33`, 2026-08-08
+
+The coordinator landed a fix for round 1's finding — `fd38dc5e33`, "rule 17:
+scope the escape hatch to the server, not the file" — and explicitly declined
+to promote their own work: "I am not promoting rule 17 — I wrote this fix, so
+that is not my call." This section is that re-audit, done in a fresh
+`bin/omi-lane` worktree, not trusting the landing commit's own transcript for
+any of the four claims it made.
+
+**Every claim in `fd38dc5e33`'s commit message was independently
+reproduced:**
+
+- Mutation 8 (a second, unhatched `Bun.serve` added to the already-hatched
+  integration/adversarial/live-server.ts, alongside the untouched
+  legitimate probe) — re-applied by hand to the real file. **Fires**, naming
+  `live-server.ts:71`. Reverted; `diff` against the pre-mutation file was
+  empty.
+- Unmounting the registered route from `serve.ts` while keeping the path
+  string — re-applied by hand. **Fires**, naming the construction line
+  (`serve.ts:115` under my exact mutation shape; the coordinator reported
+  `:120` under theirs — the four-line delta is fully explained by which lines
+  each of us deleted versus commented out, not a discrepancy in what fires).
+  Reverted; `diff` against the pre-mutation file was empty.
+- A server answering `/v1/memories-legacy-export` — constructed as a
+  standalone fixture. **Correctly green.**
+- Reverting the fence to file-wide (via a small patch to
+  scripts/lint-import-graph.ts, not a `git checkout`, so the two new
+  round-1 tests stayed in place) — **exactly one** of 12 tests goes red (the
+  mechanised mutation-8 test); 11 pass. Reverted.
+
+**The trailing-slash design call.** `/v1/memories/` deliberately still
+counts as the registered path because it is the registered route's own
+documented 404 case, and a rogue door answering it 200 is the same defect
+class rule 17 exists to catch, not a collision to exempt. Verified directly:
+a fixture serving `/v1/memories/` with a raw fixture id fires; a fixture
+serving `/v1/memories-legacy-export` does not. Agreed — no pushback.
+
+**The `hatchedAt` walk-up-the-comment-block design call.** Confirmed correct
+and necessary, not a quiet widening: the real hatch in `live-server.ts` is a
+four-`//`-line block with the marker on the *first* line. A strict
+`index - 1`-only check (rule 16's rule) would reject it. Verified: a marker
+separated from the construction site by a blank line, or by any non-comment
+line, is **not** honoured (fails closed) — confirmed by direct mutation, not
+assumed from reading the code.
+
+### New finding: the construction-line hatch check is not comment-aware — a real bypass, more severe than round 1's
+
+The coordinator asked me to attack three specific shapes. The first two fail
+closed (safe, if occasionally over-strict about formatting a legitimate
+justification); the third is a real, unauthenticated bypass:
+
+1. **Marker separated from the construction by a blank line.** Fixture:
+   `// wire-path-ok(...)` then a blank line then `Bun.serve(...)` naming
+   `/v1/memories` with a raw fixture id, no import of the registered route.
+   **Fires** — the walk-up stops at the blank line and treats the site as
+   unhatched. Safe direction (rejects a would-be-legitimate hatch; does not
+   admit a rogue one).
+2. **Marker inside the object literal, on a line below the construction
+   line.** Same fixture shape, marker moved to a line inside the `{ ... }`
+   after `Bun.serve({`. **Fires** — `hatchedAt` only looks at the
+   construction line itself and lines *above* it; a marker below is never
+   found. Safe direction, same as (1).
+3. **Marker inside a plain string literal, not a `//` comment, on the
+   construction line itself.** Fixture:
+   ```
+   const rogue = Bun.serve({ port: 0, banner: "wire-path-ok(fake, not a real comment)", fetch: (req) =>
+     new URL(req.url).pathname === "/v1/memories"
+       ? Response.json({ id: "raw-fixture-row-id" })
+       : new Response("", { status: 404 }) });
+   ```
+   **Does not fire.** No import of the registered route; no actual
+   justification; the string `"wire-path-ok(fake, not a real comment)"` is
+   ordinary data, not a comment. Confirmed the marker needs no `//` prefix
+   at all — a field named anything, containing that substring anywhere in
+   its value, on the same physical line as the construction, is sufficient.
+   Confirmed the reverse holds correctly: the identical string placed on its
+   *own* line above the construction (not the construction line itself) does
+   **not** hatch it, because that line does not start with `//`.
+
+**Root cause.** `hatchedAt`'s two halves are asymmetric:
+
+```ts
+if ((rawLines[index] ?? "").includes(wirePathAllowMarker)) return true;   // (A) not comment-aware
+for (let above = index - 1; above >= 0; above -= 1) {
+  const line = (rawLines[above] ?? "").trim();
+  const isComment = line.startsWith("//") || line.startsWith("*") || line.startsWith("/*");
+  if (!isComment) return false;                                          // (B) comment-aware
+  if (line.includes(wirePathAllowMarker)) return true;
+}
+```
+
+(B), the walk-up loop, requires each line to *start with* a comment token
+before it will even look for the marker — that half is sound, and is why
+attacks 1 and 2 fail closed. (A), the construction-line check, is a bare
+substring search over the *entire raw line*, with no requirement that the
+matched text sit inside a `//` span on that line. A trailing
+`// wire-path-ok(...)` on the construction line was clearly the intended
+shape, but nothing in the code requires the comment token to be present —
+only the marker text, anywhere on the line, including inside a string.
+
+**Severity, relative to round 1's finding.** Worse, not equivalent: round
+1's gap required a *pre-existing, legitimate* hatch elsewhere in the same
+file to hide behind. This one requires nothing — any single rogue file,
+never previously touched, can self-exempt on the first write, with a string
+that reads as data (a "banner", a log line, a field nobody would think to
+audit) rather than as a claimed justification a reviewer might question.
+
+**Not new, and out of scope for this rule, but worth recording:** modifying
+the *existing* hatched construction's own behavior (rather than adding a
+second, separate construction) is not caught by any version of this fence,
+round 1 or round 2 — I tested editing `live-server.ts`'s hatched probe's own
+`fetch` handler in place, so it also answers `/v1/memories` with a raw
+fixture id, and lint stayed green throughout. No purely syntactic checker
+can verify that a hatch's prose reason still describes the code beneath it;
+that is what PR review is for, and rule 16's `port-composition-ok` has the
+identical property. Flagging it so nobody mistakes the fence for covering
+this case, not proposing it as a new blocker.
+
+### False-positive sweep, round 2
+
+Reran the full server-construction grep; `live-server.ts` remains the only
+file with a real (non-test, non-checker) hatch marker. `fd38dc5e33`'s new
+`namesWirePath` boundary check verified directly: `/v1/memories-legacy-export`
+green, `/v1/memories/` fires (by design, per above).
+
+One imprecision found, **confirmed pre-existing, not a round-2 regression**
+(re-ran the identical fixture against the round-1 checker, commit
+`5d788a2b02`, before `fd38dc5e33`'s hatch-scoping change — it also fired):
+a file with two *unrelated* server constructions — one legitimately serving
+something else entirely, one absent altogether, plus a plain client `fetch`
+call to `/v1/memories` elsewhere in the file — fires, blaming the unrelated
+server's construction line. Root cause: `standsUpAServer` and `namesWirePath`
+are still file-wide conditions; only the *hatch* resolution became per-site
+in `fd38dc5e33`. No file in the tree today has this shape (`live-server.ts`
+has exactly one server construction, so it is not exposed to this). Recorded
+as a known limit, not a blocker — nothing today depends on the current
+behavior, and it errs toward flagging rather than missing a door.
+
+### Verdict: HOLD (round 2)
+
+**What would unblock promotion:** make the construction-line hatch check
+(A) as comment-aware as the walk-up check (B) already is — for example,
+require that the marker survive on the *comment-stripped* version of that
+one line be *absent* while it is present on the raw line (i.e., the marker
+occurs only inside text `withoutComments()` would blank), rather than a bare
+`rawLines[index].includes(...)`. Re-run attack 3 against the tightened
+check and confirm it now fires while the real `live-server.ts` hatch — a
+genuine trailing-adjacent `//` block — still passes. Re-run all existing
+red-proofs. A non-author re-reads the diff.
+
+**Blast radius if this HOLD is wrong:** small, same shape as round 1 — the
+fix is additive to one helper, does not change any case already audited as
+firing correctly, and the tree's one real hatch is a `//` block, not a
+string, so tightening this does not touch it.
+
+**What is still open after this round, stated plainly:** the construction-
+line string-literal bypass (blocking). The pre-existing multi-server
+false-positive imprecision (not blocking, recorded). The
+same-construction-behavior-drift gap (not this fence's job; recorded so
+nobody assumes it is covered).
