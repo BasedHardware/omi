@@ -2,17 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Memory } from "@omi-core/contracts";
 import { formatDate, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
-import type { ProductionMemoryStore } from "./memory-fixtures.js";
+import type { ProductionMemoryStore } from "./ProductionStores.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionFilterChips, ProductionSearchField } from "./ProductionPrimitives.js";
+import { presentMemoryContent } from "./memory-presentation.js";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
-
-function splitProvenance(content: string): { prefix: string | null; text: string } {
-  const match = /^([a-z][a-z0-9_-]{1,80}):\s+([\s\S]+)$/i.exec(content);
-  return match ? { prefix: `${match[1]}:`, text: match[2] ?? "" } : { prefix: null, text: content };
-}
 
 function phaseLabel(status: StoreStatus, locale: Locale): string | null {
   switch (status.refresh.phase) {
@@ -35,9 +31,9 @@ function MemoryCard({ memory, store, locale, run }: {
   const [editing, setEditing] = useState(false);
   // Split the stored value first, then collapse only its body. This keeps the
   // provenance prefix visible without ever changing the value sent to a store.
-  const { prefix, text } = splitProvenance(memory.content);
-  const isLong = text.length > 240;
-  const visibleText = !expanded && isLong ? `${text.slice(0, 240)}…` : text;
+  const { provenance, body } = presentMemoryContent(memory.content);
+  const isLong = body.length > 240;
+  const visibleText = !expanded && isLong ? `${body.slice(0, 240)}…` : body;
   const targetVisibility = memory.visibility === "public" ? "private" : "public";
   useEffect(() => setDraft(memory.content), [memory.content]);
 
@@ -53,7 +49,7 @@ function MemoryCard({ memory, store, locale, run }: {
   return (
     <article className={`memory-card${memory.locked ? " is-locked" : ""}`} data-memory-id={memory.id} data-long={isLong || undefined}>
       <header className="memory-card-header">
-        <span className="memory-provenance">{prefix ?? memory.category}</span>
+        <span className="memory-provenance">{provenance ?? memory.category}</span>
         <div className="memory-meta">
           <span>{t(locale, "memories.capturedOn", { date: formatDate(memory.updatedAt, locale) })}</span>
           <span className="memory-visibility">{memory.visibility === "public" ? t(locale, "memories.public") : t(locale, "memories.private")}</span>

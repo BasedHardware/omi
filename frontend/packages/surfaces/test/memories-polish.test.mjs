@@ -9,10 +9,11 @@ const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 test("memory provenance stays metadata while long-content checks only the body", async () => {
   const source = await read("src/production/MemoriesProduction.tsx");
-  assert.match(source, /\[a-z0-9_-\]\{1,80\}/);
-  assert.match(source, /const isLong = text\.length > 240/);
+  const presentation = await read("src/production/memory-presentation.ts");
+  assert.match(presentation, /\[a-z0-9_-\]\{1,80\}/);
+  assert.match(source, /const isLong = body\.length > 240/);
   assert.match(source, /<header className="memory-card-header">/);
-  assert.match(source, /<span className="memory-provenance">\{prefix \?\? memory\.category\}<\/span>/);
+  assert.match(source, /<span className="memory-provenance">\{provenance \?\? memory\.category\}<\/span>/);
   assert.doesNotMatch(source, /\{letter\.summary\}|failure\.detail/);
   // red-proof: rendering the full stored string in metadata or using its total
   // length would bring slug noise back into the body and misclassify long keys.
