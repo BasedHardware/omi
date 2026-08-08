@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Триває міграція",
     "accountCutoverMigrationInProgressMessage": "Ваш обліковий запис мігрує. Функції продукту призупинено до завершення міграції.",
     "accountCutoverMigrationRollbackMessage": "Ваш обліковий запис на обслуговуванні після відкату міграції. Частина новіших даних може бути ізольована.",
-    "accountCutoverOpenStore": "Відкрити магазин"
+    "accountCutoverOpenStore": "Відкрити магазин",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

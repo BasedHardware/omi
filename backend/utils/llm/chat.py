@@ -600,17 +600,34 @@ Keep these goals in mind when giving advice or suggestions.
 
 """
 
-    # Add page context if provided
+    # Add page context if provided. Conversation id and/or start/end dates hard-scope
+    # retrieval tools (#4515); the prompt must match that fail-closed contract.
     context_section = ""
     if context:
         # Sanitize title to prevent prompt injection (escape angle brackets and quotes)
         safe_title = (context.title or "").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-        context_section = f"""<current_context>
-{user_name} is currently viewing: {context.type} - "{safe_title}" (ID: {context.id or 'unknown'})
-Keep this context in mind when answering their question.
-</current_context>
-
-"""
+        scope_lines = [
+            f'{user_name} is currently viewing: {context.type} - "{safe_title}" (ID: {context.id or "unknown"})'
+        ]
+        hard_scope = False
+        if context.type == "conversation" and (context.id or "").strip():
+            hard_scope = True
+            scope_lines.append(
+                "HARD SCOPE: Answer ONLY using this conversation. Do not use other conversations, "
+                "memories, or time ranges. If the question is outside this conversation, say so."
+            )
+        start_date = context.start_date if isinstance(context.start_date, str) else ""
+        end_date = context.end_date if isinstance(context.end_date, str) else ""
+        if start_date.strip() or end_date.strip():
+            hard_scope = True
+            window = " to ".join(part for part in [start_date.strip(), end_date.strip()] if part)
+            scope_lines.append(
+                f"HARD SCOPE timeframe: {window}. Answer ONLY using conversations inside this window. "
+                "If the answer is outside it, say so."
+            )
+        if not hard_scope:
+            scope_lines.append("Keep this context in mind when answering their question.")
+        context_section = "<current_context>\n" + "\n".join(scope_lines) + "\n</current_context>\n\n"
 
     # Build conditional instruction hints for the template
     plugin_instruction_hint = "- Regard the <plugin_instructions>" if plugin_info else ""

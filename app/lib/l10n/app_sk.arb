@@ -3219,5 +3219,9 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod"
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

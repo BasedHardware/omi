@@ -3232,5 +3232,9 @@
     "accountCutoverMigrationInProgressTitle": "Migrering i gang",
     "accountCutoverMigrationInProgressMessage": "Din konto migreres. Produktfunktioner er sat på pause, indtil migreringen er færdig.",
     "accountCutoverMigrationRollbackMessage": "Din konto er under vedligeholdelse efter en migrerings-rollback. Nyere data kan være isoleret.",
-    "accountCutoverOpenStore": "Åbn butik"
+    "accountCutoverOpenStore": "Åbn butik",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

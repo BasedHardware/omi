@@ -9865,4 +9865,18 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Buka toko';
+
+  @override
+  String get chatScopeToday => 'Today';
+
+  @override
+  String get chatScopeThisWeek => 'This week';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'About: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Ask about this';
 }

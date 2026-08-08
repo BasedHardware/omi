@@ -22,6 +22,7 @@ from utils.conversations.search import (
     merge_conversation_search_ids,
     parse_exact_conversation_reference,
 )
+from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 import logging
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,37 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return agent_config_context.get()
     except LookupError:
         return None
+
+
+def _scoped_conversation_fetch(
+    uid: str,
+    conversation_id: str,
+    *,
+    start_dt: Optional[datetime],
+    end_dt: Optional[datetime],
+    include_discarded: bool = False,
+    statuses: Optional[List[str]] = None,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Load one owned conversation and enforce the same visibility filters as list fetch."""
+    conv = conversations_db.get_conversation(uid, conversation_id)
+    if not conv or conv.get('is_locked', False):
+        return [], f"No accessible conversation found for scoped id {conversation_id}."
+    if not include_discarded and conv.get('discarded', False):
+        return [], f"No accessible conversation found for scoped id {conversation_id}."
+    if statuses:
+        raw_status = conv.get('status')
+        status_val = getattr(raw_status, 'value', raw_status)
+        if status_val is not None and str(status_val) not in statuses:
+            return [], f"No accessible conversation found for scoped id {conversation_id}."
+    start_ts = int(start_dt.timestamp()) if start_dt is not None else None
+    end_ts = int(end_dt.timestamp()) if end_dt is not None else None
+    if start_ts is not None or end_ts is not None:
+        if not conversation_matches_date_range(conv, start_ts, end_ts):
+            return [], (
+                f"Scoped conversation {conversation_id} is outside the active chat timeframe. "
+                "Ask the user to clear or widen the timeframe, or pick that conversation alone."
+            )
+    return [conv], None
 
 
 # A wide date range ("analyze my last 30 days") can match hundreds of conversations. Feeding all of
@@ -161,6 +193,11 @@ def get_conversations_tool(
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
 
+    scope = chat_scope_from_config(configurable)
+    start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
+
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
@@ -198,20 +235,34 @@ def get_conversations_tool(
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
-    # Get conversations
-    conversations_data: List[Dict[str, Any]] = conversations_db.get_conversations(
-        uid,
-        limit=limit,
-        offset=offset,
-        start_date=start_dt,
-        end_date=end_dt,
-        include_discarded=include_discarded,
-        statuses=status_list,
-    )
+    scoped_id = (scope or {}).get("conversation_id") if scope else None
+    if scoped_id:
+        conversations_data, scoped_err = _scoped_conversation_fetch(
+            uid,
+            str(scoped_id),
+            start_dt=start_dt,
+            end_dt=end_dt,
+            include_discarded=include_discarded,
+            statuses=status_list or None,
+        )
+        if scoped_err:
+            logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
+            return scoped_err
+    else:
+        # Get conversations
+        conversations_data = conversations_db.get_conversations(
+            uid,
+            limit=limit,
+            offset=offset,
+            start_date=start_dt,
+            end_date=end_dt,
+            include_discarded=include_discarded,
+            statuses=status_list,
+        )
 
-    # Filter out locked conversations (paid plan required)
-    if conversations_data:
-        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+        # Filter out locked conversations (paid plan required)
+        if conversations_data:
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
     # Bound how many conversations are formatted for the chat model so a wide date range cannot
     # flood its context and freeze it (#4927). Newest-first, so this keeps the most recent.
@@ -407,6 +458,11 @@ def search_conversations_tool(
         limit,
     )
 
+    scope = chat_scope_from_config(configurable)
+    start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
+
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
@@ -415,6 +471,8 @@ def search_conversations_tool(
     # Parse dates to timestamps if provided
     starts_at = None
     ends_at = None
+    start_dt = None
+    end_dt = None
 
     if start_date:
         try:
@@ -422,6 +480,7 @@ def search_conversations_tool(
             if dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info(f"📅 Parsed start_date '{start_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            start_dt = dt
             starts_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
@@ -432,6 +491,7 @@ def search_conversations_tool(
             if dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info(f"📅 Parsed end_date '{end_date}' as {dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+            end_dt = dt
             ends_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
@@ -439,11 +499,35 @@ def search_conversations_tool(
     # Limit to reasonable max
     limit = min(limit, 20)
 
+    scoped_id = (scope or {}).get("conversation_id") if scope else None
+    if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
+        return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
+
     try:
         keyword_ids: List[str] = []
         vector_ids: List[str] = []
-        if exact_conversation_id:
+        if scoped_id:
+            conversations_data, scoped_err = _scoped_conversation_fetch(
+                uid,
+                str(scoped_id),
+                start_dt=start_dt,
+                end_dt=end_dt,
+                include_discarded=False,
+                statuses=None,
+            )
+            if scoped_err:
+                logger.info(f"⚠️ search_conversations_tool - {scoped_err}")
+                return scoped_err
+            conversation_ids = [str(scoped_id)]
+        elif exact_conversation_id:
             conversation_ids = [exact_conversation_id]
+            conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+            conversations_data = [
+                c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
+            ]
+            if not conversations_data:
+                return f"No conversations found matching query: '{query}'"
         else:
             # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
             # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
@@ -452,46 +536,35 @@ def search_conversations_tool(
             )
             vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
             conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
-
-        logger.info(
-            "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
-            len(conversation_ids),
-            len(keyword_ids),
-            len(vector_ids),
-            'exact-reference' if exact_conversation_id else 'semantic',
-        )
-
-        if not conversation_ids:
-            date_info = ""
-            if starts_at and ends_at:
-                date_info = f" in the specified date range"
-            elif starts_at:
-                date_info = f" after the specified start date"
-            elif ends_at:
-                date_info = f" before the specified end date"
-
-            msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
             logger.info(
-                "⚠️ search_conversations_tool - no results query_mode=%s",
+                "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
+                len(conversation_ids),
+                len(keyword_ids),
+                len(vector_ids),
                 'exact-reference' if exact_conversation_id else 'semantic',
             )
-            return msg
+            if not conversation_ids:
+                date_info = ""
+                if starts_at and ends_at:
+                    date_info = f" in the specified date range"
+                elif starts_at:
+                    date_info = f" after the specified start date"
+                elif ends_at:
+                    date_info = f" before the specified end date"
 
-        # Get full conversation data
-        conversations_data: List[Dict[str, Any]] = conversations_db.get_conversations_by_id(uid, conversation_ids)
+                msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
+                logger.info(
+                    "⚠️ search_conversations_tool - no results query_mode=%s",
+                    'exact-reference' if exact_conversation_id else 'semantic',
+                )
+                return msg
 
-        if not conversations_data:
-            return f"No conversations found matching query: '{query}'"
-
-        # Filter out locked conversations (paid plan required)
-        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
-        if exact_conversation_id:
-            conversations_data = [
-                c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
-            ]
-
-        if not conversations_data:
-            return f"No conversations found matching query: '{query}'"
+            conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+            if not conversations_data:
+                return f"No conversations found matching query: '{query}'"
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+            if not conversations_data:
+                return f"No conversations found matching query: '{query}'"
 
         logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
 
@@ -549,7 +622,11 @@ def search_conversations_tool(
         )
 
         # Return formatted string
-        match_kind = 'matching exactly' if exact_conversation_id else 'semantically matching'
+        match_kind = (
+            'in the active chat scope'
+            if scoped_id
+            else ('matching exactly' if exact_conversation_id else 'semantically matching')
+        )
         result = f"Found {len(conversations)} conversations {match_kind} '{query}':\n\n"
         result += conversations_to_string(
             conversations,

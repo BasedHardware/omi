@@ -13,11 +13,13 @@ import 'package:shimmer/shimmer.dart';
 import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -733,6 +735,37 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Ask about this conversation (#4515)
+                        Container(
+                          width: 36,
+                          height: 36,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            tooltip: context.l10n.askAboutThisConversation,
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              final convo = provider.conversation;
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChatPage(
+                                    isPivotBottom: false,
+                                    initialChatContext: ChatPageContext(
+                                      type: 'conversation',
+                                      id: convo.id,
+                                      title: convo.structured.title,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const FaIcon(FontAwesomeIcons.solidComments, size: 14.0, color: Colors.white),
+                          ),
+                        ),
                         // Star button (first) - toggle starred status
                         Container(
                           width: 36,

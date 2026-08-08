@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Migrazione in corso",
     "accountCutoverMigrationInProgressMessage": "Il tuo account è in migrazione. Le funzioni del prodotto sono in pausa fino al termine della migrazione.",
     "accountCutoverMigrationRollbackMessage": "Il tuo account è in manutenzione dopo un rollback della migrazione. Alcuni dati più recenti potrebbero essere isolati.",
-    "accountCutoverOpenStore": "Apri store"
+    "accountCutoverOpenStore": "Apri store",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }

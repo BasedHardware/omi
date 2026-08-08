@@ -24,6 +24,7 @@ from utils.memory.chat_memory_adapter import (
 )
 from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.conversations.render import format_local_date, resolve_display_tz
+from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.hybrid import rrf_rerank
 from utils.retrieval.tools.result_bounds import cap_items_for_llm, bounded_result
 import logging
@@ -49,6 +50,37 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return agent_config_context.get()
     except LookupError:
         return None
+
+
+def _memory_tools_blocked_by_chat_scope(configurable: Any) -> Optional[str]:
+    """Conversation hard-scope cannot be honored by global memory tools (#4515)."""
+    scope = chat_scope_from_config(configurable)
+    if scope and scope.get("conversation_id"):
+        return (
+            "Error: Chat is scoped to a single conversation. "
+            "Use get_conversations_tool or search_conversations_tool for that conversation; "
+            "memory fact tools are unavailable while conversation scope is active."
+        )
+    return None
+
+
+def _parse_aware_iso(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        raise ValueError("naive datetime")
+    return dt
+
+
+def _memory_in_scope(created_at: Optional[datetime], start_dt: Optional[datetime], end_dt: Optional[datetime]) -> bool:
+    if created_at is None:
+        return True
+    if start_dt and created_at < start_dt:
+        return False
+    if end_dt and created_at > end_dt:
+        return False
+    return True
 
 
 @tool
@@ -129,6 +161,14 @@ def get_memories_tool(
         logger.info(f"❌ get_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
+
+    blocked = _memory_tools_blocked_by_chat_scope(configurable)
+    if blocked:
+        return blocked
+
+    start_date, end_date, scope_err = apply_chat_scope_dates(chat_scope_from_config(configurable), start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
 
     # Cap at 5000 per call to prevent overloading context
     if limit > 5000:
@@ -340,6 +380,20 @@ def search_memories_tool(
         return "Error: User ID not found in configuration"
     logger.info(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
 
+    blocked = _memory_tools_blocked_by_chat_scope(configurable)
+    if blocked:
+        return blocked
+
+    scope = chat_scope_from_config(configurable) or {}
+    _, _, scope_err = apply_chat_scope_dates(scope, None, None)
+    if scope_err:
+        return f"Error: {scope_err}"
+    try:
+        scope_start_dt = _parse_aware_iso(scope.get("start_date") if isinstance(scope.get("start_date"), str) else None)
+        scope_end_dt = _parse_aware_iso(scope.get("end_date") if isinstance(scope.get("end_date"), str) else None)
+    except ValueError as e:
+        return f"Error: chat_scope dates invalid ({e})"
+
     # Cap limit at 20
     limit = min(limit, 20)
 
@@ -353,7 +407,15 @@ def search_memories_tool(
 
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
-        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        matches = MemoryService(db_client=firestore_db).search(
+            uid, query, limit=limit * 3 if (scope_start_dt or scope_end_dt) else limit
+        )
+        if scope_start_dt or scope_end_dt:
+            matches = [
+                m
+                for m in matches
+                if _memory_in_scope(getattr(m.memory, "created_at", None), scope_start_dt, scope_end_dt)
+            ][:limit]
         if not matches:
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
@@ -417,6 +479,10 @@ def search_memories_tool(
             if not m:
                 continue
             if m.get('is_locked', False) or m.get('user_review') is False or m.get('invalid_at') is not None:
+                continue
+            created = m.get('created_at')
+            created_dt = created if isinstance(created, datetime) else None
+            if not _memory_in_scope(created_dt, scope_start_dt, scope_end_dt):
                 continue
             candidates.append(
                 {

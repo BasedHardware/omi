@@ -15579,8 +15579,19 @@
         "type": "object"
       },
       "PageContext": {
-        "description": "Page context for chat - indicates what the user is currently viewing.",
+        "description": "Page context for chat - indicates what the user is currently viewing.\n\nWhen ``type`` is ``conversation`` with an ``id``, and/or ``start_date`` /\n``end_date`` are set, retrieval tools hard-scope to that conversation and/or\ntimeframe (#4515). Dates must include a timezone offset\n(YYYY-MM-DDTHH:MM:SS+HH:MM).",
         "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
           "id": {
             "anyOf": [
               {
@@ -15591,6 +15602,17 @@
               }
             ],
             "title": "Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
           },
           "title": {
             "anyOf": [

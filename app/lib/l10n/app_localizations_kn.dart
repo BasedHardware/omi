@@ -9871,4 +9871,18 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get chatScopeToday => 'Today';
+
+  @override
+  String get chatScopeThisWeek => 'This week';
+
+  @override
+  String chatScopeAbout(String title) {
+    return 'About: $title';
+  }
+
+  @override
+  String get askAboutThisConversation => 'Ask about this';
 }

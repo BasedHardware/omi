@@ -11634,5 +11634,26 @@
     "accountCutoverOpenStore": "Open store",
     "@accountCutoverOpenStore": {
         "description": "Button that opens the app store for a required cutover upgrade"
+    },
+    "chatScopeToday": "Today",
+    "@chatScopeToday": {
+        "description": "Chat timeframe scope chip for today"
+    },
+    "chatScopeThisWeek": "This week",
+    "@chatScopeThisWeek": {
+        "description": "Chat timeframe scope chip for this week"
+    },
+    "chatScopeAbout": "About: {title}",
+    "@chatScopeAbout": {
+        "description": "Chat scope chip when asking about a specific conversation",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            }
+        }
+    },
+    "askAboutThisConversation": "Ask about this",
+    "@askAboutThisConversation": {
+        "description": "Tooltip for Ask button on conversation detail"
     }
 }

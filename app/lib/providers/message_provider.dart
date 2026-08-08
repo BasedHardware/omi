@@ -602,7 +602,7 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(false);
   }
 
-  Future sendMessageStreamToServer(String text) async {
+  Future sendMessageStreamToServer(String text, {ChatPageContext? context}) async {
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
     // If Omi was still speaking a prior voice reply, stop it — the user's
@@ -663,7 +663,7 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds)) {
+      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds, context: context)) {
         chunkCount++;
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();

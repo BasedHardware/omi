@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Siirto käynnissä",
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
-    "accountCutoverOpenStore": "Avaa kauppa"
+    "accountCutoverOpenStore": "Avaa kauppa",
+    "chatScopeToday": "Today",
+    "chatScopeThisWeek": "This week",
+    "chatScopeAbout": "About: {title}",
+    "askAboutThisConversation": "Ask about this"
 }
