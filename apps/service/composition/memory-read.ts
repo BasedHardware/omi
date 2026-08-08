@@ -39,6 +39,11 @@ import {
   type McpCursorSigningKeyset,
 } from "../../mcp/cursor";
 import { createReaderScopedOpaqueCodecs } from "../codecs/opaque-refs";
+import {
+  DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY,
+  selectRendersForGranularity,
+  type MemoryReadGranularity,
+} from "./granularity";
 import { createQaDeterministicSynthesizer } from "./qa-synthesizer";
 
 /**
@@ -63,26 +68,6 @@ const RENDER_PROMPT_VERSION = "qa-prompt-v1";
 const RENDER_POLICY_VERSION = "qa-policy-v1";
 const RENDER_SCHEMA_VERSION = "qa-schema-v1";
 
-/**
- * Which structural view becomes a served memory.
- *
- * `buildDeterministicAnchors` produces temporal, entity, and source views over
- * the same claims, so serving every node would show one proposition several
- * times over. There is also NO view that is one-node-per-proposition: the
- * temporal view is hierarchical (year -> month -> day) and its nodes aggregate
- * every claim beneath them, while entity and source nodes group by entity and
- * by capture session. A "memory" in this model is therefore an aggregation that
- * was synthesized, not a single claim.
- *
- * This composition serves temporal LEAF nodes - the deepest temporal grouping,
- * one per local day. That choice is aligned with a memories timeline and with
- * the local-day grouping the client performs, but it is a QA composition
- * choice, not a ratified product rule. It is reported in
- * blocked/BE-SURFACE-served-node-selection.md. The recall core makes the same
- * disclaimer about its own ordering.
- */
-// domain-pending(DIV-DOMCORE-008)
-const SERVED_VIEW_KIND = "temporal";
 
 /**
  * Re-roots a value onto standard object prototypes.
@@ -160,6 +145,13 @@ export interface MemoryReadCompositionConfig {
    */
   readonly readTimestampEpochSeconds: number;
   readonly traceSink: (trace: ContentSafeRecallTrace) => void | Promise<void>;
+  /**
+   * Which synthesized nodes count as served memories. EXPLICIT, never implied
+   * by the transport - see ./granularity.ts. Defaults to the app-facing
+   * granularity when omitted.
+   */
+  // domain-pending(DIV-DOMCORE-008)
+  readonly granularity?: MemoryReadGranularity;
 }
 
 /**
@@ -343,21 +335,6 @@ const attestationToCursorBindings = (
   read_mode_digest: attestation.read_mode_digest,
 });
 
-/** Selects the produced renders this composition is willing to serve as memories. */
-const selectServedRenders = (
-  renders: readonly RenderNode[],
-  nodeViewKinds: ReadonlyMap<string, { readonly view_kind: string; readonly isLeaf: boolean }>,
-): readonly RenderNode[] => renders
-  .filter((render) => {
-    const node = nodeViewKinds.get(render.node_id);
-    if (!node || node.view_kind !== SERVED_VIEW_KIND || !node.isLeaf) return false;
-    // Only grounded, current renders may be served. An empty, failed, or stale
-    // render is not a memory - and presenting one as absence would be a lie.
-    return render.status === "ready" && render.render_hash !== null && !render.stale;
-  })
-  .slice()
-  .sort((left, right) => compareStrings(left.node_id, right.node_id));
-
 export interface PreparedMemoryRead {
   readonly ports: ApplicationReadPorts;
   /** How many produced renders this snapshot is willing to serve, before paging. */
@@ -412,11 +389,8 @@ export const prepareMemoryRead = async (
     options: { account_timezone: preRenderLoad.account_timezone },
   }));
 
+  const granularity = config.granularity ?? DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY;
   const tree = buildDeterministicAnchors(preRenderProjection);
-  const nodeViewKinds = new Map(tree.nodes.map((node) => [node.node_id, {
-    view_kind: node.view_kind as string,
-    isLeaf: node.child_node_ids.length === 0,
-  }]));
   const allRenders = await renderStructuralTree(
     tree,
     preRenderProjection,
@@ -429,7 +403,7 @@ export const prepareMemoryRead = async (
       schema_version: RENDER_SCHEMA_VERSION,
     },
   );
-  const servedRenders = selectServedRenders(allRenders, nodeViewKinds);
+  const servedRenders = selectRendersForGranularity(allRenders, tree, granularity);
   const synthesizedProjectionGenerationDigest =
     computeApplicationSynthesizedProjectionGenerationDigest(preRenderProjection, servedRenders);
 
