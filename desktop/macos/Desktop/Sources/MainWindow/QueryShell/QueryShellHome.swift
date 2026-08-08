@@ -278,13 +278,15 @@ struct QueryShellHome: View {
   private func panelBody(request: QueryShellRequest) -> some View {
     switch mode {
     case .results:
-      // The seam's occupant: one merged chronological spine — a conversation, the memories it
-      // produced and the screen you were on, in the order they happened. See `SpineStream`.
+      // The seam's occupant: one merged chronological spine — a conversation, the memories and
+      // tasks it produced, and the screen you were on, in the order they happened. See `SpineStream`.
       SpineStream(
         request: request,
         appState: appState,
         memoriesViewModel: memoriesViewModel,
+        tasksStore: TasksStore.shared,
         onOpenConversation: openConversation,
+        onOpenConversationSource: openConversationSource,
         onOpenBrainMap: openBrainMap,
         onOpenRewind: openRewind
       )
@@ -509,6 +511,15 @@ struct QueryShellHome: View {
   /// Opens the real Conversations page on the real conversation — never a copy of it here (INV-NAV-1).
   private func openConversation(_ id: String) {
     ConversationDetailAutomationState.shared.requestOpen(conversationId: id, showTranscript: false)
+    navigate(.conversation)
+  }
+
+  private func openConversationSource(_ id: String, transcriptSegmentIds: [String]) {
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: id,
+      showTranscript: true,
+      transcriptSegmentIds: transcriptSegmentIds
+    )
     navigate(.conversation)
   }
 

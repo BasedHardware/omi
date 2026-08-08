@@ -1,7 +1,7 @@
 //
-//  SpineRowViews.swift — the four things a day is made of.
+//  SpineRowViews.swift — the things a day is made of.
 //
-//  A conversation, the memories it produced, the frames that were on screen, and the end-of-day map
+//  A conversation, the memories and tasks it produced, the frames that were on screen, and the map
 //  of what those memories connect to. They share one grid — a fixed time gutter on the left, content
 //  on the right, a hairline between them — because that gutter is what makes the list a clock rather
 //  than a stack of cards.
@@ -93,6 +93,8 @@ struct SpineRowView: View {
   /// state their own time instead.
   let showsIndent: Bool
   let onOpenConversation: (ServerConversation) -> Void
+  let onOpenConversationSource: (String, [String]) -> Void
+  let onToggleTask: (TaskActionItem) -> Void
   let onToggleStar: (ServerConversation) -> Void
   let onOpenMoment: (SpineMoment) -> Void
   let onOpenBrainMap: () -> Void
@@ -110,7 +112,7 @@ struct SpineRowView: View {
   private var gutterInset: CGFloat {
     switch row.content {
     case .conversation, .brainMap: return SpineMetrics.cardGutterInset
-    case .memories, .moments: return SpineMetrics.inlineGutterInset
+    case .memories, .tasks, .moments: return SpineMetrics.inlineGutterInset
     }
   }
 
@@ -163,7 +165,18 @@ struct SpineRowView: View {
         onToggleStar: { onToggleStar(summary.conversation) }
       )
     case .memories(let memories):
-      SpineMemoriesRow(memories: memories, showsTimestamps: !row.isAttached && !showsIndent)
+      SpineMemoriesRow(
+        memories: memories,
+        showsTimestamps: !row.isAttached && !showsIndent,
+        onOpenConversationSource: onOpenConversationSource
+      )
+    case .tasks(let tasks):
+      SpineTasksRow(
+        tasks: tasks,
+        showsTimestamps: !row.isAttached && !showsIndent,
+        onToggle: onToggleTask,
+        onOpenConversationSource: onOpenConversationSource
+      )
     case .moments(let shown, let total):
       SpineMomentsRow(moments: shown, total: total, onOpen: onOpenMoment)
     case .brainMap(let map):
@@ -251,11 +264,16 @@ struct SpineMemoriesRow: View {
   let memories: [SpineMemory]
   /// Set when the row is soloed and there is no conversation above it to own the minute.
   let showsTimestamps: Bool
+  let onOpenConversationSource: (String, [String]) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
       ForEach(memories) { memory in
-        SpineMemoryLine(memory: memory, showsTimestamp: showsTimestamps && memories.count > 1)
+        SpineMemoryLine(
+          memory: memory,
+          showsTimestamp: showsTimestamps && memories.count > 1,
+          onOpenConversationSource: onOpenConversationSource
+        )
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -270,6 +288,7 @@ struct SpineMemoriesRow: View {
 private struct SpineMemoryLine: View {
   let memory: SpineMemory
   let showsTimestamp: Bool
+  let onOpenConversationSource: (String, [String]) -> Void
 
   private var copy: SpineMemoryCopy { SpineFormat.memoryCopy(memory.text) }
 
@@ -301,11 +320,85 @@ private struct SpineMemoryLine: View {
           Text(SpineFormat.time(memory.timestamp))
             .inkStyle(.statusLabel, color: Ink.secondary)
         }
+        if let conversationID = memory.conversationID {
+          Button {
+            onOpenConversationSource(conversationID, [])
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "text.quote")
+              Text("From \(memory.sourceConversationTitle ?? "conversation")")
+            }
+            .inkStyle(.statusLabel, color: Ink.secondary)
+          }
+          .buttonStyle(.plain)
+          .help("Open the source conversation and full transcript")
+        }
       }
       .frame(maxWidth: SpineMetrics.proseMaxWidth, alignment: .leading)
     }
     // Two runs of one sentence: read as one utterance, not as a label and then a fragment.
     .accessibilityElement(children: .combine)
+  }
+}
+
+// MARK: - Tasks
+
+/// Tasks use the same quiet inline hierarchy as memories, with completion and provenance kept visible.
+struct SpineTasksRow: View {
+  let tasks: [SpineTask]
+  let showsTimestamps: Bool
+  let onToggle: (TaskActionItem) -> Void
+  let onOpenConversationSource: (String, [String]) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
+      ForEach(tasks) { task in
+        HStack(alignment: .top, spacing: 9) {
+          Button {
+            onToggle(task.task)
+          } label: {
+            Image(systemName: task.task.completed ? "checkmark.circle.fill" : "circle")
+              .font(.system(size: 13, weight: .medium))
+              .foregroundStyle(task.task.completed ? Ink.listeningGreen : Ink.secondary)
+          }
+          .buttonStyle(.plain)
+          .help(task.task.completed ? "Mark incomplete" : "Mark complete")
+
+          VStack(alignment: .leading, spacing: 3) {
+            Text(task.text)
+              .inkStyle(.prose, color: task.task.completed ? Ink.secondary : Ink.primary)
+              .strikethrough(task.task.completed, color: Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+            if let conversationID = task.conversationID {
+              Button {
+                let segmentIDs =
+                  task.task.provenance?
+                  .first(where: { $0.kind == .conversation && $0.id == conversationID })?
+                  .transcriptSegmentIds ?? []
+                onOpenConversationSource(conversationID, segmentIDs)
+              } label: {
+                HStack(spacing: 4) {
+                  Image(systemName: "text.quote")
+                  Text(task.sourceLabel)
+                }
+                .inkStyle(.statusLabel, color: Ink.secondary)
+              }
+              .buttonStyle(.plain)
+              .help("Open the source conversation and full transcript")
+            } else {
+              Text(task.sourceLabel)
+                .inkStyle(.statusLabel, color: Ink.secondary)
+            }
+            if showsTimestamps && tasks.count > 1 {
+              Text(SpineFormat.time(task.timestamp))
+                .inkStyle(.statusLabel, color: Ink.secondary)
+            }
+          }
+          .frame(maxWidth: SpineMetrics.proseMaxWidth, alignment: .leading)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 

@@ -27,6 +27,19 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
     XCTAssertTrue(state.transcriptDrawerOpen)
   }
 
+  func testTranscriptEvidenceSurvivesNavigationAndFocusesPresentedDetail() {
+    let state = ConversationDetailAutomationState()
+    state.requestOpen(
+      conversationId: "conversation-1",
+      showTranscript: true,
+      transcriptSegmentIds: ["segment-2"]
+    )
+
+    _ = state.takePendingOpenRequest()
+    XCTAssertTrue(state.syncPresentedDetail(conversationId: "conversation-1", transcriptDrawerOpen: false))
+    XCTAssertEqual(state.focusedTranscriptSegmentIds, ["segment-2"])
+  }
+
   func testLaterRequestWithoutTranscriptReplacesEarlierDrawerIntent() {
     let state = ConversationDetailAutomationState()
 

@@ -52,6 +52,9 @@ class EvidenceRef(BaseModel):
     scope: EvidenceScope
     device_id: Optional[StableId] = None
     excerpt_hash: Optional[str] = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    transcript_segment_ids: list[StableId] = Field(default_factory=list)
+    start_seconds: Optional[float] = Field(default=None, ge=0)
+    end_seconds: Optional[float] = Field(default=None, ge=0)
 
     @model_validator(mode='after')
     def validate_scope(self):
@@ -61,6 +64,8 @@ class EvidenceRef(BaseModel):
             raise ValueError('canonical evidence cannot carry device_id')
         if self.kind == EvidenceKind.local_screen and self.scope != EvidenceScope.device_local:
             raise ValueError('local_screen evidence must be device_local')
+        if self.start_seconds is not None and self.end_seconds is not None and self.end_seconds < self.start_seconds:
+            raise ValueError('end_seconds must be greater than or equal to start_seconds')
         return self
 
 

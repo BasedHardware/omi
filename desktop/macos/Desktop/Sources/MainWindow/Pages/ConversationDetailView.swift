@@ -741,15 +741,24 @@ struct ConversationDetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        // LazyVStack is a DIRECT child of ScrollView so it gets bounded proposed height
-        // and only materializes visible children.
-        ScrollView {
-          LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
-            transcriptBubblesContent
+        ScrollViewReader { proxy in
+          // LazyVStack is a DIRECT child of ScrollView so it gets bounded proposed height
+          // and only materializes visible children.
+          ScrollView {
+            LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
+              transcriptBubblesContent
+            }
+            .padding(OmiSpacing.lg)
           }
-          .padding(OmiSpacing.lg)
+          .glassScrollFade()
+          .onAppear { focusTranscript(using: proxy) }
+          .onChange(of: automation.focusedTranscriptSegmentIds) { _, _ in
+            focusTranscript(using: proxy)
+          }
+          .onChange(of: displayConversation.transcriptSegments.count) { _, _ in
+            focusTranscript(using: proxy)
+          }
         }
-        .glassScrollFade()
       }
     }
   }
@@ -773,6 +782,27 @@ struct ConversationDetailView: View {
           }
       )
       .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.xs)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .fill(
+            automation.focusedTranscriptSegmentIds.contains(segment.backendId ?? segment.id)
+              ? Ink.rowFillHover : Color.clear
+          )
+      )
+      .id(segment.backendId ?? segment.id)
+    }
+  }
+
+  private func focusTranscript(using proxy: ScrollViewProxy) {
+    guard showTranscriptDrawer,
+      let segmentID = automation.focusedTranscriptSegmentIds.first,
+      displayConversation.transcriptSegments.contains(where: { ($0.backendId ?? $0.id) == segmentID })
+    else { return }
+    DispatchQueue.main.async {
+      OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+        proxy.scrollTo(segmentID, anchor: .center)
+      }
     }
   }
 
@@ -1073,6 +1103,25 @@ struct ConversationDetailView: View {
               .foregroundColor(item.completed ? Ink.secondary : Ink.primary)
               .textSelection(.enabled)
               .strikethrough(item.completed, color: Ink.secondary)
+
+            Spacer(minLength: OmiSpacing.sm)
+
+            Button {
+              ConversationDetailAutomationState.shared.requestOpen(
+                conversationId: displayConversation.id,
+                showTranscript: true,
+                transcriptSegmentIds: item.sourceSegmentIDs
+              )
+            } label: {
+              HStack(spacing: OmiSpacing.xxs) {
+                Image(systemName: "text.quote")
+                Text(item.sourceSegmentIDs.isEmpty ? "Transcript" : "Source")
+              }
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Open the full transcript")
           }
           .padding(OmiSpacing.md)
           .frame(maxWidth: .infinity, alignment: .leading)
