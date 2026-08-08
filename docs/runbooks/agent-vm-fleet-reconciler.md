@@ -60,6 +60,13 @@ that same identity-checked disk to the candidate. The candidate's state disk
 becomes the active owner's state surface only after the health,
 release-identity, lease, and cutover checks succeed.
 
+Replacement creation attaches only the new boot disk and durable state disk.
+The full predecessor clone is hot-attached read-only with `autoDelete: false`
+after the guest kernel has selected its root device, avoiding duplicate legacy
+filesystem labels during boot. Startup waits a bounded interval for required
+state devices and expands the image's ext4 root partition to the provisioned
+boot-disk size before installing or pulling Docker content.
+
 The **explicit ephemeral browser policy** is part of this contract: only paths
 listed in the state-disk contract are persistent. Browser cache, temporary
 profiles, downloads, and other unlisted browser data are ephemeral and must be
@@ -70,7 +77,8 @@ separate reviewed state contract names them.
 The active owner's boot disk and initial state-disk attachment are created with
 `autoDelete: true`. Once migration must preserve state across VM replacement,
 the reconciler changes the state-disk attachment to `autoDelete: false` before
-detaching it; the temporary read-only source clone remains `autoDelete: true`.
+detaching it; the temporary read-only source clone remains protected with
+`autoDelete: false` until explicit retirement.
 During migration, the stopped predecessor, detached persistent state disk, and
 temporary clone are preserved through the journaled soak window; candidate
 health alone never authorizes cleanup. After cutover, cleanup is
@@ -118,6 +126,15 @@ continuity, source-clone attach/detach, the explicit ephemeral browser policy,
 active-owner `autoDelete: true`, and identity-fenced cleanup across a complete
 soak and rollback exercise. The production manifest must continue to omit the
 migration flag until that evidence is reviewed and accepted.
+
+A pre-cutover failure remains retryable under the same immutable release. If a
+normal deployment advances the release first, the reconciler does not require
+an operator to edit Firestore: it revalidates that the exact candidate is gone,
+the journaled state disk is attached to the numeric-ID-fenced predecessor, and
+the disk deletion policy is restored. Only then may a lease-guarded transaction
+mark the old journal `superseded` and clear its durable owner marker. Any
+identity or cleanup ambiguity stays fail-closed instead of starting a candidate
+for the newer release.
 
 Generate the opt-in manifest with the checked-in renderer; do not hand-edit a
 manifest after it receives `manifestSha256`:
@@ -194,7 +211,7 @@ redundant VPC-network field when a subnetwork is present, so Compute infers the
 network from the subnet and no project-wide network access is granted.
 The same custom role includes only the additional state-disk/clone operations
 `compute.disks.create`, `compute.disks.delete`, `compute.disks.get`,
-`compute.disks.use`, `compute.disks.useReadOnly`,
+`compute.disks.update`, `compute.disks.use`, `compute.disks.useReadOnly`,
 `compute.instances.attachDisk`, `compute.instances.detachDisk`, and
 `compute.instances.setDiskAutoDelete`. The existing `omi-agent-*` instance,
 disk, and image conditions remain in force; no broad Compute role or
