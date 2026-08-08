@@ -395,7 +395,7 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
     // Only canonical claims are required to carry persisted temporal truth. A
     // malformed/legacy or provisional item is honestly imprecise, never filed
     // under its capture/observation date.
-    const valid_time = item.claim.lifecycle === "canonical" ? item.claim.temporal_scope.valid_time : null;
+    const valid_time = item.claim.lifecycle === "canonical" ? item.claim.temporal_scope.valid_time ?? null : null;
     const resolved = valid_time?.resolved_interval;
     return {
       claim_revision_id: item.revision_id, canonical_claim_id: item.claim.lifecycle === "canonical" ? item.claim.canonical_claim_id : null,
@@ -404,7 +404,8 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
       arguments: item.claim.arguments.map((argument) => argument.value.kind === "entity_ref" ? { ...argument, value: { ...argument.value, ref: canonicalIds.get(argument.value.ref) ?? argument.value.ref } } : argument),
       observed_at: item.claim.temporal_scope.observed_at, valid_time, temporal_precision: item.claim.temporal_scope.precision,
       time_anchor: resolved && resolved.kind !== "imprecise" ? { kind: "valid_time" as const, value: resolved.start } : { kind: "imprecise_time" as const, observed_at: item.claim.temporal_scope.observed_at, marker: "persisted_imprecise_or_missing_valid_time" as const },
-      evidence_refs: item.claim.evidence_refs, evidence_spans, scope: item.claim.scope, source_language: item.claim.source_language, polarity: item.claim.polarity,
+      evidence_refs: item.claim.evidence_refs, evidence_spans, scope: item.claim.scope, source_language: item.claim.source_language,
+      ...(item.claim.polarity === undefined ? {} : { polarity: item.claim.polarity }),
       policy_labels: item.claim.policy_labels, policy_class, placement_status: item.placement_status,
     } satisfies LiveClaimView;
   });
@@ -416,7 +417,15 @@ export const projectTreeInputSnapshot = (snapshot: GraphSnapshot, options: TreeI
       .sort((left, right) => compareStrings(`${left.subject_class}\u0000${left.sensitivity}\u0000${left.capture_class}`, `${right.subject_class}\u0000${right.sensitivity}\u0000${right.capture_class}`)),
   } : null;
   const reader_projection_digest = readerProjectionSeed === null ? null : sha256CanonicalRedacted(readerProjectionSeed);
-  const identity_constraints = snapshot.identity_constraints?.map((item) => item.constraint) ?? [];
+  const identity_constraints = snapshot.identity_constraints?.map((item) => {
+    const { endpoints, evidence_refs, identity_authorization, ...required } = item.constraint;
+    return {
+      ...required,
+      ...(endpoints === undefined ? {} : { endpoints }),
+      ...(evidence_refs === undefined ? {} : { evidence_refs }),
+      ...(identity_authorization === undefined ? {} : { identity_authorization }),
+    } satisfies IdentityConstraint;
+  }) ?? [];
   const policy_classes = Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, claim.policy_class]));
   const projected_content_digest = sha256CanonicalContent({ owner_account_id: snapshot.owner_account_id, claims, identity_constraints, evidence_index: spans, policy_classes, diagnostics });
   const generationSeed = { graph: options.graph_generation ?? snapshot.graph_generation ?? "snapshot", projected_content_digest, classifier: classifier.version, liveness_hook: "d35-liveness-v1", timezone: options.account_timezone, reader_projection_digest };

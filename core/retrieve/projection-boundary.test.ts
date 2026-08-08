@@ -18,8 +18,9 @@ const authorizationRequest = (appId = "app:a"): ApplicationMemoryReadAuthorizati
 });
 
 const projectedInput = (appId = "app:a"): ApplicationGrantProjectedTreeInputSnapshot =>
-  readAfterApplicationAuthorization(authorizationRequest(appId), (project) =>
-    project(snapshot(), { account_timezone: "UTC" }));
+  readAfterApplicationAuthorization(authorizationRequest(appId), () => ({
+    snapshot: snapshot(), options: { account_timezone: "UTC" },
+  }));
 
 const renderedFixture = async (appId = "app:a"): Promise<{ input: ApplicationGrantProjectedTreeInputSnapshot; render: RenderNode }> => {
   const input = projectedInput(appId);
@@ -177,8 +178,9 @@ test("cache identity changes when projected content changes without a graph fron
   secondGraph.claims = secondGraph.claims.map((item) => item.revision_id === "a"
     ? { ...item, claim: { ...item.claim, predicate: "changed-predicate" } }
     : item);
-  const project = (graph: ReturnType<typeof snapshot>) => readAfterApplicationAuthorization(authorizationRequest(), (projectInput) =>
-    projectInput(graph, { account_timezone: "UTC" }));
+  const project = (graph: ReturnType<typeof snapshot>) => readAfterApplicationAuthorization(authorizationRequest(), () => ({
+    snapshot: graph, options: { account_timezone: "UTC" },
+  }));
   const firstInput = project(firstGraph);
   const secondInput = project(secondGraph);
   const firstRenders = await renderStructuralTree(buildDeterministicAnchors(firstInput), firstInput, {
@@ -206,4 +208,48 @@ test("cache identity changes when projected content changes without a graph fron
   const hiddenPrivateInput = project(hiddenPrivateChange);
   expect(hiddenPrivateInput.graph_generation).toBe(firstInput.graph_generation);
   expect(hiddenPrivateInput.projected_content_digest).toBe(firstInput.projected_content_digest);
+});
+
+test("poisoned or re-signed cache entries are rejected and recomputed", async () => {
+  const input = projectedInput();
+  const tree = buildDeterministicAnchors(input);
+  const options = { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" };
+  const first = await renderStructuralTree(tree, input, { render: async () => ({ summary_text: "first", citations: ["e1"] }) }, options);
+  const seed = first[0]!;
+  const poisonedManifest = { ...seed.rendered_from_manifest, live_member_revisions: ["forged"] };
+  const poisonedHash = sha256CanonicalRedacted({
+    owner_account_id: seed.owner_account_id,
+    graph_generation: seed.graph_generation,
+    reader_projection_digest: seed.reader_projection_digest,
+    projection_authorization_digest: seed.projection_authorization_digest,
+    projected_content_digest: seed.projected_content_digest,
+    node_id: seed.node_id,
+    rendered_from_digest: seed.rendered_from_digest,
+    rendered_from_manifest: poisonedManifest,
+    summary_text: seed.summary_text,
+    citations: seed.citations,
+    effective_policy: seed.effective_policy,
+  });
+  const poisoned = { ...seed, rendered_from_manifest: poisonedManifest, render_hash: poisonedHash, render_generation: `render-v1:${poisonedHash}` };
+  let calls = 0;
+  const renders = await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => { calls++; return { summary_text: "recomputed", citations: ["e1"] }; },
+  }, options, new Map([[seed.rendered_from_digest, poisoned]]));
+  expect(calls).toBeGreaterThan(0);
+  expect(renders.every((render) => !render.rendered_from_manifest.live_member_revisions.includes("forged"))).toBe(true);
+
+  const resignedPolicy = resign(seed, { effective_policy: { ...seed.effective_policy, sensitivity: "private" } });
+  calls = 0;
+  const policyRenders = await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => { calls++; return { summary_text: "policy-recomputed", citations: ["e1"] }; },
+  }, options, new Map([[seed.rendered_from_digest, resignedPolicy]]));
+  expect(calls).toBeGreaterThan(0);
+  expect(policyRenders.every((render) => render.effective_policy.sensitivity === "generic")).toBe(true);
+
+  calls = 0;
+  const malformed = { ...seed, citations: undefined } as never;
+  await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => { calls++; return { summary_text: "malformed-recomputed", citations: ["e1"] }; },
+  }, options, new Map([[seed.rendered_from_digest, malformed]]));
+  expect(calls).toBeGreaterThan(0);
 });

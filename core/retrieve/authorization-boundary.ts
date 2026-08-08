@@ -1,6 +1,7 @@
 import { sha256CanonicalRedacted } from "../ledger";
 import { genericPolicyClassifier, projectTreeInputSnapshot, type GraphSnapshot, type PolicyClass, type TreeInputSnapshot } from "./index";
 import { sha256CanonicalContent } from "./content-digest";
+import { deepFreezePlainJson, normalizePlainJson } from "./plain-json";
 
 const projectedInputs = new WeakSet<object>();
 // domain-pending(DIV-DOMCORE-001)
@@ -75,10 +76,14 @@ export interface ApplicationGrantProjectedTreeInputSnapshot extends TreeInputSna
 
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
-export type ApplicationProjectionCapability = (
-  snapshot: GraphSnapshot,
-  options: { account_timezone: string },
-) => ApplicationGrantProjectedTreeInputSnapshot;
+export interface ApplicationProjectionLoad {
+  readonly snapshot: GraphSnapshot;
+  readonly options: { readonly account_timezone: string };
+}
+
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMAPPS-001)
+export type ApplicationProjectionLoader = () => ApplicationProjectionLoad;
 
 // domain-pending(DIV-DOMAPPS-001)
 export type ApplicationReadDenial =
@@ -107,14 +112,6 @@ const isResolved = (value: string | null): value is string => typeof value === "
 const normalizedStrings = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
 const genericPolicyLabels = new Set(["subject:generic", "sensitivity:generic", "capture:generic"]);
 const hasOnlyGenericPolicyLabels = (labels: readonly string[]): boolean => labels.every((label) => genericPolicyLabels.has(label));
-const deepFreeze = <Value>(value: Value): Value => {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const nested of Object.values(value)) deepFreeze(nested);
-    Object.freeze(value);
-  }
-  return value;
-};
-
 const rejectNestedOwnerMismatch = (snapshot: GraphSnapshot, ownerAccountId: string): void => {
   const visited = new WeakSet<object>();
   const inspect = (value: unknown): void => {
@@ -125,36 +122,69 @@ const rejectNestedOwnerMismatch = (snapshot: GraphSnapshot, ownerAccountId: stri
     for (const nested of Object.values(value)) inspect(nested);
   };
   inspect(snapshot);
+};
 
-  const events = new Map<string, NonNullable<GraphSnapshot["events"]>[number]>();
-  for (const event of snapshot.events ?? []) {
-    for (const ref of [event.revision_id, event.event.event_revision_id]) {
-      if (!ref || (events.has(ref) && events.get(ref) !== event)) deny("projection_binding_mismatch");
-      events.set(ref, event);
+const sameEvidenceSpan = (
+  left: TreeInputSnapshot["evidence_index"][number],
+  right: TreeInputSnapshot["evidence_index"][number],
+): boolean => sha256CanonicalContent(left) === sha256CanonicalContent(right);
+
+const validateVisibleEvidenceClosure = (input: TreeInputSnapshot): void => {
+  const evidenceById = new Map<string, TreeInputSnapshot["evidence_index"][number]>();
+  for (const evidence of input.evidence_index) {
+    if (!evidence.evidence_id || evidenceById.has(evidence.evidence_id)) deny("projection_binding_mismatch");
+    evidenceById.set(evidence.evidence_id, evidence);
+  }
+  for (const claim of input.claims) {
+    const refs = [...claim.evidence_refs].sort();
+    const spanIds = claim.evidence_spans.map((span) => span.evidence_id).sort();
+    if (refs.length === 0 || refs.length !== new Set(refs).size || refs.length !== spanIds.length
+      || refs.some((ref, index) => ref !== spanIds[index])) deny("projection_binding_mismatch");
+    for (const span of claim.evidence_spans) {
+      const indexed = evidenceById.get(span.evidence_id);
+      if (!indexed || !sameEvidenceSpan(span, indexed)) deny("projection_binding_mismatch");
     }
   }
-  const evidenceIds = new Set<string>();
-  for (const evidence of snapshot.evidence ?? []) {
-    if (!evidence.evidence.evidence_id || evidenceIds.has(evidence.evidence.evidence_id) || !events.has(evidence.evidence.event_revision_id)) deny("projection_binding_mismatch");
-    evidenceIds.add(evidence.evidence.evidence_id);
+};
+
+const hasExactOwnOwner = (value: object, ownerAccountId: string): boolean =>
+  Object.prototype.hasOwnProperty.call(value, "owner_account_id")
+  && (value as { owner_account_id?: unknown }).owner_account_id === ownerAccountId;
+
+const validateVisibleTenantLineage = (
+  snapshot: GraphSnapshot,
+  claims: TreeInputSnapshot["claims"],
+  evidenceIndex: TreeInputSnapshot["evidence_index"],
+  ownerAccountId: string,
+): void => {
+  for (const claim of claims) {
+    const rawClaims = snapshot.claims.filter((item) => item.revision_id === claim.claim_revision_id);
+    if (rawClaims.length !== 1 || !hasExactOwnOwner(rawClaims[0]!.claim, ownerAccountId)) deny("projection_binding_mismatch");
+    for (const argument of claim.arguments) if (argument.value.kind === "entity_ref") {
+      const entities = snapshot.entities.filter((item) => item.entity.entity_id === argument.value.ref);
+      if (entities.length !== 1 || !hasExactOwnOwner(entities[0]!.entity, ownerAccountId)) deny("projection_binding_mismatch");
+    }
   }
-  for (const item of snapshot.claims) for (const evidenceRef of item.claim.evidence_refs) {
-    if (!evidenceIds.has(evidenceRef)) deny("projection_binding_mismatch");
+  for (const evidence of evidenceIndex) {
+    const events = (snapshot.events ?? []).filter((item) => item.revision_id === evidence.event_revision_id
+      || item.event.event_revision_id === evidence.event_revision_id);
+    if (events.length !== 1 || !hasExactOwnOwner(events[0]!.event, ownerAccountId)) deny("projection_binding_mismatch");
   }
 };
 
 /**
  * Pure application authorization gate. Scope and persisted grant are checked
- * independently, and every denial is resolved before the store callback can run.
- * The returned branded decision binds the exact non-owner application grant.
+ * independently, and every denial is resolved before the zero-authority store
+ * loader can run. Projection remains internal to this boundary.
  */
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
-export const readAfterApplicationAuthorization = <Result>(
+export const readAfterApplicationAuthorization = (
   request: ApplicationMemoryReadAuthorizationRequest,
-  readStore: (project: ApplicationProjectionCapability) => Result,
-): Result => {
+  loadStore: ApplicationProjectionLoader,
+): ApplicationGrantProjectedTreeInputSnapshot => {
+  request = normalizePlainJson(request);
   const credential = request.credential;
   if (credential.credential_kind !== "mcp_api_key") deny("unsupported_credential_kind");
   if (!credential.scopes.includes(REQUIRED_MEMORY_READ_SCOPE)) deny("missing_scope");
@@ -204,9 +234,8 @@ export const readAfterApplicationAuthorization = <Result>(
     projection_policy_classes: Object.freeze([APPLICATION_DEFAULT_SYNTHESIZED_POLICY]),
     authorization_digest: authorizationDigest,
   });
-  const project: ApplicationProjectionCapability = (snapshot, options) =>
-    projectApplicationDefaultReadTreeInput(snapshot, options, authorization);
-  return readStore(project);
+  const loaded = normalizePlainJson(loadStore());
+  return projectApplicationDefaultReadTreeInput(loaded.snapshot, loaded.options, authorization);
 };
 
 /**
@@ -229,6 +258,9 @@ const projectApplicationDefaultReadTreeInput = (
   // domain-pending(DIV-DOMCORE-008)
   const canonicalDefaultSnapshot: GraphSnapshot = {
     ...snapshot,
+    // Identity closure can rename visible entity arguments before projection.
+    // Omit it until complete visible-only support can be proven.
+    identity_constraints: [],
     claims: snapshot.claims.filter((item) => item.placement_status === "canonical"
       && item.claim.lifecycle === "canonical"
       && item.claim.scope.locality === "durable"),
@@ -242,19 +274,27 @@ const projectApplicationDefaultReadTreeInput = (
     && hasOnlyGenericPolicyLabels(claim.policy_labels)
     && claim.evidence_refs.every((evidenceId) => {
       const evidence = evidenceById.get(evidenceId);
-      return evidence !== undefined && hasOnlyGenericPolicyLabels(evidence.policy_labels);
+      // Preserve a policy-eligible claim with a missing span so the visible
+      // closure validator can deny it instead of silently hiding corruption.
+      return evidence === undefined || hasOnlyGenericPolicyLabels(evidence.policy_labels);
     }));
   const visibleClaimIds = new Set(claims.map((claim) => claim.claim_revision_id));
   const visibleEvidenceIds = new Set(claims.flatMap((claim) => claim.evidence_refs));
   const evidence_index = input.evidence_index.filter((span) => visibleEvidenceIds.has(span.evidence_id));
+  // Identity constraints can rename/coalesce visible topology. Until complete
+  // visible support can be proven, the application projection omits them.
+  // domain-pending(DIV-DOMCORE-008)
+  const identity_constraints: TreeInputSnapshot["identity_constraints"] = [];
   const policy_classes = Object.fromEntries(claims.map((claim) => [claim.claim_revision_id, { ...claim.policy_class }]));
   const diagnostics = input.diagnostics.filter((diagnostic) => "claim_revision_id" in diagnostic
     ? visibleClaimIds.has(diagnostic.claim_revision_id)
     : diagnostic.claim_revision_ids.some((revision) => visibleClaimIds.has(revision)));
+  validateVisibleTenantLineage(canonicalDefaultSnapshot, claims, evidence_index, authorization.owner_account_id);
+  validateVisibleEvidenceClosure({ ...input, claims, identity_constraints, evidence_index, policy_classes, diagnostics });
   const projected_content_digest = sha256CanonicalContent({
     owner_account_id: input.owner_account_id,
     claims,
-    identity_constraints: input.identity_constraints,
+    identity_constraints,
     evidence_index,
     policy_classes,
     diagnostics,
@@ -275,13 +315,14 @@ const projectApplicationDefaultReadTreeInput = (
     projection_authorization_digest: authorization.authorization_digest,
     projected_content_digest,
     claims,
+    identity_constraints,
     evidence_index,
     policy_classes,
     diagnostics,
   };
-  const detached = structuredClone(projected) as ApplicationGrantProjectedTreeInputSnapshot;
+  const detached = normalizePlainJson(projected) as ApplicationGrantProjectedTreeInputSnapshot;
   projectedInputs.add(detached);
-  return deepFreeze(detached);
+  return deepFreezePlainJson(detached);
 };
 
 // domain-pending(DIV-DOMAPPS-001)

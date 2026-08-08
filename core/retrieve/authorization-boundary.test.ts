@@ -6,6 +6,7 @@ import {
 } from "./authorization-boundary";
 import { snapshot } from "./tree.fixture";
 import { genericPolicyClassifier } from "./index";
+import { buildDeterministicAnchors } from "./tree";
 
 const allowed = (): ApplicationMemoryReadAuthorizationRequest => ({
   owner_account_id: "owner",
@@ -27,15 +28,16 @@ const allowed = (): ApplicationMemoryReadAuthorizationRequest => ({
     scopes: ["memories.read"],
   },
 });
+const load = (graph = snapshot(), options: { account_timezone: string } = { account_timezone: "UTC" }) =>
+  () => ({ snapshot: graph, options });
 
 test("application read requires scope and exact active persisted grant before store access", () => {
   let storeCalls = 0;
-  const result = readAfterApplicationAuthorization(allowed(), (project) => {
+  const result = readAfterApplicationAuthorization(allowed(), () => {
     storeCalls++;
-    expect(project(snapshot(), { account_timezone: "UTC" }).reader_projection_digest).not.toContain("owner");
-    return "read-result";
+    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
   });
-  expect(result).toBe("read-result");
+  expect(result.reader_projection_digest).not.toContain("owner");
   expect(storeCalls).toBe(1);
 });
 
@@ -62,7 +64,7 @@ test("application read denials all occur before the supplied store callback", ()
   for (const [label, request, reason] of cases) {
     let storeCalls = 0;
     try {
-      readAfterApplicationAuthorization(request, () => { storeCalls++; return "must-not-read"; });
+      readAfterApplicationAuthorization(request, () => { storeCalls++; return { snapshot: snapshot(), options: { account_timezone: "UTC" } }; });
       throw new Error(`expected denial: ${label}`);
     } catch (error) {
       expect(error).toBeInstanceOf(ApplicationReadDenied);
@@ -74,8 +76,7 @@ test("application read denials all occur before the supplied store callback", ()
 
 test("application projection factory is branded, owner-bound, and canonical/default only", () => {
   const graph = snapshot();
-  const projected = readAfterApplicationAuthorization(allowed(), (project) =>
-    project(graph, { account_timezone: "UTC" }));
+  const projected = readAfterApplicationAuthorization(allowed(), load(graph));
   expect(projected.owner_account_id).toBe("owner");
   expect(projected.reader_projection_digest).not.toBeNull();
   expect(projected.projection_authorization_digest).not.toBeNull();
@@ -84,32 +85,63 @@ test("application projection factory is branded, owner-bound, and canonical/defa
   expect(projected.claims[0]!.policy_class).toEqual({ subject_class: "generic", sensitivity: "generic", capture_class: "generic" });
 
   const otherOwner = { ...graph, owner_account_id: "owner:b" };
-  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
-    project(otherOwner, { account_timezone: "UTC" }))).toThrow("projection_binding_mismatch");
-  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
-    project(graph, { account_timezone: "UTC", request_context: { reader_account_id: "owner", grant: { grant_id: "owner", policy_classes: [] } } } as never))).toThrow("projection_binding_mismatch");
+  expect(() => readAfterApplicationAuthorization(allowed(), load(otherOwner))).toThrow("projection_binding_mismatch");
+  expect(() => readAfterApplicationAuthorization(allowed(), () => ({
+    snapshot: graph,
+    options: { account_timezone: "UTC", request_context: { reader_account_id: "owner", grant: { grant_id: "owner", policy_classes: [] } } },
+  }) as never)).toThrow("projection_binding_mismatch");
 });
 
 test("owner status never substitutes for the application grant", () => {
   const request = allowed();
   let storeCalls = 0;
-  expect(() => readAfterApplicationAuthorization({ ...request, persisted_grant: null }, () => { storeCalls++; })).toThrow(ApplicationReadDenied);
+  expect(() => readAfterApplicationAuthorization({ ...request, persisted_grant: null }, () => {
+    storeCalls++;
+    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+  })).toThrow(ApplicationReadDenied);
   expect(storeCalls).toBe(0);
 });
 
-test("authorization callback exposes only a closure capability, never a recoverable decision token", () => {
-  readAfterApplicationAuthorization(allowed(), (capability) => {
-    expect(typeof capability).toBe("function");
-    expect(Reflect.ownKeys(Object(capability))).not.toContain("authorization_digest");
-    return null;
-  });
+test("authorization invokes a zero-authority loader and returns its internally projected snapshot", () => {
+  let receivedArguments = -1;
+  const projected = readAfterApplicationAuthorization(allowed(), function (...args: unknown[]) {
+    receivedArguments = args.length;
+    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+  } as never);
+  expect(receivedArguments).toBe(0);
+  expect(projected.claims.map((claim) => claim.claim_revision_id)).toEqual(["a"]);
+});
+
+test("projection rejects inherited owners and accessors without invoking getters", () => {
+  const inherited = snapshot();
+  const originalClaim = inherited.claims[0]!.claim;
+  const inheritedClaim = Object.create({ owner_account_id: "owner:b" });
+  for (const [key, value] of Object.entries(originalClaim)) if (key !== "owner_account_id") inheritedClaim[key] = value;
+  inherited.claims = [{ ...inherited.claims[0]!, claim: inheritedClaim }, ...inherited.claims.slice(1)];
+  expect(() => readAfterApplicationAuthorization(allowed(), load(inherited))).toThrow();
+
+  let getterCalls = 0;
+  const withGetter = snapshot();
+  Object.defineProperty(withGetter.claims[0]!.claim, "owner_account_id", { enumerable: true, get: () => { getterCalls++; return "owner"; } });
+  expect(() => readAfterApplicationAuthorization(allowed(), load(withGetter))).toThrow();
+  expect(getterCalls).toBe(0);
+});
+
+test("projection rejects proxies and non-JSON nested values", () => {
+  const proxied = snapshot();
+  proxied.claims = [new Proxy(proxied.claims[0]!, {}), ...proxied.claims.slice(1)];
+  expect(() => readAfterApplicationAuthorization(allowed(), load(proxied))).toThrow();
+  const dated = snapshot();
+  dated.events![0]!.event.payload = { when: new Date("2026-01-01T00:00:00Z") };
+  expect(() => readAfterApplicationAuthorization(allowed(), load(dated))).toThrow();
 });
 
 test("application projection refuses caller classifier overrides and keeps private policy out", () => {
   const malicious = { version: "attacker", classify: () => ({ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }) };
-  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
-    project(snapshot(), { account_timezone: "UTC", classifier: malicious } as never))).toThrow("projection_binding_mismatch");
-  const projected = readAfterApplicationAuthorization(allowed(), (project) => project(snapshot(), { account_timezone: "UTC" }));
+  expect(() => readAfterApplicationAuthorization(allowed(), () => ({
+    snapshot: snapshot(), options: { account_timezone: "UTC", classifier: malicious },
+  }) as never)).toThrow();
+  const projected = readAfterApplicationAuthorization(allowed(), load());
   expect(projected.claims.map((claim) => claim.claim_revision_id)).toEqual(["a"]);
   expect(projected.classifier_version).toBe(genericPolicyClassifier.version);
 
@@ -117,7 +149,7 @@ test("application projection refuses caller classifier overrides and keeps priva
   unknown.claims = unknown.claims.map((item) => item.revision_id === "a"
     ? { ...item, claim: { ...item.claim, policy_labels: ["unrecognized-policy-label"] } }
     : item);
-  const unknownProjected = readAfterApplicationAuthorization(allowed(), (project) => project(unknown, { account_timezone: "UTC" }));
+  const unknownProjected = readAfterApplicationAuthorization(allowed(), load(unknown));
   expect(unknownProjected.claims).toEqual([]);
 });
 
@@ -126,11 +158,115 @@ test("application projection rejects nested cross-owner claims and events before
   claimMismatch.claims = claimMismatch.claims.map((item, index) => index === 0
     ? { ...item, claim: { ...item.claim, owner_account_id: "owner:b" } }
     : item);
-  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
-    project(claimMismatch, { account_timezone: "UTC" }))).toThrow("projection_binding_mismatch");
+  expect(() => readAfterApplicationAuthorization(allowed(), load(claimMismatch))).toThrow("projection_binding_mismatch");
 
   const eventMismatch = snapshot();
   eventMismatch.events = eventMismatch.events!.map((item) => ({ ...item, event: { ...item.event, owner_account_id: "owner:b" } }));
-  expect(() => readAfterApplicationAuthorization(allowed(), (project) =>
-    project(eventMismatch, { account_timezone: "UTC" }))).toThrow("projection_binding_mismatch");
+  expect(() => readAfterApplicationAuthorization(allowed(), load(eventMismatch))).toThrow("projection_binding_mismatch");
+});
+
+test("visible owner-bearing lineage requires an own tenant identity", () => {
+  const claimWithoutOwner = snapshot();
+  delete (claimWithoutOwner.claims[0]!.claim as { owner_account_id?: string }).owner_account_id;
+  expect(() => readAfterApplicationAuthorization(allowed(), load(claimWithoutOwner))).toThrow("projection_binding_mismatch");
+
+  const eventWithoutOwner = snapshot();
+  delete (eventWithoutOwner.events![0]!.event as { owner_account_id?: string }).owner_account_id;
+  expect(() => readAfterApplicationAuthorization(allowed(), load(eventWithoutOwner))).toThrow("projection_binding_mismatch");
+
+  const entityWithoutOwner = snapshot();
+  delete (entityWithoutOwner.entities[0]!.entity as { owner_account_id?: string }).owner_account_id;
+  expect(() => readAfterApplicationAuthorization(allowed(), load(entityWithoutOwner))).toThrow("projection_binding_mismatch");
+});
+
+test("hidden private missing evidence is noninterfering while hidden cross-owner data still rejects", () => {
+  const hiddenMalformed = snapshot();
+  hiddenMalformed.claims = hiddenMalformed.claims.map((item) => item.revision_id === "private"
+    ? { ...item, claim: { ...item.claim, evidence_refs: ["missing-private"] } }
+    : item);
+  const projected = readAfterApplicationAuthorization(allowed(), load(hiddenMalformed));
+  expect(projected.claims.map((claim: { claim_revision_id: string }) => claim.claim_revision_id)).toEqual(["a"]);
+
+  const hiddenCrossOwner = snapshot();
+  hiddenCrossOwner.claims = hiddenCrossOwner.claims.map((item) => item.revision_id === "private"
+    ? { ...item, claim: { ...item.claim, owner_account_id: "owner:b" } }
+    : item);
+  expect(() => readAfterApplicationAuthorization(allowed(), load(hiddenCrossOwner))).toThrow();
+});
+
+test("visible generic event-chain faults fail closed", () => {
+  const missingEvent = snapshot();
+  missingEvent.evidence = missingEvent.evidence!.map((item) => ({
+    ...item, evidence: { ...item.evidence, event_revision_id: "missing-event" },
+  }));
+  expect(() => readAfterApplicationAuthorization(allowed(), load(missingEvent))).toThrow("projection_binding_mismatch");
+});
+
+test("hidden identity constraints cannot rename or coalesce visible application topology", () => {
+  const withoutConstraint = snapshot();
+  const hiddenEvent = {
+    revision_id: "event:private",
+    event: {
+      ...withoutConstraint.events![0]!.event,
+      event_id: "event:private",
+      event_revision_id: "event:private",
+      evidence_addressable_refs: ["e:private"],
+      policy_labels: ["sensitivity:private"],
+    },
+  };
+  const hiddenEvidence = {
+    revision_id: "e:private",
+    evidence: {
+      ...withoutConstraint.evidence![0]!.evidence,
+      evidence_id: "e:private",
+      event_revision_id: "event:private",
+      policy_labels: ["sensitivity:private"],
+    },
+  };
+  withoutConstraint.events = [...withoutConstraint.events!, hiddenEvent];
+  withoutConstraint.evidence = [...withoutConstraint.evidence!, hiddenEvidence];
+  withoutConstraint.claims = withoutConstraint.claims.map((item) => item.revision_id === "private"
+    ? { ...item, claim: { ...item.claim, evidence_refs: ["e:private"] } }
+    : item);
+  withoutConstraint.entities = [...withoutConstraint.entities, {
+    revision_id: "entity:hidden",
+    entity: { ...withoutConstraint.entities[0]!.entity, entity_id: "entity:hidden", entity_revision_id: "entity:hidden", handle: "hidden" },
+  }];
+  const withConstraint = structuredClone(withoutConstraint);
+  const endpoints = [{ kind: "entity" as const, entity_id: "entity" }, { kind: "entity" as const, entity_id: "entity:hidden" }] as const;
+  withConstraint.identity_constraints = [{
+    revision_id: "constraint:hidden",
+    constraint: {
+      constraint_id: "constraint:hidden",
+      owner_account_id: "owner",
+      endpoints,
+      left_handle: "entity",
+      right_handle: "hidden",
+      relation: "same",
+      evidence_refs: ["e:private"],
+      identity_authorization: {
+        authorization_id: "authorization:hidden",
+        owner_account_id: "owner",
+        endpoints,
+        relation: "same",
+        support: { kind: "owner_confirmation", confirmation_ref: "confirmation:hidden" },
+        standing_policy_ref: null,
+        namespace_scope: { namespace_instance_ref: null, identity_domain: null, scope_ref: null },
+        authority_policy_version: "identity-policy:v1",
+        evaluated_frontier: 1,
+        actor_provenance: { actor_ref: "owner", producer_ref: null },
+        lifecycle: "active",
+        superseded_by: null,
+      },
+      effective_at: 1,
+      reversed_at: null,
+    },
+  }];
+
+  const baseline = readAfterApplicationAuthorization(allowed(), load(withoutConstraint));
+  const constrained = readAfterApplicationAuthorization(allowed(), load(withConstraint));
+  expect(constrained.identity_constraints).toEqual([]);
+  expect(constrained.projected_content_digest).toBe(baseline.projected_content_digest);
+  expect(constrained.graph_generation).toBe(baseline.graph_generation);
+  expect(buildDeterministicAnchors(constrained)).toEqual(buildDeterministicAnchors(baseline));
 });
