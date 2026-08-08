@@ -23,6 +23,7 @@ def test_streaming_selects_hosted_deepgram_when_configured(monkeypatch):
     monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', object())
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
 
     service, language, model = streaming.get_stt_service_for_language('en', multi_lang_enabled=False)
 
@@ -36,6 +37,8 @@ def test_streaming_skips_deepgram_when_no_client_is_configured(monkeypatch):
     monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', None)
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda provider: None)
 
     service, language, model = streaming.get_stt_service_for_language('en')
 
@@ -48,6 +51,7 @@ def test_ptt_never_selects_deepgram_even_when_configured(monkeypatch):
     monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', object())
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.internal')
 
     service, language, model = streaming.get_stt_service_for_language('en', surface=STTServingSurface.PTT)
@@ -72,6 +76,7 @@ def test_streaming_can_select_explicit_self_hosted_deepgram(monkeypatch):
     monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', True)
     monkeypatch.setattr(streaming, 'deepgram', object())
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
 
     service, language, model = streaming.get_stt_service_for_language('en')
 
@@ -80,9 +85,37 @@ def test_streaming_can_select_explicit_self_hosted_deepgram(monkeypatch):
     assert model == 'nova-3'
 
 
+def test_byok_keeps_deepgram_selectable_without_an_account_key(monkeypatch):
+    """A BYOK user brings their own credential, so a keyless runtime still serves them."""
+    monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
+    monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
+    monkeypatch.setattr(streaming, 'deepgram', None)
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda provider: 'user-key')
+
+    service, _, model = streaming.get_stt_service_for_language('en', multi_lang_enabled=False)
+
+    assert service == streaming.STTService.deepgram
+    assert model == 'nova-3'
+    assert streaming._deepgram_client_for_request() is not None
+
+
+def test_managed_client_is_not_built_at_import(monkeypatch):
+    """Importing must not depend on Deepgram configuration."""
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', False)
+    monkeypatch.setattr(streaming, 'deepgram', None)
+    monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
+    monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+
+    assert streaming._managed_deepgram_client() is None
+    assert streaming._managed_deepgram_ready is True
+
+
 def test_deepgram_client_cannot_be_created_without_configuration(monkeypatch):
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', None)
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', True)
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda provider: None)
 
     with pytest.raises(RuntimeError, match='Deepgram is not configured'):
         streaming._deepgram_client_for_request()

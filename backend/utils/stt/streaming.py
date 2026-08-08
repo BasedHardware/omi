@@ -335,7 +335,7 @@ def get_stt_service_for_language(
             if (
                 model.startswith('dg-')
                 and provider_is_enabled(deepgram_provider_for_runtime(is_dg_self_hosted), surface)
-                and deepgram is not None
+                and _deepgram_is_available()
             ):
                 dg_model = model.replace('dg-', '', 1)
                 if multi_lang_enabled and language in deepgram_nova3_multi_languages:
@@ -445,16 +445,47 @@ def _require_self_hosted_deepgram_endpoint(endpoint: str) -> str:
 # Built once; also keys the per-request BYOK client below.
 deepgram_cloud_options = _deepgram_options(DEEPGRAM_CLOUD_ENDPOINT)
 
-if is_dg_self_hosted:
-    dg_self_hosted_url = _require_self_hosted_deepgram_endpoint(os.getenv('DEEPGRAM_SELF_HOSTED_URL') or '')
-    deepgram_options = _deepgram_options(dg_self_hosted_url)
-    logger.info(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
-    deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_options)
-elif os.getenv('DEEPGRAM_API_KEY'):
-    # No key means no client; selection checks `deepgram is not None` and skips
-    # the provider rather than failing a live session at connect time.
-    deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_cloud_options)
+_managed_deepgram_lock = threading.RLock()
+_managed_deepgram_ready = False
+
+
+def _build_managed_deepgram_client() -> Optional[DeepgramClient]:
+    """Build the account-owned client, or None when no credential is configured."""
+    if is_dg_self_hosted:
+        endpoint = _require_self_hosted_deepgram_endpoint(os.getenv('DEEPGRAM_SELF_HOSTED_URL') or '')
+        logger.info(f'Using Deepgram self-hosted at: {endpoint}')
+        return DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', _deepgram_options(endpoint))
+    api_key = os.getenv('DEEPGRAM_API_KEY')
+    if not api_key:
+        return None
     logger.info('Using Deepgram hosted API')
+    return DeepgramClient(api_key, deepgram_cloud_options)
+
+
+def _managed_deepgram_client() -> Optional[DeepgramClient]:
+    """Return the account client, constructing it on first use.
+
+    Deferred so importing this module never depends on Deepgram configuration:
+    schema export, test collection and other non-serving entry points import it
+    without credentials. Mirrors the lazy client in ``utils/stt/pre_recorded.py``.
+    """
+    global deepgram, _managed_deepgram_ready
+    if _managed_deepgram_ready:
+        return deepgram
+    with _managed_deepgram_lock:
+        if not _managed_deepgram_ready:
+            deepgram = _build_managed_deepgram_client()
+            _managed_deepgram_ready = True
+    return deepgram
+
+
+def _deepgram_is_available() -> bool:
+    """Return whether this request could reach Deepgram at all.
+
+    A BYOK user brings their own credential, so Deepgram stays selectable on a
+    runtime that has no account key of its own.
+    """
+    return _managed_deepgram_client() is not None or bool(get_byok_key('deepgram'))
 
 
 async def process_audio_dg(
@@ -596,14 +627,17 @@ def _deepgram_client_for_request() -> DeepgramClient:
     BYOK users pay Deepgram directly, so their key serves their requests.
     Self-hosted has no per-user billing and ignores BYOK.
     """
-    if deepgram is None:
-        raise RuntimeError('Deepgram is not configured; set DEEPGRAM_API_KEY or self-hosted endpoint')
+    managed = _managed_deepgram_client()
     if is_dg_self_hosted:
-        return deepgram
+        if managed is None:
+            raise RuntimeError('Self-hosted Deepgram is not configured')
+        return managed
     byok = get_byok_key('deepgram')
     if byok:
         return DeepgramClient(byok, deepgram_cloud_options)
-    return deepgram
+    if managed is None:
+        raise RuntimeError('Deepgram is not configured; set DEEPGRAM_API_KEY or provide a BYOK key')
+    return managed
 
 
 def connect_to_deepgram(
