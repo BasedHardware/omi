@@ -754,6 +754,7 @@ async def _replace_stopped_boot_image_drift(
     if not state_disk_name or (not state_disk_reused and not source_clone_name):
         raise RuntimeError("boot-image migration journal has no durable state disk plan")
     migration = dict(journal)
+    expected_state_id = str(journal.get("stateDiskId") or "")
     if journal.get("stateDiskId"):
         cleanup_context.update(
             {
@@ -869,8 +870,8 @@ async def _replace_stopped_boot_image_drift(
             prepared_state,
         ):
             raise RuntimeError("boot-image state disk journal fence changed")
-        # The journal transaction is also the account-deletion fence.  Renew it
-        # immediately before detaching a reused disk so a deletion marker or
+        expected_state_id = str(prepared_state["stateDiskId"])
+        # Renew the journal/account-deletion fence before detach so a deletion marker or
         # expired worker lease cannot strand the only durable state disk.
         if state_disk_reused and existing_state_attachment is not None:
             if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
@@ -912,7 +913,6 @@ async def _replace_stopped_boot_image_drift(
     state_disk = await api.get_disk(state_disk_name)
     if state_disk is None or str(state_disk.get("id") or "") == "":
         raise RuntimeError("replacement candidate state disk is unavailable")
-    expected_state_id = str(journal.get("stateDiskId") or "")
     if expected_state_id and str(state_disk.get("id")) != expected_state_id:
         raise RuntimeError("replacement candidate state disk ID changed")
     source_clone = _disk_attachment(candidate, STATE_SOURCE_DEVICE_NAME)

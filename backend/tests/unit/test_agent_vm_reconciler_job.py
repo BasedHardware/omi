@@ -249,7 +249,10 @@ def test_boot_image_migration_plan_rejects_whitespace_only_allowed_uids(monkeypa
 
 
 @pytest.mark.parametrize("firestore_status", ["stopped", "ready"])
-def test_boot_image_migration_replaces_only_a_provider_stopped_allowlisted_vm(monkeypatch, firestore_status):
+@pytest.mark.parametrize("stale_journal_disk_ids", [False, True], ids=["first-attempt", "recreated-disks"])
+def test_boot_image_migration_replaces_only_a_provider_stopped_allowlisted_vm(
+    monkeypatch, firestore_status, stale_journal_disk_ids
+):
     class MigrationApi:
         creates: list[tuple[Any, ...]] = []
         labels: list[str] = []
@@ -374,7 +377,14 @@ def test_boot_image_migration_replaces_only_a_provider_stopped_allowlisted_vm(mo
     MigrationApi.events = []
     monkeypatch.setattr(reconciler, "GceAgentVmClient", MigrationApi)
     monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
-    monkeypatch.setattr(reconciler, "begin_boot_image_migration", lambda *args: dict(args[-1]))
+
+    def begin_boot_image_migration(*args: Any) -> dict[str, Any]:
+        journal = dict(args[-1])
+        if stale_journal_disk_ids:
+            journal.update({"stateDiskId": "deleted-state-id", "sourceCloneDiskId": "deleted-source-id"})
+        return journal
+
+    monkeypatch.setattr(reconciler, "begin_boot_image_migration", begin_boot_image_migration)
     monkeypatch.setattr(reconciler, "recover_missing_boot_image_candidate", lambda *_args: True)
     monkeypatch.setattr(reconciler, "record_boot_image_state_disks", lambda *_args: True)
     monkeypatch.setattr(reconciler, "record_boot_image_candidate", lambda *_args: True)
