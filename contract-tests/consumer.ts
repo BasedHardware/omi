@@ -21,6 +21,14 @@ import {
   parseRecallTraceRef,
 } from "@omi-core/ratified-contracts/recall/trace";
 import type { RecallTraceV1 } from "@omi-core/ratified-contracts/recall/trace";
+import {
+  WRITE_ERRORS,
+  WRITE_REFUSALS,
+  parseWriteOpEnvelopeJson,
+  readWriteRefusalOutcome,
+  writeOpsPath,
+} from "@omi-core/ratified-contracts/write/ops";
+import type { WriteOpEnvelope, WriteRefusalOutcome } from "@omi-core/ratified-contracts/write/ops";
 
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
@@ -190,8 +198,30 @@ void (null as unknown as ForbiddenFieldsMustStayAbsent);
 type PackageRootMustStayAbsent = import("@omi-core/ratified-contracts").Memory;
 void (null as unknown as PackageRootMustStayAbsent);
 
+// The write wire, from the SERVING side's typechecker. A backend that binds a
+// route to this contract has to be able to name these types; if the tarball
+// ever shipped the runtime without the declarations, this file stops compiling.
+const writeEnvelope: WriteOpEnvelope | null = parseWriteOpEnvelopeJson(
+  JSON.stringify({
+    write_id: "d".repeat(64),
+    account_epoch: 7,
+    domain: "tasks",
+    op: { op: "delete", record_id: "task-9f21" },
+  }),
+);
+if (writeEnvelope === null) throw new Error("a well-formed tasks envelope must parse on the serving side");
+const writeRefusal: WriteRefusalOutcome | null = readWriteRefusalOutcome(
+  WRITE_REFUSALS.stale_epoch.status,
+  WRITE_REFUSALS.stale_epoch.body,
+);
+if (writeRefusal !== "stale_epoch") throw new Error("stale_epoch must be readable off its own body");
+if (readWriteRefusalOutcome(WRITE_ERRORS.conflict.status, WRITE_ERRORS.conflict.body) !== null) {
+  throw new Error("conflict is an error, not a refusal outcome");
+}
+
 export const consumerResult = {
   contractVersion: page.contractVersion,
   firstId: page.items[0]?.id,
   complete: page.window.complete,
+  writeOpsPath: writeOpsPath(writeEnvelope.domain),
 } as const;

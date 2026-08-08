@@ -3,7 +3,11 @@
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
-  "workspaces": ["core/*", "drivers/*", "harness"],
+  "workspaces": [
+    "core/*",
+    "drivers/*",
+    "harness"
+  ],
   "scripts": {
     "test": "bun test",
     "test:node": "bun test",
@@ -11,7 +15,7 @@
     "qa:contracts": "bun run scripts/qa-contracts.ts"
   },
   "dependencies": {
-    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.2.0-5cb40a9a.tgz",
+    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.4.0-a03fab9c.tgz",
     "hono": "4.12.26"
   },
   "devDependencies": {

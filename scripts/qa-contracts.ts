@@ -86,6 +86,14 @@ const expectedExports = {
     types: "./dist/recall/trace.d.ts",
     import: "./dist/recall/trace.js",
   },
+  // The client-facing WRITE wire (COORD-write-path-rulings B1/B2/B4/B6). It is
+  // listed here for the same reason the others are: `requireJsonEqual` on the
+  // whole exports object means a subpath that quietly appears or disappears in
+  // the vendored tarball fails the gate rather than being absorbed.
+  "./write/ops": {
+    types: "./dist/write/ops.d.ts",
+    import: "./dist/write/ops.js",
+  },
 };
 
 function fail(message: string): never {

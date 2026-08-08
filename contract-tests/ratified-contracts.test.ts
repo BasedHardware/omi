@@ -22,6 +22,20 @@ import {
   parseRecallTraceJson,
   parseRecallTraceRef,
 } from "@omi-core/ratified-contracts/recall/trace";
+import {
+  WRITABLE_DOMAINS,
+  WRITE_ERRORS,
+  WRITE_ID_ENTROPY_BYTES,
+  WRITE_ID_PATTERN,
+  WRITE_REFUSALS,
+  isTrustedWriteAccepted,
+  isWritableDomain,
+  mintWriteId,
+  parseWriteId,
+  parseWriteOpEnvelopeJson,
+  readWriteRefusalOutcome,
+  writeOpsPath,
+} from "@omi-core/ratified-contracts/write/ops";
 
 const installedRoot = new URL("../node_modules/@omi-core/ratified-contracts/", import.meta.url);
 
@@ -478,6 +492,8 @@ describe("ratified package runtime boundary", () => {
         "recall-trace.json",
         "page-conformance.json",
         "status-matrix.json",
+        "write-ops-outcomes.json",
+        "write-ops-conformance.json",
       ],
     });
     for (const name of manifest.files) expect(await Bun.file(new URL(`fixtures/${name}`, installedRoot)).exists()).toBe(true);
@@ -492,3 +508,136 @@ describe("ratified package runtime boundary", () => {
     await expect(import(hiddenWireParser)).rejects.toThrow();
   });
 });
+
+// ── SERVER-side consumer of the write-ops corpus of record (rule 15) ────────
+//
+// The client-side consumer is
+// core-foundation/core/packages/testkit/src/test/write-ops-conformance.test.ts.
+// This is the other end. Both read the SAME file; this one reads it out of the
+// INSTALLED tarball, which is the strongest form available — the bytes here are
+// the bytes a deployed backend would have, not the bytes in somebody's source
+// tree.
+//
+// WHY THIS EXISTS RATHER THAN A HAND-WRITTEN SUITE. The two write-path spikes
+// each hand-authored their counterpart's payloads, and their own memo says so:
+// "the spikes themselves would not satisfy rule 15 ... the first real landing
+// must add the wire-seam registry row and corpus". This is that landing.
+//
+// WHAT IT DOES NOT COVER. There is no write ROUTE yet: the account epoch fence
+// (backend:ADR-010) is a separate landing and nothing here invents a second
+// one. So these tests bind the vendored contract's tables and validators, which
+// is what a route will be built out of. When the fence lands, its handler
+// returns WRITE_REFUSALS[...] rather than a literal, and these rows become
+// live-response assertions without the corpus changing.
+describe("write-ops wire seam (COORD-write-path-rulings)", () => {
+  interface WriteOpsCase {
+    name: string;
+    wireOutcome: string;
+    path: string;
+    requestBody: string;
+    envelopeAccepted: boolean;
+    response: { status: number; body: string };
+  }
+  interface WriteOpsSchema {
+    route: string;
+    writableDomains: string[];
+    writeIdPattern: string;
+    writeIdEntropyBytes: number;
+    outcomes: {
+      outcome: string;
+      kind: string;
+      status: number;
+      body?: string | null;
+      bodyRatified?: boolean;
+      servingSideBody?: string;
+    }[];
+  }
+
+  test("the installed schema of record matches the installed module's tables", async () => {
+    // red-proof: change any status in the shipped write-ops-outcomes.json and
+    // this goes red. APPLIED AND OBSERVED RED.
+    const schema = await fixture<WriteOpsSchema>("write-ops-outcomes.json");
+    expect(schema.route).toBe("/v1/{domain}/ops");
+    expect(schema.writableDomains).toEqual([...WRITABLE_DOMAINS]);
+    expect(schema.writeIdPattern).toBe(WRITE_ID_PATTERN.source);
+    expect(schema.writeIdEntropyBytes).toBe(WRITE_ID_ENTROPY_BYTES);
+    for (const row of schema.outcomes) {
+      if (row.kind === "refusal") {
+        const refusal = WRITE_REFUSALS[row.outcome as keyof typeof WRITE_REFUSALS];
+        expect<number>(refusal.status).toBe(row.status);
+        expect<string>(refusal.body).toBe(row.body as string);
+      } else if (row.kind === "error") {
+        const error = WRITE_ERRORS[row.outcome as keyof typeof WRITE_ERRORS];
+        expect<number>(error.status).toBe(row.status);
+        expect<string | null>(error.body).toBe((row.body ?? null) as string | null);
+      }
+    }
+  });
+
+  test("every corpus request is accepted or refused exactly as the corpus declares", async () => {
+    // red-proof: flip `envelopeAccepted` on the unknown-field row and this goes
+    // red. APPLIED AND OBSERVED RED.
+    const corpus = await fixture<WriteOpsCase[]>("write-ops-conformance.json");
+    expect(corpus.length).toBeGreaterThanOrEqual(16);
+    let checked = 0;
+    for (const row of corpus) {
+      expect([parseWriteOpEnvelopeJson(row.requestBody) !== null, row.name])
+        .toEqual([row.envelopeAccepted, row.name]);
+      if (row.envelopeAccepted) expect(row.path).toMatch(/^\/v1\/[a-z]+\/ops$/);
+      if (row.response.status === 200) {
+        expect(isTrustedWriteAccepted(JSON.parse(row.response.body))).toBe(true);
+      }
+      checked += 1;
+    }
+    // Producer-side count (rows declared) against consumer-side count (rows
+    // actually asserted). A loop that silently skipped a class would otherwise
+    // be a green result about nothing.
+    expect(checked).toBe(corpus.length);
+  });
+
+  test("stale_epoch is a distinct 409 and can never be read as conflict", async () => {
+    // red-proof: give WRITE_REFUSALS.stale_epoch the conflict body in the
+    // source package and this goes red. APPLIED AND OBSERVED RED.
+    //
+    // The server side of B2. A backend that answered a straggler with the
+    // conflict body would be telling the client to tell the user their edit
+    // lost a race that never happened.
+    expect(WRITE_REFUSALS.stale_epoch.status).toBe(409);
+    expect(WRITE_ERRORS.conflict.status).toBe(409);
+    expect(WRITE_REFUSALS.stale_epoch.body).not.toBe(WRITE_ERRORS.conflict.body);
+    expect(readWriteRefusalOutcome(409, WRITE_REFUSALS.stale_epoch.body)).toBe("stale_epoch");
+    expect(readWriteRefusalOutcome(409, WRITE_ERRORS.conflict.body)).toBeNull();
+
+    const corpus = await fixture<WriteOpsCase[]>("write-ops-conformance.json");
+    const stale = corpus.filter((row) => row.wireOutcome === "stale_epoch");
+    expect(stale.length).toBeGreaterThanOrEqual(1);
+    for (const row of stale) {
+      expect(row.response.status).toBe(WRITE_REFUSALS.stale_epoch.status);
+      expect(row.response.body).toBe(WRITE_REFUSALS.stale_epoch.body);
+    }
+  });
+
+  test("the wire carries no word slug and no client opId", async () => {
+    // backend:RISK-015, asserted over the serialized bytes of every accepted
+    // envelope in the corpus rather than over a type.
+    const corpus = await fixture<WriteOpsCase[]>("write-ops-conformance.json");
+    for (const row of corpus.filter((entry) => entry.envelopeAccepted)) {
+      const envelope = parseWriteOpEnvelopeJson(row.requestBody);
+      expect(envelope).not.toBeNull();
+      expect(parseWriteId(envelope!.write_id)).not.toBeNull();
+      expect(row.requestBody).not.toContain("opId");
+      expect(row.requestBody).not.toContain("op_id");
+    }
+    expect(parseWriteId("edit-task-9f21-set-done")).toBeNull();
+    expect<string | null>(mintWriteId(new Uint8Array(WRITE_ID_ENTROPY_BYTES))).toBe("00".repeat(32));
+    expect(mintWriteId(new Uint8Array(16))).toBeNull();
+  });
+
+  test("memories is not writable and its route is not constructible", () => {
+    // B6. Memories is read-only by ratified design; the type system refuses to
+    // build the path, and the runtime predicate refuses the domain.
+    expect(isWritableDomain("memories")).toBe(false);
+    expect(writeOpsPath("tasks")).toBe("/v1/tasks/ops");
+  });
+});
+
