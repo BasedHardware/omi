@@ -1798,7 +1798,7 @@ class GceAgentVmClient:
             disks.append(
                 {
                     "boot": False,
-                    "autoDelete": True,
+                    "autoDelete": False,
                     "deviceName": STATE_SOURCE_DEVICE_NAME,
                     "mode": "READ_ONLY",
                     "source": source_clone_disk_source,

@@ -349,7 +349,7 @@ async def test_boot_image_replacement_scopes_vpc_creation_to_the_explicit_subnet
     }
     assert body["disks"][2] == {
         "boot": False,
-        "autoDelete": True,
+        "autoDelete": False,
         "deviceName": "omi-agent-state-source",
         "mode": "READ_ONLY",
         "source": "projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-source-test",
