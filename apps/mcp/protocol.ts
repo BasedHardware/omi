@@ -103,6 +103,9 @@ type McpRateLimitInput =
   };
 
 export interface McpProtocolPorts {
+  // domain-pending(DIV-DOMX-002): the caller "surface" vocabulary remains
+  // unsettled; the adapter owns the origin allow-list for this HTTP surface.
+  validateOrigin(input: { readonly origin: string }): Promise<boolean> | boolean;
   authenticate(input: {
     readonly apiKeyHeader: string | undefined;
     readonly requiredKind: "mcp_api_key";
@@ -142,7 +145,7 @@ export interface McpHttpRequest {
 }
 
 export interface McpHttpResponse {
-  readonly status: 200 | 400 | 401 | 404 | 405;
+  readonly status: 200 | 400 | 401 | 403 | 404 | 405;
   readonly headers: Readonly<Record<string, string>>;
   readonly body?: unknown;
 }
@@ -161,28 +164,10 @@ interface RpcResponse {
   readonly error?: { readonly code: number; readonly message: string; readonly data?: unknown };
 }
 
-const TOOL: McpToolDefinition = {
+const TOOL: McpToolDefinition = Object.freeze({
   name: SYNTHESIZED_MEMORY_READ_TOOL,
   dependency: SYNTHESIZED_MEMORY_READ_DEPENDENCY,
-};
-
-const TOOL_DESCRIPTOR = {
-  name: TOOL.name,
-  description: "Read the authorized synthesized projection.",
-  inputSchema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      cursor: { type: "string", minLength: 1, maxLength: 4096 },
-      limit: { type: "integer", minimum: 1, maximum: 100 },
-    },
-  },
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    openWorldHint: false,
-  },
-} as const;
+});
 
 const JSON_HEADERS = Object.freeze({
   "content-type": "application/json",
@@ -196,8 +181,17 @@ export function createMcpProtocolHandler(ports: McpProtocolPorts): {
 } {
   return {
     async handleHttp(request: McpHttpRequest): Promise<McpHttpResponse> {
+      const origin = readHeader(request.headers, "origin");
+      if (!origin.valid || (origin.value !== undefined && !await isAllowedOrigin(ports, origin.value))) {
+        // Do this before endpoint/content negotiation: an invalid Origin must
+        // never gain a different result by choosing a malformed envelope.
+        return rpcHttp(403, error(null, -32600, "Forbidden origin"));
+      }
       if (request.method !== "POST") {
         return { status: 405, headers: JSON_HEADERS };
+      }
+      if (!hasStreamableHttpEnvelope(request.headers)) {
+        return rpcHttp(400, invalidRequest());
       }
       if (Array.isArray(request.body)) {
         return rpcHttp(400, invalidRequest());
@@ -217,16 +211,17 @@ export function createMcpProtocolHandler(ports: McpProtocolPorts): {
         return rpcHttp(headerFailure.status, error(rpc.id, headerFailure.code, headerFailure.message, headerFailure.data));
       }
 
-      let credential: McpCredential | null;
+      let authenticatedCredential: McpCredential | null;
       try {
-        credential = await ports.authenticate({
+        authenticatedCredential = await ports.authenticate({
           apiKeyHeader: readHeader(request.headers, "authorization").value,
           requiredKind: "mcp_api_key",
         });
       } catch {
-        credential = null;
+        authenticatedCredential = null;
       }
-      if (!isCredential(credential)) {
+      const credential = snapshotCredential(authenticatedCredential);
+      if (credential === null) {
         return { status: 401, headers: JSON_HEADERS, body: { error: "authentication_required" } };
       }
 
@@ -259,19 +254,21 @@ function discover(rpc: RpcRequest): McpHttpResponse {
     resultType: "complete",
     supportedVersions: [MCP_PROTOCOL_VERSION],
     capabilities: { tools: { listChanged: false } },
-    serverInfo: { name: "omi-platform-mcp", version: "0.0.0" },
+    _meta: { "io.modelcontextprotocol/serverInfo": { name: "omi-platform-mcp", version: "0.0.0" } },
     ...PRIVATE_CACHE,
   }));
 }
 
 async function listTools(ports: McpProtocolPorts, credential: McpCredential, rpc: RpcRequest): Promise<McpHttpResponse> {
-  if (!hasExactKeys(rpc.params, ["_meta"])) {
+  if (parseListTools(rpc.params) === null) {
     return rpcHttp(400, error(rpc.id, -32602, "Invalid params"));
   }
   const gate = await visibilityGate(ports, credential);
   return rpcHttp(200, success(rpc.id, {
     resultType: "complete",
-    tools: gate.kind === "allowed" ? [TOOL_DESCRIPTOR] : [],
+    // Create a fresh graph for every response: callers must never be able to
+    // mutate a later credential's advertised tool definition.
+    tools: gate.kind === "allowed" ? [toolDescriptor()] : [],
     ...PRIVATE_CACHE,
   }));
 }
@@ -297,7 +294,11 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
   let afterVisibleKey: string | null = null;
   if (call.cursor !== undefined) {
     try {
-      afterVisibleKey = ports.cursor.parse({ cursor: call.cursor, bindings: credential.cursorBindings }).lastVisibleKey;
+      const parsedCursor = ports.cursor.parse({ cursor: call.cursor, bindings: credential.cursorBindings });
+      if (!isCursorParseResult(parsedCursor)) {
+        return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
+      }
+      afterVisibleKey = parsedCursor.lastVisibleKey;
     } catch {
       return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
     }
@@ -353,11 +354,12 @@ async function visibilityGate(ports: McpProtocolPorts, credential: McpCredential
   } catch {
     return { kind: "denied" };
   }
-  if (!isGrantedAuthorization(authorization)) {
+  const granted = snapshotGrantedAuthorization(authorization);
+  if (granted === null) {
     return { kind: "denied" };
   }
 
-  return { kind: "allowed", authorization };
+  return { kind: "allowed", authorization: granted };
 }
 
 /**
@@ -390,16 +392,20 @@ async function applyReadRateLimit(ports: McpProtocolPorts, credential: McpCreden
 }
 
 async function applyRateLimit(ports: McpProtocolPorts, input: McpRateLimitInput, id: RpcId | null): Promise<RpcResponse | null> {
-  let rate: RateLimitDecision;
+  let rate: unknown;
   try {
     rate = await ports.rateLimit(input);
   } catch {
     return error(id, -32603, "Internal error");
   }
-  if (rate.allowed === true) {
+  const decision = snapshotRateLimitDecision(rate);
+  if (decision === null) {
+    return error(id, -32603, "Internal error");
+  }
+  if (decision.allowed === true) {
     return null;
   }
-  const retryAfterSeconds = isRecord(rate) ? validRetryAfter(rate.retryAfterSeconds as number | undefined) : undefined;
+  const retryAfterSeconds = decision.retryAfterSeconds;
   return error(id, -32029, "Rate limit exceeded", retryAfterSeconds === undefined ? undefined : { retryAfterSeconds });
 }
 
@@ -415,31 +421,36 @@ function parseRpcRequest(input: unknown): RpcRequest | null {
 
 function parseRequestMeta(params: Record<string, unknown>): { protocolVersion: string } | null {
   const meta = params._meta;
-  if (!isRecord(meta) || !hasOnlyKeys(meta, [
-    "io.modelcontextprotocol/protocolVersion",
-    "io.modelcontextprotocol/clientCapabilities",
-    "io.modelcontextprotocol/clientInfo",
-  ])) {
+  if (!isRecord(meta) || !Object.keys(meta).every(isValidMetaKey)) {
     return null;
   }
-  if (!isNonEmptyString(meta["io.modelcontextprotocol/protocolVersion"]) || !isExactEmptyObject(meta["io.modelcontextprotocol/clientCapabilities"])) {
+  if (!isNonEmptyString(meta["io.modelcontextprotocol/protocolVersion"])
+    || !isClientCapabilities(meta["io.modelcontextprotocol/clientCapabilities"])) {
     return null;
   }
   const clientInfo = meta["io.modelcontextprotocol/clientInfo"];
-  if (clientInfo !== undefined && (!isRecord(clientInfo)
-    || !hasExactKeys(clientInfo, ["name", "version"])
-    || !isNonEmptyString(clientInfo.name)
-    || !isNonEmptyString(clientInfo.version))) {
+  if (clientInfo !== undefined && !isClientInfo(clientInfo)) {
+    return null;
+  }
+  const progressToken = meta.progressToken;
+  if (progressToken !== undefined && !isProgressToken(progressToken)) {
+    return null;
+  }
+  const logLevel = meta["io.modelcontextprotocol/logLevel"];
+  if (logLevel !== undefined && !isLoggingLevel(logLevel)) {
     return null;
   }
   return { protocolVersion: meta["io.modelcontextprotocol/protocolVersion"] as string };
 }
 
 function parseToolCall(params: Record<string, unknown>): { name: string; cursor?: string; limit: number } | null {
-  if (!hasExactKeys(params, ["name", "arguments", "_meta"]) || !isToolName(params.name) || !isRecord(params.arguments)) {
+  if (!hasOnlyKeys(params, ["name", "arguments", "_meta"]) || !isToolName(params.name)) {
     return null;
   }
-  const args = params.arguments;
+  const args = params.arguments ?? {};
+  if (!isRecord(args)) {
+    return null;
+  }
   if (!hasOnlyKeys(args, ["cursor", "limit"])) {
     return null;
   }
@@ -497,6 +508,24 @@ function validateHeaders(
   return null;
 }
 
+function hasStreamableHttpEnvelope(headers: Readonly<Record<string, string | undefined>>): boolean {
+  const contentType = readHeader(headers, "content-type");
+  const accept = readHeader(headers, "accept");
+  return contentType.valid
+    && isJsonContentType(contentType.value)
+    && accept.valid
+    && acceptsMediaType(accept.value, "application/json")
+    && acceptsMediaType(accept.value, "text/event-stream");
+}
+
+async function isAllowedOrigin(ports: McpProtocolPorts, origin: string): Promise<boolean> {
+  try {
+    return await ports.validateOrigin({ origin }) === true;
+  } catch {
+    return false;
+  }
+}
+
 function readHeader(headers: Readonly<Record<string, string | undefined>>, expected: string): { readonly valid: boolean; readonly value: string | undefined } {
   const matches = Object.entries(headers).filter(([name]) => name.toLowerCase() === expected);
   if (matches.length > 1) {
@@ -548,6 +577,24 @@ function isCredential(value: unknown): value is McpCredential {
   ]) && Object.values(bindings).every(isNonEmptyString);
 }
 
+/** Snapshot once after authentication so downstream ports cannot race its tuple. */
+function snapshotCredential(value: unknown): McpCredential | null {
+  try {
+    if (!isCredential(value) || !isJsonValue(value.authentication)) {
+      return null;
+    }
+    return Object.freeze({
+      kind: value.kind,
+      scopes: Object.freeze([...value.scopes]),
+      rateLimitKey: Object.freeze({ ...value.rateLimitKey }),
+      cursorBindings: Object.freeze({ ...value.cursorBindings }),
+      authentication: cloneFrozenJson(value.authentication),
+    });
+  } catch {
+    return null;
+  }
+}
+
 function isCredentialRateLimitKey(value: unknown): value is McpCredentialRateLimitKey {
   return isRecord(value)
     && hasExactKeys(value, ["prefix", "uid", "app_id", "key_id"])
@@ -557,8 +604,52 @@ function isCredentialRateLimitKey(value: unknown): value is McpCredentialRateLim
     && isNonEmptyString(value.key_id);
 }
 
-function isGrantedAuthorization(value: unknown): value is GrantedAuthorization {
-  return isRecord(value) && value.allowed === true && Object.hasOwn(value, "readAuthorization");
+function snapshotGrantedAuthorization(value: unknown): GrantedAuthorization | null {
+  try {
+    if (!isRecord(value)
+      || !hasExactKeys(value, ["allowed", "readAuthorization"])
+      || value.allowed !== true
+      || !isRealReadAuthorization(value.readAuthorization)) {
+      return null;
+    }
+    return Object.freeze({ allowed: true, readAuthorization: cloneFrozenJson(value.readAuthorization) });
+  } catch {
+    return null;
+  }
+}
+
+function isRealReadAuthorization(value: unknown): boolean {
+  return typeof value === "string"
+    ? isNonEmptyString(value)
+    : isRecord(value) && Object.keys(value).length > 0 && isJsonObject(value);
+}
+
+function snapshotRateLimitDecision(value: unknown): RateLimitDecision | null {
+  try {
+    if (!isRecord(value)) {
+      return null;
+    }
+    if (value.allowed === true) {
+      return hasExactKeys(value, ["allowed"]) ? { allowed: true } : null;
+    }
+    if (value.allowed !== false || !hasOnlyKeys(value, ["allowed", "retryAfterSeconds"])) {
+      return null;
+    }
+    const retryAfterSeconds = value.retryAfterSeconds;
+    if (retryAfterSeconds !== undefined && validRetryAfter(retryAfterSeconds as number | undefined) === undefined) {
+      return null;
+    }
+    return retryAfterSeconds === undefined ? { allowed: false } : { allowed: false, retryAfterSeconds: retryAfterSeconds as number };
+  } catch {
+    return null;
+  }
+}
+
+function isCursorParseResult(value: unknown): value is { readonly lastVisibleKey: string } {
+  return isRecord(value)
+    && hasExactKeys(value, ["lastVisibleKey"])
+    && isNonEmptyString(value.lastVisibleKey)
+    && value.lastVisibleKey.length <= 4096;
 }
 
 function isBoundedJsonSnapshot(value: unknown): value is string {
@@ -572,7 +663,7 @@ function isBoundedJsonSnapshot(value: unknown): value is string {
   }
 }
 
-function rpcHttp(status: 200 | 400 | 404, body: RpcResponse): McpHttpResponse {
+function rpcHttp(status: 200 | 400 | 403 | 404, body: RpcResponse): McpHttpResponse {
   return { status, headers: JSON_HEADERS, body };
 }
 
@@ -612,16 +703,155 @@ function isSafeHeaderValue(value: string): boolean {
   return /^[\t\x20-\x7E]*$/.test(value);
 }
 
+function isJsonContentType(value: string | undefined): boolean {
+  return value !== undefined && value.split(";", 1)[0]?.trim().toLowerCase() === "application/json";
+}
+
+function acceptsMediaType(value: string | undefined, expected: string): boolean {
+  return value?.split(",").some((candidate) => {
+    const segments = candidate.trim().split(";");
+    if (segments.shift()?.trim().toLowerCase() !== expected) {
+      return false;
+    }
+    const quality = segments.find((segment) => segment.trim().toLowerCase().startsWith("q="));
+    if (quality === undefined) {
+      return true;
+    }
+    const parsed = Number(quality.trim().slice(2));
+    return Number.isFinite(parsed) && parsed > 0 && parsed <= 1;
+  }) ?? false;
+}
+
+function parseListTools(params: Record<string, unknown>): { readonly cursor?: string } | null {
+  if (!hasOnlyKeys(params, ["_meta", "cursor"])) {
+    return null;
+  }
+  if (params.cursor !== undefined && typeof params.cursor !== "string") {
+    return null;
+  }
+  return params.cursor === undefined ? {} : { cursor: params.cursor };
+}
+
+function toolDescriptor(): Record<string, unknown> {
+  return {
+    name: TOOL.name,
+    description: "Read the authorized synthesized projection.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        cursor: { type: "string", minLength: 1, maxLength: 4096 },
+        limit: { type: "integer", minimum: 1, maximum: 100 },
+      },
+    },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+  };
+}
+
+function isClientInfo(value: unknown): boolean {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["name", "version", "title", "description", "websiteUrl", "icons"])) {
+    return false;
+  }
+  return isNonEmptyString(value.name)
+    && isNonEmptyString(value.version)
+    && (value.title === undefined || typeof value.title === "string")
+    && (value.description === undefined || typeof value.description === "string")
+    && (value.websiteUrl === undefined || typeof value.websiteUrl === "string")
+    && (value.icons === undefined || (Array.isArray(value.icons) && value.icons.every(isJsonObject)));
+}
+
+function isClientCapabilities(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  for (const [name, capability] of Object.entries(value)) {
+    if (!isJsonObject(capability)) {
+      return false;
+    }
+    if (name === "extensions" && !Object.entries(capability).every(([extension, settings]) =>
+      isValidMetaKeyWithPrefix(extension) && isJsonObject(settings))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isProgressToken(value: unknown): boolean {
+  return typeof value === "string" || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isLoggingLevel(value: unknown): boolean {
+  return value === "debug" || value === "info" || value === "notice" || value === "warning"
+    || value === "error" || value === "critical" || value === "alert" || value === "emergency";
+}
+
+function isValidMetaKey(value: string): boolean {
+  return isValidMetaKeyParts(value, false);
+}
+
+function isValidMetaKeyWithPrefix(value: string): boolean {
+  return isValidMetaKeyParts(value, true);
+}
+
+function isValidMetaKeyParts(value: string, requirePrefix: boolean): boolean {
+  const slash = value.indexOf("/");
+  if (slash < 0) {
+    return !requirePrefix && isValidMetaName(value);
+  }
+  if (slash !== value.lastIndexOf("/")) {
+    return false;
+  }
+  return isValidMetaPrefix(value.slice(0, slash)) && isValidMetaName(value.slice(slash + 1));
+}
+
+function isValidMetaPrefix(value: string): boolean {
+  return /^(?:[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?)(?:\.[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*$/.test(value);
+}
+
+function isValidMetaName(value: string): boolean {
+  return value === "" || /^[A-Za-z0-9](?:[A-Za-z0-9_.-]*[A-Za-z0-9])?$/.test(value);
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && Object.values(value).every(isJsonValue);
+}
+
+function isJsonValue(value: unknown): boolean {
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return true;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+  return isJsonObject(value);
+}
+
+function cloneFrozenJson(value: unknown): unknown {
+  if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(cloneFrozenJson));
+  }
+  if (isRecord(value)) {
+    return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, cloneFrozenJson(nested)])));
+  }
+  throw new TypeError("Expected JSON value");
+}
+
 function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return Object.keys(value).every((key) => keys.includes(key));
 }
 
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return Object.keys(value).length === keys.length && hasOnlyKeys(value, keys);
-}
-
-function isExactEmptyObject(value: unknown): boolean {
-  return isRecord(value) && Object.keys(value).length === 0;
 }
 
 function validRetryAfter(value: number | undefined): number | undefined {

@@ -12,6 +12,7 @@ import {
 } from "./protocol";
 
 type Counters = {
+  validateOrigin: number;
   authenticate: number;
   authorize: number;
   rateLimit: number;
@@ -25,6 +26,7 @@ type Counters = {
 };
 
 type FixtureOptions = {
+  originAllowed?: boolean;
   authenticated?: boolean;
   scopes?: readonly string[];
   authorize?: boolean;
@@ -38,8 +40,13 @@ type FixtureOptions = {
   key_id?: string;
 };
 
+type ToolDescriptorForTest = {
+  inputSchema: { properties: { cursor: { minLength: number } } };
+};
+
 function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; counters: Counters } {
   const counters: Counters = {
+    validateOrigin: 0,
     authenticate: 0,
     authorize: 0,
     rateLimit: 0,
@@ -82,6 +89,12 @@ function fixture(options: FixtureOptions = {}): { ports: McpProtocolPorts; count
   return {
     counters,
     ports: {
+      // domain-pending(DIV-DOMX-002): test the HTTP caller "surface" through
+      // the adapter-owned Origin policy rather than inventing a domain term.
+      async validateOrigin() {
+        counters.validateOrigin += 1;
+        return options.originAllowed !== false;
+      },
       async authenticate(input) {
         counters.authenticate += 1;
         counters.order.push(`authenticate:${input.requiredKind}`);
@@ -152,6 +165,8 @@ function post(
   options: { id?: string | number; headerName?: string | undefined; headers?: Record<string, string | undefined> } = {},
 ): McpHttpRequest {
   const headers: Record<string, string | undefined> = {
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
     "MCP-Protocol-Version": MCP_PROTOCOL_VERSION,
     "Mcp-Method": rpcMethod,
     Authorization: "api-key-test-only",
@@ -250,10 +265,11 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(notification.status).toBe(400);
     expect(errorCode(notification)).toBe(-32600);
 
-    const sseAttempt = await createMcpProtocolHandler(fixture().ports).handleHttp(listRequest({
+    const sseOnlyAttempt = await createMcpProtocolHandler(fixture().ports).handleHttp(listRequest({
       headers: { Accept: "text/event-stream" },
     }));
-    expect(sseAttempt.headers["content-type"]).toBe("application/json");
+    expect(sseOnlyAttempt.status).toBe(400);
+    expect(errorCode(sseOnlyAttempt)).toBe(-32600);
   });
 
   test("A4 uses the exact declared per-key rate tuple before any read", async () => {
@@ -337,7 +353,7 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(errorCode(namedDiscovery)).toBe(-32020);
 
     const badMeta = await handler.handleHttp(post("tools/list", {
-      _meta: meta({ "io.modelcontextprotocol/clientCapabilities": { experimental: {} } }),
+      _meta: meta({ "io.modelcontextprotocol/logLevel": "too-loud" }),
     }));
     expect(badMeta.status).toBe(400);
     expect(errorCode(badMeta)).toBe(-32602);
@@ -352,6 +368,185 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(unknown.status).toBe(404);
     expect(errorCode(unknown)).toBe(-32601);
     expect(counters).toMatchObject({ authorize: 0, rateLimit: 0, readPage: 0 });
+  });
+
+  test("T1 rejects an invalid Origin before content negotiation and requires the Streamable HTTP POST envelope", async () => {
+    const blocked = fixture({ originAllowed: false });
+    const originResponse = await createMcpProtocolHandler(blocked.ports).handleHttp(listRequest({
+      headers: {
+        Origin: "https://attacker.invalid",
+        "Content-Type": "text/plain",
+        Accept: "text/event-stream",
+      },
+    }));
+    expect(originResponse.status).toBe(403);
+    expect(errorCode(originResponse)).toBe(-32600);
+    expect(blocked.counters).toMatchObject({ validateOrigin: 1, authenticate: 0, rateLimit: 0 });
+
+    const malformedContent = fixture();
+    const malformedContentResponse = await createMcpProtocolHandler(malformedContent.ports).handleHttp(listRequest({
+      headers: { "Content-Type": "text/plain" },
+    }));
+    expect(malformedContentResponse.status).toBe(400);
+    expect(errorCode(malformedContentResponse)).toBe(-32600);
+    expect(malformedContent.counters).toMatchObject({ authenticate: 0, rateLimit: 0 });
+
+    const jsonOnly = fixture();
+    const jsonOnlyResponse = await createMcpProtocolHandler(jsonOnly.ports).handleHttp(listRequest({
+      headers: { Accept: "application/json" },
+    }));
+    expect(jsonOnlyResponse.status).toBe(400);
+    expect(errorCode(jsonOnlyResponse)).toBe(-32600);
+    expect(jsonOnly.counters).toMatchObject({ authenticate: 0, rateLimit: 0 });
+
+    const validOrigin = fixture();
+    const accepted = await createMcpProtocolHandler(validOrigin.ports).handleHttp(discoverRequest({
+      headers: { Origin: "https://trusted.example" },
+    }));
+    expect(accepted.status).toBe(200);
+    expect(validOrigin.counters.validateOrigin).toBe(1);
+  });
+
+  test("T2 accepts valid modern request metadata and never reflects it", async () => {
+    // domain-pending(DIV-DOMX-002): extension metadata may describe a caller
+    // surface, but this transport deliberately does not project it downstream.
+    const metadata = {
+      "io.modelcontextprotocol/protocolVersion": MCP_PROTOCOL_VERSION,
+      "io.modelcontextprotocol/clientInfo": {
+        name: "valid-client",
+        version: "1.0.0",
+        title: "Valid Client",
+      },
+      "io.modelcontextprotocol/clientCapabilities": {
+        roots: {},
+        extensions: { "com.example/mcp-surface": { enabled: true } },
+      },
+      progressToken: 7,
+      "io.modelcontextprotocol/logLevel": "info",
+      "com.example/request-surface": { secret: "must-not-reflect" },
+    };
+    const response = await createMcpProtocolHandler(fixture().ports).handleHttp(post("server/discover", { _meta: metadata }));
+
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(response.body)).not.toContain("must-not-reflect");
+    expect(JSON.stringify(response.body)).not.toContain("request-surface");
+    expect(JSON.stringify(response.body)).not.toContain("progressToken");
+  });
+
+  test("T3 accepts the schema's optional tools/list cursor and omitted tools/call arguments", async () => {
+    const listed = await createMcpProtocolHandler(fixture().ports).handleHttp(post("tools/list", {
+      _meta: meta(),
+      cursor: "opaque-list-cursor",
+    }));
+    expect(listed.status).toBe(200);
+    expect(((rpcBody(listed).result as Record<string, unknown>).tools as unknown[])).toHaveLength(1);
+
+    const called = fixture();
+    const calledResponse = await createMcpProtocolHandler(called.ports).handleHttp(post("tools/call", {
+      _meta: meta(),
+      name: SYNTHESIZED_MEMORY_READ_TOOL,
+    }));
+    expect(calledResponse.status).toBe(200);
+    expect(called.counters.readPage).toBe(1);
+  });
+
+  test("T4 fails closed when a rate-limit dependency returns null or a malformed decision", async () => {
+    const nullDecision = fixture();
+    nullDecision.ports.rateLimit = async () => null as never;
+    const nullResponse = await createMcpProtocolHandler(nullDecision.ports).handleHttp(callRequest());
+    expect(errorCode(nullResponse)).toBe(-32603);
+    expect(nullDecision.counters.readPage).toBe(0);
+
+    const malformedDecision = fixture();
+    let callCount = 0;
+    malformedDecision.ports.rateLimit = async () => {
+      callCount += 1;
+      return callCount === 1 ? { allowed: true } : { allowed: true, smuggled: true } as never;
+    };
+    const malformedResponse = await createMcpProtocolHandler(malformedDecision.ports).handleHttp(callRequest());
+    expect(errorCode(malformedResponse)).toBe(-32603);
+    expect(malformedDecision.counters.readPage).toBe(0);
+  });
+
+  test("T5 validates cursor dependency output before it reaches readPage", async () => {
+    for (const malformed of [null, {}, { lastVisibleKey: "" }, { lastVisibleKey: "opaque", smuggled: true }]) {
+      const dependency = fixture();
+      dependency.ports.cursor.parse = () => malformed as never;
+      const response = await createMcpProtocolHandler(dependency.ports).handleHttp(callRequest({ cursor: "opaque-cursor" }));
+      expect(response.status).toBe(400);
+      expect(errorCode(response)).toBe(-32602);
+      expect(dependency.counters).toMatchObject({ readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
+    }
+  });
+
+  test("T6 accepts only an exact authorization decision with a real read authorization", async () => {
+    for (const decision of [
+      { allowed: true, readAuthorization: null },
+      { allowed: true, readAuthorization: {}, smuggled: true },
+      { allowed: false, readAuthorization: { smuggled: true } },
+    ]) {
+      const authorization = fixture();
+      authorization.ports.authorize = async () => decision as never;
+      const response = await createMcpProtocolHandler(authorization.ports).handleHttp(callRequest());
+      expect(errorCode(response)).toBe(-32602);
+      expect(authorization.counters).toMatchObject({ readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
+    }
+  });
+
+  test("T7 snapshots credential routing data before rate limiting and authorization", async () => {
+    const snapshot = fixture();
+    const rawCredential = {
+      kind: "mcp_api_key" as const,
+      scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
+      rateLimitKey: { prefix: "mcp" as const, uid: "owner-1", app_id: "app-1", key_id: "key-1" },
+      cursorBindings: {
+        ownerAuthorizationDigest: "owner-digest",
+        appAuthorizationDigest: "app-digest",
+        keyAuthorizationDigest: "key-digest",
+        graphGenerationDigest: "graph-digest",
+        projectionGenerationDigest: "projection-digest",
+        filterDigest: "filter-digest",
+        readModeDigest: "mode-digest",
+      },
+      authentication: { adapterOnly: true },
+    } satisfies McpCredential;
+    let authorizedCredential: McpCredential | undefined;
+    const originalRateLimit = snapshot.ports.rateLimit;
+    snapshot.ports.authenticate = async () => rawCredential;
+    snapshot.ports.rateLimit = async (input) => {
+      if (input.rate_policy === "mcp:sse") {
+        rawCredential.scopes.length = 0;
+        rawCredential.rateLimitKey.key_id = "raced-key";
+        rawCredential.authentication.adapterOnly = false;
+      }
+      return originalRateLimit(input);
+    };
+    snapshot.ports.authorize = async ({ credential }) => {
+      authorizedCredential = credential;
+      return { allowed: true, readAuthorization: { adapterOnly: true } };
+    };
+
+    const response = await createMcpProtocolHandler(snapshot.ports).handleHttp(callRequest());
+    expect(response.status).toBe(200);
+    expect(snapshot.counters.rateInputs[0]).toMatchObject({ key_id: "key-1" });
+    expect(authorizedCredential).toBeDefined();
+    expect(authorizedCredential?.scopes).toEqual([SYNTHESIZED_MEMORY_READ_SCOPE]);
+    expect(authorizedCredential?.rateLimitKey.key_id).toBe("key-1");
+    expect((authorizedCredential?.authentication as { adapterOnly: boolean }).adapterOnly).toBe(true);
+    expect(Object.isFrozen(authorizedCredential)).toBe(true);
+    expect(Object.isFrozen(authorizedCredential?.rateLimitKey)).toBe(true);
+  });
+
+  test("T8 returns a fresh tool descriptor graph for each tools/list response", async () => {
+    const handler = createMcpProtocolHandler(fixture().ports);
+    const first = await handler.handleHttp(listRequest());
+    const firstTool = ((rpcBody(first).result as Record<string, unknown>).tools as ToolDescriptorForTest[])[0];
+    firstTool.inputSchema.properties.cursor.minLength = 999;
+
+    const second = await handler.handleHttp(listRequest());
+    const secondTool = ((rpcBody(second).result as Record<string, unknown>).tools as ToolDescriptorForTest[])[0];
+    expect(secondTool).not.toBe(firstTool);
+    expect(secondTool.inputSchema.properties.cursor.minLength).toBe(1);
   });
 
   test("U1 rejects malformed cursors after the gate and before data access", async () => {
