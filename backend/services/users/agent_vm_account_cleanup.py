@@ -174,6 +174,8 @@ def _delete_current_agent_vm(
     project: str,
     client: Any,
     headers: Mapping[str, str],
+    *,
+    legacy_late_cleanup: bool = False,
 ) -> None:
     vm_name = _journal_name(vm, 'vmName')
     zone = str(vm.get('zone') or _DEFAULT_AGENT_VM_ZONE)
@@ -184,11 +186,37 @@ def _delete_current_agent_vm(
         return
     owner_label = _owner_disk_label(uid)
     expected_id = _current_vm_expected_instance_id(vm, plans)
+    legacy_late_adopted = False
+    if expected_id is None and legacy_late_cleanup:
+        provider_id = _provider_numeric_id(instance, 'current instance')
+        if not _is_uid_owned_legacy_vm_name(uid, vm_name):
+            raise RuntimeError('legacy late Agent VM name identity is ambiguous')
+        if not users_db.adopt_legacy_late_agent_vm_cleanup(uid, vm_name, zone, provider_id):
+            raise RuntimeError('legacy late Agent VM cleanup fence changed')
+        adopted = users_db.get_late_agent_vm_cleanup(uid)
+        if not isinstance(adopted, Mapping) or _stored_vm_instance_id(adopted) != provider_id:
+            raise RuntimeError('legacy late Agent VM cleanup identity is ambiguous')
+        refreshed = _compute_resource(client, headers, instance_url, 'current instance')
+        if refreshed is None:
+            users_db.clear_late_agent_vm_cleanup(uid, vm_name)
+            return
+        if _provider_numeric_id(refreshed, 'current instance') != provider_id:
+            raise RuntimeError('legacy late Agent VM identity changed during cleanup')
+        labels = refreshed.get('labels')
+        if labels is not None and (
+            not isinstance(labels, Mapping) or labels.get('omi-agent-owner') not in (None, owner_label)
+        ):
+            raise RuntimeError('legacy late Agent VM owner identity is ambiguous')
+        instance = refreshed
+        expected_id = provider_id
+        legacy_late_adopted = True
     if expected_id is None and plans:
         raise RuntimeError('current Agent VM instance identity is ambiguous')
     labels = instance.get('labels')
     already_adopted = isinstance(labels, Mapping) and labels.get('omi-agent-owner') == owner_label
-    if expected_id is not None and already_adopted:
+    if legacy_late_adopted:
+        pass
+    elif expected_id is not None and already_adopted:
         _validate_current_instance_identity(instance, expected_id=expected_id, owner_label=owner_label)
     else:
         provider_id = _provider_numeric_id(instance, 'current instance')
@@ -238,6 +266,14 @@ def _delete_current_agent_vm(
 
 def _owner_disk_label(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()[:20]
+
+
+def _is_uid_owned_legacy_vm_name(uid: str, vm_name: str) -> bool:
+    """Recognize every deterministic owner name emitted by prior provisioners."""
+    owner_hash = _owner_disk_label(uid)
+    return vm_name in {f'omi-agent-{uid[:12].lower()}', f'omi-agent-{owner_hash}'} or bool(
+        re.fullmatch(rf'omi-agent-{owner_hash}-[0-9a-f]{{8}}', vm_name)
+    )
 
 
 def _validate_instance_identity(
@@ -491,6 +527,12 @@ def _load_agent_vm_migration_cleanup_plans(
     active_vm_name = active_vm.get('vmName') if isinstance(active_vm, Mapping) else None
     owner_label = _owner_disk_label(uid)
     shared_instance_keys = _shared_migration_instance_keys(journals)
+    allowed_state_disk_users: dict[str, set[str]] = {}
+    for journal in journals:
+        journal_zone = _journal_name(journal, 'oldZone')
+        allowed_state_disk_users.setdefault(journal_zone, set()).update(
+            {_journal_name(journal, 'oldVmName'), _journal_name(journal, 'candidateVmName')}
+        )
     plans: list[_AgentVmMigrationCleanupPlan] = []
     for journal in journals:
         migration_id = _journal_required_string(journal, 'migrationId')
@@ -587,7 +629,7 @@ def _load_agent_vm_migration_cleanup_plans(
                 role=_STATE_DISK_ROLE,
                 reused_state_disk=state_disk_reused,
             )
-            _validate_disk_users(state_disk, zone=zone, allowed_vm_names={old_vm_name, candidate_vm_name})
+            _validate_disk_users(state_disk, zone=zone, allowed_vm_names=allowed_state_disk_users[zone])
 
         source_clone_disk = None
         if source_clone_disk_name:
@@ -756,7 +798,9 @@ def _delete_agent_vm_for_account_impl(uid: str) -> None:
     incomplete identity raises so the account wipe remains retryable.
     """
     journals = read_agent_vm_migration_journals(uid)
-    vm = users_db.get_agent_vm(uid) or users_db.get_late_agent_vm_cleanup(uid)
+    active_vm = users_db.get_agent_vm(uid)
+    late_vm = users_db.get_late_agent_vm_cleanup(uid) if not isinstance(active_vm, Mapping) else None
+    vm = active_vm or late_vm
     if not isinstance(vm, Mapping) or not vm.get('vmName'):
         vm = None
     if _migration_reconcile_lease_active(vm, journals):
@@ -772,7 +816,15 @@ def _delete_agent_vm_for_account_impl(uid: str) -> None:
     with httpx.Client(timeout=180) as client:
         plans = _load_agent_vm_migration_cleanup_plans(uid, journals, vm, project, client, headers)
         if vm is not None:
-            _delete_current_agent_vm(uid, vm, plans, project, client, headers)
+            _delete_current_agent_vm(
+                uid,
+                vm,
+                plans,
+                project,
+                client,
+                headers,
+                legacy_late_cleanup=late_vm is vm,
+            )
         _cleanup_agent_vm_migration_resources(uid, plans, project, client, headers)
 
 

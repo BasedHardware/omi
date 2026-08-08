@@ -81,3 +81,30 @@ def record_late_agent_vm_cleanup(
         merge=True,
     )
     return True
+
+
+@transactional
+def adopt_legacy_late_agent_vm_cleanup(
+    transaction,
+    doc_ref,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str,
+) -> bool:
+    """Add a provider identity fence to an exact pre-fence cleanup record."""
+    if not expected_instance_id.isascii() or not expected_instance_id.isdigit():
+        raise ValueError('late Agent VM cleanup instance identity must be numeric')
+    snapshot = doc_ref.get(transaction=transaction)
+    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    raw_status = data.get('wipe_status')
+    status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
+    pending = data.get('late_agent_vm_cleanup')
+    if not account_deletion_blocks_access(status) or not isinstance(pending, dict):
+        return False
+    if pending.get('vmName') != vm_name or pending.get('zone') != zone:
+        return False
+    current_id = pending.get('expectedInstanceId')
+    if current_id is not None:
+        return current_id == expected_instance_id
+    transaction.update(doc_ref, {'late_agent_vm_cleanup.expectedInstanceId': expected_instance_id})
+    return True

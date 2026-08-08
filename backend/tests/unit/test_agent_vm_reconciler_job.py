@@ -1034,7 +1034,7 @@ def test_pre_cutover_session_deferral_compensates_candidate_and_reused_disk(monk
 @pytest.mark.parametrize("retry_count", [0, 3])
 def test_post_cutover_state_failure_keeps_admission_drained_and_retryable(monkeypatch, retry_count):
     async def no_boot_drift(*_args: Any) -> None:
-        return None
+        pytest.fail("active release boot drift must wait until migration retirement")
 
     async def state_failure(*_args: Any) -> None:
         raise RuntimeError("active state disk is ambiguous")
@@ -1116,7 +1116,7 @@ def test_first_post_cutover_reconcile_keeps_candidate_state_disk_protected(monke
             return True
 
     async def no_boot_drift(*_args: Any) -> None:
-        return None
+        pytest.fail("active release boot drift must wait until migration retirement")
 
     monkeypatch.setattr(reconciler, "GceAgentVmClient", CandidateApi)
     monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
@@ -1241,6 +1241,59 @@ def test_boot_image_migration_soak_retries_an_unhealthy_candidate():
                 release=RELEASE,
             )
         )
+
+
+def test_boot_image_migration_soak_uses_its_pinned_release_after_active_release_advances(monkeypatch):
+    observed_releases: list[AgentVmRelease] = []
+
+    class SoakApi:
+        async def get_instance(self, _name: str) -> dict[str, Any]:
+            return {"id": "candidate-id", "status": "RUNNING"}
+
+        @staticmethod
+        def private_instance_ip(_instance: dict[str, Any]) -> str:
+            return "10.0.0.2"
+
+        async def runtime_is_current(
+            self, _ip: str, _token: str, checked_release: AgentVmRelease, **_kwargs: Any
+        ) -> bool:
+            observed_releases.append(checked_release)
+            return True
+
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(reconciler, "claim_boot_image_migration_retirement", lambda *_args: {"state": "soaking"})
+    migration = {
+        "migrationId": "9" * 24,
+        "oldVmName": "old-vm",
+        "oldInstanceId": "old-id",
+        "candidateInstanceId": "candidate-id",
+        "targetRelease": RELEASE.release_id,
+        "targetBootImage": RELEASE.boot_image,
+        "targetReleaseManifest": RELEASE.to_mapping(),
+    }
+    active_release = replace(
+        RELEASE,
+        source_sha="d" * 40,
+        image_digest="gcr.io/project/agent-vm@sha256:" + "e" * 64,
+    )
+
+    result = asyncio.run(
+        reconciler._retire_soaked_boot_image_predecessor(
+            "dev-user",
+            {
+                "vmName": "candidate",
+                "authToken": "candidate-token",
+                "instanceId": "candidate-id",
+                "reconcile": {"migration": migration},
+            },
+            owner="worker",
+            api=SoakApi(),
+            release=active_release,
+        )
+    )
+
+    assert result and result.state == "soaking"
+    assert observed_releases == [RELEASE]
 
 
 def test_boot_image_migration_retains_source_clone_until_retirement_claim(monkeypatch):

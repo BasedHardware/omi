@@ -725,6 +725,7 @@ async def _replace_stopped_boot_image_drift(
             "candidateAuthToken": candidate_token,
             "targetRelease": release.release_id,
             "targetBootImage": release.boot_image,
+            "targetReleaseManifest": release.to_mapping(),
             "soakSeconds": plan.soak_seconds,
             "stateDiskName": state_disk_name,
             "stateDiskReused": state_disk_reused,
@@ -1055,6 +1056,25 @@ async def _retire_soaked_boot_image_predecessor(
         and candidate_id == str(vm.get("instanceId") or "")
     ):
         return ReconcileResult(uid, "retry", "migration retirement record is incomplete")
+    target_release_raw = migration.get("targetReleaseManifest")
+    if isinstance(target_release_raw, Mapping):
+        try:
+            target_release = validate_release_manifest(target_release_raw)
+        except Exception:
+            return ReconcileResult(uid, "retry", "migration target release snapshot is invalid")
+        if target_release.release_id != migration.get("targetRelease") or target_release.boot_image != migration.get(
+            "targetBootImage"
+        ):
+            return ReconcileResult(uid, "retry", "migration target release identity is inconsistent")
+    elif migration.get("targetRelease") in (None, release.release_id) and migration.get("targetBootImage") in (
+        None,
+        release.boot_image,
+    ):
+        # Compatibility for a migration journal written before immutable release
+        # snapshots were added. It remains recoverable only while still active.
+        target_release = release
+    else:
+        return ReconcileResult(uid, "retry", "migration target release snapshot is unavailable")
     candidate = await api.get_instance(str(vm["vmName"]))
     if candidate is None or str(candidate.get("id") or "") != candidate_id:
         raise RuntimeError("replacement candidate identity is unavailable during soak")
@@ -1070,7 +1090,7 @@ async def _retire_soaked_boot_image_predecessor(
         or not await api.runtime_is_current(
             private_ip,
             str(vm["authToken"]),
-            release,
+            target_release,
             expected_state_migration_id=migration_id,
         )
     ):
@@ -1320,6 +1340,11 @@ async def reconcile_one(
             )
             if recovery.state != "recreate_required":
                 return recovery
+        if post_cutover_migration:
+            await _active_state_disk_info(api, uid, vm, instance, repair_auto_delete=False)
+            retirement = await _retire_soaked_boot_image_predecessor(uid, vm, owner=owner, api=api, release=release)
+            if retirement is not None:
+                return retirement
         boot_drift = await _boot_image_drift(api, instance, release)
         if boot_drift:
             reason, actual = boot_drift
