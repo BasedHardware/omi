@@ -1,0 +1,42 @@
+.github/failure-classes/FC-hosted-control-window-drag-ownership.json
+  s_6ee6c64dccc4f3::t_e7a26d13ce954f 1-18
+desktop/macos/changelog/unreleased/20260808-window-click-and-drag.json
+  s_6ee6c64dccc4f3::t_253127c89cfb8f 1-3
+desktop/macos/Desktop/Tests/RewindTrackTests.swift
+  s_6ee6c64dccc4f3::t_38480473197a77 68,77
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 76
+  s_6ee6c64dccc4f3::t_dfd9c4cfc40a76 47-48,55-63,65
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 54,64
+desktop/macos/Desktop/Sources/MainWindow/ShellWindowChrome.swift
+  s_6ee6c64dccc4f3::t_d99714939dbf91 270,304,309,311-312,332
+  s_6ee6c64dccc4f3::t_38480473197a77 33,36,169,171,219,228,242,264,269,272,277-278,281,283,286-287,297-298,306,320,331
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 80,167-168,170,218,225-227,229-241,243-245,257-259,263,265,267-268,273-276,284-285,288-289,302-303,308,329-330,334,336-337
+  s_6ee6c64dccc4f3::t_6dad677d4de97a 34-35
+  s_6ee6c64dccc4f3::t_dc172be06c0d9f 260-262,266,271,279-280,282,290-296,300-301,305,307,310,313-319,321-328,333,335
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 37,84-87,246-256,299
+desktop/macos/Desktop/Tests/ShellWindowChromeTests.swift
+  s_6ee6c64dccc4f3::t_38480473197a77 94,104,131,259
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 108,125-127,132-140
+  s_6ee6c64dccc4f3::t_b0c4362d27f629 95,103,110,122,124,128-130,258
+  s_6ee6c64dccc4f3::t_6b5f2274e1a33c 109
+  s_6ee6c64dccc4f3::t_6b37bb2f87db34 111-121,123
+  s_6ee6c64dccc4f3::t_6dad677d4de97a 107,225
+desktop/macos/Desktop/Sources/Rewind/UI/RewindTrack.swift
+  s_6ee6c64dccc4f3::t_4ce506bd73e2f1 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4939b1a3c124fbb7b3091281a09f876c53643f5f",
+  "prompts": {},
+  "sessions": {
+    "s_6ee6c64dccc4f3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7a-616d-7510-bb06-c7599e02c6e2",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
