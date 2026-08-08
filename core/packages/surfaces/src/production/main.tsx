@@ -4,7 +4,8 @@ import { t } from "@omi-core/i18n";
 import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
-import { createPlatformProductionStoreFactory } from "./ProductionStores.js";
+import { createPlatformProductionStoreFactory, parseGenerationSelectionFromEntries, resolveGenerationSelection } from "./ProductionStores.js";
+import { generationMismatch, resolveProductionRoute } from "./production-routing.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
@@ -25,29 +26,23 @@ import "./styles.css";
 const query = new URLSearchParams(location.search);
 const requestedRoute = query.get("route");
 const requestedQa = query.get("qa");
-// The platform generation is a second *presentation* of Memories, not a second route:
-// `?qa=memories-platform` reviews it against fixtures, and generation selection for the
-// live path is FE-CORE's `resolveGenerationSelection`, never a URL guess.
-const route: "home" | "memories" | "conversations" | "tasks" = requestedRoute === "tasks" || requestedQa === "tasks"
-  ? "tasks"
-  : requestedRoute === "conversations" || requestedQa === "conversations" || requestedQa === "conversation-detail"
-    ? "conversations"
-    : requestedRoute === "memories" || requestedQa === "memories" || requestedQa === "memories-platform"
-      ? "memories"
-      : "home";
 /**
- * Host-supplied backend-generation selection.
+ * Host-supplied backend-generation selection, resolved BEFORE routing.
  *
  * "Host" means the launcher: a shell owns the WKWebView URL it loads AND may inject a
  * config object before the bundle runs. Both are the host speaking; neither is a user
- * typing a guess. The value is passed through untouched to
- * `resolveGenerationSelection`, which validates it and rejects anything unavailable
- * LOUDLY rather than downgrading in silence.
+ * typing a guess.
  *
- * `platformOriginLabel` is a display label only. The surface deliberately cannot learn the
- * real base URL — the shell alone holds it (ADR-008 §3) — so the badge names the binding
- * it was told about rather than inventing a URL from `location.origin`, which in a shell
- * is a custom scheme and has nothing to do with the backend.
+ * Two things here were wrong and cost a night's headline result:
+ *
+ *  1. The query-param path hand-rolled `{ memories: "platform" }` instead of using
+ *     `parseGenerationSelectionFromEntries`, which is the helper FE-CORE built for exactly
+ *     this. It understands `generation=platform` as a BROADCAST preference that applies
+ *     only to domains that actually have that generation, and reports a rejection when it
+ *     does not — rather than silently asserting something about every domain.
+ *  2. Selection was resolved after routing, so the route could not depend on it. It has to:
+ *     a host that asks for the platform generation and lands on a surface that never reads
+ *     it gets a perfect-looking app on the wrong generation and a served count of zero.
  */
 type OmiHostConfig = {
   readonly generations?: unknown;
@@ -55,8 +50,20 @@ type OmiHostConfig = {
 };
 const hostConfig: OmiHostConfig =
   (globalThis as { __OMI_HOST_CONFIG__?: OmiHostConfig }).__OMI_HOST_CONFIG__ ?? {};
-const requestedGenerations: unknown = hostConfig.generations
-  ?? (query.get("generation") === "platform" ? { memories: "platform" } : undefined);
+const generationResolution = hostConfig.generations !== undefined
+  ? resolveGenerationSelection(hostConfig.generations)
+  : parseGenerationSelectionFromEntries(query.entries());
+const generationSelection = generationResolution.selection;
+const generationRejected = generationResolution.rejected;
+
+// The platform generation is a second *presentation* of Memories, not a second route:
+// `?qa=memories-platform` reviews it against fixtures, and generation selection for the
+// live path is FE-CORE's `resolveGenerationSelection`, never a URL guess.
+const route = resolveProductionRoute({
+  requestedRoute,
+  requestedQa,
+  memoriesGeneration: generationSelection.memories,
+});
 const requestedPlatform = query.get("platform");
 const platform: "mobile" | "desktop" = requestedPlatform === "desktop" || requestedPlatform === "mobile"
   ? requestedPlatform
@@ -121,11 +128,66 @@ if (themeSelection === "system") {
   systemPrefersDark.addEventListener("change", () => applyTheme(themeNameFor(platform, colorModeFor("system"))));
 }
 
+/**
+ * What the app ACTUALLY did, readable from outside the bundle.
+ *
+ * A rejected selection and a silently-legacy render used to be indistinguishable from
+ * outside the app — which is precisely how a served count of zero coexists with a
+ * screenshot that looks perfect. `selected` is what the host asked for; `rendered` is what
+ * was really constructed and put on screen. A script asserts on the second, never the
+ * first.
+ *
+ * The shell reads this with `evaluateJavaScript`; log-scrapers read the same facts off the
+ * OMI_PRODUCTION_READY line below.
+ */
+type OmiRuntimeState = {
+  route: string;
+  selected: typeof generationSelection;
+  rejected: typeof generationRejected;
+  rendered: { surface: string; memoriesGeneration: "legacy" | "platform" } | null;
+  mismatch: string | null;
+};
+const runtimeState: OmiRuntimeState = {
+  route,
+  selected: generationSelection,
+  rejected: generationRejected,
+  rendered: null,
+  mismatch: null,
+};
+(globalThis as { __OMI_RUNTIME_STATE__?: OmiRuntimeState }).__OMI_RUNTIME_STATE__ = runtimeState;
+document.documentElement.dataset["generationMemories"] = generationSelection.memories;
+if (generationRejected.length > 0) {
+  document.documentElement.dataset["generationRejected"] = "true";
+  console.warn(`OMI_GENERATION_REJECTED ${JSON.stringify(generationRejected)}`);
+}
+console.info(`OMI_GENERATION_SELECTION ${JSON.stringify(generationSelection)}`);
+
+/** Records what really rendered, and shouts if it contradicts what was asked for. */
+const markRendered = (surface: string, memoriesGeneration: "legacy" | "platform"): void => {
+  runtimeState.rendered = { surface, memoriesGeneration };
+  document.documentElement.dataset["renderedSurface"] = surface;
+  document.documentElement.dataset["renderedMemoriesGeneration"] = memoriesGeneration;
+  if (generationMismatch(generationSelection.memories, memoriesGeneration)) {
+    // The host asked for the platform generation and is being shown legacy memory records.
+    // Never let this be quiet: it is a correct-looking app on the wrong backend.
+    runtimeState.mismatch = `memories: selected platform, rendered legacy (surface ${surface})`;
+    document.documentElement.dataset["generationMismatch"] = "true";
+    console.error(`OMI_GENERATION_MISMATCH ${JSON.stringify(runtimeState.mismatch)}`);
+  }
+};
+
 let readyLogged = false;
 const emitReady = (state: string): void => {
   if (readyLogged) return;
   readyLogged = true;
-  console.info(`OMI_PRODUCTION_READY route=${route} state=${state}`);
+  const rendered = runtimeState.rendered;
+  console.info(
+    `OMI_PRODUCTION_READY route=${route} state=${state}`
+    + ` generation.memories=${generationSelection.memories}`
+    + ` rendered=${rendered ? rendered.surface : "none"}`
+    + ` rendered.memories=${rendered ? rendered.memoriesGeneration : "none"}`
+    + ` mismatch=${runtimeState.mismatch === null ? "no" : "yes"}`,
+  );
 };
 
 function bridgeUnavailable(): React.JSX.Element {
@@ -211,16 +273,12 @@ if (query.get("lab") === "1") {
         // blocked/FE-SURFACES-bridge-two-origin-binding.md. Passing the same client twice is
         // stated here rather than hidden, because the silent version of this is exactly how
         // a client ends up reading the legacy wire while believing it is on the new one.
-        const platform = createPlatformProductionStoreFactory(bridge, env, { legacyHttp: http, platformHttp: http }, requestedGenerations);
+        const platform = createPlatformProductionStoreFactory(bridge, env, { legacyHttp: http, platformHttp: http }, generationSelection);
         const stores = platform;
-        if (platform.rejected.length > 0) {
-          // Machine-readable on purpose: INTEGRATION asserts on this line.
-          console.warn(`OMI_GENERATION_REJECTED ${JSON.stringify(platform.rejected)}`);
-        }
-        console.info(`OMI_GENERATION_SELECTION ${JSON.stringify(platform.selection)}`);
         if (route === "memories" && platform.selection.memories === "platform") {
           const store = await platform.openSynthesizedMemories();
           await store.refresh();
+          markRendered("memories-platform", "platform");
           root.render(<StrictMode><MemoriesPlatformProduction store={store} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
           return;
         }
@@ -230,18 +288,22 @@ if (query.get("lab") === "1") {
             stores.openConversations(),
           ]);
           await Promise.allSettled([memories.refresh(), conversations.refresh()]);
+          markRendered("home", "legacy");
           root.render(<StrictMode><HomeProduction sources={{ memories, conversations }} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "tasks") {
           const store = await stores.openTasks();
+          markRendered("tasks", "legacy");
           root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else if (route === "conversations") {
           const [store, foldersStore] = await Promise.all([
             stores.openConversations(),
             stores.openFolders(),
           ]);
+          markRendered("conversations", "legacy");
           root.render(<StrictMode><ConversationsProduction store={store} foldersStore={foldersStore} detailId={detailId} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         } else {
           const store = await stores.openMemories();
+          markRendered("memories-legacy", "legacy");
           root.render(<StrictMode><MemoriesProduction store={store} locale={locale} onReady={() => emitReady("bridge")} /></StrictMode>);
         }
       } catch {
