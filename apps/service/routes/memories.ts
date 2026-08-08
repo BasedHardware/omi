@@ -70,7 +70,16 @@ const bearerToken = (header: string | undefined): string | null => {
 const parsePageQuery = (
   rawLimit: string | undefined,
   rawCursor: string | undefined,
+  duplicated: boolean,
 ): { readonly limit: number; readonly cursor: string | null } | null => {
+  // A repeated query parameter is ambiguous, and resolving it silently is a
+  // parameter-pollution bug: Hono takes the FIRST value, so `?limit=5&limit=101`
+  // was answered 200 while `?limit=101&limit=5` was answered 400. Two requests
+  // carrying the same pair of values disagreed purely on ordering. Both grammars
+  // here are single-valued, so ambiguity fails closed - the same rule
+  // apps/mcp/bun-http.ts already applies to single-valued headers.
+  if (duplicated) return null;
+
   let limit = DEFAULT_PAGE_LIMIT;
   if (rawLimit !== undefined) {
     if (!/^[0-9]{1,3}$/.test(rawLimit)) return null;
@@ -79,6 +88,20 @@ const parsePageQuery = (
   }
   const cursor = rawCursor === undefined || rawCursor.length === 0 ? null : rawCursor;
   return { limit, cursor };
+};
+
+/** True when any single-valued query parameter appears more than once. */
+const hasDuplicateQueryParameters = (rawUrl: string): boolean => {
+  let parameters: URLSearchParams;
+  try {
+    parameters = new URL(rawUrl).searchParams;
+  } catch {
+    return true;
+  }
+  for (const name of ["limit", "cursor"]) {
+    if (parameters.getAll(name).length > 1) return true;
+  }
+  return false;
 };
 
 /**
@@ -108,7 +131,11 @@ export const MEMORY_READ_TRANSITIONAL_ALIAS_PATH = "/v1/memories/recall";
 export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): void => {
   // domain-pending(DIV-DOMCORE-001)
   const handler = async (context: {
-    req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined };
+    req: {
+      url: string;
+      header: (name: string) => string | undefined;
+      query: (name: string) => string | undefined;
+    };
   }): Promise<Response> => {
     const token = bearerToken(context.req.header("authorization"));
     if (token === null) {
@@ -124,6 +151,7 @@ export const registerMemoryRoutes = (app: Hono, deps: MemoryRouteDependencies): 
     const page = parsePageQuery(
       context.req.query("limit") ?? undefined,
       context.req.query("cursor") ?? undefined,
+      hasDuplicateQueryParameters(context.req.url),
     );
     if (page === null) {
       deps.counter.recordDomainRead("denied");
