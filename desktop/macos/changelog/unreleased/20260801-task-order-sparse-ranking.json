@@ -1,3 +1,0 @@
-{
-  "change": "Reduced task reorder sync cost by assigning sparse sort-order ranks and sending only moved tasks, with bounded rebalance batches for legacy or exhausted ranks"
-}

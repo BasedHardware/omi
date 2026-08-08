@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Provision the narrow runtime permission used by Agent VM self-stop.
+# Transitional compatibility only: older Agent VM startup artifacts used this
+# direct self-stop permission. New artifacts call the backend stop broker and
+# operators should revoke this binding after broker-capable rollout evidence.
 #
 # Refuse by default. Apply only after reviewing the target projects:
 #   AGENT_VM_BOOTSTRAP_IAM_APPLY=1 bash backend/scripts/apply-agent-vm-bootstrap-iam.sh

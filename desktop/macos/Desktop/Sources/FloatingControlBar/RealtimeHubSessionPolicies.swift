@@ -797,7 +797,7 @@ enum RealtimeHubToolFailureKind: String, Equatable {
         default:
           return .backendTransport
         }
-      case .unsupportedTierScopedBulkMutation, .syncUploadRejected:
+      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked:
         return .backendClientRejected
       }
     }

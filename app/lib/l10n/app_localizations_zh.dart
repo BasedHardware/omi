@@ -733,11 +733,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return '您的套餐将于 $date 续订。';
-  }
-
-  @override
   String get basicPlan => '免费套餐';
 
   @override
@@ -9594,4 +9589,71 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => '太旧，无法同步 — Omi 无法接收';
+
+  @override
+  String get planSheetChooseYourPlan => '选择你的方案，解锁无限 Omi。';
+
+  @override
+  String get availableOnMacMobileWeb => '支持 Mac、手机和网页';
+
+  @override
+  String get popularBadge => '热门';
+
+  @override
+  String get worksOnDesktop => '支持桌面端';
+
+  @override
+  String get noDesktopAccess => '不支持桌面端';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months 个月 / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '免费 $count 个月',
+      one: '免费 1 个月',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi 是免费的，但免费版存在一些会影响体验的限制：';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 秒延迟（非实时）';
+
+  @override
+  String get downgradeToFreemiumAction => '降级到免费版';
+
+  @override
+  String get getFreeUnlimitedAccess => '免费获取无限访问权限';
+
+  @override
+  String get shareDataForTraining => '共享数据用于训练';
+
+  @override
+  String get yourRequestUnderReview => '你的申请正在审核中';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => '需要更新';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => '请安装最新的 Omi 应用，以便在账户迁移后继续使用。';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => '正在迁移';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => '您的账户正在迁移。产品功能将暂停，直到迁移完成。';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage => '账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。';
+
+  @override
+  String get accountCutoverOpenStore => '打开应用商店';
 }

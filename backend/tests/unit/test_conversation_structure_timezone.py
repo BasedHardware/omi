@@ -123,6 +123,10 @@ conversation_folder_stub.FolderAssignment = MagicMock()
 conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
 conversation_folder_stub.build_folders_context = MagicMock(return_value="")
 
+# Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
+gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
+gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
+
 # Real models (pure pydantic) resolve from the models package directory.
 _stub_package("models")
 sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]

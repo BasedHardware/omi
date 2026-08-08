@@ -402,9 +402,10 @@ enum GeneratedToolCapabilities {
       title: "Search Conversations",
       latency: .fastNetwork,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Semantic search across the user's past conversations.",
+      summary: "Search the user's past conversations by topic or exact canonical ID/share link.",
       bullets: [
-      "Use for specific topics, decisions, or events discussed in conversations."
+      "Use for specific topics, decisions, or events discussed in conversations.",
+      "For a canonical conversation UUID or https://h.omi.me/conversations/<uuid> link, pass it unchanged for an exact lookup."
     ]
     ),
     Capability(

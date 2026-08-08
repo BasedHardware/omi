@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 
 private let chatMarkRestingOpacity = 0.95
@@ -19,23 +20,6 @@ enum ChatMarkMotion: Equatable {
     case .wave: return 0.6
     }
   }
-
-  static func forTool(_ toolName: String) -> ChatMarkMotion {
-    let cleaned =
-      toolName.hasPrefix("mcp__")
-      ? String(toolName.split(separator: "__").last ?? Substring(toolName))
-      : toolName
-    let lower = cleaned.lowercased()
-    let head =
-      lower.split(separator: ":").first.map(String.init)?
-      .trimmingCharacters(in: .whitespaces) ?? lower
-
-    let acting: Set<String> = [
-      "write", "edit", "multiedit", "notebookedit", "bash",
-      "spawn_agent", "run_agent_and_wait", "send_agent_message", "run_attempt",
-    ]
-    return acting.contains(head) ? .wave : .gather
-  }
 }
 
 enum ChatOmiMarkPlacement {
@@ -44,6 +28,24 @@ enum ChatOmiMarkPlacement {
   /// an empty streaming reply otherwise has zero height and clips the mark at
   /// the transcript's live edge.
   static let reservedRowHeight: CGFloat = 32
+
+  /// The diameter the mark is drawn at inside the transcript. The gutter is
+  /// derived from it, so the two can never disagree about how much room it needs.
+  static let markSize: CGFloat = 24
+
+  /// **How much clear room the mark needs to the left of the message column.**
+  ///
+  /// The mark is drawn in an overlay offset by exactly this much, so a transcript hosted with less
+  /// leading inset than this does not merely crowd it — it draws the mark outside the container and
+  /// the assistant's only identity cue silently disappears. `ChatMessagesView` now guarantees this
+  /// much leading inset itself rather than trusting each host to know the number.
+  ///
+  /// **It is the mark's own width plus one gap, and no more.** At `32 + md` it was 44: on the ask
+  /// panel, whose content starts 16 pt in, that put the message column 60 pt from the glass while the
+  /// header chip above it started at 16, and left the mark 13 pt from the panel's edge — outside
+  /// every other margin on the surface and 44 pt from the sentence it labels. A gutter is the room an
+  /// object needs, not a margin of its own.
+  static let markGutter: CGFloat = markSize + OmiSpacing.sm
 
   static func finalAssistantMessageID(in messages: [ChatMessage]) -> String? {
     messages.last(where: { $0.sender == .ai })?.id
@@ -238,7 +240,7 @@ final class ChatMarkModel {
         width: diameter,
         height: diameter
       )
-      context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(frame.opacity)))
+      context.fill(Path(ellipseIn: rect), with: .color(Ink.primary.opacity(frame.opacity)))
     }
   }
 
