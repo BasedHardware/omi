@@ -390,6 +390,21 @@ state_mount_destination() {
     || state_fail "state mount source mismatch"
 }
 
+state_wait_for_device() {
+  local device="$1"
+  local description="$2"
+  # Cover the reconciler's bounded 300-second GCE attach operation plus API
+  # validation overhead while still failing closed on a missing device.
+  local timeout="${AGENT_VM_STATE_DEVICE_WAIT_SECONDS:-600}"
+  [[ "$timeout" =~ ^[0-9]+$ ]] && (( 10#$timeout >= 1 && 10#$timeout <= 600 )) \
+    || state_fail "invalid state device wait timeout"
+  local deadline=$((SECONDS + 10#$timeout))
+  while [[ ! -e "$device" && "$SECONDS" -lt "$deadline" ]]; do
+    sleep 1
+  done
+  [[ -e "$device" ]] || state_fail "$description is missing after bounded wait"
+}
+
 ensure_state_tools() {
   local missing=false
   local tool
@@ -441,7 +456,9 @@ state_receipt="${state_mount}/${state_receipt_name}"
 state_receipt_for_container=""
 
 if [[ "$state_required" == true || -e "$state_device" ]]; then
-  [[ -e "$state_device" ]] || state_fail "required state device is missing"
+  if [[ "$state_required" == true ]]; then
+    state_wait_for_device "$state_device" "required state device"
+  fi
   if state_migration_id="$(metadata_get_optional 'http://metadata.google.internal/computeMetadata/v1/instance/attributes/omi-agent-migration')"; then
     :
   else
@@ -494,8 +511,8 @@ if [[ "$state_required" == true || -e "$state_device" ]]; then
   if [[ "$state_receipt_present" == false && "$state_source_required_metadata_present" != true ]]; then
     state_fail "state source requirement metadata is missing for legacy migration"
   fi
-  if [[ "$state_receipt_present" == false && "$state_source_required" == true && ! -e "$state_source_device" ]]; then
-    state_fail "required legacy state source device is missing"
+  if [[ "$state_receipt_present" == false && "$state_source_required" == true ]]; then
+    state_wait_for_device "$state_source_device" "required legacy state source device"
   fi
 
   if [[ "$state_receipt_present" == false && -e "$state_source_device" ]]; then

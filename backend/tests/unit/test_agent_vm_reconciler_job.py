@@ -320,7 +320,6 @@ def test_boot_image_migration_replaces_only_a_provider_stopped_allowlisted_vm(
             type(self).creates.append(args)
             migration_id = args[4]
             state_name = str(args[5]).rsplit("/", 1)[-1]
-            source_name = str(args[6]).rsplit("/", 1)[-1]
             type(self).candidate = {
                 "id": "candidate-id",
                 "labels": {
@@ -337,13 +336,29 @@ def test_boot_image_migration_replaces_only_a_provider_stopped_allowlisted_vm(
                         "deviceName": "omi-agent-state",
                         "source": f"projects/project/zones/us-central1-a/disks/{state_name}",
                     },
-                    {
-                        "boot": False,
-                        "deviceName": "omi-agent-state-source",
-                        "source": f"projects/project/zones/us-central1-a/disks/{source_name}",
-                    },
                 ],
             }
+
+        async def attach_disk(
+            self,
+            vm_name: str,
+            source: str,
+            *,
+            device_name: str,
+            read_only: bool,
+            auto_delete: bool,
+        ) -> None:
+            type(self).events.append(("attach", vm_name, source, device_name, read_only, auto_delete))
+            assert type(self).candidate is not None
+            type(self).candidate["disks"].append(
+                {
+                    "boot": False,
+                    "deviceName": device_name,
+                    "mode": "READ_ONLY" if read_only else "READ_WRITE",
+                    "autoDelete": auto_delete,
+                    "source": source,
+                }
+            )
 
         @staticmethod
         def private_instance_ip(_instance: dict[str, Any]) -> str:
@@ -405,6 +420,7 @@ def test_boot_image_migration_replaces_only_a_provider_stopped_allowlisted_vm(
 
     assert result.state == "migrated"
     assert MigrationApi.labels and MigrationApi.creates and MigrationApi.waits
+    assert any(event[0] == "attach" and event[4:] == (True, False) for event in MigrationApi.events)
     assert cutovers[-1]["vmName"].startswith("omi-agent-user-m-")
     assert cutovers[-1]["authToken"] != "old-token"
     assert cutovers[-1]["reconcile"]["state"] == "migration_soaking"

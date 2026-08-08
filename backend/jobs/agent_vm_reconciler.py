@@ -915,21 +915,50 @@ async def _replace_stopped_boot_image_drift(
         raise RuntimeError("replacement candidate state disk is unavailable")
     if expected_state_id and str(state_disk.get("id")) != expected_state_id:
         raise RuntimeError("replacement candidate state disk ID changed")
+    candidate_id = str(candidate["id"])
     source_clone = _disk_attachment(candidate, STATE_SOURCE_DEVICE_NAME)
-    if source_clone_name and (
-        not isinstance(source_clone, Mapping) or _disk_name(source_clone.get("source")) != source_clone_name
-    ):
-        raise RuntimeError("replacement candidate source clone identity is ambiguous")
     source_clone_disk_id = ""
     if source_clone_name:
         source_clone_disk = await api.get_disk(source_clone_name)
         source_clone_disk_id = str(source_clone_disk.get("id") or "") if isinstance(source_clone_disk, Mapping) else ""
-        if not source_clone_disk_id:
-            raise RuntimeError("replacement candidate source clone is unavailable")
+        source_clone_labels = source_clone_disk.get("labels") if isinstance(source_clone_disk, Mapping) else None
+        expected_source_clone_id = str(
+            cleanup_context.get("sourceCloneDiskId") or journal.get("sourceCloneDiskId") or ""
+        )
+        if (
+            not source_clone_disk_id
+            or (expected_source_clone_id and source_clone_disk_id != expected_source_clone_id)
+            or not isinstance(source_clone_labels, Mapping)
+            or source_clone_labels.get("omi-agent-migration") != migration_id
+            or source_clone_labels.get("omi-agent-role") != "source"
+            or source_clone_labels.get("omi-agent-owner") != _owner_disk_label(uid)
+        ):
+            raise RuntimeError("replacement candidate source clone is unavailable or ambiguous")
+        cleanup_context.update({"instanceId": candidate_id, "sourceCloneDiskId": source_clone_disk_id})
+        if source_clone is None:
+            if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
+                raise RuntimeError("boot-image source clone attach fence changed")
+            await api.attach_disk(
+                candidate_name,
+                _disk_source(api.project, zone, source_clone_name),
+                device_name=STATE_SOURCE_DEVICE_NAME,
+                read_only=True,
+                auto_delete=False,
+            )
+            candidate = await api.get_instance(candidate_name)
+            if candidate is None or str(candidate.get("id") or "") != candidate_id:
+                raise RuntimeError("replacement candidate identity changed during source clone attach")
+            source_clone = _disk_attachment(candidate, STATE_SOURCE_DEVICE_NAME)
+        if (
+            not isinstance(source_clone, Mapping)
+            or _disk_name(source_clone.get("source")) != source_clone_name
+            or source_clone.get("mode") not in {None, "READ_ONLY"}
+            or source_clone.get("autoDelete") not in {None, False}
+        ):
+            raise RuntimeError("replacement candidate source clone identity is ambiguous")
     candidate_boot_drift = await _boot_image_drift(api, candidate, release)
     if candidate_boot_drift:
         raise RuntimeError("replacement candidate boot image does not match the pinned release")
-    candidate_id = str(candidate["id"])
     cleanup_context.update(
         {
             "vmName": candidate_name,
