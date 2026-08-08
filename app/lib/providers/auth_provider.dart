@@ -68,6 +68,11 @@ class AuthenticationProvider extends BaseProvider {
       _sessionExpirationGeneration++;
       user = null;
       authToken = null;
+      // The session is provably dead: drop the cutover owner so the fail-closed gate stops treating
+      // anyone as the authenticated product owner. Auth-backend agnostic (Firebase + OIDC) — under
+      // OIDC there is no authState stream to clear it, and under Firebase the id-token stream may not
+      // re-fire if the User object lingers after a revoked/expired token.
+      unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(null));
       final rootContext = globalNavigatorKey.currentContext;
       if (rootContext != null && rootContext.mounted) {
         clearAllUserState(rootContext);
@@ -80,7 +85,16 @@ class AuthenticationProvider extends BaseProvider {
     // perpetual `user==null` branch of idTokenChanges, forcing re-login on every
     // restart. The OIDC session lives in SharedPreferences (OidcAuthService) and
     // refreshes via getAuthHeader.
-    if (Env.useOidc) return;
+    if (Env.useOidc) {
+      // OIDC (ADR-0038) has no Firebase authState stream to bind the cutover owner (the Firebase
+      // path below does that at line ~110), and the main.dart bootstrap only binds from a Firebase
+      // currentUser — so on a warm start with a restored OIDC session, bind the owner here or the
+      // fail-closed gate never learns it and blocks product traffic indefinitely.
+      if (OidcAuthService.instance.hasStoredSession()) {
+        unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(SharedPreferencesUtil().uid));
+      }
+      return;
+    }
     // DEBUG: Log initial state
     Logger.debug(
       'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',
@@ -226,6 +240,9 @@ class AuthenticationProvider extends BaseProvider {
         // expired, `_sessionExpired` is still latched and refreshIdToken() would
         // short-circuit to MissingUser, leaving this fresh login unusable.
         AuthService.instance.markAuthenticatedUser(outcome.uid!);
+        // Bind the cutover owner to the freshly authenticated OIDC uid (parity with the Firebase
+        // authStateChanges path); the fail-closed gate blocks product traffic until it resolves.
+        unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(outcome.uid));
         authToken = SharedPreferencesUtil().authToken;
         _requiresReauthentication = false;
         NotificationService.instance.saveNotificationToken();
