@@ -537,6 +537,57 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(Object.isFrozen(authorizedCredential?.rateLimitKey)).toBe(true);
   });
 
+  test("T7b rejects credential and authorization accessors without invoking a safe-to-evil swap getter", async () => {
+    const credentialDependency = fixture();
+    let rateLimitKeyGetterCalls = 0;
+    const credentialWithAccessor = {
+      kind: "mcp_api_key",
+      scopes: [SYNTHESIZED_MEMORY_READ_SCOPE],
+      cursorBindings: {
+        ownerAuthorizationDigest: "owner-digest",
+        appAuthorizationDigest: "app-digest",
+        keyAuthorizationDigest: "key-digest",
+        graphGenerationDigest: "graph-digest",
+        projectionGenerationDigest: "projection-digest",
+        filterDigest: "filter-digest",
+        readModeDigest: "mode-digest",
+      },
+      authentication: { adapterOnly: true },
+    };
+    Object.defineProperty(credentialWithAccessor, "rateLimitKey", {
+      enumerable: true,
+      get() {
+        rateLimitKeyGetterCalls += 1;
+        return rateLimitKeyGetterCalls === 1
+          ? { prefix: "mcp", uid: "owner-1", app_id: "app-1", key_id: "safe-key" }
+          : { prefix: "mcp", uid: "owner-evil", app_id: "app-evil", key_id: "evil-key" };
+      },
+    });
+    credentialDependency.ports.authenticate = async () => credentialWithAccessor as never;
+    const credentialResponse = await createMcpProtocolHandler(credentialDependency.ports).handleHttp(callRequest());
+    expect(credentialResponse.status).toBe(401);
+    expect(rateLimitKeyGetterCalls).toBe(0);
+    expect(credentialDependency.counters).toMatchObject({ rateLimit: 0, authorize: 0, readPage: 0 });
+
+    const authorizationDependency = fixture();
+    let readAuthorizationGetterCalls = 0;
+    const authorizationWithAccessor = { allowed: true };
+    Object.defineProperty(authorizationWithAccessor, "readAuthorization", {
+      enumerable: true,
+      get() {
+        readAuthorizationGetterCalls += 1;
+        return readAuthorizationGetterCalls === 1
+          ? { readToken: "safe" }
+          : { readToken: "evil" };
+      },
+    });
+    authorizationDependency.ports.authorize = async () => authorizationWithAccessor as never;
+    const authorizationResponse = await createMcpProtocolHandler(authorizationDependency.ports).handleHttp(callRequest());
+    expect(errorCode(authorizationResponse)).toBe(-32602);
+    expect(readAuthorizationGetterCalls).toBe(0);
+    expect(authorizationDependency.counters).toMatchObject({ readPage: 0, validatePage: 0, reauthorizeBeforeEmission: 0 });
+  });
+
   test("T8 returns a fresh tool descriptor graph for each tools/list response", async () => {
     const handler = createMcpProtocolHandler(fixture().ports);
     const first = await handler.handleHttp(listRequest());

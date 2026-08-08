@@ -54,6 +54,7 @@ export interface McpCredentialRateLimitKey {
   readonly key_id: string;
 }
 
+// domain-pending(DIV-DOMX-002): "surface" remains an unresolved label here.
 /** API-key-only QA surface; this is never serialized onto the MCP wire. */
 export interface McpCredential {
   readonly kind: "mcp_api_key";
@@ -175,6 +176,7 @@ const JSON_HEADERS = Object.freeze({
 });
 const PRIVATE_CACHE = Object.freeze({ ttlMs: 0, cacheScope: "private" });
 const MAX_VALIDATED_PAGE_BYTES = 1_000_000;
+const DETACH_FAILED = Symbol("mcp_dependency_data_detach_failed");
 
 export function createMcpProtocolHandler(ports: McpProtocolPorts): {
   handleHttp(request: McpHttpRequest): Promise<McpHttpResponse>;
@@ -294,7 +296,7 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
   let afterVisibleKey: string | null = null;
   if (call.cursor !== undefined) {
     try {
-      const parsedCursor = ports.cursor.parse({ cursor: call.cursor, bindings: credential.cursorBindings });
+      const parsedCursor = snapshotCursorParseResult(ports.cursor.parse({ cursor: call.cursor, bindings: credential.cursorBindings }));
       if (!isCursorParseResult(parsedCursor)) {
         return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
       }
@@ -579,20 +581,8 @@ function isCredential(value: unknown): value is McpCredential {
 
 /** Snapshot once after authentication so downstream ports cannot race its tuple. */
 function snapshotCredential(value: unknown): McpCredential | null {
-  try {
-    if (!isCredential(value) || !isJsonValue(value.authentication)) {
-      return null;
-    }
-    return Object.freeze({
-      kind: value.kind,
-      scopes: Object.freeze([...value.scopes]),
-      rateLimitKey: Object.freeze({ ...value.rateLimitKey }),
-      cursorBindings: Object.freeze({ ...value.cursorBindings }),
-      authentication: cloneFrozenJson(value.authentication),
-    });
-  } catch {
-    return null;
-  }
+  const snapshot = detachDependencyData(value);
+  return snapshot !== DETACH_FAILED && isCredential(snapshot) ? snapshot : null;
 }
 
 function isCredentialRateLimitKey(value: unknown): value is McpCredentialRateLimitKey {
@@ -605,17 +595,15 @@ function isCredentialRateLimitKey(value: unknown): value is McpCredentialRateLim
 }
 
 function snapshotGrantedAuthorization(value: unknown): GrantedAuthorization | null {
-  try {
-    if (!isRecord(value)
-      || !hasExactKeys(value, ["allowed", "readAuthorization"])
-      || value.allowed !== true
-      || !isRealReadAuthorization(value.readAuthorization)) {
-      return null;
-    }
-    return Object.freeze({ allowed: true, readAuthorization: cloneFrozenJson(value.readAuthorization) });
-  } catch {
+  const snapshot = detachDependencyData(value);
+  if (snapshot === DETACH_FAILED
+    || !isRecord(snapshot)
+    || !hasExactKeys(snapshot, ["allowed", "readAuthorization"])
+    || snapshot.allowed !== true
+    || !isRealReadAuthorization(snapshot.readAuthorization)) {
     return null;
   }
+  return snapshot as GrantedAuthorization;
 }
 
 function isRealReadAuthorization(value: unknown): boolean {
@@ -625,31 +613,32 @@ function isRealReadAuthorization(value: unknown): boolean {
 }
 
 function snapshotRateLimitDecision(value: unknown): RateLimitDecision | null {
-  try {
-    if (!isRecord(value)) {
-      return null;
-    }
-    if (value.allowed === true) {
-      return hasExactKeys(value, ["allowed"]) ? { allowed: true } : null;
-    }
-    if (value.allowed !== false || !hasOnlyKeys(value, ["allowed", "retryAfterSeconds"])) {
-      return null;
-    }
-    const retryAfterSeconds = value.retryAfterSeconds;
-    if (retryAfterSeconds !== undefined && validRetryAfter(retryAfterSeconds as number | undefined) === undefined) {
-      return null;
-    }
-    return retryAfterSeconds === undefined ? { allowed: false } : { allowed: false, retryAfterSeconds: retryAfterSeconds as number };
-  } catch {
+  const snapshot = detachDependencyData(value);
+  if (snapshot === DETACH_FAILED || !isRecord(snapshot)) {
     return null;
   }
+  if (snapshot.allowed === true) {
+    return hasExactKeys(snapshot, ["allowed"]) ? { allowed: true } : null;
+  }
+  if (snapshot.allowed !== false || !hasOnlyKeys(snapshot, ["allowed", "retryAfterSeconds"])) {
+    return null;
+  }
+  const retryAfterSeconds = snapshot.retryAfterSeconds;
+  if (retryAfterSeconds !== undefined && validRetryAfter(retryAfterSeconds as number | undefined) === undefined) {
+    return null;
+  }
+  return retryAfterSeconds === undefined ? { allowed: false } : { allowed: false, retryAfterSeconds: retryAfterSeconds as number };
 }
 
-function isCursorParseResult(value: unknown): value is { readonly lastVisibleKey: string } {
-  return isRecord(value)
-    && hasExactKeys(value, ["lastVisibleKey"])
-    && isNonEmptyString(value.lastVisibleKey)
-    && value.lastVisibleKey.length <= 4096;
+function snapshotCursorParseResult(value: unknown): { readonly lastVisibleKey: string } | null {
+  const snapshot = detachDependencyData(value);
+  return snapshot !== DETACH_FAILED
+    && isRecord(snapshot)
+    && hasExactKeys(snapshot, ["lastVisibleKey"])
+    && isNonEmptyString(snapshot.lastVisibleKey)
+    && snapshot.lastVisibleKey.length <= 4096
+    ? snapshot as { readonly lastVisibleKey: string }
+    : null;
 }
 
 function isBoundedJsonSnapshot(value: unknown): value is string {
@@ -833,17 +822,94 @@ function isJsonValue(value: unknown): boolean {
   return isJsonObject(value);
 }
 
-function cloneFrozenJson(value: unknown): unknown {
-  if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "number") {
+/**
+ * Detach one dependency result by descriptors, never by property reads.
+ * Accessors, symbols, exotic prototypes, sparse arrays, and non-JSON values
+ * are rejected before a getter can run. Callers validate and consume only the
+ * returned frozen graph, never the dependency-owned source object again.
+ */
+function detachDependencyData(value: unknown): unknown | typeof DETACH_FAILED {
+  try {
+    return detachPlainData(value, 0);
+  } catch {
+    return DETACH_FAILED;
+  }
+}
+
+function detachPlainData(value: unknown, depth: number): unknown {
+  if (depth > 64) {
+    throw new TypeError("Dependency result is too deeply nested");
+  }
+  if (value === null || typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("Dependency result contains a non-finite number");
+    }
     return value;
   }
   if (Array.isArray(value)) {
-    return Object.freeze(value.map(cloneFrozenJson));
+    return detachPlainArray(value, depth + 1);
   }
-  if (isRecord(value)) {
-    return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, cloneFrozenJson(nested)])));
+  if (typeof value === "object") {
+    return detachPlainObject(value, depth + 1);
   }
-  throw new TypeError("Expected JSON value");
+  throw new TypeError("Dependency result is not plain data");
+}
+
+function detachPlainArray(value: unknown[], depth: number): readonly unknown[] {
+  if (Object.getPrototypeOf(value) !== Array.prototype) {
+    throw new TypeError("Dependency result contains an exotic array");
+  }
+  const keys = Reflect.ownKeys(value);
+  if (keys.some((key) => typeof key !== "string")) {
+    throw new TypeError("Dependency result contains symbol keys");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const lengthDescriptor = descriptors.length;
+  if (lengthDescriptor === undefined || !("value" in lengthDescriptor) || typeof lengthDescriptor.value !== "number") {
+    throw new TypeError("Dependency result has an invalid array length");
+  }
+  const length = lengthDescriptor.value;
+  if (!Number.isSafeInteger(length) || length < 0 || keys.length !== length + 1) {
+    throw new TypeError("Dependency result contains sparse or extra array properties");
+  }
+  const detached: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = descriptors[String(index)];
+    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+      throw new TypeError("Dependency result contains an array accessor");
+    }
+    detached.push(detachPlainData(descriptor.value, depth));
+  }
+  return Object.freeze(detached);
+}
+
+function detachPlainObject(value: object, depth: number): Readonly<Record<string, unknown>> {
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError("Dependency result contains an exotic object");
+  }
+  const keys = Reflect.ownKeys(value);
+  if (keys.some((key) => typeof key !== "string")) {
+    throw new TypeError("Dependency result contains symbol keys");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const detached = Object.create(null) as Record<string, unknown>;
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) {
+      throw new TypeError("Dependency result contains an accessor or hidden property");
+    }
+    Object.defineProperty(detached, key, {
+      value: detachPlainData(descriptor.value, depth),
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+  }
+  return Object.freeze(detached);
 }
 
 function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
