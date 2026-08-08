@@ -156,7 +156,9 @@ def test_startup_expands_the_gce_root_partition_before_state_or_docker_work() ->
     assert 'root_source="$(findmnt --noheadings --output SOURCE /)"' in source
     assert 'root_partition="$(readlink -f "$root_source")"' in source
     assert 'parent_name="$(lsblk --noheadings --output PKNAME "$root_partition"' in source
-    assert 'partition_number="$(lsblk --noheadings --output PARTN "$root_partition"' in source
+    assert 'partition_number_file="/sys/class/block/${root_partition##*/}/partition"' in source
+    assert 'IFS= read -r partition_number < "$partition_number_file"' in source
+    assert "--output PARTN" not in source
     assert 'disk_size="$(blockdev --getsize64 "$root_disk")"' in source
     assert 'partition_size="$(blockdev --getsize64 "$root_partition")"' in source
     assert 'growpart "$root_disk" "$partition_number"' in source

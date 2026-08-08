@@ -66,6 +66,7 @@ expand_root_filesystem() {
   local root_partition
   local root_filesystem
   local parent_name
+  local partition_number_file
   local partition_number
   local root_disk
   local disk_size
@@ -97,7 +98,12 @@ expand_root_filesystem() {
 
   parent_name="$(lsblk --noheadings --output PKNAME "$root_partition" | tr -d '[:space:]')" \
     || startup_fail "root disk identity is unavailable"
-  partition_number="$(lsblk --noheadings --output PARTN "$root_partition" | tr -d '[:space:]')" \
+  # Ubuntu images can carry an lsblk without the optional PARTN output column.
+  # Linux exposes the partition number directly through sysfs on every block
+  # partition, including both /dev/sda1 and NVMe-style device names.
+  partition_number_file="/sys/class/block/${root_partition##*/}/partition"
+  [[ -r "$partition_number_file" ]] || startup_fail "root partition number is unavailable"
+  IFS= read -r partition_number < "$partition_number_file" \
     || startup_fail "root partition number is unavailable"
   [[ "$parent_name" =~ ^[a-zA-Z0-9._-]+$ && "$partition_number" =~ ^[0-9]+$ ]] \
     || startup_fail "root partition identity is invalid"
