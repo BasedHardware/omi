@@ -567,6 +567,7 @@ jobs:
           gcloud storage cp \
             "${{ steps.agent-vm-release.outputs.manifest_uri }}" \
             "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+            --cache-control='no-store,max-age=0' \
             --if-generation-match="$(cat "$RUNNER_TEMP/agent-vm-active-previous.generation")"
           echo "AGENT_VM_ACTIVE_POINTER_MUTATED=true" >> "$GITHUB_ENV"
           activated_generation="$(gcloud storage objects describe \
@@ -626,7 +627,8 @@ jobs:
           fi
           if [[ "$(cat "$RUNNER_TEMP/agent-vm-active-previous.state")" == "present" ]]; then
             gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
-              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" --if-generation-match="$expected_generation"
+              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
+              --cache-control='no-store,max-age=0' --if-generation-match="$expected_generation"
           else
             gcloud storage rm "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
               --if-generation-match="$expected_generation" --quiet

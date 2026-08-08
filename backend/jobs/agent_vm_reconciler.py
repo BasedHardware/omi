@@ -220,7 +220,16 @@ def _read_gcs_uri(uri: str) -> bytes:
     bucket_name, _, blob_name = uri[5:].partition("/")
     if not bucket_name or not blob_name:
         raise ValueError("Agent VM release URI must contain a bucket and object")
-    return storage.Client().bucket(bucket_name).blob(blob_name).download_as_bytes()
+    blob = storage.Client().bucket(bucket_name).blob(blob_name)
+    # Mutable public GCS objects implicitly receive ``public, max-age=3600``
+    # when no Cache-Control metadata is set. Resolve the current generation via
+    # the authenticated metadata API, then pin the media download to that
+    # immutable generation so a cached predecessor can never drive a rollout.
+    blob.reload()
+    generation = blob.generation
+    if generation is None:
+        raise RuntimeError("Agent VM release object is missing a generation")
+    return blob.download_as_bytes(if_generation_match=generation)
 
 
 def load_active_release() -> tuple[AgentVmRelease, dict[str, Any]]:
