@@ -126,26 +126,21 @@ Candidate: `1294773c8 feat(memory): wire default-off v3 rollout runtime`
 - **Production activation gate:** NO-GO by policy until dev-cloud GO and independent review.
 - Any prior clearance for default-off production code or index declaration is non-activation plumbing only and must not be treated as enabled-path proof.
 
-## First-user dev read proof lane
+## Human dogfood lane paused
 
-The first-user / dogfood lane uses runtime data/auth Firestore project `based-hardware` and deploy plane `based-hardware-dev`, with approved UIDs:
+No human UID is currently approved for the canonical-memory, Smart Tasks, or
+Chat-first cohort. Checked-in dev runtime config must remain fail-closed:
 
-- `vi7SA9ckQCe4ccobWNxlbdcNdC23` (david.d.zhang@gmail.com) — active in this PR
-- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` (kodjima33@gmail.com) — commented out for this PR; re-enable soon
-
-For this lane, checked-in dev runtime config may persist these readiness
-declarations:
-
-- `MEMORY_MODE=read`;
-- `MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23`;
-- `MEMORY_V3_GET_ENABLED=true`;
-- request-path `MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`
-  (maintenance lives only on `memory-maintenance-job`).
+- `MEMORY_MODE=off`;
+- `MEMORY_ENABLED_USERS=`;
+- `MEMORY_V3_GET_ENABLED=false`;
+- `MEMORY_CANONICAL_MAINTENANCE_ENABLED=false`;
+- parity capture disabled with an empty principal allowlist.
 
 Hourly canonical maintenance (required normalization → TTL audit → one terminal
 consolidation route per pending item) is hosted by `memory-maintenance-job` and
-must receive the same whitelist-scoped flags plus
-`MEMORY_CANONICAL_MAINTENANCE_ENABLED=true`; Cloud Scheduler owns cadence.
+must remain disabled until a separately reviewed rollout restores a cohort;
+Cloud Scheduler owns cadence.
 Production declarations must remain off with an empty runtime inventory and
 `MEMORY_V3_GET_ENABLED=false`, while the production code cohort and persisted
 controls remain unactivated, until Gate 2 and Gate 3 requirements are

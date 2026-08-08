@@ -34,10 +34,14 @@ struct QuestionCardView: View {
   private var validOptions: [Option] { options.compactMap(Option.init) }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      Label("Question", systemImage: "questionmark.circle")
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundStyle(Ink.secondary)
+
       Text(text)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
       // A completed question remains useful transcript context, but its
@@ -51,14 +55,10 @@ struct QuestionCardView: View {
             } label: {
               Text(option.label)
                 .scaledFont(size: OmiType.caption, weight: .medium)
-                .foregroundStyle(OmiColors.textSecondary)
+                .foregroundStyle(Ink.secondary)
                 .padding(.horizontal, OmiSpacing.md)
                 .padding(.vertical, OmiSpacing.sm)
-                .omiControlSurface(
-                  fill: OmiColors.backgroundPrimary.opacity(0.7),
-                  radius: OmiChrome.chipRadius,
-                  stroke: OmiColors.border.opacity(0.65)
-                )
+                .glassChip()
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Send suggestion: \(option.label)")
@@ -67,15 +67,14 @@ struct QuestionCardView: View {
         }
       }
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("chat-first-question-\(questionID)")
@@ -146,67 +145,82 @@ struct TaskCardView: View {
 
   @ViewBuilder
   private func card(_ task: TaskActionItem) -> some View {
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
-      Button {
-        toggle(task)
-      } label: {
-        ZStack {
-          Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
-            .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundStyle(task.completed ? OmiColors.success : OmiColors.textTertiary)
-
-          if showCompletionAcknowledgement {
-            Image(systemName: "checkmark")
-              .scaledFont(size: OmiType.caption, weight: .bold)
-              .foregroundStyle(OmiColors.success)
-              .transition(.scale.combined(with: .opacity))
-          }
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
+        Label("Task", systemImage: "checklist")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+        Spacer(minLength: 0)
+        if task.completed {
+          Text("Completed")
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundStyle(Ink.listeningGreen)
         }
-        .frame(width: 24, height: 24)
       }
-      .buttonStyle(.plain)
-      .disabled(isToggling)
-      .accessibilityLabel(task.completed ? "Mark \(task.description) incomplete" : "Mark \(task.description) complete")
-      .accessibilityIdentifier("chat-first-task-\(taskID)-toggle")
 
-      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        Text(task.description)
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundStyle(task.completed ? OmiColors.textTertiary : OmiColors.textPrimary)
-          .strikethrough(task.completed, color: OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
+        Button {
+          toggle(task)
+        } label: {
+          ZStack {
+            Image(systemName: task.completed ? "checkmark.circle.fill" : "circle")
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundStyle(task.completed ? Ink.listeningGreen : Ink.secondary)
 
-        HStack(spacing: OmiSpacing.xs) {
-          if let goalID = task.goalId, !goalID.isEmpty {
-            ChatFirstDestinationBadge(
-              title: "Goal",
-              systemImage: "target",
-              accessibilityID: "chat-first-task-\(taskID)-goal-\(goalID)"
-            ) {
-              navigation.open(focus: .goal(id: goalID))
+            if showCompletionAcknowledgement {
+              Image(systemName: "checkmark")
+                .scaledFont(size: OmiType.caption, weight: .bold)
+                .foregroundStyle(Ink.listeningGreen)
+                .transition(.scale.combined(with: .opacity))
             }
           }
-          if let conversationID = ChatFirstCaptureLinkPolicy.captureID(for: task) {
-            ChatFirstDestinationBadge(
-              title: "Capture",
-              systemImage: "waveform",
-              accessibilityID: "chat-first-task-\(taskID)-capture-\(conversationID)"
-            ) {
-              navigation.open(focus: .capture(id: conversationID, momentTs: nil))
+          .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .disabled(isToggling)
+        .accessibilityLabel(
+          task.completed ? "Mark \(task.description) incomplete" : "Mark \(task.description) complete"
+        )
+        .accessibilityIdentifier("chat-first-task-\(taskID)-toggle")
+
+        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+          Text(task.description)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundStyle(task.completed ? Ink.secondary : Ink.primary)
+            .strikethrough(task.completed, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+          HStack(spacing: OmiSpacing.xs) {
+            if let goalID = task.goalId, !goalID.isEmpty {
+              ChatFirstDestinationBadge(
+                title: "Goal",
+                systemImage: "target",
+                accessibilityID: "chat-first-task-\(taskID)-goal-\(goalID)"
+              ) {
+                navigation.open(focus: .goal(id: goalID))
+              }
+            }
+            if let conversationID = ChatFirstCaptureLinkPolicy.captureID(for: task) {
+              ChatFirstDestinationBadge(
+                title: "Capture",
+                systemImage: "waveform",
+                accessibilityID: "chat-first-task-\(taskID)-capture-\(conversationID)"
+              ) {
+                navigation.open(focus: .capture(id: conversationID, momentTs: nil))
+              }
             }
           }
         }
       }
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
     )
   }
 
@@ -427,11 +441,11 @@ private struct ChatFirstLinkBlockView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Label(eyebrow, systemImage: systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
 
       Text(summary)
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
       Button(action: action) {
@@ -444,29 +458,24 @@ private struct ChatFirstLinkBlockView: View {
           Image(systemName: "arrow.up.right")
         }
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(OmiColors.textPrimary)
+        .foregroundStyle(Ink.primary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xs)
-        .omiControlSurface(
-          fill: OmiColors.backgroundPrimary.opacity(0.72),
-          radius: OmiChrome.chipRadius,
-          stroke: OmiColors.border.opacity(0.7)
-        )
+        .glassChip()
       }
       .buttonStyle(.plain)
       .disabled(isOpening)
       .accessibilityLabel(actionTitle)
       .accessibilityIdentifier(accessibilityID)
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.88),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.55),
-      shadowOpacity: 0.05,
-      shadowRadius: 5,
-      shadowY: 2
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
     )
   }
 }
@@ -484,14 +493,10 @@ struct ChatFirstDestinationBadge: View {
     Button(action: action) {
       Label(title, systemImage: systemImage)
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundStyle(OmiColors.textSecondary)
+        .foregroundStyle(Ink.secondary)
         .padding(.horizontal, OmiSpacing.sm)
         .padding(.vertical, OmiSpacing.xxs)
-        .omiControlSurface(
-          fill: OmiColors.backgroundPrimary.opacity(0.68),
-          radius: OmiChrome.chipRadius,
-          stroke: OmiColors.border.opacity(0.65)
-        )
+        .glassChip()
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Open \(title)")
@@ -505,16 +510,15 @@ struct ChatFirstUnavailableBlockView: View {
   var body: some View {
     Label("\(entityName) is no longer available", systemImage: "exclamationmark.circle")
       .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundStyle(OmiColors.textTertiary)
-      .padding(OmiSpacing.md)
-      .frame(maxWidth: 560, alignment: .leading)
-      .omiPanel(
-        fill: OmiColors.backgroundTertiary.opacity(0.7),
-        radius: OmiChrome.sectionRadius,
-        stroke: OmiColors.border.opacity(0.45),
-        shadowOpacity: 0,
-        shadowRadius: 0,
-        shadowY: 0
+      .foregroundStyle(Ink.secondary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Ink.rowFill)
+      .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+          .stroke(Ink.glassEdge, lineWidth: 1)
       )
       .accessibilityLabel("\(entityName) is no longer available")
       .accessibilityIdentifier("chat-first-\(entityName.lowercased())-unavailable")
@@ -530,17 +534,16 @@ private struct ChatFirstLoadingBlockView: View {
         .controlSize(.small)
       Text("Loading \(entityName.lowercased())")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundStyle(OmiColors.textTertiary)
+        .foregroundStyle(Ink.secondary)
     }
-    .padding(OmiSpacing.md)
-    .frame(maxWidth: 560, alignment: .leading)
-    .omiPanel(
-      fill: OmiColors.backgroundTertiary.opacity(0.7),
-      radius: OmiChrome.sectionRadius,
-      stroke: OmiColors.border.opacity(0.45),
-      shadowOpacity: 0,
-      shadowRadius: 0,
-      shadowY: 0
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(Ink.rowFill)
+    .clipShape(RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
+        .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityLabel("Loading \(entityName.lowercased())")
     .accessibilityIdentifier("chat-first-\(entityName.lowercased())-loading")

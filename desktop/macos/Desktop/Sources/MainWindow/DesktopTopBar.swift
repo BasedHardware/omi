@@ -1,10 +1,42 @@
 import OmiTheme
 import SwiftUI
 
-/// The constant floating top bar that replaces the left nav rail: primary
-/// navigation (Home / Memory / Tasks / Apps), a "new since you were last here"
-/// counter (conversations · memories · tasks created while Omi wasn't in front),
-/// and the Capture/Listening controls on the right.
+/// The constant floating top bar.
+///
+/// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
+/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, three wordless controls:
+/// microphone, screen capture, settings.
+///
+/// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
+/// halves were wrong once Home became a search surface. A **`Memory` destination sitting next to a
+/// field that already returns memories is a contradiction** — the user reads it as two different
+/// memories — so the destinations that search absorbs are reached through `Library`, which is where
+/// the whole corpus lives when you want to browse it rather than ask for it. The right-hand pills,
+/// meanwhile, were two labels permanently occupying the corner of a window whose point is the field in
+/// the middle of it; `ShellStatusIcons` carries the same state in a dot and the same sentence in a
+/// tooltip, at a third of the width.
+///
+/// `Library` then briefly opened a **hover menu** of seven destinations, and that was the worse
+/// mistake: a control that opens because the pointer crossed it and closes because the pointer left on
+/// the way to the row you wanted. It is gone. Three of its seven entries were the Memory hub's own
+/// views and now live on the hub's page (`MemoryHubSwitcher`); the rest are the flat pills above. See
+/// `TopNavigationDestinations.swift` for the full argument and `ShellDestination` for the
+/// reachability contract that keeps it honest.
+///
+/// **Nothing became unreachable.** INV-NAV-1 is about the destination a shell routes to, not about how
+/// many pills the bar has: every established destination — Home, Conversations, Memories, Brain Map,
+/// Tasks, Rewind — still lands on its own feature-complete page. `Insights` is not in that list
+/// because its page was deleted rather than rehoused: the invariant forbids *stranding* a destination
+/// behind a reduced copy, not retiring one. What the assistant produces still arrives, as memories and
+/// notifications, and Home's knows-list still reads its history (`InsightStorage`).
+///
+/// **It is a panel, and it is the same panel as the two below it.** The window has no ground
+/// (`ShellWindowChrome`), so a bar drawn with nothing behind it is type hanging on the user's wallpaper
+/// — legible, and reading as a fault rather than as a design. One full-lane bar rather than a pill
+/// hugging its own content, for two reasons: the row already pins its trailing controls to the lane's
+/// trailing edge, so a content-hugging shape would have to become *two* pills and lose that edge; and
+/// three objects stacked on one lane with one corner and one shadow read as one surface, where a narrow
+/// pill floating over two wide panels reads as a stray. Everything it wears is `InkGlass`'s.
 struct DesktopTopBar: View {
   @Binding var selectedIndex: Int
   @Binding var memoryDestinationRawValue: Int
@@ -15,11 +47,6 @@ struct DesktopTopBar: View {
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
   let onRewind: () -> Void
-  @State private var memoryDropdownState = MemoryDropdownInteractionState()
-  @State private var memoryDropdownTask: Task<Void, Never>?
-  @State private var isMemoryButtonHovered = false
-
-  private var navItems: [TopNavigationItem] { TopNavigationRoutes.primaryItems }
 
   private var newConversations: Int {
     appState.conversations.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
@@ -31,6 +58,10 @@ struct DesktopTopBar: View {
     tasksStore.tasks.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
   }
 
+  private var badges: TopNavigationDestinationBadges {
+    TopNavigationDestinationBadges(library: newConversations + newMemories, tasks: newTasks)
+  }
+
   var body: some View {
     GeometryReader { proxy in
       let laneWidth = TopNavigationLayoutMetrics.contentLaneWidth(for: proxy.size.width)
@@ -38,33 +69,45 @@ struct DesktopTopBar: View {
       HStack(spacing: 0) {
         Spacer(minLength: 0)
         TopNavigationBarLayout(
-          expandedNavigation: { navPills },
+          expandedNavigation: {
+            TopNavigationDestinationRow(
+              selectedIndex: selectedIndex, badges: badges, onSelect: navigate)
+          },
           compactNavigation: { compactNavigationMenu },
-          persistentControls: { CaptureListeningControls(appState: appState, onRewind: onRewind) },
+          persistentControls: { ShellStatusIcons(appState: appState) },
           settings: { settingsButton }
         )
-        .frame(width: laneWidth)
+        // The inset first, then the lane: the *glass* is exactly `laneWidth`, so the bar shares a
+        // leading edge with the panels under it, and the controls sit inside that edge rather than
+        // touching the corner.
+        .padding(.horizontal, TopNavigationLayoutMetrics.barContentInset)
+        .frame(width: laneWidth, height: TopNavigationLayoutMetrics.barHeight)
+        .inkGlassPanel(
+          cornerRadius: TopNavigationLayoutMetrics.barCornerRadius,
+          shadow: TopNavigationLayoutMetrics.barShadow)
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    .frame(height: 44)
+    .frame(height: TopNavigationLayoutMetrics.barHeight)
     .padding(.vertical, OmiSpacing.sm)
-    // The Memory submenu is an inline overlay. Elevation belongs to the shared
-    // top-bar component so every shell and exported preview paints it above the
-    // destination sibling rather than relying on each call site to remember.
+    // The compact fallback's menu is the one surface here that draws outside the bar. Elevation
+    // belongs to the shared top-bar component so every shell and exported preview paints it above the
+    // destination sibling rather than relying on each call site to remember (INV-NAV-1).
     .zIndex(1)
-    .onDisappear {
-      memoryDropdownTask?.cancel()
-    }
   }
 
-  /// The complete primary navigation remains available when the full set of
-  /// fixed-width pills will not fit beside the persistent status controls.
+  /// The complete primary navigation remains available when the full row of pills will not fit beside
+  /// the persistent status controls — a window narrower than the shell's own minimum, or a large
+  /// accessibility text size. It is flat too: the same destinations, one press each.
   private var compactNavigationMenu: some View {
     Menu {
-      ForEach(navItems) { item in
-        compactNavigationItem(item)
+      ForEach(TopNavigationRoutes.primaryItems) { item in
+        Button {
+          navigate(to: item.index)
+        } label: {
+          Label(item.title, systemImage: item.icon)
+        }
       }
     } label: {
       Label("Navigate", systemImage: "sidebar.left")
@@ -76,211 +119,52 @@ struct DesktopTopBar: View {
     .accessibilityIdentifier("compact-navigation-menu")
   }
 
+  /// Gear that opens Settings, wordless like the two capture controls beside it. The tooltip carries
+  /// the sentence the label used to — and now it is true: `Permissions` is a row in the list this
+  /// opens, where before the gear promised a surface Settings did not have.
+  ///
+  /// Built from `TopNavigationRoutes.persistentItems` rather than from literals here, so the gear
+  /// the user presses and the gear `ShellDestination.unreachable()` checks are the same one.
   @ViewBuilder
-  private func compactNavigationItem(_ item: TopNavigationItem) -> some View {
-    if item.index == SidebarNavItem.conversations.rawValue {
-      Menu {
-        ForEach(TopNavigationRoutes.memoryDestinations) { destination in
-          Button {
-            selectMemoryDestination(destination)
-          } label: {
-            Label(destination.title, systemImage: destination.icon)
-          }
-        }
-      } label: {
-        Label(item.title, systemImage: item.icon)
-      }
-    } else {
-      Button {
-        dismissMemoryDropdown()
-        OmiMotion.withGated(.easeOut(duration: 0.08)) {
-          selectedIndex = item.index
-        }
-      } label: {
-        Label(item.title, systemImage: item.icon)
-      }
-    }
-  }
-
-  /// Gear that opens Settings. The old left rail held the settings/profile entry;
-  /// with the rail gone this is the only visible way in (⌘, still works too).
   private var settingsButton: some View {
-    let isActive = selectedIndex == SidebarNavItem.settings.rawValue
-    return Button {
-      dismissMemoryDropdown()
-      OmiMotion.withGated(.easeOut(duration: 0.08)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
-    } label: {
-      Image(systemName: "gearshape")
-        .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(isActive ? OmiColors.textPrimary : OmiColors.textTertiary)
-        .frame(width: 32, height: 32)
-        .background(Circle().fill(isActive ? OmiColors.textPrimary.opacity(0.08) : Color.clear))
-        .contentShape(Circle())
-    }
-    .buttonStyle(.plain)
-    .help("Settings")
-  }
-
-  private var navPills: some View {
-    // Flat, containerless nav so the bar blends with the chat page: unselected
-    // items are muted text; the selected item gets a subtle highlight only.
-    HStack(spacing: TopNavigationPillMetrics.itemSpacing) {
-      ForEach(navItems) { item in
-        if item.index == SidebarNavItem.conversations.rawValue {
-          memoryNavigationItem(item)
-        } else {
-          let badgeCount = newCount(for: item)
-          Button {
-            dismissMemoryDropdown()
-            OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = item.index }
-          } label: {
-            TopNavigationPill(
-              icon: item.icon,
-              title: item.title,
-              badgeCount: badgeCount,
-              isSelected: selectedIndex == item.index,
-              width: TopNavigationPillMetrics.width(for: item.index, badgeCount: badgeCount)
-            )
-          }
-          .buttonStyle(.plain)
-          .help(item.title)
-        }
-      }
-    }
-  }
-
-  private var memoryDestination: MemoryHubDestination {
-    MemoryHubDestination(rawValue: memoryDestinationRawValue) ?? .memories
-  }
-
-  private func selectMemoryDestination(_ destination: MemoryHubDestination) {
-    dismissMemoryDropdown()
-    memoryDestinationRawValue = destination.rawValue
-    OmiMotion.withGated(.easeOut(duration: 0.08)) {
-      selectedIndex = SidebarNavItem.conversations.rawValue
-    }
-  }
-
-  private func memoryNavigationItem(_ item: TopNavigationItem) -> some View {
-    let isSelected =
-      selectedIndex == item.index && memoryDestination == .memories
-    let badgeCount = newCount(for: item)
-    let pillWidth = TopNavigationPillMetrics.width(for: item.index, badgeCount: badgeCount)
-    return Button {
-      selectMemoryDestination(.memories)
-    } label: {
-      HStack(spacing: 6) {
-        Image(systemName: item.icon)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .frame(width: TopNavigationPillMetrics.iconWidth)
-        Text(item.title)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-        memoryBadge(count: badgeCount)
-      }
-      .foregroundStyle(
-        isSelected || isMemoryButtonHovered
-          ? OmiColors.textPrimary : OmiColors.textSecondary
+    ForEach(TopNavigationRoutes.persistentItems) { item in
+      ShellStatusIconButton(
+        systemImage: item.icon,
+        tooltip: item.tooltip,
+        // No live capability behind it, so it wears neither the dot nor the off-slash: a permanently
+        // hollow badge or a struck-through gear would both report a state Settings does not have.
+        state: nil,
+        isSelected: selectedIndex == item.index,
+        action: { navigate(to: item.index) }
       )
-      .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
-      .frame(width: pillWidth, height: TopNavigationPillMetrics.height)
-      .background(
-        Capsule(style: .continuous)
-          .fill(
-            isSelected
-              ? OmiColors.textPrimary.opacity(0.10)
-              : isMemoryButtonHovered ? OmiColors.textPrimary.opacity(0.06) : Color.clear
-          )
-      )
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .help("Open Memories — hover for more Memory views")
-    .accessibilityIdentifier("memory-navigation-button")
-    .onHover { isMemoryButtonHovered = $0 }
-    .fixedSize()
-    .onHover { isHovering in
-      memoryDropdownHoverChanged(isHovering, in: .anchor)
-    }
-    .overlay(alignment: .topLeading) {
-      if memoryDropdownState.isPresented {
-        memoryDropdown(width: pillWidth)
-          .offset(y: TopNavigationPillMetrics.height + 5)
-          .transition(.opacity.combined(with: .move(edge: .top)))
-          .zIndex(20)
-      }
-    }
-    .zIndex(memoryDropdownState.isPresented ? 20 : 0)
-  }
-
-  private func memoryDropdown(width: CGFloat) -> some View {
-    VStack(alignment: .leading, spacing: 5) {
-      ForEach(MemoryHubDestination.dropdownDestinations) { destination in
-        MemoryDropdownRow(
-          destination: destination,
-          isSelected: memoryDestination == destination,
-          width: width,
-          onSelect: { selectMemoryDestination(destination) }
-        )
-      }
-    }
-    .frame(width: width)
-    .onHover { isHovering in
-      memoryDropdownHoverChanged(isHovering, in: .dropdown)
+      .accessibilityIdentifier("shell-status-settings")
     }
   }
 
-  private func memoryDropdownHoverChanged(
-    _ isHovering: Bool,
-    in region: MemoryDropdownInteractionState.HoverRegion
-  ) {
-    memoryDropdownTask?.cancel()
-    guard let pendingPresentation = memoryDropdownState.hoverChanged(isHovering, in: region) else {
-      memoryDropdownTask = nil
+  /// Every nav press on this bar: the brand, the pills and the settings gear. They were four copies of
+  /// the same two lines; being one place is also what makes the cue fire once per press instead of
+  /// once per call site that remembered to fire it.
+  ///
+  /// `Rewind` is the one destination the shell does not reach by index — each shell hands the bar its
+  /// own way in (an overlay here, a `More` route in chat-first), so the pill calls that.
+  private func navigate(to index: Int) {
+    guard index != SidebarNavItem.rewind.rawValue else {
+      OmiUISound.play(.navigate)
+      onRewind()
       return
     }
-
-    let delay: Duration = pendingPresentation.isPresented ? .milliseconds(140) : .milliseconds(180)
-    memoryDropdownTask = Task { @MainActor in
-      try? await Task.sleep(for: delay)
-      guard !Task.isCancelled else { return }
-      _ = memoryDropdownState.apply(pendingPresentation)
-    }
-  }
-
-  private func dismissMemoryDropdown() {
-    memoryDropdownTask?.cancel()
-    memoryDropdownState.dismiss()
-  }
-
-  @ViewBuilder
-  private func memoryBadge(count: Int) -> some View {
-    if count > 0 {
-      Text("+\(count)")
-        .scaledFont(size: OmiType.micro, weight: .bold)
-        .foregroundColor(OmiColors.textPrimary)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 1)
-        .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
-    }
-  }
-
-  /// New-item count to badge on a nav button (since Omi was last in front).
-  /// The Memory hub holds both memories and conversations, so its badge sums
-  /// them; Tasks badges new tasks. Home/Apps have no counter.
-  private func newCount(for item: TopNavigationItem) -> Int {
-    switch item.index {
-    case SidebarNavItem.conversations.rawValue: return newMemories + newConversations
-    case SidebarNavItem.tasks.rawValue: return newTasks
-    default: return 0
-    }
+    OmiUISound.play(.navigate)
+    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
   }
 }
 
 enum TopNavigationLayoutMetrics {
-  /// The top bar follows the same readable lane as the Home chat composer,
+  /// The top bar follows the same readable lane as the query bar and results panel below it,
   /// retaining the composer's horizontal inset at narrow sizes.
+  ///
+  /// It is the **source** of that lane rather than a copy of it: `QueryShellLayout.laneWidth` and
+  /// `PageGlassLaneLayout.laneWidth` both delegate here, so the bar and whatever is under it cannot
+  /// drift apart.
   static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
     max(
       0,
@@ -290,6 +174,36 @@ enum TopNavigationLayoutMetrics {
       )
     )
   }
+
+  /// The bar's own height.
+  ///
+  /// The row inside it is 32 pt (the icon buttons; the pills are 30), so this is that plus a band of
+  /// air top and bottom. Comfortably more than twice `barCornerRadius`, which matters: at exactly
+  /// twice, the 22 pt corner degenerates into a capsule and the bar stops being the same *shape* as
+  /// the panels under it — it becomes a giant pill sitting on two rounded rectangles.
+  static let barHeight: CGFloat = 52
+
+  /// The air between the bar's glass edge and the first pill inside it.
+  ///
+  /// One spacing token, not a tuned number. It exists so a *selected* pill — which is a filled capsule
+  /// — never touches the panel's rounded edge, which is the one state where a flush row looks broken
+  /// rather than tight.
+  static let barContentInset: CGFloat = OmiSpacing.sm
+
+  /// The corner the bar is cut to — the shared one, never a second opinion about 22. See
+  /// `InkGlass.cornerRadius`: a bar and a timeline rounded differently read as two products.
+  static var barCornerRadius: CGFloat { InkGlass.cornerRadius }
+
+  /// The bar's shadow: the one broad ambient shadow every floating object in this app casts, so the
+  /// three objects on the lane are lit by the same light.
+  static var barShadow: InkGlassShadow { .ambient }
+
+  /// What the trailing cluster costs the row: the two capture icons, the gap, and the gear.
+  ///
+  /// Stated here so the layout test can ask "does the flat row of destinations fit beside the controls
+  /// at the narrowest window" without hosting the capture stack and its permissions.
+  static let persistentControlsWidth: CGFloat = 32 * 2 + 2
+  static let settingsControlWidth: CGFloat = 32
 }
 
 /// Keeps the persistent capture and settings controls visible while replacing
@@ -412,131 +326,5 @@ private struct TopNavigationBarRowLayout: Layout {
       subviews[1].sizeThatFits(.unspecified),
       subviews[2].sizeThatFits(.unspecified)
     )
-  }
-}
-
-struct TopNavigationItem: Identifiable, Equatable {
-  let index: Int
-  let title: String
-  let icon: String
-
-  var id: Int { index }
-}
-
-enum TopNavigationRoutes {
-  static let primaryItems = [
-    TopNavigationItem(index: SidebarNavItem.dashboard.rawValue, title: "Home", icon: "house.fill"),
-    TopNavigationItem(index: SidebarNavItem.conversations.rawValue, title: "Memory", icon: "brain"),
-    TopNavigationItem(index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist"),
-    TopNavigationItem(index: SidebarNavItem.apps.rawValue, title: "Apps", icon: "puzzlepiece.fill"),
-  ]
-
-  static let memoryDestinations = MemoryHubDestination.allCases
-}
-
-enum TopNavigationPillMetrics {
-  static let itemSpacing: CGFloat = 4
-  static let horizontalPadding: CGFloat = 12
-  static let height: CGFloat = 30
-  static let iconWidth: CGFloat = 18
-  static let badgeWidth: CGFloat = 38
-
-  static func width(for itemIndex: Int, badgeCount: Int = 0) -> CGFloat {
-    let baseWidth: CGFloat
-    switch itemIndex {
-    case SidebarNavItem.dashboard.rawValue:
-      baseWidth = 88
-    case SidebarNavItem.conversations.rawValue:
-      baseWidth = 128
-    case SidebarNavItem.tasks.rawValue:
-      baseWidth = 84
-    case SidebarNavItem.apps.rawValue:
-      baseWidth = 80
-    default:
-      baseWidth = 88
-    }
-    return baseWidth + (badgeCount > 0 ? badgeWidth : 0)
-  }
-}
-
-private struct TopNavigationPill: View {
-  let icon: String
-  let title: String
-  let badgeCount: Int
-  let isSelected: Bool
-  let width: CGFloat
-  @State private var isHovering = false
-
-  var body: some View {
-    HStack(spacing: 6) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .frame(width: TopNavigationPillMetrics.iconWidth)
-      Text(title)
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-      if badgeCount > 0 {
-        Text("+\(badgeCount)")
-          .scaledFont(size: OmiType.micro, weight: .bold)
-          .foregroundColor(OmiColors.textPrimary)
-          .padding(.horizontal, 5)
-          .padding(.vertical, 1)
-          .background(Capsule(style: .continuous).fill(OmiColors.textPrimary.opacity(0.16)))
-      }
-    }
-    .foregroundStyle(isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textTertiary)
-    .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
-    .frame(width: width, height: TopNavigationPillMetrics.height)
-    .background(
-      Capsule(style: .continuous)
-        .fill(
-          isSelected
-            ? OmiColors.textPrimary.opacity(0.10)
-            : isHovering ? OmiColors.textPrimary.opacity(0.06) : Color.clear
-        )
-    )
-    .contentShape(Capsule())
-    .onHover { isHovering = $0 }
-  }
-}
-
-private struct MemoryDropdownRow: View {
-  let destination: MemoryHubDestination
-  let isSelected: Bool
-  let width: CGFloat
-  let onSelect: () -> Void
-  @State private var isHovering = false
-
-  var body: some View {
-    Button(action: onSelect) {
-      HStack(spacing: 6) {
-        Image(systemName: destination.icon)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .frame(width: TopNavigationPillMetrics.iconWidth)
-        Text(destination.title)
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-      }
-      .foregroundStyle(
-        isSelected || isHovering ? OmiColors.textPrimary : OmiColors.textSecondary
-      )
-      .padding(.horizontal, TopNavigationPillMetrics.horizontalPadding)
-      .frame(width: width, height: TopNavigationPillMetrics.height)
-      .background(
-        Capsule(style: .continuous)
-          .fill(
-            isSelected
-              ? OmiColors.backgroundTertiary
-              : isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary
-          )
-      )
-      .overlay(
-        Capsule(style: .continuous)
-          .stroke(OmiColors.border.opacity(0.55), lineWidth: 1)
-      )
-      .shadow(color: Color.black.opacity(0.24), radius: 8, y: 3)
-      .contentShape(Capsule())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .accessibilityIdentifier("memory-destination-\(destination.rawValue)")
   }
 }

@@ -48,6 +48,17 @@ def test_blank_overrides_produce_no_helm_set_args():
     assert not any("env[" in token and "FEATURE_MODE" in token for token in argv)
 
 
+def test_gateway_feature_mode_disabled_alias_maps_to_off():
+    """GitHub rejects choice value off; workflow/UI uses disabled -> env off."""
+    values = _load_values(PROD_VALUES)
+    argv = HELPER.resolve_env_override_argv(
+        values,
+        {"OMI_LLM_GATEWAY_FEATURE_MODE": "disabled"},
+    )
+    assert argv[0] == "--set-string"
+    assert argv[1].endswith("].value=off")
+
+
 def test_gateway_feature_mode_off_produces_helm_argv_override():
     values = _load_values(PROD_VALUES)
     argv = HELPER.resolve_env_override_argv(
@@ -191,5 +202,12 @@ def test_workflow_exposes_optional_override_inputs_and_applies_them_on_both_helm
     assert text.count('${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}') == 2
     # Auto-push / blank overrides must still leave chart defaults authoritative:
     # the helper is only invoked with input env vars, never hard-coded modes.
-    assert "OMI_LLM_GATEWAY_FEATURE_MODE=${GATEWAY_FEATURE_MODE:-}" in text
+    # FEATURE_MODE uses FEATURE_MODE_VALUE after mapping workflow token disabled -> off
+    # (GitHub Actions rejects choice literal "off" with HTTP 422).
+    assert "FEATURE_MODE_VALUE" in text
+    assert (
+        'FEATURE_MODE_VALUE="off"' in text or "FEATURE_MODE_VALUE=\"off\"" in text or 'FEATURE_MODE_VALUE="off"' in text
+    )
+    assert "disabled" in text
+    assert "OMI_LLM_GATEWAY_FEATURE_MODE=${FEATURE_MODE_VALUE}" in text
     assert "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" in text

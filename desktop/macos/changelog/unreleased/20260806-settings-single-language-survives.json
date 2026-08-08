@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Settings ▸ Transcription silently reverting Single Language back to Auto-Detect — picking a language now survives reopening Settings"
+}

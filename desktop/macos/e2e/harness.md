@@ -14,6 +14,14 @@ while iterating on the macOS app.
   for real user-facing affordances, menus, sheets, permissions, onboarding, and OS
   integration.
 
+Each run queries `set_automation_ui_presentation`, parks bridge/visual work in
+`quiet` mode, and restores the mode that was active before the run—even when a
+step fails. Accessibility snapshots and semantic `press` actions stay quiet and
+cursor-free. Only an `ax.activate` step that explicitly requests `action: click`
+briefly uses `interactive` mode in the bottom-right corner, then returns to
+`quiet`. Bundles without that action continue with a setup warning and the
+legacy behavior.
+
 ## Artifacts
 
 Runs are written under `desktop/macos/.harness/runs/`, which is gitignored. Artifacts
@@ -75,7 +83,9 @@ Supported step types:
 - `power.sample`
 
 `ax.activate` is UI-lane-only and activates a SwiftUI/AppKit control by its stable
-accessibility identifier — never a coordinate. AX steps require a named
+accessibility identifier using the semantic AX `press` action by default — never
+a coordinate. Reserve `action: click` for controls that do not expose a press
+action; that fallback briefly reveals the app in the bottom-right corner. AX steps require a named
 non-production bundle id (`com.omi.omi-*`); the harness refuses production and
 unnamed bundle ids. `ax.expect` supports `identifiers_visible`, ordered
 `focus_order` assertions over the interactive AX tree, and exact

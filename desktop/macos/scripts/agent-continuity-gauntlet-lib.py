@@ -36,6 +36,7 @@ DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
 GAUNTLET_ROOT = DESKTOP_DIR / ".harness/agent-continuity-gauntlet"
 PRUNE_ABORTED_BUNDLE_DAYS = 7
 RESILIENCE_DIAGNOSTIC_SCHEMA_VERSION = 1
+AUTOMATION_UI_PRESENTATION_ACTION = "set_automation_ui_presentation"
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 from automation_token_lib import (  # noqa: E402
@@ -257,6 +258,26 @@ def bridge_action(
 
 def bridge_state(port: int) -> dict[str, Any]:
     return bridge_request(port, "GET", "/state")
+
+
+def set_automation_ui_presentation(
+    port: int,
+    mode: str,
+    *,
+    activate: bool = False,
+) -> dict[str, Any]:
+    """Set the local automation window presentation through the bridge action."""
+    if mode not in {"normal", "quiet", "interactive"}:
+        return {"ok": False, "error": f"unsupported automation UI presentation: {mode}"}
+    return bridge_request(
+        port,
+        "POST",
+        "/action",
+        {
+            "name": AUTOMATION_UI_PRESENTATION_ACTION,
+            "params": {"mode": mode, "activate": activate},
+        },
+    )
 
 
 def write_json(path: Path, data: Any) -> None:
@@ -1149,20 +1170,99 @@ def capture_log_excerpt(log_path: Path, offset: int, dest: Path, max_bytes: int 
     dest.write_bytes(excerpt)
 
 
-def run_agent_swift_screenshot(bundle_id: str, dest: Path) -> dict[str, Any]:
+def run_agent_swift_screenshot(port: int, bundle_id: str, dest: Path) -> dict[str, Any]:
+    """Capture a window, preferring in-process export before using external AX."""
+    visual_export = bridge_request(
+        port,
+        "POST",
+        "/visual/export",
+        {"path": str(dest), "target": "main"},
+    )
+    if visual_export.get("ok") is True and dest.is_file():
+        return {
+            "ok": True,
+            "method": "visual_export",
+            "path": str(dest),
+            "response": visual_export,
+        }
+
+    # Older launches may have a narrower --automation-capture-root than the
+    # gauntlet evidence directory. The established semantic action uses the
+    # same in-process content-view capture without requiring a visible window.
+    action_export = bridge_request(
+        port,
+        "POST",
+        "/action",
+        {
+            "name": "capture_main_window_png",
+            "params": {"path": str(dest)},
+        },
+    )
+    if action_export.get("ok") is True and dest.is_file():
+        return {
+            "ok": True,
+            "method": "in_process_action",
+            "path": str(dest),
+            "response": action_export,
+            "visual_export": visual_export,
+        }
+
     if shutil.which("agent-swift") is None:
-        return {"ok": False, "error": "agent-swift not installed"}
-    commands = [
-        ["agent-swift", "connect", "--bundle-id", bundle_id],
-        ["agent-swift", "screenshot", str(dest)],
-    ]
-    output: list[str] = []
-    for command in commands:
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        output.append(result.stdout)
-        if result.returncode != 0:
-            return {"ok": False, "error": result.stdout, "command": command}
-    return {"ok": True, "path": str(dest), "output": "\n".join(output)}
+        return {
+            "ok": False,
+            "error": "agent-swift not installed",
+            "visual_export": visual_export,
+            "action_export": action_export,
+        }
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "visual_export": visual_export,
+        "action_export": action_export,
+    }
+    try:
+        interactive = set_automation_ui_presentation(port, "interactive", activate=True)
+        if interactive.get("ok") is not True:
+            result["error"] = f"interactive presentation failed: {interactive}"
+        else:
+            commands = [
+                ["agent-swift", "connect", "--bundle-id", bundle_id],
+                ["agent-swift", "screenshot", str(dest)],
+            ]
+            output: list[str] = []
+            for command in commands:
+                try:
+                    command_result = subprocess.run(
+                        command,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                    )
+                except OSError as exc:
+                    result["error"] = str(exc)
+                    result["command"] = command
+                    break
+                output.append(command_result.stdout)
+                if command_result.returncode != 0:
+                    result["error"] = command_result.stdout
+                    result["command"] = command
+                    break
+            else:
+                result = {
+                    "ok": True,
+                    "method": "agent_swift",
+                    "path": str(dest),
+                    "output": "\n".join(output),
+                    "visual_export": visual_export,
+                    "action_export": action_export,
+                }
+    finally:
+        # External AX/screenshot work must never leave a named bundle interactive.
+        restored = set_automation_ui_presentation(port, "quiet", activate=False)
+        if restored.get("ok") is not True:
+            result["ok"] = False
+            result["restore_error"] = f"quiet presentation restore failed: {restored}"
+    return result
 
 
 def classify_restarted_bundle_state(
@@ -1334,7 +1434,7 @@ class GauntletRunner:
             self.port,
             "POST",
             "/navigate",
-            {"target": "chat", "activateApp": True, "settleMs": 300},
+            {"target": "chat", "activateApp": False, "settleMs": 300},
         )
         if navigate.get("ok") is False:
             raise SystemExit(f"navigate chat failed: {navigate.get('error', navigate)}")
@@ -1373,7 +1473,7 @@ class GauntletRunner:
         write_json(step_dir / "runtime-sqlite.json", runtime_detail)
 
         png_path = step_dir / "main-window.png"
-        screenshot = run_agent_swift_screenshot(self.bundle_id, png_path)
+        screenshot = run_agent_swift_screenshot(self.port, self.bundle_id, png_path)
         write_json(step_dir / "screenshot-meta.json", screenshot)
 
         identity = identity_keys(snapshot_detail, runtime_detail)
@@ -3880,6 +3980,7 @@ def self_check() -> int:
         "kernel_turn_tail",
         "ptt_turn_snapshot",
         "ptt_manager_turn",
+        AUTOMATION_UI_PRESENTATION_ACTION,
     }
     hub_actions = {"ptt_test_turn"}
     bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
@@ -3933,6 +4034,13 @@ def self_check() -> int:
     missing_auth_checks = bridge_auth_self_check_failures(driver_source)
     if missing_auth_checks:
         print(f"self-check failed: bridge auth wiring missing {missing_auth_checks}", file=sys.stderr)
+        return 1
+    presentation_failures = automation_presentation_self_check_failures(driver_source)
+    if presentation_failures:
+        print(
+            f"self-check failed: automation presentation wiring missing {presentation_failures}",
+            file=sys.stderr,
+        )
         return 1
     missing_driver_checks = resilience_driver_self_check_failures(driver_source)
     if missing_driver_checks:
@@ -4048,6 +4156,44 @@ def self_check() -> int:
         "INV-6 hermetic contract gates + owner-switch)"
     )
     return 0
+
+
+def automation_presentation_self_check_failures(driver_source: str) -> list[str]:
+    """Keep nonintrusive navigation and screenshot presentation seams wired."""
+    failures: list[str] = []
+    tree = ast.parse(driver_source)
+    functions = {
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    navigate = functions.get("navigate_chat")
+    has_nonactivating_navigation = any(
+        isinstance(node, ast.Dict)
+        and any(
+            isinstance(key, ast.Constant)
+            and key.value == "activateApp"
+            and isinstance(value, ast.Constant)
+            and value.value is False
+            for key, value in zip(node.keys, node.values)
+        )
+        for node in (ast.walk(navigate) if navigate is not None else ())
+    )
+    if not has_nonactivating_navigation:
+        failures.append("navigate_chat keeps activateApp=false")
+
+    for literal in (
+        '"/visual/export"',
+        '"capture_main_window_png"',
+        '"interactive"',
+        '"quiet"',
+        '"mode": mode',
+        '"activate": activate',
+        "finally:",
+    ):
+        if literal not in driver_source:
+            failures.append(f"driver contains {literal}")
+    return failures
 
 
 def spawn_acceptance_self_check_failures(driver_source: str) -> list[str]:

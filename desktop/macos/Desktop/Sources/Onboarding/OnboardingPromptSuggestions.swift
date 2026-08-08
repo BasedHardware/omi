@@ -34,6 +34,22 @@ enum PostOnboardingPromptSuggestions {
     get { UserDefaults.standard.bool(forKey: dismissedKey) }
     set { UserDefaults.standard.set(newValue, forKey: dismissedKey) }
   }
+
+  /// Whether the shell should raise the "try asking" popup on this launch.
+  ///
+  /// **Arming belongs here, not to whichever page happens to be on screen.** This surface has now
+  /// been stranded at both ends in turn. First the producer: `save(_:)` was reachable only from the
+  /// retired paged-intro onboarding, so the array stayed empty. That was fixed — and the guidance
+  /// still did not appear, because the only thing that armed the popup was `DashboardPage.onAppear`,
+  /// and `DashboardPage` had stopped being Home. Onboarding wrote the suggestions, set the flag, and
+  /// nothing read either one.
+  ///
+  /// Both halves failed the same way: the condition lived inside a `body` that a redesign could stop
+  /// mounting. As a value it is something a test can hold and a moved page cannot silently take with
+  /// it.
+  static func shouldArmPopup() -> Bool {
+    shouldShowPopup && !isDismissed && !suggestions().isEmpty
+  }
 }
 
 @MainActor
