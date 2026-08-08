@@ -14,6 +14,12 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  contracts/ratified:
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/adapters-legacy:
     dependencies:
       '@omi-core/contracts':
@@ -30,6 +36,22 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/adapters-platform:
+    dependencies:
+      '@omi-core/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@omi-core/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@omi-core/ratified-contracts':
+        specifier: workspace:*
+        version: link:../../contracts/ratified
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/bridge-web:
     dependencies:
       '@omi-core/contracts':
@@ -40,11 +62,27 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/dev-recall-stub:
+    dependencies:
+      '@omi-core/ratified-contracts':
+        specifier: workspace:*
+        version: link:../../contracts/ratified
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/domain:
     dependencies:
       '@omi-core/adapters-legacy':
         specifier: workspace:*
         version: link:../adapters-legacy
+      '@omi-core/adapters-platform':
+        specifier: workspace:*
+        version: link:../adapters-platform
       '@omi-core/contracts':
         specifier: workspace:*
         version: link:../../contracts
@@ -54,6 +92,12 @@ importers:
       '@omi-core/sync':
         specifier: workspace:*
         version: link:../sync
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/i18n:
     devDependencies:
       typescript:
         specifier: ^5.7.2
@@ -69,17 +113,14 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/i18n:
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
   packages/surfaces:
     dependencies:
       '@omi-core/adapters-legacy':
         specifier: workspace:*
         version: link:../adapters-legacy
+      '@omi-core/adapters-platform':
+        specifier: workspace:*
+        version: link:../adapters-platform
       '@omi-core/bridge-web':
         specifier: workspace:*
         version: link:../bridge-web
@@ -124,12 +165,6 @@ importers:
         specifier: ^7.2.6
         version: 7.3.6(@types/node@22.20.1)
 
-  packages/tokens:
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
   packages/sync:
     dependencies:
       '@omi-core/contracts':
@@ -148,12 +183,18 @@ importers:
       '@omi-core/adapters-legacy':
         specifier: workspace:*
         version: link:../adapters-legacy
+      '@omi-core/adapters-platform':
+        specifier: workspace:*
+        version: link:../adapters-platform
       '@omi-core/bridge-web':
         specifier: workspace:*
         version: link:../bridge-web
       '@omi-core/contracts':
         specifier: workspace:*
         version: link:../../contracts
+      '@omi-core/dev-recall-stub':
+        specifier: workspace:*
+        version: link:../dev-recall-stub
       '@omi-core/domain':
         specifier: workspace:*
         version: link:../domain
@@ -170,6 +211,12 @@ importers:
       '@types/node':
         specifier: ^22
         version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/tokens:
+    devDependencies:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

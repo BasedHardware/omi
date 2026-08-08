@@ -24,6 +24,9 @@
       "path": "../adapters-legacy"
     },
     {
+      "path": "../adapters-platform"
+    },
+    {
       "path": "../domain"
     },
     {
@@ -31,6 +34,9 @@
     },
     {
       "path": "../bridge-web"
+    },
+    {
+      "path": "../dev-recall-stub"
     }
   ]
 }
