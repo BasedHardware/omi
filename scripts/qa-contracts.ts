@@ -228,6 +228,12 @@ async function main(): Promise<void> {
   const artifactPath = resolve(root, lock.artifact.path);
   const metadataPath = resolve(root, lock.artifact.metadataPath);
   const provenancePath = resolve(root, lock.artifact.provenancePath);
+  const vendorRoot = join(root, "vendor", "contracts");
+  verifyExactFiles("vendor contract file list", await listFiles(vendorRoot), [
+    relative(vendorRoot, artifactPath),
+    relative(vendorRoot, metadataPath),
+    relative(vendorRoot, provenancePath),
+  ]);
   for (const [label, path] of [["artifact", artifactPath], ["metadata", metadataPath], ["provenance", provenancePath]] as const) {
     const stat = await lstat(path);
     if (!stat.isFile() || stat.isSymbolicLink()) fail(`${label} must be a committed regular file`);

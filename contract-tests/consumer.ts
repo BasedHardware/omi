@@ -65,10 +65,31 @@ const page: Read.Page = {
   absence: null,
 };
 
+const mixedDegradedCompleteness: Read.DegradedRecall = {
+  version: "recall-completeness-v1",
+  status: "degraded",
+  reasons: ["projection_stale", "accepted_work_pending", "source_bound"],
+  frontiers: {
+    declaredFrontier,
+    newestSearchedAcceptedFrontier: includedFrontier,
+    missingAcceptedFrontierReason: null,
+    // domain-pending(DIV-DOMCORE-006)
+    newestSearchedStmFrontier: includedFrontier,
+    missingStmFrontierReason: null,
+  },
+};
+const mixedDegradedPage: Read.Page = {
+  ...page,
+  window: { status: "incomplete", complete: false, hasMore: false, nextCursor: null },
+  completeness: mixedDegradedCompleteness,
+};
+
 if (!isTrustedPageWindowHonest(page.window)) throw new Error("valid page window rejected");
 if (!isTrustedRecallCompletenessHonest(page)) throw new Error("valid completeness envelope rejected");
 if (!isTrustedSynthesizedPageData(page)) throw new Error("valid trusted page rejected");
 if (!parseSynthesizedPageJson(JSON.stringify(page))) throw new Error("valid canonical page JSON rejected");
+if (!isTrustedRecallCompletenessHonest(mixedDegradedPage)) throw new Error("valid mixed-precedence envelope rejected");
+if (!parseSynthesizedPageJson(JSON.stringify(mixedDegradedPage))) throw new Error("valid mixed-precedence page JSON rejected");
 
 const trace: RecallTraceV1 = {
   version: "recall-trace-v1",

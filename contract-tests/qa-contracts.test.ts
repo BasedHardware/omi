@@ -56,7 +56,7 @@ describe("contract QA rejects drift", () => {
       "node_modules/@omi-core/ratified-contracts/PROVENANCE.json",
     );
     const files = lock.artifact.files.map((path) => path.replace(/^package\//, ""));
-    expect(() => verifyInstalledContract(lock, { ...manifest, version: "0.1.1" }, files, provenance)).toThrow(
+    expect(() => verifyInstalledContract(lock, { ...manifest, version: `${manifest.version}-tampered` }, files, provenance)).toThrow(
       "installed package version mismatch",
     );
     expect(() => verifyInstalledContract(lock, { ...manifest, exports: { ".": "./index.js" } }, files, provenance)).toThrow(

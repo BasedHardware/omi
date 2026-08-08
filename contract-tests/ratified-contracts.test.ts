@@ -53,6 +53,32 @@ describe("ratified package runtime boundary", () => {
     for (const row of rows) expect(isTrustedRecallCompletenessHonest(row.page)).toBe(row.honest);
   });
 
+  test("packed 0.1.1 mixed precedence conformance retains every verdict", async () => {
+    const rows = await fixture<Array<{
+      name: string;
+      page: Parameters<typeof isTrustedRecallCompletenessHonest>[0];
+      honest: boolean;
+    }>>("recall-completeness.json");
+    const expected = new Map<string, boolean>([
+      ["degraded outranks incomplete while preserving both reasons", true],
+      ["incomplete cannot understate degraded plus incomplete reasons", false],
+      ["degraded outranks partial while preserving both reasons", true],
+      ["partial cannot understate degraded plus partial reasons", false],
+      ["incomplete outranks partial while preserving both reasons", true],
+      ["partial cannot understate incomplete plus partial reasons", false],
+      ["degraded outranks all lower families while preserving every reason", true],
+      ["incomplete cannot understate all three reason families", false],
+      ["missing frontier limitation must remain in mixed reason set", false],
+    ]);
+
+    for (const [name, honest] of expected) {
+      const row = rows.find((candidate) => candidate.name === name);
+      expect(row).toBeDefined();
+      if (!row) throw new Error(`missing 0.1.1 mixed-precedence fixture: ${name}`);
+      expect(isTrustedRecallCompletenessHonest(row.page)).toBe(honest);
+    }
+  });
+
   test("packed strict-page fixtures retain their verdicts", async () => {
     const rows = await fixture<Array<{ page: unknown; safe: boolean }>>("page-conformance.json");
     for (const row of rows) {

@@ -3,19 +3,19 @@
   "publicationStatus": "upstream-branch-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.1.0",
-    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.1.0-0da61705.tgz"
+    "version": "0.1.1",
+    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.1.1-0604820d.tgz"
   },
   "artifact": {
-    "path": "vendor/contracts/omi-core-ratified-contracts-0.1.0-0da61705.tgz",
-    "sha256": "0da61705c0d1906e22d19f40ff8ab67ece435a303cd34c09c551ca437298e74b",
-    "sha512": "f45368044ca5d6078ef16f945fcee5319e846b533f63dc99f2f6cd26bd0cead63ab4c6ae3ed626a88abe019c1c0f291890560a1ee7fd74730dd2e010eaf7176e",
-    "integrity": "sha512-9FNoBEyl1geO8W+UX87lMZ6Ea1M/Y9yZ8vbNJr0M6tY6tMauPtYmqIq+AZwcDykYkFYKHuf9dHMN0uAQ6vcXbg==",
+    "path": "vendor/contracts/omi-core-ratified-contracts-0.1.1-0604820d.tgz",
+    "sha256": "0604820d02541a904124476fc75eda664195881444ef6a6f6424cdbd1b403de1",
+    "sha512": "81ed3faf874a82fd4c34318c131aa132ca1823cc5417a51f02897767db0b9a041e42090c0e02c0d75ab8651a81b6f3e8d5ea1f1d9485d2511a9ecdb4a923774b",
+    "integrity": "sha512-ge0/r4dKgv1MNDGMExqhMsoYI8xUF6UfAol3Z9sLmgQeQgkMDgLA11q4ZRqBtvPo1eofHZSF0lEans20qSN3Sw==",
     "metadataPath": "vendor/contracts/ARTIFACT.json",
-    "metadataSha256": "4d882b06ff681ad6905db4a07c01a2e0a057bffaf93cd3641b3f3968762349f0",
+    "metadataSha256": "20e453f0764dee589872523356caefe31aecff2dfbf1e881dbb48048fd7005b1",
     "provenancePath": "vendor/contracts/PROVENANCE.json",
-    "provenanceSha256": "32e84df64eb5ff20099dae15cf6a092c79849d9fc7aacf833255c600560ce6f3",
-    "sourceDigest": "81ad79497254690762d0555435388803d9be0dd5b7f1c29d308f31bfa29bc218",
+    "provenanceSha256": "5f6fd0d845af75e04ccf79c6afa67e6934927a49ffb4399a19362a9244c9f481",
+    "sourceDigest": "060e3a44f36e3e0126fd2ef38edd4b8fb2b7dbcb123c007bc58bd13e34cef153",
     "files": [
       "package/PROVENANCE.json",
       "package/README.md",
@@ -40,12 +40,12 @@
     "repository": "BasedHardware/omi",
     "path": "core/contracts/ratified",
     "ref": "refs/heads/codex/contract-seam-memory-read",
-    "commit": "d8a1daf53a3f1cc56df07bac7c0b9ca9bdbca789",
+    "commit": "3fb61c0df9a0de9bbfbf95b36c8928f56314950f",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
     "upstreamBranchPushed": true,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact source commit is pushed to the upstream coordination branch; it is not merged to main, registry-published, or adopted in production. This vendored tarball remains QA evidence."
+    "evidence": "The exact source commit is pushed to the upstream coordination branch only; it is not merged to main, registry-published, or adopted in production. This vendored tarball remains QA evidence."
   },
   "toolchain": {
     "artifactBuild": {
