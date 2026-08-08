@@ -6,7 +6,7 @@
  * store namespaces by uid exactly as shell bindings must.
  */
 
-import type { DurableKv, DurableLog, LogEntry, StorageBridge } from "@omi-core/contracts";
+import type { DurableKv, DurableLog, FallbackRecord, FallbackSink, LogEntry, StorageBridge } from "@omi-core/contracts";
 import type { Env } from "@omi-core/kernel";
 
 export class MemoryStore {
@@ -64,11 +64,31 @@ export class MemoryStore {
   }
 }
 
+/**
+ * The "in-memory" `FallbackSink` adapter from COORD-degradation-is-
+ * unobservable: inspectable, so a test can assert "degraded exactly once,
+ * reason X" directly against `.records`, rather than trusting emission into
+ * a void the way `case "telemetry": return;` did.
+ */
+export class InMemoryFallbackSink implements FallbackSink {
+  readonly records: FallbackRecord[] = [];
+
+  record(event: FallbackRecord): void {
+    this.records.push(event);
+  }
+}
+
 /** Deterministic time: timers fire only when the test advances the clock. */
 export class ManualEnv implements Env {
   private t = 1_000_000;
   private seed = 42;
   private timers: { at: number; fn: () => void; cancelled: boolean }[] = [];
+  /**
+   * A fresh sink per `ManualEnv` instance, which is a fresh sink per test —
+   * teardown is structural (the object is just garbage after the test ends),
+   * never a cleanup hook someone has to remember to call.
+   */
+  readonly fallbackSink = new InMemoryFallbackSink();
 
   now(): number {
     return this.t;

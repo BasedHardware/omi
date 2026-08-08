@@ -64,6 +64,12 @@ export type OperationOutcome =
 /**
  * What the dead-letter ("unsent items") surface renders. Owning this surface
  * is a REQUIREMENT of hosting the sync layer on a shell — not optional.
+ *
+ * COORD-cross-generation-writes ratified export-then-exclude for stranded
+ * writes: nothing is dropped, and each op is preserved with enough detail
+ * to reconstruct the user's edit BY HAND. `summary` alone cannot do that —
+ * "Edit memory abc123: content" tells a human which record changed, not
+ * what the new content was. `payload` is that detail.
  */
 export interface DeadLetter {
   opId: string;
@@ -71,6 +77,36 @@ export interface DeadLetter {
   domain: string;
   /** Human-readable reconstruction of what the user tried to do. */
   summary: string;
+  /**
+   * The serialized domain op — same string `PendingOp.payload` carried
+   * (the full create/patch/delete, including the actual patch fields, not
+   * just their names). This is what lets a human reproduce the edit by
+   * hand rather than merely knowing one happened.
+   *
+   * Optional ONLY for backward compatibility: dead letters journaled before
+   * this field existed have no `payload`. Never omit it when constructing a
+   * new one — `Outbox` always sets it. A reader must not assume presence;
+   * use `deadLetterPayload()` rather than `JSON.parse(letter.payload)`
+   * directly, so an old record renders as "unavailable" instead of
+   * throwing.
+   */
+  payload?: string;
   failure: Extract<WriteFailure, { kind: "permanent" }>;
   deadAt: number;
+}
+
+/**
+ * Safe read of a dead letter's reconstructable edit. Returns `null` — never
+ * throws — when `payload` is absent (a dead letter journaled before this
+ * field existed) or malformed (should not happen; defensive). Callers that
+ * need the patch to reconstruct a user's edit by hand should go through
+ * this rather than `JSON.parse(letter.payload)` directly.
+ */
+export function deadLetterPayload(letter: DeadLetter): unknown | null {
+  if (letter.payload === undefined) return null;
+  try {
+    return JSON.parse(letter.payload) as unknown;
+  } catch {
+    return null;
+  }
 }
