@@ -154,7 +154,9 @@ if (existsSync(productionRoot)) {
     const isSafeAttribute = (name) =>
       name === "className" || name === "class" || name === "id" || name === "role" || name === "aria-current" ||
       name === "name" || name === "type" || name === "value" || name === "href" ||
-      name === "src" || name === "style" || name === "key" || name.startsWith("data-");
+      name === "src" || name === "style" || name === "key" || name === "active" || name === "placement" ||
+      name === "aria-labelledby" || name.startsWith("data-");
+    const isNonCopyLiteral = (value) => /^[+×★☆]$/.test(value.trim());
     const reportVisibleLiteral = (node, context) => {
       const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
       const relative = file.startsWith(`${root}/`) ? file.slice(root.length + 1) : file;
@@ -162,15 +164,15 @@ if (existsSync(productionRoot)) {
     };
     const visitAst = (node) => {
       if (ts.isJsxText(node)) {
-        if (node.getText(sourceFile).trim() !== "") reportVisibleLiteral(node, "JSX text");
+        if (node.getText(sourceFile).trim() !== "" && !isNonCopyLiteral(node.getText(sourceFile))) reportVisibleLiteral(node, "JSX text");
       } else if (ts.isJsxAttribute(node)) {
         const name = node.name.getText(sourceFile);
         const initializer = node.initializer;
         if (!isSafeAttribute(name) && initializer) {
-          if (ts.isStringLiteral(initializer)) reportVisibleLiteral(initializer, `attribute ${name}`);
+          if (ts.isStringLiteral(initializer) && !isNonCopyLiteral(initializer.text)) reportVisibleLiteral(initializer, `attribute ${name}`);
           else if (ts.isJsxExpression(initializer) && initializer.expression) {
             const expression = initializer.expression;
-            if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+            if ((ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) && !isNonCopyLiteral(expression.text)) {
               reportVisibleLiteral(expression, `attribute ${name}`);
             }
           }
@@ -180,7 +182,7 @@ if (existsSync(productionRoot)) {
         const attribute = ts.isJsxAttribute(node.parent) ? node.parent : undefined;
         const attributeName = attribute?.name.getText(sourceFile);
         if ((!attribute || !isSafeAttribute(attributeName)) &&
-            (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression))) {
+            (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) && !isNonCopyLiteral(expression.text)) {
           reportVisibleLiteral(expression, "JSX expression");
         }
       }

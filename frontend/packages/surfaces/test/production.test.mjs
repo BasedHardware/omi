@@ -9,24 +9,101 @@ const read = (relative) => readFile(resolve(root, relative), "utf8");
 
 test("production entry gates fixtures and marks the explicit host platform", async () => {
   const source = await read("src/production/main.tsx");
-  assert.match(source, /query\.get\("qa"\) === "memories"/);
+  assert.match(source, /requestedQa === "memories"/);
   assert.match(source, /dataset\["platform"\]/);
   assert.match(source, /dataset\["theme"\]/);
   assert.match(source, /OMI_PRODUCTION_READY/);
   // red-proof: removing the qa=memories guard would make arbitrary URL state
   // values enter the synthetic fixture path in a production shell.
-  assert.doesNotMatch(source, /const fixtureValue = query\.get\("state"\);/);
+  assert.match(source, /const fixtureValue = query\.get\("state"\);/);
+  assert.match(source, /requestedQa === "memories"/);
+  assert.match(source, /fixtureConversationDetailId\(conversationFixture\)/);
+  assert.match(source, /fixtureConversationStore\(conversationFixture, requestedQa === "conversation-detail"\)/);
+  assert.match(source, /requestedQa === "tasks"/);
+  assert.match(source, /TASK_FIXTURE_STATES\.includes/);
+  assert.match(source, /TasksStore\.open\(bridge, env, http\)/);
+  assert.match(source, /now=\{TASK_FIXED_NOW\}/);
+  // red-proof: dropping the detail-fixture fallback strands the documented
+  // qa=conversation-detail URL on a not-found view unless a hidden row ID is
+  // supplied; dropping the tasks guard lets an arbitrary state select a task
+  // fixture or leaves the production Tasks navigation pointing at Memories.
 });
 
 test("desktop-only Rewind stays out of mobile captured tabs", async () => {
-  const source = await read("src/production/MemoriesProduction.tsx");
+  const source = await read("src/production/ProductionChrome.tsx");
   const mobileTabs = source.match(/<div className="nav-mobile">([\s\S]*?)<\/div>/)?.[1] ?? "";
   assert.match(source, /nav\.rewind/);
-  assert.match(source, /desktop-library-segment/);
   assert.doesNotMatch(mobileTabs, /nav\.rewind/);
   assert.match(mobileTabs, /nav\.conversations/);
   assert.match(mobileTabs, /nav\.tasks/);
   // red-proof: adding Rewind to nav-mobile violates the binding's desktop-only rule.
+});
+
+test("conversation production slice stays within the ratified list/detail contract", async () => {
+  const source = await read("src/production/ConversationsProduction.tsx");
+  const fixtures = await read("src/production/conversation-fixtures.ts");
+  assert.match(source, /store\.patch\(conversation\.id/);
+  assert.match(source, /folderId/);
+  assert.match(source, /formatDuration/);
+  assert.match(source, /conversation-detail/);
+  assert.doesNotMatch(source, /store\.create/);
+  assert.match(source, /store\.delete\(conversation\.id\)/);
+  assert.match(fixtures, /delete\(conversationId\)/);
+  assert.doesNotMatch(source, /failure\.detail/);
+  assert.doesNotMatch(source, /participants|transcript|generate|chat/i);
+  for (const state of ["loading", "empty", "empty-summary", "fallbacks", "unavailable", "saved-failed", "queued", "sending", "retrying", "needs-auth", "dead", "normal", "locked", "discarded", "long"]) {
+    assert.match(fixtures, new RegExp(`\\"${state}\\"`));
+  }
+  assert.match(fixtures, /isLocked: true/);
+  assert.match(fixtures, /discarded: true/);
+  assert.match(fixtures, /parseRecordId/);
+  assert.match(fixtures, /if \(state === "empty" && detail\)/);
+  assert.match(source, /\{canPatch && <div className="conversation-detail-actions">/);
+  const editableActions = source.match(/\{canPatch && <div className="conversation-detail-actions">([\s\S]*?)<\/div>\}/)?.[1] ?? "";
+  assert.match(editableActions, /store\.delete\(conversation\.id\)/);
+  assert.match(source, /conversations\.discardedBody/);
+  assert.match(source, /conversation\.starred \? t\(locale, "conversations\.unstar"\) : t\(locale, "conversations\.star"\)/);
+  // red-proof: moving delete outside canPatch lets locked/discarded rows mutate
+  // and makes this contract guard fail; swapping the visible star labels makes
+  // the action announce the opposite of what it will do.
+});
+
+test("conversation rows are compact, day-grouped, and only attribute safe sources", async () => {
+  const source = await read("src/production/ConversationsProduction.tsx");
+  const fixtures = await read("src/production/conversation-fixtures.ts");
+  assert.match(source, /conversation-day-group/);
+  assert.match(source, /dayLabel\(timestamp, locale, Boolean\(fixture\)\)/);
+  assert.match(source, /filter === "starred" \? rows\.filter/);
+  assert.match(source, /aria-pressed=\{filter === "all"\}/);
+  assert.match(source, /sourceAttribution\(conversation\.source, locale\)/);
+  const attribution = source.match(/function sourceAttribution\([\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(attribution, /source\.trim\(\)\.toLowerCase\(\) === "omi"/);
+  assert.match(attribution, /: null;/);
+  assert.doesNotMatch(attribution, /return source;/);
+  assert.match(source, /conversations\.dateUnavailable/);
+  assert.match(source, /conversations\.noDuration/);
+  assert.match(fixtures, /Date\.UTC/);
+  assert.match(fixtures, /startedAt: null/);
+  const rowSource = source.match(/function ConversationRow\([\s\S]*?function ConversationDetail/)?.[0] ?? "";
+  assert.match(rowSource, /conversation\.starred \? t\(locale, "conversations\.unstar"\) : t\(locale, "conversations\.star"\)/);
+  // red-proof: returning the raw source string, removing the day group, or
+  // bringing back a wall-clock fixture makes the relevant assertion fail;
+  // reversing the visible star label makes the row action contradict its aria
+  // label and the current starred state.
+});
+
+test("production chrome preserves QA context while clearing fixture selection", async () => {
+  const source = await read("src/production/ProductionChrome.tsx");
+  assert.match(source, /params\.delete\("qa"\)/);
+  assert.match(source, /params\.delete\("state"\)/);
+  assert.match(source, /params\.get\("platform"\)|location\.search/);
+  assert.match(source, /href\("tasks"\)/);
+  assert.match(source, /active === "tasks" \? "page"/);
+  assert.match(source, /top && active !== "tasks"/);
+  // red-proof: route links must not strand mobile/platform/profile QA on the
+  // prior fixture, while profile remains available for the bridge shell. A
+  // Tasks route must also identify itself in both navs without inheriting the
+  // Library-only segmented rail.
 });
 
 test("memory cards keep locked and provenance behavior honest", async () => {
