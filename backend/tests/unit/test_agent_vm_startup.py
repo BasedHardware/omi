@@ -148,6 +148,21 @@ def test_startup_bootstraps_read_only_state_tooling_contract() -> None:
     assert source.index('state_fsync_tree "$data_dir"') < source.index('state_write_receipt "$state_receipt"')
 
 
+def test_startup_expands_the_gce_root_partition_before_state_or_docker_work() -> None:
+    source = STARTUP.read_text(encoding="utf-8")
+
+    assert 'root_source="$(findmnt --noheadings --output SOURCE /)"' in source
+    assert 'root_partition="$(readlink -f "$root_source")"' in source
+    assert 'parent_name="$(lsblk --noheadings --output PKNAME "$root_partition"' in source
+    assert 'partition_number="$(lsblk --noheadings --output PARTN "$root_partition"' in source
+    assert 'disk_size="$(blockdev --getsize64 "$root_disk")"' in source
+    assert 'partition_size="$(blockdev --getsize64 "$root_partition")"' in source
+    assert 'growpart "$root_disk" "$partition_number"' in source
+    assert 'resize2fs "$root_partition"' in source
+    assert source.index("expand_root_filesystem\n") < source.index("quiesce_docker_before_state_mount\n")
+    assert source.index("quiesce_docker_before_state_mount\n") < source.index("ensure_docker_daemon\n")
+
+
 def _write_fake_command(bin_dir: Path, name: str, body: str) -> None:
     path = bin_dir / name
     path.write_text(f"#!/bin/bash\n{body}\n", encoding="utf-8")
