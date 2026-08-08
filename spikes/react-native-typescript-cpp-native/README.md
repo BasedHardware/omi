@@ -298,7 +298,56 @@ open https://crepuscularity.tsc.hk
 
 The local benchmark shows no meaningful difference between the three simulated adapter shapes at this synthetic boundary. It does not measure React Native, browser, Moonshine, or real C++ module runtime performance. The TypeScript-first architecture with a narrow C++ native-function boundary remains the recommended PoC direction.
 
-## 9. Real React Native Runtime Attempt
+### Expanded framework comparison
+
+This is an architecture comparison, not a claim that every framework was built in this spike. The decisive constraints are Omi-v4's mobile BLE ownership, background relay, audio/WAL boundary, TypeScript preference, and existing Flutter/native investment.
+
+| Option | Best fit | Omi-v4 fit | Main cost/risk | Spike verdict |
+|---|---|---|---|---|
+| **Bare React Native + TypeScript** | iOS/Android product UI with TypeScript domain contracts | Strong mobile-shell fit; native BLE adapters and C++/TurboModule seam are expressible | Native lifecycle and module work remains; desktop is not one uniform target | **Best ecosystem/TS-first mobile baseline** |
+| **Valdi** | Native iOS/Android/macOS UI authored in TypeScript | Very strong shape for this question: official project claims native views, no webview/JS bridge, and type-safe C++/Swift/Kotlin/Objective-C polyglot modules | Public project is beta; smaller ecosystem and less Omi-v4-specific proof than Flutter/RN; setup/tooling needs independent validation | **Strongest new TS-native mobile challenger** |
+| **Flutter** | Existing Omi mobile relay and cross-platform UI | Highest immediate parity because the current relay is Flutter-owned | Dart becomes the primary UI language; does not answer the TS preference | **Lowest migration risk** |
+| **Tauri 2** | Desktop/webview shell with Rust commands and web UI | Good for desktop, Rust-owned native capabilities, and C/C++ via Rust FFI; Tauri documentation exposes iOS/Android targets | Mobile is a separate native-plugin path, not a drop-in BLE solution; webview/native boundary still has to be maintained | **Strong desktop candidate; secondary mobile candidate** |
+| **Dioxus** | Rust-owned UI across web/desktop and experimental/mobile paths | Attractive if Rust becomes the shared application owner; C++ can sit behind Rust FFI | Adds a Rust UI/runtime decision and has less Omi-v4 mobile proof than Flutter/RN | **Interesting Rust alternative, not yet the smallest spike** |
+| **Crepuscularity** | Rust-owned DSL, GPUI desktop, web/extensions, and native View IR | Local repo proves GPUI, web, TUI, C ABI, SwiftUI/Compose View IR, and Tauri integration surfaces | Mobile View IR is not the same as a proven BLE/background relay; adopting it would be a new Rust/IR architecture | **Strong desktop/shared-UI comparison; do not call it mobile-proven** |
+| **Electrobun** | Very small TypeScript/Bun desktop apps | Excellent TS fit for desktop tooling and native desktop capabilities | Desktop-focused; does not solve iOS/Android mobile BLE/background lifecycle | **Desktop-only candidate** |
+| **Jetpack Compose Multiplatform** | Kotlin-native Android/iOS/desktop UI | Strong native mobile lifecycle and Android BLE ergonomics; C++ can bind through JNI/Objective-C++ | Kotlin becomes the app language and the TS-first goal is lost; iOS and desktop still need platform work | **Strong native mobile option, weak TS alignment** |
+| **Web TS + Moonshine** | Browser voice/UI experiments | Useful for web rendering/ASR boundary tests | No reliable mobile BLE/background relay or native device ownership | **Web/ASR-only comparison** |
+
+**Not included by request:** Lynx and Makepad.
+
+#### Recommendation from the expanded comparison
+
+Keep the PoC decision split into two independent questions:
+
+1. **Mobile shell:** compare Valdi, RN + TypeScript, and the existing Flutter shell. Valdi is the strongest new TS-native challenger if its beta tooling and native-module workflow survive a real device spike; RN is the safer ecosystem baseline; Flutter remains the safest parity baseline.
+2. **Desktop shell:** compare Tauri, Crepuscularity, Electrobun, and the existing native shell separately. Do not force the mobile winner onto macOS.
+3. **Shared relay:** keep the Omi relay contract/platform adapters independently testable. C++ is optional at the narrow native boundary; it is not a reason to adopt a Rust UI framework or rewrite the Flutter relay.
+
+Evidence anchors for this comparison:
+
+- [Tauri guides](https://tauri.app/start/) — Rust/webview host and documented desktop/mobile distribution surfaces.
+- [Dioxus documentation](https://dioxuslabs.com/learn/0.6/getting_started/) — Rust UI/runtime candidate.
+- [Electrobun](https://electrobun.dev/) — Bun/TypeScript desktop candidate.
+- [Compose Multiplatform documentation](https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform.html) — Kotlin native/mobile candidate.
+- [Valdi repository](https://github.com/Snapchat/Valdi) — TypeScript-to-native-view and polyglot-module claims; repository labels the project beta.
+- [Local Crepuscularity README](file:///Users/undivisible/projects/crepuscularity/README.md) — inspected local evidence for GPUI, Tauri integration, native View IR, C ABI, and mobile scaffolding.
+
+The next discriminating experiment is therefore one real mobile native adapter—not another UI framework benchmark:
+
+```text
+RN or Flutter mobile shell
+        │
+platform BLE adapter
+        │
+Omi-v4-compatible relay contract
+        │
+optional C++ narrow native function
+```
+
+---
+
+## 10. Real React Native Runtime Attempt
 
 This spike also contains `rn-runtime/`, a fresh bare React Native 0.79.2 shell generated with the React Native CLI. It is intentionally separate from production code and contains no BLE dependency or production SDK import.
 
@@ -317,7 +366,7 @@ The Android result is real shell/build evidence, but this spike still does not p
 
 ---
 
-## 10. Observability Decision
+## 11. Observability Decision
 
 The observability shape follows the current Omi-v4 decision record, without importing Omi-v4 production code:
 
