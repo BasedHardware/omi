@@ -311,6 +311,27 @@ def close_runtime_database() -> None:
                 pass
 
 
+async def run_thread_operation(function: Any, *args: Any) -> Any:
+    """Run a blocking operation without abandoning it when the caller is cancelled."""
+    operation = asyncio.create_task(asyncio.to_thread(function, *args))
+    try:
+        return await asyncio.shield(operation)
+    except asyncio.CancelledError:
+        while not operation.done():
+            try:
+                await asyncio.shield(operation)
+            except asyncio.CancelledError:
+                continue
+            except BaseException:
+                break
+        if operation.done():
+            try:
+                operation.result()
+            except BaseException:
+                pass
+        raise
+
+
 def restore_previous_database(
     previous: Path,
     prior_moved: bool,
@@ -409,18 +430,18 @@ async def upload_database(request: Request) -> tuple[int, int]:
                 output.write(data)
                 final_size += len(data)
             output.flush()
-        fsync_file(temporary)
-        fsync_directory(temporary.parent)
+        await run_thread_operation(fsync_file, temporary)
+        await run_thread_operation(fsync_directory, temporary.parent)
         if final_size > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail={"error": "File too large", "maxBytes": MAX_UPLOAD_BYTES})
         try:
-            integrity = await asyncio.to_thread(validate_database_integrity, temporary)
+            integrity = await run_thread_operation(validate_database_integrity, temporary)
         except sqlite3.Error as exc:
             raise HTTPException(status_code=400, detail="Uploaded database is not valid SQLite") from exc
         if integrity != ["ok"]:
             raise HTTPException(status_code=400, detail="Uploaded database failed SQLite integrity check")
 
-        await asyncio.to_thread(install_uploaded_database, temporary)
+        await run_thread_operation(install_uploaded_database, temporary)
         runtime.last_activity_at = time.monotonic()
         return received, final_size
     except HTTPException:

@@ -48,6 +48,7 @@ from utils.subscription import is_trial_paywalled
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _ZONE = "us-central1-a"
+_GCE_NUMERIC_ID = re.compile(r"[0-9]+")
 _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 _READY_TIMEOUT_SECONDS = 300
 _READY_POLL_SECONDS = 5
@@ -283,7 +284,7 @@ def _set_vm_if_current_txn(
     else:
         next_vm.pop("ip", None)
     if instance_id is not None:
-        if not instance_id.isdigit():
+        if not _GCE_NUMERIC_ID.fullmatch(instance_id):
             raise ValueError("Agent VM instance ID must be numeric")
         next_vm["instanceId"] = instance_id
     transaction.set(user_ref, {"agentVm": next_vm}, merge=True)
@@ -477,7 +478,7 @@ async def _create_vm(
     if instance is None:
         raise AgentVmCreateOutcomeUnknown("GCE created VM is unavailable")
     instance_id = str(instance.get("id") or "")
-    if not instance_id:
+    if not _GCE_NUMERIC_ID.fullmatch(instance_id):
         raise AgentVmCreateOutcomeUnknown("created Agent VM identity is unavailable")
     private_ip = GceAgentVmClient.private_instance_ip(instance)
     ip = _ip(instance)
@@ -517,6 +518,8 @@ async def _delete_vm(
     expected_owner_hash: str | None = None,
 ) -> bool:
     if expected_instance_id is not None or expected_owner_hash is not None:
+        if expected_instance_id is not None and not _GCE_NUMERIC_ID.fullmatch(expected_instance_id):
+            raise AgentVmIdentityMismatch("late Agent VM cleanup instance identity is invalid")
         _, instance = await _instance(project, zone, vm_name)
         if instance is None:
             return True
@@ -698,7 +701,14 @@ async def _delete_late_vm_or_record(
     except AgentVmIdentityMismatch:
         raise
     except Exception:
-        await run_blocking(db_executor, users_db.record_late_agent_vm_cleanup, uid, vm_name, zone)
+        await run_blocking(
+            db_executor,
+            users_db.record_late_agent_vm_cleanup,
+            uid,
+            vm_name,
+            zone,
+            expected_instance_id,
+        )
         raise
 
 

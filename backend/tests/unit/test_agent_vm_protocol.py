@@ -186,6 +186,54 @@ def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monk
     assert result == (len(payload), len(payload))
 
 
+def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
+    started = threading.Event()
+    release = threading.Event()
+    worker = None
+    calls = 0
+
+    def slow_fsync(_path):
+        nonlocal calls, worker
+        calls += 1
+        if calls == 1:
+            worker = threading.current_thread()
+            started.set()
+            assert release.wait(2)
+
+    monkeypatch.setattr(module, "fsync_file", slow_fsync)
+
+    class Request:
+        headers = {"content-length": str(len(payload))}
+
+        async def stream(self):
+            yield payload
+
+    async def run_upload():
+        upload_task = asyncio.create_task(module.upload_database(Request()))
+        assert await asyncio.to_thread(started.wait, 1)
+        await asyncio.sleep(0.01)
+        elapsed = time.monotonic() - started_at
+        release.set()
+        result = await upload_task
+        return elapsed, result
+
+    timer = threading.Timer(0.2, release.set)
+    started_at = time.monotonic()
+    timer.start()
+    try:
+        elapsed, result = asyncio.run(run_upload())
+    finally:
+        release.set()
+        timer.cancel()
+        module.runtime.close_database()
+
+    assert elapsed < 0.15
+    assert worker is not threading.main_thread()
+    assert result == (len(payload), len(payload))
+
+
 def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path: Path, monkeypatch) -> None:
     _, module = load_app(tmp_path)
     create_database(module.runtime.db_path, "durable", "preserved")
@@ -248,6 +296,60 @@ def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path:
     assert query_blocked
     assert result == (len(payload), len(payload))
     assert json.loads(query_result) == {"rows": [{"1": 1}], "count": 1}
+
+
+def test_cancelled_database_upload_waits_for_install_before_reusing_temp_path(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    payload = create_database(tmp_path / "uploaded.db", "replacement", "ready")
+    temporary = module.runtime.db_path.with_suffix(".db.uploading")
+    install_started = threading.Event()
+    release_install = threading.Event()
+    worker_saw_temp_path = []
+    install_calls = 0
+
+    monkeypatch.setattr(module.runtime, "require_auth", lambda _request: None)
+
+    def blocking_install(path):
+        nonlocal install_calls
+        install_calls += 1
+        install_started.set()
+        assert release_install.wait(2)
+        worker_saw_temp_path.append(path.exists())
+
+    monkeypatch.setattr(module, "install_uploaded_database", blocking_install)
+
+    class Request:
+        headers = {"content-length": str(len(payload))}
+
+        async def stream(self):
+            yield payload
+
+    async def run_uploads():
+        first = asyncio.create_task(module.upload(Request()))
+        assert await asyncio.to_thread(install_started.wait, 1)
+        second = asyncio.create_task(module.upload(Request()))
+        await asyncio.sleep(0.01)
+        first.cancel()
+        await asyncio.sleep(0.01)
+        assert not first.done()
+        assert not second.done()
+        assert temporary.exists()
+        release_install.set()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        result = await second
+        return result
+
+    try:
+        result = asyncio.run(run_uploads())
+    finally:
+        release_install.set()
+        module.runtime.close_database()
+
+    assert result == {"status": "ok", "bytesReceived": len(payload), "finalSize": len(payload), "databaseReady": True}
+    assert install_calls == 2
+    assert worker_saw_temp_path == [True, True]
+    assert not temporary.exists()
 
 
 def test_valid_database_upload_atomically_replaces_open_database(tmp_path: Path) -> None:

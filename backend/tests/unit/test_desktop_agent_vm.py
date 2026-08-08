@@ -266,7 +266,7 @@ async def test_late_created_vm_cleanup_is_persisted_when_provider_delete_fails(m
         "uid", "project", "image", "bucket", "omi-agent-uid", "omi-token", "service-account"
     )
 
-    assert persisted == [("uid", "omi-agent-uid", "us-central1-a")]
+    assert persisted == [("uid", "omi-agent-uid", "us-central1-a", "123456789")]
 
 
 @pytest.mark.asyncio
@@ -320,7 +320,7 @@ async def test_create_error_after_deletion_admission_still_records_possible_late
         "uid", "project", "image", "bucket", "omi-agent-uid", "omi-token", "service-account"
     )
 
-    assert persisted == [("uid", "omi-agent-uid", "us-central1-a")]
+    assert persisted == [("uid", "omi-agent-uid", "us-central1-a", None)]
 
 
 @pytest.mark.asyncio

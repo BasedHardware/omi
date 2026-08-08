@@ -262,12 +262,7 @@ def _validate_instance_identity(
 
 
 def _current_vm_instance_id(vm: Mapping[str, Any], plans: list[_AgentVmMigrationCleanupPlan]) -> str:
-    stored_value = vm.get('instanceId')
-    stored_id = ''
-    if stored_value not in (None, ''):
-        if not isinstance(stored_value, str) or not _GCE_NUMERIC_ID.fullmatch(stored_value):
-            raise RuntimeError('current Agent VM instance identity is ambiguous')
-        stored_id = stored_value
+    stored_id = _stored_vm_instance_id(vm)
 
     journaled_ids: set[str] = set()
     vm_name = _journal_name(vm, 'vmName')
@@ -289,11 +284,25 @@ def _current_vm_instance_id(vm: Mapping[str, Any], plans: list[_AgentVmMigration
     raise RuntimeError('current Agent VM instance identity is ambiguous')
 
 
+def _stored_vm_instance_id(vm: Mapping[str, Any]) -> str:
+    stored_ids: set[str] = set()
+    for field in ('instanceId', 'expectedInstanceId'):
+        stored_value = vm.get(field)
+        if stored_value in (None, ''):
+            continue
+        if not isinstance(stored_value, str) or not _GCE_NUMERIC_ID.fullmatch(stored_value):
+            raise RuntimeError('current Agent VM instance identity is ambiguous')
+        stored_ids.add(stored_value)
+    if len(stored_ids) > 1:
+        raise RuntimeError('current Agent VM instance identity is ambiguous')
+    return next(iter(stored_ids), '')
+
+
 def _current_vm_expected_instance_id(vm: Mapping[str, Any], plans: list[_AgentVmMigrationCleanupPlan]) -> str | None:
     """Return the durable instance fence, leaving only truly legacy VMs unresolved."""
     vm_name = _journal_name(vm, 'vmName')
     has_matching_journal = any(vm_name in {plan['old_vm_name'], plan['candidate_vm_name']} for plan in plans)
-    if vm.get('instanceId') not in (None, '') or has_matching_journal:
+    if _stored_vm_instance_id(vm) or has_matching_journal:
         return _current_vm_instance_id(vm, plans)
     return None
 
@@ -331,6 +340,40 @@ def _metadata_value(instance: Mapping[str, Any], key: str) -> str:
     return values[0]
 
 
+def _validate_active_pointer_instance_identity(
+    instance: Mapping[str, Any],
+    active_vm: Mapping[str, Any] | None,
+    *,
+    expected_id: str,
+    owner_label: str,
+) -> None:
+    """Fence an active migration resource using the durable Firestore pointer.
+
+    The predecessor can be observed between the journal write and the provider
+    label update. Its migration label is therefore not an identity fence. The
+    pointer's auth token and provider numeric ID are durable, while the owner
+    label is optional for legacy resources but never allowed to disagree.
+    """
+    if not _GCE_NUMERIC_ID.fullmatch(expected_id) or _provider_numeric_id(instance, 'active instance') != expected_id:
+        raise RuntimeError('Agent VM migration instance identity is ambiguous')
+    labels = instance.get('labels')
+    if labels is None:
+        labels = {}
+    elif not isinstance(labels, Mapping):
+        raise RuntimeError('Agent VM owner identity is ambiguous')
+    observed_owner = labels.get('omi-agent-owner')
+    if observed_owner not in (None, owner_label):
+        raise RuntimeError('Agent VM owner identity is ambiguous')
+    if not isinstance(active_vm, Mapping):
+        raise RuntimeError('Agent VM owner identity is ambiguous')
+    auth_token = active_vm.get('authToken')
+    if isinstance(auth_token, str) and auth_token:
+        if _metadata_value(instance, 'auth-token') != auth_token:
+            raise RuntimeError('Agent VM auth-token identity is ambiguous')
+    elif observed_owner != owner_label:
+        raise RuntimeError('Agent VM owner identity is ambiguous')
+
+
 def _load_legacy_firestore_vm(
     uid: str,
     original_vm: Mapping[str, Any],
@@ -354,10 +397,8 @@ def _load_legacy_firestore_vm(
         raise RuntimeError('current Agent VM identity changed during cleanup')
     _firestore_auth_token(current_vm)
 
-    current_instance_id = current_vm.get('instanceId')
-    if current_instance_id not in (None, ''):
-        if not isinstance(current_instance_id, str) or not _GCE_NUMERIC_ID.fullmatch(current_instance_id):
-            raise RuntimeError('current Agent VM instance identity is ambiguous')
+    current_instance_id = _stored_vm_instance_id(current_vm)
+    if current_instance_id:
         if current_instance_id != provider_id:
             raise RuntimeError('current Agent VM identity changed during cleanup')
     return current_vm
@@ -378,7 +419,9 @@ def _validate_legacy_current_instance_identity(
         raise RuntimeError('current Agent VM auth-token identity is ambiguous')
 
     labels = instance.get('labels')
-    if not isinstance(labels, Mapping):
+    if labels is None:
+        labels = {}
+    elif not isinstance(labels, Mapping):
         raise RuntimeError('current Agent VM owner identity is ambiguous')
     observed_owner = labels.get('omi-agent-owner')
     if observed_owner not in (None, owner_label):
@@ -469,8 +512,8 @@ def _load_agent_vm_migration_cleanup_plans(
             raise RuntimeError('Agent VM migration source clone identity is ambiguous')
         old_is_active_pointer = active_vm_name == old_vm_name
         candidate_is_active_pointer = active_vm_name == candidate_vm_name
-        old_uses_shared_fence = journal.get('state') == 'completed' and (
-            old_is_active_pointer or (old_vm_name, old_instance_id) in shared_instance_keys
+        old_uses_shared_fence = old_is_active_pointer or (
+            journal.get('state') == 'completed' and (old_vm_name, old_instance_id) in shared_instance_keys
         )
         if old_is_active_pointer and candidate_is_active_pointer:
             raise RuntimeError('Agent VM migration journal names are ambiguous')
@@ -478,7 +521,19 @@ def _load_agent_vm_migration_cleanup_plans(
         old_instance = _compute_resource(client, headers, _compute_instance_url(project, zone, old_vm_name), 'instance')
         if old_instance is not None:
             if old_uses_shared_fence:
-                _validate_current_instance_identity(old_instance, expected_id=old_instance_id, owner_label=owner_label)
+                if old_is_active_pointer:
+                    _validate_active_pointer_instance_identity(
+                        old_instance,
+                        active_vm,
+                        expected_id=old_instance_id,
+                        owner_label=owner_label,
+                    )
+                else:
+                    _validate_current_instance_identity(
+                        old_instance,
+                        expected_id=old_instance_id,
+                        owner_label=owner_label,
+                    )
             else:
                 _validate_instance_identity(old_instance, expected_id=old_instance_id, migration_id=migration_id)
 
@@ -489,17 +544,27 @@ def _load_agent_vm_migration_cleanup_plans(
             candidate_id_is_journaled = bool(candidate_instance_id)
             if not candidate_instance_id:
                 candidate_instance_id = _provider_numeric_id(candidate_instance, 'candidate instance')
-            candidate_uses_shared_fence = (
-                journal.get('state') == 'completed'
-                and candidate_id_is_journaled
-                and (candidate_is_active_pointer or (candidate_vm_name, candidate_instance_id) in shared_instance_keys)
+            candidate_uses_shared_fence = candidate_id_is_journaled and (
+                candidate_is_active_pointer
+                or (
+                    journal.get('state') == 'completed'
+                    and (candidate_vm_name, candidate_instance_id) in shared_instance_keys
+                )
             )
             if candidate_uses_shared_fence:
-                _validate_current_instance_identity(
-                    candidate_instance,
-                    expected_id=candidate_instance_id,
-                    owner_label=owner_label,
-                )
+                if candidate_is_active_pointer:
+                    _validate_active_pointer_instance_identity(
+                        candidate_instance,
+                        active_vm,
+                        expected_id=candidate_instance_id,
+                        owner_label=owner_label,
+                    )
+                else:
+                    _validate_current_instance_identity(
+                        candidate_instance,
+                        expected_id=candidate_instance_id,
+                        owner_label=owner_label,
+                    )
             else:
                 _validate_instance_identity(
                     candidate_instance,

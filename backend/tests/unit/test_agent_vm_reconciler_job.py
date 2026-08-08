@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from dataclasses import replace
-from typing import Any
+from typing import Any, Mapping
 
 import pytest
 
@@ -248,7 +248,8 @@ def test_boot_image_migration_plan_rejects_whitespace_only_allowed_uids(monkeypa
         reconciler._boot_image_migration_plan(raw, RELEASE)
 
 
-def test_boot_image_migration_replaces_only_an_already_stopped_allowlisted_vm(monkeypatch):
+@pytest.mark.parametrize("firestore_status", ["stopped", "ready"])
+def test_boot_image_migration_replaces_only_a_provider_stopped_allowlisted_vm(monkeypatch, firestore_status):
     class MigrationApi:
         creates: list[tuple[Any, ...]] = []
         labels: list[str] = []
@@ -384,7 +385,7 @@ def test_boot_image_migration_replaces_only_an_already_stopped_allowlisted_vm(mo
     result = asyncio.run(
         reconciler.reconcile_one(
             "dev-user",
-            {"vmName": "omi-agent-user", "authToken": "old-token", "status": "stopped"},
+            {"vmName": "omi-agent-user", "authToken": "old-token", "status": firestore_status},
             RELEASE,
             owner="worker",
             project="project",
@@ -406,6 +407,28 @@ def test_boot_image_migration_replaces_only_an_already_stopped_allowlisted_vm(mo
         "diskId": next(disk["id"] for name, disk in MigrationApi.disks.items() if name.startswith("omi-agent-source-")),
     }
     assert cutovers[-1]["stateDisk"]["diskId"].endswith("-id")
+
+
+def test_boot_image_migration_never_replaces_a_provider_running_vm_with_stale_ready_status():
+    class RunningApi:
+        async def get_instance(self, _name: str) -> dict[str, Any]:
+            return {"id": "old-id", "status": "RUNNING"}
+
+    result = asyncio.run(
+        reconciler._replace_stopped_boot_image_drift(
+            "dev-user",
+            {"vmName": "omi-agent-user", "authToken": "old-token", "status": "ready"},
+            {"id": "old-id", "status": "RUNNING"},
+            RELEASE,
+            reconciler.BootImageMigrationPlan(frozenset({"dev-user"}), 1, 60),
+            owner="worker",
+            api=RunningApi(),
+        )
+    )
+
+    assert result == reconciler.ReconcileResult(
+        "dev-user", "recreate_required", "boot-image migration requires an already stopped VM"
+    )
 
 
 def test_migration_allowlist_owners_are_selected_outside_the_rollout_cohort(monkeypatch):
@@ -1275,10 +1298,234 @@ def test_boot_image_migration_retirement_enables_state_auto_delete_after_journal
     assert result and result.state == "retired"
     assert events == [
         ("claim-retirement",),
-        ("auto-delete", "candidate", lifecycle.STATE_DISK_DEVICE_NAME, True),
         ("delete-predecessor", "old-vm", "old-id", migration["migrationId"]),
         ("complete-migration",),
+        ("auto-delete", "candidate", lifecycle.STATE_DISK_DEVICE_NAME, True),
     ]
+
+
+def test_boot_image_migration_retirement_keeps_state_disk_protected_when_source_cleanup_fails(monkeypatch):
+    events: list[tuple[Any, ...]] = []
+
+    class RetirementApi:
+        async def get_instance(self, _name: str) -> dict[str, Any]:
+            return {
+                "id": "candidate-id",
+                "status": "RUNNING",
+                "disks": [
+                    {
+                        "boot": False,
+                        "deviceName": lifecycle.STATE_SOURCE_DEVICE_NAME,
+                        "source": "projects/project/zones/us-central1-a/disks/source-disk",
+                    }
+                ],
+            }
+
+        @staticmethod
+        def private_instance_ip(_instance: dict[str, Any]) -> str:
+            return "10.0.0.2"
+
+        async def runtime_is_current(self, *_args: Any, **_kwargs: Any) -> bool:
+            return True
+
+        async def get_disk(self, _disk_name: str) -> dict[str, Any]:
+            return {"id": "foreign-source-id"}
+
+        async def set_disk_auto_delete(self, *_args: Any) -> None:
+            events.append(("auto-delete",))
+
+        async def delete_replacement(self, *_args: Any) -> bool:
+            events.append(("delete-predecessor",))
+            return True
+
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(
+        reconciler,
+        "claim_boot_image_migration_retirement",
+        lambda *_args: {"state": "retiring", "oldVmName": "old-vm", "oldInstanceId": "old-id"},
+    )
+    monkeypatch.setattr(
+        reconciler,
+        "complete_boot_image_migration",
+        lambda *_args: pytest.fail("source cleanup must complete before the migration commit"),
+    )
+
+    result = asyncio.run(
+        reconciler._retire_soaked_boot_image_predecessor(
+            "dev-user",
+            {
+                "vmName": "candidate",
+                "authToken": "candidate-token",
+                "instanceId": "candidate-id",
+                "reconcile": {
+                    "migration": {
+                        "migrationId": "5" * 24,
+                        "oldVmName": "old-vm",
+                        "oldInstanceId": "old-id",
+                        "candidateInstanceId": "candidate-id",
+                        "sourceCloneDiskName": "source-disk",
+                        "sourceCloneDiskId": "source-id",
+                    }
+                },
+            },
+            owner="worker",
+            api=RetirementApi(),
+            release=RELEASE,
+        )
+    )
+
+    assert result == reconciler.ReconcileResult(
+        "dev-user", "stale", "migration source clone identity changed before cleanup"
+    )
+    assert events == []
+
+
+def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_opt_in(monkeypatch):
+    migration_id = "6" * 24
+    journal = {
+        "migrationId": migration_id,
+        "state": "candidate_creating",
+        "oldVmName": "omi-agent-user",
+        "oldZone": "us-central1-a",
+        "oldAuthToken": "old-token",
+        "oldInstanceId": "old-id",
+        "candidateVmName": "omi-agent-user-m-666666666666",
+        "candidateAuthToken": "candidate-token",
+        "targetRelease": RELEASE.release_id,
+        "targetBootImage": RELEASE.boot_image,
+        "soakSeconds": 60,
+        "stateDiskName": "legacy-state",
+        "stateDiskId": "state-id",
+        "stateDiskReused": True,
+        "sourceCloneDiskName": "",
+    }
+
+    class RecoveryApi:
+        project = "project"
+        zone = "us-central1-a"
+
+        def __init__(self, _project: str, _zone: str) -> None:
+            self.candidate: dict[str, Any] | None = None
+            self.created = False
+
+        async def get_instance(self, name: str) -> dict[str, Any] | None:
+            if name == "omi-agent-user":
+                return {
+                    "id": "old-id",
+                    "status": "TERMINATED",
+                    "machineType": "zones/us-central1-a/machineTypes/e2-small",
+                    "networkInterfaces": [{"network": "global/networks/default", "networkIP": "10.0.0.1"}],
+                    "metadata": {},
+                    "serviceAccounts": [],
+                    "disks": [{"boot": True, "source": "projects/project/zones/us-central1-a/disks/old-boot"}],
+                    "labelFingerprint": "fingerprint",
+                }
+            return self.candidate
+
+        @staticmethod
+        def instance_url(name: str) -> str:
+            return f"https://compute.googleapis.com/compute/v1/projects/project/zones/us-central1-a/instances/{name}"
+
+        async def set_migration_labels(self, *_args: Any) -> None:
+            return None
+
+        async def get_disk(self, name: str) -> dict[str, Any] | None:
+            if name != "legacy-state":
+                return None
+            return {
+                "id": "state-id",
+                "labels": {
+                    "omi-agent-role": "state",
+                    "omi-agent-owner": reconciler._owner_disk_label("dev-user"),
+                },
+                # The crash happened after detach, so the durable disk is not
+                # owned by the predecessor while the journal remains active.
+                "users": [],
+            }
+
+        async def create_disk(self, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            pytest.fail("recovery must reuse the journaled state disk")
+
+        async def create_replacement(self, *_args: Any) -> None:
+            self.created = True
+            self.candidate = {
+                "id": "candidate-id",
+                "status": "RUNNING",
+                "labels": {
+                    "omi-agent-migration": migration_id,
+                    "omi-agent-predecessor": "old-id",
+                    "omi-agent-owner": reconciler._owner_disk_label("dev-user"),
+                },
+                "serviceAccounts": [{"email": RELEASE.service_account}],
+                "networkInterfaces": [{"networkIP": "10.0.0.2", "accessConfigs": [{"natIP": "34.0.0.2"}]}],
+                "disks": [
+                    {"boot": True, "source": "projects/project/zones/us-central1-a/disks/candidate-boot"},
+                    {
+                        "boot": False,
+                        "deviceName": lifecycle.STATE_DISK_DEVICE_NAME,
+                        "source": "projects/project/zones/us-central1-a/disks/legacy-state",
+                    },
+                ],
+            }
+
+        async def delete_replacement(self, *_args: Any) -> bool:
+            self.candidate = None
+            return True
+
+        async def request(self, _method: str, _url: str) -> Any:
+            class Response:
+                @staticmethod
+                def raise_for_status() -> None:
+                    return None
+
+                @staticmethod
+                def json() -> dict[str, str]:
+                    return {"sourceImage": RELEASE.boot_image}
+
+            return Response()
+
+        @staticmethod
+        def private_instance_ip(_instance: Mapping[str, Any]) -> str:
+            return "10.0.0.2"
+
+        @staticmethod
+        def instance_ip(_instance: Mapping[str, Any]) -> str:
+            return "34.0.0.2"
+
+        async def wait_for_runtime(self, *_args: Any, **_kwargs: Any) -> None:
+            return None
+
+    cutovers: list[Mapping[str, Any]] = []
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", RecoveryApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_boot_image_migration", lambda *_args: journal)
+    monkeypatch.setattr(reconciler, "begin_boot_image_migration", lambda *_args: dict(journal))
+    monkeypatch.setattr(reconciler, "recover_missing_boot_image_candidate", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "record_boot_image_state_disks", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "record_boot_image_candidate", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "cutover_boot_image_migration", lambda *args: cutovers.append(args[-1]) or True)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "dev-user",
+            {
+                "vmName": "omi-agent-user",
+                "zone": "us-central1-a",
+                "status": "stopped",
+                "authToken": "old-token",
+                "reconcile": {"durableMigration": True},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            # No boot_image_migration manifest plan is supplied.
+        )
+    )
+
+    assert result.state == "migrated"
+    assert cutovers and cutovers[-1]["instanceId"] == "candidate-id"
 
 
 def test_boot_image_migration_never_creates_for_an_active_session(monkeypatch):
@@ -1516,6 +1763,53 @@ def test_boot_image_migration_binds_a_legacy_pointer_to_the_provider_instance_id
         "dev-user", "omi-agent-user", "us-central1-a", "old-token", "worker", migration_id, migration, now=100
     )
     assert client.transactions[-1].updates[-1][1]["agentVm.instanceId"] == "old-id"
+
+
+@pytest.mark.parametrize("demand_field", ["startRequested", "drainRequested"])
+def test_boot_image_migration_cas_rejects_ready_legacy_status_with_new_demand(monkeypatch, demand_field):
+    migration_id = "7" * 24
+    client = StrictFirestore(
+        {
+            ("users", "dev-user"): {
+                "agentVm": {
+                    "vmName": "omi-agent-user",
+                    "zone": "us-central1-a",
+                    "status": "ready",
+                    "instanceId": "old-id",
+                    "authToken": "old-token",
+                    "reconcile": {
+                        "lease": {"owner": "worker", "expiresAt": 200.0},
+                        demand_field: True,
+                    },
+                }
+            }
+        }
+    )
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
+
+    assert (
+        lifecycle.begin_boot_image_migration(
+            "dev-user",
+            "omi-agent-user",
+            "us-central1-a",
+            "old-token",
+            "worker",
+            migration_id,
+            {
+                "migrationId": migration_id,
+                "oldVmName": "omi-agent-user",
+                "oldAuthToken": "old-token",
+                "oldInstanceId": "old-id",
+                "candidateVmName": "candidate",
+                "candidateAuthToken": "candidate-token",
+                "targetRelease": RELEASE.release_id,
+                "soakSeconds": 60,
+            },
+            now=100.0,
+        )
+        is None
+    )
+    assert not client.transactions[-1].updates
 
 
 def test_boot_image_migration_completion_requires_candidate_pointer_and_lease(monkeypatch):
@@ -2289,3 +2583,59 @@ def test_owner_discovery_legacy_fallback_supports_existing_small_fleets(monkeypa
     monkeypatch.setattr(reconciler, "get_firestore_client", lambda: OwnerClient(query))
 
     assert reconciler._owners() == [("owner", {"vmName": "omi-agent-owner", "authToken": "token"})]
+
+
+def test_owner_discovery_selects_a_durable_migration_without_manifest_opt_in(monkeypatch):
+    class MigrationReference:
+        path = "users/journal-owner/agentVmMigrations/666666666666666666666666"
+
+    class MigrationSnapshot:
+        reference = MigrationReference()
+
+        def to_dict(self) -> dict[str, Any]:
+            return {"state": "candidate_creating"}
+
+    class MigrationQuery:
+        def where(self, **_kwargs: Any) -> "MigrationQuery":
+            return self
+
+        def stream(self) -> list[MigrationSnapshot]:
+            return [MigrationSnapshot()]
+
+    class UserDocument:
+        def get(self) -> OwnerSnapshot:
+            return OwnerSnapshot(
+                "journal-owner",
+                {"agentVm": {"vmName": "omi-agent-journal-owner", "authToken": "token"}},
+            )
+
+    class DurableUsers(OwnerQuery):
+        def document(self, uid: str) -> UserDocument:
+            assert uid == "journal-owner"
+            return UserDocument()
+
+    users = DurableUsers([OwnerSnapshot("cohort", {"agentVm": {"vmName": "cohort", "authToken": "token"}})])
+
+    class DurableClient:
+        def collection(self, name: str) -> DurableUsers:
+            assert name == "users"
+            return users
+
+        @staticmethod
+        def collection_group(name: str) -> MigrationQuery:
+            assert name == "agentVmMigrations"
+            return MigrationQuery()
+
+    monkeypatch.setattr(reconciler, "get_firestore_client", lambda: DurableClient())
+
+    owners = reconciler._owners()
+
+    assert owners[-1] == (
+        "journal-owner",
+        {
+            "vmName": "omi-agent-journal-owner",
+            "authToken": "token",
+            "reconcile": {"durableMigration": True},
+        },
+    )
+    assert reconciler._select_reconcile_owners(owners, RELEASE.release_id, 0)[-1] == owners[-1]

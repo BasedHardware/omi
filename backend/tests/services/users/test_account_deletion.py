@@ -481,6 +481,34 @@ def test_agent_vm_account_cleanup_treats_current_vm_404_as_idempotent(monkeypatc
     assert client.delete_calls == []
 
 
+def test_agent_vm_account_cleanup_retries_late_vm_from_durable_instance_id_after_user_purge(monkeypatch):
+    uid = 'late-owner'
+    vm_name = 'omi-agent-late'
+    zone = 'us-central1-a'
+    instance_url = f'https://compute.googleapis.com/compute/v1/projects/test-project/zones/{zone}/instances/{vm_name}'
+    owner_label = agent_vm_account_cleanup._owner_disk_label(uid)
+    client = _ComputeClient(
+        instances={
+            vm_name: {
+                'id': '707',
+                'labels': {'omi-agent-owner': owner_label},
+            }
+        }
+    )
+    _configure_compute_cleanup(monkeypatch, client)
+    monkeypatch.setattr(agent_vm_account_cleanup, 'read_agent_vm_migration_journals', lambda _uid: [])
+    monkeypatch.setattr(agent_vm_account_cleanup.users_db, 'get_agent_vm', lambda _uid: None)
+    monkeypatch.setattr(
+        agent_vm_account_cleanup.users_db,
+        'get_late_agent_vm_cleanup',
+        lambda _uid: {'vmName': vm_name, 'zone': zone, 'instanceId': '707'},
+    )
+
+    agent_vm_account_cleanup._delete_agent_vm_for_account_impl(uid)
+
+    assert client.delete_calls == [instance_url]
+
+
 def test_agent_vm_account_cleanup_deletes_legacy_vm_from_exact_firestore_token(monkeypatch):
     uid = 'legacy-owner'
     vm_name = 'omi-agent-legacy'
@@ -491,7 +519,6 @@ def test_agent_vm_account_cleanup_deletes_legacy_vm_from_exact_firestore_token(m
         instances={
             vm_name: {
                 'id': '606',
-                'labels': {},
                 'metadata': {'items': [{'key': 'auth-token', 'value': 'legacy-token'}]},
             }
         }
@@ -505,6 +532,31 @@ def test_agent_vm_account_cleanup_deletes_legacy_vm_from_exact_firestore_token(m
 
     assert client.post_calls == []
     assert client.delete_calls == [instance_url]
+
+
+def test_agent_vm_account_cleanup_rejects_legacy_vm_with_foreign_owner_label(monkeypatch):
+    uid = 'legacy-owner'
+    vm_name = 'omi-agent-legacy'
+    zone = 'us-central1-a'
+    client = _ComputeClient(
+        instances={
+            vm_name: {
+                'id': '606',
+                'labels': {'omi-agent-owner': 'foreign-owner'},
+                'metadata': {'items': [{'key': 'auth-token', 'value': 'legacy-token'}]},
+            }
+        }
+    )
+    vm = {'vmName': vm_name, 'zone': zone, 'authToken': 'legacy-token'}
+    _configure_compute_cleanup(monkeypatch, client)
+    monkeypatch.setattr(agent_vm_account_cleanup, 'read_agent_vm_migration_journals', lambda _uid: [])
+    monkeypatch.setattr(agent_vm_account_cleanup.users_db, 'get_agent_vm', lambda _uid: vm)
+    monkeypatch.setattr(agent_vm_account_cleanup.users_db, 'get_late_agent_vm_cleanup', lambda _uid: None)
+
+    with pytest.raises(RuntimeError, match='owner identity is ambiguous'):
+        agent_vm_account_cleanup._delete_agent_vm_for_account_impl(uid)
+
+    assert client.delete_calls == []
 
 
 def test_agent_vm_account_cleanup_refuses_legacy_vm_with_mismatched_metadata_token(monkeypatch):
@@ -698,7 +750,7 @@ def test_agent_vm_account_cleanup_accepts_absent_incomplete_resources(monkeypatc
     assert client.delete_calls == []
 
 
-def test_agent_vm_account_cleanup_rejects_incomplete_active_journal_without_migration_label():
+def test_agent_vm_account_cleanup_accepts_active_predecessor_before_migration_label_update(monkeypatch):
     uid = 'migration-owner'
     journal = _migration_journal()
     journal.pop('candidateInstanceId')
@@ -708,6 +760,7 @@ def test_agent_vm_account_cleanup_rejects_incomplete_active_journal_without_migr
     old_instance = {
         'id': journal['oldInstanceId'],
         'labels': {'omi-agent-owner': agent_vm_account_cleanup._owner_disk_label(uid)},
+        'metadata': {'items': [{'key': 'auth-token', 'value': 'active-token'}]},
         'disks': [
             {
                 'source': f"projects/test-project/zones/{journal['oldZone']}/disks/{state_disk_name}",
@@ -724,22 +777,31 @@ def test_agent_vm_account_cleanup_rejects_incomplete_active_journal_without_migr
                     'omi-agent-role': 'state',
                     'omi-agent-owner': agent_vm_account_cleanup._owner_disk_label(uid),
                 },
-                'users': [
-                    f"https://compute.googleapis.com/compute/v1/projects/test-project/zones/{journal['oldZone']}/instances/{old_vm_name}"
-                ],
+                'users': [],
             }
         },
     )
 
-    with pytest.raises(RuntimeError, match='identity is ambiguous'):
-        agent_vm_account_cleanup._load_agent_vm_migration_cleanup_plans(
-            uid,
-            [journal],
-            {'vmName': old_vm_name, 'zone': journal['oldZone']},
-            'test-project',
-            client,
-            {'Authorization': 'Bearer test-token'},
-        )
+    _configure_compute_cleanup(monkeypatch, client)
+    monkeypatch.setattr(agent_vm_account_cleanup, 'read_agent_vm_migration_journals', lambda _uid: [journal])
+    monkeypatch.setattr(
+        agent_vm_account_cleanup.users_db,
+        'get_agent_vm',
+        lambda _uid: {
+            'vmName': old_vm_name,
+            'zone': journal['oldZone'],
+            'instanceId': journal['oldInstanceId'],
+            'authToken': 'active-token',
+        },
+    )
+    monkeypatch.setattr(agent_vm_account_cleanup.users_db, 'get_late_agent_vm_cleanup', lambda _uid: None)
+
+    agent_vm_account_cleanup._delete_agent_vm_for_account_impl(uid)
+
+    assert client.delete_calls == [
+        f"https://compute.googleapis.com/compute/v1/projects/test-project/zones/{journal['oldZone']}/instances/{old_vm_name}",
+        f"https://compute.googleapis.com/compute/v1/projects/test-project/zones/{journal['oldZone']}/disks/{state_disk_name}",
+    ]
 
 
 def test_background_wipe_blocks_user_data_purge_when_agent_vm_cleanup_fails(monkeypatch):

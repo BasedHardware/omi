@@ -24,6 +24,7 @@ import google.auth
 import google.auth.transport.requests
 import httpx
 from google.cloud.firestore import DELETE_FIELD, transactional
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -37,6 +38,10 @@ MAX_RETRY_DELAY_SECONDS = 3600
 STATE_DISK_DEVICE_NAME = "omi-agent-state"
 STATE_SOURCE_DEVICE_NAME = "omi-agent-state-source"
 STATE_SOURCE_REQUIRED_METADATA = "omi-agent-state-source-required"
+ACTIVE_BOOT_IMAGE_MIGRATION_STATES = frozenset(
+    {"candidate_creating", "candidate_ready", "candidate_deleted", "cutover", "retiring"}
+)
+PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES = frozenset({"candidate_creating", "candidate_ready", "candidate_deleted"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
 _IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
@@ -683,6 +688,64 @@ def _migration_matches(
         return False
     lease = reconcile.get("lease")
     return isinstance(lease, Mapping) and lease.get("owner") == owner and float(lease.get("expiresAt", 0) or 0) > now
+
+
+def active_boot_image_migration_uids(*, firestore_client: Any | None = None) -> set[str]:
+    """Return owners with a non-terminal durable boot-image migration journal.
+
+    The journal is the recovery source of truth.  In particular, the owner
+    document may still point at the predecessor while a pre-cutover journal is
+    already committed, so selection cannot depend on the current release
+    manifest or an embedded ``agentVm.reconcile.migration`` field.
+    """
+    client = firestore_client or get_firestore_client()
+    collection_group = getattr(client, "collection_group", None)
+    # Small unit-test doubles predating this recovery surface do not model
+    # collection-group queries.  Production Firestore always provides it.
+    if not callable(collection_group):
+        return set()
+    query: Any = collection_group("agentVmMigrations")
+    snapshots = query.where(filter=FieldFilter("state", "in", sorted(ACTIVE_BOOT_IMAGE_MIGRATION_STATES))).stream()
+    uids: set[str] = set()
+    for snapshot in snapshots:
+        path = getattr(getattr(snapshot, "reference", None), "path", "")
+        if not isinstance(path, str):
+            continue
+        parts = path.split("/")
+        if len(parts) == 4 and parts[0] == "users" and parts[2] == "agentVmMigrations" and parts[1]:
+            uids.add(parts[1])
+    return uids
+
+
+def active_boot_image_migration(
+    uid: str,
+    vm_name: str,
+    instance_id: str,
+    *,
+    firestore_client: Any | None = None,
+) -> dict[str, Any] | None:
+    """Find the durable migration belonging to this provider VM identity.
+
+    Matching both predecessor and candidate identities lets a retry recover a
+    crash before cutover while leaving the post-cutover retirement path fenced
+    by the same durable journal.
+    """
+    client = firestore_client or get_firestore_client()
+    snapshots = client.collection("users").document(uid).collection("agentVmMigrations").stream()
+    for snapshot in snapshots:
+        migration = snapshot.to_dict()
+        if not isinstance(migration, dict) or migration.get("state") not in ACTIVE_BOOT_IMAGE_MIGRATION_STATES:
+            continue
+        predecessor_matches = (
+            migration.get("oldVmName") == vm_name and str(migration.get("oldInstanceId") or "") == instance_id
+        )
+        candidate_matches = (
+            migration.get("candidateVmName") == vm_name
+            and str(migration.get("candidateInstanceId") or "") == instance_id
+        )
+        if predecessor_matches or candidate_matches:
+            return migration
+    return None
 
 
 @transactional
@@ -1927,15 +1990,19 @@ __all__ = [
     "AgentVmNotFound",
     "AgentVmRelease",
     "AgentVmReleaseError",
+    "ACTIVE_BOOT_IMAGE_MIGRATION_STATES",
     "DEFAULT_ZONE",
     "GceAgentVmClient",
     "STATE_DISK_DEVICE_NAME",
     "STATE_SOURCE_DEVICE_NAME",
     "STATE_SOURCE_REQUIRED_METADATA",
+    "PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES",
     "LEASE_HEARTBEAT_SECONDS",
     "RECONCILER_SCHEMA_VERSION",
     "TrustedAgentVmHealthChannelUnavailable",
     "active_session_count",
+    "active_boot_image_migration",
+    "active_boot_image_migration_uids",
     "begin_boot_image_migration",
     "claim_reconciler_run_lease",
     "claim_boot_image_migration_retirement",

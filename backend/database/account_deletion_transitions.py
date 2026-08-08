@@ -54,16 +54,27 @@ def mark_wipe_completed(transaction, doc_ref) -> bool:
 
 
 @transactional
-def record_late_agent_vm_cleanup(transaction, doc_ref, vm_name: str, zone: str) -> bool:
+def record_late_agent_vm_cleanup(
+    transaction,
+    doc_ref,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str | None = None,
+) -> bool:
     snapshot = doc_ref.get(transaction=transaction)
     raw_status = (snapshot.to_dict() or {}).get('wipe_status') if snapshot.exists else None
     status = normalize_account_deletion_status(marker_exists=snapshot.exists, raw_status=raw_status)
     if not account_deletion_blocks_access(status):
         return False
+    if expected_instance_id is not None and (not expected_instance_id.isascii() or not expected_instance_id.isdigit()):
+        raise ValueError('late Agent VM cleanup instance identity must be numeric')
+    pending = {'vmName': vm_name, 'zone': zone}
+    if expected_instance_id is not None:
+        pending['expectedInstanceId'] = expected_instance_id
     transaction.set(
         doc_ref,
         {
-            'late_agent_vm_cleanup': {'vmName': vm_name, 'zone': zone},
+            'late_agent_vm_cleanup': pending,
             'wipe_status': 'failed',
             'wipe_failed_at': datetime.now(timezone.utc),
         },
