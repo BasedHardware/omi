@@ -19,5 +19,11 @@ node --experimental-strip-types --test ts/tests/*.test.ts
 
 echo ""
 echo "=================================================="
-echo "ALL TESTS PASSED SUCCESSFULLY!"
+echo "3. Running Benchmark: Adapter/Controller Overhead"
+echo "=================================================="
+node --experimental-strip-types ts/benchmark/run-benchmark.ts
+
+echo ""
+echo "=================================================="
+echo "ALL TESTS AND BENCHMARK PASSED SUCCESSFULLY!"
 echo "=================================================="
