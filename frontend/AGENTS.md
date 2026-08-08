@@ -14,7 +14,7 @@ pnpm -r test         # hermetic; node:test; no network, no wall clock
 node scripts/check-isolation.mjs
 ```
 
-All three commands green (plus `node scripts/gen-barrels.mjs --check`,
+All three commands green (plus `node scripts/gen-barrels.mjs --check`, `node scripts/check-wire-conformance.mjs`,
 `node scripts/check-structure.mjs` — no workspace dep cycles, no test files outside
 their home; tests for contracts/domain/sync/kernel/adapters live in `packages/testkit/`
 — and `node scripts/gen-bridge-swift.mjs --check` — security-bearing bridge constants
@@ -99,6 +99,26 @@ foundation gap, not your call to fill.
     Row-count assertions are the canonical decorative shape: assert the *content* only a
     working mechanism can produce, not how many rows survived. Found by mutation, not by
     reading — three review passes missed it.
+
+15. **A shared wire is tested against its REAL shape, never a remembered one.**
+    When two components are developed independently against the same wire, at
+    least one test must consume the OTHER side's actual wire shape — a shared
+    corpus of record — rather than a payload its own author typed out. A test
+    that hand-authors the counterpart's frame is testing the author's memory of
+    the wire, which is exactly what is already wrong when this bites.
+    ENFORCED BY `scripts/check-wire-conformance.mjs` (in `pnpm verify`): every
+    seam in its registry must have a corpus covering every frame its
+    schema-of-record declares, and at least one named test that actually reads
+    that corpus. Adding a wire two components speak means adding a registry row.
+    History: three defects in one night shared this exact shape and none was
+    catchable from either side — a backend with 448 green tests that had never
+    served a request, a bridge reporting itself active while serving nothing,
+    and an entitlement UI built against a reserved `/listen` frame no server
+    emits while the server emitted a different frame nobody consumed. Each half
+    was individually correct and individually green. Note what the check does
+    NOT do: it cannot prove a test asserts anything useful about what it read —
+    that is rule 14's job. It proves the mechanical thing missing in all three:
+    the real shape exists, and something loads it.
 
 ## What you may do freely
 

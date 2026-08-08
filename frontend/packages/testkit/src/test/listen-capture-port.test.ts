@@ -212,7 +212,7 @@ test("entitlement state is null before any frame; paused state does not terminat
   const { port, ingest } = openPort();
   const entitlements: Array<string | null> = [];
   port.observeEntitlementState((p) => {
-    entitlements.push(p ? `${p.state}|${p.upgradeTarget}` : null);
+    entitlements.push(p ? `${p.status}|${p.captureContinuing}|${p.upgradeTarget}` : null);
   });
 
   assert.equal(port.getEntitlementState(), null);
@@ -232,13 +232,16 @@ test("entitlement state is null before any frame; paused state does not terminat
   );
 
   assert.equal(port.getConnectionState().status, "open");
-  assert.equal(port.getEntitlementState()?.state, "transcription_paused_capture_continuing");
+  // Normalised: the surface reads status + captureContinuing, never the wire state.
+  assert.equal(port.getEntitlementState()?.status, "limit_reached");
+  assert.equal(port.getEntitlementState()?.captureContinuing, true);
+  assert.equal(port.getEntitlementState()?.source, "entitlement");
   assert.deepEqual(textsOf(port.getTranscriptSegments()), ["speaking"]);
 
   ingest.acceptTextFrame(batch(seg({ id: "t2", text: "still here", start: 2, end: 3 })));
   assert.deepEqual(textsOf(port.getTranscriptSegments()), ["speaking", "still here"]);
   assert.equal(port.getConnectionState().status, "open");
-  assert.deepEqual(entitlements, [null, "transcription_paused_capture_continuing|plans"]);
+  assert.deepEqual(entitlements, [null, "limit_reached|true|plans"]);
 });
 
 test("acceptReconnect is a no-op while open or idle", () => {
