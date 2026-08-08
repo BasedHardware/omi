@@ -7,7 +7,9 @@ import { SqliteStmStore } from "./stm";
 import { SqliteLedger } from "./index";
 import {
   createSqliteQaRecallLoader,
+  SQLITE_QA_STM_SCAN_CEILING,
   type AcceptedRecentState,
+  type SqliteQaReadOnlyQuery,
   type SqliteQaRecallLimits,
 } from "./application-recall-read";
 
@@ -129,6 +131,19 @@ const addRow = (target: Fixture, id: string, options: RowOptions = {}): DurableS
     );
   }
   const sourceEvidence = options.row_evidence ?? [evidence(id, sourceEvent.event_revision_id)];
+  sourceEvidence.forEach((item, index) => {
+    const commitId = `evidence-commit:${id}:${index}`;
+    const nextSequence = (target.db.query("SELECT COALESCE(MAX(sequence), 0) + 1 AS sequence FROM derivation_commits").get() as { sequence: number }).sequence;
+    insertDerivation(target, commitId, ownerAccountId, nextSequence);
+    target.db.query("INSERT INTO evidence_revisions VALUES (?, ?, ?, ?, ?, ?)").run(
+      `evidence-revision:${id}:${index}`,
+      ownerAccountId,
+      item.event_revision_id,
+      JSON.stringify(item),
+      `evidence-hash:${id}:${index}`,
+      commitId,
+    );
+  });
   const observedAt = options.event_time_watermark ?? sourceEvent.event_time;
   const sourceClaim = {
     ...claim(id, ownerAccountId, options.claim_evidence_refs ?? sourceEvidence.map((item) => item.evidence_id), observedAt),
@@ -172,10 +187,9 @@ const insertDerivation = (target: Fixture, commitId: string, ownerAccountId = OW
 
 const loadFor = <Candidate = never>(target: Fixture, overrides: {
   readonly limits?: SqliteQaRecallLimits;
-  readonly accepted?: (db: Database, ownerAccountId: string, limits: SqliteQaRecallLimits) => unknown;
+  readonly accepted?: (query: SqliteQaReadOnlyQuery, ownerAccountId: string, limits: SqliteQaRecallLimits) => unknown;
 } = {}) => createSqliteQaRecallLoader<Candidate>({
   db: target.db,
-  ledger: target.ledger,
   owner_account_id: OWNER,
   account_timezone: "UTC",
   limits: overrides.limits ?? LIMITS,
@@ -195,17 +209,15 @@ describe("hermetic SQLite QA coherent recall read", () => {
     let durableObserved = false;
     let stmObserved = false;
     let acceptedObserved = false;
+    let retainedQuery: SqliteQaReadOnlyQuery | undefined;
 
-    const originalSnapshot = target.ledger.snapshot.bind(target.ledger);
-    target.ledger.snapshot = (ownerAccountId: string) => {
-      expect(target.db.inTransaction).toBe(true);
-      durableObserved = true;
-      return originalSnapshot(ownerAccountId);
-    };
     const originalQuery = target.db.query.bind(target.db);
     Object.defineProperty(target.db, "query", {
       configurable: true,
       value: (sql: string) => {
+        if (sql.includes("FROM event_revisions") && target.db.inTransaction) {
+          durableObserved = true;
+        }
         if (sql.includes("FROM stm_items")) {
           expect(target.db.inTransaction).toBe(true);
           stmObserved = true;
@@ -215,9 +227,13 @@ describe("hermetic SQLite QA coherent recall read", () => {
     });
 
     const result = loadFor<{ ref: string }>(target, {
-      accepted: (db, ownerAccountId, limits) => {
-        expect(db).toBe(target.db);
-        expect(db.inTransaction).toBe(true);
+      accepted: (query, ownerAccountId, limits) => {
+        retainedQuery = query;
+        expect(Object.keys(query)).toEqual(["select"]);
+        expect("exec" in query).toBe(false);
+        expect("transaction" in query).toBe(false);
+        expect(query.select({ sql: "SELECT ? AS marker", parameters: ["accepted"], max_rows: 1 })).toEqual([{ marker: "accepted" }]);
+        expect(target.db.inTransaction).toBe(true);
         expect(ownerAccountId).toBe(OWNER);
         expect(limits).toEqual(LIMITS);
         expect(Object.isFrozen(limits)).toBe(true);
@@ -239,6 +255,7 @@ describe("hermetic SQLite QA coherent recall read", () => {
     expect(result.stm_rows.map((item) => item.id)).toEqual(["claim:1"]);
     expect(result.accepted_state.candidates).toEqual([{ ref: "accepted:candidate:1" }]);
     expect(target.db.inTransaction).toBe(false);
+    expect(() => retainedQuery!.select({ sql: "SELECT 1", parameters: [], max_rows: 1 })).toThrow("not active");
   });
 
   test("filters owner and ledger-decided rows before limit without moving STM coverage coordinates", () => {
@@ -251,11 +268,14 @@ describe("hermetic SQLite QA coherent recall read", () => {
     target.stm.consume([consumed.id]);
     const visible = addRow(target, "4", { capture_sequence: 1 });
 
-    const result = loadFor(target, { limits: { max_items: 1, max_bytes: 100 } })();
+    const result = loadFor(target, { limits: { max_items: 1, max_bytes: 100_000 } })();
     expect(result.stm_rows.map((item) => item.id)).toEqual([visible.id]);
+    const visibleBytes = result.stm_rows[0]!.bytes;
     expect(result.internal_coverage.stm).toEqual({
+      eligible_items: 1,
+      scan_ceiling: SQLITE_QA_STM_SCAN_CEILING,
       selected_items: 1,
-      selected_bytes: visible.bytes,
+      selected_bytes: visibleBytes,
       last_selected_position: {
         event_time_watermark: visible.event_time_watermark,
         capture_sequence: visible.capture_sequence,
@@ -282,11 +302,11 @@ describe("hermetic SQLite QA coherent recall read", () => {
     const first = addRow(itemBound, "1", { bytes: 4 });
     const second = addRow(itemBound, "2", { bytes: 5 });
     const third = addRow(itemBound, "3", { bytes: 6 });
-    const itemResult = loadFor(itemBound, { limits: { max_items: 2, max_bytes: 100 } })();
+    const itemResult = loadFor(itemBound, { limits: { max_items: 2, max_bytes: 100_000 } })();
     expect(itemResult.stm_rows.map((item) => item.id)).toEqual([first.id, second.id]);
     expect(itemResult.internal_coverage.stm).toMatchObject({
       selected_items: 2,
-      selected_bytes: 9,
+      selected_bytes: itemResult.stm_rows[0]!.bytes + itemResult.stm_rows[1]!.bytes,
       has_more: true,
       bounds_reached: ["item_limit"],
       next_unselected_position: { id: third.id },
@@ -296,11 +316,13 @@ describe("hermetic SQLite QA coherent recall read", () => {
     const byteFirst = addRow(byteBound, "1", { bytes: 4 });
     const byteSecond = addRow(byteBound, "2", { bytes: 5 });
     addRow(byteBound, "3", { bytes: 1 });
-    const byteResult = loadFor(byteBound, { limits: { max_items: 8, max_bytes: 4 } })();
+    const baseline = loadFor(byteBound, { limits: { max_items: 8, max_bytes: 100_000 } })();
+    const firstComputedBytes = baseline.stm_rows[0]!.bytes;
+    const byteResult = loadFor(byteBound, { limits: { max_items: 8, max_bytes: firstComputedBytes } })();
     expect(byteResult.stm_rows.map((item) => item.id)).toEqual([byteFirst.id]);
     expect(byteResult.internal_coverage.stm).toMatchObject({
       selected_items: 1,
-      selected_bytes: 4,
+      selected_bytes: firstComputedBytes,
       has_more: true,
       bounds_reached: ["byte_limit"],
       next_unselected_position: { id: byteSecond.id },
@@ -314,6 +336,56 @@ describe("hermetic SQLite QA coherent recall read", () => {
     const middle = addRow(target, "2", { event_time_watermark: watermark, capture_sequence: 1, revision_lineage: "z", ingest_sequence: 2 });
     const first = addRow(target, "1", { event_time_watermark: watermark, capture_sequence: 1, revision_lineage: "a", ingest_sequence: 1 });
     expect(loadFor(target)().stm_rows.map((item) => item.id)).toEqual([first.id, middle.id, last.id]);
+  });
+
+  test("sorts the full eligible set with the core collator before applying a limit", () => {
+    const target = fixture();
+    const watermark = "2026-08-07T12:00:00Z";
+    const binaryFirst = addRow(target, "10", {
+      event_time_watermark: watermark,
+      capture_sequence: 1,
+      revision_lineage: "10",
+      ingest_sequence: 1,
+    });
+    const coreFirst = addRow(target, "_", {
+      event_time_watermark: watermark,
+      capture_sequence: 1,
+      revision_lineage: "_",
+      ingest_sequence: 1,
+    });
+    expect(["10", "_"].sort(new Intl.Collator().compare)).toEqual(["_", "10"]);
+    const result = loadFor(target, { limits: { max_items: 1, max_bytes: 100_000 } })();
+    expect(result.stm_rows.map((item) => item.id)).toEqual([coreFirst.id]);
+    expect(result.internal_coverage.stm.next_unselected_position?.id).toBe(binaryFirst.id);
+  });
+
+  test("fails closed when the eligible owner set exceeds the finite QA scan ceiling", () => {
+    const target = fixture();
+    target.db.query(`
+      WITH RECURSIVE sequence(value) AS (
+        SELECT 1
+        UNION ALL
+        SELECT value + 1 FROM sequence WHERE value < ?
+      )
+      INSERT INTO stm_items (
+        id, session_id, event_time_watermark, capture_sequence, revision_lineage,
+        ingest_sequence, entity_refs_json, lexical_terms_json, vector_key, predicate_id,
+        bytes, claim_json, evidence_json, argument_origins_json, settled_window_id
+      )
+      SELECT 'overflow:' || value, 'session', 'watermark', value, 'lineage', value,
+        '[]', '[]', 'vector', 'predicate', 0, ?, '[]', '{}', 'window'
+      FROM sequence
+    `).run(
+      SQLITE_QA_STM_SCAN_CEILING + 1,
+      JSON.stringify({ owner_account_id: OWNER }),
+    );
+    expect(loadFor(target)).toThrow("scan ceiling");
+
+    target.db.query("UPDATE stm_items SET claim_json = ? WHERE id LIKE 'overflow:%'").run(
+      JSON.stringify({ owner_account_id: FOREIGN_OWNER }),
+    );
+    const visible = addRow(target, "1");
+    expect(loadFor(target)().stm_rows.map((item) => item.id)).toEqual([visible.id]);
   });
 
   test("publishes a real ledger-head digest and coherent clock-free snapshot identity", () => {
@@ -365,6 +437,29 @@ describe("hermetic SQLite QA coherent recall read", () => {
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
 describe("strict STM row integrity", () => {
+  test("recomputes canonical UTF-8 row bytes and rejects a forged capture session", () => {
+    const oversized = fixture();
+    const largeEvidence = { ...evidence("1"), excerpt: "x".repeat(6_345) };
+    const stored = addRow(oversized, "1", { bytes: 0, row_evidence: [largeEvidence] });
+    const bounded = loadFor(oversized, { limits: { max_items: 8, max_bytes: 1 } })();
+    expect(bounded.stm_rows).toEqual([]);
+    expect(bounded.internal_coverage.stm).toMatchObject({
+      selected_bytes: 0,
+      has_more: true,
+      bounds_reached: ["byte_limit"],
+      next_unselected_position: { id: stored.id },
+    });
+    const unbounded = loadFor(oversized, { limits: { max_items: 8, max_bytes: 100_000 } })();
+    expect(unbounded.stm_rows[0]!.bytes).toBeGreaterThan(6_345);
+    expect(unbounded.stm_rows[0]!.bytes).not.toBe(0);
+    expect(unbounded.internal_coverage.stm.selected_bytes).toBe(unbounded.stm_rows[0]!.bytes);
+
+    const forgedSession = fixture();
+    const forged = addRow(forgedSession, "1", { bytes: 0 });
+    forgedSession.db.query("UPDATE stm_items SET session_id = ? WHERE id = ?").run("session:forged", forged.id);
+    expect(loadFor(forgedSession)).toThrow("capture session");
+  });
+
   test("rejects malformed claims, row/revision mismatch, duplicate references, and malformed evidence", () => {
     const malformedClaim = fixture();
     const malformed = addRow(malformedClaim, "1");
@@ -394,11 +489,41 @@ describe("strict STM row integrity", () => {
   test("rejects missing and cross-owner evidence-to-event closure", () => {
     const missing = fixture();
     addRow(missing, "1", { insert_event: false });
-    expect(loadFor(missing)).toThrow("exactly one durable event revision");
+    expect(loadFor(missing)).toThrow("durable evidence revision");
 
     const crossOwner = fixture();
     addRow(crossOwner, "1", { event_content_owner: FOREIGN_OWNER, event_column_owner: OWNER });
-    expect(loadFor(crossOwner)).toThrow("cross-owner durable event");
+    expect(loadFor(crossOwner)).toThrow("event owner mismatch");
+  });
+
+  test("requires each STM evidence object to equal a durable evidence revision", () => {
+    const target = fixture();
+    addRow(target, "1");
+    target.db.query("UPDATE evidence_revisions SET content_json = ? WHERE revision_id = ?").run(
+      JSON.stringify({ ...evidence("1"), excerpt: "forged durable excerpt" }),
+      "evidence-revision:1:0",
+    );
+    expect(loadFor(target)).toThrow("equal exactly one durable evidence revision");
+  });
+
+  test("validates the complete detached durable snapshot before using it", () => {
+    const malformedEvent = fixture();
+    addRow(malformedEvent, "1");
+    malformedEvent.db.query("UPDATE event_revisions SET content_json = ? WHERE revision_id = ?").run(
+      JSON.stringify({ event_revision_id: "event-revision:1", owner_account_id: OWNER }),
+      "event-revision:1",
+    );
+    expect(loadFor(malformedEvent)).toThrow("invalid event");
+
+    const malformedUnrelatedEntity = fixture();
+    malformedUnrelatedEntity.db.query("INSERT INTO entity_revisions VALUES (?, ?, ?, ?, ?)").run(
+      "entity-revision:bad",
+      OWNER,
+      JSON.stringify({ owner_account_id: OWNER }),
+      "entity-hash:bad",
+      "entity-commit:bad",
+    );
+    expect(loadFor(malformedUnrelatedEntity)).toThrow("invalid entity");
   });
 
   test("rejects non-active evidence and an event that does not address it exactly once", () => {
@@ -463,6 +588,78 @@ describe("strict STM row integrity", () => {
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
 describe("accepted recent-state injection", () => {
+  test("exposes only bounded SELECT and rejects transaction, DDL, PRAGMA, attach, and close attempts", () => {
+    const attacks = [
+      "ROLLBACK; BEGIN",
+      "CREATE TABLE escaped(value TEXT)",
+      "PRAGMA user_version = 9",
+      "SELECT * FROM pragma_user_version",
+      "ATTACH DATABASE ':memory:' AS escaped",
+    ];
+    for (const sql of attacks) {
+      const target = fixture();
+      expect(loadFor(target, {
+        accepted: (query) => {
+          expect(Object.keys(query)).toEqual(["select"]);
+          expect((query as unknown as { close?: unknown }).close).toBeUndefined();
+          return query.select({ sql, parameters: [], max_rows: 1 });
+        },
+      })).toThrow("read-only SELECT");
+      expect(target.db.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
+      expect(target.db.query("SELECT name FROM sqlite_master WHERE name = 'escaped'").get()).toBeNull();
+    }
+
+    const closeTarget = fixture();
+    expect(loadFor(closeTarget, {
+      accepted: (query) => {
+        (query as unknown as { close: () => void }).close();
+        return null;
+      },
+    })).toThrow();
+    expect(closeTarget.db.query("SELECT 1 AS open").get()).toEqual({ open: 1 });
+  });
+
+  test("detects rollback/rebegin even when inTransaction becomes true again", () => {
+    const target = fixture();
+    addRow(target, "1");
+    expect(loadFor(target, {
+      accepted: () => {
+        target.db.exec("ROLLBACK; BEGIN");
+        return {
+          state: "searched",
+          declared_frontier: "accepted:1",
+          searched_frontier: "accepted:1",
+          candidates: [],
+        };
+      },
+    })).toThrow("transaction continuity");
+    expect(target.db.inTransaction).toBe(false);
+    expect(target.db.query("SELECT COUNT(*) AS count FROM stm_items").get()).toEqual({ count: 1 });
+  });
+
+  test("rolls back captured-database mutations even when the callback restores query_only", () => {
+    const target = fixture();
+    const row = addRow(target, "1");
+    expect(loadFor(target, {
+      accepted: () => {
+        target.db.exec("PRAGMA query_only = OFF");
+        target.db.query("UPDATE stm_items SET predicate_id = ? WHERE id = ?").run("mutated", row.id);
+        target.db.exec("CREATE TABLE escaped(value TEXT)");
+        target.db.exec("PRAGMA user_version = 9");
+        target.db.exec("PRAGMA query_only = ON");
+        return {
+          state: "searched",
+          declared_frontier: "accepted:1",
+          searched_frontier: "accepted:1",
+          candidates: [],
+        };
+      },
+    })).toThrow();
+    expect(target.db.query("SELECT predicate_id FROM stm_items WHERE id = ?").get(row.id)).toEqual({ predicate_id: row.predicate_id });
+    expect(target.db.query("SELECT name FROM sqlite_master WHERE name = 'escaped'").get()).toBeNull();
+    expect(target.db.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
+  });
+
   test("absence degrades to unavailable and never infers acceptance from durable artifacts", () => {
     const target = fixture();
     addRow(target, "1");
@@ -625,16 +822,41 @@ describe("configuration bounds", () => {
 
   test("rejects an invalid timezone before any read transaction", () => {
     const target = fixture();
-    let snapshotCalls = 0;
-    const original = target.ledger.snapshot.bind(target.ledger);
-    target.ledger.snapshot = (ownerAccountId: string) => { snapshotCalls += 1; return original(ownerAccountId); };
+    const changesBefore = totalChanges(target.db);
     expect(() => createSqliteQaRecallLoader({
       db: target.db,
-      ledger: target.ledger,
       owner_account_id: OWNER,
       account_timezone: "Not/A_Real_Zone",
       limits: LIMITS,
     })).toThrow("timezone is invalid");
-    expect(snapshotCalls).toBe(0);
+    expect(totalChanges(target.db)).toBe(changesBefore);
+  });
+
+  test("snapshots option descriptors without invoking accessors and rejects an independent ledger", () => {
+    const target = fixture();
+    let getterCalls = 0;
+    const accessorOptions: Record<string, unknown> = {
+      db: target.db,
+      owner_account_id: OWNER,
+      account_timezone: "UTC",
+      limits: LIMITS,
+    };
+    Object.defineProperty(accessorOptions, "accepted_recent_state_port", {
+      enumerable: true,
+      get() { getterCalls += 1; return () => null; },
+    });
+    expect(() => createSqliteQaRecallLoader(accessorOptions as never)).toThrow("accessors");
+    expect(getterCalls).toBe(0);
+
+    const otherDb = new Database(":memory:");
+    const otherLedger = new SqliteLedger(otherDb);
+    expect(() => createSqliteQaRecallLoader({
+      db: target.db,
+      owner_account_id: OWNER,
+      account_timezone: "UTC",
+      limits: LIMITS,
+      ledger: otherLedger,
+    } as never)).toThrow("invalid shape");
+    otherDb.close();
   });
 });

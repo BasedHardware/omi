@@ -1,18 +1,31 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { isProxy } from "node:util/types";
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 
 import { compareStrings } from "../../core/order";
 import type { GraphSnapshot } from "../../core/retrieve";
 import type { AcceptedCoverageState } from "../../core/retrieve/recall-integrity";
-import { validateProvisionalClaim } from "../../core/schema/claim-validation";
-import { EvidenceSchema, L1EventSchema, type Evidence } from "../../core/schema";
+import { validateCanonicalClaim, validateProvisionalClaim } from "../../core/schema/claim-validation";
+import {
+  EntitySchema,
+  EvidenceSchema,
+  IdentityAuthorizationSchema,
+  IdentityConstraintSchema,
+  L1EventSchema,
+  MentionSchema,
+  PredicateAssertionSchema,
+  PredicateSchema,
+  type Evidence,
+} from "../../core/schema";
 import { validateStrict } from "../../core/schema/json";
 import { compareStmOrder } from "../../core/stm";
 import type { DurableStmItem } from "./stm";
-import type { SqliteLedger } from "./index";
+import { SqliteLedger } from "./index";
 
-type PlainJson = null | boolean | number | string | readonly PlainJson[] | { readonly [key: string]: PlainJson };
+export type SqliteQaQueryValue = null | boolean | number | string
+  | readonly SqliteQaQueryValue[]
+  | { readonly [key: string]: SqliteQaQueryValue };
+type PlainJson = SqliteQaQueryValue;
 
 const INTERNAL_REF = /^[\x21-\x7e]{1,512}$/;
 const ACCEPTED_STATES = new Set<AcceptedCoverageState>([
@@ -27,17 +40,18 @@ const ACCEPTED_STATES = new Set<AcceptedCoverageState>([
   "policy_bound",
 ]);
 const MAX_BOUND = Number.MAX_SAFE_INTEGER - 1;
+/** Full-set sort is deliberately finite even though output limits are separate. */
+export const SQLITE_QA_STM_SCAN_CEILING = 1_024;
 
 const fail = (message: string): never => { throw new TypeError(`SQLite QA recall read: ${message}`); };
 
 const compareCodeUnits = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
 /**
- * The accepted-source port is the only caller-controlled value boundary in
- * this adapter. Detach it before inspecting semantic fields. A value may be
- * reached only once: shared-reference aliases are rejected rather than copied,
- * because an alias can otherwise smuggle identity and TOCTOU assumptions into
- * later application code.
+ * Detach every persisted/callback JSON boundary before inspecting semantic
+ * fields. A value may be reached only once: shared-reference aliases are
+ * rejected rather than copied, because an alias can otherwise smuggle identity
+ * and TOCTOU assumptions into later application code.
  */
 const detachPlainJson = (input: unknown): PlainJson => {
   const seen = new WeakSet<object>();
@@ -123,8 +137,8 @@ const deepFreeze = <Value>(value: Value): Value => {
 
 const requireSafeBound = (value: number, name: string): number => {
   if (!Number.isSafeInteger(value) || value < 0) return fail(`${name} must be a non-negative safe integer`);
-  // The SQL item query uses limit + 1. Applying the same arithmetic ceiling to
-  // both knobs also keeps every accumulated byte count exactly representable.
+  // Keep every accumulated byte count and downstream bound arithmetic exactly
+  // representable even at adversarial configuration values.
   if (value > MAX_BOUND) return fail(`${name} is too large`);
   return value;
 };
@@ -182,6 +196,141 @@ const parseArgumentOrigins = (value: unknown): Readonly<Record<string, "suggeste
   return Object.freeze(output);
 };
 
+const requireJsonArray = (value: PlainJson, name: string): readonly PlainJson[] => {
+  if (!Array.isArray(value)) return fail(`durable snapshot ${name} must be an array`);
+  return value;
+};
+
+const requireExactRecord = (
+  value: PlainJson,
+  keys: readonly string[],
+  name: string,
+): { readonly [key: string]: PlainJson } => {
+  if (!hasExactKeys(value, keys)) return fail(`durable snapshot ${name} has an invalid shape`);
+  return value;
+};
+
+const requireOwned = (value: PlainJson, ownerAccountId: string, name: string): void => {
+  if (!isRecord(value) || value["owner_account_id"] !== ownerAccountId) {
+    fail(`durable snapshot ${name} owner mismatch`);
+  }
+};
+
+const requireRevision = (value: PlainJson, name: string): string =>
+  requireString(value, `durable snapshot ${name} revision_id`);
+
+/**
+ * `SqliteLedger.snapshot` parses persisted JSON. Its TypeScript return type is
+ * therefore not a runtime trust boundary. Validate the complete QA projection
+ * before any row lineage or digest uses it.
+ */
+const validateDurableSnapshot = (value: PlainJson, ownerAccountId: string): GraphSnapshot => {
+  const snapshot = requireExactRecord(value, [
+    "owner_account_id", "graph_generation", "claims", "entities", "predicates",
+    "predicate_assertions", "identity_constraints", "mentions", "identity_authorizations",
+    "identity_support", "events", "evidence", "liveness_causes", "adjacency",
+    "source_local_roles", "placement_artifacts",
+  ], "root");
+  if (snapshot["owner_account_id"] !== ownerAccountId) return fail("durable snapshot owner mismatch");
+
+  for (const item of requireJsonArray(snapshot["claims"]!, "claims")) {
+    const row = requireExactRecord(item, ["revision_id", "claim", "placement_status", "commit_sequence"], "claim revision");
+    const revisionId = requireRevision(row["revision_id"]!, "claim");
+    const claim = row["claim"];
+    if (!validateProvisionalClaim(claim) && !validateCanonicalClaim(claim)) return fail("durable snapshot contains an invalid claim");
+    requireOwned(claim as unknown as PlainJson, ownerAccountId, "claim");
+    if (claim.claim_revision_id !== revisionId) return fail("durable claim wrapper/revision mismatch");
+    if (!["canonical", "consumed", "provisional_unresolved_subject", "provisional_abstained"].includes(String(row["placement_status"]))) {
+      return fail("durable snapshot claim placement status is invalid");
+    }
+    requireNonnegativeInteger(row["commit_sequence"], "durable claim commit_sequence");
+  }
+
+  for (const item of requireJsonArray(snapshot["entities"]!, "entities")) {
+    const row = requireExactRecord(item, ["revision_id", "entity"], "entity revision");
+    const revisionId = requireRevision(row["revision_id"]!, "entity");
+    if (!validateStrict(EntitySchema, row["entity"])) return fail("durable snapshot contains an invalid entity");
+    requireOwned(row["entity"]!, ownerAccountId, "entity");
+    if ((row["entity"] as { entity_revision_id: string }).entity_revision_id !== revisionId) return fail("durable entity wrapper/revision mismatch");
+  }
+
+  const schemaCollections = [
+    ["predicates", "predicate", PredicateSchema],
+    ["predicate_assertions", "assertion", PredicateAssertionSchema],
+    ["identity_constraints", "constraint", IdentityConstraintSchema],
+    ["mentions", "mention", MentionSchema],
+    ["identity_authorizations", "authorization", IdentityAuthorizationSchema],
+  ] as const;
+  for (const [collectionName, payloadName, schema] of schemaCollections) {
+    for (const item of requireJsonArray(snapshot[collectionName]!, collectionName)) {
+      const row = requireExactRecord(item, ["revision_id", payloadName], `${payloadName} revision`);
+      requireRevision(row["revision_id"]!, payloadName);
+      if (!validateStrict(schema, row[payloadName])) return fail(`durable snapshot contains an invalid ${payloadName}`);
+      requireOwned(row[payloadName]!, ownerAccountId, payloadName);
+    }
+  }
+
+  const eventRevisionIds = new Set<string>();
+  for (const item of requireJsonArray(snapshot["events"]!, "events")) {
+    const row = requireExactRecord(item, ["revision_id", "event"], "event revision");
+    const revisionId = requireRevision(row["revision_id"]!, "event");
+    if (!validateStrict(L1EventSchema, row["event"])) return fail("durable snapshot contains an invalid event");
+    requireOwned(row["event"]!, ownerAccountId, "event");
+    if ((row["event"] as { event_revision_id: string }).event_revision_id !== revisionId) return fail("durable event wrapper/revision mismatch");
+    if (eventRevisionIds.has(revisionId)) return fail("durable snapshot contains duplicate event revisions");
+    eventRevisionIds.add(revisionId);
+  }
+
+  for (const item of requireJsonArray(snapshot["evidence"]!, "evidence")) {
+    const row = requireExactRecord(item, ["revision_id", "evidence", "commit_sequence"], "evidence revision");
+    requireRevision(row["revision_id"]!, "evidence");
+    if (!validateStrict(EvidenceSchema, row["evidence"])) return fail("durable snapshot contains invalid evidence");
+    const durableEvidence = row["evidence"] as unknown as Evidence;
+    if (!eventRevisionIds.has(durableEvidence.event_revision_id)) return fail("durable evidence has no owner-scoped event revision");
+    requireNonnegativeInteger(row["commit_sequence"], "durable evidence commit_sequence");
+  }
+
+  for (const item of requireJsonArray(snapshot["identity_support"]!, "identity_support")) {
+    const allowed = hasExactKeys(item, ["support_ref", "owner_account_id", "evidence_ref", "claim_revision_id", "source_independence_key"])
+      || hasExactKeys(item, ["support_ref", "owner_account_id", "evidence_ref", "claim_revision_id", "source_independence_key", "support_origin"]);
+    if (!allowed || !isRecord(item)) return fail("durable snapshot identity support has an invalid shape");
+    requireOwned(item, ownerAccountId, "identity support");
+    for (const key of ["support_ref", "evidence_ref", "claim_revision_id", "source_independence_key"]) {
+      requireString(item[key], `durable identity support ${key}`);
+    }
+    if ("support_origin" in item && item["support_origin"] !== "suggested" && item["support_origin"] !== "independent") {
+      return fail("durable identity support origin is invalid");
+    }
+  }
+
+  const liveness = requireExactRecord(snapshot["liveness_causes"]!, ["purged_claim_revision_ids", "forgotten_claim_revision_ids"], "liveness causes");
+  parseUniqueStringArray(liveness["purged_claim_revision_ids"], "durable purged claim ids");
+  parseUniqueStringArray(liveness["forgotten_claim_revision_ids"], "durable forgotten claim ids");
+
+  for (const item of requireJsonArray(snapshot["adjacency"]!, "adjacency")) {
+    const row = requireExactRecord(item, ["claim_revision_id", "entity_id", "role_slot_id"], "adjacency");
+    for (const key of ["claim_revision_id", "entity_id", "role_slot_id"]) requireString(row[key], `durable adjacency ${key}`);
+  }
+  for (const item of requireJsonArray(snapshot["source_local_roles"]!, "source_local_roles")) {
+    const row = requireExactRecord(item, ["claim_revision_id", "source_local_ref", "role_slot_id"], "source-local role");
+    for (const key of ["claim_revision_id", "source_local_ref", "role_slot_id"]) requireString(row[key], `durable source-local role ${key}`);
+  }
+  for (const item of requireJsonArray(snapshot["placement_artifacts"]!, "placement_artifacts")) {
+    const row = requireExactRecord(item, ["artifact_id", "kind", "provisional_revision_id", "canonical_claim_revision_id", "margin", "risk_markers", "unit_boundary_decision", "scope_locality"], "placement artifact");
+    requireString(row["artifact_id"], "durable placement artifact_id");
+    requireString(row["provisional_revision_id"], "durable placement provisional_revision_id");
+    if (!["confirmation_queue", "abstention_set", "auto_placement_log"].includes(String(row["kind"]))) return fail("durable placement kind is invalid");
+    if (row["canonical_claim_revision_id"] !== null) requireString(row["canonical_claim_revision_id"], "durable placement canonical revision");
+    if (row["margin"] !== null && !["low", "medium", "high"].includes(String(row["margin"]))) return fail("durable placement margin is invalid");
+    const risks = requireJsonArray(row["risk_markers"]!, "placement risk markers");
+    if (risks.some((risk) => typeof risk !== "string" || !["new_entity", "resolved_pronoun", "low_margin"].includes(risk))) return fail("durable placement risk marker is invalid");
+    if (row["unit_boundary_decision"] !== "accept_ltm" && row["unit_boundary_decision"] !== "abstain") return fail("durable placement decision is invalid");
+    if (row["scope_locality"] !== null && row["scope_locality"] !== "durable" && row["scope_locality"] !== "source_local") return fail("durable placement locality is invalid");
+  }
+
+  return value as unknown as GraphSnapshot;
+};
+
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
 interface StmSqlRow {
@@ -195,17 +344,28 @@ interface StmSqlRow {
   readonly lexical_terms_json: unknown;
   readonly vector_key: unknown;
   readonly predicate_id: unknown;
-  readonly bytes: unknown;
   readonly claim_json: unknown;
   readonly evidence_json: unknown;
   readonly argument_origins_json: unknown;
   readonly settled_window_id: unknown;
 }
 
+const stampCanonicalStmBytes = (input: Omit<DurableStmItem, "bytes">): DurableStmItem => {
+  let bytes = 0;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const detached = detachPlainJson({ ...input, bytes });
+    const computed = canonicalBytes(detached);
+    if (computed === bytes) return detached as unknown as DurableStmItem;
+    bytes = computed;
+  }
+  return fail("STM canonical byte count did not converge");
+};
+
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
 const decodeStmRow = (row: StmSqlRow, ownerAccountId: string, durable: GraphSnapshot): DurableStmItem => {
   const id = requireString(row.id, "STM row id");
+  const sessionId = requireString(row.session_id, "session_id");
   const claimValue = parseJson(row.claim_json, "claim_json");
   if (!validateProvisionalClaim(claimValue)) return fail("STM row contains an invalid provisional claim");
   if (claimValue.owner_account_id !== ownerAccountId) return fail("STM claim owner does not match the coherent load owner");
@@ -231,6 +391,10 @@ const decodeStmRow = (row: StmSqlRow, ownerAccountId: string, durable: GraphSnap
 
   for (const item of evidence) {
     if (item.state !== "active") return fail("STM evidence is not active");
+    const detachedItem = detachPlainJson(item);
+    const durableEvidence = (durable.evidence ?? []).filter((candidate) =>
+      canonicalJson(detachPlainJson(candidate.evidence)) === canonicalJson(detachedItem));
+    if (durableEvidence.length !== 1) return fail("STM evidence does not equal exactly one durable evidence revision");
     const events = (durable.events ?? []).filter((candidate) =>
       candidate.revision_id === item.event_revision_id
       && candidate.event.event_revision_id === item.event_revision_id);
@@ -238,6 +402,7 @@ const decodeStmRow = (row: StmSqlRow, ownerAccountId: string, durable: GraphSnap
     const event = events[0]!.event;
     if (!validateStrict(L1EventSchema, event)) return fail("STM evidence resolves to an invalid durable event");
     if (event.owner_account_id !== ownerAccountId) return fail("STM evidence resolves to a cross-owner durable event");
+    if (event.capture_session_id !== sessionId) return fail("STM row session does not match its durable event capture session");
     if (event.evidence_addressable_refs.filter((ref) => ref === item.evidence_id).length !== 1) {
       return fail("STM evidence is not uniquely addressable from its durable event");
     }
@@ -247,9 +412,9 @@ const decodeStmRow = (row: StmSqlRow, ownerAccountId: string, durable: GraphSnap
   if (eventTimeWatermark !== claimValue.temporal_scope.observed_at) {
     return fail("STM event-time watermark does not match the claim observation time");
   }
-  return {
+  return stampCanonicalStmBytes({
     id,
-    session_id: requireString(row.session_id, "session_id"),
+    session_id: sessionId,
     event_time_watermark: eventTimeWatermark,
     capture_sequence: requireNonnegativeInteger(row.capture_sequence, "capture_sequence"),
     revision_lineage: requireString(row.revision_lineage, "revision_lineage"),
@@ -258,12 +423,11 @@ const decodeStmRow = (row: StmSqlRow, ownerAccountId: string, durable: GraphSnap
     lexical_terms: parseUniqueStringArray(parseJson(row.lexical_terms_json, "lexical_terms_json"), "lexical_terms_json"),
     vector_key: requireString(row.vector_key, "vector_key"),
     predicate_id: requireString(row.predicate_id, "predicate_id"),
-    bytes: requireNonnegativeInteger(row.bytes, "bytes"),
     claim: claimValue,
     evidence: Object.freeze([...evidence]),
     argument_origins: parseArgumentOrigins(parseJson(row.argument_origins_json, "argument_origins_json")),
     settled_window_id: requireString(row.settled_window_id, "settled_window_id"),
-  };
+  });
 };
 
 // domain-pending(DIV-DOMCORE-001)
@@ -283,6 +447,20 @@ export interface AcceptedRecentState<Candidate> {
   readonly candidates: readonly Candidate[];
 }
 
+export type SqliteQaQueryParameter = null | boolean | number | string;
+
+export interface SqliteQaSelectRequest {
+  /** One SELECT statement. SQL comments, semicolons, PRAGMA, ATTACH, DDL, and DML are rejected. */
+  readonly sql: string;
+  readonly parameters: readonly SqliteQaQueryParameter[];
+  readonly max_rows: number;
+}
+
+/** The accepted-state collaborator never receives the SQLite connection. */
+export interface SqliteQaReadOnlyQuery {
+  readonly select: (request: SqliteQaSelectRequest) => readonly SqliteQaQueryValue[];
+}
+
 /**
  * An ingestion-owned test port supplies accepted material and its coverage.
  * This adapter deliberately defines no acceptance predicate and owns no table.
@@ -290,7 +468,7 @@ export interface AcceptedRecentState<Candidate> {
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
 export type AcceptedRecentStatePort<Candidate> = (
-  db: Database,
+  query: SqliteQaReadOnlyQuery,
   ownerAccountId: string,
   limits: SqliteQaRecallLimits,
 ) => unknown;
@@ -324,6 +502,8 @@ export interface SqliteQaRecallLoad<Candidate> {
       readonly ledger_head_digest: string;
     };
     readonly stm: {
+      readonly eligible_items: number;
+      readonly scan_ceiling: number;
       readonly selected_items: number;
       readonly selected_bytes: number;
       readonly last_selected_position: SqliteQaStmStoragePosition | null;
@@ -348,7 +528,6 @@ export interface SqliteQaRecallLoad<Candidate> {
 // domain-pending(DIV-DOMCORE-008)
 export interface SqliteQaRecallLoaderOptions<Candidate> {
   readonly db: Database;
-  readonly ledger: SqliteLedger;
   readonly owner_account_id: string;
   readonly account_timezone: string;
   readonly limits: SqliteQaRecallLimits;
@@ -412,6 +591,98 @@ const decodeAcceptedState = <Candidate>(input: unknown, limits: SqliteQaRecallLi
   });
 };
 
+const snapshotDataProperties = (
+  input: unknown,
+  required: readonly string[],
+  optional: readonly string[],
+  name: string,
+): Readonly<Record<string, unknown>> => {
+  if (typeof input !== "object" || input === null || Array.isArray(input) || isProxy(input)) {
+    return fail(`${name} must be a non-proxy plain object`);
+  }
+  const prototype = Object.getPrototypeOf(input);
+  if (prototype !== Object.prototype && prototype !== null) return fail(`${name} must be a plain object`);
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  const keys = Reflect.ownKeys(descriptors);
+  if (keys.some((key) => typeof key === "symbol")) return fail(`${name} rejects symbol keys`);
+  const actual = (keys as string[]).sort(compareCodeUnits);
+  const allowed = [...required, ...optional].sort(compareCodeUnits);
+  if (required.some((key) => !actual.includes(key)) || actual.some((key) => !allowed.includes(key))) {
+    return fail(`${name} has an invalid shape`);
+  }
+  const output: Record<string, unknown> = Object.create(null);
+  for (const key of actual) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      return fail(`${name} rejects accessors and hidden fields`);
+    }
+    output[key] = descriptor.value;
+  }
+  return Object.freeze(output);
+};
+
+const validateAcceptedPort = <Candidate>(value: unknown): AcceptedRecentStatePort<Candidate> | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "function" || isProxy(value)) return fail("accepted_recent_state_port must be a non-proxy function");
+  return value as AcceptedRecentStatePort<Candidate>;
+};
+
+const SELECT_FORBIDDEN = /(?:;|--|\/\*|\*\/|\bpragma(?:\b|_)|\b(?:attach|detach|begin|commit|rollback|savepoint|release|vacuum|create|alter|drop|insert|update|delete|replace|reindex|analyze|load_extension|writefile|readfile)\b)/iu;
+
+const createReadOnlyQuery = (db: Database, limits: SqliteQaRecallLimits): {
+  readonly query: SqliteQaReadOnlyQuery;
+  readonly revoke: () => void;
+} => {
+  let active = true;
+  const select = (requestInput: SqliteQaSelectRequest): readonly PlainJson[] => {
+    if (!active || !db.inTransaction || queryOnlyState(db) !== 1) {
+      return fail("accepted SELECT capability is not active in its coherent read transaction");
+    }
+    const request = detachPlainJson(requestInput);
+    if (!hasExactKeys(request, ["sql", "parameters", "max_rows"])) return fail("accepted SELECT request has an invalid shape");
+    const sql = request["sql"];
+    const parameters = request["parameters"];
+    const maxRows = request["max_rows"];
+    if (typeof sql !== "string" || sql.length === 0 || sql.length > 16_384
+      || !/^\s*select\b/iu.test(sql) || SELECT_FORBIDDEN.test(sql)) {
+      return fail("accepted query capability permits one read-only SELECT statement only");
+    }
+    if (!Array.isArray(parameters) || parameters.some((parameter) =>
+      parameter !== null && typeof parameter !== "boolean" && typeof parameter !== "number" && typeof parameter !== "string")) {
+      return fail("accepted SELECT parameters must be JSON scalars");
+    }
+    const boundedRows = requireNonnegativeInteger(maxRows, "accepted SELECT max_rows");
+    if (boundedRows > limits.max_items) return fail("accepted SELECT max_rows exceeds the configured item limit");
+    if (boundedRows === 0) return Object.freeze([]);
+    const rows = db.query(`SELECT * FROM (${sql}) AS "__qa_accepted_read" LIMIT ?`).all(
+      ...(parameters as SqliteQaQueryParameter[]),
+      boundedRows,
+    );
+    const detached = detachPlainJson(rows);
+    if (!Array.isArray(detached)) return fail("accepted SELECT returned an invalid row set");
+    return detached;
+  };
+  const capability = Object.create(null) as { select: SqliteQaReadOnlyQuery["select"] };
+  Object.defineProperty(capability, "select", { value: select, enumerable: true, writable: false, configurable: false });
+  return Object.freeze({
+    query: Object.freeze(capability),
+    revoke: () => { active = false; },
+  });
+};
+
+const queryOnlyState = (db: Database): number => {
+  const row = db.query("PRAGMA query_only").get() as { query_only?: unknown } | null;
+  if (!row || (row.query_only !== 0 && row.query_only !== 1)) return fail("SQLite query_only state is invalid");
+  return row.query_only;
+};
+
+const connectionStateDigest = (db: Database): string => canonicalDigest(detachPlainJson({
+  databases: db.query("PRAGMA database_list").all(),
+  foreign_keys: db.query("PRAGMA foreign_keys").all(),
+  schema_version: db.query("PRAGMA schema_version").all(),
+  user_version: db.query("PRAGMA user_version").all(),
+}));
+
 const totalChanges = (db: Database): number => {
   const row = db.query("SELECT total_changes() AS count").get() as { count: number };
   return row.count;
@@ -427,151 +698,229 @@ const asPlainJson = (value: unknown): PlainJson => detachPlainJson(value);
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
 export const createSqliteQaRecallLoader = <Candidate>(options: SqliteQaRecallLoaderOptions<Candidate>): (() => SqliteQaRecallLoad<Candidate>) => {
-  const ownerAccountId = requireString(options.owner_account_id, "owner_account_id");
-  const accountTimezone = requireTimezone(options.account_timezone);
+  const configured = snapshotDataProperties(
+    options,
+    ["db", "owner_account_id", "account_timezone", "limits"],
+    ["accepted_recent_state_port"],
+    "loader options",
+  );
+  const db = configured["db"];
+  if (!(db instanceof Database) || isProxy(db)) return fail("db must be an exact non-proxy SQLite Database");
+  const ownerAccountId = requireString(configured["owner_account_id"], "owner_account_id");
+  const accountTimezone = requireTimezone(requireString(configured["account_timezone"], "account_timezone"));
+  const configuredLimits = snapshotDataProperties(configured["limits"], ["max_items", "max_bytes"], [], "limits");
   const limits = Object.freeze({
-    max_items: requireSafeBound(options.limits.max_items, "max_items"),
-    max_bytes: requireSafeBound(options.limits.max_bytes, "max_bytes"),
+    max_items: requireSafeBound(configuredLimits["max_items"] as number, "max_items"),
+    max_bytes: requireSafeBound(configuredLimits["max_bytes"] as number, "max_bytes"),
   });
-  const { db, ledger, accepted_recent_state_port: acceptedPort } = options;
-  const sqlLimit = limits.max_items + 1;
+  const acceptedPort = validateAcceptedPort<Candidate>(configured["accepted_recent_state_port"]);
+
+  // QA-only composition owns schema preparation. Constructing the ledger here
+  // (after all configuration checks, before any coherent load) is the binding:
+  // its private connection is the exact Database captured above, so callers
+  // cannot pair ledger reads from one database with STM reads from another.
+  // `SqliteLedger` migration/PRAGMA side effects happen only at factory time.
+  const ledger = new SqliteLedger(db);
 
   return () => {
-    const read = db.transaction((): SqliteQaRecallLoad<Candidate> => {
-      if (!db.inTransaction) return fail("coherent source reads require one active transaction");
-      const changesBefore = totalChanges(db);
+    if (db.inTransaction) return fail("coherent load cannot start inside another transaction");
+    const priorQueryOnly = queryOnlyState(db);
+    if (priorQueryOnly === 0) db.exec("PRAGMA query_only = ON");
+    try {
+      const read = db.transaction((): SqliteQaRecallLoad<Candidate> => {
+        if (!db.inTransaction) return fail("coherent source reads require one active transaction");
+        const changesBefore = totalChanges(db);
+        const connectionStateBefore = connectionStateDigest(db);
 
-      const ledgerHead = ledger.graphHead(ownerAccountId);
-      const durable = asPlainJson(ledger.snapshot(ownerAccountId)) as unknown as GraphSnapshot;
-      if (durable.owner_account_id !== ownerAccountId) return fail("durable snapshot owner mismatch");
-      const graphGeneration = durable.graph_generation ?? 0;
-      if ((typeof graphGeneration !== "string" || graphGeneration.length === 0)
-        && (typeof graphGeneration !== "number" || !Number.isSafeInteger(graphGeneration) || graphGeneration < 0)) {
-        return fail("durable snapshot graph generation is invalid");
-      }
-      if (graphGeneration !== (ledgerHead?.sequence ?? 0)) {
-        return fail("durable snapshot generation does not match its ledger head");
-      }
-
-      // Owner and decided-row exclusion occur before LIMIT. A foreign or
-      // ledger-decided-but-undrained row cannot move the selected prefix or its
-      // internal storage position.
-      // domain-pending(DIV-DOMCORE-006)
-      // domain-pending(DIV-DOMCORE-008)
-      const malformedOwnerlessRow = db.query(`
-        SELECT 1 AS present
-        FROM stm_items
-        WHERE consumed = 0 AND json_valid(claim_json) = 0
-        LIMIT 1
-      `).get();
-      // The disposable table has no separate owner column. Invalid claim JSON
-      // therefore cannot be attributed safely; reject database integrity rather
-      // than silently treating the row as foreign or letting it move a prefix.
-      if (malformedOwnerlessRow) return fail("STM contains malformed ownerless claim JSON");
-
-      const rawRows = db.query(`
-        SELECT id, session_id, event_time_watermark, capture_sequence, revision_lineage,
-          ingest_sequence, entity_refs_json, lexical_terms_json, vector_key, predicate_id,
-          bytes, claim_json, evidence_json, argument_origins_json, settled_window_id
-        FROM stm_items AS s
-        WHERE s.consumed = 0
-          AND CASE WHEN json_valid(s.claim_json)
-            THEN json_extract(s.claim_json, '$.owner_account_id') ELSE NULL END = ?
-          AND NOT EXISTS (
-            SELECT 1
-            FROM consumed_markers AS marker
-            JOIN derivation_commits AS derivation ON derivation.commit_id = marker.commit_id
-            WHERE marker.provisional_revision_id = s.id
-              AND derivation.owner_account_id = ?
-          )
-        ORDER BY event_time_watermark, capture_sequence, revision_lineage, ingest_sequence, id
-        LIMIT ?
-      `).all(ownerAccountId, ownerAccountId, sqlLimit) as StmSqlRow[];
-
-      const decoded = rawRows.map((row) => decodeStmRow(row, ownerAccountId, durable)).sort(compareStmOrder);
-      const selected: DurableStmItem[] = [];
-      let selectedBytes = 0;
-      let next: DurableStmItem | undefined;
-      for (const item of decoded) {
-        if (selected.length >= limits.max_items || item.bytes > limits.max_bytes - selectedBytes) {
-          next = item;
-          break;
+        const ledgerHead = ledger.graphHead(ownerAccountId);
+        const durable = validateDurableSnapshot(asPlainJson(ledger.snapshot(ownerAccountId)), ownerAccountId);
+        const graphGeneration = durable.graph_generation ?? 0;
+        if ((typeof graphGeneration !== "string" || graphGeneration.length === 0)
+          && (typeof graphGeneration !== "number" || !Number.isSafeInteger(graphGeneration) || graphGeneration < 0)) {
+          return fail("durable snapshot graph generation is invalid");
         }
-        selected.push(item);
-        selectedBytes += item.bytes;
-      }
-      const bounds: SqliteQaStmBound[] = [];
-      if (next && selected.length >= limits.max_items) bounds.push("item_limit");
-      if (next && next.bytes > limits.max_bytes - selectedBytes) bounds.push("byte_limit");
+        if (graphGeneration !== (ledgerHead?.sequence ?? 0)) {
+          return fail("durable snapshot generation does not match its ledger head");
+        }
 
-      const defaultAccepted = {
-        state: "unavailable",
-        declared_frontier: null,
-        searched_frontier: null,
-        candidates: [],
-      } as const;
-      // The port runs under this exact transaction. It is an injected read of
-      // already-accepted state; no durable/Event/evidence/derivation field is
-      // inspected to infer acceptance.
-      // domain-pending(DIV-DOMCORE-001)
-      // domain-pending(DIV-DOMCORE-008)
-      const accepted = decodeAcceptedState<Candidate>(
-        acceptedPort ? acceptedPort(db, ownerAccountId, limits) : defaultAccepted,
-        limits,
-      );
+        // Owner and decided-row exclusion occur before the finite scan count.
+        // Foreign, consumed, and ledger-decided-but-undrained rows cannot move
+        // the selected prefix or exhaust its scan budget.
+        // domain-pending(DIV-DOMCORE-006)
+        // domain-pending(DIV-DOMCORE-008)
+        const malformedOwnerlessRow = db.query(`
+          SELECT 1 AS present
+          FROM stm_items
+          WHERE consumed = 0 AND json_valid(claim_json) = 0
+          LIMIT 1
+        `).get();
+        // The disposable table has no separate owner column. Invalid claim JSON
+        // therefore cannot be attributed safely; reject database integrity rather
+        // than silently treating the row as foreign or letting it move a prefix.
+        if (malformedOwnerlessRow) return fail("STM contains malformed ownerless claim JSON");
 
-      const ledgerHeadValue = ledgerHead === null ? null : Object.freeze({
-        commit_id: requireString(ledgerHead.commit_id, "ledger head commit_id"),
-        sequence: requireNonnegativeInteger(ledgerHead.sequence, "ledger head sequence"),
-      });
-      const ledgerHeadDigest = canonicalDigest(asPlainJson({
-        owner_account_id: ownerAccountId,
-        ledger_head: ledgerHeadValue,
-      }));
-      const internalCoverage = {
-        applied_limits: { ...limits },
-        durable: {
-          graph_generation: graphGeneration,
+        const eligibleCountRow = db.query(`
+          SELECT COUNT(*) AS count
+          FROM stm_items AS s
+          WHERE s.consumed = 0
+            AND CASE WHEN json_valid(s.claim_json)
+              THEN json_extract(s.claim_json, '$.owner_account_id') ELSE NULL END = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM consumed_markers AS marker
+              JOIN derivation_commits AS derivation ON derivation.commit_id = marker.commit_id
+              WHERE marker.provisional_revision_id = s.id
+                AND derivation.owner_account_id = ?
+            )
+        `).get(ownerAccountId, ownerAccountId) as { count?: unknown } | null;
+        const eligibleCount = requireNonnegativeInteger(eligibleCountRow?.count, "eligible STM row count");
+        if (eligibleCount > SQLITE_QA_STM_SCAN_CEILING) return fail("eligible STM rows exceed the QA scan ceiling");
+
+        // SQL performs only owner and ledger-decision eligibility. No SQLite
+        // collation or pre-limit prefix is trusted: the complete eligible owner
+        // set is detached, validated, and sorted by the core comparator first.
+        const rawRows = db.query(`
+          SELECT id, session_id, event_time_watermark, capture_sequence, revision_lineage,
+            ingest_sequence, entity_refs_json, lexical_terms_json, vector_key, predicate_id,
+            claim_json, evidence_json, argument_origins_json, settled_window_id
+          FROM stm_items AS s
+          WHERE s.consumed = 0
+            AND CASE WHEN json_valid(s.claim_json)
+              THEN json_extract(s.claim_json, '$.owner_account_id') ELSE NULL END = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM consumed_markers AS marker
+              JOIN derivation_commits AS derivation ON derivation.commit_id = marker.commit_id
+              WHERE marker.provisional_revision_id = s.id
+                AND derivation.owner_account_id = ?
+            )
+        `).all(ownerAccountId, ownerAccountId) as StmSqlRow[];
+        if (rawRows.length !== eligibleCount) return fail("eligible STM count changed inside the coherent transaction");
+
+        const decoded = rawRows.map((row) => decodeStmRow(row, ownerAccountId, durable)).sort(compareStmOrder);
+        const selected: DurableStmItem[] = [];
+        let selectedBytes = 0;
+        let next: DurableStmItem | undefined;
+        for (const item of decoded) {
+          if (selected.length >= limits.max_items || item.bytes > limits.max_bytes - selectedBytes) {
+            next = item;
+            break;
+          }
+          selected.push(item);
+          selectedBytes += item.bytes;
+        }
+        const bounds: SqliteQaStmBound[] = [];
+        if (next && selected.length >= limits.max_items) bounds.push("item_limit");
+        if (next && next.bytes > limits.max_bytes - selectedBytes) bounds.push("byte_limit");
+
+        const defaultAccepted = {
+          state: "unavailable",
+          declared_frontier: null,
+          searched_frontier: null,
+          candidates: [],
+        } as const;
+        let accepted = decodeAcceptedState<Candidate>(defaultAccepted, limits);
+        if (acceptedPort) {
+          const savepoint = `qa_accepted_${randomBytes(16).toString("hex")}`;
+          db.exec(`SAVEPOINT "${savepoint}"`);
+          try {
+            const readOnly = createReadOnlyQuery(db, limits);
+            let acceptedInput: unknown;
+            try {
+              acceptedInput = acceptedPort(readOnly.query, ownerAccountId, limits);
+            } finally {
+              readOnly.revoke();
+            }
+            if (!db.inTransaction) return fail("accepted port broke the coherent transaction");
+            if (queryOnlyState(db) !== 1) return fail("accepted port disabled SQLite query-only mode");
+            if (connectionStateDigest(db) !== connectionStateBefore) return fail("accepted port changed SQLite connection or schema state");
+            const detachedAccepted = decodeAcceptedState<Candidate>(acceptedInput, limits);
+            // A callback can make `inTransaction` true again after ROLLBACK;
+            // BEGIN. Only the private savepoint proves transaction continuity.
+            // Roll back on success too: the accepted value is already detached,
+            // and a callback that captured the original Database cannot smuggle
+            // a write through by restoring connection flags before returning.
+            db.exec(`ROLLBACK TO SAVEPOINT "${savepoint}"`);
+            db.exec(`RELEASE SAVEPOINT "${savepoint}"`);
+            accepted = detachedAccepted;
+          } catch (error) {
+            let savepointIntact = false;
+            try {
+              db.exec(`ROLLBACK TO SAVEPOINT "${savepoint}"`);
+              db.exec(`RELEASE SAVEPOINT "${savepoint}"`);
+              savepointIntact = true;
+            } catch {
+              // The outer transaction wrapper will roll back any replacement
+              // transaction before control leaves this synchronous load.
+            }
+            if (!savepointIntact) return fail("accepted port broke coherent transaction continuity");
+            throw error;
+          }
+        }
+
+        const ledgerHeadValue = ledgerHead === null ? null : Object.freeze({
+          commit_id: requireString(ledgerHead.commit_id, "ledger head commit_id"),
+          sequence: requireNonnegativeInteger(ledgerHead.sequence, "ledger head sequence"),
+        });
+        const ledgerHeadDigest = canonicalDigest(asPlainJson({
+          owner_account_id: ownerAccountId,
           ledger_head: ledgerHeadValue,
-          ledger_head_digest: ledgerHeadDigest,
-        },
-        stm: {
-          selected_items: selected.length,
-          selected_bytes: selectedBytes,
-          last_selected_position: positionOf(selected.at(-1)),
-          next_unselected_position: positionOf(next),
-          has_more: next !== undefined,
-          bounds_reached: [...bounds],
-        },
-        accepted: {
-          state: accepted.value.state,
-          declared_frontier: accepted.value.declared_frontier,
-          searched_frontier: accepted.value.searched_frontier,
-          selected_items: accepted.value.candidates.length,
-          selected_bytes: accepted.bytes,
-        },
-      } as const;
-      const digestInput = asPlainJson({
-        owner_account_id: ownerAccountId,
-        account_timezone: accountTimezone,
-        durable_snapshot: durable,
-        stm_rows: selected,
-        accepted_state: accepted.value,
-        internal_coverage: internalCoverage,
-      });
-      const coherentSnapshotDigest = canonicalDigest(digestInput);
+        }));
+        const internalCoverage = {
+          applied_limits: { ...limits },
+          durable: {
+            graph_generation: graphGeneration,
+            ledger_head: ledgerHeadValue,
+            ledger_head_digest: ledgerHeadDigest,
+          },
+          stm: {
+            eligible_items: eligibleCount,
+            scan_ceiling: SQLITE_QA_STM_SCAN_CEILING,
+            selected_items: selected.length,
+            selected_bytes: selectedBytes,
+            last_selected_position: positionOf(selected.at(-1)),
+            next_unselected_position: positionOf(next),
+            has_more: next !== undefined,
+            bounds_reached: [...bounds],
+          },
+          accepted: {
+            state: accepted.value.state,
+            declared_frontier: accepted.value.declared_frontier,
+            searched_frontier: accepted.value.searched_frontier,
+            selected_items: accepted.value.candidates.length,
+            selected_bytes: accepted.bytes,
+          },
+        } as const;
+        const digestInput = asPlainJson({
+          owner_account_id: ownerAccountId,
+          account_timezone: accountTimezone,
+          durable_snapshot: durable,
+          stm_rows: selected,
+          accepted_state: accepted.value,
+          internal_coverage: internalCoverage,
+        });
+        const coherentSnapshotDigest = canonicalDigest(digestInput);
 
-      if (totalChanges(db) !== changesBefore) return fail("a read port attempted to mutate SQLite");
-      return deepFreeze({
-        owner_account_id: ownerAccountId,
-        account_timezone: accountTimezone,
-        durable_snapshot: durable,
-        stm_rows: selected,
-        accepted_state: accepted.value,
-        internal_coverage: internalCoverage,
-        coherent_snapshot_digest: coherentSnapshotDigest,
+        if (!db.inTransaction) return fail("coherent transaction ended before load completion");
+        if (queryOnlyState(db) !== 1) return fail("SQLite query-only mode changed during coherent load");
+        if (connectionStateDigest(db) !== connectionStateBefore) return fail("SQLite connection or schema state changed during coherent load");
+        if (totalChanges(db) !== changesBefore) return fail("a read port attempted to mutate SQLite");
+        return deepFreeze({
+          owner_account_id: ownerAccountId,
+          account_timezone: accountTimezone,
+          durable_snapshot: durable,
+          stm_rows: selected,
+          accepted_state: accepted.value,
+          internal_coverage: internalCoverage,
+          coherent_snapshot_digest: coherentSnapshotDigest,
+        });
       });
-    });
-    return read.deferred();
+      return read.deferred();
+    } finally {
+      if (db.inTransaction) {
+        try { db.exec("ROLLBACK"); } catch { /* closed or already unwound */ }
+      }
+      db.exec(`PRAGMA query_only = ${priorQueryOnly}`);
+    }
   };
 };
