@@ -12,61 +12,73 @@
       "outcome": "accepted",
       "status": 200,
       "kind": "accepted",
-      "idempotent": false
+      "idempotent": false,
+      "bodyRatified": false
     },
     {
       "outcome": "accepted_idempotent",
       "status": 200,
       "kind": "accepted",
-      "idempotent": true
+      "idempotent": true,
+      "bodyRatified": false
     },
     {
       "outcome": "authentication",
       "status": 401,
       "body": "{\"error\":\"unauthorized\",\"refusal_outcome\":\"authentication\"}",
-      "kind": "refusal"
+      "kind": "refusal",
+      "bodyRatified": true
     },
     {
       "outcome": "authorization",
       "status": 403,
       "body": "{\"error\":\"forbidden\",\"refusal_outcome\":\"authorization\"}",
-      "kind": "refusal"
+      "kind": "refusal",
+      "bodyRatified": true
     },
     {
       "outcome": "entitlement",
       "status": 403,
       "body": "{\"error\":\"forbidden\",\"refusal_outcome\":\"entitlement\"}",
-      "kind": "refusal"
+      "kind": "refusal",
+      "bodyRatified": true
     },
     {
       "outcome": "stale_epoch",
       "status": 409,
       "body": "{\"error\":\"stale_epoch\",\"refusal_outcome\":\"stale_epoch\"}",
-      "kind": "refusal"
+      "kind": "refusal",
+      "bodyRatified": true
     },
     {
       "outcome": "validation",
       "status": 422,
       "body": "{\"error\":\"invalid_envelope\"}",
-      "kind": "error"
+      "kind": "error",
+      "bodyRatified": true
     },
     {
       "outcome": "write_id_reuse",
       "status": 409,
       "body": "{\"error\":\"write_id_reuse\"}",
-      "kind": "error"
+      "kind": "error",
+      "bodyRatified": true
     },
     {
       "outcome": "conflict",
       "status": 409,
       "body": "{\"error\":\"conflict\"}",
-      "kind": "error"
+      "kind": "error",
+      "bodyRatified": true
     },
     {
       "outcome": "maintenance",
       "status": 503,
-      "body": "{\"error\":\"maintenance\"}",
-      "kind": "error"
+      "body": null,
+      "kind": "error",
+      "bodyRatified": false,
+      "servingSideBody": "{\"error\":\"maintenance\",\"refusal_outcome\":\"control_unavailable\"}",
+      "note": "The 503 body is NOT ratified. It is spelled by the serving side in platform/apps/service/control/fence-http.ts and carries a live escalation to fable (data/run-2026-08-08c/blocked/EPOCH-refusal-wire-values.md section 1) about whether refusal_outcome is a five-value enum. servingSideBody records what the server emits TODAY so both sides still agree on observed behaviour; body stays null so no ruling is pre-empted. Client obligation is unaffected either way: 503 is backpressure, never a dead letter."
     }
   ]
 }

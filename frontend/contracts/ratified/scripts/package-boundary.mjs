@@ -16,18 +16,27 @@ const provenance = JSON.parse(provenanceBytes);
  * declared explicitly in ARTIFACT.json rather than inferred from semver.
  * Exactly two values exist; there is no third.
  *
- * 0.3.0 is `additive`. It adds ONE new export subpath (`./write/ops`) and two
- * new fixture corpora. It removes nothing, narrows nothing, requires nothing
- * new of anyone, and changes the meaning of no existing field: every client
- * built against 0.2.0 keeps working unchanged, which is the definition.
+ * 0.3.0 added the write wire and was `additive`: one new export subpath
+ * (`./write/ops`) and two fixture corpora, removing and narrowing nothing.
  *
- * The one classification that needed thought is `stale_epoch`. It is a NEW
- * refusal outcome on a NEW route, so no existing response can begin carrying
- * it and no existing client can begin seeing it — additive. It would have
- * been `breaking` had it been added to an outcome set some already-shipped
- * client exhaustively switches over, and it is deliberately not that.
+ * 0.4.0 is `breaking`, declared over-cautiously and on purpose. It changes
+ * `WRITE_ERRORS.maintenance.body` from a fixed string to `null`, because the
+ * 503 body is under a live escalation to fable
+ * (data/run-2026-08-08c/blocked/EPOCH-refusal-wire-values.md §1) and a
+ * ratified contract must not fix a byte string that a pending ruling may move.
+ * Narrowing a type is `breaking` by §1's own rules, and "when in doubt, it is
+ * breaking" settles the rest.
+ *
+ * §8's breaking-bump discipline, satisfied rather than waved:
+ *   - WHAT DATA WRITTEN UNDER 0.4.0 MEANS TO A CLIENT ON 0.3.0: nothing. This
+ *     is a REQUEST-shape and error-table contract; no data is persisted in any
+ *     shape it defines, and the change removes a constant rather than altering
+ *     a payload.
+ *   - IS IT IRREVERSIBLE? No. Nothing adopted 0.3.0 — it was pushed to
+ *     core/foundation and no consumer ever vendored it, so there is no client
+ *     in the field and rollback is a re-vendor.
  */
-const COMPATIBILITY_CLASS = "additive";
+const COMPATIBILITY_CLASS = "breaking";
 if (COMPATIBILITY_CLASS !== "additive" && COMPATIBILITY_CLASS !== "breaking") {
   throw new Error("compatibility class must be exactly 'additive' or 'breaking'");
 }
@@ -80,7 +89,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.3.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.4.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");

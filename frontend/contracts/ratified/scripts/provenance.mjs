@@ -56,12 +56,16 @@ const provenance = {
   // fixes it ("a cross-cutting ruling is cited by its document slug, prefixed
   // COORD-"), so the slug below is the defined form, not a best guess.
   //
-  // 0.3.0 adds "COORD-write-path-rulings" — the RATIFIED write-path rulings
+  // 0.4.0 adds "COORD-cross-generation-writes" — the ratified ruling that
+  // governs migration windows and straggler disposition, and therefore the one
+  // that governs the 503/backpressure semantics 0.4.0 declines to fix bytes for.
+  //
+  // 0.3.0 added "COORD-write-path-rulings" — the RATIFIED write-path rulings
   // (B1 minted write_id, B2 stale_epoch as its own refusal outcome, B4
   // POST /v1/{domain}/ops, B6 tasks-first but domain-generic). Per the
   // evolution policy §3 a bump is valid only if this array gains a ratified
   // ruling id the previous version did not carry; that is what this line is.
-  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings"],
+  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy", "COORD-write-path-rulings", "COORD-cross-generation-writes"],
   compiler: { name: "typescript", version: manifest.devDependencies.typescript },
   inputs: entries,
   sourceDigest,

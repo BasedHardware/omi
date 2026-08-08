@@ -369,8 +369,21 @@ test("the write-ops schema of record matches the module's own tables", async () 
     assert.ok(row, `error outcome ${name} is missing from the schema of record`);
     assert.equal(row.kind, "error");
     assert.equal(row.status, error.status);
-    assert.equal(row.body, error.body);
+    // A null body is a DECLARED non-ratification, not a gap. The schema must say
+    // so explicitly and must record what the serving side emits today, so "we
+    // have not ratified this" can never be confused with "nobody looked".
+    assert.equal(row.body, error.body, `${name} body`);
+    assert.equal(row.bodyRatified, error.body !== null, `${name} bodyRatified`);
+    if (error.body === null) {
+      assert.equal(typeof row.servingSideBody, "string", `${name} must record the serving side's current spelling`);
+      assert.ok(row.note.includes("escalation"), `${name} must name why its body is unratified`);
+    }
   }
+  // The 503 body is under escalation to fable and this contract must not fix it.
+  // red-proof: give WRITE_ERRORS.maintenance a string body and this goes red.
+  // APPLIED AND OBSERVED RED.
+  assert.equal(WRITE_ERRORS.maintenance.body, null);
+  assert.equal(WRITE_ERRORS.maintenance.status, 503);
   // Nothing in the schema that the module does not define.
   const known = new Set([...WRITE_REFUSAL_OUTCOMES, ...Object.keys(WRITE_ERRORS), "accepted", "accepted_idempotent"]);
   for (const row of schema.outcomes) assert.ok(known.has(row.outcome), `schema declares unknown outcome ${row.outcome}`);

@@ -80,6 +80,10 @@ assert.equal(inheritedGetterCalls, 0);
 // bytes a backend would install, and rule 15 is about the real shape.
 const writeOpsSchema = await fixture("write-ops-outcomes.json");
 for (const row of writeOpsSchema.outcomes) {
+  if (row.kind === "error" && row.bodyRatified === false) {
+    assert.equal(row.body, null, `${row.outcome} declares an unratified body`);
+    assert.equal(typeof row.servingSideBody, "string", `${row.outcome} records the serving side's spelling`);
+  }
   if (row.kind !== "refusal") continue;
   assert.equal(WRITE_REFUSALS[row.outcome].status, row.status, `${row.outcome} status`);
   assert.equal(WRITE_REFUSALS[row.outcome].body, row.body, `${row.outcome} body`);

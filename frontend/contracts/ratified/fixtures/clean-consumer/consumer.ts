@@ -255,6 +255,9 @@ if (staleEpochOutcome !== "stale_epoch") throw new Error("stale_epoch must be re
 if (readWriteRefusalOutcome(WRITE_ERRORS.conflict.status, WRITE_ERRORS.conflict.body) !== null) {
   throw new Error("conflict must never read as a refusal outcome — it is not one");
 }
+// The 503 body is under escalation and is deliberately unratified; a consumer
+// must be able to see that as a value rather than discovering an empty string.
+if (WRITE_ERRORS.maintenance.body !== null) throw new Error("the 503 body must stay unratified");
 
 const sampleEnvelope: WriteOpEnvelope | null = parseWriteOpEnvelopeJson(
   JSON.stringify({
