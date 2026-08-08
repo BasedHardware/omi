@@ -38,8 +38,11 @@ function memory(value: Partial<Memory> & Pick<Memory, "id" | "content">): Memory
 
 function baseRows(): Memory[] {
   return [
-    memory({ id: id("fixture-memory-one"), content: "notes: Keep the morning review short and focused.", category: "manual", visibility: "private" }),
-    memory({ id: id("fixture-memory-two"), content: "preferences: Omi should surface saved context before asking again.", category: "review", visibility: "public" }),
+    memory({ id: id("fixture-memory-one"), content: "notes: Keep the morning review short, focused, and ordered around the one decision that matters most.", category: "manual", visibility: "private" }),
+    memory({ id: id("fixture-memory-two"), content: "preferences: Omi should surface saved context before asking the same question again.", category: "review", visibility: "public" }),
+    memory({ id: id("fixture-memory-three"), content: "work: The current project is a desktop-first redesign with shared product logic and thin native shells.", updatedAt: FIXED_NOW - 2 * 86_400_000, visibility: "private" }),
+    memory({ id: id("fixture-memory-four"), content: "communication: Concise updates are preferred when the next action is already clear.", updatedAt: FIXED_NOW - 4 * 86_400_000, visibility: "private" }),
+    memory({ id: id("fixture-memory-five"), content: "product: Fast iteration and native feel are both release criteria; neither is a trade for the other.", updatedAt: FIXED_NOW - 7 * 86_400_000, visibility: "public" }),
   ];
 }
 

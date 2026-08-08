@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, Folder } from "@omi-core/contracts";
 import { formatDate, formatDuration, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
-import type { ConversationFixtureState, ProductionConversationStore, ProductionFolderStore } from "./conversation-fixtures.js";
-import { ProductionChrome } from "./ProductionChrome.js";
+import { CONVERSATION_FIXED_NOW, type ConversationFixtureState, type ProductionConversationStore, type ProductionFolderStore } from "./conversation-fixtures.js";
+import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import "./conversations.css";
 
 type Locale = string;
@@ -49,6 +49,9 @@ function dateLabel(value: number | null, locale: Locale, deterministic = false):
 
 function dayLabel(value: number | null, locale: Locale, deterministic: boolean): string {
   if (value === null) return t(locale, "conversations.dateUnavailable");
+  if (deterministic && new Date(value).toISOString().slice(0, 10) === new Date(CONVERSATION_FIXED_NOW).toISOString().slice(0, 10)) {
+    return t(locale, "tasks.today");
+  }
   return formatDate(value, locale, { dateStyle: "medium", ...(deterministic ? { timeZone: "UTC" } : {}) });
 }
 
@@ -307,6 +310,8 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
   return (
     <main className="production-shell" data-production-shell="true" data-route="conversations" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
       <ProductionChrome locale={locale} active="conversations" placement="top" />
+      <section className="desktop-page-panel">
+      <ProductionLibrarySegment locale={locale} active="conversations" />
       <header className="production-header">
         <div><p className="eyebrow">{t(locale, "nav.conversations")}</p><h1>{t(locale, "conversations.title")}</h1><p>{t(locale, "conversations.subtitle")}</p></div>
         {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>{t(locale, "common.retry")}</button>}
@@ -343,6 +348,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
         </section>}
       </>}
       {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>{t(locale, "dead.remove")}</button></div>)}</section>}
+      </section>
       <ProductionChrome locale={locale} active="conversations" placement="bottom" />
     </main>
   );

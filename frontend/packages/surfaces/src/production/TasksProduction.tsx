@@ -200,6 +200,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   const [draft, setDraft] = useState("");
   const [dueDraft, setDueDraft] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [selectedTaskId, setSelectedTaskId] = useState<Task["id"] | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const draftRef = useRef<HTMLTextAreaElement>(null);
@@ -266,7 +267,10 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
 
   const grouped = useMemo(() => {
     const groups: Record<GroupKey, Task[]> = { today: [], tomorrow: [], later: [] };
-    for (const task of rows) groups[groupFor(task, now, dayFormatter)].push(task);
+    const needle = query.trim().toLocaleLowerCase(locale);
+    for (const task of rows) {
+      if (!needle || task.description.toLocaleLowerCase(locale).includes(needle)) groups[groupFor(task, now, dayFormatter)].push(task);
+    }
     for (const group of Object.values(groups)) {
       group.sort((left, right) => {
         if (left.dueAt === null && right.dueAt !== null) return 1;
@@ -276,7 +280,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       });
     }
     return groups;
-  }, [dayFormatter, now, rows]);
+  }, [dayFormatter, locale, now, query, rows]);
 
   const add = async (): Promise<void> => {
     const description = draft.trim();
@@ -339,13 +343,19 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   return (
     <main ref={shellRef} className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
       <ProductionChrome locale={locale} active="tasks" placement="top" />
+      <section className="desktop-page-panel">
       <header className="tasks-header">
         <div>
           <p className="tasks-eyebrow">{translate("tasks.title")}</p>
           <h1>{translate("tasks.title")}</h1>
           <p>{translate("tasks.subtitle")}</p>
         </div>
-        {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={translate("common.retry")}>{translate("common.retry")}</button>}
+        <div className="tasks-header-actions">
+          <label className="tasks-search"><span className="visually-hidden">{translate("tasks.filterSavedPlaceholder")}</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={translate("tasks.filterSavedPlaceholder")} /></label>
+          {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={translate("common.retry")}>{translate("common.retry")}</button>}
+          <button className="tasks-add-trigger" type="button" aria-expanded={createOpen} aria-label={createOpen ? translate("common.cancel") : translate("tasks.newTask")} onClick={() => { setCreateOpen((open) => !open); if (!createOpen) requestAnimationFrame(() => draftRef.current?.focus()); }}>{createOpen ? "×" : "+"}</button>
+          <button className="tasks-settings-trigger" type="button" disabled aria-label={translate("nav.settings")}>•••</button>
+        </div>
       </header>
       {fixture && <p className="tasks-fixture-label">{translate("qa.fixtureLabel", { name: translate("qa.syntheticData"), fixture })}</p>}
       {notice && <div className={`tasks-status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
@@ -406,6 +416,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         setCreateOpen(true);
         requestAnimationFrame(() => draftRef.current?.focus());
       }} aria-label={translate("tasks.add")}>+</button>
+      </section>
       <ProductionChrome locale={locale} active="tasks" placement="bottom" />
     </main>
   );
