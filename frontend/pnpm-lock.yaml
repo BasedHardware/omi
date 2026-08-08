@@ -14,6 +14,12 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  contracts/ratified:
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   packages/adapters-legacy:
     dependencies:
       '@omi-core/contracts':
@@ -59,17 +65,17 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/kernel:
-    dependencies:
-      '@omi-core/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
+  packages/i18n:
     devDependencies:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
 
-  packages/i18n:
+  packages/kernel:
+    dependencies:
+      '@omi-core/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
     devDependencies:
       typescript:
         specifier: ^5.7.2
@@ -124,12 +130,6 @@ importers:
         specifier: ^7.2.6
         version: 7.3.6(@types/node@22.20.1)
 
-  packages/tokens:
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
   packages/sync:
     dependencies:
       '@omi-core/contracts':
@@ -170,6 +170,12 @@ importers:
       '@types/node':
         specifier: ^22
         version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/tokens:
+    devDependencies:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

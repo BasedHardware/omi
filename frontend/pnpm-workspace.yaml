@@ -2,5 +2,6 @@
 # workspace package — ruled 2026-08-07; revisit only if a generator needs dependencies.
 packages:
   - contracts
+  - contracts/ratified
   - packages/*
   - shells/*
