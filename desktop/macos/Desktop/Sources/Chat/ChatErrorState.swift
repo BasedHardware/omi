@@ -17,7 +17,9 @@ enum BridgeUnavailableReason: Equatable, Sendable {
   /// `./run.sh`). Maps from `BridgeError.nodeNotFound`.
   case nodeMissing
   /// Bridge JS / AI components not on disk. Maps from
-  /// `BridgeError.bridgeScriptNotFound`.
+  /// `BridgeError.bridgeScriptNotFound` and
+  /// `BridgeError.agentRuntimePayloadIncomplete` — both mean this install cannot
+  /// run chat until it is repaired, so both take the install-runtime recovery.
   case runtimeMissing
   /// Bridge process started but exited / OOM'd. Maps from
   /// `BridgeError.processExited` and `.outOfMemory`.
@@ -111,14 +113,20 @@ extension ChatErrorState {
     case .timeout:
       return "AI took too long to respond."
     case .bridgeUnavailable(let reason):
-      if case .failedToStart(let failure) = reason {
+      switch reason {
+      case .failedToStart(let failure):
         switch failure {
         case .handshakeTimedOut: return "AI took too long to start. Try again."
         case .incompatibleHandshake: return "AI needs to restart before it can respond. Try again."
         case .exitedDuringStartup, .launchFailed: return "AI couldn't start. Try again."
         }
+      // Repairing the install is the only way out, so even the one-line
+      // floating-bar summary has to say that rather than "not available".
+      case .nodeMissing, .runtimeMissing:
+        return "AI components aren't installed."
+      case .crashed, .unknown:
+        return "AI isn't available right now."
       }
-      return "AI isn't available right now."
     case .interrupted:
       return "Response stopped."
     case .noDataFound:
@@ -139,6 +147,7 @@ extension ChatErrorState {
   ///   - `.timeout`              → `.timeout(toolName: nil)`
   ///   - `.nodeNotFound`         → `.bridgeUnavailable(.nodeMissing)`
   ///   - `.bridgeScriptNotFound` → `.bridgeUnavailable(.runtimeMissing)`
+  ///   - `.agentRuntimePayloadIncomplete` → `.bridgeUnavailable(.runtimeMissing)`
   ///   - `.processExited`        → `.bridgeUnavailable(.crashed)`
   ///   - `.outOfMemory`          → `.bridgeUnavailable(.crashed)`
   ///   - `.failedToStart`        → `.bridgeUnavailable(.unknown)` with retry
@@ -163,7 +172,7 @@ extension ChatErrorState {
       return nil
     case .nodeNotFound:
       return .bridgeUnavailable(reason: .nodeMissing)
-    case .bridgeScriptNotFound:
+    case .bridgeScriptNotFound, .agentRuntimePayloadIncomplete:
       return .bridgeUnavailable(reason: .runtimeMissing)
     case .processExited, .outOfMemory:
       return .bridgeUnavailable(reason: .crashed)

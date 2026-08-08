@@ -104,10 +104,10 @@ struct OmiMarkdownContent: View, Equatable {
   // MARK: - Thematic Break
 
   private func thematicBreakView() -> some View {
-    let dividerColor = style == .user ? Color.white.opacity(0.34) : OmiColors.textTertiary.opacity(0.44)
-
+    // One rule on one ground: every bubble style sits on the light glass now, so the old
+    // white-on-dark divider and the faint grey one collapse into `Ink.separator`.
     return Capsule()
-      .fill(dividerColor)
+      .fill(Ink.separator)
       .frame(maxWidth: .infinity)
       .frame(height: 1)
       .padding(.vertical, OmiSpacing.sm)
@@ -157,9 +157,14 @@ struct OmiMarkdownContent: View, Equatable {
   private static func styledAttributedString(
     from processed: String, style: OmiMarkdown.Style, fontSize: CGFloat, fontScale: CGFloat
   ) -> AttributedString? {
+    // Every surface that renders assistant text lands here — chat bubbles, the floating bar, the
+    // onboarding transcript, table cells, and both the plain and inline-copy paths — so the tilde
+    // rule is applied once, at the only point all of them share.
+    let source = OmiMarkdownTilde.escapingNonPairDelimiters(processed)
+
     guard
       var attributed = try? AttributedString(
-        markdown: processed,
+        markdown: source,
         options: .init(
           allowsExtendedAttributes: true,
           interpretedSyntax: .inlineOnlyPreservingWhitespace
@@ -169,11 +174,10 @@ struct OmiMarkdownContent: View, Equatable {
 
     let codeFontSize = round(13 * fontScale)
     let baseColor = baseColor(for: style)
-    let linkColor: Color = style == .user ? .white.opacity(0.9) : OmiColors.accent
-    let codeBgColor: Color =
-      style == .user
-      ? .white.opacity(0.15)
-      : OmiColors.backgroundTertiary
+    let linkColor: Color = Ink.accent
+    // Inline code is a chip on the glass, not a dark inset. `rowFillHover` is the emphasized wash
+    // the rest of the glass vocabulary uses for exactly this — a surface one step up from its host.
+    let codeBgColor: Color = Ink.rowFillHover
 
     attributed.font = .system(size: fontSize)
     attributed.foregroundColor = baseColor
@@ -206,7 +210,10 @@ struct OmiMarkdownContent: View, Equatable {
     return attributed
   }
 
-  fileprivate static func inlineAttributedString(
+  /// `internal` rather than `fileprivate` so a test can assert what a surface actually renders —
+  /// preprocessing, delimiter handling and styling together — instead of re-implementing the parse
+  /// options beside it and drifting from the real path.
+  static func inlineAttributedString(
     from content: String,
     style: OmiMarkdown.Style,
     fontSize: CGFloat,
@@ -238,14 +245,26 @@ struct OmiMarkdownContent: View, Equatable {
     return (attributed, masked.placeholders)
   }
 
-  fileprivate static func baseColor(for style: OmiMarkdown.Style) -> Color {
+  /// The one colour every bubble's prose is drawn in.
+  ///
+  /// All three styles now render on the light-pinned glass panel, so all three get the same answer.
+  /// The assistant bubble draws no ground at all (the glass owns it), and both user bubbles are a
+  /// `labelColor` wash *over* that glass — `ChatBubble.messageTextBubble` uses `Ink.rowFillHover`
+  /// and onboarding's user bubble uses `glassCard(emphasized:)`. There is no dark ground left in
+  /// this renderer for a light-on-dark answer to be correct on.
+  ///
+  /// It has to be the dynamic label rather than a fixed near-white or near-black. The old palette
+  /// was hardcoded dark: `textPrimary` was `#FFFFFF`, which is what made every assistant reply —
+  /// and the whole conversational onboarding — white-on-white and invisible; `.user`'s `.white` was
+  /// the same bug one bubble over. The switch stays exhaustive rather than collapsing to a bare
+  /// `return` so a future genuinely-dark surface has to state its own case.
+  /// `internal` rather than `fileprivate` so the contrast guard can call the real function instead
+  /// of restating the mapping it is supposed to be checking, and `nonisolated` because it is a pure
+  /// value on a `@MainActor` view — something to read, not to draw with.
+  nonisolated static func baseColor(for style: OmiMarkdown.Style) -> Color {
     switch style {
-    case .assistant:
-      OmiColors.textPrimary
-    case .user:
-      .white
-    case .onboardingUser:
-      OmiColors.backgroundPrimary
+    case .assistant, .user, .onboardingUser:
+      Ink.primary
     }
   }
 
@@ -652,6 +671,64 @@ enum OmiMarkdownInlineCode {
   }
 }
 
+extension OmiMarkdownInlineCode {
+  /// Closed code spans, backtick fences included, as ranges. Everything inside one is literal text.
+  static func codeSpanRanges(in text: String) -> [Range<String.Index>] {
+    closedSpans(in: text).map(\.range)
+  }
+}
+
+/// Tilde runs, held to the GFM rule.
+///
+/// GFM strikethrough is `~~text~~`. Foundation's Markdown parser also honours a *single* `~` as a
+/// delimiter, which GFM does not — and a lone tilde is overwhelmingly ordinary text: an approximate
+/// price, an approximate duration, a home directory.
+///
+/// The reported answer was a list of ticket prices. `(~$190)` and `(~$230)` are each flanked by
+/// punctuation on both sides, so each tilde can both open and close a run: they paired with *each
+/// other*, struck out the whole sentence between them, and swallowed their own tildes on the way, so
+/// the prices lost the very character that made them approximate.
+///
+/// Escaping every tilde run that is not exactly two restores the GFM rule at the delimiter level,
+/// which is the level the defect lives at — the content is never rewritten. `~~struck~~` still
+/// strikes. A run of three or more was already literal in the underlying parser and stays that way.
+enum OmiMarkdownTilde {
+  static func escapingNonPairDelimiters(_ text: String) -> String {
+    guard text.contains("~") else { return text }
+
+    // A backslash is literal inside a code span, so escaping in there would print `\~` at the user.
+    let codeSpans = OmiMarkdownInlineCode.codeSpanRanges(in: text)
+    var result = ""
+    result.reserveCapacity(text.count)
+    var index = text.startIndex
+
+    while index < text.endIndex {
+      if let span = codeSpans.first(where: { $0.contains(index) }) {
+        result += text[index..<span.upperBound]
+        index = span.upperBound
+        continue
+      }
+
+      guard text[index] == "~" else {
+        result.append(text[index])
+        index = text.index(after: index)
+        continue
+      }
+
+      var runEnd = index
+      while runEnd < text.endIndex, text[runEnd] == "~" {
+        runEnd = text.index(after: runEnd)
+      }
+      let run = text[index..<runEnd]
+      // Exactly two is the one form GFM calls a delimiter; everything else is a character.
+      result += run.count == 2 ? String(run) : String(repeating: "\\~", count: run.count)
+      index = runEnd
+    }
+
+    return result
+  }
+}
+
 private struct OmiMarkdownInlineCopyText: View {
   let attributed: AttributedString
   let placeholders: [OmiMarkdownInlineCode.Placeholder]
@@ -692,6 +769,12 @@ private struct OmiMarkdownInlineCopyText: View {
   }
 }
 
+/// The one surface in this file that keeps a dark ground, and the only light-on-dark text left here.
+///
+/// It is a transient floating toast, not hosted page content — an *opaque* capsule that paints its
+/// own ground and therefore carries its own contrast wherever it lands. That is the same exemption
+/// the glass vocabulary already grants an opaque popover, and it is why this survived the light
+/// conversion while every white-on-glass bubble colour around it did not.
 private struct OmiMarkdownCopyToast: View {
   let fontScale: CGFloat
 
@@ -718,7 +801,7 @@ private struct OmiMarkdownInlineCodeCopyButton: View {
   @State private var copyGeneration = 0
 
   private var backgroundColor: Color {
-    style == .user ? .white.opacity(copied ? 0.22 : 0.15) : OmiColors.backgroundTertiary
+    copied ? Ink.hairline : Ink.rowFillHover
   }
 
   var body: some View {
@@ -736,7 +819,7 @@ private struct OmiMarkdownInlineCodeCopyButton: View {
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
           RoundedRectangle(cornerRadius: 4)
-            .stroke(copied ? OmiColors.accent.opacity(0.7) : .clear, lineWidth: 1)
+            .stroke(copied ? Ink.accent.opacity(0.7) : .clear, lineWidth: 1)
         )
     }
     .buttonStyle(.plain)
@@ -990,8 +1073,10 @@ private struct OmiMarkdownTableView: View {
     [table.header] + table.rows
   }
 
+  /// The grid itself. This was a white hairline in *both* branches — legible only because the page
+  /// behind it was near-black, and an invisible white-on-white grid the moment the panel went light.
   private var borderColor: Color {
-    style == .user ? .white.opacity(0.18) : .white.opacity(0.14)
+    Ink.separator
   }
 
   var body: some View {
@@ -1077,19 +1162,13 @@ private struct OmiMarkdownTableView: View {
     .if_available_writingToolsNone()
   }
 
+  /// Header, then zebra banding, in the glass washes — one ladder for every bubble style, because
+  /// they all sit on the same light ground now.
   private func rowBackground(_ row: Int) -> Color {
-    if style == .user {
-      if row == 0 {
-        return .white.opacity(0.13)
-      }
-      return row.isMultiple(of: 2) ? .white.opacity(0.07) : .white.opacity(0.035)
-    }
     if row == 0 {
-      return OmiColors.backgroundTertiary
+      return Ink.rowFillHover
     }
-    return row.isMultiple(of: 2)
-      ? OmiColors.backgroundTertiary.opacity(0.72)
-      : OmiColors.backgroundSecondary.opacity(0.92)
+    return row.isMultiple(of: 2) ? Ink.rowFill : .clear
   }
 
   private func columnMetrics(
@@ -1120,7 +1199,7 @@ private struct OmiMarkdownCodeBlockView: View {
   @State private var copyGeneration = 0
 
   private var backgroundColor: Color {
-    style == .user ? .white.opacity(0.15) : OmiColors.backgroundTertiary
+    Ink.rowFillHover
   }
 
   var body: some View {
@@ -1129,12 +1208,12 @@ private struct OmiMarkdownCodeBlockView: View {
         if let language {
           Text(language)
             .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(style == .user ? .white.opacity(0.7) : OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         Spacer(minLength: 0)
         Image(systemName: copied ? "checkmark" : "doc.on.doc")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(copied ? .green : (style == .user ? .white.opacity(0.7) : OmiColors.textTertiary))
+          .foregroundColor(copied ? Ink.listeningGreen : Ink.secondary)
           .frame(width: round(16 * fontScale), height: round(16 * fontScale))
       }
 

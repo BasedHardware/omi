@@ -40,7 +40,7 @@ enum MemoryTag: String, CaseIterable, Identifiable {
     }
   }
 
-  var color: Color { OmiColors.textSecondary }
+  var color: Color { Ink.secondary }
 
   /// Backend category this filter maps to.
   var category: MemoryCategory {
@@ -307,6 +307,9 @@ class MemoriesViewModel: ObservableObject {
   /// Cached filtered and sorted memories - only recomputed when inputs change
   @Published private(set) var filteredMemories: [ServerMemory] = []
 
+  /// Guardrailed only — no search term, no tags. See `MemoryPageProjection.guardrailed`.
+  @Published private(set) var streamMemories: [ServerMemory] = []
+
   /// Cached tag counts - only recomputed when memories change
   @Published private(set) var tagCounts: [MemoryTag: Int] = [:]
 
@@ -466,7 +469,7 @@ class MemoriesViewModel: ObservableObject {
           lifecycleExposed: canonicalLifecycleExposed
         )
         currentOffset = loaded.count
-        hasMoreMemories = loaded.count >= pageSize
+        hasMoreMemories = ServerPaging.hasMore(received: loaded.count)
         recomputeFilteredMemories()
       } catch {
         guard isCurrentScope(token) else { return }
@@ -708,7 +711,7 @@ class MemoriesViewModel: ObservableObject {
       )
       currentOffset = memories.count
       rawBackendOffset = apiMemories.count
-      hasMoreMemories = apiMemories.count >= reloadLimit
+      hasMoreMemories = ServerPaging.hasMore(received: apiMemories.count)
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
@@ -851,6 +854,14 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Recompute filtered memories when search/tags/layer change
+  /// The guardrails, bound to this page's state. One definition, two readers, so they cannot drift.
+  private func guardrailed(_ values: [ServerMemory]) -> [ServerMemory] {
+    MemoryPageProjection.guardrailed(
+      values, allowedLayers: activeLayerFilter, thisDeviceOnly: filterThisDeviceOnly,
+      deviceScopeSupported: deviceScopeSupported,
+      matchesThisDevice: { ClientDeviceService.shared.memoryMatchesThisDevice($0) })
+  }
+
   private func recomputeFilteredMemories() {
     // Must match the isInFilteredMode property so pagination routing is
     // consistent. Layer-only views and device-scoped views are excluded from
@@ -879,22 +890,11 @@ class MemoriesViewModel: ObservableObject {
       result = memories
     }
 
-    // Guardrail: Archive is never part of the default list unless the user explicitly selects Archive.
-    if let allowedLayers = activeLayerFilter {
-      let allowedTiers = Set(allowedLayers)
-      result = result.filter { allowedTiers.contains($0.tier) }
-    }
-
-    // A canonical response has already been filtered server-side and its
-    // provenance is authoritative. Legacy rows cannot identify their capture
-    // device, so keeping them visible is the only honest fallback; filtering
-    // them client-side would turn the list into a misleading empty state.
-    if filterThisDeviceOnly && deviceScopeSupported {
-      result = result.filter { ClientDeviceService.shared.memoryMatchesThisDevice($0) }
-    }
+    result = guardrailed(result)
 
     // Sort by date (newest first)
     result.sort { $0.createdAt > $1.createdAt }
+    streamMemories = guardrailed(memories).sorted { $0.createdAt > $1.createdAt }
 
     if isInFilteredMode {
       // Store full results for pagination, apply display cap
@@ -1062,7 +1062,7 @@ class MemoriesViewModel: ObservableObject {
         if !cachedMemories.isEmpty, isCurrentScope(token) {
           memories = displayCacheMemories(cachedMemories, for: token)
           currentOffset = cachedMemories.count
-          hasMoreMemories = cachedMemories.count >= pageSize
+          hasMoreMemories = ServerPaging.hasMore(received: cachedMemories.count)
           isLoading = false  // Show cached data immediately
           log("MemoriesViewModel: Loaded \(cachedMemories.count) memories from local cache")
         }
@@ -1133,7 +1133,7 @@ class MemoriesViewModel: ObservableObject {
         // hasMoreMemories from the filtered count would disable scrolling and
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
-        hasMoreMemories = fetchedMemories.count >= pageSize
+        hasMoreMemories = ServerPaging.hasMore(received: fetchedMemories.count)
         log(
           "MemoriesViewModel: Showing \(visibleMemories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
         )
@@ -1148,7 +1148,7 @@ class MemoriesViewModel: ObservableObject {
         )
         currentOffset = memories.count
         rawBackendOffset = fetchedMemories.count
-        hasMoreMemories = fetchedMemories.count >= pageSize
+        hasMoreMemories = ServerPaging.hasMore(received: fetchedMemories.count)
       }
     } catch {
       // Only show error if we don't have cached data
@@ -1341,7 +1341,7 @@ class MemoriesViewModel: ObservableObject {
         guard isCurrentScope(token), currentOffset == requestedOffset else { return }
         if !moreFromCache.isEmpty {
           let visibleMemories = displayCacheMemories(moreFromCache, for: token)
-          memories.append(contentsOf: visibleMemories)
+          memories = ServerPaging.appending(visibleMemories, to: memories, by: \.id)
           // Advance the SQLite paging cursor by the RAW row count returned by the
           // query, not the tier-filtered visible count. getLocalMemories(offset:)
           // pages over raw rows, so advancing by the smaller filtered count makes the
@@ -1353,7 +1353,7 @@ class MemoriesViewModel: ObservableObject {
           // has more cached rows to page; using the filtered count here disabled
           // scrolling and permanently hid those memories (the initial-load path
           // already documents this exact raw-vs-filtered pagination rule).
-          hasMoreMemories = moreFromCache.count >= pageSize
+          hasMoreMemories = ServerPaging.hasMore(received: moreFromCache.count)
           log(
             "MemoriesViewModel: Loaded \(visibleMemories.count) more from local cache (total: \(memories.count))"
           )
@@ -1395,12 +1395,12 @@ class MemoriesViewModel: ObservableObject {
       let visibleNewMemories = displayMemories(newMemories.filter { layerAllowed($0, for: token) }, for: token)
 
       // Then append to display
-      memories.append(contentsOf: visibleNewMemories)
+      memories = ServerPaging.appending(visibleNewMemories, to: memories, by: \.id)
       currentOffset += visibleNewMemories.count
       // Advance the raw backend cursor by the raw page size so the next fetch
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
-      hasMoreMemories = newMemories.count >= pageSize
+      hasMoreMemories = ServerPaging.hasMore(received: newMemories.count)
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )
@@ -1841,6 +1841,7 @@ struct MemoriesPage: View {
         mainMemoriesView
       }
     }
+    .glassContent()
   }
 
   private var memoriesColumn: some View {
@@ -1882,9 +1883,9 @@ struct MemoriesPage: View {
     // is what kept the old sheet's 450pt content clipped inside it.
     .frame(width: 360)
     .frame(maxHeight: .infinity)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
     .overlay(alignment: .leading) {
-      Rectangle().fill(OmiColors.border.opacity(0.25)).frame(width: 1)
+      Rectangle().fill(Ink.separator.opacity(0.25)).frame(width: 1)
     }
     .accessibilityIdentifier("memory_detail_panel")
   }
@@ -1917,14 +1918,16 @@ struct MemoriesPage: View {
       undoDeleteToast
     }
     .overlay {
-      // Loading overlay for conversation fetch
+      // Loading overlay for conversation fetch. This page rides on `PageGlassLane`'s panel, so the
+      // dim fills that panel and stops at its corner. The `.ignoresSafeArea()` it replaces asked to
+      // bleed past exactly the surface the dim belongs to.
       if viewModel.isLoadingConversation {
-        Color.black.opacity(0.3)
-          .ignoresSafeArea()
+        ShellModalScrim()
           .overlay {
             ProgressView()
               .scaleEffect(1.2)
-              .tint(.white)
+              // Two rungs on glass: the dim sits on the panel, so the spinner is `Ink.primary`.
+              .tint(Ink.primary)
           }
       }
     }
@@ -1952,18 +1955,18 @@ struct MemoriesPage: View {
       HStack(spacing: OmiSpacing.md) {
         Image(systemName: "trash")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Text("Memory deleted")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         // Progress indicator
         Text(String(format: "%.0fs", viewModel.undoTimeRemaining))
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .monospacedDigit()
 
         Button {
@@ -1971,7 +1974,7 @@ struct MemoriesPage: View {
         } label: {
           Text("Undo")
             .scaledFont(size: OmiType.body, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
         }
         .buttonStyle(.plain)
 
@@ -1981,16 +1984,13 @@ struct MemoriesPage: View {
         } label: {
           Image(systemName: "xmark")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md)
-      .omiPanel(
-        fill: OmiColors.backgroundSecondary, radius: 20, stroke: OmiColors.border.opacity(0.18),
-        shadowOpacity: 0.18, shadowRadius: 14, shadowY: 8
-      )
+      .glassFloatingBar()
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.bottom, OmiSpacing.xxl)
       .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -2006,10 +2006,10 @@ struct MemoriesPage: View {
         VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
           Text("Memories")
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundStyle(OmiColors.textPrimary)
+            .foregroundStyle(Ink.primary)
           Text("What Omi has learned and saved for you")
             .scaledFont(size: OmiType.caption)
-            .foregroundStyle(OmiColors.textTertiary)
+            .foregroundStyle(Ink.secondary)
         }
         Spacer()
       }
@@ -2099,17 +2099,11 @@ struct MemoriesPage: View {
         }
         .foregroundColor(
           viewModel.selectedLayerFilter == .defaultAccess
-            ? OmiColors.textSecondary : OmiColors.textPrimary
+            ? Ink.secondary : Ink.primary
         )
         .padding(.horizontal, OmiSpacing.md)
         .frame(minHeight: 44)
-        .omiControlSurface(
-          fill: viewModel.selectedLayerFilter == .defaultAccess
-            ? OmiColors.backgroundSecondary : OmiColors.backgroundRaised,
-          radius: 16,
-          stroke: OmiColors.border.opacity(
-            viewModel.selectedLayerFilter == .defaultAccess ? 0.18 : 0.6)
-        )
+        .glassChip(isActive: viewModel.selectedLayerFilter != .defaultAccess)
       }
       .menuStyle(.button)
       .buttonStyle(.plain)
@@ -2130,16 +2124,11 @@ struct MemoriesPage: View {
           .fixedSize(horizontal: true, vertical: false)
       }
       .foregroundColor(
-        viewModel.filterThisDeviceOnly ? OmiColors.textPrimary : OmiColors.textSecondary
+        viewModel.filterThisDeviceOnly ? Ink.primary : Ink.secondary
       )
       .padding(.horizontal, OmiSpacing.md)
       .frame(minHeight: 44)
-      .omiControlSurface(
-        fill: viewModel.filterThisDeviceOnly
-          ? OmiColors.backgroundRaised : OmiColors.backgroundSecondary,
-        radius: 16,
-        stroke: OmiColors.border.opacity(viewModel.filterThisDeviceOnly ? 0.6 : 0.18)
-      )
+      .glassChip(isActive: viewModel.filterThisDeviceOnly)
     }
     .buttonStyle(.plain)
     .help("Show memories captured on this Mac")
@@ -2163,16 +2152,11 @@ struct MemoriesPage: View {
           .scaledFont(size: OmiType.micro)
       }
       .foregroundColor(
-        viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary
+        viewModel.selectedTags.isEmpty ? Ink.secondary : Ink.primary
       )
       .padding(.horizontal, OmiSpacing.md)
       .frame(minHeight: 44)
-      .omiControlSurface(
-        fill: viewModel.selectedTags.isEmpty
-          ? OmiColors.backgroundSecondary : OmiColors.backgroundRaised,
-        radius: 16,
-        stroke: OmiColors.border.opacity(viewModel.selectedTags.isEmpty ? 0.18 : 0.6)
-      )
+      .glassChip(isActive: !viewModel.selectedTags.isEmpty)
     }
     .buttonStyle(.plain)
     .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
@@ -2185,10 +2169,9 @@ struct MemoriesPage: View {
     } label: {
       Image(systemName: "plus")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(.black)
+        .foregroundColor(Ink.surface)
         .frame(width: 44, height: 44)
-        .background(OmiColors.textPrimary)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Capsule(style: .continuous).fill(Ink.primary))
     }
     .buttonStyle(.plain)
     .help("Add Memory")
@@ -2199,13 +2182,9 @@ struct MemoriesPage: View {
     } label: {
       Image(systemName: "ellipsis")
         .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
         .frame(width: 44, height: 44)
-        .omiControlSurface(
-          fill: OmiColors.backgroundSecondary,
-          radius: 14,
-          stroke: OmiColors.border.opacity(0.18)
-        )
+        .glassChip()
     }
     .buttonStyle(.plain)
     .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
@@ -2245,20 +2224,20 @@ struct MemoriesPage: View {
       // Search field
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "magnifyingglass")
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .scaledFont(size: OmiType.caption)
 
         TextField("Search categories...", text: $categorySearchText)
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         if !categorySearchText.isEmpty {
           Button {
             categorySearchText = ""
           } label: {
             Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .scaledFont(size: OmiType.caption)
           }
           .buttonStyle(.plain)
@@ -2266,7 +2245,7 @@ struct MemoriesPage: View {
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(OmiColors.backgroundTertiary)
+      .background(Ink.rowFillHover)
       .cornerRadius(OmiChrome.badgeRadius)
       .padding(.horizontal, OmiSpacing.md)
       .padding(.top, OmiSpacing.md)
@@ -2291,22 +2270,22 @@ struct MemoriesPage: View {
               Spacer()
               Text("\(viewModel.totalMemoriesCount)")
                 .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .padding(.horizontal, OmiSpacing.xs)
                 .padding(.vertical, OmiSpacing.hairline)
-                .background(OmiColors.backgroundTertiary)
+                .background(Ink.rowFillHover)
                 .cornerRadius(OmiChrome.stripRadius)
               if pendingSelectedTags.isEmpty {
                 Image(systemName: "checkmark")
                   .scaledFont(size: OmiType.caption, weight: .medium)
-                  .foregroundColor(.white)
+                  .foregroundColor(Ink.primary)
               }
             }
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.md)
             .padding(.vertical, OmiSpacing.sm)
             .background(
-              pendingSelectedTags.isEmpty ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear
+              pendingSelectedTags.isEmpty ? Ink.rowFillHover.opacity(0.5) : Color.clear
             )
             .cornerRadius(OmiChrome.badgeRadius)
             .contentShape(Rectangle())
@@ -2337,21 +2316,21 @@ struct MemoriesPage: View {
                 Spacer()
                 Text("\(count)")
                   .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
+                  .foregroundColor(Ink.secondary)
                   .padding(.horizontal, OmiSpacing.xs)
                   .padding(.vertical, OmiSpacing.hairline)
-                  .background(OmiColors.backgroundTertiary)
+                  .background(Ink.rowFillHover)
                   .cornerRadius(OmiChrome.stripRadius)
                 if isSelected {
                   Image(systemName: "checkmark")
                     .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(.white)
+                    .foregroundColor(Ink.primary)
                 }
               }
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.sm)
-              .background(isSelected ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
+              .background(isSelected ? Ink.rowFillHover.opacity(0.5) : Color.clear)
               .cornerRadius(OmiChrome.badgeRadius)
               .contentShape(Rectangle())
             }
@@ -2373,10 +2352,10 @@ struct MemoriesPage: View {
         } label: {
           Text("Clear")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .padding(.horizontal, OmiSpacing.lg)
             .padding(.vertical, OmiSpacing.sm)
-            .background(OmiColors.backgroundTertiary)
+            .background(Ink.rowFillHover)
             .cornerRadius(OmiChrome.badgeRadius)
         }
         .buttonStyle(.plain)
@@ -2387,10 +2366,10 @@ struct MemoriesPage: View {
         } label: {
           Text("Apply")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(.black)
+            .foregroundColor(Ink.surface)
             .padding(.horizontal, OmiSpacing.lg)
             .padding(.vertical, OmiSpacing.sm)
-            .background(Color.white)
+            .background(Ink.primary)
             .cornerRadius(OmiChrome.badgeRadius)
         }
         .buttonStyle(.plain)
@@ -2398,7 +2377,7 @@ struct MemoriesPage: View {
       .padding(OmiSpacing.md)
     }
     .frame(width: 280)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.rowFill)
   }
 
   // MARK: - Management Menu Popover
@@ -2408,7 +2387,7 @@ struct MemoriesPage: View {
       // Visibility section
       Text("Visibility")
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.top, OmiSpacing.md)
         .padding(.bottom, OmiSpacing.xs)
@@ -2425,7 +2404,7 @@ struct MemoriesPage: View {
             .scaledFont(size: OmiType.body)
           Spacer()
         }
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .contentShape(Rectangle())
@@ -2452,7 +2431,7 @@ struct MemoriesPage: View {
             .scaledFont(size: OmiType.body)
           Spacer()
         }
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .contentShape(Rectangle())
@@ -2484,7 +2463,7 @@ struct MemoriesPage: View {
             .scaledFont(size: OmiType.body)
           Spacer()
         }
-        .foregroundColor(OmiColors.error)
+        .foregroundColor(Ink.errorRed)
         .padding(.horizontal, OmiSpacing.md)
         .padding(.vertical, OmiSpacing.sm)
         .contentShape(Rectangle())
@@ -2501,7 +2480,7 @@ struct MemoriesPage: View {
     }
     .padding(.vertical, OmiSpacing.xxs)
     .frame(width: 200)
-    .background(OmiColors.backgroundSecondary)
+    .background(Ink.surface)
   }
 
   // MARK: - Memory List
@@ -2540,7 +2519,7 @@ struct MemoriesPage: View {
               .scaleEffect(0.8)
             Text("Loading more...")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
           .frame(maxWidth: .infinity)
           .padding(.vertical, OmiSpacing.lg)
@@ -2557,10 +2536,10 @@ struct MemoriesPage: View {
                 Text("Load more memories")
               }
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
-              .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 16)
+              .glassChip()
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
@@ -2574,10 +2553,10 @@ struct MemoriesPage: View {
                 Text("Load more memories")
               }
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
-              .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 16)
+              .glassChip()
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
@@ -2588,6 +2567,7 @@ struct MemoriesPage: View {
       .padding(.horizontal, OmiSpacing.xxl)
       .padding(.bottom, OmiSpacing.xxl)
     }
+    .glassScrollFade()
   }
 
   private func tagBadge(_ title: String, _ icon: String, _ color: Color) -> some View {
@@ -2597,7 +2577,7 @@ struct MemoriesPage: View {
       Text(title)
         .scaledFont(size: OmiType.caption, weight: .medium)
     }
-    .foregroundColor(OmiColors.textSecondary)
+    .foregroundColor(Ink.secondary)
   }
 
   private func categoryIcon(_ category: MemoryCategory) -> String {
@@ -2605,11 +2585,11 @@ struct MemoriesPage: View {
   }
 
   private func categoryColor(_ category: MemoryCategory) -> Color {
-    OmiColors.textSecondary
+    Ink.secondary
   }
 
   private func tagColorFor(_ tag: String) -> Color {
-    return OmiColors.textSecondary
+    return Ink.secondary
   }
 
   private func formatDate(_ date: Date) -> String {
@@ -2630,17 +2610,17 @@ struct MemoriesPage: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "brain.head.profile")
         .scaledFont(size: 48)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text("No Memories Yet")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text(
         "Your memories and tips will appear here.\nMemories are extracted from your conversations."
       )
       .scaledFont(size: OmiType.body)
-      .foregroundColor(OmiColors.textTertiary)
+      .foregroundColor(Ink.secondary)
       .multilineTextAlignment(.center)
 
       Button {
@@ -2651,11 +2631,10 @@ struct MemoriesPage: View {
           Text("Add Your First Memory")
         }
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.backgroundPrimary)
+        .foregroundColor(Ink.surface)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.accent)
-        .cornerRadius(OmiChrome.elementRadius)
+        .background(Capsule(style: .continuous).fill(Ink.primary))
       }
       .buttonStyle(.plain)
       .padding(.top, OmiSpacing.sm)
@@ -2667,15 +2646,15 @@ struct MemoriesPage: View {
     VStack(spacing: OmiSpacing.md) {
       Image(systemName: "magnifyingglass")
         .scaledFont(size: 36)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Text("No Results")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text("Try a different search or filter")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       if !viewModel.selectedTags.isEmpty {
         Button {
@@ -2683,7 +2662,7 @@ struct MemoriesPage: View {
         } label: {
           Text("Clear Filters")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -2699,7 +2678,7 @@ struct MemoriesPage: View {
 
       Text("Loading memories...")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -2708,15 +2687,15 @@ struct MemoriesPage: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle")
         .scaledFont(size: 36)
-        .foregroundColor(OmiColors.error)
+        .foregroundColor(Ink.errorRed)
 
       Text("Failed to Load Memories")
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text("Check your connection and try again.")
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
 
       Button {
         Task { await viewModel.loadMemories() }
@@ -2726,11 +2705,10 @@ struct MemoriesPage: View {
           Text("Retry")
         }
         .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(OmiColors.backgroundPrimary)
+        .foregroundColor(Ink.surface)
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.sm)
-        .background(OmiColors.accent)
-        .cornerRadius(OmiChrome.elementRadius)
+        .background(Capsule(style: .continuous).fill(Ink.primary))
       }
       .buttonStyle(.plain)
     }
@@ -2757,10 +2735,10 @@ private struct MemoryLayerBadge: View {
         Text(layer.displayName)
           .scaledFont(size: OmiType.micro, weight: .medium)
       }
-      .foregroundColor(layer == .archive ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(layer == .archive ? Ink.primary : Ink.secondary)
       .padding(.horizontal, OmiSpacing.xs)
       .padding(.vertical, OmiSpacing.hairline)
-      .background(layer == .archive ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary)
+      .background(layer == .archive ? Ink.rowFill : Ink.rowFillHover)
       .clipShape(Capsule())
     }
     .buttonStyle(.plain)
@@ -2769,10 +2747,10 @@ private struct MemoryLayerBadge: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         Text(layer.displayName)
           .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Text(layer.layerInfoText)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
       .padding(OmiSpacing.md)
@@ -2807,10 +2785,10 @@ private struct MemoryCardView: View {
             if memory.content.hasPrefix("[Protected") || memory.content.hasPrefix("[Encrypted") {
               Text("Protected memory")
                 .italic()
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             } else {
               Text(memory.content)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
             }
           }
           .scaledFont(size: 13.5)
@@ -2826,12 +2804,12 @@ private struct MemoryCardView: View {
         HStack(spacing: OmiSpacing.sm) {
           Text(formatDate(memory.createdAt))
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
 
           if let deviceLabel = ClientDeviceService.shared.deviceProvenanceLabel(for: memory) {
             Text(deviceLabel)
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           // Badge when the server sent an authoritative layer (canonical cohort always does).
@@ -2844,7 +2822,7 @@ private struct MemoryCardView: View {
           if let sourceName = memory.sourceName {
             Text("From \(sourceName)")
               .scaledFont(size: OmiType.micro)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
               .lineLimit(1)
           }
 
@@ -2860,21 +2838,17 @@ private struct MemoryCardView: View {
           if isHovered {
             Image(systemName: "arrow.up.right")
               .scaledFont(size: OmiType.micro, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
       }
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.md)
-      .background(
-        isHovered
-          ? OmiColors.backgroundRaised
-          : (isNewlyCreated ? OmiColors.userBubble.opacity(0.24) : OmiColors.backgroundSecondary)
+      .glassCard(
+        cornerRadius: OmiChrome.controlRadius,
+        emphasized: isHovered || isNewlyCreated
       )
       .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-      .shadow(
-        color: .black.opacity(isHovered ? 0.14 : 0.08), radius: isHovered ? 12 : 8, x: 0,
-        y: isHovered ? 8 : 5)
     }
     .buttonStyle(.plain)
     .contentShape(Rectangle())
@@ -2908,7 +2882,7 @@ private struct MemoryDetailButton: View {
   var body: some View {
     Image(systemName: "info.circle")
       .scaledFont(size: OmiType.micro)
-      .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
+      .foregroundColor(showTooltip ? Ink.primary : Ink.secondary)
       .frame(width: 20, height: 20)
       .contentShape(Rectangle())
       .onHover { hovering in
@@ -3028,12 +3002,12 @@ private struct MemoryDetailTooltip: View {
     HStack(alignment: .top, spacing: OmiSpacing.xs) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .frame(width: 70, alignment: .trailing)
 
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
     }
   }
 
@@ -3041,12 +3015,12 @@ private struct MemoryDetailTooltip: View {
     VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
       Text(label)
         .scaledFont(size: OmiType.caption, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .padding(.leading, 76)
 
       Text(value)
         .scaledFont(size: OmiType.caption)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(.leading, 76)
         .lineLimit(3)
     }
@@ -3091,7 +3065,7 @@ struct MemoryDetailPanel: View {
     VStack(alignment: .leading, spacing: 0) {
       header
 
-      Divider().overlay(OmiColors.border.opacity(0.2))
+      Divider().overlay(Ink.separator.opacity(0.2))
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xl) {
@@ -3113,7 +3087,7 @@ struct MemoryDetailPanel: View {
             section(memory.isTip ? "Why this tip" : "Reasoning") {
               Text(reasoning)
                 .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textSecondary)
+                .foregroundColor(Ink.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             }
@@ -3131,7 +3105,7 @@ struct MemoryDetailPanel: View {
                 if let summary = memory.contextSummary, !summary.isEmpty {
                   Text(summary)
                     .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(Ink.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 }
@@ -3143,9 +3117,9 @@ struct MemoryDetailPanel: View {
             MemoryActionRow(
               icon: "bubble.left.and.bubble.right",
               title: "View Source Conversation",
-              iconColor: OmiColors.textPrimary,
-              textColor: OmiColors.textPrimary,
-              backgroundColor: OmiColors.backgroundTertiary,
+              iconColor: Ink.primary,
+              textColor: Ink.primary,
+              backgroundColor: Ink.rowFillHover,
               trailingIcon: "arrow.up.right"
             ) {
               NSApp.keyWindow?.makeFirstResponder(nil)
@@ -3170,7 +3144,7 @@ struct MemoryDetailPanel: View {
   private var header: some View {
     HStack(spacing: OmiSpacing.sm) {
       if memory.isTip {
-        chip("Tips", icon: "lightbulb.fill", tint: OmiColors.textSecondary)
+        chip("Tips", icon: "lightbulb.fill", tint: Ink.secondary)
         if let tipCategory = memory.tipCategory {
           chip(
             tipCategory.capitalized, icon: memory.tipCategoryIcon, tint: tagColorFor(tipCategory))
@@ -3184,7 +3158,7 @@ struct MemoryDetailPanel: View {
       }
 
       if memory.isPublic {
-        chip("Public", icon: "person.2.fill", tint: OmiColors.textSecondary)
+        chip("Public", icon: "person.2.fill", tint: Ink.secondary)
       }
 
       Spacer(minLength: OmiSpacing.xs)
@@ -3220,10 +3194,11 @@ struct MemoryDetailPanel: View {
       } label: {
         Image(systemName: "ellipsis")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .frame(width: 24, height: 24)
           .contentShape(Rectangle())
       }
+      .tint(Ink.primary)
       .menuStyle(.borderlessButton)
       .menuIndicator(.hidden)
       .frame(width: 24)
@@ -3261,10 +3236,10 @@ struct MemoryDetailPanel: View {
         // twelve-line memory and made editing a scroll-and-hunt exercise.
         TextEditor(text: $editContentText)
           .scaledFont(size: OmiType.subheading)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
           .scrollContentBackground(.hidden)
           .padding(OmiSpacing.sm)
-          .background(OmiColors.backgroundTertiary)
+          .background(Ink.rowFillHover)
           .cornerRadius(OmiChrome.elementRadius)
           .frame(minHeight: 260)
 
@@ -3274,7 +3249,7 @@ struct MemoryDetailPanel: View {
           } label: {
             Text("Cancel")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
 
@@ -3287,10 +3262,10 @@ struct MemoryDetailPanel: View {
           } label: {
             Text("Save")
               .scaledFont(size: OmiType.body, weight: .medium)
-              .foregroundColor(.black)
+              .foregroundColor(Ink.surface)
               .padding(.horizontal, OmiSpacing.md)
               .padding(.vertical, OmiSpacing.xxs)
-              .background(Color.white)
+              .background(Ink.primary)
               .cornerRadius(OmiChrome.badgeRadius)
           }
           .buttonStyle(.plain)
@@ -3301,12 +3276,12 @@ struct MemoryDetailPanel: View {
       Text("Protected memory")
         .italic()
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .fixedSize(horizontal: false, vertical: true)
     } else {
       Text(memory.content)
         .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -3332,7 +3307,7 @@ struct MemoryDetailPanel: View {
         if !provenanceFacts.isEmpty {
           FlowLayout(spacing: OmiSpacing.xxs) {
             ForEach(provenanceFacts) { fact in
-              chip(fact.label, icon: fact.icon, tint: OmiColors.textSecondary)
+              chip(fact.label, icon: fact.icon, tint: Ink.secondary)
             }
           }
         }
@@ -3343,7 +3318,7 @@ struct MemoryDetailPanel: View {
           Text(formatDate(memory.createdAt))
             .scaledFont(size: OmiType.caption)
         }
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
       }
       .accessibilityIdentifier("memory_detail_provenance")
     }
@@ -3385,7 +3360,7 @@ struct MemoryDetailPanel: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text(title.uppercased())
         .scaledFont(size: OmiType.micro, weight: .semibold)
-        .foregroundColor(OmiColors.textQuaternary)
+        .foregroundColor(Ink.secondary)
         .tracking(0.6)
       content()
     }
@@ -3407,7 +3382,7 @@ struct MemoryDetailPanel: View {
     .padding(.vertical, 3)
     .background(
       RoundedRectangle(cornerRadius: OmiChrome.badgeRadius, style: .continuous)
-        .fill(OmiColors.backgroundTertiary)
+        .fill(Ink.rowFillHover)
     )
   }
 
@@ -3421,7 +3396,7 @@ struct MemoryDetailPanel: View {
         .fixedSize(horizontal: false, vertical: true)
         .textSelection(.enabled)
     }
-    .foregroundColor(OmiColors.textTertiary)
+    .foregroundColor(Ink.secondary)
   }
 }
 
@@ -3448,7 +3423,7 @@ private struct MemoryActionRow: View {
       if let trailing = trailingIcon {
         Image(systemName: trailing)
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .scaledFont(size: OmiType.body)
@@ -3489,151 +3464,5 @@ private struct MemoryActionRow: View {
       // Execute the action (which should handle its own delays for dismiss)
       action()
     }
-  }
-}
-
-// MARK: - Add Memory Sheet
-
-struct AddMemorySheet: View {
-  @ObservedObject var viewModel: MemoriesViewModel
-  var onDismiss: (() -> Void)? = nil
-
-  @Environment(\.dismiss) private var environmentDismiss
-
-  private func dismissSheet() {
-    viewModel.newMemoryText = ""
-    if let onDismiss = onDismiss {
-      onDismiss()
-    } else {
-      environmentDismiss()
-    }
-  }
-
-  var body: some View {
-    VStack(spacing: OmiSpacing.xl) {
-      // Header with close button
-      HStack {
-        Text("Add Memory")
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Spacer()
-        DismissButton(action: dismissSheet)
-      }
-
-      TextEditor(text: $viewModel.newMemoryText)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
-        .scrollContentBackground(.hidden)
-        .padding(OmiSpacing.md)
-        .background(OmiColors.backgroundTertiary)
-        .cornerRadius(OmiChrome.elementRadius)
-        .frame(height: 150)
-
-      HStack(spacing: OmiSpacing.md) {
-        // Cancel button
-        Button(action: dismissSheet) {
-          Text("Cancel")
-            .foregroundColor(OmiColors.textSecondary)
-        }
-
-        Spacer()
-
-        Button {
-          Task { await viewModel.createMemory() }
-        } label: {
-          Text("Save")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(viewModel.newMemoryText.isEmpty ? OmiColors.textTertiary : .black)
-            .padding(.horizontal, OmiSpacing.xl)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(
-              viewModel.newMemoryText.isEmpty ? OmiColors.backgroundTertiary : Color.white
-            )
-            .cornerRadius(OmiChrome.elementRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .stroke(
-                  viewModel.newMemoryText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.newMemoryText.isEmpty)
-      }
-    }
-    .padding(OmiSpacing.xxl)
-    .frame(width: 400)
-    .background(OmiColors.backgroundSecondary)
-  }
-}
-
-// MARK: - Edit Memory Sheet
-
-struct EditMemorySheet: View {
-  let memory: ServerMemory
-  @ObservedObject var viewModel: MemoriesViewModel
-  var onDismiss: (() -> Void)? = nil
-
-  @Environment(\.dismiss) private var environmentDismiss
-
-  private func dismissSheet() {
-    viewModel.editText = ""
-    if let onDismiss = onDismiss {
-      onDismiss()
-    } else {
-      environmentDismiss()
-    }
-  }
-
-  var body: some View {
-    VStack(spacing: OmiSpacing.xl) {
-      // Header with close button
-      HStack {
-        Text("Edit Memory")
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Spacer()
-        DismissButton(action: dismissSheet)
-      }
-
-      TextEditor(text: $viewModel.editText)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
-        .scrollContentBackground(.hidden)
-        .padding(OmiSpacing.md)
-        .background(OmiColors.backgroundTertiary)
-        .cornerRadius(OmiChrome.elementRadius)
-        .frame(height: 150)
-
-      HStack(spacing: OmiSpacing.md) {
-        // Cancel button
-        Button(action: dismissSheet) {
-          Text("Cancel")
-            .foregroundColor(OmiColors.textSecondary)
-        }
-
-        Spacer()
-
-        Button {
-          Task { await viewModel.saveEditedMemory(memory) }
-        } label: {
-          Text("Save")
-            .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(viewModel.editText.isEmpty ? OmiColors.textTertiary : .black)
-            .padding(.horizontal, OmiSpacing.xl)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(viewModel.editText.isEmpty ? OmiColors.backgroundTertiary : Color.white)
-            .cornerRadius(OmiChrome.elementRadius)
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .stroke(viewModel.editText.isEmpty ? Color.clear : OmiColors.border, lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.editText.isEmpty)
-      }
-    }
-    .padding(OmiSpacing.xxl)
-    .frame(width: 400)
-    .background(OmiColors.backgroundSecondary)
   }
 }

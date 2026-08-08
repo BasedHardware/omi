@@ -11,18 +11,15 @@ import SwiftUI
 struct NotchSystemControlsView: View {
   let progress: CGFloat
 
-  @ObservedObject private var focusStorage = FocusStorage.shared
   @ObservedObject private var shortcuts = ShortcutSettings.shared
   /// Toggle state lives in UserDefaults and plugin state rather than in an observable, so
   /// it is sampled when the surface opens and after each toggle instead of being bound.
   @State private var screenCaptureOn = false
   @State private var audioRecordingOn = false
-
-  private var currentAppName: String? {
-    let name = focusStorage.detectedAppName ?? focusStorage.currentApp
-    guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
-    return name
-  }
+  /// The frontmost app the capture loop is currently on. Sampled with the toggles rather than
+  /// observed: it used to be read off the retired Focus feature's storage, and the plugin that
+  /// actually drives capture is the honest owner of "what Omi is looking at".
+  @State private var currentAppName: String?
 
   var body: some View {
     VStack(alignment: .trailing, spacing: OmiSpacing.xs) {
@@ -57,16 +54,23 @@ struct NotchSystemControlsView: View {
     }
   }
 
-  /// What Omi is currently looking at. This is the same frontmost-app signal the capture
-  /// loop uses, so the notch and the assistants can never disagree about the active app.
+  /// The frontmost app as the capture loop sees it, so the notch and the assistants can never
+  /// disagree about the active app.
+  private static func frontmostCaptureApp() -> String? {
+    let name = ProactiveAssistantsPlugin.shared.currentStatus.currentApp
+    guard let name, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+    return name
+  }
+
+  /// What Omi is currently looking at.
   private func currentAppRow(_ name: String) -> some View {
     HStack(spacing: OmiSpacing.xxs) {
       Circle()
-        .fill(screenCaptureOn ? Color.white.opacity(0.55) : Color.white.opacity(0.22))
+        .fill(screenCaptureOn ? NotchGlass.ink(.w55) : NotchGlass.ink(.w25))
         .frame(width: 5, height: 5)
       Text(name)
         .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(.white.opacity(0.62))
+        .foregroundColor(NotchGlass.secondary)
         .lineLimit(1)
         .truncationMode(.tail)
     }
@@ -99,7 +103,7 @@ struct NotchSystemControlsView: View {
     HStack(spacing: 3) {
       Text(title)
         .scaledFont(size: 8, weight: .semibold)
-        .foregroundStyle(.white.opacity(0.54))
+        .foregroundStyle(NotchGlass.ink(.w55))
       shortcutKeys(keys)
     }
     .accessibilityElement(children: .combine)
@@ -110,12 +114,12 @@ struct NotchSystemControlsView: View {
     ForEach(ShortcutHintLayout.visibleTokens(for: keys), id: \.self) { key in
       Text(key)
         .scaledFont(size: 8, weight: .medium)
-        .foregroundStyle(.white.opacity(0.75))
+        .foregroundStyle(NotchGlass.ink(.w75))
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .padding(.horizontal, key.count > 1 ? 3 : 0)
         .frame(minWidth: 12, minHeight: 12)
-        .background(Color.white.opacity(0.12))
+        .background(NotchGlass.fillHover)
         .cornerRadius(OmiChrome.stripRadius)
     }
     .fixedSize(horizontal: true, vertical: false)
@@ -129,11 +133,11 @@ struct NotchSystemControlsView: View {
         Text(label)
           .scaledFont(size: OmiType.micro, weight: .semibold)
       }
-      .foregroundColor(isOn ? .white : .white.opacity(0.45))
+      .foregroundColor(NotchGlass.controlLabel(isActive: isOn))
       .padding(.horizontal, OmiSpacing.sm)
       .padding(.vertical, OmiSpacing.xxs)
       .background(
-        Capsule().fill(isOn ? Color.white.opacity(0.18) : Color.white.opacity(0.08))
+        Capsule().fill(NotchGlass.controlFill(isActive: isOn, isHovering: false))
       )
       .contentShape(Capsule())
     }
@@ -148,6 +152,7 @@ struct NotchSystemControlsView: View {
 
   private func refresh() {
     screenCaptureOn = SystemCaptureControls.isScreenCaptureOn
+    currentAppName = Self.frontmostCaptureApp()
     audioRecordingOn = SystemCaptureControls.isAudioRecordingOn
   }
 
