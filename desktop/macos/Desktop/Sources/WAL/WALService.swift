@@ -1052,6 +1052,10 @@ final class WALService: ObservableObject {
 
   /// Sync all pending WALs to cloud
   func syncToCloud() async {
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      logger.info("WAL cloud sync deferred: account cutover offline upload gate closed")
+      return
+    }
     guard !isSyncing else {
       logger.warning("Sync already in progress")
       return
@@ -1063,10 +1067,17 @@ final class WALService: ObservableObject {
     let toSync = wals.filter { $0.status == .miss && $0.storage == .disk }
 
     for wal in toSync {
+      guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+        logger.info("WAL cloud sync interrupted by account cutover gate")
+        break
+      }
       do {
         try await uploadWalToCloud(wal)
       } catch APIError.syncRateLimited {
         logger.warning("WAL upload rate limited; leaving pending WALs for retry")
+        break
+      } catch APIError.accountCutoverOfflineQueueBlocked {
+        logger.info("WAL upload blocked by account cutover gate")
         break
       } catch {
         logger.error("Failed to sync WAL \(wal.id): \(error.localizedDescription)")

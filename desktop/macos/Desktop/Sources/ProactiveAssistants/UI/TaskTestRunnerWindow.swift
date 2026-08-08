@@ -55,7 +55,7 @@ struct TaskTestRunnerView: View {
       columnHeaders
         .padding(.horizontal, OmiSpacing.xl)
         .padding(.vertical, OmiSpacing.xs)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Ink.rowFill)
 
       Divider()
 
@@ -86,7 +86,7 @@ struct TaskTestRunnerView: View {
         .padding(OmiSpacing.lg)
     }
     .frame(width: 1400, height: 900)
-    .background(Color(nsColor: .windowBackgroundColor))
+    .inkGlassPanel(cornerRadius: 0, shadow: nil)
   }
 
   // MARK: - Header
@@ -613,13 +613,17 @@ class TaskTestRunnerWindow: NSWindow {
 
     super.init(
       contentRect: contentRect,
-      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
 
     self.title = "Task Extraction Test Runner"
     self.isReleasedWhenClosed = false
+    // The inside of a titled window is glass: transparent, light-pinned, and shadowed by its own
+    // frame (`WindowGlass.Kind.titled`). Without the pin the title bar and the traffic lights stay in
+    // the machine's appearance — a dark title bar on a white sheet on a Dark Mac.
+    WindowGlass.wear(self, as: .titled)
     self.delegate = self
     self.minSize = NSSize(width: 900, height: 600)
     self.center()

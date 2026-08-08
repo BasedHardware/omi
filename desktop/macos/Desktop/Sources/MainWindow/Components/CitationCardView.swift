@@ -20,13 +20,13 @@ struct CitationCardView: View {
           // Title
           Text(citation.title)
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           // Preview
           Text(citation.preview)
             .scaledFont(size: OmiType.caption)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
             .lineLimit(1)
         }
 
@@ -35,18 +35,11 @@ struct CitationCardView: View {
         // Chevron
         Image(systemName: "chevron.right")
           .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
-      )
+      .glassCard(cornerRadius: PageGlass.chipRadius, emphasized: isHovering)
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
@@ -64,10 +57,10 @@ struct CitationCardsView: View {
       HStack(spacing: OmiSpacing.xxs) {
         Image(systemName: "quote.opening")
           .scaledFont(size: OmiType.micro)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
         Text("Sources")
           .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       .padding(.top, OmiSpacing.xxs)
 
