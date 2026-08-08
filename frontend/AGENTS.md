@@ -14,13 +14,12 @@ pnpm -r test         # hermetic; node:test; no network, no wall clock
 node scripts/check-isolation.mjs
 ```
 
-All three commands green (plus `node scripts/gen-barrels.mjs --check`, `node scripts/check-wire-conformance.mjs`,
-`node scripts/check-structure.mjs` — no workspace dep cycles, no test files outside
-their home; tests for contracts/domain/sync/kernel/adapters live in `packages/testkit/`
-— and `node scripts/gen-bridge-swift.mjs --check` — security-bearing bridge constants
-must match the generated Swift; SKIPs with exit 0 when the tracker checkout is absent)
-= the baseline Definition of Done for any change here; `pnpm verify` runs the aggregate. During a concurrent wave, verify your own package scope (`pnpm --filter <pkg> build/test`) — sibling workers' unbarrelled files make the full `-r` check red until the orchestrator integrates; the orchestrator owns the integrated check. Include
-their output in your commit message evidence.
+**`pnpm verify` green is the Definition of Done here.** It runs the aggregate: barrels,
+structure (no dep cycles; tests for contracts/domain/sync/kernel/adapters live in
+`packages/testkit/`), wire conformance, and the generated Swift/Dart bridge constants.
+During a concurrent wave, verify your own package scope (`pnpm --filter <pkg> build/test`)
+— siblings' unbarrelled files keep the full `-r` check red until the orchestrator
+integrates, and the integrated check is theirs. Put the output in your commit evidence.
 
 ## The exemplar rule
 
@@ -68,61 +67,42 @@ foundation gap, not your call to fill.
     package's source tree is all it takes to export it.
 
 12. **Snapshot honesty — `complete: true` is the exceptional claim.** Filtered sources
-    are the NORM on this backend (2 of the first 4 domains filter server-side, one of
-    them *after* the page limit). The default assumption for any list endpoint is
-    therefore: it may NOT back `complete: true`. An id snapshot claims completeness only
-    when the source provably returned the whole unfiltered set, and the domain's
-    `SnapshotDescriptor` must carry the declared evidence for that claim (a repo-relative
-    locator or one-line proof of unfilteredness) — a descriptor asserting
-    complete-capability without evidence fails the harness. A 200 with an unexpected
-    body returns `null` (never a complete empty snapshot); a full page never claims
+    are the NORM here (2 of the first 4 domains filter server-side, one *after* the page
+    limit), so the default assumption for any list endpoint is that it may NOT back
+    `complete: true`. An id snapshot claims completeness only when the source provably
+    returned the whole unfiltered set, and its `SnapshotDescriptor` must carry declared
+    evidence — a descriptor asserting complete-capability without evidence fails the
+    harness. A 200 with an unexpected body returns `null`; a full page never claims
     completeness. Wrong `complete: true` is user data loss via `Projection.reconcile`.
     ENFORCED BY HARNESS: every new domain registers a `SnapshotDescriptor` in
-    `packages/testkit/src/test/snapshot-conformance.test.ts` — the shared law suite runs
-    it automatically. History: the permissive version of this rule let wave 4 certify a
-    data-loss bug as conformant via a mis-declared descriptor kind; declaring the kind is
-    a claim about the BACKEND, not about your adapter, and must cite backend evidence.
+    `packages/testkit/src/test/snapshot-conformance.test.ts`. The kind you declare is a
+    claim about the BACKEND, not your adapter, and must cite backend evidence — why:
+    [`core-invariant-history`](../docs/agents/core-invariant-history.md).
 
-13. **Shell hosts bind loopback-only, and the origin is frozen.** A serving socket binds
-    `127.0.0.1` explicitly and the verification script asserts it (`lsof` + a LAN-address
-    curl that must fail) — `NWListener(using:on:)` binds all interfaces silently (caught
-    live in wave 2: the "LoopbackServer" was publishing the bundle to the LAN). The
-    origin (fixed port / custom scheme) is a storage-correctness invariant: an ephemeral
-    port is a silent user-data wipe (IndexedDB is origin-keyed).
+13. **Shell hosts bind loopback-only, and the origin is frozen.** Bind `127.0.0.1`
+    explicitly and assert it (`lsof` + a LAN curl that must fail): `NWListener(using:on:)`
+    binds all interfaces silently — in wave 2 the "LoopbackServer" was publishing the
+    bundle to the LAN. The origin (fixed port / custom scheme) is a storage-correctness
+    invariant: an ephemeral port is a silent user-data wipe, since IndexedDB is
+    origin-keyed.
 
 14. **Invariant tests declare their red-proof.** A test that guards an invariant (data
     loss, id routing, outcome folding, snapshot honesty, cross-domain isolation) carries
     a `// red-proof:` comment naming the specific mutation that makes it fail, and the
-    reviewer applies that mutation before accepting the test. History: wave 5's
-    alias-fold test passed with rekeying replaced by the identity function — reconcile
-    masked the bug, so its assertions proved a different invariant than the one named.
-    Row-count assertions are the canonical decorative shape: assert the *content* only a
-    working mechanism can produce, not how many rows survived. Found by mutation, not by
-    reading — three review passes missed it.
+    reviewer APPLIES that mutation before accepting the test. Row-count assertions are the
+    canonical decorative shape: assert the *content* only a working mechanism can produce,
+    not how many rows survived. Why: [`core-invariant-history`](../docs/agents/core-invariant-history.md).
 
-15. **A shared wire is tested against its REAL shape, never a remembered one.**
-    When two components are developed independently against the same wire, at
-    least one test must consume the OTHER side's actual wire shape — a shared
-    corpus of record — rather than a payload its own author typed out. A test
-    that hand-authors the counterpart's frame is testing the author's memory of
-    the wire, which is exactly what is already wrong when this bites.
-    ENFORCED BY `scripts/check-wire-conformance.mjs` (in `pnpm verify`): every
-    seam in its registry must have a corpus covering every frame its
-    schema-of-record declares, and at least one named test that actually reads
-    that corpus. Adding a wire two components speak means adding a registry row.
-    History: three defects in one night shared this exact shape and none was
-    catchable from either side — a backend with 448 green tests that had never
-    served a request, a bridge reporting itself active while serving nothing,
-    and an entitlement UI built against a reserved `/listen` frame no server
-    emits while the server emitted a different frame nobody consumed. Each half
-    was individually correct and individually green. Note what the check does
-    NOT do: it cannot prove a test asserts anything useful about what it read —
-    that is rule 14's job. It proves the mechanical thing missing in all three:
-    the real shape exists, and something loads it.
+15. **A shared wire is tested against its REAL shape, never a remembered one.** When two
+    components are developed independently against one wire, at least one test must consume
+    the OTHER side's actual wire shape — a shared corpus of record — not a payload its own
+    author typed out. ENFORCED BY `scripts/check-wire-conformance.mjs` (in `pnpm verify`):
+    every seam in its registry needs a corpus covering every frame its schema-of-record
+    declares, plus a named test that reads it. A new shared wire means a new registry row.
+    The three defects that wrote this rule: [`core-invariant-history`](../docs/agents/core-invariant-history.md).
 
 ## What you may do freely
 
-Add tests, extend the testkit's fakes with new fault modes, add a new domain following the
-exemplar (contract file → codec → adapter → conformance tests), tighten types, fix defects
-with a regression test. Adding dependencies is NOT free: `contracts`, `kernel`, `domain`,
-`sync` stay dependency-free; elsewhere, justify in the PR.
+Add tests, extend the testkit's fakes with new fault modes, add a domain following the
+exemplar, tighten types, fix defects with a regression test. Dependencies are NOT free:
+`contracts`, `kernel`, `domain`, `sync` stay dependency-free; elsewhere, justify in the PR.
