@@ -13,9 +13,11 @@ from __future__ import annotations
 
 from utils.account_cutover.access import (
     AccountCutoverAccessDenial,
+    cutover_enforcement_enabled,
     enforce_account_cutover_http_access,
     enforce_account_cutover_ws_access,
     is_cutover_control_path,
+    should_skip_background_account_mutation,
 )
 from utils.account_cutover.control import build_account_cutover_control
 from utils.account_cutover.coordinator import (
@@ -26,6 +28,8 @@ from utils.account_cutover.coordinator import (
 from utils.account_cutover.fence import (
     AccountCutoverGenerationMismatchError,
     assert_legacy_product_write_allowed,
+    background_job_should_skip_account,
+    evaluate_write_fence,
     legacy_writes_allowed_for_state,
 )
 from utils.account_cutover.state import (
@@ -42,11 +46,15 @@ __all__ = [
     'apply_cutover_transition',
     'apply_forward_checkpoint',
     'assert_legacy_product_write_allowed',
+    'background_job_should_skip_account',
     'begin_forward_migration',
     'build_account_cutover_control',
+    'cutover_enforcement_enabled',
     'enforce_account_cutover_http_access',
     'enforce_account_cutover_ws_access',
+    'evaluate_write_fence',
     'is_cutover_control_path',
     'legal_transitions',
     'legacy_writes_allowed_for_state',
+    'should_skip_background_account_mutation',
 ]

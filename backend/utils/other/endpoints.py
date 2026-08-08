@@ -368,13 +368,22 @@ async def get_current_user_uid_ws_listen(
     return uid
 
 
-def get_current_user_uid_ws(authorization: str = Header(None)):
+def get_current_user_uid_ws(
+    websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare WebSocket type for WS injection
+    authorization: str = Header(None),
+):
     """WebSocket auth WITH per-UID rate limiting (7s window).
 
     Use for WebSocket endpoints that need retry-storm protection.
     """
     uid = _verify_ws_auth(authorization)
     enforce_account_deletion_ws_access(uid)
+    if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
+        enforce_account_cutover_ws_access(
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
 
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
@@ -426,10 +435,26 @@ def _verify_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
     return verify_token(token)
 
 
-async def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
-    """Authenticate first-message WebSocket clients without blocking the ASGI loop."""
+async def get_current_user_uid_from_ws_message(
+    message: Dict[str, Any],
+    *,
+    websocket: WebSocket | None = None,
+) -> str:
+    """Authenticate first-message WebSocket clients without blocking the ASGI loop.
+
+    Pass ``websocket`` so account-cutover enforcement can fence product surfaces
+    such as ``/v4/web/listen`` the same way header-auth listen does.
+    """
     uid = await run_blocking(critical_executor, _verify_user_uid_from_ws_message, message)
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    if cutover_enforcement_enabled() and websocket is not None:
+        await run_blocking(
+            db_executor,
+            enforce_account_cutover_ws_access,
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
     return uid
 
 

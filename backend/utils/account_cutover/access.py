@@ -13,6 +13,7 @@ from database import account_cutover as account_cutover_db
 from database.read_boundary import MalformedDocError
 from models.account_cutover import AccountCutoverClientAction, AccountCutoverRecord, AccountCutoverState
 from utils.account_cutover.control import build_account_cutover_control, parse_client_build
+from utils.account_cutover.fence import background_job_should_skip_account
 from utils.account_cutover.telemetry import record_cutover_access_decision
 from utils.executors import db_executor, run_blocking
 
@@ -101,8 +102,14 @@ def evaluate_account_cutover_access(
     headers: Mapping[str, str],
     firestore_client: Any = None,
     force: bool = False,
+    mutating: Optional[bool] = None,
 ) -> None:
-    """Raise AccountCutoverAccessDenial when product traffic must fail closed."""
+    """Raise AccountCutoverAccessDenial when product traffic must fail closed.
+
+    ``mutating`` defaults from the HTTP method. Product WebSocket sessions must
+    pass ``mutating=True`` so generation and legacy-plane rules apply at
+    admission; WebSockets are long-lived product surfaces, not safe reads.
+    """
 
     if not force and not cutover_enforcement_enabled():
         return
@@ -123,7 +130,8 @@ def evaluate_account_cutover_access(
         ) from error
 
     client_generation = parse_account_generation_header(headers)
-    mutating = method.upper() in _MUTATING_METHODS
+    if mutating is None:
+        mutating = method.upper() in _MUTATING_METHODS
 
     # Generation-zero legacy remains compatible without the header. Once the
     # account generation is positive, mutating callers must present a matching
@@ -132,15 +140,17 @@ def evaluate_account_cutover_access(
         if client_generation is None or client_generation != record.account_generation:
             _deny_generation_mismatch(record, client_generation=client_generation)
 
-    # Default legacy accounts with no floors keep main behavior.
+    platform = (_headers_get(headers, 'X-App-Platform') or '').strip().lower() or None
+    build = parse_client_build(_headers_get(headers, 'X-App-Build')) or parse_client_build(
+        _headers_get(headers, 'X-App-Version')
+    )
+    control = build_account_cutover_control(record, platform=platform, client_build=build)
+
+    # Default legacy accounts with no floors keep main behavior, except when
+    # operators configure a nonzero floor — force-upgrade applies to all
+    # non-allowlisted traffic (reads and writes), not only mutations.
     if record.state == AccountCutoverState.legacy and record.account_generation == 0:
-        # Still enforce force-upgrade when operators configure a nonzero floor.
-        platform = (_headers_get(headers, 'X-App-Platform') or '').strip().lower() or None
-        build = parse_client_build(_headers_get(headers, 'X-App-Build')) or parse_client_build(
-            _headers_get(headers, 'X-App-Version')
-        )
-        control = build_account_cutover_control(record, platform=platform, client_build=build)
-        if control.client_action == AccountCutoverClientAction.force_upgrade and mutating:
+        if control.client_action == AccountCutoverClientAction.force_upgrade:
             raise AccountCutoverAccessDenial(
                 code='force_upgrade_required',
                 client_action=control.client_action,
@@ -153,12 +163,6 @@ def evaluate_account_cutover_access(
                 },
             )
         return
-
-    platform = (_headers_get(headers, 'X-App-Platform') or '').strip().lower() or None
-    build = parse_client_build(_headers_get(headers, 'X-App-Build')) or parse_client_build(
-        _headers_get(headers, 'X-App-Version')
-    )
-    control = build_account_cutover_control(record, platform=platform, client_build=build)
 
     if control.client_action == AccountCutoverClientAction.force_upgrade:
         raise AccountCutoverAccessDenial(
@@ -173,7 +177,14 @@ def evaluate_account_cutover_access(
             },
         )
 
-    if control.client_action == AccountCutoverClientAction.migration_maintenance:
+    # Lossy rollback restores the legacy product plane for reads/writes while
+    # control may still advertise migration_maintenance (stranded new data /
+    # offline-queue quarantine). Do not deny product traffic solely for that
+    # projected action when the write fence says the plane is open.
+    if (
+        control.client_action == AccountCutoverClientAction.migration_maintenance
+        and record.state != AccountCutoverState.rolled_back_stranded
+    ):
         raise AccountCutoverAccessDenial(
             code='migration_maintenance',
             client_action=control.client_action,
@@ -243,12 +254,15 @@ def enforce_account_cutover_ws_access(
     firestore_client: Any = None,
 ) -> None:
     try:
+        # Product WebSocket sessions perform capture/mutations after admission.
+        # Evaluate them as mutating so generation and legacy-plane rules apply.
         evaluate_account_cutover_access(
             uid,
             method='GET',
             path=path,
             headers=headers,
             firestore_client=firestore_client,
+            mutating=True,
         )
     except AccountCutoverAccessDenial as denial:
         record_cutover_access_decision(
@@ -260,6 +274,26 @@ def enforce_account_cutover_ws_access(
             code=WS_AUTH_CODE_ACCOUNT_CUTOVER,
             reason=denial.code,
         ) from denial
+
+
+def should_skip_background_account_mutation(
+    uid: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """True when enforcement is on and queued work must not mutate this account.
+
+    Fail closed on malformed cutover documents. This is a worker admission
+    check, not a write-transaction fence.
+    """
+
+    if not cutover_enforcement_enabled():
+        return False
+    try:
+        record = account_cutover_db.get_account_cutover_record(uid, firestore_client=firestore_client)
+    except MalformedDocError:
+        return True
+    return background_job_should_skip_account(record)
 
 
 async def enforce_account_cutover_http_access_async(
@@ -289,4 +323,5 @@ __all__ = [
     'evaluate_account_cutover_access',
     'is_cutover_control_path',
     'parse_account_generation_header',
+    'should_skip_background_account_mutation',
 ]

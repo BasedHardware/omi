@@ -22,6 +22,7 @@ from utils.account_cutover.access import (
     AccountCutoverAccessDenial,
     evaluate_account_cutover_access,
     is_cutover_control_path,
+    should_skip_background_account_mutation,
 )
 from utils.account_cutover.control import build_account_cutover_control
 from utils.account_cutover.coordinator import AccountCutoverCoordinator
@@ -29,6 +30,7 @@ from utils.account_cutover.fence import (
     AccountCutoverGenerationMismatchError,
     assert_legacy_product_write_allowed,
     background_job_should_skip_account,
+    evaluate_write_fence,
     legacy_writes_allowed_for_state,
 )
 from utils.account_cutover.state import AccountCutoverTransitionError, apply_cutover_transition, legal_transitions
@@ -146,17 +148,113 @@ def test_legacy_default_remains_compatible():
 
 def test_generation_fence_blocks_migrating_writes():
     record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.migrating, account_generation=2)
-    with pytest.raises(AccountCutoverGenerationMismatchError):
+    with pytest.raises(AccountCutoverGenerationMismatchError) as blocked:
         assert_legacy_product_write_allowed(record, expected_account_generation=2)
+    assert 'blocked' in str(blocked.value)
     assert background_job_should_skip_account(record) is True
 
 
-def test_generation_fence_mismatch_on_legacy_writes():
+def test_generation_fence_requires_expected_generation_when_positive():
     record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.legacy, account_generation=2)
-    with pytest.raises(AccountCutoverGenerationMismatchError) as exc:
+    with pytest.raises(AccountCutoverGenerationMismatchError) as missing:
+        assert_legacy_product_write_allowed(record, expected_account_generation=None)
+    assert missing.value.code == 'account_generation_mismatch'
+    with pytest.raises(AccountCutoverGenerationMismatchError) as mismatch:
         assert_legacy_product_write_allowed(record, expected_account_generation=1)
-    assert exc.value.code == 'account_generation_mismatch'
+    assert mismatch.value.code == 'account_generation_mismatch'
     assert_legacy_product_write_allowed(record, expected_account_generation=2)
+    decision = evaluate_write_fence(record, expected_account_generation=None)
+    assert decision['allowed'] is False
+    assert decision['reason'] == 'generation_mismatch'
+
+
+def test_rolled_back_stranded_allows_product_writes_with_matching_generation(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(
+        uid='u1',
+        state=AccountCutoverState.rolled_back_stranded,
+        account_generation=3,
+        stranded_new_data=True,
+        offline_queue_instruction=OfflineQueueInstruction.quarantine,
+    )
+    monkeypatch.setattr(
+        account_cutover_db,
+        'get_account_cutover_record',
+        lambda uid, firestore_client=None: record,
+    )
+    assert legacy_writes_allowed_for_state(record.state) is True
+    evaluate_account_cutover_access(
+        'u1',
+        method='POST',
+        path='/v1/conversations',
+        headers={
+            'X-App-Platform': 'ios',
+            'X-App-Build': '99',
+            'X-Account-Generation': '3',
+        },
+        force=True,
+    )
+
+
+def test_force_upgrade_blocks_legacy_reads(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.legacy, account_generation=0)
+    monkeypatch.setattr(
+        account_cutover_db,
+        'get_account_cutover_record',
+        lambda uid, firestore_client=None: record,
+    )
+    monkeypatch.setattr(
+        'utils.account_cutover.access.build_account_cutover_control',
+        lambda *args, **kwargs: build_account_cutover_control(
+            record,
+            platform='ios',
+            client_build=10,
+            minimum_builds={'ios': 20},
+        ),
+    )
+    with pytest.raises(AccountCutoverAccessDenial) as exc:
+        evaluate_account_cutover_access(
+            'u1',
+            method='GET',
+            path='/v1/conversations',
+            headers={'X-App-Platform': 'ios', 'X-App-Build': '10'},
+            force=True,
+        )
+    assert exc.value.code == 'force_upgrade_required'
+
+
+def test_ws_admission_requires_generation_for_positive_accounts(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    record = AccountCutoverRecord(uid='u1', state=AccountCutoverState.legacy, account_generation=2)
+    monkeypatch.setattr(
+        account_cutover_db,
+        'get_account_cutover_record',
+        lambda uid, firestore_client=None: record,
+    )
+    with pytest.raises(AccountCutoverAccessDenial) as missing:
+        evaluate_account_cutover_access(
+            'u1',
+            method='GET',
+            path='/v4/listen',
+            headers={'X-App-Platform': 'ios', 'X-App-Build': '99'},
+            force=True,
+            mutating=True,
+        )
+    assert missing.value.code == 'account_generation_mismatch'
+
+
+def test_should_skip_background_account_mutation(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'on')
+    migrating = AccountCutoverRecord(uid='u1', state=AccountCutoverState.migrating, account_generation=1)
+    monkeypatch.setattr(
+        account_cutover_db,
+        'get_account_cutover_record',
+        lambda uid, firestore_client=None: migrating,
+    )
+    assert should_skip_background_account_mutation('u1') is True
+    monkeypatch.setenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'off')
+    assert should_skip_background_account_mutation('u1') is False
 
 
 def test_malformed_cutover_document_fails_closed(fake_db):
