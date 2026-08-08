@@ -27,8 +27,42 @@ for (const row of await fixture("status-matrix.json")) {
   assert.equal(isTrustedSynthesizedPageData(statusMatrixPage(row)), row.safe, `${row.window}/${row.completeness}`);
 }
 
+const canonicalPage = structuredClone((await fixture("page-conformance.json")).find((row) => row.safe).page);
+delete canonicalPage.items[0].citations;
+const canonicalTrace = (await fixture("recall-trace.json")).find((row) => row.safe).trace;
+const canonicalPageRaw = JSON.stringify(canonicalPage);
+const canonicalTraceRaw = JSON.stringify(canonicalTrace);
+const originalToJSON = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
+const originalCitations = Object.getOwnPropertyDescriptor(Object.prototype, "citations");
+let inheritedGetterCalls = 0;
+let parsedPage;
+let parsedTrace;
+try {
+  Object.defineProperty(Object.prototype, "toJSON", {
+    configurable: true,
+    get() { inheritedGetterCalls += 1; return undefined; },
+  });
+  Object.defineProperty(Object.prototype, "citations", {
+    configurable: true,
+    get() { inheritedGetterCalls += 1; return ["citation-v1:inherited"]; },
+  });
+  parsedPage = parseSynthesizedPageJson(canonicalPageRaw);
+  parsedTrace = parseRecallTraceJson(canonicalTraceRaw);
+} finally {
+  restorePrototypeProperty("toJSON", originalToJSON);
+  restorePrototypeProperty("citations", originalCitations);
+}
+assert.ok(parsedPage);
+assert.ok(parsedTrace);
+assert.equal(inheritedGetterCalls, 0);
+
 async function fixture(name) {
   return JSON.parse(await readFile(new URL(name, fixtureRoot), "utf8"));
+}
+
+function restorePrototypeProperty(name, descriptor) {
+  if (descriptor) Object.defineProperty(Object.prototype, name, descriptor);
+  else delete Object.prototype[name];
 }
 
 function statusMatrixPage(row) {

@@ -1,10 +1,12 @@
 /**
  * Parses bounded canonical JSON text before applying a contract validator.
  *
- * Canonical input is exactly `JSON.stringify(JSON.parse(raw))`: compact encoding,
- * normalized escapes/numbers, preserved object-key order, and no duplicate keys.
- * The round trip makes duplicate-key payloads fail because JSON.parse retains only
- * the last value. JSON.parse creates data-only objects and executes no caller code.
+ * Canonical input is the compact JSON.stringify encoding of JSON.parse(raw), with
+ * object-key order preserved. Before serialization, the parsed data is copied by
+ * descriptor into a graph whose objects and arrays have null prototypes. This keeps
+ * canonical verification from consulting inherited getters such as toJSON. The
+ * round trip rejects normalized escapes/numbers and duplicate-key payloads because
+ * JSON.parse retains only the last duplicate. No caller-owned code is executed.
  */
 export function parseCanonicalJson<T>(
   raw: string,
@@ -14,11 +16,39 @@ export function parseCanonicalJson<T>(
   if (typeof raw !== "string" || raw.length === 0 || raw.length > maxCodeUnits) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (JSON.stringify(parsed) !== raw) return null;
+    if (JSON.stringify(detachJsonData(parsed)) !== raw) return null;
     return predicate(parsed) ? parsed : null;
   } catch {
     return null;
   }
+}
+
+/** Copies JSON.parse output without reading a property through its prototype. */
+function detachJsonData(value: unknown): unknown {
+  if (value === null || typeof value !== "object") return value;
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Array.isArray(value)) {
+    const length = descriptors["length"]?.value;
+    if (!Number.isSafeInteger(length) || length < 0) throw new TypeError("invalid JSON array length");
+    const detached: unknown[] = [];
+    Object.setPrototypeOf(detached, null);
+    for (let index = 0; index < length; index += 1) {
+      const key = String(index);
+      const descriptor = descriptors[key];
+      if (!isJsonDataDescriptor(descriptor)) throw new TypeError("invalid JSON array entry");
+      Object.defineProperty(detached, key, { ...descriptor, value: detachJsonData(descriptor.value) });
+    }
+    return detached;
+  }
+
+  const detached = Object.create(null) as Record<string, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string") throw new TypeError("invalid JSON object key");
+    const descriptor = descriptors[key];
+    if (!isJsonDataDescriptor(descriptor)) throw new TypeError("invalid JSON object property");
+    Object.defineProperty(detached, key, { ...descriptor, value: detachJsonData(descriptor.value) });
+  }
+  return detached;
 }
 
 /**
@@ -72,7 +102,7 @@ function inspectArray(value: unknown[], seen: Set<object>): boolean {
 
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
-  if (!lengthDescriptor || "get" in lengthDescriptor || lengthDescriptor.enumerable || lengthDescriptor.configurable || !lengthDescriptor.writable) return false;
+  if (!lengthDescriptor || Object.hasOwn(lengthDescriptor, "get") || lengthDescriptor.enumerable || lengthDescriptor.configurable || !lengthDescriptor.writable) return false;
   for (const key of expected.slice(0, -1)) {
     const descriptor = descriptors[key];
     if (!isJsonDataDescriptor(descriptor) || !inspectData(descriptor.value, seen)) return false;
@@ -85,7 +115,7 @@ function isJsonDataDescriptor(
 ): descriptor is PropertyDescriptor & { value: unknown } {
   return Boolean(
     descriptor
-      && !("get" in descriptor)
+      && Object.hasOwn(descriptor, "value")
       && descriptor.enumerable
       && descriptor.configurable
       && descriptor.writable,

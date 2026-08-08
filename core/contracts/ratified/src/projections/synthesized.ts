@@ -384,11 +384,17 @@ function hasSafeItem(value: unknown): boolean {
   const item = value as { id: unknown; text: unknown; citations?: unknown; provenance?: unknown };
   if (typeof item.id !== "string" || parseSynthesizedItemId(item.id) === null) return false;
   if (typeof item.text !== "string" || parseSynthesizedText(item.text) === null) return false;
-  if ("citations" in item && (!Array.isArray(item.citations) || !item.citations.every((ref) => typeof ref === "string" && parseCitationRef(ref) !== null))) return false;
-  if (Array.isArray(item.citations) && new Set(item.citations).size !== item.citations.length) return false;
-  if ("provenance" in item) {
-    if (!hasExactKeys(item.provenance, ["synthesisVersion", "inputDigest", "outputDigest"])) return false;
-    const provenance = item.provenance as { synthesisVersion: unknown; inputDigest: unknown; outputDigest: unknown };
+  const citationsDescriptor = Object.getOwnPropertyDescriptor(item, "citations");
+  if (citationsDescriptor) {
+    if (!Object.hasOwn(citationsDescriptor, "value") || !Array.isArray(citationsDescriptor.value)) return false;
+    const citations = citationsDescriptor.value as unknown[];
+    if (!citations.every((ref) => typeof ref === "string" && parseCitationRef(ref) !== null)) return false;
+    if (new Set(citations).size !== citations.length) return false;
+  }
+  const provenanceDescriptor = Object.getOwnPropertyDescriptor(item, "provenance");
+  if (provenanceDescriptor) {
+    if (!Object.hasOwn(provenanceDescriptor, "value") || !hasExactKeys(provenanceDescriptor.value, ["synthesisVersion", "inputDigest", "outputDigest"])) return false;
+    const provenance = provenanceDescriptor.value as { synthesisVersion: unknown; inputDigest: unknown; outputDigest: unknown };
     if (typeof provenance.synthesisVersion !== "string" || provenance.synthesisVersion.trim().length === 0) return false;
     if (typeof provenance.inputDigest !== "string" || parseSha256Digest(provenance.inputDigest) === null) return false;
     if (typeof provenance.outputDigest !== "string" || parseSha256Digest(provenance.outputDigest) === null) return false;

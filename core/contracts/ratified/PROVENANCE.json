@@ -23,8 +23,8 @@
   "inputs": [
     {
       "path": "fixtures/clean-consumer/conformance.mjs",
-      "sha256": "d1e89b94d18fe63c4f4c7d087d652754f0d348f035df46c65614d16f6b3f0cce",
-      "bytes": 2935
+      "sha256": "1eff03cc31d1f3bd8b3ea8e7210323d2e9feae8427841821042ba546a484de1e",
+      "bytes": 4344
     },
     {
       "path": "fixtures/clean-consumer/consumer.ts",
@@ -83,8 +83,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "d530080efac2f594b7a1b4b56103715c0bf28e3df96025a331701b7fe3aadba9",
-      "bytes": 3894
+      "sha256": "eefaff1b90fe4cb0797738d0757fd4f21f8c51d59ccd07e90c6f833657cd2367",
+      "bytes": 4071
     },
     {
       "path": "scripts/check-domain-markers.mjs",
@@ -118,8 +118,8 @@
     },
     {
       "path": "src/projections/synthesized.ts",
-      "sha256": "4ab61259fcc72da5d35f54eea22cd5c57073b31a63efa37a7c71f0b0749db7de",
-      "bytes": 18369
+      "sha256": "a6b1e3c73e62bda748079ef4037ce6e0295599fea404d56be1b578e697fd65c7",
+      "bytes": 18711
     },
     {
       "path": "src/recall/trace.ts",
@@ -128,13 +128,13 @@
     },
     {
       "path": "src/wire/json.ts",
-      "sha256": "d13c8f72d142b4cc1e4775ddcc83eec4f2a763eb77023b84f82926cb7ee93e24",
-      "bytes": 3826
+      "sha256": "6b0b67ae280c81f27b3e7d9cf6c725294dc48c817c03d0f58a480ff7bbe3945c",
+      "bytes": 5369
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "ad70a513bb2bef7bc142fe0b85d2485e437984ab0adbcac9e8a09fae4a1f38e9",
-      "bytes": 9329
+      "sha256": "1faf7b0c0698694fa6339bf1f6473c8327e4c2b853572a685d6640f84451e79e",
+      "bytes": 11085
     },
     {
       "path": "tsconfig.base.json",
@@ -147,5 +147,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "3ed654f28585d7d44c4cf289e4725021b8fd7998821b056a847d3b9c54917046"
+  "sourceDigest": "9fff749ca05182bbdac72c344d9d4248468c978de7b7bacce426a65824cefd4f"
 }

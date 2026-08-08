@@ -179,6 +179,43 @@ test("raw trace parser and trusted predicate enforce data-only nested stages", a
   assert.equal(isTrustedRecallTraceData(new Proxy(structuredClone(trace), {})), false);
 });
 
+test("raw parsers never consult inherited toJSON or omitted optional fields", { concurrency: false }, async () => {
+  const pageFixture = JSON.parse(await readFile(new URL("../fixtures/page-conformance.json", import.meta.url), "utf8"));
+  const page = structuredClone(pageFixture.find((row) => row.safe).page);
+  delete page.items[0].citations;
+  const traceFixture = JSON.parse(await readFile(new URL("../fixtures/recall-trace.json", import.meta.url), "utf8"));
+  const trace = traceFixture.find((row) => row.safe).trace;
+  const pageRaw = JSON.stringify(page);
+  const traceRaw = JSON.stringify(trace);
+  const originalToJSON = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
+  const originalCitations = Object.getOwnPropertyDescriptor(Object.prototype, "citations");
+  let toJSONGetterCalls = 0;
+  let citationsGetterCalls = 0;
+  let parsedPage;
+  let parsedTrace;
+
+  try {
+    Object.defineProperty(Object.prototype, "toJSON", {
+      configurable: true,
+      get() { toJSONGetterCalls += 1; return undefined; },
+    });
+    Object.defineProperty(Object.prototype, "citations", {
+      configurable: true,
+      get() { citationsGetterCalls += 1; return ["citation-v1:inherited"]; },
+    });
+    parsedPage = parseSynthesizedPageJson(pageRaw);
+    parsedTrace = parseRecallTraceJson(traceRaw);
+  } finally {
+    restorePrototypeProperty("toJSON", originalToJSON);
+    restorePrototypeProperty("citations", originalCitations);
+  }
+
+  assert.ok(parsedPage);
+  assert.ok(parsedTrace);
+  assert.equal(toJSONGetterCalls, 0);
+  assert.equal(citationsGetterCalls, 0);
+});
+
 function statusMatrixPage(row) {
   const windows = {
     complete_terminal: { status: "complete", complete: true, hasMore: false, nextCursor: null },
@@ -211,4 +248,9 @@ function statusMatrixPage(row) {
     },
     absence: row.queryGap ? { kind: "query_gap" } : null,
   };
+}
+
+function restorePrototypeProperty(name, descriptor) {
+  if (descriptor) Object.defineProperty(Object.prototype, name, descriptor);
+  else delete Object.prototype[name];
 }
