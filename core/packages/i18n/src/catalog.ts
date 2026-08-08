@@ -187,4 +187,51 @@ export const EN_MESSAGES = {
   "home.keySearch": "⌘K",
   "home.loadedCount": "{count} loaded items",
   "home.matchCount": "{count} matches in loaded items",
+
+  // Where the rows on screen came from. Rendered at every width, on purpose: a QA label
+  // that desktop CSS hides is exactly how a fixture render gets mistaken for real data.
+  "dataSource.fixture": "Fixture data — not from your account",
+  "dataSource.live": "Live backend",
+  "dataSource.detail": "{source} · {detail}",
+
+  // Platform-generation Memories (synthesized read model). This surface renders
+  // propositions with lineage. It has no editing copy on purpose: the ratified
+  // read contract carries no editable memory fields.
+  "memoriesPlatform.title": "Memories",
+  "memoriesPlatform.subtitle": "Propositions Omi has synthesized, with the lineage behind them.",
+  "memoriesPlatform.propositions": "Propositions",
+  "memoriesPlatform.readOnlyNote": "These propositions are generated. They change on the next consolidation cycle, not by direct edit.",
+  "memoriesPlatform.filterSavedPlaceholder": "Filter loaded propositions",
+  "memoriesPlatform.emptyBody": "Propositions will appear here once Omi has understood enough to state one.",
+  "memoriesPlatform.queryGapTitle": "Nothing matched",
+  "memoriesPlatform.queryGapBody": "The projection was searched and returned no propositions for this request.",
+  "memoriesPlatform.loadMore": "Load more",
+  "memoriesPlatform.loadingMore": "Loading more propositions",
+  "memoriesPlatform.terminalPage": "You have reached the end of this projection.",
+  "memoriesPlatform.citations": "Citations",
+  "memoriesPlatform.citationsCount": "Cited sources: {count}",
+  "memoriesPlatform.lineage": "Lineage",
+  "memoriesPlatform.showLineage": "Show lineage",
+  "memoriesPlatform.hideLineage": "Hide lineage",
+  "memoriesPlatform.synthesisVersion": "Synthesis version",
+  "memoriesPlatform.inputDigest": "Input digest",
+  "memoriesPlatform.outputDigest": "Output digest",
+  "memoriesPlatform.lineageUnavailable": "No lineage was provided for this proposition.",
+  "memoriesPlatform.recallUnknownTitle": "Nothing loaded yet",
+  "memoriesPlatform.recallUnknownBody": "Omi has not received an answer for this view yet, so it cannot say whether there is anything to show.",
+  "memoriesPlatform.completenessLabel": "Recall completeness",
+  "memoriesPlatform.unrecognizedReasons": "{count} further limitations were reported that this version cannot describe.",
+  "memoriesPlatform.completeness.complete": "Complete — the whole accepted projection was searched.",
+  "memoriesPlatform.completeness.incomplete": "Incomplete — accepted work is still being consolidated.",
+  "memoriesPlatform.completeness.degraded": "Degraded — this projection is not currently authoritative.",
+  "memoriesPlatform.completeness.partial": "Partial — the search was bounded before it covered everything.",
+  "memoriesPlatform.reasonsLabel": "Why this result is limited",
+  "memoriesPlatform.reason.acceptedWorkPending": "Accepted work is still pending consolidation.",
+  "memoriesPlatform.reason.projectionStale": "The projection is stale.",
+  "memoriesPlatform.reason.projectionUnavailable": "The projection is unavailable.",
+  "memoriesPlatform.reason.projectionBypassed": "The projection was bypassed.",
+  "memoriesPlatform.reason.sourceBound": "The search was bounded by source.",
+  "memoriesPlatform.reason.timeBound": "The search was bounded by time.",
+  "memoriesPlatform.reason.policyBound": "The search was bounded by policy.",
+
 } as const;
