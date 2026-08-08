@@ -148,6 +148,25 @@ def test_startup_bootstraps_read_only_state_tooling_contract() -> None:
     assert source.index('state_fsync_tree "$data_dir"') < source.index('state_write_receipt "$state_receipt"')
 
 
+def test_startup_expands_the_gce_root_partition_before_state_or_docker_work() -> None:
+    source = STARTUP.read_text(encoding="utf-8")
+
+    assert '[[ -r /sys/class/dmi/id/sys_vendor ]] || return 0' in source
+    assert '[[ "$system_vendor" == "Google" ]] || return 0' in source
+    assert 'root_source="$(findmnt --noheadings --output SOURCE /)"' in source
+    assert 'root_partition="$(readlink -f "$root_source")"' in source
+    assert 'parent_name="$(lsblk --noheadings --output PKNAME "$root_partition"' in source
+    assert 'partition_number_file="/sys/class/block/${root_partition##*/}/partition"' in source
+    assert 'IFS= read -r partition_number < "$partition_number_file"' in source
+    assert "--output PARTN" not in source
+    assert 'disk_size="$(blockdev --getsize64 "$root_disk")"' in source
+    assert 'partition_size="$(blockdev --getsize64 "$root_partition")"' in source
+    assert 'growpart "$root_disk" "$partition_number"' in source
+    assert 'resize2fs "$root_partition"' in source
+    assert source.index("expand_root_filesystem\n") < source.index("quiesce_docker_before_state_mount\n")
+    assert source.index("quiesce_docker_before_state_mount\n") < source.index("ensure_docker_daemon\n")
+
+
 def _write_fake_command(bin_dir: Path, name: str, body: str) -> None:
     path = bin_dir / name
     path.write_text(f"#!/bin/bash\n{body}\n", encoding="utf-8")
@@ -267,6 +286,7 @@ def _state_startup_environment(
         "AGENT_VM_STATE_SOURCE_DEVICE": bash_path(source_device, cwd=ROOT),
         "AGENT_VM_STATE_MOUNT": bash_path(state_mount, cwd=ROOT),
         "AGENT_VM_STATE_SOURCE_MOUNT": bash_path(source_mount, cwd=ROOT),
+        "AGENT_VM_STATE_DEVICE_WAIT_SECONDS": "1",
         "MIGRATION_MODE": "metadata",
         "STATE_REQUIRED_MODE": "required",
         "STATE_SOURCE_REQUIRED_MODE": "required",
@@ -459,7 +479,34 @@ def test_startup_fails_closed_when_required_legacy_source_device_is_missing(tmp_
     result = _run_state_startup(environment)
 
     assert result.returncode != 0
-    assert "required legacy state source device is missing" in result.stderr
+    assert "required legacy state source device is missing after bounded wait" in result.stderr
+
+
+def test_startup_waits_for_a_late_attached_legacy_source_device(tmp_path: Path) -> None:
+    environment, state_mount, _, log = _state_startup_environment(tmp_path)
+    source_device = Path(environment["AGENT_VM_STATE_SOURCE_DEVICE"])
+    source_device.unlink()
+    environment["AGENT_VM_STATE_DEVICE_WAIT_SECONDS"] = "3"
+    _write_fake_command(
+        Path(environment["OMI_TEST_FAKE_BIN"]),
+        "sleep",
+        "printf 'state_wait_sleep %s\\n' \"$*\" >> \"$COMMAND_LOG\"\n" "touch \"$STATE_SOURCE_DEVICE\"",
+    )
+    result = _run_state_startup(environment)
+
+    assert result.returncode == 0, result.stderr
+    assert log.read_text(encoding="utf-8").splitlines().count("state_wait_sleep 1") == 1
+    assert (state_mount / "state-receipt.json").is_file()
+
+
+def test_startup_parses_device_wait_timeout_as_decimal(tmp_path: Path) -> None:
+    environment, state_mount, _, _ = _state_startup_environment(tmp_path)
+    environment["AGENT_VM_STATE_DEVICE_WAIT_SECONDS"] = "08"
+
+    result = _run_state_startup(environment)
+
+    assert result.returncode == 0, result.stderr
+    assert (state_mount / "state-receipt.json").is_file()
 
 
 def test_startup_allows_an_explicitly_optional_legacy_source_to_be_absent(tmp_path: Path) -> None:

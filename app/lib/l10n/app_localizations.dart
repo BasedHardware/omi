@@ -18296,6 +18296,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your request is under review'**
   String get yourRequestUnderReview;
+
+  /// Title for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Update Required'**
+  String get accountCutoverUpdateRequiredTitle;
+
+  /// Body for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Install the latest Omi app to continue after account migration.'**
+  String get accountCutoverUpdateRequiredMessage;
+
+  /// Title for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Migration in Progress'**
+  String get accountCutoverMigrationInProgressTitle;
+
+  /// Body for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is migrating. Product features are paused until migration finishes.'**
+  String get accountCutoverMigrationInProgressMessage;
+
+  /// Body when cutover rollback stranded newer data
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is in maintenance after a migration rollback. Some newer data may be stranded.'**
+  String get accountCutoverMigrationRollbackMessage;
+
+  /// Button that opens the app store for a required cutover upgrade
+  ///
+  /// In en, this message translates to:
+  /// **'Open store'**
+  String get accountCutoverOpenStore;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

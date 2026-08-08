@@ -91,9 +91,8 @@ final class ShellWindowChromeTests: XCTestCase {
   }
 
   /// …and the window still moves. It has two handles: the transparent title bar over the reserved
-  /// band (`GlassShell.titlebarClearance`, which is why the shell draws nothing up there) and the
-  /// window background, which is what makes the top bar a drag handle without any view knowing it is
-  /// one.
+  /// band and a thresholded mouse monitor across the content. The native background-drag switch is
+  /// deliberately off because AppKit mistakes hosted SwiftUI buttons for background.
   func testTheWindowIsStillMovableWithoutATitleBarToGrab() {
     let window = makeWindow()
     window.isMovableByWindowBackground = false
@@ -101,12 +100,44 @@ final class ShellWindowChromeTests: XCTestCase {
     ShellWindowChrome.dress(window)
 
     XCTAssertTrue(window.isMovable, "a floating window that cannot be moved is stranded")
-    XCTAssertTrue(
-      window.isMovableByWindowBackground,
-      "with no visible frame, the panels and the empty desktop between them are the drag handles")
+    XCTAssertFalse(window.isMovableByWindowBackground)
+    XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window))
     XCTAssertTrue(
       window.styleMask.contains(.titled),
-      "the transparent title bar is the second drag handle; a borderless window loses it")
+      "the transparent title bar remains an independent drag handle")
+  }
+
+  func testHostedSwiftUIButtonsDoNotEnableNativeBackgroundDragging() throws {
+    let window = makeWindow()
+    let host = NSHostingView(
+      rootView: Button("Rewind") {}
+        .buttonStyle(.plain)
+        .frame(width: Self.contentSize.width, height: Self.contentSize.height))
+    host.frame = NSRect(origin: .zero, size: Self.contentSize)
+    window.contentView = host
+    ShellWindowChrome.dress(window)
+    host.layoutSubtreeIfNeeded()
+
+    let hit = try XCTUnwrap(host.hitTest(NSPoint(x: 450, y: 300)))
+    XCTAssertTrue(
+      hit.mouseDownCanMoveWindow,
+      "the regression fixture no longer reproduces AppKit's SwiftUI misclassification")
+    XCTAssertTrue(
+      ShellWindowChrome.shouldBeginDrag(at: NSPoint(x: 450, y: 300), in: window),
+      "the replacement must allow a real drag to start over the same hosted SwiftUI surface")
+    XCTAssertFalse(
+      window.isMovableByWindowBackground,
+      "native background dragging steals this hosted button's click before SwiftUI receives it")
+    XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window))
+  }
+
+  func testNativeDragControlsKeepTheirOwnGestures() {
+    let window = makeWindow()
+    let scrollView = NSScrollView(frame: NSRect(origin: .zero, size: Self.contentSize))
+    window.contentView = scrollView
+    ShellWindowChrome.dress(window)
+
+    XCTAssertFalse(ShellWindowChrome.shouldBeginDrag(at: NSPoint(x: 450, y: 300), in: window))
   }
 
   // MARK: - Summoned vs anchored
@@ -191,7 +222,7 @@ final class ShellWindowChromeTests: XCTestCase {
       "the panels inside draw their own ambient shadow; the shell does not add an outer frame shadow")
     XCTAssertTrue(
       WindowGlass.hasTitlebar(ShellWindowChrome.glassKind),
-      "the transparent title bar is one of the shell's two drag handles, and ⌘W routes from the mask")
+      "the transparent title bar remains a drag handle, and ⌘W routes from the mask")
   }
 
   /// …and `dress` really applies it, in both presentations. The mapping above is a value; this is the
@@ -224,7 +255,8 @@ final class ShellWindowChromeTests: XCTestCase {
       XCTAssertTrue(
         window.styleMask.isSuperset(of: ShellWindowChrome.keyboardWindowCommands),
         "\(presentation) has no ⌘W or ⌘M and no buttons either")
-      XCTAssertTrue(window.isMovableByWindowBackground, "\(presentation) cannot be dragged anywhere")
+      XCTAssertFalse(window.isMovableByWindowBackground, "\(presentation) can steal hosted button clicks")
+      XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window), "\(presentation) cannot be dragged")
     }
   }
 
