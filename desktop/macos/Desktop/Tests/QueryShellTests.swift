@@ -395,10 +395,10 @@ final class QueryShellTests: XCTestCase {
   /// you on the same list, and the map is a second drawing of the whole corpus on a page that owns
   /// it. A chip that looks like its four neighbours and navigates instead teaches the row a rule and
   /// then breaks it — so `Brain Map ›` lives in the panel header beside `Filter ›`, next to the one
-  /// other control that leaves the list (`Chat ›`), and `QueryShellKind` stays four.
-  func testTheChipsAreTheFourTypesTheSpineMerges() {
+  /// other control that leaves the list (`Chat ›`), while Tasks remains a filter over the spine.
+  func testTheChipsAreTheFiveTypesTheSpineMerges() {
     XCTAssertEqual(
-      QueryShellKind.allCases.map(\.rawValue), ["all", "conversations", "memories", "rewind"])
+      QueryShellKind.allCases.map(\.rawValue), ["all", "conversations", "memories", "tasks", "rewind"])
     XCTAssertEqual(QueryShellKind.allCases.map(\.title).first, "All")
   }
 

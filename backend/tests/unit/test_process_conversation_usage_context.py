@@ -965,8 +965,10 @@ def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
     conversation.is_locked = False
     conversation.structured.action_items = [action_item]
 
-    monkeypatch.setattr(process_conversation.conversation_capture, 'process_before_legacy', lambda *args: False)
-    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_fields', lambda *args: {})
+    monkeypatch.setattr(
+        process_conversation.conversation_capture, 'process_conversation_before_legacy', lambda *args: False
+    )
+    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_conversation_fields', lambda *args: {})
     monkeypatch.setattr(process_conversation.conversation_capture, 'legacy_document_ids', lambda *args: None)
     monkeypatch.setattr(process_conversation.conversation_capture, 'reconcile_after_legacy', lambda *args: None)
     monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])

@@ -54,7 +54,28 @@ def _capture_signals(action_item: Any) -> BackendCaptureSignals:
     )
 
 
-def _capture_decision(action_item: Any, conversation_id: str):
+def _conversation_evidence_ref(
+    action_item: Any,
+    conversation_id: str,
+    transcript_segments: Sequence[Any] = (),
+) -> EvidenceRef:
+    requested_ids = set(getattr(action_item, 'source_segment_ids', None) or [])
+    supporting_segments = [segment for segment in transcript_segments if getattr(segment, 'id', None) in requested_ids]
+    return EvidenceRef(
+        kind=EvidenceKind.conversation,
+        id=conversation_id,
+        scope=EvidenceScope.canonical,
+        transcript_segment_ids=[segment.id for segment in supporting_segments],
+        start_seconds=min((segment.start for segment in supporting_segments), default=None),
+        end_seconds=max((segment.end for segment in supporting_segments), default=None),
+    )
+
+
+def _capture_decision(
+    action_item: Any,
+    conversation_id: str,
+    transcript_segments: Sequence[Any] = (),
+):
     return adapt_backend_capture(
         TaskCreatePayload(
             description=action_item.description,
@@ -62,39 +83,48 @@ def _capture_decision(action_item: Any, conversation_id: str):
             due_at=action_item.due_at,
             due_confidence=1.0 if action_item.due_at else None,
         ),
-        evidence_ref=EvidenceRef(
-            kind=EvidenceKind.conversation,
-            id=conversation_id,
-            scope=EvidenceScope.canonical,
-        ),
+        evidence_ref=_conversation_evidence_ref(action_item, conversation_id, transcript_segments),
         source_surface='conversation',
         signals=_capture_signals(action_item),
     )
 
 
-def canonical_fields(action_item: Any, conversation_id: str) -> dict[str, Any]:
+def canonical_fields(
+    action_item: Any,
+    conversation_id: str,
+    transcript_segments: Sequence[Any] = (),
+) -> dict[str, Any]:
     return {
         'status': 'completed' if action_item.completed else 'active',
         'owner': getattr(action_item, 'capture_owner', None) or 'unknown',
         'due_confidence': 1.0 if action_item.due_at else None,
         'source': 'conversation',
         'provenance': [
-            EvidenceRef(
-                kind=EvidenceKind.conversation,
-                id=conversation_id,
-                scope=EvidenceScope.canonical,
-            ).model_dump(mode='python')
+            _conversation_evidence_ref(action_item, conversation_id, transcript_segments).model_dump(mode='python')
         ],
     }
 
 
-def process_before_legacy(uid: str, conversation_id: str, action_items: Sequence[Any]) -> bool:
+def canonical_conversation_fields(action_item: Any, conversation: Any) -> dict[str, Any]:
+    return canonical_fields(action_item, conversation.id, getattr(conversation, 'transcript_segments', ()) or ())
+
+
+def process_before_legacy(
+    uid: str,
+    conversation_id: str,
+    action_items: Sequence[Any],
+    transcript_segments: Sequence[Any] = (),
+) -> bool:
     """Capture proposals before the legacy writer; return true when legacy is bypassed."""
     control = task_control_db.get_task_workflow_control(uid)
     if not capture_enabled(uid):
         return False
     for action_item, semantic_key, occurrence in _semantic_occurrences(action_items):
-        decision = _capture_decision(action_item, conversation_id)
+        decision = (
+            _capture_decision(action_item, conversation_id, transcript_segments)
+            if transcript_segments
+            else _capture_decision(action_item, conversation_id)
+        )
         if decision.candidate is None:
             continue
         candidate = candidate_service.create_candidate(
@@ -110,6 +140,15 @@ def process_before_legacy(uid: str, conversation_id: str, action_items: Sequence
                 account_generation=control.account_generation,
             )
     return True
+
+
+def process_conversation_before_legacy(uid: str, conversation: Any) -> bool:
+    return process_before_legacy(
+        uid,
+        conversation.id,
+        conversation.structured.action_items,
+        getattr(conversation, 'transcript_segments', ()) or (),
+    )
 
 
 def reconcile_after_legacy(
@@ -192,9 +231,11 @@ def _idempotency_key(
 
 __all__ = [
     'canonical_fields',
+    'canonical_conversation_fields',
     'capture_enabled',
     'legacy_document_ids',
     'legacy_replacement_map',
     'process_before_legacy',
+    'process_conversation_before_legacy',
     'reconcile_after_legacy',
 ]

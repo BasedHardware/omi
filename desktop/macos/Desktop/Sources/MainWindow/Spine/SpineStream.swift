@@ -90,9 +90,12 @@ struct SpineStream: View {
   let request: QueryShellRequest
   @ObservedObject var appState: AppState
   @ObservedObject var memoriesViewModel: MemoriesViewModel
+  @ObservedObject var tasksStore: TasksStore
 
   /// Hands a conversation to the page that owns conversations.
   let onOpenConversation: (String) -> Void
+  /// Opens a task or memory's source conversation, optionally focused on exact transcript segments.
+  let onOpenConversationSource: (String, [String]) -> Void
   /// Hands the day's memories to the surface that owns the graph.
   let onOpenBrainMap: () -> Void
   /// Hands a frame to Rewind.
@@ -137,17 +140,23 @@ struct SpineStream: View {
     .task {
       if appState.conversations.isEmpty { await appState.loadConversations() }
       await memoriesViewModel.loadMemoriesIfNeeded()
+      await tasksStore.loadTasksIfNeeded()
       ingest()
       hydrator.start(conversations: conversationPages, memories: memoryPages)
     }
     .onDisappear { hydrator.stop() }
     .onReceive(appState.$conversations) { _ in ingest() }
     .onReceive(memoriesViewModel.$streamMemories) { _ in ingest() }
+    .onReceive(tasksStore.$incompleteTasks) { _ in ingest() }
     .onChange(of: request) { _, newValue in store.apply(request: newValue) }
   }
 
   private func ingest() {
-    store.ingest(conversations: appState.conversations, memories: memoriesViewModel.streamMemories)
+    store.ingest(
+      conversations: appState.conversations,
+      memories: memoriesViewModel.streamMemories,
+      tasks: tasksStore.incompleteTasks
+    )
     store.apply(request: request)
     // A store that was hydrated and has since been truncated under us reopens its cursor; this is
     // where the spine notices and goes back for the rest.
@@ -188,6 +197,8 @@ struct SpineStream: View {
                   row: row,
                   showsIndent: store.kind == .everything,
                   onOpenConversation: { onOpenConversation($0.id) },
+                  onOpenConversationSource: onOpenConversationSource,
+                  onToggleTask: { task in Task { await tasksStore.toggleTask(task) } },
                   onToggleStar: toggleStar,
                   onOpenMoment: { _ in onOpenRewind() },
                   onOpenBrainMap: onOpenBrainMap
@@ -355,9 +366,10 @@ struct SpineEmptyCopy: Equatable, Sendable {
 
   private static func emptyKindDetail(_ kind: SpineKind) -> String {
     switch kind {
-    case .everything: return "Conversations, memories and screen moments appear here as they happen."
+    case .everything: return "Conversations, memories, tasks and screen moments appear here as they happen."
     case .conversations: return "Conversations appear here once Omi has heard one."
     case .memories: return "Memories appear here as Omi learns things worth keeping."
+    case .tasks: return "Tasks you add or Omi extracts appear here."
     case .screen: return "Screen moments appear here while screen capture is on."
     }
   }
