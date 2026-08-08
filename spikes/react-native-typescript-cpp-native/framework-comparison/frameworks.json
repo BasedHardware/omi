@@ -3,7 +3,7 @@
   "candidates": [
     {"name":"react-native","language":"TypeScript","mobile":true,"desktop":true,"native_boundary":"TurboModule/JSI","status":"shell-built-android-verified"},
     {"name":"flutter","language":"Dart","mobile":true,"desktop":true,"native_boundary":"FFI/platform channels","status":"existing-parity-baseline"},
-    {"name":"valdi","language":"TypeScript","mobile":true,"desktop":true,"native_boundary":"generated polyglot bindings","status":"source-checked-cli-build-blocked-by-bazel"},
+    {"name":"valdi","language":"TypeScript","mobile":true,"desktop":true,"native_boundary":"generated polyglot bindings","status":"agent-check-failed-resolve-pass-build-fail-lint-fail-tests-fail"},
     {"name":"tauri","language":"Rust + web TypeScript","mobile":true,"desktop":true,"native_boundary":"Rust commands/plugins/FFI","status":"shell-built-macos-verified"},
     {"name":"dioxus","language":"Rust","mobile":true,"desktop":true,"native_boundary":"Rust FFI/platform APIs","status":"shell-built-cargo-check-verified"},
     {"name":"crepuscularity","language":"Rust/.crepus","mobile":true,"desktop":true,"native_boundary":"View IR/C ABI/Tauri","status":"local-source-inspected"},
