@@ -23,7 +23,8 @@ name: Auto Release Desktop (Windows) on Main
 # `.config.mjs` name is NOT auto-detected, and that JS config is what computes the
 # pi-mono asarUnpack closure at pack time. Dropping the flag would silently ship an
 # installer missing that closure and break the coding agent. `pnpm build:win`
-# already carries the flag; the signed path passes it by hand.
+# already carries the flag and packaged-runtime probe; the signed path passes the
+# signing overrides by hand and invokes the same probe after electron-builder.
 
 on:
   workflow_dispatch:
@@ -309,13 +310,15 @@ jobs:
             -c.win.azureSignOptions.endpoint="$AZURE_ENDPOINT" \
             -c.win.azureSignOptions.certificateProfileName="$AZURE_PROFILE" \
             -c.win.azureSignOptions.codeSigningAccountName="$AZURE_ACCOUNT"
+          pnpm verify:packaged-main
 
       - name: Build unsigned installer
         if: steps.signing.outputs.signed != 'true'
         shell: bash
         # pnpm build:win == `npm run build && electron-builder --win --x64 --config
-        # electron-builder.config.mjs --publish never` — it carries the required config
-        # flag AND --publish never. The latter matters: the config's `publish` block is
+        # electron-builder.config.mjs --publish never && npm run verify:packaged-main`
+        # — it carries the required config flag, publish guard, and packaged-main probe.
+        # The --publish flag matters: the config's `publish` block is
         # the electron-updater FEED pointer, but electron-builder also treats it as an
         # upload target and auto-publishes when CI + a git tag are detected (this job
         # checks out the release tag). Without --publish never it dies on a missing
