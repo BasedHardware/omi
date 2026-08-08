@@ -600,6 +600,18 @@ describe("MCP 2026-07-28 synthesized read handler", () => {
     expect(secondTool.inputSchema.properties.cursor.minLength).toBe(1);
   });
 
+  test("U0 passes a valid parsed cursor to readPage", async () => {
+    const { ports, counters } = fixture();
+
+    const response = await createMcpProtocolHandler(ports).handleHttp(
+      callRequest({ cursor: "opaque-cursor" }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(counters).toMatchObject({ cursorParse: 1, readPage: 1 });
+    expect(counters.order).toContain("readPage:opaque-visible-key-1");
+  });
+
   test("U1 rejects malformed cursors after the gate and before data access", async () => {
     const { ports, counters } = fixture({ cursorFailure: true });
     const response = await createMcpProtocolHandler(ports).handleHttp(callRequest({ cursor: "bad-cursor" }));

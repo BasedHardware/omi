@@ -297,7 +297,7 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
   if (call.cursor !== undefined) {
     try {
       const parsedCursor = snapshotCursorParseResult(ports.cursor.parse({ cursor: call.cursor, bindings: credential.cursorBindings }));
-      if (!isCursorParseResult(parsedCursor)) {
+      if (parsedCursor === null) {
         return rpcHttp(400, error(rpc.id, -32602, "Invalid cursor"));
       }
       afterVisibleKey = parsedCursor.lastVisibleKey;
