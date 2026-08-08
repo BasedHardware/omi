@@ -9844,4 +9844,25 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'Ваш запит розглядається';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Потрібне оновлення';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Встановіть найновіший додаток Omi, щоб продовжити після міграції облікового запису.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Триває міграція';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ваш обліковий запис мігрує. Функції продукту призупинено до завершення міграції.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ваш обліковий запис на обслуговуванні після відкату міграції. Частина новіших даних може бути ізольована.';
+
+  @override
+  String get accountCutoverOpenStore => 'Відкрити магазин';
 }

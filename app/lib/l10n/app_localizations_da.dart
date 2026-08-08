@@ -9807,4 +9807,25 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'Din anmodning er under behandling';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Opdatering påkrævet';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Installer den seneste Omi-app for at fortsætte efter kontomigreringen.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrering i gang';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Din konto migreres. Produktfunktioner er sat på pause, indtil migreringen er færdig.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Din konto er under vedligeholdelse efter en migrerings-rollback. Nyere data kan være isoleret.';
+
+  @override
+  String get accountCutoverOpenStore => 'Åbn butik';
 }

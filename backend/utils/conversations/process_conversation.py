@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 from database import redis_db
 from database.auth import get_user_name
+from utils.conversations.transcript_for_llm import conversation_transcript_for_llm
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -258,8 +259,7 @@ def _get_structured(
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {ext_conv.text_source}')
 
         main_conv = cast(Union[Conversation, CreateConversation], conversation)
-        user_name = get_user_name(uid, use_default=False)
-        transcript_text = main_conv.get_transcript(False, people=people, user_name=user_name)  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
+        transcript_text = conversation_transcript_for_llm(uid, main_conv, people)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -489,9 +489,8 @@ def _trigger_apps(
 
     def execute_app(app: App) -> None:
         with track_usage(uid, Features.CONVERSATION_APPS):
-            result = get_app_result(
-                conversation.get_transcript(False, people=people), conversation.photos, app, language_code=language_code  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
-            ).strip()
+            transcript = conversation_transcript_for_llm(uid, conversation, people)
+            result = get_app_result(transcript, conversation.photos, app, language_code=language_code).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)

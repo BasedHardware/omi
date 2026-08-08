@@ -27,7 +27,6 @@ from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSIO
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 from utils.memory.v3.limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
 
-FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 DEFAULT_OWNER = "memory_platform"
 DEFAULT_ROUTE_SCOPE = "get_v3_memories"
 

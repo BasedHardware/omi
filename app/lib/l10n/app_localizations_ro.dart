@@ -9869,4 +9869,25 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'Cererea ta este în curs de examinare';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Actualizare necesară';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Instalează cea mai recentă aplicație Omi pentru a continua după migrarea contului.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migrare în curs';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Contul tău este în curs de migrare. Funcțiile produsului sunt întrerupte până la finalizarea migrării.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Contul tău este în mentenanță după un rollback al migrării. Unele date mai noi pot fi izolate.';
+
+  @override
+  String get accountCutoverOpenStore => 'Deschide magazinul';
 }

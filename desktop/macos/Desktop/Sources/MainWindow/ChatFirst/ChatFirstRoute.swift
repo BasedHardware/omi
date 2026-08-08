@@ -72,17 +72,16 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
   }
 
   /// Maps every legacy-compatible automation name to its mounted cohort route.
-  /// This is visibility-only: dispatch remains owned by `DesktopHomeView` so
-  /// callers retain the legacy adapter while the old shell is active.
+  /// Dashboard/Home are aliases for the canonical Chat surface: dispatch remains
+  /// owned by `DesktopHomeView`, but the cohort never mounts a second Dashboard
+  /// Home for either legacy name.
   static func automationVisibilityDestination(named target: String) -> ChatFirstRoute? {
     if let primary = primaryAutomationDestination(named: target) {
       return primary
     }
     let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
     switch normalized {
-    case "dashboard", "home": return .more(.dashboard)
-    case "focus": return .more(.focus)
-    case "insight": return .more(.insight)
+    case "dashboard", "home": return .chat
     case "rewind": return .more(.rewind)
     case "apps", "integrations": return .more(.apps)
     case "permissions": return .more(.permissions)
@@ -95,8 +94,6 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
 
 enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   case dashboard
-  case focus
-  case insight
   case rewind
   case apps
   case permissions
@@ -108,8 +105,6 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   var title: String {
     switch self {
     case .dashboard: return "Dashboard"
-    case .focus: return "Focus"
-    case .insight: return "Insights"
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
@@ -121,8 +116,6 @@ enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
   var systemImage: String {
     switch self {
     case .dashboard: return "house.fill"
-    case .focus: return "eye.fill"
-    case .insight: return "lightbulb.fill"
     case .rewind: return "clock.arrow.circlepath"
     case .apps: return "puzzlepiece.fill"
     case .permissions: return "exclamationmark.triangle.fill"
@@ -206,7 +199,12 @@ private struct ChatFirstPersistedNavigation: Codable, Equatable {
 final class ChatFirstShellNavigation: ObservableObject {
   static let storageKey = "chatFirstShell.windowNavigation.v1"
 
-  @Published private(set) var route: ChatFirstRoute
+  /// Every mutation below is a navigation the user asked for — a rail press, a More page, a typed
+  /// Chat link — so the cue belongs on the property rather than on each of the three call sites.
+  /// The value assigned in `init` is a restore, not a navigation, and `didSet` correctly skips it.
+  @Published private(set) var route: ChatFirstRoute {
+    didSet { OmiUISound.play(.navigate) }
+  }
   /// The destination currently mounted by SwiftUI. This is deliberately
   /// separate from `route`: navigation commands are not complete until the
   /// requested target has actually appeared.
@@ -380,13 +378,10 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// No Chat-first route is represented by a legacy raw index internally.
   func selectLegacyDestination(_ item: SidebarNavItem) {
     switch item {
-    case .dashboard: selectMore(.dashboard)
+    case .dashboard: selectPrimary(.chat)
     case .conversations: selectPrimary(.conversations)
-    case .chat: selectPrimary(.chat)
     case .memories: selectPrimary(.memories)
     case .tasks: selectPrimary(.tasks)
-    case .focus: selectMore(.focus)
-    case .insight: selectMore(.insight)
     case .rewind: selectMore(.rewind)
     case .apps: selectMore(.apps)
     case .settings: selectMore(.settings)

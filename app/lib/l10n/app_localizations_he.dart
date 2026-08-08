@@ -9746,4 +9746,23 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'הבקשה שלכם בבדיקה';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'נדרש עדכון';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'התקינו את אפליקציית Omi העדכנית כדי להמשיך לאחר העברת החשבון.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'העברה בתהליך';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => 'החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.';
+
+  @override
+  String get accountCutoverOpenStore => 'פתחו חנות';
 }

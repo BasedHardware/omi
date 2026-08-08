@@ -24,27 +24,24 @@ python3 scripts/v3_dev_cloud_readiness.py
 
 Expected status without a fully specified dev target is `BLOCKED` with missing-env blockers. This is correct and is not a failure.
 
-## First-user dev read-mode persistence
+## Human dogfood paused
 
-The first-user dev/beta read proof uses deploy plane `based-hardware-dev` and runtime data/auth Firestore project `based-hardware`.
-
-Checked-in dev runtime config intentionally preserves the first-user full canonical baseline across future dev deploys:
+Human canonical-memory, Smart Tasks, and Chat-first dogfood is paused while the
+combined rollout and migration are redesigned. Checked-in dev runtime config is
+fail-closed across request, worker, maintenance, and parity-capture surfaces:
 
 ```text
-MEMORY_MODE=read
-MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23
-# Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
-MEMORY_V3_GET_ENABLED=true
-# Request-path maintenance stays false; only memory-maintenance-job sets it true.
-MEMORY_CANONICAL_MAINTENANCE_ENABLED=false   # request-path / GKE
-# memory-maintenance-job: MEMORY_CANONICAL_MAINTENANCE_ENABLED=true
-# memory-maintenance-job: cadence is owned by Cloud Scheduler
+MEMORY_MODE=off
+MEMORY_ENABLED_USERS=
+MEMORY_V3_GET_ENABLED=false
+MEMORY_CANONICAL_MAINTENANCE_ENABLED=false
+OMI_PARITY_PACK_CAPTURE=0
+OMI_PARITY_PACK_ALLOWED_PRINCIPALS=
 ```
 
-Dev dogfood cohort (code `CANONICAL_MEMORY_USERS` + env allowlist):
-
-- `vi7SA9ckQCe4ccobWNxlbdcNdC23` — david.d.zhang@gmail.com (active)
-- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` — kodjima33@gmail.com (commented out for this PR; re-enable soon)
+The code cohort contains synthetic local/dev verification identities only. A
+future human canary requires a new reviewed cohort and runtime-config change;
+do not reuse the historical first-user commands below without that approval.
 
 Canonical maintenance runs from the dedicated hourly `memory-maintenance-job`
 Cloud Run Job (not request-path backend, not `notifications-job`). The job
@@ -103,7 +100,7 @@ gcloud scheduler jobs resume memory-maintenance-hourly \
    passed.
 3. Capture a pre-execution baseline for the active dogfood UID (pending ST count / last watermark fields only — no raw memory content).
 4. Execute once and wait: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev --wait`
-5. Assert watermark / ST→LT movement vs the baseline for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
+5. Assert watermark / ST→LT movement vs the baseline for the newly approved canary UID (do not print raw memory content).
 6. Confirm a later `memory-maintenance-hourly` execution completed successfully;
    do not treat the deploy-time configuration check as proof of invocation IAM
    or job execution.
@@ -125,7 +122,7 @@ Dry-run:
 ```bash
 cd backend
 python3 scripts/apply_first_user_v3_projection.py \
-  --uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --uid "${APPROVED_UID}" \
   --project based-hardware \
   --limit 25
 ```
@@ -135,11 +132,11 @@ Apply one known memory only after reviewing the dry-run:
 ```bash
 cd backend
 python3 scripts/apply_first_user_v3_projection.py \
-  --uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --uid "${APPROVED_UID}" \
   --project based-hardware \
   --memory-id <memory-id> \
   --apply \
-  --confirm-uid vi7SA9ckQCe4ccobWNxlbdcNdC23
+  --confirm-uid "${APPROVED_UID}"
 ```
 
 The script writes only:
@@ -158,7 +155,7 @@ Use `backend/scripts/first_user_memory_e2e_proof.py` after projection docs and d
 ```bash
 cd backend
 python3 scripts/first_user_memory_e2e_proof.py \
-  --uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --uid "${APPROVED_UID}" \
   --project based-hardware \
   --backend-url <dev-backend-url> \
   --id-token-file /path/to/firebase-id-token.txt \

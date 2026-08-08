@@ -252,14 +252,6 @@ class AnalyticsManager {
     PostHogManager.shared.monitoringStopped()
   }
 
-  func distractionDetected(app: String, windowTitle: String?) {
-    PostHogManager.shared.distractionDetected(app: app, windowTitle: windowTitle)
-  }
-
-  func focusRestored(app: String) {
-    PostHogManager.shared.focusRestored(app: app)
-  }
-
   // MARK: - Recording Events
 
   func transcriptionStarted() {
@@ -928,14 +920,6 @@ class AnalyticsManager {
   }
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
-
-  func focusAlertShown(app: String) {
-    PostHogManager.shared.focusAlertShown(app: app)
-  }
-
-  func focusAlertDismissed(app: String, action: String) {
-    PostHogManager.shared.focusAlertDismissed(app: app, action: action)
-  }
 
   func taskExtracted(taskCount: Int) {
     PostHogManager.shared.taskExtracted(taskCount: taskCount)

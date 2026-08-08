@@ -33,7 +33,6 @@ from utils.memory.v3.projection_reader_contract import (
     V3_COMPATIBILITY_PROJECTION_VERSION,
 )
 
-FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 DEFAULT_PROJECT = "based-hardware"
 DEFAULT_LIMIT = 25
 MAX_LIMIT = 500
@@ -357,7 +356,7 @@ def build_report(build: ProjectionBuild, *, applied_paths: list[str] | None = No
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build/apply first-user v3 compatibility projection docs.")
-    parser.add_argument("--uid", default=FIRST_USER_UID)
+    parser.add_argument("--uid", required=True)
     parser.add_argument("--project", default=DEFAULT_PROJECT)
     parser.add_argument("--memory-id", default="")
     parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT)

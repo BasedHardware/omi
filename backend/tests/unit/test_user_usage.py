@@ -103,6 +103,41 @@ def test_only_proactive_counts_zero(monkeypatch):
     assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 0
 
 
+def test_month_read_is_bounded_to_the_current_month(monkeypatch):
+    # `enforce_chat_quota` calls this on every chat request. Reading the whole
+    # llm_usage collection made the cost of asking a question grow with how long
+    # the account had existed.
+    _setup_docs(
+        monkeypatch,
+        {
+            "2025-06-23": {"desktop_chat": {"quota_questions": 500}},  # last year
+            "2026-05-31": {"desktop_chat": {"quota_questions": 400}},  # day before the month
+            "2026-06-01": {"desktop_chat": {"quota_questions": 1}},  # first day, inclusive
+            "2026-06-30": {"desktop_chat": {"quota_questions": 2}},  # last day, inclusive
+            "2026-07-01": {"desktop_chat": {"quota_questions": 300}},  # day after the month
+        },
+    )
+    observed = []
+    monkeypatch.setattr(user_usage, "record_firestore_read", lambda *args: observed.append(args))
+
+    assert user_usage.get_monthly_chat_usage("uid", now=NOW)["questions"] == 3
+    assert observed == [(FirestoreReadFamily.CHAT_QUOTA_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, 2)]
+
+
+def test_december_month_read_stops_at_the_january_boundary(monkeypatch):
+    _setup_docs(
+        monkeypatch,
+        {
+            "2026-12-01": {"desktop_chat": {"quota_questions": 4}},
+            "2026-12-31": {"desktop_chat": {"quota_questions": 6}},
+            "2027-01-01": {"desktop_chat": {"quota_questions": 900}},
+        },
+    )
+    usage = user_usage.get_monthly_chat_usage("uid", now=datetime(2026, 12, 15, tzinfo=timezone.utc))
+    assert usage["questions"] == 10
+    assert usage["reset_at"] == int(datetime(2027, 1, 1, tzinfo=timezone.utc).timestamp())
+
+
 def test_monthly_usage_since_observes_every_scanned_hourly_document(store, monkeypatch):
     # Both docs land in June 2026 with ids >= the start cursor, so the year/month/id filters
     # select them; the read-metrics telemetry must observe the count of scanned documents.

@@ -48,6 +48,51 @@ def _run_mark_completed(data):
     return result, store.get(_PATH).to_dict()
 
 
+class _RecordingTx:
+    """Neutral store transaction handle that records set/update payloads.
+
+    The ported ``(tx, path)`` helpers persist through the store seam; this records
+    each write so the tests can assert on the exact payload (as the raw-Firestore
+    transaction fake did) while still applying it to a real FakeDocumentStore.
+    """
+
+    def __init__(self, store):
+        self._store = store
+        self._sets = []
+        self._updates = []
+
+    def get(self, path):
+        return self._store.get(path)
+
+    def set(self, path, data, *, merge=False):
+        self._sets.append((path, data))
+        self._store.set(path, data, merge=merge)
+
+    def update(self, path, data):
+        self._updates.append((path, data))
+        self._store.update(path, data)
+
+
+def _run_record_late_cleanup(data, expected_instance_id='707'):
+    store = FakeDocumentStore()
+    store.set(_PATH, data)
+    tx = _RecordingTx(store)
+    result = users_db._record_late_agent_vm_cleanup_txn(
+        tx, _PATH, 'omi-agent-late', 'us-central1-a', expected_instance_id
+    )
+    return result, tx._sets
+
+
+def _run_adopt_legacy_late_cleanup(data, expected_instance_id='808'):
+    store = FakeDocumentStore()
+    store.set(_PATH, data)
+    tx = _RecordingTx(store)
+    result = users_db._adopt_legacy_late_agent_vm_cleanup_txn(
+        tx, _PATH, 'omi-agent-legacyowner', 'us-central1-a', expected_instance_id
+    )
+    return result, tx._updates
+
+
 def test_mark_completed_refuses_outstanding_late_vm_cleanup():
     result, doc = _run_mark_completed(
         {'wipe_status': 'running', 'late_agent_vm_cleanup': {'vmName': 'omi-agent-uid', 'zone': 'us-central1-a'}}
@@ -62,6 +107,48 @@ def test_mark_completed_commits_without_late_vm_cleanup():
 
     assert result is True
     assert doc['wipe_status'] == 'completed'
+
+
+def test_record_late_cleanup_persists_numeric_instance_fence():
+    result, sets = _run_record_late_cleanup({'wipe_status': 'running'})
+
+    assert result is True
+    assert sets[0][1]['late_agent_vm_cleanup'] == {
+        'vmName': 'omi-agent-late',
+        'zone': 'us-central1-a',
+        'expectedInstanceId': '707',
+    }
+
+
+def test_record_late_cleanup_rejects_malformed_instance_fence():
+    import pytest
+
+    with pytest.raises(ValueError, match='must be numeric'):
+        _run_record_late_cleanup({'wipe_status': 'running'}, 'not-an-id')
+
+
+def test_adopt_legacy_late_cleanup_adds_exact_instance_fence():
+    result, updates = _run_adopt_legacy_late_cleanup(
+        {
+            'wipe_status': 'failed',
+            'late_agent_vm_cleanup': {'vmName': 'omi-agent-legacyowner', 'zone': 'us-central1-a'},
+        }
+    )
+
+    assert result is True
+    assert updates[0][1] == {'late_agent_vm_cleanup.expectedInstanceId': '808'}
+
+
+def test_adopt_legacy_late_cleanup_refuses_a_changed_record():
+    result, updates = _run_adopt_legacy_late_cleanup(
+        {
+            'wipe_status': 'failed',
+            'late_agent_vm_cleanup': {'vmName': 'omi-agent-other', 'zone': 'us-central1-a'},
+        }
+    )
+
+    assert result is False
+    assert updates == []
 
 
 def test_mark_billing_failed_allows_pre_wipe_states(monkeypatch):
@@ -129,7 +216,9 @@ def test_claim_txn_returns_none_for_missing_doc():
 
 
 def test_claim_txn_returns_none_for_unknown_status():
-    result, doc = _run_claim({'uid': 'uid1', 'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)})
+    result, doc = _run_claim(
+        {'uid': 'uid1', 'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)}
+    )
     assert result is None
     assert doc['wipe_status'] == 'completed'
 

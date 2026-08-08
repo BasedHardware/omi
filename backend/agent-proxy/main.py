@@ -45,6 +45,7 @@ from services.agent_vm_lifecycle import (
     release_session_lease,
     request_vm_start,
 )
+from services.agent_vm_read import demoted_updating_vm
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +248,7 @@ async def _ensure_vm_running(uid: str, vm: Dict[str, Any], health_failed: bool =
         vm_name,
         health_failed,
     )
-    return {**vm, "status": "updating", "ip": None}
+    return demoted_updating_vm(vm)
 
 
 async def _wait_for_vm_healthy(vm_ip: str, auth_token: str, timeout: float = 120) -> bool:

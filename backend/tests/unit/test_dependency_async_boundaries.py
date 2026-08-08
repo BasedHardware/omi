@@ -123,10 +123,10 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
         result = asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
 
         assert result == 'user-1'  # the port's verify_token internally calls the stubbed verify_id_token
-        # Two offloaded boundaries: the port's verify_token on the critical executor (not the raw
+        # Three offloaded boundaries: the port's verify_token on the critical executor (not the raw
         # firebase SDK — dependencies.py goes through utils.auth, ADR-0034; identity varies, so compare
-        # by name), then account-deletion access enforcement on the db executor (identity-stable).
-        assert len(calls) == 2
+        # by name), then account-deletion access enforcement and cutover enforcement on the db executor.
+        assert len(calls) == 3
         assert calls[0][0] is dependencies.critical_executor
         assert getattr(calls[0][1], '__name__', '') == 'verify_token'
         assert calls[0][2] == ('firebase-token',) and calls[0][3] == {}
@@ -136,7 +136,12 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
             ('user-1',),
             {},
         )
-
+        assert calls[2] == (
+            dependencies.db_executor,
+            dependencies._enforce_cutover_http_if_request,
+            ('user-1', None),
+            {},
+        )
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
@@ -178,9 +183,11 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         assert [(executor, fn) for executor, fn, _args, _kwargs in calls] == [
             (dependencies.db_executor, lookup_mcp),
             (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
+            (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
             (dependencies.critical_executor, check_rate_limit),
             (dependencies.db_executor, lookup_dev),
             (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
+            (dependencies.db_executor, dependencies._enforce_cutover_http_if_request),
         ]
         assert rate_limit_calls == [
             {

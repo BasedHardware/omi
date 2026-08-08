@@ -9833,4 +9833,25 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'Talebin inceleniyor';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Güncelleme gerekli';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Hesap taşımasından sonra devam etmek için en son Omi uygulamasını yükleyin.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Taşıma devam ediyor';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Hesabınız taşınıyor. Taşıma bitene kadar ürün özellikleri duraklatılır.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Taşıma geri alınmasından sonra hesabınız bakımda. Daha yeni bazı veriler izole kalabilir.';
+
+  @override
+  String get accountCutoverOpenStore => 'Mağazayı aç';
 }

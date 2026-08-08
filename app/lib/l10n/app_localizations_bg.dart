@@ -9859,4 +9859,25 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'Заявката ви се разглежда';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Требуется обновление';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Установите последнее приложение Omi, чтобы продолжить после миграции аккаунта.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Идёт миграция';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.';
+
+  @override
+  String get accountCutoverOpenStore => 'Открыть магазин';
 }

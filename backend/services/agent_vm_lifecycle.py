@@ -37,6 +37,13 @@ LEASE_TTL_SECONDS = 900
 LEASE_HEARTBEAT_SECONDS = 60
 SESSION_LEASE_TTL_SECONDS = 90
 MAX_RETRY_DELAY_SECONDS = 3600
+STATE_DISK_DEVICE_NAME = "omi-agent-state"
+STATE_SOURCE_DEVICE_NAME = "omi-agent-state-source"
+STATE_SOURCE_REQUIRED_METADATA = "omi-agent-state-source-required"
+ACTIVE_BOOT_IMAGE_MIGRATION_STATES = frozenset(
+    {"candidate_creating", "candidate_ready", "candidate_deleted", "cutover", "retiring"}
+)
+PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES = frozenset({"candidate_creating", "candidate_ready", "candidate_deleted"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_SHA = re.compile(r"^[0-9a-f]{40}$")
 _IMAGE_DIGEST = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
@@ -225,6 +232,21 @@ def runtime_matches(payload: Mapping[str, Any], release: AgentVmRelease) -> bool
     )
 
 
+def state_runtime_matches(payload: Mapping[str, Any], migration_id: str) -> bool:
+    """Require the receipt and the database it says was durable to be open."""
+    return state_runtime_ready(payload) and payload.get("stateMigrationId") == migration_id
+
+
+def state_runtime_ready(payload: Mapping[str, Any]) -> bool:
+    """Require mounted durable state and any receipt-declared database."""
+    database_expected = payload.get("stateDatabaseExpected")
+    return (
+        payload.get("stateReady") is True
+        and isinstance(database_expected, bool)
+        and (not database_expected or payload.get("databaseReady") is True)
+    )
+
+
 def retry_delay_seconds(attempt: int) -> int:
     return min(MAX_RETRY_DELAY_SECONDS, 60 * (2 ** max(0, min(attempt, 6))))
 
@@ -250,7 +272,8 @@ def reconcile_requested(vm: Mapping[str, Any], now: float | None = None) -> bool
     return (
         bool(reconcile.get("startRequested"))
         or bool(reconcile.get("drainRequested"))
-        or reconcile.get("state") in {"draining", "deferred", "missing"}
+        or reconcile.get("state")
+        in {"claimed", "draining", "deferred", "migration_claimed", "migration_soaking", "missing"}
         or lease_active
     )
 
@@ -651,6 +674,35 @@ def _migration_matches(
     return isinstance(lease, Mapping) and lease.get("owner") == owner and float(lease.get("expiresAt", 0) or 0) > now
 
 
+def active_boot_image_migration(
+    uid: str,
+    vm_name: str,
+    instance_id: str,
+    migration_id: str,
+) -> dict[str, Any] | None:
+    """Find the durable migration belonging to this provider VM identity.
+
+    Matching both predecessor and candidate identities lets a retry recover a
+    crash before cutover while leaving the post-cutover retirement path fenced
+    by the same durable journal.
+    """
+    snapshot = _store().get(f"users/{uid}/agentVmMigrations/{migration_id}")
+    migration = snapshot.to_dict() if snapshot.exists else None
+    if (
+        not isinstance(migration, dict)
+        or migration.get("migrationId") != migration_id
+        or migration.get("state") not in ACTIVE_BOOT_IMAGE_MIGRATION_STATES
+    ):
+        return None
+    predecessor_matches = (
+        migration.get("oldVmName") == vm_name and str(migration.get("oldInstanceId") or "") == instance_id
+    )
+    candidate_matches = (
+        migration.get("candidateVmName") == vm_name and str(migration.get("candidateInstanceId") or "") == instance_id
+    )
+    return migration if predecessor_matches or candidate_matches else None
+
+
 def _begin_boot_image_migration_txn(
     tx: Any,
     deletion_path: str,
@@ -675,8 +727,9 @@ def _begin_boot_image_migration_txn(
         vm, vm_name=vm_name, zone=zone, auth_token=auth_token, owner=owner, now=now
     ):
         return None
+    durable_migration_id = migration.get("migrationId")
     old_instance_id = str(migration.get("oldInstanceId") or "")
-    if not old_instance_id:
+    if not isinstance(durable_migration_id, str) or not durable_migration_id or not old_instance_id:
         return None
     recorded_instance_id = str(vm.get("instanceId") or "")
     if recorded_instance_id and recorded_instance_id != old_instance_id:
@@ -706,7 +759,10 @@ def _begin_boot_image_migration_txn(
         return current
     record = {**migration, "state": "candidate_creating", "createdAt": now, "updatedAt": now}
     tx.set(migration_path, record)
-    update = {"agentVm.reconcile.state": "migration_claimed"}
+    update = {
+        "agentVm.reconcile.state": "migration_claimed",
+        "agentVm.reconcile.durableMigration": durable_migration_id,
+    }
     if not recorded_instance_id:
         # Legacy owner records predate the explicit GCE ID field. Bind it only
         # inside this stopped-only, owner-token-and-lease CAS, then every
@@ -814,6 +870,81 @@ def record_boot_image_candidate(
                 auth_token,
                 owner,
                 candidate_instance_id,
+                now,
+            )
+        )
+    )
+
+
+def _record_boot_image_state_disks_txn(
+    tx: Any,
+    deletion_path: str,
+    user_path: str,
+    migration_path: str,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    owner: str,
+    state: Mapping[str, Any],
+    now: float,
+) -> bool:
+    deletion = tx.get(deletion_path)
+    raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
+    if account_deletion_blocks_access(
+        normalize_account_deletion_status(marker_exists=deletion.exists, raw_status=raw_status)
+    ):
+        return False
+    snapshot = tx.get(user_path)
+    migration_snapshot = tx.get(migration_path)
+    vm = (snapshot.to_dict() or {}).get("agentVm") if snapshot.exists else None
+    migration = migration_snapshot.to_dict() if migration_snapshot.exists else None
+    if (
+        not isinstance(vm, dict)
+        or not isinstance(migration, dict)
+        or migration.get("state") not in {"candidate_creating", "candidate_ready"}
+        or not _migration_matches(vm, vm_name=vm_name, zone=zone, auth_token=auth_token, owner=owner, now=now)
+        or migration.get("stateDiskName") != state.get("stateDiskName")
+        or migration.get("sourceCloneDiskName") != state.get("sourceCloneDiskName")
+    ):
+        return False
+    state_disk_id = state.get("stateDiskId")
+    if not isinstance(state_disk_id, str) or not state_disk_id:
+        return False
+    update = {
+        "stateDiskId": state_disk_id,
+        "stateDiskReused": state.get("stateDiskReused") is True,
+        "updatedAt": now,
+    }
+    source_clone_id = state.get("sourceCloneDiskId")
+    if isinstance(source_clone_id, str) and source_clone_id:
+        update["sourceCloneDiskId"] = source_clone_id
+    tx.update(migration_path, update)
+    return True
+
+
+def record_boot_image_state_disks(
+    uid: str,
+    vm_name: str,
+    zone: str,
+    auth_token: str,
+    owner: str,
+    migration_id: str,
+    state: Mapping[str, Any],
+    now: float | None = None,
+) -> bool:
+    now = time.time() if now is None else now
+    return bool(
+        _store().run_transaction(
+            lambda tx: _record_boot_image_state_disks_txn(
+                tx,
+                f"account_deletions/{uid}",
+                f"users/{uid}",
+                f"users/{uid}/agentVmMigrations/{migration_id}",
+                vm_name,
+                zone,
+                auth_token,
+                owner,
+                state,
                 now,
             )
         )
@@ -1139,7 +1270,11 @@ def _complete_boot_image_migration_txn(
         )
     ):
         return False
-    completion = {"agentVm.reconcile.migration": sentinels.DELETE, "agentVm.reconcile.state": "ready"}
+    completion = {
+        "agentVm.reconcile.migration": sentinels.DELETE,
+        "agentVm.reconcile.durableMigration": sentinels.DELETE,
+        "agentVm.reconcile.state": "ready",
+    }
     completion.update({f"agentVm.reconcile.{key}": value for key, value in clear_vm_reconcile_lease_fields().items()})
     tx.update(user_path, completion)
     tx.update(migration_path, {"state": "completed", "completedAt": now, "updatedAt": now})
@@ -1405,6 +1540,7 @@ class GceAgentVmClient:
         instance: Mapping[str, Any],
         release: AgentVmRelease,
         auth_token: str | None = None,
+        extra_metadata: Mapping[str, str] | None = None,
     ) -> None:
         metadata = dict(instance.get("metadata") or {})
         items = metadata.get("items")
@@ -1418,6 +1554,7 @@ class GceAgentVmClient:
         current.update(expected_release_metadata(release))
         if auth_token:
             current["auth-token"] = auth_token
+        current.update(extra_metadata or {})
         fingerprint = metadata.get("fingerprint")
         if not isinstance(fingerprint, str) or not fingerprint:
             raise RuntimeError("GCE instance metadata fingerprint missing")
@@ -1448,6 +1585,132 @@ class GceAgentVmClient:
     async def start(self, vm_name: str) -> None:
         await self._mutate("POST", self.instance_url(vm_name) + "/start")
 
+    def disk_url(self, disk_name: str) -> str:
+        return f"https://compute.googleapis.com/compute/v1/projects/{self.project}/zones/{self.zone}/disks/{disk_name}"
+
+    async def get_disk(self, disk_name: str) -> dict[str, Any] | None:
+        response = await self.request("GET", self.disk_url(disk_name))
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else None
+
+    async def create_disk(
+        self,
+        disk_name: str,
+        *,
+        migration_id: str,
+        role: str,
+        owner_hash: str,
+        source_disk: str | None = None,
+        size_gb: int = 50,
+    ) -> dict[str, Any]:
+        """Create or recover one deterministic, migration-labelled disk."""
+        existing = await self.get_disk(disk_name)
+        if existing is None:
+            body: dict[str, Any] = {
+                "name": disk_name,
+                "labels": {
+                    "omi-agent-migration": migration_id,
+                    "omi-agent-role": role,
+                    "omi-agent-owner": owner_hash,
+                },
+            }
+            if source_disk:
+                body["sourceDisk"] = source_disk
+            else:
+                body.update(
+                    {
+                        "sizeGb": str(size_gb),
+                        "type": f"zones/{self.zone}/diskTypes/pd-balanced",
+                    }
+                )
+            await self._mutate(
+                "POST",
+                f"https://compute.googleapis.com/compute/v1/projects/{self.project}/zones/{self.zone}/disks",
+                body,
+            )
+            existing = await self.get_disk(disk_name)
+        if existing is None:
+            raise RuntimeError("created Agent VM state disk is unavailable")
+        labels = existing.get("labels")
+        if (
+            str(existing.get("id") or "") == ""
+            or existing.get("status") != "READY"
+            or not isinstance(labels, Mapping)
+            or labels.get("omi-agent-migration") != migration_id
+            or labels.get("omi-agent-role") != role
+            or labels.get("omi-agent-owner") != owner_hash
+        ):
+            raise RuntimeError("Agent VM state disk identity is ambiguous")
+        if source_disk:
+            actual_source = str(existing.get("sourceDisk") or "")
+            if actual_source.rstrip("/").split("/compute/v1/")[-1] != source_disk.rstrip("/").split("/compute/v1/")[-1]:
+                raise RuntimeError("Agent VM source clone does not match the predecessor disk")
+        return existing
+
+    async def set_disk_auto_delete(self, vm_name: str, device_name: str, auto_delete: bool) -> None:
+        value = "true" if auto_delete else "false"
+        await self._mutate(
+            "POST",
+            self.instance_url(vm_name) + f"/setDiskAutoDelete?deviceName={device_name}&autoDelete={value}",
+        )
+
+    async def detach_disk(self, vm_name: str, device_name: str) -> None:
+        await self._mutate("POST", self.instance_url(vm_name) + f"/detachDisk?deviceName={device_name}")
+
+    async def attach_disk(
+        self,
+        vm_name: str,
+        disk_source: str,
+        *,
+        device_name: str = STATE_DISK_DEVICE_NAME,
+        read_only: bool = False,
+        auto_delete: bool = False,
+    ) -> None:
+        await self._mutate(
+            "POST",
+            self.instance_url(vm_name) + "/attachDisk",
+            {
+                "source": disk_source,
+                "deviceName": device_name,
+                "mode": "READ_ONLY" if read_only else "READ_WRITE",
+                "autoDelete": auto_delete,
+            },
+        )
+
+    async def delete_disk(
+        self,
+        disk_name: str,
+        expected_disk_id: str,
+        migration_id: str | None,
+        role: str,
+        owner_hash: str,
+    ) -> bool:
+        disk = await self.get_disk(disk_name)
+        if disk is None:
+            return True
+        labels = disk.get("labels")
+        migration_matches = isinstance(labels, Mapping) and labels.get("omi-agent-migration") == migration_id
+        # A reused owner state disk predates the migration journal and therefore
+        # has no migration label. Its numeric provider ID, role, and owner label
+        # are the complete rollback fence; migration-created source disks still
+        # require their journal label.
+        if (
+            str(disk.get("id") or "") != expected_disk_id
+            or not isinstance(labels, Mapping)
+            or labels.get("omi-agent-role") != role
+            or labels.get("omi-agent-owner") != owner_hash
+            or (role != "state" and not migration_matches)
+        ):
+            return False
+        users = disk.get("users")
+        if isinstance(users, list) and users:
+            return False
+        await self._mutate("DELETE", self.disk_url(disk_name))
+        return True
+
     async def create_replacement(
         self,
         vm_name: str,
@@ -1455,6 +1718,9 @@ class GceAgentVmClient:
         release: AgentVmRelease,
         auth_token: str,
         migration_id: str,
+        state_disk_source: str,
+        source_clone_disk_source: str | None = None,
+        owner_hash: str = "",
     ) -> None:
         """Create a labelled replacement from the pinned immutable boot image.
 
@@ -1462,6 +1728,8 @@ class GceAgentVmClient:
         same deterministic VM name.  We deliberately do not copy a private IP,
         disk, token, or arbitrary metadata from the predecessor.
         """
+        if not owner_hash:
+            raise RuntimeError("replacement owner identity is unavailable")
         machine_type = predecessor.get("machineType")
         if not isinstance(machine_type, str) or not machine_type:
             raise RuntimeError("predecessor machine type is unavailable")
@@ -1476,31 +1744,58 @@ class GceAgentVmClient:
         predecessor_id = str(predecessor.get("id") or "")
         if not predecessor_id:
             raise RuntimeError("predecessor instance ID is unavailable")
+        disks: list[dict[str, Any]] = [
+            {
+                "boot": True,
+                "autoDelete": True,
+                "initializeParams": {
+                    "sourceImage": release.boot_image,
+                    "diskSizeGb": "50",
+                    "diskType": f"zones/{self.zone}/diskTypes/pd-balanced",
+                },
+            },
+            {
+                "boot": False,
+                "autoDelete": False,
+                "deviceName": STATE_DISK_DEVICE_NAME,
+                "mode": "READ_WRITE",
+                "source": state_disk_source,
+            },
+        ]
+        if source_clone_disk_source:
+            disks.append(
+                {
+                    "boot": False,
+                    "autoDelete": True,
+                    "deviceName": STATE_SOURCE_DEVICE_NAME,
+                    "mode": "READ_ONLY",
+                    "source": source_clone_disk_source,
+                }
+            )
         body = {
             "name": vm_name,
             "machineType": machine_type,
-            "disks": [
-                {
-                    "boot": True,
-                    "autoDelete": True,
-                    "initializeParams": {
-                        "sourceImage": release.boot_image,
-                        "diskSizeGb": "50",
-                        "diskType": f"zones/{self.zone}/diskTypes/pd-balanced",
-                    },
-                }
-            ],
+            "disks": disks,
             "serviceAccounts": [
                 {"email": release.service_account, "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}
             ],
             "networkInterfaces": [interface],
             "tags": {"items": ["omi-agent-vm"]},
-            "labels": {"omi-agent-migration": migration_id, "omi-agent-predecessor": predecessor_id},
+            "labels": {
+                "omi-agent-migration": migration_id,
+                "omi-agent-predecessor": predecessor_id,
+                "omi-agent-owner": owner_hash,
+            },
             "metadata": {
                 "items": [
                     *[{"key": key, "value": value} for key, value in expected_release_metadata(release).items()],
                     {"key": "auth-token", "value": auth_token},
                     {"key": "omi-agent-migration", "value": migration_id},
+                    {"key": "omi-agent-state-required", "value": "true"},
+                    {
+                        "key": STATE_SOURCE_REQUIRED_METADATA,
+                        "value": "true" if source_clone_disk_source else "false",
+                    },
                 ]
             },
         }
@@ -1577,7 +1872,16 @@ class GceAgentVmClient:
             "Agent VM readiness requires AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc and private VPC reachability"
         )
 
-    async def wait_for_runtime(self, ip: str, auth_token: str, release: AgentVmRelease, timeout: int = 300) -> None:
+    async def wait_for_runtime(
+        self,
+        ip: str,
+        auth_token: str,
+        release: AgentVmRelease,
+        timeout: int = 300,
+        *,
+        expected_state_migration_id: str | None = None,
+        require_state: bool = False,
+    ) -> None:
         deadline = time.monotonic() + timeout
         runtime_url = self._trusted_runtime_url(ip)
         headers = {"Authorization": f"Bearer {auth_token}"}
@@ -1590,6 +1894,11 @@ class GceAgentVmClient:
                         response.status_code == 200
                         and isinstance(payload, Mapping)
                         and runtime_matches(payload, release)
+                        and (
+                            expected_state_migration_id is None
+                            or state_runtime_matches(payload, expected_state_migration_id)
+                        )
+                        and (not require_state or state_runtime_ready(payload))
                     ):
                         return
                 except (httpx.HTTPError, ValueError):
@@ -1597,7 +1906,15 @@ class GceAgentVmClient:
                 await asyncio.sleep(5)
         raise RuntimeError("Agent VM did not report the activated release before the readiness timeout")
 
-    async def runtime_is_current(self, ip: str, auth_token: str, release: AgentVmRelease) -> bool:
+    async def runtime_is_current(
+        self,
+        ip: str,
+        auth_token: str,
+        release: AgentVmRelease,
+        *,
+        expected_state_migration_id: str | None = None,
+        require_state: bool = False,
+    ) -> bool:
         runtime_url = self._trusted_runtime_url(ip)
         try:
             async with httpx.AsyncClient(timeout=8) as client:
@@ -1606,7 +1923,13 @@ class GceAgentVmClient:
                     headers={"Authorization": f"Bearer {auth_token}"},
                 )
             payload = response.json()
-            return response.status_code == 200 and isinstance(payload, Mapping) and runtime_matches(payload, release)
+            return (
+                response.status_code == 200
+                and isinstance(payload, Mapping)
+                and runtime_matches(payload, release)
+                and (expected_state_migration_id is None or state_runtime_matches(payload, expected_state_migration_id))
+                and (not require_state or state_runtime_ready(payload))
+            )
         except (httpx.HTTPError, ValueError):
             return False
 
@@ -1616,12 +1939,18 @@ __all__ = [
     "AgentVmNotFound",
     "AgentVmRelease",
     "AgentVmReleaseError",
+    "ACTIVE_BOOT_IMAGE_MIGRATION_STATES",
     "DEFAULT_ZONE",
     "GceAgentVmClient",
+    "STATE_DISK_DEVICE_NAME",
+    "STATE_SOURCE_DEVICE_NAME",
+    "STATE_SOURCE_REQUIRED_METADATA",
+    "PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES",
     "LEASE_HEARTBEAT_SECONDS",
     "RECONCILER_SCHEMA_VERSION",
     "TrustedAgentVmHealthChannelUnavailable",
     "active_session_count",
+    "active_boot_image_migration",
     "begin_boot_image_migration",
     "claim_reconciler_run_lease",
     "claim_boot_image_migration_retirement",
@@ -1638,6 +1967,7 @@ __all__ = [
     "reconcile_requested",
     "release_manifest_bytes",
     "record_boot_image_candidate",
+    "record_boot_image_state_disks",
     "recover_missing_boot_image_candidate",
     "release_reconciler_run_lease",
     "request_vm_start",
@@ -1647,6 +1977,7 @@ __all__ = [
     "retry_delay_seconds",
     "rollout_selected",
     "runtime_matches",
+    "state_runtime_matches",
     "startup_wrapper",
     "update_vm_reconcile",
     "validate_release_manifest",

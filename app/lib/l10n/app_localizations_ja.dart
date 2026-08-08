@@ -9659,4 +9659,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'リクエストを確認中です';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'アップデートが必要です';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => 'アカウント移行後も続行するには、最新のOmiアプリをインストールしてください。';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => '移行中';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => 'アカウントを移行中です。移行が完了するまでプロダクト機能は一時停止されます。';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage => '移行のロールバック後、アカウントはメンテナンス中です。新しいデータの一部が孤立している可能性があります。';
+
+  @override
+  String get accountCutoverOpenStore => 'ストアを開く';
 }

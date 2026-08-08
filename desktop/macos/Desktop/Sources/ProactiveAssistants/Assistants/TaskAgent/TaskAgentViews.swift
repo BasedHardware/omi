@@ -1,6 +1,35 @@
 import OmiTheme
 import SwiftUI
 
+// MARK: - Agent status colour
+
+/// The one status → colour decision for the task agent.
+///
+/// It was written out twice — once on the row indicator and once on the detail sheet — with the two
+/// copies already disagreeing about nothing only by luck. A status readout that means "this failed"
+/// is exactly the kind of thing that drifts silently when the palette moves under it, so the switch
+/// lives once, as a pure function, and the glass ladder it uses is a claim a test can hold.
+///
+/// **Two rungs, not three.** These readouts sit on the glass panel, where `Ink.tertiary` measures
+/// under WCAG AA (see its documentation), so every state that is not saying something specific is
+/// `Ink.secondary` rather than a fainter grey.
+///
+/// `@MainActor` because `TaskAgentManager.AgentStatus` is nested in a main-actor-isolated type.
+enum TaskAgentStatusInk {
+  @MainActor
+  static func color(for status: TaskAgentManager.AgentStatus) -> Color {
+    switch status {
+    // In flight. Nothing to do about it yet, so it stays the reading rung.
+    case .pending, .processing, .editing: return Ink.secondary
+    // Done is the one state with a result to look at, so it gets the top rung.
+    case .completed: return Ink.primary
+    // Failed is the one state this app is allowed to raise its voice for. It used to render in the
+    // faintest grey in the file, which is the opposite of what a failure has to do.
+    case .failed: return Ink.errorRed
+    }
+  }
+}
+
 // MARK: - Task Classification Badge
 
 /// Displays a task tag as-is
@@ -10,7 +39,7 @@ struct TaskClassificationBadge: View {
   var body: some View {
     Text(category.capitalized)
       .scaledFont(size: OmiType.micro, weight: .medium)
-      .foregroundColor(OmiColors.textSecondary)
+      .foregroundColor(Ink.secondary)
   }
 }
 
@@ -59,7 +88,7 @@ struct AgentStatusIndicator: View {
         } label: {
           Image(systemName: "terminal")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
             .frame(width: 20, height: 20)
         }
         .buttonStyle(.plain)
@@ -72,7 +101,7 @@ struct AgentStatusIndicator: View {
           Text(statusText)
             .scaledFont(size: OmiType.micro, weight: .medium)
         }
-        .foregroundColor(statusColor(for: session.status))
+        .foregroundColor(TaskAgentStatusInk.color(for: session.status))
       } else if settings.isEnabled {
         // No session — terminal icon launches the agent
         Button {
@@ -86,12 +115,12 @@ struct AgentStatusIndicator: View {
             } else {
               Image(systemName: "terminal")
                 .scaledFont(size: OmiType.micro)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
             }
 
             Text(isLaunching ? "Launching..." : "Run Agent")
               .scaledFont(size: OmiType.micro, weight: .medium)
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.secondary)
           }
         }
         .buttonStyle(.plain)
@@ -143,15 +172,6 @@ struct AgentStatusIndicator: View {
     }
   }
 
-  private func statusColor(for status: TaskAgentManager.AgentStatus) -> Color {
-    switch status {
-    case .pending: return OmiColors.textTertiary
-    case .processing: return OmiColors.textSecondary
-    case .editing: return OmiColors.textSecondary
-    case .completed: return OmiColors.textPrimary
-    case .failed: return OmiColors.textTertiary
-    }
-  }
 }
 
 // MARK: - Task Agent Detail View
@@ -186,7 +206,7 @@ struct TaskAgentDetailView: View {
       // Header
       header
 
-      Divider()
+      GlassSeparator()
 
       // Content
       ScrollView {
@@ -216,13 +236,14 @@ struct TaskAgentDetailView: View {
         .padding(OmiSpacing.xl)
       }
 
-      Divider()
+      GlassSeparator()
 
       // Footer
       footer
     }
     .frame(width: 550, height: 600)
-    .background(OmiColors.backgroundPrimary)
+    // No ground of its own: the sheet's glass owns it. See `glassContent()`.
+    .glassContent()
     .onAppear {
       if let session = session {
         editedPrompt = session.prompt
@@ -237,7 +258,7 @@ struct TaskAgentDetailView: View {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
         Text("Task Agent")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
 
         HStack(spacing: OmiSpacing.xxs) {
           ForEach(task.tags.prefix(3), id: \.self) { tag in
@@ -258,17 +279,14 @@ struct TaskAgentDetailView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       Text("Task")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       Text(task.description)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
         .padding(OmiSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(OmiColors.backgroundSecondary)
-        )
+        .glassCard(cornerRadius: PageGlass.rowRadius)
     }
   }
 
@@ -276,37 +294,34 @@ struct TaskAgentDetailView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Agent Status")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       HStack(spacing: OmiSpacing.lg) {
         // Status badge
         HStack(spacing: OmiSpacing.sm) {
           Image(systemName: session.status.icon)
             .scaledFont(size: OmiType.subheading)
-            .foregroundColor(statusColor(for: session.status))
+            .foregroundColor(TaskAgentStatusInk.color(for: session.status))
 
           VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             HStack(spacing: OmiSpacing.xs) {
               Text(session.status.displayName)
                 .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
+                .foregroundColor(Ink.primary)
 
               if !session.editedFiles.isEmpty {
                 Text("\(session.editedFiles.count) files edited")
                   .scaledFont(size: OmiType.caption, weight: .medium)
-                  .foregroundColor(OmiColors.textSecondary)
+                  .foregroundColor(Ink.secondary)
                   .padding(.horizontal, OmiSpacing.xs)
                   .padding(.vertical, OmiSpacing.hairline)
-                  .background(
-                    Capsule()
-                      .fill(OmiColors.textSecondary.opacity(0.15))
-                  )
+                  .glassChip()
               }
             }
 
             Text("Session: \(session.sessionName)")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
         }
 
@@ -323,13 +338,10 @@ struct TaskAgentDetailView: View {
               Text("Open Terminal")
                 .scaledFont(size: OmiType.caption, weight: .medium)
             }
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.vertical, OmiSpacing.xs)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                .fill(OmiColors.textSecondary.opacity(0.1))
-            )
+            .glassChip()
           }
           .buttonStyle(.plain)
 
@@ -343,23 +355,17 @@ struct TaskAgentDetailView: View {
                 Text("Stop")
                   .scaledFont(size: OmiType.caption, weight: .medium)
               }
-              .foregroundColor(OmiColors.textSecondary)
+              .foregroundColor(Ink.primary)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.vertical, OmiSpacing.xs)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
-                  .fill(OmiColors.textSecondary.opacity(0.1))
-              )
+              .glassChip()
             }
             .buttonStyle(.plain)
           }
         }
       }
       .padding(OmiSpacing.md)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
-      )
+      .glassCard(cornerRadius: PageGlass.rowRadius)
     }
   }
 
@@ -367,28 +373,25 @@ struct TaskAgentDetailView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Agent Status")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "terminal")
           .scaledFont(size: 32)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         Text("No agent running")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Text("Launch a Claude agent to analyze this task and create an implementation plan.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
       }
       .frame(maxWidth: .infinity)
       .padding(OmiSpacing.xl)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
-      )
+      .glassCard(cornerRadius: PageGlass.rowRadius)
     }
   }
 
@@ -396,20 +399,20 @@ struct TaskAgentDetailView: View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       Text("Agent Status")
         .scaledFont(size: OmiType.body, weight: .semibold)
-        .foregroundColor(OmiColors.textSecondary)
+        .foregroundColor(Ink.secondary)
 
       VStack(spacing: OmiSpacing.md) {
         Image(systemName: "terminal")
           .scaledFont(size: 32)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
 
         Text("Task Agent Disabled")
           .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Text("Enable Task Agent in settings to launch Claude agents for code-related tasks.")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
 
         Button {
@@ -421,16 +424,13 @@ struct TaskAgentDetailView: View {
         } label: {
           Text("Open Settings")
             .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
       .frame(maxWidth: .infinity)
       .padding(OmiSpacing.xl)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(OmiColors.backgroundSecondary)
-      )
+      .glassCard(cornerRadius: PageGlass.rowRadius)
     }
   }
 
@@ -439,7 +439,7 @@ struct TaskAgentDetailView: View {
       HStack {
         Text("Prompt")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
 
@@ -454,7 +454,7 @@ struct TaskAgentDetailView: View {
               Text("Edit")
                 .scaledFont(size: OmiType.caption, weight: .medium)
             }
-            .foregroundColor(OmiColors.textSecondary)
+            .foregroundColor(Ink.secondary)
           }
           .buttonStyle(.plain)
         }
@@ -464,23 +464,19 @@ struct TaskAgentDetailView: View {
         VStack(spacing: OmiSpacing.sm) {
           TextEditor(text: $editedPrompt)
             .scaledFont(size: OmiType.caption, design: .monospaced)
+            .foregroundColor(Ink.primary)
+            // A `TextEditor` paints an opaque ground of its own, which on glass is a grey slab.
+            .scrollContentBackground(.hidden)
             .frame(minHeight: 150)
             .padding(OmiSpacing.sm)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .fill(OmiColors.backgroundSecondary)
-            )
-            .overlay(
-              RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .stroke(OmiColors.border, lineWidth: 1)
-            )
+            .glassField(cornerRadius: PageGlass.rowRadius)
 
           HStack {
             Button("Cancel") {
               isEditingPrompt = false
               editedPrompt = session.prompt
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
             Spacer()
 
@@ -496,20 +492,17 @@ struct TaskAgentDetailView: View {
                 Text("Restart Agent")
               }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(OmiButtonStyle(.primary, size: .compact))
             .disabled(isRestarting || editedPrompt.isEmpty)
           }
         }
       } else {
         Text(session.prompt)
           .scaledFont(size: OmiType.caption, design: .monospaced)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .padding(OmiSpacing.md)
           .frame(maxWidth: .infinity, alignment: .leading)
-          .background(
-            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-              .fill(OmiColors.backgroundSecondary)
-          )
+          .glassCard(cornerRadius: PageGlass.rowRadius)
       }
     }
   }
@@ -519,7 +512,7 @@ struct TaskAgentDetailView: View {
       HStack {
         Text("Agent Output")
           .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
 
         Spacer()
 
@@ -533,7 +526,7 @@ struct TaskAgentDetailView: View {
             Text("Copy")
               .scaledFont(size: OmiType.caption, weight: .medium)
           }
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
         }
         .buttonStyle(.plain)
       }
@@ -541,15 +534,12 @@ struct TaskAgentDetailView: View {
       ScrollView {
         Text(output)
           .scaledFont(size: OmiType.caption, design: .monospaced)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .frame(maxWidth: .infinity, alignment: .leading)
       }
       .frame(maxHeight: 200)
       .padding(OmiSpacing.md)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(Color.black.opacity(0.8))
-      )
+      .glassField(cornerRadius: PageGlass.rowRadius)
     }
   }
 
@@ -559,8 +549,7 @@ struct TaskAgentDetailView: View {
         Button("Remove Session") {
           manager.removeSession(taskId: task.id)
         }
-        .buttonStyle(.bordered)
-        .foregroundColor(OmiColors.textSecondary)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
 
       Spacer()
@@ -568,22 +557,12 @@ struct TaskAgentDetailView: View {
       Button("Close") {
         dismissSheet()
       }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
     }
     .padding(OmiSpacing.xl)
   }
 
   // MARK: - Helpers
-
-  private func statusColor(for status: TaskAgentManager.AgentStatus) -> Color {
-    switch status {
-    case .pending: return OmiColors.textTertiary
-    case .processing: return OmiColors.textSecondary
-    case .editing: return OmiColors.textSecondary
-    case .completed: return OmiColors.textPrimary
-    case .failed: return OmiColors.textTertiary
-    }
-  }
 
   private func restartWithNewPrompt() async {
     isRestarting = true

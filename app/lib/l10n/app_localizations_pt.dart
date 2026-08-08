@@ -9830,4 +9830,25 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'Sua solicitação está em análise';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Atualização necessária';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Instale o app Omi mais recente para continuar após a migração da conta.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migração em andamento';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Sua conta está migrando. Os recursos do produto ficam pausados até a migração terminar.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Sua conta está em manutenção após um rollback de migração. Alguns dados mais recentes podem ficar isolados.';
+
+  @override
+  String get accountCutoverOpenStore => 'Abrir loja';
 }

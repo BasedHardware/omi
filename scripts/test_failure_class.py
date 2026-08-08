@@ -66,7 +66,12 @@ class FailureClassCliTests(unittest.TestCase):
                 artifact.touch()
 
     def tearDown(self) -> None:
-        self.temp_directory.cleanup()
+        # The synthetic repo's `.git` can still be receiving background writes when the
+        # test finishes, so a strict rmtree races them and raises "Directory not empty".
+        # Cleanup failures say nothing about the assertions, which have already run — a
+        # temp directory the OS will reclaim must never be able to fail the suite.
+        shutil.rmtree(self.temp_directory.name, ignore_errors=True)
+        self.temp_directory._finalizer.detach()  # type: ignore[attr-defined]
 
     def git(self, *args: str) -> str:
         result = run(["git", *args], self.root)

@@ -52,13 +52,13 @@ struct MemoryAtlasNeighbourhoodCaption: View {
         Text(caption.uppercased())
           .scaledFont(size: 9, weight: .semibold)
           .tracking(0.8)
-          .foregroundColor(isHovered ? OmiColors.textPrimary : OmiColors.textTertiary)
+          .foregroundColor(isHovered ? Ink.primary : Ink.secondary)
           .lineLimit(1)
           .truncationMode(.tail)
 
         Image(systemName: "scope")
           .scaledFont(size: 8, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
+          .foregroundColor(Ink.secondary)
           .opacity(isHovered ? 1 : 0)
           .frame(width: isHovered ? 9 : 0)
       }
@@ -71,9 +71,9 @@ struct MemoryAtlasNeighbourhoodCaption: View {
       // and the dots underneath would read through the letters.
       .background(
         Capsule()
-          .fill(OmiColors.backgroundPrimary.opacity(isHovered ? 0.92 : 0.66))
+          .fill(Ink.surface.opacity(isHovered ? 0.92 : 0.66))
           .overlay(
-            Capsule().stroke(OmiColors.border.opacity(isHovered ? 0.4 : 0.14), lineWidth: 1))
+            Capsule().stroke(Ink.separator.opacity(isHovered ? 0.4 : 0.14), lineWidth: 1))
       )
       .contentShape(Capsule())
     }

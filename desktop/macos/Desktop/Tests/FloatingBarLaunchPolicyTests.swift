@@ -107,19 +107,19 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
   }
 
   func testDesktopHomeLaunchUsesNormalPolicyAndDoesNotCallDeferredRevealDirectly() throws {
-    let source = try sourceFile("MainWindow/DesktopHomeView.swift")
+    let source = try sourceFile("AccountCutover/DesktopHomeSignedInStartup.swift")
     let floatingBarLaunchSection = try extractSection(
       from: source,
-      startingAt: "// Set up floating control bar.",
-      endingBefore: "// Set up push-to-talk voice input")
+      startingAt: "FloatingControlBarManager.shared.setup(",
+      endingBefore: "if let barState = FloatingControlBarManager.shared.barState")
 
     XCTAssertTrue(
       floatingBarLaunchSection.contains("FloatingControlBarManager.shared.setup("),
-      "DesktopHomeView must create the floating bar window before applying launch presentation.")
+      "Signed-in startup must create the floating bar window before applying launch presentation.")
     XCTAssertTrue(
       floatingBarLaunchSection.contains(
         "FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)"),
-      "Normal DesktopHomeView launch must route through the normal signed-in floating-bar policy.")
+      "Normal signed-in launch must route through the normal floating-bar policy.")
     XCTAssertFalse(
       floatingBarLaunchSection.contains("showDeferredUntilFirstPushToTalk()"),
       "Deferred reveal hides the notch until PTT and must not be used for normal signed-in launch.")

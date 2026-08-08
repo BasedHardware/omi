@@ -32,7 +32,6 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 DEFAULT_PROJECT = "based-hardware"
-DEFAULT_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 MAINTENANCE_ENABLED_ENV = "MEMORY_CANONICAL_MAINTENANCE_ENABLED"
 CONSOLIDATION_ENABLED_ENV = "MEMORY_CANONICAL_CONSOLIDATION_ENABLED"
 BATCH_CAP_ENV = "MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP"
@@ -67,8 +66,8 @@ def _parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--uid",
-        default=DEFAULT_UID,
-        help="Target UID (dry-run default is dogfood; --apply requires --confirm-data-plane)",
+        required=True,
+        help="Target UID (required; --apply also requires --confirm-data-plane)",
     )
     p.add_argument("--apply", action="store_true", help="Perform writes (default: dry-run)")
     p.add_argument(
@@ -166,9 +165,8 @@ def _create_marker(db_client: Any, *, uid: str, marker: str) -> str:
     now = datetime.now(timezone.utc)
     mid = str(uuid.uuid4())
     content = (
-        f"{marker}: David prefers progressive Omi canonical-memory cutover: "
-        "dark deploy, then David canary, then staff ring, then budgeted stage-all. "
-        "He rejects all-users GA in one flip."
+        f"{marker}: Synthetic proof memory for a progressive canonical-memory cutover: "
+        "dark deploy, approved canary, staff ring, then budgeted stage-all."
     )
     row = MemoryDB(
         id=mid,

@@ -232,7 +232,10 @@ async def web_listen_handler(
     except WebSocketDisconnect:
         return
     try:
-        uid = await auth.get_current_user_uid_from_ws_message(cast(Dict[str, Any], first_message))
+        uid = await auth.get_current_user_uid_from_ws_message(
+            cast(Dict[str, Any], first_message),
+            websocket=websocket,
+        )
     except ValueError as error:
         await websocket.close(code=1008, reason=str(error))
         return

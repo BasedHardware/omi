@@ -11,6 +11,11 @@ from models.user_usage import UsageStats
 
 logger = logging.getLogger(__name__)
 
+# Firestore's document-id sentinel field path (`FieldPath.document_id()`), spelled
+# literally: tests that stub `google.cloud.firestore_v1` as a plain module cannot
+# import its `field_path` submodule.
+_DOCUMENT_ID_FIELD = '__name__'
+
 
 def _store():
     return get_document_store()
@@ -20,6 +25,13 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     """Typed adapter for a Firestore snapshot's `to_dict()` (SDK stub gap)."""
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def _next_month(now: datetime) -> Tuple[int, int]:
+    """(year, month) of the UTC month after ``now`` — the quota bucket boundary."""
+    if now.month == 12:
+        return now.year + 1, 1
+    return now.year, now.month + 1
 
 
 def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -34,18 +46,20 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> Dict[str
     excluded on purpose — those are company-driven, not user-initiated questions.
     """
     now = now or datetime.now(timezone.utc)
-    month_prefix = f'{now.year}-{now.month:02d}-'
 
     llm_usage_path = f'users/{uid}/llm_usage'
     store = _store()
     questions = 0
     cost_usd = 0.0
+    month_prefix = f'{now.year}-{now.month:02d}'
+    document_count = 0
     for doc_id in store.list_ids(llm_usage_path):
         if not doc_id.startswith(month_prefix):
             continue
         snap = store.get(f'{llm_usage_path}/{doc_id}')
         if not snap.exists:
             continue
+        document_count += 1
         data: Dict[str, Any] = _typed_doc(snap)
         has_desktop_realtime_quota_questions = 'desktop_chat_realtime.quota_questions' in data or (
             isinstance(data.get('desktop_chat_realtime'), dict) and 'quota_questions' in data['desktop_chat_realtime']
@@ -90,11 +104,14 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> Dict[str
                 # backend_chat.quota_questions so LLM telemetry no longer drives quota.
                 questions += int(value)
 
+    record_firestore_read(
+        FirestoreReadFamily.CHAT_QUOTA_MONTHLY_USAGE,
+        FirestoreReadMode.BOUNDED,
+        document_count,
+    )
+
     # Compute end-of-month boundary in UTC for the reset timestamp.
-    if now.month == 12:
-        next_year, next_month = now.year + 1, 1
-    else:
-        next_year, next_month = now.year, now.month + 1
+    next_year, next_month = _next_month(now)
     reset_at = int(datetime(next_year, next_month, 1, tzinfo=timezone.utc).timestamp())
 
     return {

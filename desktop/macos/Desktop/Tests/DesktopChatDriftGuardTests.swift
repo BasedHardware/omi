@@ -18,12 +18,32 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertFalse(source.contains("ThinkingBlock("))
   }
 
+  func testTaskChatPanelDisablesPushToTalkUntilTaskThreadRoutingExists() throws {
+    let source = try sourceFile("MainWindow/Components/TaskChatPanel.swift")
+
+    // omi-test-quality: source-inspection -- static contract: this caller must
+    // opt out of ChatInputView's global PTT route until task-thread voice
+    // routing is implemented.
+    let inputStart = try XCTUnwrap(source.range(of: "            ChatInputView("))
+    let inputEnd = try XCTUnwrap(
+      source.range(of: "\n            )", range: inputStart.upperBound..<source.endIndex)
+    )
+    let inputCall = source[inputStart.lowerBound..<inputEnd.lowerBound]
+    XCTAssertTrue(
+      inputCall.contains("showsPushToTalk: false"),
+      "TaskChatPanel must explicitly disable the shared composer's PTT control"
+    )
+  }
+
   func testSharedChatViewsRemainDocumentedForMainAndTaskChat() throws {
     let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
     let inputSource = try sourceFile("MainWindow/Components/ChatInputView.swift")
 
-    XCTAssertTrue(messagesSource.contains("Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat)."))
-    XCTAssertTrue(inputSource.contains("Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat)."))
+    // Deliberately not pinned to whichever name the main surface currently has:
+    // the contract is that both views stay documented as shared with the task
+    // sidebar, not what the other caller happens to be called this month.
+    XCTAssertTrue(messagesSource.contains("and TaskChatPanel (task sidebar chat)."))
+    XCTAssertTrue(inputSource.contains("and TaskChatPanel (task sidebar chat)."))
   }
 
   func testChatComposerUsesAThinUniformShellAndTranscriptFade() {
@@ -34,51 +54,76 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertLessThanOrEqual(ChatComposerLayout.fadeHeight, 12)
   }
 
-  func testOnlyConsecutiveUserRowsUseCompactSpacing() {
+  /// **A reply sits closer to its question than to the next one.** That
+  /// difference is the only thing in the layout that says which answer belongs to
+  /// which question; with one uniform gap a column of short messages reads as
+  /// scattered text, which is exactly what it did.
+  func testAReplySitsCloserToItsQuestionThanTheNextExchangeDoes() {
     let messages = [
       ChatMessage(id: "a0", text: "Answer", sender: .ai),
       ChatMessage(id: "u0", text: "First", sender: .user),
       ChatMessage(id: "u1", text: "Second", sender: .user),
       ChatMessage(id: "a1", text: "Answer", sender: .ai),
+      ChatMessage(id: "u2", text: "Third", sender: .user),
     ]
 
-    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 0, in: messages), 0)
-    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 1, in: messages), 0)
-    XCTAssertEqual(
+    func gap(_ index: Int) -> CGFloat {
       ChatTranscriptLayout.regularRowSpacing
-        + ChatTranscriptLayout.topAdjustment(at: 2, in: messages),
-      ChatTranscriptLayout.consecutiveUserRowSpacing
-    )
-    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 3, in: messages), 0)
+        + ChatTranscriptLayout.topAdjustment(at: index, in: messages)
+    }
+
+    XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 0, in: messages), 0)
+    // assistant → user starts a new exchange and takes the full gap.
+    XCTAssertEqual(gap(1), ChatTranscriptLayout.regularRowSpacing)
+    XCTAssertEqual(gap(2), ChatTranscriptLayout.consecutiveUserRowSpacing)
+    // user → assistant is one exchange, so it is the tight gap.
+    XCTAssertEqual(gap(3), ChatTranscriptLayout.replySpacing)
+    XCTAssertEqual(gap(4), ChatTranscriptLayout.regularRowSpacing)
+
+    XCTAssertLessThan(
+      ChatTranscriptLayout.replySpacing, ChatTranscriptLayout.regularRowSpacing,
+      "a reply must bind to its question more tightly than to the next exchange")
   }
 
-  func testPromptTimelineCannotMutateTranscriptScrollerDuringLayout() throws {
-    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
-    let timelineSource = try sourceFile("MainWindow/Components/ChatPromptTimeline.swift")
+  /// The gap after an assistant row is also the room its hover-revealed metadata
+  /// band draws into — that band is zero-height at rest, so the space has to come
+  /// from somewhere, and it comes from here.
+  func testTheGapAfterAnAssistantRowStaysWideEnoughForItsHoverBand() {
+    let messages = [
+      ChatMessage(id: "a0", text: "Answer", sender: .ai),
+      ChatMessage(id: "a1", text: "Also this", sender: .ai),
+    ]
+    XCTAssertEqual(
+      ChatTranscriptLayout.spacing(from: messages[0], to: messages[1]),
+      ChatTranscriptLayout.regularRowSpacing)
+  }
 
-    // omi-test-quality: source-inspection -- static contract: the prompt rail must stay an observational overlay; changing NSScrollView chrome from its visibility callbacks can re-enter transcript layout.
+  func testTranscriptScrollerPolicyIsStaticAndSingle() throws {
+    let messagesSource = try sourceFile("MainWindow/Components/ChatMessagesView.swift")
+
+    // omi-test-quality: source-inspection -- static contract: the transcript owns exactly one
+    // vertical scroll affordance, and its chrome policy never changes at runtime. Mutating
+    // NSScrollView's scroller visibility during layout can re-enter the transcript's own pass.
     XCTAssertFalse(messagesSource.contains("hidesNativeScrollIndicator"))
     XCTAssertFalse(messagesSource.contains("ChatTimelineScrollerSuppressionHost"))
-    XCTAssertTrue(messagesSource.contains(".scrollIndicators(.hidden)"))
-    XCTAssertFalse(timelineSource.contains("onVisibilityChange"))
+    // `.never`, not `.hidden`. Both are static, so the no-runtime-mutation reason
+    // this test exists for is unchanged — but per Apple's `ScrollIndicatorVisibility`
+    // documentation `.hidden` only requests hiding, while `.never` overrides
+    // scrollable components that would otherwise show the scroller. AppKit took the
+    // former as advisory and drew the overlay scroller over the panel's rounded edge.
+    XCTAssertTrue(messagesSource.contains(".scrollIndicators(.never)"))
+    XCTAssertFalse(messagesSource.contains(".scrollIndicators(.hidden)"))
+    // The prompt rail drew a second vertical bar beside the scroller. It is gone; nothing may
+    // reserve a trailing gutter for one again.
+    XCTAssertFalse(messagesSource.contains("contentColumnWidth"))
+    XCTAssertFalse(messagesSource.contains("PromptTimeline"))
   }
 
-  func testPromptTimelineReceivesScrollUpdatesDuringContinuousGestures() throws {
-    let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
-
-    // omi-test-quality: source-inspection -- continuous gestures must deliver the latest position on the next run-loop turn, including while AppKit is servicing event tracking.
-    XCTAssertTrue(scrollSource.contains("inModes: [.common, .default, Self.eventTrackingRunLoopMode]"))
-    XCTAssertTrue(scrollSource.contains("private static let eventTrackingRunLoopMode"))
-    XCTAssertFalse(scrollSource.contains("asyncAfter(deadline: .now() + 0.06, execute: workItem)"))
-  }
-
-  func testScrollDetectorsRebindAfterSwiftUIReplacesTheTranscriptScrollView() throws {
+  func testTheScrollDetectorRebindsAfterSwiftUIReplacesTheTranscriptScrollView() throws {
     let scrollSource = try sourceFile("MainWindow/Components/ChatScrollBehavior.swift")
 
     // omi-test-quality: source-inspection -- AppKit representables must recover
     // when SwiftUI swaps the lazy transcript's underlying scroll hierarchy.
-    XCTAssertTrue(scrollSource.contains("context.coordinator.setupScrollObserver(for: nsView)"))
-    XCTAssertTrue(scrollSource.contains("observedClipView"))
     XCTAssertTrue(scrollSource.contains("context.coordinator.install(for: nsView)"))
     XCTAssertTrue(scrollSource.contains("installedScrollView"))
   }
@@ -135,12 +180,23 @@ final class DesktopChatDriftGuardTests: XCTestCase {
 
   func testChatFirstShellUsesModernTopNavigation() throws {
     let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
+    let queryHomeSource = try sourceFile("MainWindow/QueryShell/QueryShellHome.swift")
+    let answerThreadSource = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern top-navigation and Dashboard/Home chat surfaces and must not resurrect either its retired rail or ChatPage's nested header.
+    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern
+    // top-navigation and the single QueryShellHome chat surface, while rich-block capability and
+    // visible-transcript lifecycle remain threaded through the shared answer view.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
-    XCTAssertTrue(shellSource.contains("case .chat:\n      DashboardPage("))
+    XCTAssertTrue(shellSource.contains("case .chat:\n      QueryShellHome("))
+    XCTAssertFalse(shellSource.contains("case .chat:\n      DashboardPage("))
+    XCTAssertTrue(shellSource.contains("forceModernPresentation: true"))
     XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))
+    XCTAssertTrue(queryHomeSource.contains("forceModernPresentation"))
+    XCTAssertTrue(queryHomeSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
+    XCTAssertTrue(answerThreadSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
+    XCTAssertTrue(answerThreadSource.contains("chatTranscriptFirstPageDidLoad()"))
+    XCTAssertTrue(answerThreadSource.contains("chatTranscriptDidDisappear()"))
     XCTAssertFalse(shellSource.contains("ChatFirstSidebar("))
     XCTAssertFalse(shellSource.contains("\n      ChatPage("))
     XCTAssertTrue(dashboardSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
@@ -150,20 +206,24 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(homeSource.contains("if usesChatFirstShell,"))
   }
 
-  func testMainAndNotchChatShareTheTranscriptFade() throws {
-    let mainChat = try sourceFile("MainWindow/Pages/ChatPage.swift")
+  /// The fade is the notch's alone now that the standalone chat page is gone.
+  /// Home deliberately does not mask its transcript viewport — the ask bar
+  /// already draws its own boundary, and a mask there clips the first lines of
+  /// an incoming reply — so this pins the notch and pins Home's abstention.
+  func testTheTranscriptFadeIsTheNotchsAloneAndHomeAbstains() throws {
     let notchChat = try sourceFile("FloatingControlBar/AIResponseView.swift")
+    let home = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    XCTAssertTrue(mainChat.contains(".overlay(alignment: .bottom) {\n      ChatComposerFade()"))
     XCTAssertTrue(notchChat.contains(".overlay(alignment: .bottom) {\n        ChatComposerFade()"))
-    XCTAssertTrue(mainChat.contains(".padding(.vertical, OmiSpacing.sm)"))
+    XCTAssertFalse(
+      home.contains("ChatComposerFade()"),
+      "Home's transcript must stay unmasked; a fade there cuts off incoming replies.")
   }
 
   func testChatTranscriptLoaderIgnoresSessionListRefreshes() throws {
-    let chatPage = try sourceFile("MainWindow/Pages/ChatPage.swift")
     let dashboardPage = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    for source in [chatPage, dashboardPage] {
+    for source in [dashboardPage] {
       XCTAssertFalse(
         source.contains("isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)"),
         "Session-list refreshes must not hide a non-empty transcript behind the initial message-history loader."
@@ -174,7 +234,6 @@ final class DesktopChatDriftGuardTests: XCTestCase {
       )
     }
 
-    XCTAssertTrue(chatPage.contains("isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing"))
     XCTAssertEqual(
       dashboardPage.components(separatedBy: "isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing")
         .count - 1,

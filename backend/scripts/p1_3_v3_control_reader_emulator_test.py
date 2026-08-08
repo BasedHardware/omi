@@ -30,7 +30,7 @@ from utils.memory.v3.control_state_adapter import read_v3_control
 PROJECT_ID = os.environ.get("GCLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT") or "demo-memory"
 # This is the code-owned canonical entitlement; the emulator remains isolated
 # by FIRESTORE_EMULATOR_HOST and never contacts the real account.
-UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+UID = "omi-emulator-v3-control-reader-proof-v1"
 CONTROL_PATH = MemoryCollections(uid=UID).memory_control_state
 GLOBAL_READ_GATE_PATH = "memory_control/global_read_gate"
 WRITE_CONVERGENCE_GATE_PATH = "memory_control/write_convergence_gate"

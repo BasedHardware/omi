@@ -9823,4 +9823,25 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => 'Vaše žádost se posuzuje';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Je vyžadována aktualizace';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Probíhá migrace';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.';
+
+  @override
+  String get accountCutoverOpenStore => 'Otevřít obchod';
 }

@@ -9641,4 +9641,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get yourRequestUnderReview => '你的申请正在审核中';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => '需要更新';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage => '请安装最新的 Omi 应用，以便在账户迁移后继续使用。';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => '正在迁移';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage => '您的账户正在迁移。产品功能将暂停，直到迁移完成。';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage => '账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。';
+
+  @override
+  String get accountCutoverOpenStore => '打开应用商店';
 }

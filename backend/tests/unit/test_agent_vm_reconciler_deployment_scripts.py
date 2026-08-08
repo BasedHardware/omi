@@ -112,6 +112,7 @@ def test_desktop_workflows_guard_active_pointer_reads_writes_and_cleanup_rollbac
         assert "gcloud storage objects describe" in text
         assert "NOT_FOUND" in text
         assert "--if-generation-match" in text
+        assert "--cache-control='no-store,max-age=0'" in text
         assert "agent-vm-active-activated.generation" in text
         assert "DESKTOP_BACKEND_PROMOTION_COMPLETED=true" in text
         assert "env.DESKTOP_BACKEND_PROMOTION_COMPLETED != 'true'" in text
@@ -147,9 +148,10 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
     assert "REFUSED:" in script
     assert (
-        "compute.disks.get,compute.images.useReadOnly,compute.instances.create,compute.instances.delete,compute.instances.get,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
+        "compute.disks.create,compute.disks.delete,compute.disks.get,compute.disks.setLabels,compute.disks.use,compute.disks.useReadOnly,compute.images.useReadOnly,compute.instances.attachDisk,compute.instances.create,compute.instances.delete,compute.instances.detachDisk,compute.instances.get,compute.instances.setDiskAutoDelete,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
         in script
     )
+    assert "compute.disks.setLabels" in script
     assert 'subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"' in script
     assert "Agent VM reconciler instance scope" in script
     assert "Agent VM reconciler disk scope" in script
@@ -169,7 +171,33 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     command_log = tmp_path / "gcloud.log"
     fake_gcloud = fake_bin / "gcloud"
     fake_gcloud.write_text(
-        "#!/usr/bin/env bash\n" "printf '%s\\n' \"$*\" >> \"$FAKE_GCLOUD_LOG\"\n",
+        "#!/usr/bin/env bash\n"
+        "for arg in \"$@\"; do\n"
+        "  case \"$arg\" in\n"
+        "    --condition=None) ;;\n"
+        "    --condition=*)\n"
+        "      IFS=',' read -r -a fields <<< \"${arg#--condition=}\"\n"
+        "      [[ \"${#fields[@]}\" == 3 ]] || exit 64\n"
+        "      seen_title=0 seen_description=0 seen_expression=0\n"
+        "      for field in \"${fields[@]}\"; do\n"
+        "        key=\"${field%%=*}\"\n"
+        "        value=\"${field#*=}\"\n"
+        "        [[ -n \"$value\" ]] || exit 64\n"
+        "        case \"$key\" in\n"
+        "          title) seen_title=1 ;;\n"
+        "          description) seen_description=1 ;;\n"
+        "          expression) seen_expression=1 ;;\n"
+        "          *) exit 64 ;;\n"
+        "        esac\n"
+        "      done\n"
+        "      [[ \"$seen_title$seen_description$seen_expression\" == 111 ]] || exit 64\n"
+        "      ;;\n"
+        "  esac\n"
+        "done\n"
+        "printf '%s\\n' \"$*\" >> \"$FAKE_GCLOUD_LOG\"\n"
+        "if [[ \"$*\" == projects\\ get-iam-policy* && \"${FAKE_GCLOUD_LEGACY_DISK_BINDING:-}\" == 1 ]]; then\n"
+        "  printf '%s\\n' 'Boot disk reads for omi-agent instances in the Agent VM zone'\n"
+        "fi\n",
         encoding="utf-8",
     )
     fake_gcloud.chmod(0o755)
@@ -228,7 +256,12 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
         "--project=based-hardware-dev "
         "--member=serviceAccount:local-development-joan@based-hardware-dev.iam.gserviceaccount.com "
-        "--role=roles/iam.serviceAccountUser"
+        "--role=roles/iam.serviceAccountUser --condition=None"
+    ) in commands
+    assert (
+        "--condition=title=Agent VM reconciler disk scope,description=Agent VM boot and state disk lifecycle "
+        "operations in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && "
+        "resource.name.startsWith('projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-')"
     ) in commands
     assert (
         "projects add-iam-policy-binding based-hardware-dev "
@@ -245,6 +278,53 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
         "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
         "--role=roles/datastore.user --condition=None"
     ) in commands
+    assert (
+        "storage buckets add-iam-policy-binding gs://based-hardware-dev-agent "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=roles/storage.objectViewer --condition=None"
+    ) in commands
+    assert (
+        "iam service-accounts add-iam-policy-binding "
+        "omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com "
+        "--project=based-hardware-dev "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=roles/iam.serviceAccountUser --condition=None"
+    ) in commands
+
+    legacy_upgrade = subprocess.run(
+        ["bash", "backend/scripts/apply-agent-vm-reconciler-iam.sh"],
+        cwd=REPO_DIR,
+        env={
+            **base_env,
+            "AGENT_VM_RECONCILER_DEPLOYER": "local-development-joan@based-hardware-dev.iam.gserviceaccount.com",
+            "FAKE_GCLOUD_LEGACY_DISK_BINDING": "1",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert legacy_upgrade.returncode == 0, legacy_upgrade.stderr
+    upgraded_commands = command_log.read_text(encoding="utf-8")
+    assert (
+        "projects remove-iam-policy-binding based-hardware-dev "
+        "--member=serviceAccount:agent-vm-reconciler@based-hardware-dev.iam.gserviceaccount.com "
+        "--role=projects/based-hardware-dev/roles/omiAgentVmReconciler "
+        "--condition=title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances "
+        "in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && "
+        "resource.name.startsWith('projects/based-hardware-dev/zones/us-central1-a/disks/omi-agent-')"
+    ) in upgraded_commands
+
+
+def test_reconciler_runbook_documents_state_disk_clone_browser_and_production_gates():
+    runbook = _read("docs/runbooks/agent-vm-fleet-reconciler.md")
+
+    assert "persistent state disk" in runbook
+    assert "source clone" in runbook
+    assert "explicit ephemeral browser policy" in runbook
+    assert "autoDelete: true" in runbook
+    assert "temporary clone" in runbook
+    assert "identity-fenced cleanup" in runbook
+    assert "Production remains disabled until dev proof" in runbook
 
 
 def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(tmp_path):
@@ -254,6 +334,7 @@ def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(t
     assert 'project" != "based-hardware-dev"' in text
     assert "gcloud storage cp --no-clobber" in text
     assert "--if-generation-match" in text
+    assert "--cache-control='no-store,max-age=0'" in text
     assert "cmp -s" in text
 
     refused = subprocess.run(["bash", str(script)], cwd=REPO_DIR, text=True, capture_output=True, check=False)

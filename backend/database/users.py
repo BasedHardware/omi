@@ -7,6 +7,7 @@ from database.store import get_document_store
 from database.store.sentinels import DELETE, SERVER_TIMESTAMP, ArrayUnion
 from database.account_deletion_policy import normalize_account_deletion_status
 from database.account_deletion_transitions import (
+    adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
     record_late_agent_vm_cleanup as _record_late_agent_vm_cleanup_txn,
 )
@@ -437,10 +438,17 @@ def mark_user_deletion_wipe_failed(uid: str):
     )
 
 
-def record_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str) -> bool:
+def record_late_agent_vm_cleanup(
+    uid: str,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str | None = None,
+) -> bool:
     """Persist a late VM only when an admitted deletion owns its cleanup."""
     path = f'account_deletions/{uid}'
-    return _store().run_transaction(lambda tx: _record_late_agent_vm_cleanup_txn(tx, path, vm_name, zone))
+    return _store().run_transaction(
+        lambda tx: _record_late_agent_vm_cleanup_txn(tx, path, vm_name, zone, expected_instance_id)
+    )
 
 
 def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
@@ -454,7 +462,25 @@ def get_late_agent_vm_cleanup(uid: str) -> dict[str, str] | None:
     zone = pending.get('zone')
     if not isinstance(vm_name, str) or not vm_name or not isinstance(zone, str) or not zone:
         return None
-    return {'vmName': vm_name, 'zone': zone}
+    result = {'vmName': vm_name, 'zone': zone}
+    expected_instance_id = pending.get('expectedInstanceId')
+    if expected_instance_id is not None:
+        if (
+            not isinstance(expected_instance_id, str)
+            or not expected_instance_id.isascii()
+            or not expected_instance_id.isdigit()
+        ):
+            raise RuntimeError('late Agent VM cleanup instance identity is malformed')
+        result['expectedInstanceId'] = expected_instance_id
+    return result
+
+
+def adopt_legacy_late_agent_vm_cleanup(uid: str, vm_name: str, zone: str, expected_instance_id: str) -> bool:
+    """CAS-upgrade a pre-instance-ID cleanup record before provider deletion."""
+    path = f'account_deletions/{uid}'
+    return _store().run_transaction(
+        lambda tx: _adopt_legacy_late_agent_vm_cleanup_txn(tx, path, vm_name, zone, expected_instance_id)
+    )
 
 
 def clear_late_agent_vm_cleanup(uid: str, vm_name: str) -> None:
@@ -738,9 +764,7 @@ def claim_deletion_wipe(
     from being re-enqueued concurrently by multiple workers or scheduler runs.
     """
     path = f'account_deletions/{uid}'
-    return _store().run_transaction(
-        lambda tx: _claim_deletion_wipe_txn(tx, path, stale_after, running_stale_after)
-    )
+    return _store().run_transaction(lambda tx: _claim_deletion_wipe_txn(tx, path, stale_after, running_stale_after))
 
 
 def _claim_deletion_wipe_task_txn(tx, path: str, running_stale_after: timedelta) -> str:
@@ -918,9 +942,7 @@ def add_person_speech_sample(
         True if sample was added, False if limit reached or person not found
     """
     path = f'users/{uid}/people/{person_id}'
-    return _store().run_transaction(
-        lambda tx: _add_sample_transaction(tx, path, sample_path, transcript, max_samples)
-    )
+    return _store().run_transaction(lambda tx: _add_sample_transaction(tx, path, sample_path, transcript, max_samples))
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
@@ -1025,7 +1047,7 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> b
         {
             'speaker_embedding': embedding,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1091,7 +1113,7 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
         {
             'speech_sample_transcripts': transcripts,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1139,8 +1161,7 @@ def update_person_speech_samples_after_migration(
     else:
         update_data['speaker_embedding'] = DELETE
 
-    store.update(
-        path,update_data)
+    store.update(path, update_data)
     return True
 
 
@@ -1168,7 +1189,7 @@ def clear_person_speaker_embedding(uid: str, person_id: str) -> bool:
         {
             'speaker_embedding': DELETE,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1197,7 +1218,7 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
         {
             'speech_samples_version': version,
             'updated_at': datetime.now(timezone.utc),
-        }
+        },
     )
     return True
 
@@ -1862,12 +1883,12 @@ def get_agent_vm(uid: str) -> Optional[dict]:
 
 def update_agent_vm(uid: str, update: dict) -> None:
     """Apply a partial update to the user's agentVm fields (dotted-key update dict)."""
-    _store().update(f'users/{uid}',update)
+    _store().update(f'users/{uid}', update)
 
 
 def clear_agent_vm(uid: str) -> None:
     """Delete the user's agentVm record."""
-    _store().update(f'users/{uid}',{'agentVm': DELETE})
+    _store().update(f'users/{uid}', {'agentVm': DELETE})
 
 
 def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:
