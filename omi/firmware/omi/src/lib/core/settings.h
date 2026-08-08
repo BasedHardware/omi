@@ -43,6 +43,24 @@ int app_settings_save_mic_gain(uint8_t new_gain);
  */
 uint8_t app_settings_get_mic_gain(void);
 
+#ifdef CONFIG_OMI_ENABLE_DEVICE_NAME_RW
+/**
+ * @brief Save the BLE device name to persistent storage.
+ *
+ * @param name The new device name (UTF-8, not required to be null-terminated).
+ * @param len Length of the name in bytes (1..CONFIG_BT_DEVICE_NAME_MAX).
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_save_device_name(const char *name, size_t len);
+
+/**
+ * @brief Get the persisted BLE device name.
+ *
+ * @return Null-terminated device name string.
+ */
+const char *app_settings_get_device_name(void);
+#endif
+
 /**
  * @brief Save the RTC timestamp setting.
  *

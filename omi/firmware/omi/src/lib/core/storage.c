@@ -787,8 +787,14 @@ static void storage_write(void)
                 storage_status_cache_maybe_refresh(false);
             }
             uint32_t idle_sleep_ms = conn ? STORAGE_IDLE_POLL_MS_CONNECTED : STORAGE_IDLE_POLL_MS_OFFLINE;
+            if (conn) {
+                bt_conn_unref(conn);
+            }
             k_msleep(idle_sleep_ms);
         } else {
+            if (conn) {
+                bt_conn_unref(conn);
+            }
             k_yield();
         }
     }
