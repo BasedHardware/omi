@@ -1,0 +1,36 @@
+.conversation-list, .conversation-day-group { display: grid; gap: var(--space-sm); }
+.conversation-list { gap: var(--space-xl); }
+.conversation-day-group > h2 { margin: 0; color: var(--content-secondary); font-family: var(--type-heading-family); font-size: var(--type-label-size); font-weight: var(--type-heading-weight); }
+.conversation-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-md); padding: var(--space-md) var(--space-lg); border: 1px solid var(--border); border-radius: var(--radius-card); color: var(--content-primary); text-decoration: none; background: var(--surface-raised); box-shadow: 0 var(--space-sm) var(--space-xxl) var(--surface-scrim); }
+.conversation-row:hover { border-color: var(--focus); }
+.conversation-row-main { min-width: 0; color: inherit; text-decoration: none; }
+.conversation-row-title { display: flex; align-items: center; gap: var(--space-sm); margin: 0; font-family: var(--type-heading-family); font-size: var(--type-heading-size); font-weight: var(--type-heading-weight); }
+.conversation-row-meta { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin-top: var(--space-sm); color: var(--content-tertiary); font-size: var(--type-label-size); }
+.conversation-row-actions { display: flex; align-items: flex-start; gap: var(--space-xs); }
+.conversation-row-actions button { min-width: var(--min-tap-target); padding: var(--space-xs); }
+.conversation-star { color: var(--warning); }
+.conversation-filter { display: flex; gap: var(--space-sm); margin-bottom: var(--space-xl); }
+.conversation-filter button[aria-pressed="true"] { color: var(--content-primary); border-color: var(--focus); background: var(--surface-elevated); }
+.conversation-detail { display: grid; gap: var(--space-lg); }
+.conversation-detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-lg); }
+.conversation-detail-header h2 { margin: 0; font-family: var(--type-title-family); font-size: var(--type-title-size); font-weight: var(--type-title-weight); line-height: var(--type-title-line); }
+.conversation-detail-title-editor { display: grid; gap: var(--space-sm); width: 100%; }
+.conversation-detail-title-editor input { min-height: var(--min-tap-target); border: 1px solid var(--border); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-md); color: var(--content-primary); background: var(--surface-raised); }
+.conversation-summary { padding: var(--space-lg); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); }
+.conversation-summary h3 { margin: 0 0 var(--space-sm); font-size: var(--type-heading-size); font-weight: var(--type-heading-weight); }
+.conversation-summary p { margin: 0; white-space: pre-wrap; line-height: var(--type-body-line); }
+.conversation-summary .conversation-long-body { max-height: 11rem; overflow: hidden; }
+.conversation-summary .conversation-long-body.is-expanded { max-height: none; }
+.conversation-detail-meta { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin: 0; }
+.conversation-detail-meta div { display: flex; align-items: baseline; gap: var(--space-xs); padding: var(--space-sm) var(--space-md); border-radius: var(--radius-control); background: var(--surface-elevated); }
+.conversation-detail-meta dt { color: var(--content-tertiary); font-size: var(--type-label-size); }
+.conversation-detail-meta dd { margin: 0; color: var(--content-primary); }
+.conversation-detail-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+.conversation-detail-actions select { min-width: 9rem; }
+.conversation-detail-actions label { display: grid; gap: var(--space-xs); color: var(--content-secondary); font-size: var(--type-label-size); }
+.conversation-back { display: inline-flex; min-height: var(--min-tap-target); align-items: center; margin-bottom: var(--space-md); }
+.conversation-source { margin: 0; color: var(--content-secondary); font-size: var(--type-label-size); }
+html[data-platform="desktop"] .conversation-row { grid-template-columns: minmax(0, 1fr) auto; padding: var(--space-lg) var(--space-xl); }
+html[data-platform="desktop"] .conversation-list { max-width: 920px; }
+html[data-platform="mobile"] .conversation-row { padding: var(--space-md); }
+html[data-platform="mobile"] .conversation-row-title { min-width: 0; overflow-wrap: anywhere; }

@@ -3,6 +3,7 @@ import type { Memory } from "@omi-core/contracts";
 import { formatDate, t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
 import type { ProductionMemoryStore } from "./memory-fixtures.js";
+import { ProductionChrome } from "./ProductionChrome.js";
 
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<void>;
@@ -89,28 +90,6 @@ function MemoryCard({ memory, store, locale, run }: {
   );
 }
 
-function ProductionNav({ locale }: { locale: Locale }): React.JSX.Element {
-  return (
-    <nav className="production-nav" aria-label={t(locale, "nav.library")}>
-      <div className="nav-desktop">
-        <div className="nav-primary">
-          <span>{t(locale, "nav.home")}</span>
-          <span aria-current="page">{t(locale, "nav.library")}</span>
-          <span>{t(locale, "nav.tasks")}</span>
-          <span>{t(locale, "nav.rewind")}</span>
-          <span>{t(locale, "nav.apps")}</span>
-        </div>
-      </div>
-      <div className="nav-mobile">
-        <span>{t(locale, "nav.home")}</span>
-        <span>{t(locale, "nav.conversations")}</span>
-        <span>{t(locale, "nav.tasks")}</span>
-        <span>{t(locale, "nav.apps")}</span>
-      </div>
-    </nav>
-  );
-}
-
 export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
   store: ProductionMemoryStore;
   fixture?: string;
@@ -189,16 +168,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
 
   return (
     <main className="production-shell" data-production-shell="true" data-route="memories" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
-      <ProductionNav locale={locale} />
-      <div className="desktop-library-segment" aria-label={t(locale, "nav.library")}>
-        <span>{t(locale, "nav.conversations")}</span>
-        <span aria-current="page">{t(locale, "nav.memories")}</span>
-        <span>{t(locale, "nav.brainMap")}</span>
-      </div>
-      <div className="mobile-library-segment" aria-label={t(locale, "nav.library")}>
-        <span>{t(locale, "nav.conversations")}</span>
-        <span aria-current="page">{t(locale, "nav.memories")}</span>
-      </div>
+      <ProductionChrome locale={locale} active="memories" placement="top" />
       <header className="production-header">
         <div><p className="eyebrow">{t(locale, "nav.memories")}</p><h1>{t(locale, "memories.title")}</h1><p>{t(locale, "memories.subtitle")}</p></div>
         {status.refresh.phase !== "ready" && <button type="button" onClick={() => void run(() => store.refresh())} aria-label={t(locale, "common.retry")}>{t(locale, "common.retry")}</button>}
@@ -219,7 +189,7 @@ export function MemoriesProduction({ store, fixture, locale = "en", onReady }: {
       </section>
       {status.refresh.phase === "ready" && rows.length === 0 ? <p className="empty-state">{t(locale, "memories.emptyBody")}</p> : <section className="memory-grid" aria-label={t(locale, "memories.title")}>{rows.map((memory) => <MemoryCard key={memory.id} memory={memory} store={store} locale={locale} run={run} />)}</section>}
       {dead.length > 0 && <section className="dead-letter-panel" aria-label={t(locale, "dead.title")}><h2>{t(locale, "dead.title")}</h2>{dead.map((letter) => <div className="dead-letter" key={letter.opId}><span>{letter.summary}</span><span>{t(locale, "dead.body")}</span><button type="button" onClick={() => void run(async () => { await store.discardDeadLetter(letter.opId); await reload(); })}>{t(locale, "dead.remove")}</button></div>)}</section>}
-      <ProductionNav locale={locale} />
+      <ProductionChrome locale={locale} active="memories" placement="bottom" />
     </main>
   );
 }
