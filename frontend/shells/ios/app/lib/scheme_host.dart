@@ -76,8 +76,7 @@ class SchemeSpike {
     );
   }
 
-  Future<void> setActiveBundle(String version) =>
-      _ch.invokeMethod<bool>('setActiveBundle', bundleDir(version));
+  Future<void> setActiveBundle(String version) => _ch.invokeMethod<bool>('setActiveBundle', bundleDir(version));
 
   /// Pull the native handler's request log (every request it served, with the
   /// headers it actually saw) into the probe file.

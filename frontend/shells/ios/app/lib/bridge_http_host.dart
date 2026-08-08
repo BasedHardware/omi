@@ -66,11 +66,8 @@ class BridgeHttpPreparedRequest {
 }
 
 class BridgeHttpPolicyResult {
-  BridgeHttpPolicyResult.dispatch(this.request)
-    : failureReason = null,
-      detail = null;
-  BridgeHttpPolicyResult.failure(this.failureReason, this.detail)
-    : request = null;
+  BridgeHttpPolicyResult.dispatch(this.request) : failureReason = null, detail = null;
+  BridgeHttpPolicyResult.failure(this.failureReason, this.detail) : request = null;
 
   final BridgeHttpPreparedRequest? request;
   final BridgeHttpFailureReason? failureReason;
@@ -126,42 +123,24 @@ class BridgeHttpHostPolicy {
     required String? token,
   }) {
     if (!const {'GET', 'POST', 'PATCH', 'DELETE'}.contains(method)) {
-      return BridgeHttpPolicyResult.failure(
-        BridgeHttpFailureReason.shellError,
-        'missing or unsupported method/path',
-      );
+      return BridgeHttpPolicyResult.failure(BridgeHttpFailureReason.shellError, 'missing or unsupported method/path');
     }
-    if (!path.startsWith('/') ||
-        path.startsWith('//') ||
-        path.contains('://')) {
-      return BridgeHttpPolicyResult.failure(
-        BridgeHttpFailureReason.shellError,
-        'path is not origin-relative',
-      );
+    if (!path.startsWith('/') || path.startsWith('//') || path.contains('://')) {
+      return BridgeHttpPolicyResult.failure(BridgeHttpFailureReason.shellError, 'path is not origin-relative');
     }
     final resolved = baseUrl.resolve(path);
-    if (resolved.scheme != baseUrl.scheme ||
-        resolved.host != baseUrl.host ||
-        resolved.port != baseUrl.port) {
-      return BridgeHttpPolicyResult.failure(
-        BridgeHttpFailureReason.shellError,
-        'path is not origin-relative',
-      );
+    if (resolved.scheme != baseUrl.scheme || resolved.host != baseUrl.host || resolved.port != baseUrl.port) {
+      return BridgeHttpPolicyResult.failure(BridgeHttpFailureReason.shellError, 'path is not origin-relative');
     }
     if (token == null || token.isEmpty) {
-      return BridgeHttpPolicyResult.failure(
-        BridgeHttpFailureReason.notAuthenticated,
-        'shell holds no credential',
-      );
+      return BridgeHttpPolicyResult.failure(BridgeHttpFailureReason.notAuthenticated, 'shell holds no credential');
     }
     final outbound = <String, String>{};
     for (final entry in headers.entries) {
-      if (BridgeHttpContract.forbiddenHeaders.contains(entry.key.toLowerCase()))
-        continue;
+      if (BridgeHttpContract.forbiddenHeaders.contains(entry.key.toLowerCase())) continue;
       outbound[entry.key] = entry.value;
     }
-    if (body != null)
-      outbound[HttpHeaders.contentTypeHeader] = 'application/json';
+    if (body != null) outbound[HttpHeaders.contentTypeHeader] = 'application/json';
     outbound[HttpHeaders.authorizationHeader] = 'Bearer $token';
     return BridgeHttpPolicyResult.dispatch(
       BridgeHttpPreparedRequest(
@@ -201,14 +180,8 @@ class BridgeHttpHostPolicy {
   /// Live reply factory: only id/status/body/retry hint cross into the page;
   /// response headers are deliberately absent. The generated runner invokes
   /// this exact factory for its redaction assertion.
-  static Map<String, dynamic> responsePayload(
-    BridgeHttpNormalizedResponse normalized,
-  ) {
-    final out = <String, dynamic>{
-      'id': normalized.id,
-      'status': normalized.status,
-      'body': normalized.body,
-    };
+  static Map<String, dynamic> responsePayload(BridgeHttpNormalizedResponse normalized) {
+    final out = <String, dynamic>{'id': normalized.id, 'status': normalized.status, 'body': normalized.body};
     if (normalized.retryAfterMs != null) {
       out['retryAfterMs'] = normalized.retryAfterMs;
     }
@@ -256,22 +229,16 @@ class BridgeHttpHost {
     token: token,
   );
 
-  static BridgeHttpFailureReason transportFailureForConformance(
-    String id,
-    String name,
-  ) => BridgeHttpHostPolicy.transportFailure(name);
+  static BridgeHttpFailureReason transportFailureForConformance(String id, String name) =>
+      BridgeHttpHostPolicy.transportFailure(name);
 
   static BridgeHttpNormalizedResponse normalizeResponseForConformance({
     required String id,
     required int status,
     required String? body,
     required int? retryAfterSeconds,
-  }) => BridgeHttpHostPolicy.normalizeResponse(
-    id: id,
-    status: status,
-    body: body,
-    retryAfterSeconds: retryAfterSeconds,
-  );
+  }) =>
+      BridgeHttpHostPolicy.normalizeResponse(id: id, status: status, body: body, retryAfterSeconds: retryAfterSeconds);
 
   /// Register the one-way channel. Must run BEFORE the surface loads, so the
   /// page's feature detection sees `window.<channel>` and picks bridge mode.
@@ -291,12 +258,7 @@ class BridgeHttpHost {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) {
-        return _fail(
-          controller,
-          id,
-          BridgeHttpFailureReason.shellError,
-          'malformed bridge http request',
-        );
+        return _fail(controller, id, BridgeHttpFailureReason.shellError, 'malformed bridge http request');
       }
       final rawId = decoded['id'];
       if (rawId is! String) {
@@ -308,25 +270,15 @@ class BridgeHttpHost {
       final method = decoded['method'];
       final path = decoded['path'];
       if (method is! String || path is! String) {
-        return _fail(
-          controller,
-          id,
-          BridgeHttpFailureReason.shellError,
-          'missing or unsupported method/path',
-        );
+        return _fail(controller, id, BridgeHttpFailureReason.shellError, 'missing or unsupported method/path');
       }
 
       final rawHeaders = decoded['headers'];
       final headers = rawHeaders is Map
           ? Map<String, String>.fromEntries(
               rawHeaders.entries
-                  .where(
-                    (entry) => entry.key is String && entry.value is String,
-                  )
-                  .map(
-                    (entry) =>
-                        MapEntry(entry.key as String, entry.value as String),
-                  ),
+                  .where((entry) => entry.key is String && entry.value is String)
+                  .map((entry) => MapEntry(entry.key as String, entry.value as String)),
             )
           : <String, String>{};
       final body = decoded['body'] is String ? decoded['body'] as String : null;
@@ -357,13 +309,8 @@ class BridgeHttpHost {
         addBody: (value) => request.add(utf8.encode(value)),
       );
 
-      final response = await request.close().timeout(
-        const Duration(seconds: 12),
-      );
-      final text = await response
-          .transform(utf8.decoder)
-          .join()
-          .timeout(const Duration(seconds: 12));
+      final response = await request.close().timeout(const Duration(seconds: 12));
+      final text = await response.transform(utf8.decoder).join().timeout(const Duration(seconds: 12));
 
       final retryAfter = response.headers.value(HttpHeaders.retryAfterHeader);
       final secs = retryAfter == null ? null : num.tryParse(retryAfter);
@@ -375,66 +322,30 @@ class BridgeHttpHost {
       );
       final out = BridgeHttpHostPolicy.responsePayload(normalized);
 
-      await _reply(controller, id, <String, dynamic>{
-        'ok': true,
-        'response': out,
-      });
+      await _reply(controller, id, <String, dynamic>{'ok': true, 'response': out});
     } on TimeoutException {
-      await _fail(
-        controller,
-        id,
-        BridgeHttpFailureReason.timeout,
-        'request timed out',
-      );
+      await _fail(controller, id, BridgeHttpFailureReason.timeout, 'request timed out');
     } on SocketException catch (e) {
       // Detail carries the OS error code only — never the URL or the token.
-      await _fail(
-        controller,
-        id,
-        BridgeHttpFailureReason.offline,
-        'socket error ${e.osError?.errorCode ?? -1}',
-      );
+      await _fail(controller, id, BridgeHttpFailureReason.offline, 'socket error ${e.osError?.errorCode ?? -1}');
     } on HttpException {
-      await _fail(
-        controller,
-        id,
-        BridgeHttpFailureReason.offline,
-        'http exception',
-      );
+      await _fail(controller, id, BridgeHttpFailureReason.offline, 'http exception');
     } catch (_) {
-      await _fail(
-        controller,
-        id,
-        BridgeHttpFailureReason.shellError,
-        'unexpected shell error',
-      );
+      await _fail(controller, id, BridgeHttpFailureReason.shellError, 'unexpected shell error');
     }
   }
 
-  Future<void> _fail(
-    WebViewController controller,
-    String id,
-    BridgeHttpFailureReason reason,
-    String detail,
-  ) {
+  Future<void> _fail(WebViewController controller, String id, BridgeHttpFailureReason reason, String detail) {
     return _reply(controller, id, <String, dynamic>{
       'ok': false,
-      'failure': <String, dynamic>{
-        'id': id,
-        'reason': reason.wire,
-        'detail': detail,
-      },
+      'failure': <String, dynamic>{'id': id, 'reason': reason.wire, 'detail': detail},
     });
   }
 
   /// Deliver exactly one reply per id by invoking the page's reply function.
   /// Both arguments are JSON-encoded, so nothing in a path or body can break out
   /// of the expression.
-  Future<void> _reply(
-    WebViewController controller,
-    String id,
-    Map<String, dynamic> reply,
-  ) async {
+  Future<void> _reply(WebViewController controller, String id, Map<String, dynamic> reply) async {
     if (!_replyGate.accept(id)) return;
     final js =
         '${BridgeHttpContract.replyFunction}('

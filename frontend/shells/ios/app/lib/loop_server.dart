@@ -15,11 +15,7 @@ class LoopServer {
 
   int get port => _server!.port;
 
-  static const _mime = {
-    'html': 'text/html; charset=utf-8',
-    'js': 'text/javascript',
-    'json': 'application/json',
-  };
+  static const _mime = {'html': 'text/html; charset=utf-8', 'js': 'text/javascript', 'json': 'application/json'};
 
   /// port 0 = ephemeral (OS-assigned) — used to demonstrate that the web
   /// origin, and therefore all storage, is keyed on the port.
@@ -39,8 +35,7 @@ class LoopServer {
       switch (path) {
         case '/probe/echo':
           req.response.headers.contentType = ContentType.json;
-          req.response.write(
-              '{"echo":true,"xProbe":"${req.headers.value('x-probe')}","sawCookie":"${cookie ?? ''}"}');
+          req.response.write('{"echo":true,"xProbe":"${req.headers.value('x-probe')}","sawCookie":"${cookie ?? ''}"}');
           await req.response.close();
         case '/probe/stream':
           await _stream(req);
@@ -69,24 +64,33 @@ class LoopServer {
     res.headers.contentType = ContentType('text', 'plain');
     var aborted = false;
     final t0 = DateTime.now();
-    unawaited(res.done.then(
-      (_) => debugPrint('[loop] stream res.done after ${DateTime.now().difference(t0).inMilliseconds}ms'),
-      onError: (Object e) {
-        aborted = true;
-        debugPrint('[loop] stream client ABORT observed after ${DateTime.now().difference(t0).inMilliseconds}ms: $e');
-      },
-    ));
+    unawaited(
+      res.done.then(
+        (_) => debugPrint('[loop] stream res.done after ${DateTime.now().difference(t0).inMilliseconds}ms'),
+        onError: (Object e) {
+          aborted = true;
+          debugPrint('[loop] stream client ABORT observed after ${DateTime.now().difference(t0).inMilliseconds}ms: $e');
+        },
+      ),
+    );
     for (var i = 1; i <= 10 && !aborted; i++) {
       res.write('chunk-$i@${DateTime.now().millisecondsSinceEpoch}\n');
       // flush() can hang forever on a dead peer — race it against a timeout so
       // we can report whether client aborts are actually observable server-side.
-      final flushed = await res.flush().then((_) => true).catchError((Object e) {
-        debugPrint('[loop] stream flush error at chunk $i: $e');
-        return false;
-      }).timeout(const Duration(seconds: 3), onTimeout: () {
-        debugPrint('[loop] stream flush TIMED OUT at chunk $i (peer gone, no error surfaced)');
-        return false;
-      });
+      final flushed = await res
+          .flush()
+          .then((_) => true)
+          .catchError((Object e) {
+            debugPrint('[loop] stream flush error at chunk $i: $e');
+            return false;
+          })
+          .timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              debugPrint('[loop] stream flush TIMED OUT at chunk $i (peer gone, no error surfaced)');
+              return false;
+            },
+          );
       if (!flushed) return;
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }
