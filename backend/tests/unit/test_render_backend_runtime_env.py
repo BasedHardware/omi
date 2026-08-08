@@ -170,6 +170,9 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     assert 'RAPID_API_KEY' not in notifications_job['secrets']
     assert 'PINECONE_API_KEY' not in notifications_job['secrets']
 
+
+def test_render_dev_emits_x_connector_sync_job_outputs(monkeypatch):
+    jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
     x_sync_job = jobs['x-connector-sync-job']
     # env_var bindings require the same GitHub env vars the deploy workflow passes.
     monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')

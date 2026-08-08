@@ -616,8 +616,7 @@ async def run_x_sync_job() -> Dict:
         await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)
 
     logger.info(
-        f'x_connector: sync job done — users={len(uids)} synced={synced} '
-        f'failed={failed} new_posts={new_posts}'
+        f'x_connector: sync job done — users={len(uids)} synced={synced} ' f'failed={failed} new_posts={new_posts}'
     )
     return {
         'users': len(uids),
@@ -644,6 +643,4 @@ def raise_if_x_sync_job_failed(summary: Dict) -> None:
     # Empty registry is a valid healthy run. Total failure across every connected
     # user means the sync contract did not complete even though listing worked.
     if users > 0 and synced == 0 and failed >= users:
-        raise RuntimeError(
-            f"x-connector-sync-job failed: synced 0/{users} connected user(s) (failed={failed})"
-        )
+        raise RuntimeError(f"x-connector-sync-job failed: synced 0/{users} connected user(s) (failed={failed})")
