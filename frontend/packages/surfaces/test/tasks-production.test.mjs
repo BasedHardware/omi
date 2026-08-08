@@ -64,6 +64,7 @@ test("keyboard shortcuts mutate only a selected task and are input-safe", async 
   assert.match(source, /event\.key === "Tab"/);
   assert.match(source, /Math\.max\(0, Math\.min\(3, selectedTask\.indentLevel/);
   assert.match(source, /closest\("input, textarea, select/);
+  assert.match(source, /select, button, a/);
   assert.match(source, /selectedTaskId/);
   // red-proof: removing input-safety would turn typing Meta/Control-N or Tab
   // inside the task editor into a destructive or structural mutation.
@@ -76,6 +77,9 @@ test("mutation failures stay localized and dead letters remain discardable", asy
   assert.match(source, /store\.discardDeadLetter\(letter\.opId\)/);
   assert.doesNotMatch(source, /letter\.failure|failure\.detail|letter\.summary/);
   assert.match(fixtures, /state === "operation-failed"/);
+  assert.match(fixtures, /refreshFailuresRemaining/);
+  assert.match(source, /return true/);
+  assert.match(source, /current\.trim\(\) === description/);
   // red-proof: rendering a dead-letter backend detail or swallowing a failed
   // fixture operation would make terminal failures invisible to the user.
 });
@@ -112,6 +116,9 @@ test("all task UI copy is translator-backed and desktop/mobile affordances exist
   assert.match(styles, /tasks-mobile-fab/);
   assert.match(styles, /task-card\.is-completed/);
   assert.match(styles, /task-card\.is-selected/);
+  assert.match(source, /data-indent-level=\{indentLevel\}/);
+  assert.match(styles, /task-card\.is-indent-3/);
+  assert.match(source, /confirm\(translate\("tasks\.deleteConfirm"\)\)/);
   assert.doesNotMatch(styles, /#(?:[0-9a-f]{3,8})\b/i);
   assert.doesNotMatch(styles, /@media\s*\(/);
   // red-proof: a raw JSX sentence or purple literal would bypass locale and

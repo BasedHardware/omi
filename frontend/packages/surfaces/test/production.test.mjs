@@ -61,6 +61,7 @@ test("conversation production slice stays within the ratified list/detail contra
   assert.match(source, /\{canPatch && <div className="conversation-detail-actions">/);
   const editableActions = source.match(/\{canPatch && <div className="conversation-detail-actions">([\s\S]*?)<\/div>\}/)?.[1] ?? "";
   assert.match(editableActions, /store\.delete\(conversation\.id\)/);
+  assert.match(editableActions, /confirm\(t\(locale, "conversations\.deleteConfirm"\)\)/);
   assert.match(source, /conversations\.discardedBody/);
   assert.match(source, /conversation\.starred \? t\(locale, "conversations\.unstar"\) : t\(locale, "conversations\.star"\)/);
   // red-proof: moving delete outside canPatch lets locked/discarded rows mutate
@@ -90,6 +91,15 @@ test("conversation rows are compact, day-grouped, and only attribute safe source
   // bringing back a wall-clock fixture makes the relevant assertion fail;
   // reversing the visible star label makes the row action contradict its aria
   // label and the current starred state.
+});
+
+test("conversation links inherit production colors instead of browser defaults", async () => {
+  const styles = await read("src/production/conversations.css");
+  const backLink = styles.match(/\.conversation-back\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+  assert.match(backLink, /color:\s*var\(--content-primary\)/);
+  assert.match(backLink, /text-decoration:\s*none/);
+  // red-proof: removing either declaration restores the browser-blue,
+  // underlined link that diverges from the native Ink surface.
 });
 
 test("production chrome preserves QA context while clearing fixture selection", async () => {

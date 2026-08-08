@@ -108,6 +108,7 @@ export function fixtureStore(state: FixtureState, now = FIXED_NOW): ProductionTa
     queue: queue(queuePhase),
   };
   let dead = state === "dead" ? [deadLetter(now)] : [];
+  let refreshFailuresRemaining = state === "operation-failed" ? 1 : 0;
   const listeners = new Set<() => void>();
   const notify = (): void => { listeners.forEach((listener) => listener()); };
 
@@ -116,7 +117,13 @@ export function fixtureStore(state: FixtureState, now = FIXED_NOW): ProductionTa
     status() { return status; },
     async deadLetters() { return dead; },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    async refresh() { notify(); },
+    async refresh() {
+      if (refreshFailuresRemaining > 0) {
+        refreshFailuresRemaining -= 1;
+        throw new Error("fixture refresh failed");
+      }
+      notify();
+    },
     async create(description, dueAt) {
       if (state === "operation-failed") throw new Error("fixture operation failed");
       const suffix = ["one", "two", "three", "four", "five"][rows.length] ?? "more";
