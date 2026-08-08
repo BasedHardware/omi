@@ -220,6 +220,7 @@ jobs:
               --current-pr "$PR_NUMBER" \
               --version "$VERSION" \
               --base main \
+              --repository "$GITHUB_REPOSITORY" \
               --search-head "release/windows-v" || \
               echo "Could not retire superseded sync PRs (non-fatal)."
           fi

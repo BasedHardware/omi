@@ -12,14 +12,18 @@ and never raise (the release is already published by the time this runs).
 
 Listing intentionally does **not** use `gh pr list --search 'head:…'`. That
 qualifier does not match same-repo `release/windows-v*` heads as a prefix (live
-queries return zero results), so candidates are listed openly for `main` and
-filtered locally with `head_ref.startswith(prefix)`.
+queries return zero results). It also does **not** use a single-page
+`gh pr list --limit 100`: this repo routinely has more than 100 open PRs against
+`main`, so a truncated first page would silently miss older superseded sync PRs.
+Candidates are fetched exhaustively via `gh api --paginate --slurp` and filtered
+locally with `head_ref.startswith(prefix)`.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -28,6 +32,8 @@ from pathlib import Path
 from typing import Sequence
 
 ROOT = Path(__file__).resolve().parents[2]
+
+LIST_PAGE_SIZE = 100
 
 GithubRunner = object  # gh subprocess seam for tests
 
@@ -50,43 +56,57 @@ def select_superseded(prs: Sequence[SyncPullRequest], current_number: int, prefi
     return [
         pr
         for pr in prs
-        if pr.number != current_number
-        and not pr.is_cross_repository
-        and pr.head_ref.startswith(prefix)
+        if pr.number != current_number and not pr.is_cross_repository and pr.head_ref.startswith(prefix)
     ]
 
 
-def list_open_prs_args(*, base: str) -> list[str]:
-    """Build `gh pr list` args for candidate sync PRs.
+def list_open_prs_args(*, repository: str, base: str, per_page: int = LIST_PAGE_SIZE) -> list[str]:
+    """Build exhaustive `gh api` args for open PRs targeting ``base``.
 
-    Do not add `--search head:…` here — GitHub's `head:` search qualifier does
-    not treat the value as a branch-name prefix for same-repo PRs, so that path
-    silently returns an empty set and the retirement step becomes a no-op.
+    Do not add `gh pr list --search head:…` — GitHub's `head:` search qualifier
+    does not treat the value as a branch-name prefix for same-repo PRs.
+    Do not use a single-page `gh pr list --limit 100` — open PR volume against
+    ``main`` can exceed one page, and a truncated list would miss older sync PRs.
     """
     return [
-        "pr",
-        "list",
-        "--base",
-        base,
-        "--state",
-        "open",
-        "--json",
-        "number,headRefName,isCrossRepository",
-        "--limit",
-        "100",
+        "api",
+        "--paginate",
+        "--slurp",
+        f"repos/{repository}/pulls?state=open&base={base}&per_page={per_page}",
     ]
 
 
 def parse_listed_prs(stdout: str) -> list[SyncPullRequest]:
-    raw = json.loads(stdout)
-    return [
-        SyncPullRequest(
-            number=item["number"],
-            head_ref=item["headRefName"],
-            is_cross_repository=bool(item.get("isCrossRepository", False)),
-        )
-        for item in raw
-    ]
+    """Parse `gh api --paginate --slurp` output (array of pages of pulls)."""
+    pages = json.loads(stdout)
+    if not isinstance(pages, list):
+        raise TypeError("expected a JSON array of pull pages")
+
+    prs: list[SyncPullRequest] = []
+    for page in pages:
+        if not isinstance(page, list):
+            raise TypeError("expected each page to be a JSON array of pulls")
+        for item in page:
+            if not isinstance(item, dict):
+                raise TypeError("expected each pull to be a JSON object")
+            head = item.get("head") or {}
+            base = item.get("base") or {}
+            if not isinstance(head, dict) or not isinstance(base, dict):
+                raise TypeError("expected pull head/base objects")
+            head_repo = head.get("repo") if isinstance(head.get("repo"), dict) else None
+            base_repo = base.get("repo") if isinstance(base.get("repo"), dict) else None
+            head_full = head_repo.get("full_name") if head_repo else None
+            base_full = base_repo.get("full_name") if base_repo else None
+            # Missing head repo (deleted fork) is treated as cross-repo so we never close it.
+            is_cross = head_full is None or base_full is None or head_full != base_full
+            prs.append(
+                SyncPullRequest(
+                    number=int(item["number"]),
+                    head_ref=str(head["ref"]),
+                    is_cross_repository=is_cross,
+                )
+            )
+    return prs
 
 
 def _run_gh(args: Sequence[str], *, gh: str = "gh") -> subprocess.CompletedProcess[str]:
@@ -104,20 +124,21 @@ def retire(
     version: str,
     base: str,
     search_head: str,
+    repository: str,
     gh: str = "gh",
 ) -> list[SyncPullRequest]:
-    """List open PRs against ``base`` and close superseded sync PRs.
+    """List all open PRs against ``base`` and close superseded sync PRs.
 
     Returns the list of PRs that were closed. All gh failures are swallowed so a
     cleanup problem can never block the release workflow.
     """
-    listed = _run_gh(list_open_prs_args(base=base), gh=gh)
+    listed = _run_gh(list_open_prs_args(repository=repository, base=base), gh=gh)
     if listed.returncode:
         return []
 
     try:
         prs = parse_listed_prs(listed.stdout)
-    except (json.JSONDecodeError, KeyError, TypeError):
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return []
 
     to_close = select_superseded(prs, current_number, search_head)
@@ -160,12 +181,45 @@ def _self_test(gh: str) -> int:
         print("self-test failed: current or unrelated PR was not retained", file=sys.stderr)
         return 1
 
-    list_args = list_open_prs_args(base="main")
+    list_args = list_open_prs_args(repository="BasedHardware/omi", base="main")
     if "--search" in list_args or any(a.startswith("head:") for a in list_args):
         print(f"self-test failed: listing still uses head-search: {list_args}", file=sys.stderr)
         return 1
-    if "--base" not in list_args or "main" not in list_args:
-        print(f"self-test failed: listing missing base filter: {list_args}", file=sys.stderr)
+    if "--paginate" not in list_args or "--slurp" not in list_args:
+        print(f"self-test failed: listing is not exhaustive: {list_args}", file=sys.stderr)
+        return 1
+    if not any("per_page=" in a for a in list_args):
+        print(f"self-test failed: listing missing per_page: {list_args}", file=sys.stderr)
+        return 1
+
+    # Truncation guard: a single full page must not be treated as the complete set.
+    page = [
+        {
+            "number": i,
+            "head": {"ref": f"release/windows-v1.0.{i}", "repo": {"full_name": "BasedHardware/omi"}},
+            "base": {"repo": {"full_name": "BasedHardware/omi"}},
+        }
+        for i in range(1, LIST_PAGE_SIZE + 1)
+    ]
+    if len(parse_listed_prs(json.dumps([page]))) != LIST_PAGE_SIZE:
+        print("self-test failed: single-page parse length mismatch", file=sys.stderr)
+        return 1
+    two_pages = parse_listed_prs(
+        json.dumps(
+            [
+                page,
+                [
+                    {
+                        "number": 999,
+                        "head": {"ref": "feat/x", "repo": {"full_name": "BasedHardware/omi"}},
+                        "base": {"repo": {"full_name": "BasedHardware/omi"}},
+                    }
+                ],
+            ]
+        )
+    )
+    if len(two_pages) != LIST_PAGE_SIZE + 1:
+        print("self-test failed: multi-page parse did not flatten pages", file=sys.stderr)
         return 1
 
     if shutil.which(gh) is None:
@@ -178,6 +232,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--current-pr", type=int)
     parser.add_argument("--version")
     parser.add_argument("--base", default="main")
+    parser.add_argument(
+        "--repository",
+        default=os.environ.get("GITHUB_REPOSITORY", ""),
+        help="owner/name for gh api pulls listing (defaults to GITHUB_REPOSITORY)",
+    )
     parser.add_argument(
         "--search-head",
         default="release/windows-v",
@@ -192,12 +251,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.current_pr is None or args.version is None:
         parser.error("--current-pr and --version are required unless --self-test is used")
+    if not args.repository:
+        parser.error("--repository is required (or set GITHUB_REPOSITORY)")
 
     retire(
         current_number=args.current_pr,
         version=args.version,
         base=args.base,
         search_head=args.search_head,
+        repository=args.repository,
         gh=args.gh,
     )
     return 0
