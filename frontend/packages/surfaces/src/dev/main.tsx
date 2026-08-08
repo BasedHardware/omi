@@ -18,6 +18,7 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { realEnv } from "@omi-core/kernel";
+import { openOnDiskFallbackSink } from "@omi-core/sync";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
 import { ConversationsStore, FoldersStore, MemoriesStore, TasksStore } from "@omi-core/domain";
 import { ConversationsSurface } from "../conversations/ConversationsSurface.js";
@@ -103,7 +104,10 @@ function DevApp(): React.JSX.Element {
     const http = BRIDGE_MODE
       ? bridgeHttpClient()
       : devHttpClient(baseUrl, () => localStorage.getItem(LS_TOKEN) ?? "");
-    const env = realEnv();
+    // COORD-degradation-is-unobservable: this is a dev/QA build, so it gets
+    // the on-disk adapter — an overnight degradation should still be here
+    // in the morning, not lost when the tab closes.
+    const env = realEnv(await openOnDiskFallbackSink(bridge));
     setStores({
       tasks: await TasksStore.open(bridge, env, http),
       memories: await MemoriesStore.open(bridge, env, http),

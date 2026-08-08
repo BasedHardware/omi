@@ -167,6 +167,11 @@ export class Outbox {
             recordId: op.recordId,
             domain: op.domain,
             summary: op.summary,
+            // The full serialized domain op, not just its summary — the
+            // export-then-exclude disposition (COORD-cross-generation-writes)
+            // requires reconstructing the user's edit by hand, and a summary
+            // cannot do that.
+            payload: op.payload,
             failure: eff.outcome.failure,
             deadAt: eff.outcome.deadAt,
           });
@@ -174,10 +179,21 @@ export class Outbox {
         }
         return;
       }
-      case "telemetry":
-        // Telemetry sink binding arrives with the shell integration; the
-        // effect exists so tests can assert emission today.
+      case "telemetry": {
+        // COORD-degradation-is-unobservable: this used to be `return;` —
+        // sound telemetry emitted into a sink nothing bound. `Env.fallbackSink`
+        // is that binding now. `from`/`to` are derived mechanically (not a
+        // hand-maintained case per path) because the ruling is explicit:
+        // do not design a failure taxonomy up front, just bind the channel.
+        this.env.fallbackSink.record({
+          path: eff.path,
+          from: "outbox",
+          to: eff.path.split(".").at(-1) ?? eff.path,
+          detail: eff.detail,
+          at: this.env.now(),
+        });
         return;
+      }
     }
   }
 

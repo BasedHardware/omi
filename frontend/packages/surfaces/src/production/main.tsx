@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { t } from "@omi-core/i18n";
 import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
+import { openOnDiskFallbackSink } from "@omi-core/sync";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
 import { createPlatformProductionStoreFactory, parseGenerationSelectionFromEntries, resolveGenerationSelection } from "./ProductionStores.js";
 import { generationMismatch, resolveProductionRoute } from "./production-routing.js";
@@ -273,7 +274,10 @@ if (query.get("lab") === "1") {
       try {
         const bridge = await openWebStorageBridge(profile);
         const http = bridgeHttpClient();
-        const env = realEnv();
+        // COORD-degradation-is-unobservable: dev/QA builds get the on-disk
+        // adapter, not the in-memory one — a degradation from an overnight
+        // run must still be there in the morning.
+        const env = realEnv(await openOnDiskFallbackSink(bridge));
         // One factory for every route. `PlatformProductionStoreFactory` extends the legacy
         // one, so legacy domains behave identically whatever the selection says — which is
         // what lets Memories move generation without Tasks/Conversations/Folders moving.
