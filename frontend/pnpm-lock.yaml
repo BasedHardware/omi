@@ -62,6 +62,19 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/dev-recall-stub:
+    dependencies:
+      '@omi-core/ratified-contracts':
+        specifier: workspace:*
+        version: link:../../contracts/ratified
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/domain:
     dependencies:
       '@omi-core/adapters-legacy':

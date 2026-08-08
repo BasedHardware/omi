@@ -10,11 +10,13 @@ type JsonSchema = Record<string, unknown> & {
   type?: string | string[];
   const?: unknown;
   enum?: unknown[];
+  oneOf?: JsonSchema[];
   required?: string[];
   properties?: Record<string, JsonSchema>;
   items?: JsonSchema;
   additionalProperties?: boolean;
   minimum?: number;
+  minLength?: number;
   format?: string;
   "x-omi-opaque"?: boolean;
   "x-omi-open-enum"?: boolean;
@@ -81,6 +83,13 @@ export class Validator {
     const errors: string[] = [];
     if (s["x-omi-opaque"]) return errors;
 
+    if (Array.isArray(s.oneOf) && s.oneOf.length > 0) {
+      const branchErrors = s.oneOf.map((branch) => this.validate(branch, value, path));
+      if (branchErrors.some((errs) => errs.length === 0)) return errors;
+      errors.push(`${path}: matched no oneOf branch`);
+      return errors;
+    }
+
     if (s.const !== undefined && value !== s.const) {
       errors.push(`${path}: expected const ${JSON.stringify(s.const)}, got ${JSON.stringify(value)}`);
       return errors;
@@ -102,6 +111,9 @@ export class Validator {
 
     if (typeof value === "number" && s.minimum !== undefined && value < s.minimum) {
       errors.push(`${path}: ${value} < minimum ${s.minimum}`);
+    }
+    if (typeof value === "string" && s.minLength !== undefined && value.length < s.minLength) {
+      errors.push(`${path}: string length ${value.length} < minLength ${s.minLength}`);
     }
     if (typeof value === "string" && s.format === "uuid" && !UUID_RE.test(value)) {
       errors.push(`${path}: ${JSON.stringify(value)} is not a uuid`);
