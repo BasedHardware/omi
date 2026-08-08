@@ -269,7 +269,7 @@ test('day-scoped Rewind: browse, calendar, search results, drill-down, empty day
       (base) => window.omi.rewindSetEmbedSession({ desktopApiBase: base, token: 'e2e-token' }),
       stub.base
     )
-  const input = rw.locator('input[placeholder="Search what was on screen…"]')
+  const input = rw.locator('[data-testid="rewind-search"]')
   // Phase 1 (keyword) is immediate; phase 2 (semantic recall) arrives out-of-band.
   // Re-issue the query each iteration so a fresh phase-2 fires for the newest search
   // sequence, until BOTH the keyword group and the semantic "Related" group render.

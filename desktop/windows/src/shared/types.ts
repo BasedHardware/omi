@@ -127,7 +127,12 @@ export type ChatMessage = {
  * See lib/sync/outbox.ts for the transition rules and dedupe strategy.
  */
 export type ConversationSyncState =
-  'local_only' | 'pending' | 'posting' | 'done' | 'failed' | 'unconfirmed'
+  | 'local_only'
+  | 'pending'
+  | 'posting'
+  | 'done'
+  | 'failed'
+  | 'unconfirmed'
 
 /** One transcript segment in the `/v1/conversations/from-segments` request shape
  * (snake_case matches the wire verbatim). `start`/`end` are WALL-CLOCK
@@ -989,14 +994,14 @@ export type OmiBridgeApi = {
   onRewindCaptured: (cb: () => void) => () => void
   /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
    *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
-  rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
+  rewindSearch: (query: string) => Promise<{ groups: RewindSearchGroup[]; normalizedQuery: string }>
   /** Phase 2: the same result list with semantic hits merged in, delivered if and
    *  when the embedding round-trip lands. Never fires when semantic search is
    *  unavailable (signed out, backend down, nothing indexed) — the keyword results
    *  from `rewindSearch` simply stand. Callers must ignore a payload whose `query`
    *  is not the one they are currently showing. */
   onRewindSearchResults: (
-    cb: (r: { query: string; groups: RewindSearchGroup[] }) => void
+    cb: (r: { query: string; normalizedQuery: string; groups: RewindSearchGroup[] }) => void
   ) => () => void
   /** Relay the Firebase session to the main-process Rewind embedding indexer
    *  (Track 4); null on sign-out. Without it, semantic search stays inert and
@@ -1709,7 +1714,13 @@ export type MemoryExportResult = {
 }
 
 export type IndexedFileType =
-  'document' | 'code' | 'image' | 'media' | 'archive' | 'application' | 'other'
+  | 'document'
+  | 'code'
+  | 'image'
+  | 'media'
+  | 'archive'
+  | 'application'
+  | 'other'
 
 export type IndexedFileRecord = {
   path: string
@@ -1803,7 +1814,14 @@ export type RebuildResult = {
 // the macOS-parity local graph synthesized from indexed_files + memories and
 // consumed by the chat pre-step. Never conflate the two mechanisms.
 export type LocalKGNodeType =
-  'project' | 'app' | 'technology' | 'person' | 'org' | 'interest' | 'file_group' | 'card' // background-synthesized natural-language overview served to the chat floor
+  | 'project'
+  | 'app'
+  | 'technology'
+  | 'person'
+  | 'org'
+  | 'interest'
+  | 'file_group'
+  | 'card' // background-synthesized natural-language overview served to the chat floor
 
 export type LocalKGNode = {
   id: string // `${slug(label)}:${nodeType}` — stable across re-synthesis
