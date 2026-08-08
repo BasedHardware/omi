@@ -1,6 +1,9 @@
 {
   "schemaVersion": 1,
-  "ruling": "COORD-write-path-rulings",
+  "ruling": [
+    "COORD-write-path-rulings",
+    "COORD-fable-rulings-wave2"
+  ],
   "route": "/v1/{domain}/ops",
   "writableDomains": [
     "tasks"
@@ -72,13 +75,13 @@
       "bodyRatified": true
     },
     {
-      "outcome": "maintenance",
+      "outcome": "control_unavailable",
+      "kind": "availability",
       "status": 503,
-      "body": null,
-      "kind": "error",
-      "bodyRatified": false,
-      "servingSideBody": "{\"error\":\"maintenance\",\"refusal_outcome\":\"control_unavailable\"}",
-      "note": "The 503 body is NOT ratified. It is spelled by the serving side in platform/apps/service/control/fence-http.ts and carries a live escalation to fable (data/run-2026-08-08c/blocked/EPOCH-refusal-wire-values.md section 1) about whether refusal_outcome is a five-value enum. servingSideBody records what the server emits TODAY so both sides still agree on observed behaviour; body stays null so no ruling is pre-empted. Client obligation is unaffected either way: 503 is backpressure, never a dead letter."
+      "body": "{\"error\":\"maintenance\",\"refusal_outcome\":\"control_unavailable\"}",
+      "bodyRatified": true,
+      "retryAfterSeconds": 60,
+      "note": "RATIFIED by COORD-fable-rulings-wave2 W1 as an AVAILABILITY SIGNAL, not a fifth authorization outcome. ADR-010 section 3's four refusal outcomes are statements about the caller's authority; this one says the server does not know and therefore does not serve. The client obligation is refresh control state and drain where authority lives \u2014 not retry in place, and never a dead letter. retry-after is a fixed constant and may not vary with account state; the active epoch is never in the body."
     }
   ]
 }

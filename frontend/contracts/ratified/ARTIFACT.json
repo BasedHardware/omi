@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.4.0"
+    "version": "0.5.0"
   },
   "compatibility": "breaking",
-  "provenanceSha256": "bb1654a0aaf69073b6cce99038bc7d41e992eb860252ef024309c6b60e05b17e",
-  "sourceDigest": "a183348c02f3aab5730f50795b2dccd9b24cc6ceab689132fd8b166c5540ea5b",
-  "tarballSha256": "a03fab9c7a386af69246a0f77467cbc221fc08e2b7b62a1645f01973a5834306",
+  "provenanceSha256": "e377ce50c15e81addde711e46efa1e450ae26e0632ee766e43017935489b9145",
+  "sourceDigest": "d332c562c4a091368da502e52d231c9b6a7a174fe0c5086be70291a2c0a3ecad",
+  "tarballSha256": "99df48efaca9443b5c401cd0b7baa986b09c78cf027aad54db12e3674508819c",
   "files": [
     "package/PROVENANCE.json",
     "package/README.md",

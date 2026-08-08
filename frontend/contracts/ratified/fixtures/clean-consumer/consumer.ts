@@ -23,6 +23,9 @@ import {
 } from "@omi-core/ratified-contracts/recall/trace";
 import type { RecallTraceV1 } from "@omi-core/ratified-contracts/recall/trace";
 import {
+  CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  WRITE_AVAILABILITY,
+  readWriteAvailabilitySignal,
   isTrustedWriteOpEnvelope,
   isWritableDomain,
   mintWriteId,
@@ -255,9 +258,18 @@ if (staleEpochOutcome !== "stale_epoch") throw new Error("stale_epoch must be re
 if (readWriteRefusalOutcome(WRITE_ERRORS.conflict.status, WRITE_ERRORS.conflict.body) !== null) {
   throw new Error("conflict must never read as a refusal outcome — it is not one");
 }
-// The 503 body is under escalation and is deliberately unratified; a consumer
-// must be able to see that as a value rather than discovering an empty string.
-if (WRITE_ERRORS.maintenance.body !== null) throw new Error("the 503 body must stay unratified");
+// The fifth wire value, ratified by COORD-fable-rulings-wave2 W1 as an
+// AVAILABILITY signal. A consumer must reach it through its own reader — the
+// refusal reader must not answer it, or the framing the ruling bound is lost.
+if (readWriteAvailabilitySignal(503, WRITE_AVAILABILITY.control_unavailable.body) !== "control_unavailable") {
+  throw new Error("control_unavailable must be readable off its own body");
+}
+if (readWriteRefusalOutcome(503, WRITE_AVAILABILITY.control_unavailable.body) !== null) {
+  throw new Error("control_unavailable is not one of ADR-010 §3's four authorization outcomes");
+}
+if (WRITE_AVAILABILITY.control_unavailable.retryAfterSeconds !== CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS) {
+  throw new Error("retry-after must be the fixed constant");
+}
 
 const sampleEnvelope: WriteOpEnvelope | null = parseWriteOpEnvelopeJson(
   JSON.stringify({

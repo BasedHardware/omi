@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.4.0"
+    "version": "0.5.0"
   },
   "repository": "BasedHardware/omi",
   "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
@@ -18,7 +18,8 @@
     "FEAT-AUTH-011",
     "COORD-contract-evolution-policy",
     "COORD-write-path-rulings",
-    "COORD-cross-generation-writes"
+    "COORD-cross-generation-writes",
+    "COORD-fable-rulings-wave2"
   ],
   "compiler": {
     "name": "typescript",
@@ -27,13 +28,13 @@
   "inputs": [
     {
       "path": "fixtures/clean-consumer/conformance.mjs",
-      "sha256": "4ca23f2be034042a83d4bef34683798aa745582eb803a82c9d0a9eab073b67ff",
-      "bytes": 7062
+      "sha256": "2a875ed88b27d0a5275db8adfc7797f60ad56396d3793dbb18d6724f00d67a6d",
+      "bytes": 7325
     },
     {
       "path": "fixtures/clean-consumer/consumer.ts",
-      "sha256": "f5d92b1d7ed42d33ecc5bb0bd4afc6005dcb147ea061d56aa582efe3e362e7fc",
-      "bytes": 12796
+      "sha256": "5dfb9e5f3124fb832d6ed48a024252574c06ca5837525bb207bbee301a9f04f4",
+      "bytes": 13416
     },
     {
       "path": "fixtures/clean-consumer/tsconfig.json",
@@ -77,17 +78,17 @@
     },
     {
       "path": "fixtures/write-ops-conformance.json",
-      "sha256": "738dba2a57a5fbcaa82b9d1e865553e3b0d7bb51fdf8d079f60997191f9cfd84",
-      "bytes": 11602
+      "sha256": "3f6f0a4c72f7cf828377651ea31e1fbfa59eb9b436e5c6fd2d7b9d1500330b44",
+      "bytes": 11591
     },
     {
       "path": "fixtures/write-ops-outcomes.json",
-      "sha256": "96fd584ae4ef08aa9443d6ab0bbf3f5c254809d10b5897c5fcb0842bef6247ac",
-      "bytes": 2568
+      "sha256": "efe14a7e91cd04d29cc2e0700b1597bab8367e502ee1cdc540aa87787a44d963",
+      "bytes": 2620
     },
     {
       "path": "package.json",
-      "sha256": "272e61a40d1a2dce980d490f06c88b337b3a262f96f4d6ba7c41534fe38d65af",
+      "sha256": "e0812801bc82b078d93acdc28da07664b56e5822dec0e56d6ba4f64e9c8344ff",
       "bytes": 2132
     },
     {
@@ -112,13 +113,13 @@
     },
     {
       "path": "scripts/package-boundary.mjs",
-      "sha256": "dc6a414a4c7b67a2b8b14f4672ca7761db8d138777d3ee30353594ddf725e8ad",
-      "bytes": 10085
+      "sha256": "25020e11746d9b9c7e7d21c5b9f786f6eea4f63e793781479128df5bb773e0c9",
+      "bytes": 10258
     },
     {
       "path": "scripts/provenance.mjs",
-      "sha256": "28020bfb59b003485fe7e85fa599d9063973769c70fbcf946e14317f8fd18163",
-      "bytes": 3742
+      "sha256": "3531ba860f49456073b1bb73b984d6a76864964a9db0692491cbec0047cbd8c7",
+      "bytes": 4005
     },
     {
       "path": "scripts/verify-ci.mjs",
@@ -147,13 +148,13 @@
     },
     {
       "path": "src/write/ops.ts",
-      "sha256": "b46d6de9daeb02aeacc01d1b9918055edfb81a5aafdfc57f63258b58370a2d0a",
-      "bytes": 17252
+      "sha256": "3dc0cf2e7e89b54773288135afcb7fcae9ff26c3f36380714695b3a6a52c9c75",
+      "bytes": 19607
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "0d46dfaf98ffa2c8efb321cd1af32386f828c6c9233c78116b79e2eeb604ffd6",
-      "bytes": 21951
+      "sha256": "68f887f6dc6c071728356abb6ffebd8c8aefe7eb3bc31fb8eec275502fb35f3a",
+      "bytes": 23776
     },
     {
       "path": "tsconfig.base.json",
@@ -166,5 +167,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "a183348c02f3aab5730f50795b2dccd9b24cc6ceab689132fd8b166c5540ea5b"
+  "sourceDigest": "d332c562c4a091368da502e52d231c9b6a7a174fe0c5086be70291a2c0a3ecad"
 }

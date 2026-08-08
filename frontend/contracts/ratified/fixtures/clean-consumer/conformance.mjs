@@ -9,7 +9,9 @@ import {
 import { isTrustedRecallTraceData, parseRecallTraceJson } from "@omi-core/ratified-contracts/recall/trace";
 import {
   parseWriteOpEnvelopeJson,
+  readWriteAvailabilitySignal,
   readWriteRefusalOutcome,
+  WRITE_AVAILABILITY,
   WRITE_REFUSALS,
 } from "@omi-core/ratified-contracts/write/ops";
 
@@ -80,9 +82,12 @@ assert.equal(inheritedGetterCalls, 0);
 // bytes a backend would install, and rule 15 is about the real shape.
 const writeOpsSchema = await fixture("write-ops-outcomes.json");
 for (const row of writeOpsSchema.outcomes) {
-  if (row.kind === "error" && row.bodyRatified === false) {
-    assert.equal(row.body, null, `${row.outcome} declares an unratified body`);
-    assert.equal(typeof row.servingSideBody, "string", `${row.outcome} records the serving side's spelling`);
+  if (row.kind === "availability") {
+    assert.equal(WRITE_AVAILABILITY[row.outcome].status, row.status, `${row.outcome} status`);
+    assert.equal(WRITE_AVAILABILITY[row.outcome].body, row.body, `${row.outcome} body`);
+    assert.equal(readWriteAvailabilitySignal(row.status, row.body), row.outcome, `${row.outcome} round trip`);
+    assert.equal(readWriteRefusalOutcome(row.status, row.body), null, `${row.outcome} is not a refusal outcome`);
+    continue;
   }
   if (row.kind !== "refusal") continue;
   assert.equal(WRITE_REFUSALS[row.outcome].status, row.status, `${row.outcome} status`);

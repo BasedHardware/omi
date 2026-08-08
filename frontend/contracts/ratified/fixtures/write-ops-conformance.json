@@ -150,10 +150,10 @@
     }
   },
   {
-    "name": "migration window: backpressure, recorded nowhere",
-    "wireOutcome": "maintenance",
-    "ruling": "B2",
-    "note": "Backpressure, recorded nowhere, and the client must NOT dead-letter it. The BODY here is the serving side's current spelling, not a ratified value \u2014 see the maintenance row in write-ops-outcomes.json. The client classification (retryable) is identical under either outcome of the pending escalation, which is why this row can exist while the body cannot be fixed.",
+    "name": "migration window or unknown control state: backpressure, recorded nowhere",
+    "wireOutcome": "control_unavailable",
+    "ruling": "W1",
+    "note": "Not evidence. Nothing is persisted and the client must NOT dead-letter it. Ratified as an availability signal by COORD-fable-rulings-wave2 W1: a bare 503 would make a client retry in place against a platform that, after a rollback, can never accept \u2014 while the edit's real home is legacy.",
     "path": "/v1/tasks/ops",
     "requestBody": "{\"write_id\":\"fca55726028447cb383216e7f3ffe6eca1bdfcebd1ea9f1aab142bb9538d2152\",\"account_epoch\":7,\"domain\":\"tasks\",\"op\":{\"op\":\"patch\",\"record_id\":\"task-9f21\",\"patch\":{\"done\":true}}}",
     "envelopeAccepted": true,
@@ -164,7 +164,9 @@
     "clientFailure": {
       "kind": "retryable"
     },
-    "bodyRatified": false
+    "responseHeaders": {
+      "retry-after": "60"
+    }
   },
   {
     "name": "write_id is not 64 lowercase hex",
