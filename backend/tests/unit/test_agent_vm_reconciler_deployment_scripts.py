@@ -112,6 +112,7 @@ def test_desktop_workflows_guard_active_pointer_reads_writes_and_cleanup_rollbac
         assert "gcloud storage objects describe" in text
         assert "NOT_FOUND" in text
         assert "--if-generation-match" in text
+        assert "--cache-control='no-store,max-age=0'" in text
         assert "agent-vm-active-activated.generation" in text
         assert "DESKTOP_BACKEND_PROMOTION_COMPLETED=true" in text
         assert "env.DESKTOP_BACKEND_PROMOTION_COMPLETED != 'true'" in text
@@ -332,6 +333,7 @@ def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(t
     assert 'project" != "based-hardware-dev"' in text
     assert "gcloud storage cp --no-clobber" in text
     assert "--if-generation-match" in text
+    assert "--cache-control='no-store,max-age=0'" in text
     assert "cmp -s" in text
 
     refused = subprocess.run(["bash", str(script)], cwd=REPO_DIR, text=True, capture_output=True, check=False)
