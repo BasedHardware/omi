@@ -149,10 +149,81 @@ function resolveCoreRoot() {
 }
 
 export const WORKSPACE_ROOT = resolveWorkspaceRoot();
+
+const CANONICAL_CORE = join(WORKSPACE_ROOT, "core-foundation");
+const CANONICAL_PLATFORM = join(WORKSPACE_ROOT, "platform");
+
 export const REPO_PATHS = Object.freeze({
   "core-foundation": resolveCoreRoot(),
-  platform: process.env.OMI_PLATFORM_ROOT ?? join(WORKSPACE_ROOT, "platform"),
+  platform: process.env.OMI_PLATFORM_ROOT ?? CANONICAL_PLATFORM,
 });
+
+/**
+ * ── CROSS-TREE MEASUREMENT MUST BE DECLARED, NEVER DEFAULTED ────────────────
+ *
+ * The rules above resolve the core side from git, so a lane worktree measures
+ * itself. Platform has no such signal — the runner does not live there — so with
+ * `OMI_PLATFORM_ROOT` unset it falls back to the shared checkout. Both halves
+ * then exist, the preflight is satisfied, every command runs, and **L2 goes
+ * green while measuring a platform tree containing none of your diff.**
+ *
+ * That happened within hours of the resolution fix landing. The WRITE lane's
+ * receipt read `platform … 57c4fdf64d dirty=False` while its actual platform
+ * half was 21 uncommitted files including a re-vendored contract tarball; re-run
+ * with the variable set, the same lane reported `dirty=True` and 698 tests
+ * instead of 634. Nothing was wrong with any measurement — the conclusion was
+ * wrong because two of the measurements were about different artifacts, which is
+ * the sentence at the top of this file, happening inside the harness it guards.
+ *
+ * **This is strictly worse than the failure it replaced.** `spawn bun ENOENT`
+ * was loud and unmissable; two lanes hit it and neither could believe it. A
+ * green L2 is believable, and it is believed.
+ *
+ * So the pairing must be stated. Refusing outright would be wrong — a core-only
+ * diff legitimately measures against the shared platform, and that is exactly
+ * what the fix for the ENOENT bug did. What is banned is doing it *by omission*,
+ * where the pairing is a fallback nobody chose and nobody sees.
+ */
+export function assertCrossTreePairingIsDeclared() {
+  const coreIsWorktree = REPO_PATHS["core-foundation"] !== CANONICAL_CORE;
+  const platformIsWorktree = REPO_PATHS.platform !== CANONICAL_PLATFORM;
+  if (!coreIsWorktree && !platformIsWorktree) return; // ordinary shared run
+
+  const undeclared = [];
+  if (!process.env.OMI_CORE_ROOT) {
+    undeclared.push({
+      variable: "OMI_CORE_ROOT",
+      resolved: REPO_PATHS["core-foundation"],
+      shared: CANONICAL_CORE,
+    });
+  }
+  if (!process.env.OMI_PLATFORM_ROOT) {
+    undeclared.push({
+      variable: "OMI_PLATFORM_ROOT",
+      resolved: REPO_PATHS.platform,
+      shared: CANONICAL_PLATFORM,
+    });
+  }
+  if (undeclared.length === 0) return;
+
+  const lines = undeclared.map(
+    ({ variable, resolved, shared }) =>
+      `  ${variable} is unset, so this side resolved to ${resolved}` +
+      (resolved === shared ? "  <- the SHARED checkout, not your lane" : ""),
+  );
+  throw new Error(
+    "provenance: this run measures one lane worktree and one other tree, and the\n" +
+      "pairing was never declared. A pass would be a true statement about a tree\n" +
+      "that may contain none of your diff.\n\n" +
+      `${lines.join("\n")}\n\n` +
+      "  Declare BOTH sides. Point each at your worktree, or at the shared checkout\n" +
+      "  to say plainly that your diff does not touch it:\n\n" +
+      `    export OMI_CORE_ROOT=${REPO_PATHS["core-foundation"]}\n` +
+      `    export OMI_PLATFORM_ROOT=${REPO_PATHS.platform}\n\n` +
+      "  Those values are what this run would have used. Exporting them changes\n" +
+      "  nothing except that you chose them.",
+  );
+}
 
 /**
  * Say which repo is missing and which variable names it. The failure this
