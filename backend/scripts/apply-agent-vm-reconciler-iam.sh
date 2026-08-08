@@ -70,7 +70,7 @@ gcloud projects add-iam-policy-binding "$project" \
 # omi-agent- prefix applies to boot, state, and temporary clone disks.
 gcloud projects add-iam-policy-binding "$project" \
   --member="serviceAccount:${gsa}" --role="$role" \
-  --condition="title=Agent VM reconciler disk scope,description=Boot, state, and temporary clone disks for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
+  --condition="title=Agent VM reconciler disk scope,description=Boot disk reads for omi-agent instances in the Agent VM zone,expression=resource.type == 'compute.googleapis.com/Disk' && resource.name.startsWith('projects/${project}/zones/${zone}/disks/omi-agent-')"
 # An explicit dev migration may create a replacement only from the immutable
 # Agent VM image family.  Image use is evaluated against the Image resource,
 # not the instance/disk scopes above.

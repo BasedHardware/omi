@@ -169,7 +169,19 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     command_log = tmp_path / "gcloud.log"
     fake_gcloud = fake_bin / "gcloud"
     fake_gcloud.write_text(
-        "#!/usr/bin/env bash\n" "printf '%s\\n' \"$*\" >> \"$FAKE_GCLOUD_LOG\"\n",
+        "#!/usr/bin/env bash\n"
+        "for arg in \"$@\"; do\n"
+        "  case \"$arg\" in\n"
+        "    --condition=title=*)\n"
+        "      IFS=',' read -r -a fields <<< \"${arg#--condition=}\"\n"
+        "      for field in \"${fields[@]}\"; do\n"
+        "        key=\"${field%%=*}\"\n"
+        "        case \"$key\" in title|description|expression) ;; *) exit 64 ;; esac\n"
+        "      done\n"
+        "      ;;\n"
+        "  esac\n"
+        "done\n"
+        "printf '%s\\n' \"$*\" >> \"$FAKE_GCLOUD_LOG\"\n",
         encoding="utf-8",
     )
     fake_gcloud.chmod(0o755)
