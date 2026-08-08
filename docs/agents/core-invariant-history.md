@@ -53,7 +53,7 @@ Each half was individually correct and individually green. A test that hand-auth
 counterpart's frame is testing its author's memory of the wire — which is precisely what
 is already wrong when this bites.
 
-**What the check does NOT do.** `scripts/check-wire-conformance.mjs` cannot prove a test
+**What the check does NOT do.** `core/scripts/check-wire-conformance.mjs` cannot prove a test
 asserts anything useful about what it read; that is rule 14's job. It proves the
 mechanical thing missing in all three cases above: the real shape exists as a corpus of
 record, and something actually loads it.
