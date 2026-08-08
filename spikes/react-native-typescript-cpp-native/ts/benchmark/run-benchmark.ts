@@ -153,20 +153,20 @@ for (const { name } of adapters) {
 
 console.log('');
 console.log('─── Moonshine Integration Boundary ───');
-console.log('Moonshine (https://crepuscularity.tsc.hk) is documented as an');
-console.log('EXTERNAL speech/voice integration boundary. It is NOT a dependency');
-console.log('of this benchmark. The Web TS Adapter (C) models the boundary');
-console.log('contract shape and measures stub dispatch overhead only.');
+console.log('Moonshine is modeled as an EXTERNAL speech/voice integration');
+console.log('boundary requested for comparison with crepuscularity.tsc.hk.');
+console.log('It is NOT a dependency. The Web TS Adapter (C) models the');
+console.log('boundary contract shape and measures stub dispatch overhead only.');
 console.log('');
 console.log('─── Browser Verification ───');
 console.log('To verify the crepuscularity.tsc.hk site in a browser:');
 console.log('  1. Open: https://crepuscularity.tsc.hk');
-console.log('  2. Observe the live WASM-rendered landing page');
-console.log('  3. Footer shows: "ISC — built with crepuscularity + moonshine"');
+console.log('  2. Inspect its actual runtime/rendering behavior');
+console.log('  3. Compare its web adapter boundary with the TypeScript contract');
 console.log('  curl -sI https://crepuscularity.tsc.hk | head -5');
 console.log('');
-console.log('NOTE: The external URL was reachable via HTTP at benchmark authoring');
-console.log('time. If blocked in your environment, this does not affect local');
+console.log('NOTE: Direct HTTPS fetch returned HTTP 403 in this environment.');
+console.log('The external browser run is unverified and does not affect local');
 console.log('benchmark results. The benchmark has zero network dependencies.');
 console.log('');
 console.log('─── Proof Limits ───');

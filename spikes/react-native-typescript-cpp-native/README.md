@@ -3,7 +3,7 @@
 **Location**: `spikes/react-native-typescript-cpp-native/`  
 **Branch**: `spike/react-native-typescript-cpp-native`  
 **Framework Decision**: **Bare React Native + TypeScript**  
-**Spike Outcome**: **VALIDATED**
+**Spike Outcome**: **PARTIAL — local TypeScript/native-boundary feasibility validated; real RN/web/ASR runtime unvalidated**
 
 ---
 
@@ -230,7 +230,7 @@ node --experimental-strip-types ts/benchmark/run-benchmark.ts
 
 ## 6. Moonshine Integration Boundary
 
-**Moonshine** is documented as an **external speech/voice integration boundary** referenced by [crepuscularity.tsc.hk](https://crepuscularity.tsc.hk) (footer: *"ISC — built with crepuscularity + moonshine"*). It is **NOT a dependency** of this spike or benchmark.
+**Moonshine** is treated here as an **external speech/voice integration boundary** requested for comparison with [crepuscularity.tsc.hk](https://crepuscularity.tsc.hk). It is **NOT a dependency** of this spike or benchmark. The external site could not be inspected from this environment: a direct HTTPS fetch returned HTTP 403, so no site architecture or footer claim is treated as verified.
 
 The Web TS Adapter (C) models the Moonshine boundary as a typed interface stub:
 
@@ -254,7 +254,7 @@ curl -sI https://crepuscularity.tsc.hk | head -5
 open https://crepuscularity.tsc.hk
 ```
 
-**HTTP limitation**: The URL was reachable via HTTP at benchmark authoring time. If blocked by corporate proxy, HTTPS inspection, or regional DNS, this does not affect local benchmark results. The benchmark has **zero network dependencies**.
+**HTTP limitation**: Direct HTTPS fetch returned HTTP 403 in this environment. The browser procedure is intentionally unrun here. This does not affect the local synthetic benchmark, which has **zero network dependencies**.
 
 ---
 
