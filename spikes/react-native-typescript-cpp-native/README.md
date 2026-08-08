@@ -3,7 +3,7 @@
 **Location**: `spikes/react-native-typescript-cpp-native/`  
 **Branch**: `spike/react-native-typescript-cpp-native`  
 **Framework Decision**: **Bare React Native + TypeScript**  
-**Spike Outcome**: **PARTIAL — local TypeScript/native-boundary feasibility validated; real RN/web/ASR runtime unvalidated**
+**Spike Outcome**: **PARTIAL — Omi-v4 relay parity and local TypeScript/native-boundary feasibility validated; physical BLE, real RN TurboModule execution, iOS runtime, background lifecycle, and ASR remain unvalidated**
 
 ---
 
@@ -96,6 +96,23 @@ spikes/react-native-typescript-cpp-native/
 | **Device Transport** | `FakeDeviceTransport` simulating 2 devices (`dev-001`, `dev-002`) | **FAKE** | Simulates hardware BLE/USB transport without hardware dependencies |
 | **UI Screen Sketch** | `renderDeviceListScreenSketch` | **SKETCH** | Renders React Native component hierarchy representation without Metro/iOS/Android build |
 
+### Omi-v4 relay-parity slice
+
+The generic transport tests are not the parity claim. The added `ts/omi-parity/relay.ts` slice models the highest-value behavior read from Omi-v4's existing Dart relay:
+
+| Omi-v4 behavior | Spike proof |
+|---|---|
+| 3-byte audio packet header | `decodeAudioPacket` + reassembly test |
+| 16-bit packet-ID rollover | explicit `0xffff → 0` test |
+| fragment and packet discontinuity | explicit gap event; payload is never spliced across a gap |
+| 256 KiB frame bound | oversized frame test |
+| codec IDs PCM8/Opus/Opus-FS320 | mapping test; unknown IDs fail closed |
+| eight-frame forwarding bound | queue saturation test |
+| mobile-owner versus observer roles | control capability test |
+| 20-second reconnect grace and stream identity | grace-boundary test |
+
+This is a **TypeScript domain parity model**, not a claim that C++ has replaced the existing Flutter relay. C++ remains a narrow native-function boundary in this spike.
+
 ---
 
 ## 4. Test Execution & Strict TDD Evidence
@@ -122,7 +139,7 @@ Test project .../spikes/react-native-typescript-cpp-native/build
 node --experimental-strip-types --test ts/tests/*.test.ts
 ```
 
-**GREEN Phase Output (All 23 tests passing)**:
+**GREEN Phase Output (abbreviated; current run: all 30 tests passing)**:
 ```
 TAP version 13
 # Subtest: DeviceController - connects and normalizes incoming native packets
@@ -171,9 +188,9 @@ ok 21 - WebTypescriptAdapter - Moonshine boundary stub is not available
 ok 22 - WebTypescriptAdapter - render cache resets between runs
 # Subtest: All three adapters produce identical normalization for same input
 ok 23 - All three adapters produce identical normalization for same input
-1..23
-# tests 23
-# pass 23
+1..30
+# tests 30
+# pass 30
 # fail 0
 ```
 
