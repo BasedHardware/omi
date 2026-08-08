@@ -494,7 +494,7 @@ struct DesktopHomeView: View {
       enforceMainWindowMinimumSize()
       reportAutomationState()
       // First-run seed so the counter doesn't count the entire backlog as "new".
-      seedTopBarNewSinceIfNeeded()
+      if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 }
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
@@ -532,10 +532,6 @@ struct DesktopHomeView: View {
       return
     }
     consumePendingMainChatRequestForChatFirstShell()
-  }
-
-  private func seedTopBarNewSinceIfNeeded() {
-    topBarNewSinceRaw = topBarNewSinceRaw == 0 ? Date().timeIntervalSince1970 : topBarNewSinceRaw
   }
 
   private func consumePendingMainChatRequestForChatFirstShell() {
