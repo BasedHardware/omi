@@ -1774,6 +1774,79 @@ def remove_conversation_speaker_suggestion(
     return run_transactional(client, _remove)
 
 
+def persist_speaker_resolution_suggestions(
+    uid: str,
+    conversation_id: str,
+    suggestions: List[Any],
+    *,
+    firestore_client: Any = None,
+) -> List[Any]:
+    """Persist the naming pass's suggestions without overriding a decision the user made.
+
+    The pass computes its suggestions from a snapshot taken before the LLM and
+    refutation work, so by the time it writes, the user may already have settled a
+    speaker -- accepted its suggestion (which binds its segments to a Person) or
+    dismissed it. A plain ``update_conversation`` write would hand back that stale
+    snapshot and resurrect a suggestion for a speaker the user has now resolved.
+
+    This write re-reads the conversation inside the transaction and drops any
+    incoming suggestion whose speaker is already settled: every current segment
+    for that ``speaker_id`` carrying a ``person_id`` or marked ``is_user``. The
+    eligibility check and the write share one transaction, the same way
+    ``assign_conversation_segment_people`` closes the race from the inference side.
+
+    Returns:
+        The suggestions actually written, already filtered. An empty result means
+        nothing was written.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+    incoming = []
+    for item in suggestions:
+        if not isinstance(item, dict):
+            continue
+        speaker_id = item.get('speaker_id')
+        if not isinstance(speaker_id, int) or isinstance(speaker_id, bool):
+            continue
+        incoming.append(item)
+    if not incoming:
+        return []
+
+    @firestore.transactional
+    def _persist(transaction) -> List[Any]:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return []
+        conversation_data = _prepare_conversation_for_read(doc_snapshot.to_dict(), uid)
+        if not conversation_data:
+            return []
+
+        segments = conversation_data.get('transcript_segments')
+        if not isinstance(segments, list):
+            segments = []
+        settled: set = set()
+        for segment in segments:
+            if not isinstance(segment, dict):
+                continue
+            stored_speaker_id = segment.get('speaker_id')
+            if not isinstance(stored_speaker_id, int) or isinstance(stored_speaker_id, bool):
+                continue
+            if segment.get('is_user') or segment.get('person_id'):
+                settled.add(stored_speaker_id)
+
+        kept = [item for item in incoming if item.get('speaker_id') not in settled]
+        if not kept:
+            return []
+
+        doc_level = conversation_data.get('data_protection_level', 'standard')
+        prepared_payload = _prepare_conversation_for_write({'speaker_label_suggestions': kept}, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return kept
+
+    return run_transactional(client, _persist)
+
+
 # ***********************************
 # ********** VISIBILITY *************
 # ***********************************

@@ -770,3 +770,57 @@ class TestSuggestionWritesAreTransactional:
         stored = self.row(database)
         assert [item['speaker_id'] for item in stored['speaker_label_suggestions']] == [2]
         assert [s['person_id'] for s in stored['transcript_segments']] == [None]
+
+    def test_a_suggestion_for_a_speaker_now_resolved_is_not_persisted(self):
+        """The user accepted the speaker while the pass was still running, so the pass must not resurrect the suggestion."""
+        database = self.store([stored_segment('s1', person_id='person-alex')], [])
+
+        written = conversations_db.persist_speaker_resolution_suggestions(
+            'uid-1', 'conv-1', [stored_suggestion(1)], firestore_client=database
+        )
+
+        assert written == []
+        assert database.transactions[-1].updates == []
+        assert [item['speaker_id'] for item in self.row(database)['speaker_label_suggestions']] == []
+
+    def test_a_suggestion_for_an_is_user_speaker_is_not_persisted(self):
+        database = self.store([stored_segment('s1', is_user=True)], [])
+
+        written = conversations_db.persist_speaker_resolution_suggestions(
+            'uid-1', 'conv-1', [stored_suggestion(1)], firestore_client=database
+        )
+
+        assert written == []
+        assert database.transactions[-1].updates == []
+        assert [item['speaker_id'] for item in self.row(database)['speaker_label_suggestions']] == []
+
+    def test_only_unsettled_suggestions_are_persisted(self):
+        database = self.store(
+            [stored_segment('s1', speaker_id=1, person_id='person-alex'), stored_segment('s2', speaker_id=2)],
+            [],
+        )
+
+        written = conversations_db.persist_speaker_resolution_suggestions(
+            'uid-1', 'conv-1', [stored_suggestion(1), stored_suggestion(2, 'Sam')], firestore_client=database
+        )
+
+        assert [item['speaker_id'] for item in written] == [2]
+        assert [item['speaker_id'] for item in self.row(database)['speaker_label_suggestions']] == [2]
+
+    def test_unsettled_suggestions_are_persisted(self):
+        database = self.store([stored_segment('s1', speaker_id=1), stored_segment('s2', speaker_id=2)], [])
+
+        written = conversations_db.persist_speaker_resolution_suggestions(
+            'uid-1', 'conv-1', [stored_suggestion(1), stored_suggestion(2, 'Sam')], firestore_client=database
+        )
+
+        assert [item['speaker_id'] for item in written] == [1, 2]
+        assert [item['speaker_id'] for item in self.row(database)['speaker_label_suggestions']] == [1, 2]
+
+    def test_persisting_suggestions_for_a_missing_conversation_writes_nothing(self):
+        assert (
+            conversations_db.persist_speaker_resolution_suggestions(
+                'uid-1', 'conv-missing', [stored_suggestion(1)], firestore_client=StrictFirestore()
+            )
+            == []
+        )

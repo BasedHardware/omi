@@ -1408,9 +1408,6 @@ def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
         upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
 
 
-SPEAKER_RESOLUTION_SUGGESTIONS_FIELD = 'speaker_label_suggestions'
-
-
 def _speaker_suggestion_payload(suggestions: List[Any]) -> List[Dict[str, Any]]:
     """Serialize the names that were proposed but not verified, for the client to accept.
 
@@ -1452,10 +1449,10 @@ async def _run_speaker_resolution(uid: str, conversation: Conversation) -> None:
     try:
         await run_blocking(
             db_executor,
-            conversations_db.update_conversation,
+            conversations_db.persist_speaker_resolution_suggestions,
             uid,
             conversation.id,
-            {SPEAKER_RESOLUTION_SUGGESTIONS_FIELD: _speaker_suggestion_payload(list(outcome.suggested))},
+            _speaker_suggestion_payload(list(outcome.suggested)),
         )
     except Exception as e:
         logger.error(

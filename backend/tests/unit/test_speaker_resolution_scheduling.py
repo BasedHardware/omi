@@ -181,24 +181,22 @@ class TestScheduleSpeakerResolution:
 
         with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True), patch(
             'utils.conversations.speaker_resolution.resolve_conversation_speakers', _fake
-        ), patch.object(pc.conversations_db, 'update_conversation') as update:
+        ), patch.object(pc.conversations_db, 'persist_speaker_resolution_suggestions') as persist:
             future = pc.schedule_speaker_resolution("uid", conversation)
             assert future is not None
             future.result(timeout=10)
 
-        update.assert_called_once()
-        uid, conversation_id, payload = update.call_args[0]
+        persist.assert_called_once()
+        uid, conversation_id, payload = persist.call_args[0]
         assert (uid, conversation_id) == ("uid", "conv-1")
-        assert payload == {
-            pc.SPEAKER_RESOLUTION_SUGGESTIONS_FIELD: [
-                {
-                    'speaker_id': 0,
-                    'person_name': "Ana",
-                    'confidence': 0.8,
-                    'segment_ids': ["seg-1"],
-                }
-            ]
-        }
+        assert payload == [
+            {
+                'speaker_id': 0,
+                'person_name': "Ana",
+                'confidence': 0.8,
+                'segment_ids': ["seg-1"],
+            }
+        ]
 
     def test_no_suggestions_writes_nothing(self):
         async def _fake(uid, conv):
@@ -206,12 +204,12 @@ class TestScheduleSpeakerResolution:
 
         with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True), patch(
             'utils.conversations.speaker_resolution.resolve_conversation_speakers', _fake
-        ), patch.object(pc.conversations_db, 'update_conversation') as update:
+        ), patch.object(pc.conversations_db, 'persist_speaker_resolution_suggestions') as persist:
             future = pc.schedule_speaker_resolution("uid", _conversation())
             assert future is not None
             future.result(timeout=10)
 
-        update.assert_not_called()
+        persist.assert_not_called()
 
     def test_a_failing_pass_is_swallowed(self):
         async def _fake(uid, conv):
@@ -219,12 +217,12 @@ class TestScheduleSpeakerResolution:
 
         with patch('utils.conversations.speaker_resolution.SPEAKER_RESOLUTION_ENABLED', True), patch(
             'utils.conversations.speaker_resolution.resolve_conversation_speakers', _fake
-        ), patch.object(pc.conversations_db, 'update_conversation') as update:
+        ), patch.object(pc.conversations_db, 'persist_speaker_resolution_suggestions') as persist:
             future = pc.schedule_speaker_resolution("uid", _conversation())
             assert future is not None
             future.result(timeout=10)
 
-        update.assert_not_called()
+        persist.assert_not_called()
 
 
 class TestSuggestionsStayInsideTheEncryptionBoundary:
