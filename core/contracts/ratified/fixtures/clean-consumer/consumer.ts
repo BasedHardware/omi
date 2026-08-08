@@ -29,10 +29,11 @@ const citation = parseCitationRef("citation-v1:bright-coral-harbor");
 const cursor = parseKeysetCursor("v1.signature.payload");
 const declaredFrontier = parseRecallFrontier("frontier-v1:declared");
 const includedFrontier = parseRecallFrontier("frontier-v1:included");
+const behindFrontier = parseRecallFrontier("frontier-v1:behind");
 const inputDigest = parseSha256Digest("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 const outputDigest = parseSha256Digest("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 const traceRef = parseRecallTraceRef("trace-v1:fixture");
-if (!id || !text || !citation || !cursor || !declaredFrontier || !includedFrontier || !inputDigest || !outputDigest || !traceRef) {
+if (!id || !text || !citation || !cursor || !declaredFrontier || !includedFrontier || !behindFrontier || !inputDigest || !outputDigest || !traceRef) {
   throw new Error("fixture boundary values must parse");
 }
 
@@ -69,6 +70,27 @@ if (!isTrustedPageWindowHonest(page.window)) throw new Error("valid page window 
 if (!isTrustedRecallCompletenessHonest(page)) throw new Error("valid completeness envelope rejected");
 if (!isTrustedSynthesizedPageData(page)) throw new Error("valid trusted page rejected");
 if (!parseSynthesizedPageJson(JSON.stringify(page))) throw new Error("valid canonical page JSON rejected");
+
+const mixedDegradedRecall: Read.DegradedRecall = {
+  version: "recall-completeness-v1",
+  status: "degraded",
+  reasons: ["projection_stale", "accepted_work_pending", "source_bound"],
+  frontiers: {
+    declaredFrontier,
+    newestSearchedAcceptedFrontier: behindFrontier,
+    missingAcceptedFrontierReason: null,
+    // domain-pending(DIV-DOMCORE-006)
+    newestSearchedStmFrontier: includedFrontier,
+    missingStmFrontierReason: null,
+  },
+};
+const mixedIncompleteRecall: Read.IncompleteRecall = {
+  ...mixedDegradedRecall,
+  status: "incomplete",
+  reasons: ["accepted_work_pending", "time_bound"],
+};
+void mixedDegradedRecall;
+void mixedIncompleteRecall;
 
 const trace: RecallTraceV1 = {
   version: "recall-trace-v1",
@@ -127,7 +149,7 @@ void invalidCompleteRecallIncompleteContinuation;
 const invalidIncompleteReason: Read.IncompleteRecall = {
   version: "recall-completeness-v1",
   status: "incomplete",
-  // @ts-expect-error incomplete recall accepts only the accepted-work-pending reason family.
+  // @ts-expect-error incomplete recall excludes the higher-precedence degraded family.
   reasons: ["projection_stale"],
   frontiers: page.completeness.frontiers,
 };

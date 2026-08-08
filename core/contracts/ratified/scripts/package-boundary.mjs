@@ -50,7 +50,7 @@ const expectedTarFiles = [
 
 assertEqual(Object.keys(manifest.exports).sort(), expectedExports, "export allowlist");
 assertEqual(manifest.files, expectedManifestFiles, "manifest file allowlist");
-if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.1.0" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
+if (manifest.name !== "@omi-core/ratified-contracts" || manifest.version !== "0.1.1" || manifest.private !== true) throw new Error("package identity/version/private status drifted");
 if (provenance.package.name !== manifest.name || provenance.package.version !== manifest.version) throw new Error("package provenance identity mismatch");
 
 const declaration = readFileSync(resolve(root, "dist/projections/synthesized.d.ts"), "utf8");

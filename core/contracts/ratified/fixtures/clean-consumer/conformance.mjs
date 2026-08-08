@@ -27,6 +27,14 @@ for (const row of await fixture("status-matrix.json")) {
   assert.equal(isTrustedSynthesizedPageData(statusMatrixPage(row)), row.safe, `${row.window}/${row.completeness}`);
 }
 
+const mixedReasonPage = structuredClone((await fixture("page-conformance.json")).find((row) => row.safe).page);
+mixedReasonPage.completeness.status = "degraded";
+mixedReasonPage.completeness.reasons = ["projection_stale", "accepted_work_pending", "source_bound"];
+mixedReasonPage.completeness.frontiers.newestSearchedAcceptedFrontier = "frontier-v1:behind";
+const parsedMixedReasonPage = parseSynthesizedPageJson(JSON.stringify(mixedReasonPage));
+assert.ok(parsedMixedReasonPage);
+assert.deepEqual(parsedMixedReasonPage.completeness.reasons, mixedReasonPage.completeness.reasons);
+
 const canonicalPage = structuredClone((await fixture("page-conformance.json")).find((row) => row.safe).page);
 delete canonicalPage.items[0].citations;
 const canonicalTrace = (await fixture("recall-trace.json")).find((row) => row.safe).trace;

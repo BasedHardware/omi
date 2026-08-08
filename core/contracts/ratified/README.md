@@ -9,7 +9,7 @@ Provisional naming markers for the terms used immediately below:
 `// domain-pending(DIV-DOMCORE-006)`
 
 This is the narrow shared-package boundary approved by the ADR-004 Track 1 mechanism
-review. Version `0.1.0` has no package-root export and exposes only three explicit
+review. Version `0.1.1` has no package-root export and exposes only three explicit
 subpaths:
 
 - `./pagination/cursor`, opaque HMAC-keyset cursor carriage; and
@@ -29,8 +29,11 @@ The page carries a versioned completeness envelope with separate opaque aggregat
 and short-term-memory search frontiers plus typed null reasons. A complete claim requires honest
 coverage of both: the accepted frontier searched must equal the declared frontier (or report that
 no accepted work exists), and the short-term frontier must be present (or report that no eligible
-short-term candidates exist). An accepted frontier behind the declaration is always
-`incomplete`/`accepted_work_pending`, never a frontier substitute. The envelope also carries an
+short-term candidates exist). An accepted frontier behind the declaration always contributes
+`accepted_work_pending`, never a frontier substitute. Under ADR-008, the declared completeness
+status is derived from every applicable unique reason using the precedence
+`degraded > incomplete > partial > complete`; lower-precedence reasons remain serialized rather
+than being discarded. The envelope also carries an
 explicit query-gap absence union; the strict runtime validator rejects extra fields and false
 completeness. Terminal and continuation windows are distinct TypeScript variants, and query-gap
 absence is valid only on an honest terminal page. Item ids, per-item citation refs, and
@@ -51,7 +54,7 @@ The trace carries only opaque stage refs, typed outcome/freshness, bounded count
 version. Its type and runtime laws enforce the six-stage subset chain, reference uniqueness, and
 the stage implied by every outcome, while keeping trace fields out of the frontend item.
 
-Rulings of record: ADR-004, charter WS-006/M-001, DIV-MEM-004, FEAT-MEM-001,
+Rulings of record: ADR-004, ADR-008, charter WS-006/M-001, DIV-MEM-004, FEAT-MEM-001,
 FEAT-MEM-002, FC-AUTH-003, and FEAT-AUTH-011. `DIV-DOMCORE-001` and
 `DIV-DOMCORE-008` and `DIV-DOMCORE-006` remain open;
 their code-level spellings carry mechanical rename markers.

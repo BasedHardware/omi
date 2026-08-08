@@ -153,12 +153,12 @@ export declare namespace SynthesizedMemoryRead {
 
   interface IncompleteRecall extends FrontiersShape {
     status: "incomplete";
-    reasons: readonly [IncompleteReason, ...IncompleteReason[]];
+    reasons: readonly [IncompleteReason | PartialReason, ...(IncompleteReason | PartialReason)[]];
   }
 
   interface DegradedRecall extends FrontiersShape {
     status: "degraded";
-    reasons: readonly [DegradedReason, ...DegradedReason[]];
+    reasons: readonly [LimitationReason, ...LimitationReason[]];
   }
 
   interface PartialRecall extends FrontiersShape {
@@ -287,21 +287,13 @@ export function isTrustedRecallCompletenessHonest(page: {
   const reasons = completeness.reasons;
   if (!Array.isArray(reasons)) return false;
   if (new Set(reasons).size !== reasons.length) return false;
-  if (completeness.status === "complete") {
-    if (reasons.length !== 0) return false;
-  } else {
-    const reasonFamily = REASONS_BY_STATUS[completeness.status ?? ""];
-    if (!reasonFamily || reasons.length === 0 || !reasons.every((reason) => reasonFamily.has(reason))) return false;
-  }
+  const derivedStatus = deriveCompletenessStatus(reasons);
+  if (derivedStatus === null || completeness.status !== derivedStatus) return false;
 
   const acceptedWorkPending = accepted === null
     ? missingAccepted === "accepted_work_pending"
     : accepted !== frontiers.declaredFrontier;
-  if (acceptedWorkPending) {
-    if (completeness.status !== "incomplete" || !reasons.includes("accepted_work_pending")) return false;
-  } else if (completeness.status === "incomplete") {
-    return false;
-  }
+  if (acceptedWorkPending !== reasons.includes("accepted_work_pending")) return false;
   if (completeness.status === "complete") {
     if (accepted !== frontiers.declaredFrontier && missingAccepted !== "no_accepted_work") return false;
     if (stm === null && missingStm !== "no_eligible_stm") return false;
@@ -325,11 +317,24 @@ const LIMITATION_REASONS = new Set([
   "policy_bound",
 ]);
 
-const REASONS_BY_STATUS: Record<string, ReadonlySet<string>> = {
-  incomplete: new Set(["accepted_work_pending"]),
-  degraded: new Set(["projection_stale", "projection_unavailable", "projection_bypassed"]),
-  partial: new Set(["source_bound", "time_bound", "policy_bound"]),
-};
+const DEGRADED_REASONS: ReadonlySet<unknown> = new Set(["projection_stale", "projection_unavailable", "projection_bypassed"]);
+const PARTIAL_REASONS: ReadonlySet<unknown> = new Set(["source_bound", "time_bound", "policy_bound"]);
+
+function deriveCompletenessStatus(reasons: readonly unknown[]): "degraded" | "incomplete" | "partial" | "complete" | null {
+  let degraded = false;
+  let incomplete = false;
+  let partial = false;
+  for (const reason of reasons) {
+    if (!isLimitationReason(reason)) return null;
+    if (DEGRADED_REASONS.has(reason)) degraded = true;
+    else if (reason === "accepted_work_pending") incomplete = true;
+    else if (PARTIAL_REASONS.has(reason)) partial = true;
+  }
+  if (degraded) return "degraded";
+  if (incomplete) return "incomplete";
+  if (partial) return "partial";
+  return "complete";
+}
 
 function isLimitationReason(value: unknown): boolean {
   return typeof value === "string" && LIMITATION_REASONS.has(value);

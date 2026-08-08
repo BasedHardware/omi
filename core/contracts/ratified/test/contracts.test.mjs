@@ -69,6 +69,16 @@ test("raw page parser is bounded, canonical, and duplicate-key rejecting", async
   const page = fixture.find((row) => row.safe).page;
   const raw = JSON.stringify(page);
   assert.deepEqual(parseSynthesizedPageJson(raw), page);
+  const mixedPage = structuredClone(page);
+  mixedPage.completeness.status = "degraded";
+  mixedPage.completeness.reasons = ["projection_stale", "accepted_work_pending", "source_bound"];
+  mixedPage.completeness.frontiers.newestSearchedAcceptedFrontier = "frontier-v1:behind";
+  const parsedMixedPage = parseSynthesizedPageJson(JSON.stringify(mixedPage));
+  assert.ok(parsedMixedPage);
+  assert.deepEqual(parsedMixedPage.completeness.reasons, mixedPage.completeness.reasons);
+  const unknownReasonPage = structuredClone(mixedPage);
+  unknownReasonPage.completeness.reasons.push("unknown_limitation");
+  assert.equal(parseSynthesizedPageJson(JSON.stringify(unknownReasonPage)), null);
   for (const digest of ["arbitrary", "line-one\nline-two", "A".repeat(64)]) {
     const invalidDigestPage = structuredClone(page);
     invalidDigestPage.items[0].provenance.inputDigest = digest;

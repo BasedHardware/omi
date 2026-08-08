@@ -47,7 +47,7 @@ const provenance = {
   package: { name: manifest.name, version: manifest.version },
   repository: "BasedHardware/omi",
   baselineCommit: "e5deec43d8814191b90d3e3db46e99bec29ae724",
-  rulings: ["ADR-004", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011"],
+  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011"],
   compiler: { name: "typescript", version: manifest.devDependencies.typescript },
   inputs: entries,
   sourceDigest,
