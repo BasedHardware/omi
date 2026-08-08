@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Task, TaskPatch } from "@omi-core/contracts";
 import type { StoreStatus } from "@omi-core/domain";
 import type { MessageKey, MessageVariables } from "@omi-core/i18n";
-import type { ProductionTaskStore } from "./task-fixtures.js";
+import type { ProductionTaskStore } from "./ProductionStores.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionSearchField } from "./ProductionPrimitives.js";
 import "./tasks.css";

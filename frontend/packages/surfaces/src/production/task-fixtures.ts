@@ -1,18 +1,7 @@
-import { parseRecordId, type DeadLetter, type Task, type TaskPatch } from "@omi-core/contracts";
+import { parseRecordId, type DeadLetter, type Task } from "@omi-core/contracts";
 import type { QueuePhase, QueueStatus } from "@omi-core/sync";
 import type { RefreshPhase, StoreStatus } from "@omi-core/domain";
-
-export type ProductionTaskStore = {
-  list(): Promise<Task[]>;
-  status(): StoreStatus;
-  deadLetters(): Promise<DeadLetter[]>;
-  subscribe(listener: () => void): () => void;
-  refresh(): Promise<void>;
-  create(description: string, dueAt?: number): Promise<void>;
-  patch(id: Task["id"], patch: TaskPatch): Promise<void>;
-  delete(id: Task["id"]): Promise<void>;
-  discardDeadLetter(opId: string): Promise<void>;
-};
+import type { ProductionTaskStore } from "./ProductionStores.js";
 
 export const FIXED_NOW = Date.UTC(2026, 7, 7, 12, 0, 0);
 const DAY_MS = 86_400_000;

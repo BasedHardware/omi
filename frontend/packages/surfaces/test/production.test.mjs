@@ -21,7 +21,7 @@ test("production entry gates fixtures and marks the explicit host platform", asy
   assert.match(source, /fixtureConversationStore\(conversationFixture, requestedQa === "conversation-detail"\)/);
   assert.match(source, /requestedQa === "tasks"/);
   assert.match(source, /TASK_FIXTURE_STATES\.includes/);
-  assert.match(source, /TasksStore\.open\(bridge, env, http\)/);
+  assert.match(source, /stores\.openTasks\(\)/);
   assert.match(source, /now=\{TASK_FIXED_NOW\}/);
   // red-proof: dropping the detail-fixture fallback strands the documented
   // qa=conversation-detail URL on a not-found view unless a hidden row ID is
@@ -155,7 +155,7 @@ test("desktop glass chrome keeps the reference hierarchy without changing mobile
 
 test("memory cards keep locked and provenance behavior honest", async () => {
   const source = await read("src/production/MemoriesProduction.tsx");
-  assert.match(source, /splitProvenance\(memory\.content\)/);
+  assert.match(source, /presentMemoryContent\(memory\.content\)/);
   assert.match(source, /locked\.body/);
   assert.match(source, /await store\.discardDeadLetter\(letter\.opId\)/);
   assert.match(source, /memory\.locked \? \(/);

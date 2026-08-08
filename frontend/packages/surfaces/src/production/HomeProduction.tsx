@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, Memory } from "@omi-core/contracts";
 import { formatDate, formatNumber, t } from "@omi-core/i18n";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { presentMemoryContent } from "./memory-presentation.js";
 import "./home.css";
 
 type Locale = string;
@@ -169,7 +170,7 @@ export function HomeProduction({ sources, locale = "en", onReady }: {
                 const date = formatDate(row.timestamp, locale, { dateStyle: "medium" });
                 if (row.kind === "memory") return <article className="home-result-row" key={`memory:${row.value.id}`}>
                   <span className="home-result-icon is-memory" aria-hidden="true" />
-                  <div className="home-result-copy"><p>{row.value.content}</p><small>{[t(locale, "nav.memories"), date].join(" · ")}</small></div>
+                  <div className="home-result-copy"><p>{presentMemoryContent(row.value.content).body}</p><small>{[t(locale, "nav.memories"), date].join(" · ")}</small></div>
                 </article>;
                 if (row.kind === "conversation") return <a className="home-result-row" href={conversationHref(row.value.id)} key={`conversation:${row.value.id}`}>
                   <span className="home-result-icon is-conversation" aria-hidden="true" />
