@@ -68,24 +68,22 @@ test("reason precedence matches the ratified derivation: degraded outranks incom
   // lagging.
 });
 
-test("a limitation reason this build has never heard of still prevents a complete claim", () => {
-  const notice = completenessNotice(known("complete", ["quota_bound_2027"]));
-  assert.notEqual(notice.kind, "complete");
-  assert.equal(notice.kind, "partial");
-  assert.deepEqual(notice.reasonKeys, []);
-  assert.equal(notice.unrecognizedReasonCount, 1);
-  // red-proof: filtering the reasons down to the recognised ones BEFORE deriving the
-  // status makes this return "complete" and fail. A client that has not been taught a new
-  // limitation must get quieter, not more confident — and it must never fabricate copy for
-  // a reason string it cannot describe.
-});
-
-test("recognised and unrecognised reasons coexist without either being lost", () => {
-  const notice = completenessNotice(known("degraded", ["projection_stale", "quota_bound_2027"]));
-  assert.deepEqual(notice.reasonKeys, ["memoriesPlatform.reason.projectionStale"]);
-  assert.equal(notice.unrecognizedReasonCount, 1);
-  // red-proof: dropping the unrecognised count silently hides from the user that the
-  // server reported more limitations than the screen can name.
+test("an unknown limitation reason cannot reach this surface as a known state", async () => {
+  const ratified = await read("../../contracts/ratified/src/projections/synthesized.ts");
+  // The ratified boundary rejects a whole page whose reasons are outside its vocabulary,
+  // so a mystery reason arrives as kind:"unknown" — never as a known state the surface
+  // would have to invent copy for.
+  assert.match(ratified, /const LIMITATION_REASONS = new Set/);
+  assert.match(ratified, /if \(!isLimitationReason\(reason\)\) return null;/);
+  const presentation = await read("src/production/proposition-presentation.ts");
+  assert.match(presentation, /Readonly<Record<SynthesizedRecallReason, ReasonKey>>/);
+  assert.ok(
+    !presentation.includes("unrecognizedReasonCount"),
+    "a runtime unrecognised-reason path would describe a state the contract cannot produce",
+  );
+  // red-proof: widening REASON_KEYS back to Record<string, ReasonKey> makes the record
+  // non-total, so a new ratified reason would silently render as no copy at all instead
+  // of failing the build. The compiler is the drift guard here, and this pins that.
 });
 
 // ---------------------------------------------------------------------------
@@ -223,11 +221,6 @@ test("every ratified limitation reason has surface copy and is recognised by the
       `proposition-presentation.ts does not classify the ratified reason ${reason}`,
     );
     const notice = completenessNotice(known("complete", [reason]));
-    assert.equal(
-      notice.unrecognizedReasonCount,
-      0,
-      `ratified reason ${reason} is not recognised by completenessNotice`,
-    );
     assert.equal(notice.reasonKeys.length, 1, `ratified reason ${reason} produced no copy key`);
     assert.ok(
       Object.hasOwn(EN_MESSAGES, notice.reasonKeys[0]),

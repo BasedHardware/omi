@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { t } from "@omi-core/i18n";
 import type { StoreStatus } from "@omi-core/domain";
-import type {
-  ProductionSynthesizedMemoryStore,
-  SynthesizedMemoryItem,
-  SynthesizedRecallState,
-} from "./ProductionSynthesizedMemoryStore.js";
+import type { ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
+import type { SynthesizedMemoryItem, SynthesizedRecallState } from "@omi-core/contracts";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import {
@@ -202,11 +199,6 @@ export function MemoriesPlatformProduction({ store, source, locale = "en", onRea
                 <ul className="completeness-reasons" aria-label={t(locale, "memoriesPlatform.reasonsLabel")}>
                   {completeness.reasonKeys.map((key) => <li key={key}>{t(locale, key)}</li>)}
                 </ul>
-              )}
-              {completeness.unrecognizedReasonCount > 0 && (
-                <p className="completeness-unrecognized">
-                  {t(locale, "memoriesPlatform.unrecognizedReasons", { count: completeness.unrecognizedReasonCount })}
-                </p>
               )}
             </div>
           )}

@@ -4,7 +4,7 @@ import { t } from "@omi-core/i18n";
 import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
-import { createLegacyProductionStoreFactory } from "./ProductionStores.js";
+import { createLegacyProductionStoreFactory, createPlatformProductionStoreFactory } from "./ProductionStores.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
@@ -35,6 +35,10 @@ const route: "home" | "memories" | "conversations" | "tasks" = requestedRoute ==
     : requestedRoute === "memories" || requestedQa === "memories" || requestedQa === "memories-platform"
       ? "memories"
       : "home";
+// Host-supplied and untrusted: `resolveGenerationSelection` inside the platform factory
+// validates it and rejects loudly rather than silently downgrading to legacy.
+const requestedGeneration = query.get("generation");
+const requestedGenerations = requestedGeneration === "platform" ? { memories: "platform" } : undefined;
 const requestedPlatform = query.get("platform");
 const platform: "mobile" | "desktop" = requestedPlatform === "desktop" || requestedPlatform === "mobile"
   ? requestedPlatform
@@ -177,6 +181,20 @@ if (query.get("lab") === "1") {
         const bridge = await openWebStorageBridge(profile);
         const http = bridgeHttpClient();
         const env = realEnv();
+        if (requestedGenerations) {
+          // Platform generation: the ratified memory read path. Both transports are bound
+          // by the host — the base URL lives in the shell binding, never here (ADR-008 §3).
+          const platform = createPlatformProductionStoreFactory(bridge, env, { legacyHttp: http, platformHttp: http }, requestedGenerations);
+          if (platform.selection.memories === "platform") {
+            const store = await platform.openSynthesizedMemories();
+            root.render(<StrictMode><MemoriesPlatformProduction store={store} source={{ kind: "live", origin: location.origin }} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
+            return;
+          }
+          // Asked for platform and did not get it. Saying so is the whole point of the
+          // rejection list: a client that thinks it is on the new backend while quietly
+          // running on the old one is the worst outcome here.
+          console.warn(`OMI_GENERATION_REJECTED ${JSON.stringify(platform.rejected)}`);
+        }
         const stores = createLegacyProductionStoreFactory(bridge, env, http);
         if (route === "home") {
           const [memories, conversations] = await Promise.all([
