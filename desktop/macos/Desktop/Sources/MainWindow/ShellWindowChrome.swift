@@ -30,11 +30,11 @@
 //    strand a user in a window with no visible close control *and* no keyboard one.
 //  - **Moving has two handles, deliberately.** `.hiddenTitleBar` keeps a real (transparent) title bar
 //    over the top band, which still drags — that band is why the shell reserves
-//    `GlassShell.titlebarClearance` and draws nothing in it. `isMovableByWindowBackground` adds the
-//    second: on a window that is mostly desktop, the parts that are not a control drag it too, which is
-//    how the bar this file's chrome sits in becomes a drag handle without any view knowing it is one.
-//    Controls, text fields and scroll views consume their own drags and are unaffected. Views that own
-//    their own drags opt out with `mouseDownCanMoveWindow` (see `RewindTrackNSView`).
+//    `GlassShell.titlebarClearance` and draws nothing in it. A thresholded mouse monitor covers the
+//    rest of the window. The native `isMovableByWindowBackground` switch cannot do that safely:
+//    AppKit sees a SwiftUI `Button` as its transparent `NSHostingView`, classifies it as background,
+//    and steals its click. The monitor waits for an actual drag, while views that own their own
+//    drags opt out through `ShellWindowDragExcluding` (see `RewindTrackNSView`).
 //
 //  ## The two presentations, and why there are two
 //
@@ -77,8 +77,13 @@
 //
 
 import AppKit
+@preconcurrency import ObjectiveC
 import OmiTheme
 import SwiftUI
+
+/// A represented AppKit view whose pointer drag belongs to the control rather than the shell.
+@MainActor
+protocol ShellWindowDragExcluding: AnyObject {}
 
 /// The main window's chrome: transparent, light-pinned, and without the system's window buttons.
 @MainActor
@@ -159,7 +164,11 @@ enum ShellWindowChrome {
     // window between the two calls with no way to be closed at all.
     window.styleMask.formUnion(keyboardWindowCommands)
     hideStandardButtons(in: window)
-    window.isMovableByWindowBackground = true
+    // AppKit cannot see SwiftUI controls inside an NSHostingView. The hosting view reports that a
+    // mouse-down may move the window even when the point is a Button, so this native switch turns
+    // ordinary clicks into window drags. A thresholded monitor keeps clicks and drags separate.
+    window.isMovableByWindowBackground = false
+    installDragMonitor(in: window)
     window.level = presentation == .summoned ? .floating : .normal
     // Always `false`, in both presentations, and asserted rather than omitted — see this file's
     // header. A shell that ordered itself out whenever another app took focus deleted the window
@@ -206,11 +215,125 @@ enum ShellWindowChrome {
       && window.titleVisibility == .hidden
       && window.titlebarSeparatorStyle == .none
       && buttonsAreHidden
-      && window.isMovableByWindowBackground
+      && !window.isMovableByWindowBackground
+      && hasDragMonitor(in: window)
       && window.level == (presentation == .summoned ? .floating : .normal)
       && !window.hidesOnDeactivate
       && window.collectionBehavior.contains(.moveToActiveSpace)
       && hasExpectedSpaceBehavior
+  }
+
+  private static var dragCoordinatorAssociationKey: UInt8 = 0
+
+  static func installDragMonitor(in window: NSWindow) {
+    guard let contentView = window.contentView else { return }
+    if let coordinator = objc_getAssociatedObject(contentView, &dragCoordinatorAssociationKey)
+      as? ShellWindowDragCoordinator
+    {
+      coordinator.window = window
+      return
+    }
+
+    let coordinator = ShellWindowDragCoordinator(window: window)
+    objc_setAssociatedObject(
+      contentView, &dragCoordinatorAssociationKey, coordinator, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+  }
+
+  static func hasDragMonitor(in window: NSWindow) -> Bool {
+    guard let contentView = window.contentView else { return false }
+    return objc_getAssociatedObject(contentView, &dragCoordinatorAssociationKey)
+      is ShellWindowDragCoordinator
+  }
+
+  static func shouldBeginDrag(at location: NSPoint, in window: NSWindow) -> Bool {
+    var hit = window.contentView?.hitTest(location)
+    while let view = hit {
+      if view is any ShellWindowDragExcluding || view is NSControl || view is NSScrollView || view is NSTextView {
+        return false
+      }
+      hit = view.superview
+    }
+    return true
+  }
+}
+
+/// Holds a hosted SwiftUI mouse-down until it knows whether the gesture is a click or a window drag.
+/// A click is replayed untouched; a drag never enters SwiftUI button tracking, so moving the hosting
+/// window cannot fire or latch the control that happened to be beneath the pointer.
+@MainActor
+final class ShellWindowDragCoordinator: NSObject {
+  weak var window: NSWindow?
+  private var pendingMouseDown: NSEvent?
+  private var windowOrigin: NSPoint?
+  private var pointerOrigin: NSPoint?
+  private var canMoveWindow = false
+  private var isDraggingWindow = false
+  private var replayEventsRemaining = 0
+  private nonisolated(unsafe) var monitor: Any?
+
+  init(window: NSWindow) {
+    self.window = window
+    super.init()
+    monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) {
+      [weak self] event in
+      let consumesEvent = MainActor.assumeIsolated {
+        self?.handle(event) ?? false
+      }
+      return consumesEvent ? nil : event
+    }
+  }
+
+  deinit {
+    if let monitor { NSEvent.removeMonitor(monitor) }
+  }
+
+  private func handle(_ event: NSEvent) -> Bool {
+    guard let window, event.window === window else { return false }
+    if replayEventsRemaining > 0 {
+      replayEventsRemaining -= 1
+      return false
+    }
+
+    switch event.type {
+    case .leftMouseDown:
+      canMoveWindow = ShellWindowChrome.shouldBeginDrag(at: event.locationInWindow, in: window)
+      guard canMoveWindow else { return false }
+      pendingMouseDown = event
+      windowOrigin = window.frame.origin
+      pointerOrigin = NSEvent.mouseLocation
+      isDraggingWindow = false
+      return true
+    case .leftMouseDragged:
+      guard canMoveWindow, let windowOrigin, let pointerOrigin else { return false }
+      let pointer = NSEvent.mouseLocation
+      guard isDraggingWindow || hypot(pointer.x - pointerOrigin.x, pointer.y - pointerOrigin.y) >= 3 else {
+        return false
+      }
+      isDraggingWindow = true
+      window.setFrameOrigin(
+        NSPoint(
+          x: windowOrigin.x + pointer.x - pointerOrigin.x,
+          y: windowOrigin.y + pointer.y - pointerOrigin.y))
+      // Keep the mouse-drag sequence flowing even though its down was withheld. No SwiftUI responder
+      // owns it, and AppKit otherwise stops producing subsequent drag events after a consumed event.
+      return false
+    case .leftMouseUp:
+      guard canMoveWindow else { return false }
+      if !isDraggingWindow, let pendingMouseDown {
+        // `atStart` prepends, so enqueue up first and down second to replay down → up.
+        replayEventsRemaining = 2
+        NSApplication.shared.postEvent(event, atStart: true)
+        NSApplication.shared.postEvent(pendingMouseDown, atStart: true)
+      }
+      pendingMouseDown = nil
+      windowOrigin = nil
+      pointerOrigin = nil
+      canMoveWindow = false
+      isDraggingWindow = false
+      return true
+    default:
+      return false
+    }
   }
 }
 
