@@ -361,7 +361,7 @@ This spike also contains `rn-runtime/`, a fresh bare React Native 0.79.2 shell g
 ### Completed
 
 - React Native CLI generated the iOS and Android projects.
-- `npm install` completed: 902 packages installed.
+- Dependency installation completed: 902 packages installed.
 - New Architecture/codegen ran during CocoaPods setup.
 
 ### Native build results

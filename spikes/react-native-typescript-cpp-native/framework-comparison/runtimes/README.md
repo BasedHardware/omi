@@ -10,13 +10,13 @@ omi-relay-contract:v1|native-seam:<framework boundary>|payload:bounded|gap:expli
 
 | Shell | Command | Evidence |
 |---|---|---|
-| Tauri 2 | `npm install && npm run build && npm run tauri build -- --debug` | TypeScript + Rust command + macOS bundle/DMG built |
+| Tauri 2 | `bun install && bun run build && bun run tauri build -- --debug` | TypeScript + Rust command + macOS bundle/DMG built |
 | Dioxus | `cargo check --manifest-path src-tauri/Cargo.toml` | Official Dioxus/Tauri shell checks |
 | Flutter | `flutter analyze`; `MACOSX_DEPLOYMENT_TARGET=12.0 flutter build macos --debug` | Analyzer and macOS shell build |
-| Lynx | `npm install && npm run build` | ReactLynx shell bundle builds; native module remains next seam |
-| Makepad | `cargo test --manifest-path .../makepad_shell/Cargo.toml` | Published Makepad widgets dependency compiles; contract test passes |
-| SwiftUI | `swift build --package-path .../swift_native_shell -c debug` | SwiftUI macOS executable builds; Android intentionally skipped |
-| Compose Multiplatform | `./gradlew jvmJar --no-daemon` in the official template | Desktop JVM target builds |
+| Lynx | `bun install && bun run build` | ReactLynx shell bundle builds; native module remains next seam |
+| Makepad | `cargo test --manifest-path framework-comparison/runtimes/makepad_shell/Cargo.toml` | Published Makepad widgets dependency compiles; contract test passes |
+| SwiftUI | `swift build --package-path framework-comparison/runtimes/swift_native_shell -c debug` | SwiftUI macOS executable builds; Android intentionally skipped |
+| Compose Multiplatform | `./gradlew jvmJar --no-daemon` from `framework-comparison/runtimes/compose_template` | Desktop JVM target builds |
 
 ## Evidence that remains blocked or scoped
 

@@ -27,6 +27,23 @@ The probe is dependency-free. It validates that every candidate has an explicit 
 - Swift native (iOS/macOS only; Android intentionally excluded)
 - Web TypeScript + Moonshine boundary
 
+The detailed comparison and decision record is in [`COMPARISON.md`](COMPARISON.md).
+
+## Local crate reuse check
+
+The sibling crates were inspected as architecture references, not copied into this
+spike:
+
+- `~/projects/rotary` (`rx4`) is an agent-harness engine. Its `mcp` feature,
+  `src/mcp.rs`, IPC, permissions, and session APIs could support a future host-side
+  tool/agent integration, but they are not UI framework or native-function proof.
+- `~/projects/zkr` is a Rust evidence-backed memory database. It could be an
+  optional host persistence adapter in a later experiment, but using it here would
+  violate this spike's no-production-code/no-Omi-v4-reuse boundary.
+
+The framework decision remains independent of these crates. See the crate-specific
+section in `COMPARISON.md` for the reuse boundary.
+
 ## Evidence levels
 
 | Level | Meaning |
