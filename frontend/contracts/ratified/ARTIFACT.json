@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "compatibility": "additive",
-  "provenanceSha256": "ee4ead203206aaab5f9ca43b11177f76fa94caa1fb3f6ceae9485a3ec39674e3",
-  "sourceDigest": "27bcce85752111ec4daabc14a74e5aa10520ba0acbd66bd456f5224c0e1f133f",
-  "tarballSha256": "5cb40a9a75523d6282539f0696bffeabca7a2d3e62835f2e4f8010e362454fad",
+  "provenanceSha256": "d5aa26fbe32a5852fcf11b595141e1902df5077fecfa9fbf3d9fbd9944da3e2e",
+  "sourceDigest": "c872d23edcda5ca1c4621437a26a65347469a1cf68882c451e4a9d339ddc0ac3",
+  "tarballSha256": "d88f8731d3ed75dc25124a80d7425def0f427ecf40dfe3d284e0fe062eacf036",
   "files": [
     "package/PROVENANCE.json",
     "package/README.md",
@@ -19,12 +19,16 @@
     "package/dist/recall/trace.js",
     "package/dist/wire/json.d.ts",
     "package/dist/wire/json.js",
+    "package/dist/write/ops.d.ts",
+    "package/dist/write/ops.js",
     "package/fixtures/manifest.json",
     "package/fixtures/page-conformance.json",
     "package/fixtures/read-page-windows.json",
     "package/fixtures/recall-completeness.json",
     "package/fixtures/recall-trace.json",
     "package/fixtures/status-matrix.json",
+    "package/fixtures/write-ops-conformance.json",
+    "package/fixtures/write-ops-outcomes.json",
     "package/package.json"
   ]
 }

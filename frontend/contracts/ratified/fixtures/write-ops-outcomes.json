@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "ruling": "COORD-write-path-rulings",
+  "route": "/v1/{domain}/ops",
+  "writableDomains": [
+    "tasks"
+  ],
+  "writeIdPattern": "^[0-9a-f]{64}$",
+  "writeIdEntropyBytes": 32,
+  "outcomes": [
+    {
+      "outcome": "accepted",
+      "status": 200,
+      "kind": "accepted",
+      "idempotent": false
+    },
+    {
+      "outcome": "accepted_idempotent",
+      "status": 200,
+      "kind": "accepted",
+      "idempotent": true
+    },
+    {
+      "outcome": "authentication",
+      "status": 401,
+      "body": "{\"error\":\"unauthorized\",\"refusal_outcome\":\"authentication\"}",
+      "kind": "refusal"
+    },
+    {
+      "outcome": "authorization",
+      "status": 403,
+      "body": "{\"error\":\"forbidden\",\"refusal_outcome\":\"authorization\"}",
+      "kind": "refusal"
+    },
+    {
+      "outcome": "entitlement",
+      "status": 403,
+      "body": "{\"error\":\"forbidden\",\"refusal_outcome\":\"entitlement\"}",
+      "kind": "refusal"
+    },
+    {
+      "outcome": "stale_epoch",
+      "status": 409,
+      "body": "{\"error\":\"stale_epoch\",\"refusal_outcome\":\"stale_epoch\"}",
+      "kind": "refusal"
+    },
+    {
+      "outcome": "validation",
+      "status": 422,
+      "body": "{\"error\":\"invalid_envelope\"}",
+      "kind": "error"
+    },
+    {
+      "outcome": "write_id_reuse",
+      "status": 409,
+      "body": "{\"error\":\"write_id_reuse\"}",
+      "kind": "error"
+    },
+    {
+      "outcome": "conflict",
+      "status": 409,
+      "body": "{\"error\":\"conflict\"}",
+      "kind": "error"
+    },
+    {
+      "outcome": "maintenance",
+      "status": 503,
+      "body": "{\"error\":\"maintenance\"}",
+      "kind": "error"
+    }
+  ]
+}

@@ -48,7 +48,8 @@ export type RatifiedCorpusName =
   | "recall-completeness"
   | "recall-trace"
   | "page-conformance"
-  | "status-matrix";
+  | "status-matrix"
+  | "write-ops-conformance";
 
 export interface RatifiedFixtureManifest {
   readonly schemaVersion: number;
@@ -70,6 +71,33 @@ export function readRatifiedCorpus(name: RatifiedCorpusName): readonly unknown[]
     throw new Error(`ratified corpus ${name}.json is not an array — the corpus schema changed`);
   }
   return parsed;
+}
+
+/**
+ * The write-ops SCHEMA OF RECORD — the declared outcome table the corpus is
+ * checked for coverage against (`core/scripts/check-wire-conformance.mjs`).
+ *
+ * Read as an object rather than through `readRatifiedCorpus`, which requires
+ * an array: the two files are different kinds of thing. The corpus is a list
+ * of cases; this is the enumeration of everything the wire can answer, and the
+ * ratified package's own test asserts it matches the module's exported tables
+ * so it cannot drift into a second source of truth.
+ */
+export function readRatifiedWriteOpsSchema(): {
+  readonly schemaVersion: number;
+  readonly route: string;
+  readonly writableDomains: readonly string[];
+  readonly writeIdPattern: string;
+  readonly writeIdEntropyBytes: number;
+  readonly outcomes: readonly {
+    readonly outcome: string;
+    readonly kind: "accepted" | "refusal" | "error";
+    readonly status: number;
+    readonly body?: string;
+    readonly idempotent?: boolean;
+  }[];
+} {
+  return JSON.parse(readFileSync(new URL("write-ops-outcomes.json", FIXTURE_DIR), "utf8"));
 }
 
 /**
