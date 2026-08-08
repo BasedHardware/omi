@@ -1,3 +1,0 @@
-{
-  "change": "Fixed assistant interval sliders showing the wrong handle position for a value synced from your account, and added 1-minute, 5-minute and 30-minute steps between the old 10-second and 10-minute extremes"
-}

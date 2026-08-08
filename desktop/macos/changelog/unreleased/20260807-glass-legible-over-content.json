@@ -1,3 +1,0 @@
-{
-  "change": "Fixed chat and other panels being hard to read when the window floats over a browser or document — text and pages behind the window no longer show through strongly enough to interleave with what Omi is showing you, while the panels stay translucent"
-}
