@@ -136,13 +136,15 @@ test("model request mutation cannot rewrite the retained render manifest", async
   const input = projectedInput();
   const tree = buildDeterministicAnchors(input);
   const original = tree.nodes[0]!.dependency_manifest.live_member_revisions;
+  let mutationRejected = false;
   const renders = await renderStructuralTree(tree, input, {
     render: async (request) => {
       const node = (request.input as { node: { dependency_manifest: { live_member_revisions: string[] } } }).node;
-      node.dependency_manifest.live_member_revisions.push("forged");
+      try { node.dependency_manifest.live_member_revisions.push("forged"); } catch { mutationRejected = true; }
       return { summary_text: "safe", citations: ["e1"] };
     },
   }, { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" });
+  expect(mutationRejected).toBe(true);
   expect(renders[0]!.rendered_from_manifest.live_member_revisions).toEqual(original);
   expect(renders[0]!.rendered_from_manifest.live_member_revisions).not.toContain("forged");
 });
@@ -246,6 +248,14 @@ test("poisoned or re-signed cache entries are rejected and recomputed", async ()
   expect(calls).toBeGreaterThan(0);
   expect(policyRenders.every((render) => render.effective_policy.sensitivity === "generic")).toBe(true);
 
+  const resignedSummary = Object.freeze(resign(seed, { summary_text: "forged-and-publicly-resigned" }));
+  calls = 0;
+  const summaryRenders = await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => { calls++; return { summary_text: "summary-recomputed", citations: ["e1"] }; },
+  }, options, new Map([[seed.rendered_from_digest, resignedSummary]]));
+  expect(calls).toBeGreaterThan(0);
+  expect(summaryRenders.every((render) => render.summary_text !== "forged-and-publicly-resigned")).toBe(true);
+
   calls = 0;
   const malformed = { ...seed, citations: undefined } as never;
   await renderStructuralTree(buildDeterministicAnchors(input), input, {
@@ -260,4 +270,89 @@ test("poisoned or re-signed cache entries are rejected and recomputed", async ()
   }, options, new Map([[seed.rendered_from_digest, extraField]]));
   expect(calls).toBeGreaterThan(0);
   expect(JSON.stringify(exactRenders)).not.toContain("must-never-survive-cache-validation");
+});
+
+test("cache admission requires the exact produced object in the exact context", async () => {
+  const options = { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" };
+  const input = projectedInput("app:a");
+  const produced = await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => ({ summary_text: "produced", citations: ["e1"] }),
+  }, options);
+  const cache = new Map(produced.map((render) => [render.rendered_from_digest, render]));
+  let calls = 0;
+  await renderStructuralTree(buildDeterministicAnchors(input), input, {
+    render: async () => { calls++; return { summary_text: "must-not-run", citations: ["e1"] }; },
+  }, options, cache);
+  expect(calls).toBe(0);
+
+  for (const values of [
+    produced.map((render) => Object.freeze({ ...render })),
+    produced.map((render) => Object.freeze(structuredClone(render))),
+  ]) {
+    calls = 0;
+    await renderStructuralTree(buildDeterministicAnchors(input), input, {
+      render: async () => { calls++; return { summary_text: "recomputed", citations: ["e1"] }; },
+    }, options, new Map(values.map((render) => [render.rendered_from_digest, render])));
+    expect(calls).toBeGreaterThan(0);
+  }
+
+  const otherInput = projectedInput("app:b");
+  const otherProduced = await renderStructuralTree(buildDeterministicAnchors(otherInput), otherInput, {
+    render: async () => ({ summary_text: "other", citations: ["e1"] }),
+  }, options);
+  const producedByNode = new Map(produced.map((render) => [render.node_id, render]));
+  const wrongContext = new Map(otherProduced.map((render) => [render.rendered_from_digest, producedByNode.get(render.node_id)!]));
+  calls = 0;
+  await renderStructuralTree(buildDeterministicAnchors(otherInput), otherInput, {
+    render: async () => { calls++; return { summary_text: "context-recomputed", citations: ["e1"] }; },
+  }, options, wrongContext);
+  expect(calls).toBeGreaterThan(0);
+});
+
+test("shared-reference and distinct-by-value graphs have identical model and cache semantics", async () => {
+  const graph = (shareRange: boolean) => {
+    const value = snapshot();
+    value.claims = value.claims.map((item) => item.revision_id === "a"
+      ? { ...item, claim: { ...item.claim, evidence_refs: ["e1", "e2"] } }
+      : item);
+    value.events = value.events!.map((item) => ({
+      ...item, event: { ...item.event, evidence_addressable_refs: ["e1", "e2"] },
+    }));
+    const first = value.evidence![0]!;
+    value.evidence = [first, {
+      revision_id: "e2",
+      evidence: {
+        ...first.evidence,
+        evidence_id: "e2",
+        range: shareRange ? first.evidence.range : { ...first.evidence.range },
+        source_independence_key: "k:e2",
+      },
+    }];
+    return value;
+  };
+  const project = (value: ReturnType<typeof snapshot>) => readAfterApplicationAuthorization(authorizationRequest(), () => ({
+    snapshot: value, options: { account_timezone: "UTC" },
+  }));
+  const shared = project(graph(true));
+  const distinct = project(graph(false));
+  expect(shared.projected_content_digest).toBe(distinct.projected_content_digest);
+  expect(shared.graph_generation).toBe(distinct.graph_generation);
+  expect(JSON.stringify(shared)).toBe(JSON.stringify(distinct));
+  expect(shared.claims[0]!.evidence_spans[0]!.range).not.toBe(shared.claims[0]!.evidence_spans[1]!.range);
+
+  const model = { render: async (request: { input: unknown }) => {
+    const spans = (request.input as { claims: { evidence_spans: { range: object }[] }[] }).claims[0]!.evidence_spans;
+    return { summary_text: spans[0]!.range === spans[1]!.range ? "alias-observed" : "value-only", citations: ["e1", "e2"] };
+  } };
+  const firstRenders = await renderStructuralTree(buildDeterministicAnchors(shared), shared, model, {
+    strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s",
+  });
+  expect(firstRenders.every((render) => render.summary_text === "value-only")).toBe(true);
+  let replayCalls = 0;
+  const replay = await renderStructuralTree(buildDeterministicAnchors(distinct), distinct, {
+    render: async () => { replayCalls++; return { summary_text: "poisoned", citations: ["e1", "e2"] }; },
+  }, { strategy: "summary", model_version: "m", prompt_version: "p", policy_version: "p", schema_version: "s" },
+  new Map(firstRenders.map((render) => [render.rendered_from_digest, render])));
+  expect(replayCalls).toBe(0);
+  expect(replay.every((render) => render.summary_text === "value-only")).toBe(true);
 });

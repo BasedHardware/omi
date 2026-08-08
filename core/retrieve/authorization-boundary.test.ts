@@ -74,6 +74,37 @@ test("application read denials all occur before the supplied store callback", ()
   }
 });
 
+test("authorization rejects every malformed runtime shape before store access", () => {
+  const base = allowed();
+  const withoutKey = (value: object, key: string): Record<string, unknown> =>
+    Object.fromEntries(Object.entries(value).filter(([candidate]) => candidate !== key));
+  const malformed: unknown[] = [
+    ...["owner_account_id", "credential", "persisted_grant"].map((key) => withoutKey(base, key)),
+    ...["owner_account_id", "credential_kind", "app_id", "key_id", "scopes", "active"]
+      .map((key) => ({ ...base, credential: withoutKey(base.credential, key) })),
+    ...["owner_account_id", "consumer", "app_id", "key_id", "enabled", "default_read", "scopes"]
+      .map((key) => ({ ...base, persisted_grant: withoutKey(base.persisted_grant!, key) })),
+    { ...base, extra: true },
+    { ...base, credential: { ...base.credential, extra: true } },
+    { ...base, credential: { ...base.credential, active: "false" } },
+    { ...base, credential: { ...base.credential, scopes: "memories.read" } },
+    { ...base, credential: { ...base.credential, scopes: ["memories.read", 7] } },
+    { ...base, persisted_grant: { ...base.persisted_grant!, extra: true } },
+    { ...base, persisted_grant: { ...base.persisted_grant!, enabled: 1 } },
+    { ...base, persisted_grant: { ...base.persisted_grant!, default_read: "false" } },
+    { ...base, persisted_grant: { ...base.persisted_grant!, scopes: "memories.read" } },
+    { ...base, persisted_grant: { ...base.persisted_grant!, scopes: ["memories.read", false] } },
+  ];
+  for (const request of malformed) {
+    let storeCalls = 0;
+    expect(() => readAfterApplicationAuthorization(request as never, () => {
+      storeCalls++;
+      return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+    })).toThrow();
+    expect(storeCalls).toBe(0);
+  }
+});
+
 test("application projection factory is branded, owner-bound, and canonical/default only", () => {
   const graph = snapshot();
   const projected = readAfterApplicationAuthorization(allowed(), load(graph));
@@ -89,6 +120,9 @@ test("application projection factory is branded, owner-bound, and canonical/defa
   expect(() => readAfterApplicationAuthorization(allowed(), () => ({
     snapshot: graph,
     options: { account_timezone: "UTC", request_context: { reader_account_id: "owner", grant: { grant_id: "owner", policy_classes: [] } } },
+  }) as never)).toThrow("projection_binding_mismatch");
+  expect(() => readAfterApplicationAuthorization(allowed(), () => ({
+    snapshot: graph, options: { account_timezone: "UTC" }, extra: "not-authority",
   }) as never)).toThrow("projection_binding_mismatch");
 });
 
@@ -269,4 +303,85 @@ test("hidden identity constraints cannot rename or coalesce visible application 
   expect(constrained.projected_content_digest).toBe(baseline.projected_content_digest);
   expect(constrained.graph_generation).toBe(baseline.graph_generation);
   expect(buildDeterministicAnchors(constrained)).toEqual(buildDeterministicAnchors(baseline));
+});
+
+test("hidden private-only duplicate entity topology is byte-noninterfering", () => {
+  const absent = snapshot();
+  const hidden = snapshot();
+  hidden.entities = [...hidden.entities, {
+    revision_id: "entity:hidden",
+    entity: { ...hidden.entities[0]!.entity, entity_id: "entity:hidden", entity_revision_id: "entity:hidden" },
+  }];
+  hidden.claims = hidden.claims.map((item) => item.revision_id === "private"
+    ? { ...item, claim: { ...item.claim, arguments: item.claim.arguments.map((argument) => ({
+      ...argument, value: argument.value.kind === "entity_ref" ? { ...argument.value, ref: "entity:hidden" } : argument.value,
+    })) } }
+    : item);
+
+  const absentProjection = readAfterApplicationAuthorization(allowed(), load(absent));
+  const hiddenProjection = readAfterApplicationAuthorization(allowed(), load(hidden));
+  expect(JSON.stringify(hiddenProjection)).toBe(JSON.stringify(absentProjection));
+  expect(buildDeterministicAnchors(hiddenProjection)).toEqual(buildDeterministicAnchors(absentProjection));
+});
+
+test("hidden private lineage heads cannot suppress a visible generic predecessor", () => {
+  const hidden = snapshot();
+  hidden.claims = hidden.claims.map((item) => item.revision_id === "a"
+    ? { ...item, commit_sequence: 1 }
+    : {
+      ...item,
+      commit_sequence: 2,
+      claim: {
+        ...item.claim,
+        claim_lineage_id: "lineage:a",
+        supersedes_revision_ids: ["a"],
+      },
+    });
+  const absent = { ...hidden, claims: hidden.claims.filter((item) => item.revision_id !== "private"),
+    adjacency: hidden.adjacency.filter((edge) => edge.claim_revision_id !== "private") };
+  const hiddenProjection = readAfterApplicationAuthorization(allowed(), load(hidden));
+  const absentProjection = readAfterApplicationAuthorization(allowed(), load(absent));
+  expect(hiddenProjection.claims.map((claim) => claim.claim_revision_id)).toEqual(["a"]);
+  expect(JSON.stringify(hiddenProjection)).toBe(JSON.stringify(absentProjection));
+});
+
+test("malformed or foreign records retained by the visible closure fail closed", () => {
+  const duplicateHandle = snapshot();
+  duplicateHandle.entities = [...duplicateHandle.entities, {
+    revision_id: "entity:second",
+    entity: { ...duplicateHandle.entities[0]!.entity, entity_id: "entity:second", entity_revision_id: "entity:second" },
+  }];
+  duplicateHandle.claims = duplicateHandle.claims.map((item) => item.revision_id === "a"
+    ? { ...item, claim: { ...item.claim, arguments: [...item.claim.arguments, {
+      slot_id: "object", role: "object", value: { kind: "entity_ref" as const, ref: "entity:second" },
+    }] } }
+    : item);
+  expect(() => readAfterApplicationAuthorization(allowed(), load(duplicateHandle))).toThrow();
+
+  const predicateWithoutOwner = snapshot();
+  predicateWithoutOwner.claims = predicateWithoutOwner.claims.map((item) => item.revision_id === "a"
+    ? { ...item, claim: { ...item.claim, predicate_id: "predicate:a" } }
+    : item);
+  predicateWithoutOwner.predicates = [{
+    revision_id: "predicate:a",
+    predicate: {
+      predicate_id: "predicate:a", owner_account_id: "owner", predicate_revision_id: "predicate:a",
+      identity_name: "met", display_name: "met", lifecycle: "canonical", slot_ids: ["subject"],
+    },
+  }];
+  delete (predicateWithoutOwner.predicates[0]!.predicate as { owner_account_id?: string }).owner_account_id;
+  expect(() => readAfterApplicationAuthorization(allowed(), load(predicateWithoutOwner))).toThrow("projection_binding_mismatch");
+
+  const foreignPredicate = snapshot();
+  foreignPredicate.claims = foreignPredicate.claims.map((item) => item.revision_id === "a"
+    ? { ...item, claim: { ...item.claim, predicate_id: "predicate:a" } }
+    : item);
+  foreignPredicate.predicates = [{
+    revision_id: "predicate:a",
+    predicate: {
+      predicate_id: "predicate:a", owner_account_id: "owner:b", predicate_revision_id: "predicate:a",
+      identity_name: "met", display_name: "met", lifecycle: "canonical", slot_ids: ["subject"],
+    },
+  }];
+  expect(() => readAfterApplicationAuthorization(allowed(), load(foreignPredicate))).toThrow("projection_binding_mismatch");
 });

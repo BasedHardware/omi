@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { sha256CanonicalContent } from "./content-digest";
+import { normalizePlainJson } from "./plain-json";
 
 test("content digest rejects every non-JSON value instead of collapsing it", () => {
   class RecordClass { value = "x"; }
@@ -26,4 +27,8 @@ test("content digest permits acyclic shared values and hashes them by JSON value
   const shared = { value: "x" };
   expect(sha256CanonicalContent({ left: shared, right: shared }))
     .toBe(sha256CanonicalContent({ left: { value: "x" }, right: { value: "x" } }));
+  const normalized = normalizePlainJson({ right: shared, left: shared, negative_zero: -0 });
+  expect(normalized.left).not.toBe(normalized.right);
+  expect(Object.keys(normalized)).toEqual(["left", "negative_zero", "right"]);
+  expect(Object.is(normalized.negative_zero, -0)).toBe(false);
 });

@@ -30,6 +30,7 @@ export interface ResolvedApplicationCredential {
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMX-006)
 export interface PersistedApplicationMemoryGrant {
   owner_account_id: string;
   // domain-pending(DIV-DOMAPPS-006)
@@ -49,6 +50,7 @@ export interface PersistedApplicationMemoryGrant {
 export interface ApplicationMemoryReadAuthorizationRequest {
   owner_account_id: string;
   credential: ResolvedApplicationCredential;
+  // domain-pending(DIV-DOMX-006)
   persisted_grant: PersistedApplicationMemoryGrant | null;
 }
 
@@ -69,6 +71,7 @@ interface ApplicationReadAuthorization {
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMX-006)
 export interface ApplicationGrantProjectedTreeInputSnapshot extends TreeInputSnapshot {
   readonly reader_projection_digest: string;
   readonly projection_authorization_digest: string;
@@ -86,6 +89,7 @@ export interface ApplicationProjectionLoad {
 export type ApplicationProjectionLoader = () => ApplicationProjectionLoad;
 
 // domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMX-006)
 export type ApplicationReadDenial =
   | "unsupported_credential_kind"
   | "missing_scope"
@@ -108,10 +112,44 @@ export class ApplicationReadDenied extends Error {
 // domain-pending(DIV-DOMCORE-001)
 const REQUIRED_MEMORY_READ_SCOPE = "memories.read";
 const deny = (reason: ApplicationReadDenial): never => { throw new ApplicationReadDenied(reason); };
+const hasExactRecordKeys = (value: object, keys: readonly string[]): boolean => {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+};
+const isStringOrNull = (value: unknown): value is string | null => value === null || typeof value === "string";
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
+const requireAuthorizationRequestShape = (value: unknown): ApplicationMemoryReadAuthorizationRequest => {
+  if (value === null || typeof value !== "object" || Array.isArray(value)
+    || !hasExactRecordKeys(value, ["owner_account_id", "credential", "persisted_grant"])) deny("projection_binding_mismatch");
+  const record = value as Record<string, unknown>;
+  const credential = record.credential;
+  if (typeof record.owner_account_id !== "string" || credential === null || typeof credential !== "object" || Array.isArray(credential)
+    || !hasExactRecordKeys(credential, ["owner_account_id", "credential_kind", "app_id", "key_id", "scopes", "active"])) deny("projection_binding_mismatch");
+  const credentialRecord = credential as Record<string, unknown>;
+  if (!isStringOrNull(credentialRecord.owner_account_id) || typeof credentialRecord.credential_kind !== "string"
+    || !isStringOrNull(credentialRecord.app_id) || !isStringOrNull(credentialRecord.key_id)
+    || !isStringArray(credentialRecord.scopes) || typeof credentialRecord.active !== "boolean") deny("projection_binding_mismatch");
+  const grant = record.persisted_grant;
+  if (grant !== null) {
+    if (typeof grant !== "object" || Array.isArray(grant)
+      || !hasExactRecordKeys(grant, ["owner_account_id", "consumer", "app_id", "key_id", "enabled", "default_read", "scopes"])) deny("projection_binding_mismatch");
+    const grantRecord = grant as Record<string, unknown>;
+    if (typeof grantRecord.owner_account_id !== "string" || typeof grantRecord.consumer !== "string"
+      || typeof grantRecord.app_id !== "string" || typeof grantRecord.key_id !== "string"
+      || typeof grantRecord.enabled !== "boolean" || typeof grantRecord.default_read !== "boolean"
+      || !isStringArray(grantRecord.scopes)) deny("projection_binding_mismatch");
+  }
+  return value as ApplicationMemoryReadAuthorizationRequest;
+};
 const isResolved = (value: string | null): value is string => typeof value === "string" && value.length > 0;
 const normalizedStrings = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
 const genericPolicyLabels = new Set(["subject:generic", "sensitivity:generic", "capture:generic"]);
 const hasOnlyGenericPolicyLabels = (labels: readonly string[]): boolean => labels.every((label) => genericPolicyLabels.has(label));
+const isApplicationDefaultPolicy = (policy: PolicyClass): boolean =>
+  policy.subject_class === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.subject_class
+  && policy.sensitivity === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.sensitivity
+  && policy.capture_class === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.capture_class;
 const rejectNestedOwnerMismatch = (snapshot: GraphSnapshot, ownerAccountId: string): void => {
   const visited = new WeakSet<object>();
   const inspect = (value: unknown): void => {
@@ -164,12 +202,76 @@ const validateVisibleTenantLineage = (
       const entities = snapshot.entities.filter((item) => item.entity.entity_id === argument.value.ref);
       if (entities.length !== 1 || !hasExactOwnOwner(entities[0]!.entity, ownerAccountId)) deny("projection_binding_mismatch");
     }
+    if (claim.predicate_id !== null) {
+      const predicates = (snapshot.predicates ?? []).filter((item) => item.predicate.predicate_id === claim.predicate_id);
+      if (predicates.length !== 1 || !hasExactOwnOwner(predicates[0]!.predicate, ownerAccountId)) deny("projection_binding_mismatch");
+    }
   }
   for (const evidence of evidenceIndex) {
     const events = (snapshot.events ?? []).filter((item) => item.revision_id === evidence.event_revision_id
       || item.event.event_revision_id === evidence.event_revision_id);
     if (events.length !== 1 || !hasExactOwnOwner(events[0]!.event, ownerAccountId)) deny("projection_binding_mismatch");
   }
+};
+
+const currentApplicationEvidence = (
+  revisions: NonNullable<GraphSnapshot["evidence"]>,
+): Map<string, NonNullable<GraphSnapshot["evidence"]>[number]> => {
+  const grouped = new Map<string, NonNullable<GraphSnapshot["evidence"]>[number][]>();
+  for (const revision of revisions) grouped.set(revision.evidence.evidence_id, [...(grouped.get(revision.evidence.evidence_id) ?? []), revision]);
+  const current = new Map<string, NonNullable<GraphSnapshot["evidence"]>[number]>();
+  for (const [evidenceId, members] of grouped) {
+    if (members.length === 1) {
+      current.set(evidenceId, members[0]!);
+      continue;
+    }
+    if (members.some((member) => member.commit_sequence === undefined)) continue;
+    const greatest = Math.max(...members.map((member) => member.commit_sequence!));
+    const heads = members.filter((member) => member.commit_sequence === greatest);
+    if (heads.length === 1) current.set(evidenceId, heads[0]!);
+  }
+  return current;
+};
+
+/** Builds the only graph allowed to influence application-default topology. */
+const applicationVisibleClosure = (snapshot: GraphSnapshot): GraphSnapshot => {
+  const currentEvidence = currentApplicationEvidence(snapshot.evidence ?? []);
+  const claims = snapshot.claims.filter((item) => {
+    if (item.placement_status !== "canonical" || item.claim.lifecycle !== "canonical" || item.claim.scope.locality !== "durable") return false;
+    const evidence = item.claim.evidence_refs.flatMap((ref) => {
+      const revision = currentEvidence.get(ref);
+      return revision ? [revision.evidence] : [];
+    });
+    return isApplicationDefaultPolicy(genericPolicyClassifier.classify(item.claim, evidence))
+      && hasOnlyGenericPolicyLabels(item.claim.policy_labels)
+      && evidence.every((entry) => hasOnlyGenericPolicyLabels(entry.policy_labels));
+  });
+  const claimIds = new Set(claims.map((item) => item.revision_id));
+  const evidenceIds = new Set(claims.flatMap((item) => item.claim.evidence_refs));
+  const evidence = [...evidenceIds].sort().flatMap((evidenceId) => {
+    const revision = currentEvidence.get(evidenceId);
+    return revision ? [revision] : [];
+  });
+  const eventIds = new Set(evidence.map((item) => item.evidence.event_revision_id));
+  const events = (snapshot.events ?? []).filter((item) => eventIds.has(item.revision_id) || eventIds.has(item.event.event_revision_id));
+  const entityIds = new Set(claims.flatMap((item) => item.claim.arguments.flatMap((argument) =>
+    argument.value.kind === "entity_ref" ? [argument.value.ref] : [])));
+  const predicateIds = new Set(claims.flatMap((item) => item.claim.predicate_id ? [item.claim.predicate_id] : []));
+  return {
+    owner_account_id: snapshot.owner_account_id,
+    ...(snapshot.graph_generation === undefined ? {} : { graph_generation: snapshot.graph_generation }),
+    claims,
+    entities: snapshot.entities.filter((item) => entityIds.has(item.entity.entity_id)),
+    predicates: (snapshot.predicates ?? []).filter((item) => predicateIds.has(item.predicate.predicate_id)),
+    identity_constraints: [],
+    events,
+    evidence,
+    liveness_causes: {
+      purged_claim_revision_ids: (snapshot.liveness_causes?.purged_claim_revision_ids ?? []).filter((revision) => claimIds.has(revision)),
+      forgotten_claim_revision_ids: (snapshot.liveness_causes?.forgotten_claim_revision_ids ?? []).filter((revision) => claimIds.has(revision)),
+    },
+    adjacency: snapshot.adjacency.filter((edge) => claimIds.has(edge.claim_revision_id)),
+  };
 };
 
 /**
@@ -184,7 +286,7 @@ export const readAfterApplicationAuthorization = (
   request: ApplicationMemoryReadAuthorizationRequest,
   loadStore: ApplicationProjectionLoader,
 ): ApplicationGrantProjectedTreeInputSnapshot => {
-  request = normalizePlainJson(request);
+  request = requireAuthorizationRequestShape(normalizePlainJson(request));
   const credential = request.credential;
   if (credential.credential_kind !== "mcp_api_key") deny("unsupported_credential_kind");
   if (!credential.scopes.includes(REQUIRED_MEMORY_READ_SCOPE)) deny("missing_scope");
@@ -234,8 +336,16 @@ export const readAfterApplicationAuthorization = (
     projection_policy_classes: Object.freeze([APPLICATION_DEFAULT_SYNTHESIZED_POLICY]),
     authorization_digest: authorizationDigest,
   });
-  const loaded = normalizePlainJson(loadStore());
-  return projectApplicationDefaultReadTreeInput(loaded.snapshot, loaded.options, authorization);
+  const loaded: unknown = normalizePlainJson(loadStore());
+  if (loaded === null || typeof loaded !== "object" || Array.isArray(loaded)
+    || !hasExactRecordKeys(loaded, ["snapshot", "options"])) deny("projection_binding_mismatch");
+  const loadRecord = loaded as Record<string, unknown>;
+  const loadOptions = loadRecord.options;
+  if (loadRecord.snapshot === null || typeof loadRecord.snapshot !== "object" || Array.isArray(loadRecord.snapshot)
+    || loadOptions === null || typeof loadOptions !== "object" || Array.isArray(loadOptions)
+    || !hasExactRecordKeys(loadOptions, ["account_timezone"])
+    || typeof (loadOptions as Record<string, unknown>).account_timezone !== "string") deny("projection_binding_mismatch");
+  return projectApplicationDefaultReadTreeInput(loadRecord.snapshot as GraphSnapshot, loadOptions as { account_timezone: string }, authorization);
 };
 
 /**
@@ -256,21 +366,11 @@ const projectApplicationDefaultReadTreeInput = (
     || Object.keys(options).some((key) => key !== "account_timezone")) deny("projection_binding_mismatch");
   rejectNestedOwnerMismatch(snapshot, authorization.owner_account_id);
   // domain-pending(DIV-DOMCORE-008)
-  const canonicalDefaultSnapshot: GraphSnapshot = {
-    ...snapshot,
-    // Identity closure can rename visible entity arguments before projection.
-    // Omit it until complete visible-only support can be proven.
-    identity_constraints: [],
-    claims: snapshot.claims.filter((item) => item.placement_status === "canonical"
-      && item.claim.lifecycle === "canonical"
-      && item.claim.scope.locality === "durable"),
-  };
+  const canonicalDefaultSnapshot = applicationVisibleClosure(snapshot);
   const input = projectTreeInputSnapshot(canonicalDefaultSnapshot, { account_timezone: options.account_timezone, classifier: genericPolicyClassifier });
   const evidenceById = new Map(input.evidence_index.map((span) => [span.evidence_id, span]));
   // domain-pending(DIV-DOMCORE-008)
-  const claims = input.claims.filter((claim) => claim.policy_class.subject_class === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.subject_class
-    && claim.policy_class.sensitivity === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.sensitivity
-    && claim.policy_class.capture_class === APPLICATION_DEFAULT_SYNTHESIZED_POLICY.capture_class
+  const claims = input.claims.filter((claim) => isApplicationDefaultPolicy(claim.policy_class)
     && hasOnlyGenericPolicyLabels(claim.policy_labels)
     && claim.evidence_refs.every((evidenceId) => {
       const evidence = evidenceById.get(evidenceId);
@@ -327,6 +427,7 @@ const projectApplicationDefaultReadTreeInput = (
 
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMX-006)
 export const isApplicationGrantProjectedTreeInput = (
   input: TreeInputSnapshot,
 ): input is ApplicationGrantProjectedTreeInputSnapshot =>

@@ -37,6 +37,7 @@ export interface RenderModelPort {
 export interface RenderOptions { strategy: string; model_version: string; prompt_version: string; policy_version: string; schema_version: string; }
 export type RenderCache = ReadonlyMap<string, RenderNode>;
 
+const producedRenderNodes = new WeakSet<object>();
 const nodeClaims = (node: StructuralNode, input: TreeInputSnapshot) => node.member_claim_revision_ids.map((id) => input.claims.find((claim) => claim.claim_revision_id === id)).filter((claim): claim is NonNullable<typeof claim> => claim !== undefined);
 const immutableClone = <Value>(value: Value): Value => deepFreezePlainJson(normalizePlainJson(value));
 const samePolicy = (left: PolicyClass, right: PolicyClass): boolean =>
@@ -53,6 +54,8 @@ const renderNodeKeys = [
   "citations", "model_version", "rendered_from_digest", "rendered_from_manifest", "render_hash",
   "effective_policy", "status", "failure", "stale", "source_language",
 ] as const;
+const exactStrings = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
 const renderHash = (render: Pick<RenderNode,
   "owner_account_id" | "graph_generation" | "reader_projection_digest" | "projection_authorization_digest"
   | "projected_content_digest" | "node_id" | "rendered_from_digest" | "rendered_from_manifest"
@@ -83,7 +86,7 @@ const validatedCacheHit = (
     source_language: string;
   },
 ): RenderNode | null => {
-  if (!candidate) return null;
+  if (!candidate || !producedRenderNodes.has(candidate) || !Object.isFrozen(candidate)) return null;
   try {
     const cached = normalizePlainJson(candidate);
     if (!hasExactKeys(cached, renderNodeKeys)
@@ -112,7 +115,9 @@ const validatedCacheHit = (
       || citations.length !== canonicalCitations.length
       || citations.some((citation, index) => citation !== canonicalCitations[index])
       || cached.render_hash !== renderHash(cached)) return null;
-    return deepFreezePlainJson(cached);
+    const accepted = deepFreezePlainJson(cached);
+    producedRenderNodes.add(accepted);
+    return accepted;
   } catch { return null; }
 };
 
@@ -131,12 +136,43 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
   options = immutableClone(options);
   cache = new Map(cache);
   if (tree.input_generation !== input.graph_generation) throw new Error("render tree/input generation mismatch");
-  const rendered = new Map<string, RenderNode>();
-  const visit = async (node: StructuralNode): Promise<RenderNode> => {
+  const inputClaimsById = new Map(input.claims.map((claim) => [claim.claim_revision_id, claim]));
+  if (inputClaimsById.size !== input.claims.length) throw new Error("render input has duplicate claim identity");
+  const nodesById = new Map(tree.nodes.map((node) => [node.node_id, node]));
+  if (nodesById.size !== tree.nodes.length) throw new Error("render tree has duplicate node identity");
+  for (const node of tree.nodes) {
     if (node.graph_generation !== input.graph_generation) throw new Error(`render node/input generation mismatch for ${node.node_id}`);
+    if (new Set(node.child_node_ids).size !== node.child_node_ids.length
+      || node.child_node_ids.some((child) => !nodesById.has(child))) throw new Error(`render tree has incomplete child provenance for ${node.node_id}`);
+    if (new Set(node.member_claim_revision_ids).size !== node.member_claim_revision_ids.length
+      || node.member_claim_revision_ids.some((revision) => !inputClaimsById.has(revision))) {
+      throw new Error(`render tree has incomplete member provenance for ${node.node_id}`);
+    }
+    if (!exactStrings([...node.dependency_manifest.live_member_revisions], [...node.member_claim_revision_ids].sort())) {
+      throw new Error(`render tree has incomplete member provenance for ${node.node_id}`);
+    }
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const assertAcyclic = (nodeId: string): void => {
+    if (visiting.has(nodeId)) throw new Error(`render tree cycle at ${nodeId}`);
+    if (visited.has(nodeId)) return;
+    visiting.add(nodeId);
+    for (const child of nodesById.get(nodeId)!.child_node_ids) assertAcyclic(child);
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+  };
+  for (const node of tree.nodes) assertAcyclic(node.node_id);
+  const rendered = new Map<string, RenderNode>();
+  const inFlight = new Map<string, Promise<RenderNode>>();
+  const visit = (node: StructuralNode): Promise<RenderNode> => {
     const existing = rendered.get(node.node_id);
-    if (existing) return existing;
-    const children = await Promise.all(node.child_node_ids.map((id) => visit(tree.nodes.find((item) => item.node_id === id)!)));
+    if (existing) return Promise.resolve(existing);
+    const pending = inFlight.get(node.node_id);
+    if (pending) return pending;
+    const operation = Promise.resolve().then(async (): Promise<RenderNode> => {
+    const children = await Promise.all(node.child_node_ids.map((id) => visit(nodesById.get(id)!)));
+    if (children.some((child) => child.render_hash === null)) throw new Error(`incomplete child render provenance for ${node.node_id}`);
     const claims = nodeClaims(node, input);
     const effective = restrictivePolicyJoin(claims.map((claim) => claim.policy_class));
     // Persist the parent manifest before request construction; this is the structural
@@ -177,6 +213,7 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
         render_generation: `render-v1:${render_hash}`, summary_text: storedSummary, citations, model_version: options.model_version,
         rendered_from_digest, rendered_from_manifest: manifest, render_hash, effective_policy: effective, status, failure: null,
         stale: childStale, source_language: sourceLanguage } satisfies RenderNode);
+      producedRenderNodes.add(result);
       rendered.set(node.node_id, result); return result;
     } catch (error) {
       const result: RenderNode = deepFreezePlainJson({ owner_account_id: input.owner_account_id, graph_generation: input.graph_generation,
@@ -185,13 +222,28 @@ export const renderStructuralTree = async (tree: StructuralTree, input: TreeInpu
         node_id: node.node_id, policy_partition_label: node.policy_partition_label, render_generation: `render-v1:failed:${rendered_from_digest}`,
         summary_text: null, citations: [], model_version: options.model_version, rendered_from_digest, rendered_from_manifest: manifest, render_hash: null,
         effective_policy: effective, status: "failed", failure: error instanceof Error ? error.message : String(error), stale: true, source_language: sourceLanguage } satisfies RenderNode);
+      producedRenderNodes.add(result);
       rendered.set(node.node_id, result); return result;
     }
+    });
+    inFlight.set(node.node_id, operation);
+    return operation;
   };
   await Promise.all(tree.nodes.map(visit));
-  for (const suppliedNode of suppliedTree.nodes) {
-    const renderedNode = tree.nodes.find((node) => node.node_id === suppliedNode.node_id);
-    if (renderedNode) suppliedNode.dependency_manifest = structuredClone(renderedNode.dependency_manifest);
+  const results = [...rendered.values()].sort((left, right) => compareStrings(left.node_id, right.node_id));
+  if (results.length !== tree.nodes.length) throw new Error("render tree provenance is incomplete");
+  const renderedById = new Map(results.map((render) => [render.node_id, render]));
+  for (const node of tree.nodes) {
+    const render = renderedById.get(node.node_id);
+    const childHashes = node.child_node_ids.map((child) => renderedById.get(child)?.render_hash);
+    if (!render || childHashes.some((hash) => hash === null || hash === undefined)
+      || !exactStrings([...render.rendered_from_manifest.child_render_hashes], (childHashes as string[]).sort())) {
+      throw new Error(`render tree provenance is incomplete for ${node.node_id}`);
+    }
   }
-  return [...rendered.values()].sort((left, right) => compareStrings(left.node_id, right.node_id));
+  for (const suppliedNode of suppliedTree.nodes) {
+    const renderedNode = nodesById.get(suppliedNode.node_id);
+    if (renderedNode) suppliedNode.dependency_manifest = normalizePlainJson(renderedNode.dependency_manifest);
+  }
+  return results;
 };

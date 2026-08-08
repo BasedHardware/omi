@@ -70,7 +70,7 @@ test("R2 policy dimensions use a real peer-safe partial-order join", () => {
   expect(validateRestrictiveJoin(ownerPrivateVoice, [ownerPrivateVoice, bystanderHealthScreen])).toBe(false);
 });
 
-test("R2 persists child render hashes on structural parents and propagates structural child staleness", async () => {
+test("R2 persists complete child render hashes and rejects an unrenderable child dependency", async () => {
   const { input, tree } = inputAndTree();
   const success = new DeterministicFakeModel(() => ({ summary_text: "ok", citations: [] }));
   const successfulRenders = await renderStructuralTree(tree, input, success, options());
@@ -85,8 +85,27 @@ test("R2 persists child render hashes on structural parents and propagates struc
     if (node.anchor_key.includes("day:")) throw new Error("child failure");
     return { summary_text: "ok", citations: [] };
   });
-  const renders = await renderStructuralTree(staleTree, input, fake, options());
-  const month = renders.find((render) => staleTree.nodes.find((node) => node.node_id === render.node_id)?.anchor_key.includes("month:"));
-  expect(month?.stale).toBe(true);
-  expect(staleTree.nodes.find((node) => node.node_id === month?.node_id)?.dependency_manifest.child_render_hashes).toEqual(["missing-child-render"]);
+  await expect(renderStructuralTree(staleTree, input, fake, options())).rejects.toThrow("incomplete child render provenance");
+});
+
+test("R2 concurrent roots render each node once and retain only returned child hashes", async () => {
+  const { input, tree } = inputAndTree();
+  const calls = new Map<string, number>();
+  const renders = await renderStructuralTree(tree, input, {
+    render: async (request) => {
+      const nodeId = (request.input as { node: { node_id: string } }).node.node_id;
+      calls.set(nodeId, (calls.get(nodeId) ?? 0) + 1);
+      await Promise.resolve();
+      return { summary_text: nodeId, citations: [] };
+    },
+  }, options());
+  expect(calls.size).toBe(tree.nodes.length);
+  expect([...calls.values()].every((count) => count === 1)).toBe(true);
+  const returnedHashes = new Set(renders.flatMap((render) => render.render_hash === null ? [] : [render.render_hash]));
+  expect(renders.every((render) => render.rendered_from_manifest.child_render_hashes.every((hash) => returnedHashes.has(hash)))).toBe(true);
+
+  const broken = buildDeterministicAnchors(input);
+  (broken.nodes[0] as { child_node_ids: string[] }).child_node_ids = ["missing"];
+  await expect(renderStructuralTree(broken, input, { render: async () => ({ summary_text: "no", citations: [] }) }, options()))
+    .rejects.toThrow("incomplete child provenance");
 });

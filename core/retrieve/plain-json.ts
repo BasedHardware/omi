@@ -2,11 +2,11 @@ import { isProxy } from "node:util/types";
 
 const arrayIndex = /^(0|[1-9]\d*)$/;
 
-const assertPlainJson = (value: unknown, active: WeakSet<object>): void => {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return;
+const copyPlainJson = (value: unknown, active: WeakSet<object>): unknown => {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new TypeError("plain JSON rejects non-finite numbers");
-    return;
+    return Object.is(value, -0) ? 0 : value;
   }
   if (typeof value !== "object") throw new TypeError(`plain JSON rejects ${typeof value}`);
   if (isProxy(value)) throw new TypeError("plain JSON rejects proxies");
@@ -27,26 +27,21 @@ const assertPlainJson = (value: unknown, active: WeakSet<object>): void => {
       throw new TypeError("plain JSON rejects sparse arrays");
     }
   }
-  for (const key of keys) {
-    if (isArray && key === "length") continue;
+  const dataKeys = (keys as string[]).filter((key) => !isArray || key !== "length").sort();
+  const output: unknown[] | Record<string, unknown> = isArray ? [] : {};
+  for (const key of dataKeys) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) throw new TypeError("plain JSON requires enumerable own data properties");
-    assertPlainJson(descriptor.value, active);
+    const copied = copyPlainJson(descriptor.value, active);
+    if (isArray) output[Number(key)] = copied;
+    else output[key] = copied;
   }
   active.delete(value);
+  return output;
 };
 
-export const normalizePlainJson = <Value>(value: Value): Value => {
-  assertPlainJson(value, new WeakSet());
-  let clone: Value;
-  try {
-    clone = structuredClone(value);
-  } catch {
-    throw new TypeError("plain JSON clone failed");
-  }
-  assertPlainJson(clone, new WeakSet());
-  return clone;
-};
+/** Canonical plain-data tree: sorted record keys and no shared-reference aliases. */
+export const normalizePlainJson = <Value>(value: Value): Value => copyPlainJson(value, new WeakSet()) as Value;
 
 export const deepFreezePlainJson = <Value>(value: Value): Value => {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
