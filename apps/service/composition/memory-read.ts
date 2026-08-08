@@ -5,7 +5,7 @@
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-DOMX-001)
 // domain-pending(DIV-DOMX-006)
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 import {
   computeApplicationSynthesizedProjectionGenerationDigest,
@@ -181,8 +181,20 @@ export interface MemoryReadCompositionConfig {
  */
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
-const buildCoverage = (load: CoherentQaLoad): RecallCompletenessInput => {
-  const declaredFrontier = `frontier-v1:durable:${load.internal_coverage.durable.ledger_head_digest}`;
+const buildCoverage = (
+  load: CoherentQaLoad,
+  encodeFrontier: (internalFrontier: string) => string,
+): RecallCompletenessInput => {
+  // The declared frontier reaches the wire UNFILTERED. Unlike item, citation and
+  // trace references it does not pass through the read core's opaque-ref codecs
+  // or its forbidden-ref leak check - `mapCompleteness` copies it straight into
+  // the page. Emitting the raw ledger-head digest here would therefore publish
+  // an unkeyed digest of internal coordinates that is identical for every
+  // reader and correlatable across them. Reader-scoping it costs nothing and
+  // keeps the frontier stable for the reader that actually uses it.
+  const declaredFrontier = encodeFrontier(
+    `durable:${load.internal_coverage.durable.ledger_head_digest}`,
+  );
 
   // Accepted synthesis is not performed here. Only a declared no-eligible state
   // survives as no_eligible; every other state becomes an explicit limitation.
@@ -365,6 +377,19 @@ export const prepareMemoryRead = async (
     reader_projection_digest: evidence.principal_digest,
   });
 
+  /**
+   * Reader-scoped, domain-separated frontier handle. Same construction as the
+   * opaque-ref codecs (per-reader subkey, distinct label) but with the
+   * `frontier-v1:` grammar the ratified parser expects.
+   */
+  const frontierSubkey = createHmac("sha256", Buffer.from(config.codecRootSecret))
+    .update("omi.service.opaque-frontier.v1", "ascii")
+    .update("\0", "ascii")
+    .update(evidence.principal_digest, "ascii")
+    .digest();
+  const encodeFrontier = (internalFrontier: string): string =>
+    `frontier-v1:${createHmac("sha256", frontierSubkey).update(internalFrontier, "utf8").digest("hex")}`;
+
   const preRenderLoad = config.loadCoherent();
   const preRenderProjection = readAfterApplicationAuthorization(authorization, () => ({
     snapshot: toStandardPrototypeJson(preRenderLoad.durable_snapshot),
@@ -402,7 +427,7 @@ export const prepareMemoryRead = async (
             snapshot: toStandardPrototypeJson(load.durable_snapshot),
             options: { account_timezone: load.account_timezone },
           },
-          coverage: buildCoverage(load),
+          coverage: buildCoverage(load, encodeFrontier),
           generations: buildGenerations(
             load,
             evidence.authorization_digest,
