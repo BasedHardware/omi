@@ -87,9 +87,10 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("private static let homeAskBarMinWidth: CGFloat = 560"))
     XCTAssertTrue(source.contains("private static let homeStagePanelMaxWidth: CGFloat = 1280"))
     XCTAssertTrue(source.contains("private func homeStageSideInset(for stageWidth: CGFloat) -> CGFloat"))
-    XCTAssertTrue(source.contains("private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat"))
-    XCTAssertTrue(source.contains("(text as NSString).size(withAttributes: attributes).width"))
-    XCTAssertTrue(source.contains("private func homeHubStage(stageWidth: CGFloat, askBarWidth: CGFloat) -> some View"))
+    XCTAssertTrue(source.contains("private func homeHubAskBarWidth(for stageWidth: CGFloat, draft: String) -> CGFloat"))
+    XCTAssertTrue(
+      source.contains("(text as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 15)]).width"))
+    XCTAssertTrue(source.contains("private func homeHubStage(stageWidth: CGFloat) -> some View"))
     XCTAssertTrue(source.contains("private var homeHubHeadline: some View"))
     XCTAssertFalse(source.contains(".frame(width: 304)"))
     XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeAskBarMaxWidth)"))
@@ -124,9 +125,11 @@ final class DashboardCaptureStateTests: XCTestCase {
           usesLegacyHomeDesign: false
         ))
     }
+    // `.chat` was removed from `SidebarNavItem` when the standalone chat page was deleted. Escape on
+    // Home itself still must not navigate home, so the case moves to the destination Home now is.
     XCTAssertFalse(
       DesktopHomeEscapeNavigation.shouldNavigateHome(
-        selectedIndex: SidebarNavItem.chat.rawValue,
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
         usesLegacyHomeDesign: false
       ))
     XCTAssertFalse(
@@ -177,7 +180,16 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains(".frame(width: popupSize.width, height: popupSize.height)"))
     XCTAssertTrue(
       source.contains(".clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))"))
-    XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissAppsPopup()"))
+    // omi-test-quality: source-inspection -- static contract: whether Home hands its dim a dismiss
+    // action. `isShowingAppsPopup` is private `@State` on a view that needs five live providers to
+    // mount, so the popup cannot be raised and clicked from the test host. That a click on the dim
+    // then runs this action — anywhere on the host, including the undimmed band beside the paint —
+    // is exercised for real in `ShellModalScrimDismissTests`; this is only the wiring that reaches
+    // it. It reads Home's own file because Home is what must do the wiring.
+    XCTAssertTrue(
+      normalizedSource.contains("ShellModalScrim(onTap: dismissAppsPopup)"),
+      "The dim behind the apps popup must carry Home's dismiss action, or clicking outside the "
+        + "popup stops closing it")
     XCTAssertTrue(
       normalizedSource.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
     XCTAssertTrue(
@@ -221,7 +233,14 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(
       source.contains("let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)"))
     XCTAssertTrue(source.contains(".position(x: contentWidth / 2, y: panelTop + panelHeight / 2)"))
-    XCTAssertTrue(normalizedSource.contains(".onTapGesture { dismissHomeConnectSheet()"))
+    // omi-test-quality: source-inspection -- static contract: same wiring as the apps popup above,
+    // for the sheet stacked on top of it, and unreachable for the same reason —
+    // `selectedImportConnector` and its siblings are private `@State`. The click that runs it is
+    // behavioural in `ShellModalScrimDismissTests`.
+    XCTAssertTrue(
+      normalizedSource.contains("ShellModalScrim(onTap: dismissHomeConnectSheet)"),
+      "The dim behind the Home connect sheet must carry its dismiss action, or clicking outside the "
+        + "sheet stops closing it")
     XCTAssertFalse(source.contains("homeConnectSheetHasKeyboardFocus"))
     XCTAssertTrue(source.contains("private func dismissHomeConnectSheet()"))
   }
@@ -321,6 +340,10 @@ final class DashboardCaptureStateTests: XCTestCase {
   func testHomeOverlaysBehaveLikeModals() throws {
     let dashboard = try dashboardSource()
     let apps = try appsSource()
+    // The `dismissableSheet` modifiers are the shared presentation primitive
+    // both Home overlays and the pages mount; they live beside the pages that
+    // use them rather than inside any one of them.
+    let dismissableSheet = try source(named: "DismissableSheet.swift")
     let escapeKeyHandler = try escapeKeyHandlerSource()
     let normalizedDashboard = normalizedWhitespace(dashboard)
 
@@ -344,16 +367,17 @@ final class DashboardCaptureStateTests: XCTestCase {
       "Home overlays must not rely on onExitCommand — it requires focus the overlays never receive"
     )
     XCTAssertTrue(
-      apps.contains("OverlayModalEscapeCatcher {\n              log(\"DISMISSABLE_SHEET: Escape pressed"))
+      dismissableSheet.contains(
+        "OverlayModalEscapeCatcher {\n              log(\"DISMISSABLE_SHEET: Escape pressed"))
 
     // While an overlay is up, the content underneath must be hidden from
     // VoiceOver / Full Keyboard Access and the panel marked as modal.
     XCTAssertTrue(dashboard.contains("private var isHomeModalPresented: Bool"))
     XCTAssertTrue(dashboard.contains(".accessibilityHidden(isHomeModalPresented)"))
     XCTAssertTrue(dashboard.contains(".accessibilityAddTraits(.isModal)"))
-    XCTAssertTrue(apps.contains(".accessibilityHidden(isPresented)"))
-    XCTAssertTrue(apps.contains(".accessibilityHidden(item != nil)"))
-    XCTAssertTrue(apps.contains(".accessibilityAddTraits(.isModal)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityHidden(isPresented)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityHidden(item != nil)"))
+    XCTAssertTrue(dismissableSheet.contains(".accessibilityAddTraits(.isModal)"))
 
     // The close control must be a real, labeled button — not a tap gesture.
     XCTAssertTrue(apps.contains("var accessibilityLabel: String = \"Close\""))

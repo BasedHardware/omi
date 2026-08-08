@@ -37,7 +37,7 @@ environments:
               key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
           MEMORY_ENABLED_USERS:
             category: memory_rollout
-            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            value: ''
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -129,7 +129,7 @@ environments:
               key: TWILIO_ACCOUNT_SID
           MEMORY_MODE:
             category: memory_rollout
-            value: read
+            value: 'off'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -139,7 +139,7 @@ environments:
               key: MCP_RESOURCE_URL
           MEMORY_V3_GET_ENABLED:
             category: memory_rollout
-            value: 'true'
+            value: 'false'
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -386,7 +386,7 @@ environments:
               category: service_auth
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -428,20 +428,20 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -512,7 +512,7 @@ environments:
               category: stt_policy
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -564,7 +564,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -574,14 +574,14 @@ environments:
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -648,7 +648,7 @@ environments:
               category: stt_policy
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -700,7 +700,7 @@ environments:
               category: rollout
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -710,14 +710,14 @@ environments:
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -772,7 +772,7 @@ environments:
           env:
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -805,7 +805,7 @@ environments:
               category: reliability
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -817,16 +817,16 @@ environments:
               category: telemetry
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GCP_LOCATION:
               value: us-central1
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
-              value: '1'
+              value: '0'
               category: replay_capture
             OMI_PARITY_PACK_ALLOWED_PRINCIPALS:
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
               category: replay_capture
             OMI_PARITY_PACK_ROOT:
               value: /tmp/omi-parity-pack
@@ -924,13 +924,13 @@ environments:
               category: rollout
             MEMORY_ENABLED_USERS:
               category: memory_rollout
-              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              value: ''
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -942,7 +942,7 @@ environments:
               value: memories-backend-dev
             MEMORY_MODE:
               category: memory_rollout
-              value: read
+              value: 'off'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -951,9 +951,11 @@ environments:
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
               category: memory_rollout
-              value: 'true'
+              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
+              value: '25'
       workflow_files:
       - .github/workflows/gcp_backend_auto_dev.yml
       - .github/workflows/gcp_backend.yml

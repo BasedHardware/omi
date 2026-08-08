@@ -450,6 +450,28 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
     XCTAssertTrue(viewModel.isEmpty)
   }
 
+  func testCatalogOnlyCanonicalAtlasIsRenderableAndActivationCached() async throws {
+    let fetches = LockedCounter()
+    let response = KnowledgeGraphResponse(
+      nodes: [],
+      edges: [],
+      catalogNodes: [KnowledgeGraphNode(id: "memory-only", label: "Canonical memory", nodeType: .concept)])
+    let viewModel = MemoryGraphViewModel(
+      canonicalGraphFetcher: { _ in
+        fetches.increment()
+        return response
+      },
+      initialGraphResponse: KnowledgeGraphResponse(nodes: [], edges: []))
+
+    await viewModel.prepareCanonicalAtlas()
+    await viewModel.prepareCanonicalAtlas()
+
+    XCTAssertEqual(fetches.read(), 1, "A catalog-only atlas is a settled atlas, not an empty retry loop")
+    XCTAssertFalse(viewModel.isEmpty)
+    XCTAssertFalse(viewModel.isLoading)
+    XCTAssertEqual(viewModel.canonicalAtlasProjection?.snapshot.nodes.map(\.id), ["memory-only"])
+  }
+
   private func makeClient(urlProtocolClass: URLProtocol.Type) async -> APIClient {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [urlProtocolClass]

@@ -2,9 +2,11 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
 
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 import pytest
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
@@ -332,6 +334,48 @@ def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):
     else:
         raise AssertionError('expected processing failure')
 
+    delete.assert_called_once_with('uid1', expected_id)
+
+
+def test_from_segments_returns_byok_rate_limit_and_releases_idempotent_claim(monkeypatch):
+    """Typed processing errors retain the existing idempotent cleanup path."""
+    expected_id = developer._from_segments_conversation_id('uid1', 'byok-rate-limited-session')
+    delete = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(
+        developer,
+        'process_conversation',
+        MagicMock(
+            side_effect=HTTPException(
+                status_code=429,
+                detail={
+                    'code': 'byok_rate_limit',
+                    'message': 'The configured provider account is rate limited. Please retry later or check its limits.',
+                },
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda _request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+
+    app = FastAPI()
+    app.include_router(developer.router)
+    response = TestClient(app).post(
+        '/v1/conversations/from-segments',
+        json=_request(client_session_id='byok-rate-limited-session').model_dump(mode='json'),
+    )
+
+    assert response.status_code == 429
+    assert response.json()['detail']['code'] == 'byok_rate_limit'
+    assert (
+        response.json()['detail']['message']
+        == 'The configured provider account is rate limited. Please retry later or check its limits.'
+    )
     delete.assert_called_once_with('uid1', expected_id)
 
 

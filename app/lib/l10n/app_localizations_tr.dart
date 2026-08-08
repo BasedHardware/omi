@@ -748,11 +748,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'Planınız $date tarihinde yenilenecek.';
-  }
-
-  @override
   String get basicPlan => 'Ücretsiz Plan';
 
   @override
@@ -2133,16 +2128,16 @@ class AppLocalizationsTr extends AppLocalizations {
   String get editMemory => '✏️ Hafızayı düzenle';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Temel olarak sabitle';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Temelden ayır';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Temel bellek';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Her zaman bağlamda';
 
   @override
   String get memoryContentHint => 'Dondurma yemeyi severim...';
@@ -9786,4 +9781,53 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Eşitlemek için çok eski — Omi bunu kabul edemez';
+
+  @override
+  String get planSheetChooseYourPlan => 'Sınırsız Omi\'nin kilidini açmak için planını seç.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Mac, mobil ve web\'de kullanılabilir';
+
+  @override
+  String get popularBadge => 'POPÜLER';
+
+  @override
+  String get worksOnDesktop => 'Masaüstünde çalışır';
+
+  @override
+  String get noDesktopAccess => 'Masaüstünde çalışmaz';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months ay / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ay ücretsiz',
+      one: '1 ay ücretsiz',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro => 'Omi ücretsizdir, ancak ücretsiz sürümün deneyimini etkileyen sınırları vardır:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => '5-7 saniye gecikme (gerçek zamanlı değil)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Ücretsiz sürüme geç';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Ücretsiz sınırsız erişim kazan';
+
+  @override
+  String get shareDataForTraining => 'Eğitim için veri paylaş';
+
+  @override
+  String get yourRequestUnderReview => 'Talebin inceleniyor';
 }

@@ -164,9 +164,12 @@ def _positive_int_from_env(name: str, default: int) -> int:
     return attempts
 
 
-# The first event must arrive before the client/proxy deadline. Afterwards a
+# Setup (timezone / prompt / app tools) has its own budget so multi-second Firestore
+# work cannot silently consume the post-setup first-stream-event (TTFT) window.
+# After setup, the first event must arrive before the client/proxy deadline; afterwards a
 # heartbeat keeps a known-long tool call observable while the total deadline
 # still prevents an agent task from running without bound.
+AGENT_STREAM_SETUP_TIMEOUT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0)
 AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 25.0)
 AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS', 20.0)
 AGENT_STREAM_MAX_DURATION_SECONDS = _positive_timeout_from_env('AGENT_STREAM_MAX_DURATION_SECONDS', 150.0)
@@ -183,8 +186,20 @@ AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
     'AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS', 1.0
 )
 AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
+AGENT_STREAM_SETUP_PROGRESS = 'Preparing response…'
 AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
 AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try again.'
+# File chat still uses direct OpenAI Assistants/vision while gateway feature mode is on;
+# until that surface is migrated, fail with a typed user-safe copy instead of the generic canned reply.
+FILE_CHAT_GATEWAY_BLOCKED_MESSAGE = (
+    "File chat isn't available right now. Try again without attachments, or try again later."
+)
+# Delivered when a provider safety classifier declines the turn. Retrying the same prompt would
+# be declined again, so this says the request cannot be answered rather than inviting a retry.
+AGENT_REFUSAL_MESSAGE = "I can't help with that one. Try asking me something else."
+# Delivered when a loop runs to completion without the model ever emitting text. Unlike a
+# refusal this is not a policy decision, so it does invite a retry.
+AGENT_EMPTY_ANSWER_MESSAGE = "I wasn't able to put a response together for that. Please try again."
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
@@ -577,6 +592,47 @@ async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list
     await callback.put_data(text)
 
 
+def _has_answer(full_response: list) -> bool:
+    """Whether anything the router would render as an answer has been delivered.
+
+    List truthiness is not the same question. A stream can emit the inter-iteration separator or
+    a whitespace-only delta and then fail, which leaves ``full_response`` non-empty while the
+    persisted reply is still blank to the reader.
+    """
+    return bool(''.join(full_response).strip())
+
+
+async def _end_with_answer_guarantee(
+    callback: AsyncStreamingCallback, full_response: list, provider: str
+) -> Optional[str]:
+    """Close the stream, guaranteeing the turn left the user something to read.
+
+    Either loop can run to completion without the model emitting any text: a content filter, an
+    empty completion, or a tool-only iteration with nothing to say. ``full_response`` is what the
+    router persists and renders, so returning here silently hands the user a blank answer and
+    records the turn as a success. Report it as the failure it is instead.
+    """
+    if _has_answer(full_response):
+        await callback.end()
+        return None
+    logger.warning('Chat agent loop finished with no answer provider=%s', provider)
+    await _put_answer_text(callback, full_response, AGENT_EMPTY_ANSWER_MESSAGE)
+    await callback.end()
+    return 'empty_answer'
+
+
+def _refusal_category(response: Any) -> str:
+    """Name the policy category behind a refusal, for logs only.
+
+    ``stop_details`` is populated only alongside ``stop_reason == "refusal"`` and is absent on
+    older provider versions, so every level is optional. The category is a fixed provider enum
+    and carries none of the request content.
+    """
+    details = getattr(response, 'stop_details', None)
+    category = getattr(details, 'category', None) if details is not None else None
+    return category if isinstance(category, str) and category else 'unspecified'
+
+
 async def _run_anthropic_agent_stream(
     system_prompt: str,
     messages: list,
@@ -693,7 +749,9 @@ async def _run_anthropic_agent_stream(
                     continue
 
                 await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
-                await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
+                # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+                # router would overwrite this apology with its own canned error.
+                await _put_answer_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
                 await callback.end()
                 return f'provider_{type(e).__name__}'
 
@@ -705,6 +763,18 @@ async def _run_anthropic_agent_stream(
                 reason=retried_reason,
                 outcome='recovered',
             )
+
+        # A safety classifier can decline the turn. The response is a normal success with an
+        # empty (or partial) content list, so the loop would otherwise exit as if the model had
+        # simply answered nothing: the router sees a blank answer, emits its generic error, and
+        # records no error at all. Say so through the normal streamed/persisted contract and
+        # report the turn as failed instead.
+        if response.stop_reason == "refusal":
+            logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
+            if not _has_answer(full_response):
+                await _put_answer_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
+            await callback.end()
+            return 'provider_refusal'
 
         # If no tool_use, we're done
         if response.stop_reason != "tool_use":
@@ -780,7 +850,7 @@ async def _run_anthropic_agent_stream(
     stats = safety_guard.get_stats()
     logger.info(f"Safety Guard final stats: {stats}")
 
-    await callback.end()
+    return await _end_with_answer_guarantee(callback, full_response, 'anthropic')
 
 
 def _openai_content_text(content: Any) -> str:
@@ -897,7 +967,9 @@ async def _run_openai_agent_stream(
         chat_model = chat_model.bind(tools=tool_schemas, tool_choice='auto', max_completion_tokens=8192)
     except Exception as error:
         await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-        await callback.put_data('\n\nSorry, I encountered an error. Please try again.')
+        # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+        # router would overwrite this apology with its own canned error.
+        await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
         await callback.end()
         return f'provider_{type(error).__name__}'
 
@@ -965,7 +1037,7 @@ async def _run_openai_agent_stream(
                     continue
 
                 await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-                await callback.put_data('\n\nSorry, I encountered an error. Please try again.')
+                await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
 
@@ -1033,7 +1105,7 @@ async def _run_openai_agent_stream(
         messages.extend(tool_results)
 
     logger.info('Safety Guard final stats: %s', safety_guard.get_stats())
-    await callback.end()
+    return await _end_with_answer_guarantee(callback, full_response, 'openai')
 
 
 # ---------------------------------------------------------------------------
@@ -1113,10 +1185,13 @@ async def execute_agentic_chat_stream(
     platform: Optional[str] = None,
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
+    setup_deadline_at: Optional[float] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
     Yields formatted chunks with "data: " or "think: " prefixes.
+    ``setup_deadline_at`` is an absolute loop-clock deadline shared with the
+    chat router so metadata + prompt/tool load use one setup budget.
     """
     # Guard against oversized input before any setup or model call. An extremely long message (or
     # a long history) would exceed the chat model's context window; the Anthropic call then raises
@@ -1134,14 +1209,23 @@ async def execute_agentic_chat_stream(
         yield None
         return
 
-    first_event_deadline = asyncio.get_running_loop().time() + AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
+    if callback_data is not None:
+        callback_data.setdefault('route', 'agentic')
+
+    # Setup and post-setup TTFT use separate clocks so multi-second prompt/tool
+    # loading cannot silently consume the first-stream-event window.
     gateway_feature_mode = False
     try:
         # Resolve the user's timezone once and reuse it for both the system prompt and the
         # injected datetime block, avoiding a duplicate notification_db lookup per request.
         # These helpers perform Firestore and LangSmith I/O before the producer task exists,
-        # so they share the first-event deadline instead of leaving the SSE body silent.
-        async with asyncio.timeout(AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS):
+        # so they use the remaining shared setup budget instead of a second full window.
+        if setup_deadline_at is None:
+            setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
+        setup_remaining = setup_deadline_at - asyncio.get_running_loop().time()
+        if setup_remaining <= 0:
+            raise asyncio.TimeoutError()
+        async with asyncio.timeout(setup_remaining):
             # Anthropic BYOK is an explicit direct-provider choice. It must not
             # enter the managed OpenAI-compatible lane, whose route override
             # would otherwise attach an Anthropic key to a Luna/OpenAI route.
@@ -1173,19 +1257,37 @@ async def execute_agentic_chat_stream(
             except Exception as error:
                 logger.error('Error loading app tools error_type=%s', type(error).__name__)
     except asyncio.TimeoutError:
-        logger.warning('Agent stream timed out before the producer started uid=%s', uid)
+        logger.warning(
+            'Agent stream timed out before the producer started uid=%s reason=setup_timeout route=agentic', uid
+        )
         if callback_data is not None:
             callback_data['error'] = 'setup_timeout'
+            # Persist the typed timeout through the normal done: contract so the
+            # router does not overwrite it with the generic canned fallback.
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
         yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+        yield None
         return
     except asyncio.CancelledError:
         raise
     except Exception as error:
-        logger.error('Agent stream setup failed uid=%s error_type=%s', uid, type(error).__name__)
+        logger.error(
+            'Agent stream setup failed uid=%s reason=setup_failure route=agentic error_type=%s',
+            uid,
+            type(error).__name__,
+        )
         if callback_data is not None:
             callback_data['error'] = type(error).__name__
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
         return
+
+    # Emit a client-visible progress event immediately after setup so the SSE
+    # body is never silent while waiting for the first model token. This also
+    # starts the post-setup first-event clock with a fresh budget.
+    first_event_deadline = asyncio.get_running_loop().time() + AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
+    yield f'think: {AGENT_STREAM_SETUP_PROGRESS}'
 
     # Append app tool awareness to the system prompt. Anthropic discovers deferred app tools
     # through its server-side search tool; the OpenAI-compatible gateway receives those tools
@@ -1318,7 +1420,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             callback_data['chart_data'] = chart_data_from_config
         return True
 
-    # Stream from callback queue
+    # Stream from callback queue. Setup already emitted a think: progress event for the
+    # client, but the first-event clock below still bounds silence from the producer
+    # (post-setup TTFT) separately from that setup progress.
     try:
         started_at = asyncio.get_running_loop().time()
         received_first_event = False
@@ -1371,27 +1475,39 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             logger.info(f"Collected {len(callback_data['memories_found'])} conversations for citation")
 
     except asyncio.TimeoutError:
-        logger.warning('Agent stream reached its bounded deadline uid=%s', uid)
+        logger.warning('Agent stream reached its bounded deadline uid=%s reason=idle_timeout route=agentic', uid)
         await cancel_stream_task(task)
         if callback_data is not None:
             callback_data['error'] = 'idle_timeout'
         if keep_streamed_answer():
             yield None
             return
+        if callback_data is not None:
+            # Persist the typed timeout so the router emits one coherent done: frame
+            # instead of a second generic canned sorry bubble.
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
         yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+        yield None
         return
     except asyncio.CancelledError:
         await cancel_stream_task(task)
         raise
     except Exception as error:
-        logger.error('Agent stream failed uid=%s error_type=%s', uid, type(error).__name__)
+        logger.error(
+            'Agent stream failed uid=%s reason=stream_failure route=agentic error_type=%s',
+            uid,
+            type(error).__name__,
+        )
         await cancel_stream_task(task)
         if callback_data is not None:
             callback_data['error'] = type(error).__name__
         if keep_streamed_answer():
             yield None
             return
+        if callback_data is not None:
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
         yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
         return
     finally:
         if not task.done():

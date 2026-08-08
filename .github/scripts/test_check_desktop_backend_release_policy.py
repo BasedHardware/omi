@@ -148,9 +148,14 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             "",
             1,
         )
-        removed_env = self.dev.replace(
-            "--remove-env-vars=OMI_DESKTOP_RELEASE_TAG",
-            "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG",
+        without_google_adc_reset = self.dev.replace(
+            "GOOGLE_APPLICATION_CREDENTIALS,",
+            "",
+            1,
+        )
+        without_service_account_reset = self.dev.replace(
+            "SERVICE_ACCOUNT_JSON,",
+            "",
             1,
         )
         runtime_signer = self.dev.replace(
@@ -159,13 +164,25 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
             1,
         )
+        for credential_env in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+            with self.subTest(credential_env=credential_env):
+                readded_credential = self.dev.replace(
+                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n"
+                    f"            {credential_env}=/secrets/firebase/service-account.json\n",
+                    1,
+                )
+                errors = POLICY.validate_deploy_workflow(readded_credential, production=False)
+                self.assertTrue(any("must not set" in error and credential_env in error for error in errors), errors)
 
         missing_errors = POLICY.validate_deploy_workflow(missing_mount, production=False)
-        removed_errors = POLICY.validate_deploy_workflow(removed_env, production=False)
+        google_adc_errors = POLICY.validate_deploy_workflow(without_google_adc_reset, production=False)
+        service_account_errors = POLICY.validate_deploy_workflow(without_service_account_reset, production=False)
         signer_errors = POLICY.validate_deploy_workflow(runtime_signer, production=False)
 
         self.assertTrue(any("SERVICE_ACCOUNT_JSON" in error for error in missing_errors), missing_errors)
-        self.assertTrue(any("must not be removed" in error for error in removed_errors), removed_errors)
+        self.assertTrue(any("GOOGLE_APPLICATION_CREDENTIALS" in error for error in google_adc_errors), google_adc_errors)
+        self.assertTrue(any("SERVICE_ACCOUNT_JSON" in error for error in service_account_errors), service_account_errors)
         self.assertTrue(any("must never become" in error for error in signer_errors), signer_errors)
 
     def test_rejects_mutable_image_and_direct_traffic_deploy(self) -> None:
@@ -238,6 +255,13 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
         self.assertTrue(any("desktop_qualify_beta.yml" in error for error in errors), errors)
 
+    def test_rejects_an_agent_vm_job_argument_that_deploy_cloudrun_would_split(self) -> None:
+        mutated = self.dev.replace("'--args=-m,jobs.agent_vm_reconciler'", "--args=-m,jobs.agent_vm_reconciler", 1)
+
+        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+
+        self.assertTrue(any("action-parser-safe" in error for error in errors), errors)
+
     def test_rejects_beta_qualification_without_development_python_health(self) -> None:
         mutated = self.qualification.replace(
             "https://api.omiapi.com/v1/health",
@@ -269,6 +293,56 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_deploy_workflow(mutated, production=False)
         self.assertTrue(any("production Firebase project" in error for error in errors), errors)
 
+    def test_requires_isolated_runtime_env_for_each_development_deployment(self) -> None:
+        for step in ("Deploy desktop-backend to Cloud Run", "Deploy Agent VM reconciler Cloud Run Job"):
+            with self.subTest(step=step):
+                start = self.dev.index(f"      - name: {step}\n")
+                end = self.dev.find("\n      - name: ", start + 1)
+                block = self.dev[start:] if end < 0 else self.dev[start:end]
+                mutated_block = block.replace(
+                    "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+                    "GOOGLE_CLOUD_PROJECT=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+                    1,
+                )
+                mutated = self.dev[:start] + mutated_block + self.dev[start + len(block):]
+                errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                self.assertTrue(any(step in error and "GOOGLE_CLOUD_PROJECT" in error for error in errors), errors)
+
+                mutated_block = block.replace("GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}", "", 1)
+                mutated = self.dev[:start] + mutated_block + self.dev[start + len(block):]
+                errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                self.assertTrue(any(step in error and "GCE_PROJECT_ID" in error for error in errors), errors)
+
+                for env_var in (
+                    "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+                    "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
+                    "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+                    "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
+                ):
+                    with self.subTest(step=step, env_var=env_var):
+                        commented_block = block.replace(env_var, f"# {env_var}", 1)
+                        mutated = self.dev[:start] + commented_block + self.dev[start + len(block):]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                        self.assertTrue(any(step in error and env_var in error for error in errors), errors)
+
+                        unnamed_peer = (
+                            "\n      - uses: actions/checkout@v4\n"
+                            "        env_vars: |\n"
+                            f"          {env_var}\n"
+                        )
+                        mutated = self.dev[:start] + commented_block + unnamed_peer + self.dev[start + len(block):]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=False)
+                        self.assertTrue(any(step in error and env_var in error for error in errors), errors)
+
+    def test_requires_dev_adc_and_an_explicit_firebase_auth_credential_path(self) -> None:
+        without_auth_path = self.dev.replace(
+            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+            "",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(without_auth_path, production=False)
+        self.assertTrue(any("Firebase auth credentials" in error for error in errors), errors)
+
     def test_rejects_baked_credentials_or_python_contract_version_drift(self) -> None:
         errors = POLICY.validate_contract_sources(
             dockerfile=self.dockerfile + "\nCOPY google-credentials.json /app/google-credentials.json\n",
@@ -293,6 +367,13 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_recovery_workflow(mutated)
         self.assertTrue(any("manual traffic-only" in error for error in errors), errors)
         self.assertTrue(any("Ready" in error or "ready" in error for error in errors), errors)
+
+    def test_recovery_requires_checked_out_controls_for_traffic_verification(self) -> None:
+        mutated = self.recovery.replace("      - name: Checkout recovery controls\n        uses: actions/checkout@v7\n\n", "", 1)
+
+        errors = POLICY.validate_recovery_workflow(mutated)
+
+        self.assertTrue(any("Checkout recovery controls" in error for error in errors), errors)
 
     def test_rejects_workflow_chat_contract_drift(self) -> None:
         mutated = self.dev.replace("CHAT_CONTRACT_VERSION: '1'", "CHAT_CONTRACT_VERSION: '2'")

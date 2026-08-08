@@ -762,22 +762,6 @@ struct SharedAssistantSettingsResponse: Codable {
   }
 }
 
-struct FocusSettingsResponse: Codable {
-  var enabled: Bool?
-  var analysisPrompt: String?
-  var cooldownInterval: Int?
-  var notificationsEnabled: Bool?
-  var excludedApps: [String]?
-
-  enum CodingKeys: String, CodingKey {
-    case enabled
-    case analysisPrompt = "analysis_prompt"
-    case cooldownInterval = "cooldown_interval"
-    case notificationsEnabled = "notifications_enabled"
-    case excludedApps = "excluded_apps"
-  }
-}
-
 struct TaskSettingsResponse: Codable {
   var enabled: Bool?
   var analysisPrompt: String?
@@ -898,7 +882,6 @@ enum AssistantSettingsJSONValue: Codable, Equatable {
 
 struct AssistantSettingsResponse: Codable {
   var shared: SharedAssistantSettingsResponse?
-  var focus: FocusSettingsResponse?
   var task: TaskSettingsResponse?
   var insight: InsightSettingsResponse?
   var memory: MemorySettingsResponse?
@@ -907,7 +890,7 @@ struct AssistantSettingsResponse: Codable {
   var unknownSections: [String: AssistantSettingsJSONValue]
 
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case shared, focus, task
+    case shared, task
     case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
@@ -916,7 +899,6 @@ struct AssistantSettingsResponse: Codable {
 
   init(
     shared: SharedAssistantSettingsResponse? = nil,
-    focus: FocusSettingsResponse? = nil,
     task: TaskSettingsResponse? = nil,
     insight: InsightSettingsResponse? = nil,
     memory: MemorySettingsResponse? = nil,
@@ -925,7 +907,6 @@ struct AssistantSettingsResponse: Codable {
     unknownSections: [String: AssistantSettingsJSONValue] = [:]
   ) {
     self.shared = shared
-    self.focus = focus
     self.task = task
     self.insight = insight
     self.memory = memory
@@ -937,7 +918,6 @@ struct AssistantSettingsResponse: Codable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
-    focus = Self.decodeLossy(FocusSettingsResponse.self, from: container, forKey: .focus)
     task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
     insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
     memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
@@ -958,7 +938,6 @@ struct AssistantSettingsResponse: Codable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     try container.encodeIfPresent(shared, forKey: .shared)
-    try container.encodeIfPresent(focus, forKey: .focus)
     try container.encodeIfPresent(task, forKey: .task)
     try container.encodeIfPresent(insight, forKey: .insight)
     try container.encodeIfPresent(memory, forKey: .memory)
@@ -998,12 +977,6 @@ struct AssistantSettingsDynamicCodingKey: CodingKey {
     stringValue = String(intValue)
     self.intValue = intValue
   }
-}
-
-// MARK: - Focus Sessions API
-
-extension APIClient {
-
 }
 
 // MARK: - Insight API

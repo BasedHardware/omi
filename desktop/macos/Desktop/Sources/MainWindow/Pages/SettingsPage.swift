@@ -11,33 +11,99 @@ struct SettingsPage: View {
   @Binding var highlightedSettingId: String?
   var chatProvider: ChatProvider? = nil
 
+  /// Whether the Reset Onboarding confirmation is up.
+  ///
+  /// It lives here rather than beside the card that raises it because a modal's dim is an overlay,
+  /// and an overlay's extent is the view it is attached to. The card is a row inside this page's
+  /// scroll view; attached there, the dim would darken one row and the dialog would centre on it.
+  /// This is the pane — the deepest surface in the shell that is a real, laid-out rectangle rather
+  /// than a scrolling column — so it is where the confirmation is mounted.
+  @State private var showResetOnboardingConfirm = false
+
   var body: some View {
+    Group {
+      if let page = selectedSection.presentedPage {
+        // A section that presents a whole established page mounts it directly. Not inside the
+        // shared scroll view: `PermissionsPage` owns a `ScrollView` of its own and `HelpPage` is a
+        // web view that has to fill the pane, so nesting either one inside this page's scroller
+        // gives the pane two scrollbars and collapses the web view to nothing. Both already draw
+        // their own pane heading and `SettingsGlassMetrics.pane*` padding, so the shared header is
+        // skipped too rather than stacked on top of theirs.
+        presentedPage(page)
+      } else {
+        sectionScrollView
+      }
+    }
+    // Deliberately no background: the window wears the glass, and the glass owns the ground. A fill
+    // here — even a faint one — is a second ground painted over the material, which is how a
+    // translucent window ends up looking opaque.
+    //
+    // Drawn by the shell rather than by `.alert`, which dims the *window* — and this window is a
+    // transparent rectangle larger than the panels in it, so that dim was a rounded rectangle on the
+    // user's wallpaper. See `ShellConfirmationDialog`.
+    .shellConfirmation(
+      isPresented: $showResetOnboardingConfirm,
+      title: "Reset Onboarding?",
+      message: "This will reset onboarding for this app build only, clear onboarding chat history, "
+        + "and restart the app without affecting the other installed build.",
+      confirmTitle: "Reset & Restart"
+    ) {
+      appState.resetOnboardingAndRestart()
+    }
+    // The settings section list is a sibling of this pane inside the panel, so it stays clickable
+    // while the confirmation is up. Leaving on it cancels rather than stranding a destructive
+    // confirmation over a page it no longer belongs to.
+    .onChange(of: selectedSection) { _, _ in
+      showResetOnboardingConfirm = false
+    }
+    .onAppear {
+      AnalyticsManager.shared.settingsPageOpened()
+    }
+  }
+
+  /// The established page a presenting section mounts. One `switch`, so a new presenting section
+  /// cannot compile without naming the page it presents.
+  @ViewBuilder
+  private func presentedPage(_ page: ShellDestination) -> some View {
+    switch page {
+    case .permissions:
+      PermissionsPage(appState: appState)
+    case .help:
+      HelpPage()
+    default:
+      EmptyView()
+    }
+  }
+
+  private var sectionScrollView: some View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
-          // Section header
+          // The pane's own heading. Open Runde at display size — the one run on this surface above
+          // `Font.inkDisplayThreshold`, which is what decides the face; everything below it stays SF
+          // Pro, because that is what a native macOS app sets a settings pane in.
           HStack {
             Text(selectedSection.displayTitle)
-              .scaledFont(size: OmiType.title, weight: .bold)
-              .foregroundColor(OmiColors.textPrimary)
+              .inkStyle(.stepHeadline, color: Ink.primary)
               .id(selectedSection)
               .transition(.opacity)
               .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
 
             Spacer()
           }
-          .padding(.horizontal, OmiSpacing.section)
-          .padding(.top, OmiSpacing.section)
-          .padding(.bottom, OmiSpacing.xxl)
+          .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+          .padding(.top, SettingsGlassMetrics.paneTopPadding)
+          .padding(.bottom, SettingsGlassMetrics.sectionSpacing)
 
-          // Settings content - embedded SettingsView with dark theme override
           SettingsContentView(
             appState: appState,
             selectedSection: $selectedSection,
             highlightedSettingId: $highlightedSettingId,
-            chatProvider: chatProvider
+            chatProvider: chatProvider,
+            showResetOnboardingConfirm: $showResetOnboardingConfirm
           )
-          .padding(.horizontal, OmiSpacing.section)
+          .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+          .padding(.bottom, SettingsGlassMetrics.paneBottomPadding)
 
           Spacer()
         }
@@ -50,10 +116,6 @@ struct SettingsPage: View {
           }
         }
       }
-    }
-    .background(OmiColors.backgroundSecondary.opacity(0.3))
-    .onAppear {
-      AnalyticsManager.shared.settingsPageOpened()
     }
   }
 }
@@ -146,13 +208,9 @@ struct SettingsContentView: View {
   // Log export state
 
   // Focus Assistant states
-  @State var focusEnabled: Bool
-  @State var cooldownInterval: Int
   @State var glowOverlayEnabled: Bool
   @State var analysisDelay: Int
-  @State var focusNotificationsEnabled: Bool
   @State var liveSuggestionsEnabled: Bool
-  @State var focusExcludedApps: Set<String>
 
   // Task Assistant states
   @State var taskEnabled: Bool
@@ -197,7 +255,10 @@ struct SettingsContentView: View {
   @State var isLoadingStats = false
   @State var chatMessageCount: Int?
   @State var isLoadingChatMessages = false
-  @State var showProfileAndStats = false
+  // Persisted, because the copy beside it promises to "keep … hidden until you need them" — a
+  // promise a plain `@State` breaks at the next relaunch, and re-hiding a panel every session is
+  // the opposite of what the control offers.
+  @AppStorage("settingsShowProfileAndStats") var showProfileAndStats = false
 
   // AI User Profile
   @State var aiProfileId: Int64?
@@ -270,7 +331,16 @@ struct SettingsContentView: View {
 
   let cooldownOptions = [1, 2, 5, 10, 15, 30, 60]
   let analysisDelayOptions = [0, 10, 20, 30, 60, 300]  // seconds: instant, 10s, 20s, 30s, 1 min, 5 min
-  let extractionIntervalOptions: [Double] = [10.0, 600.0, 3600.0]  // 10s, 10min, 1hr
+  // 10s, 1min, 5min, 10min, 30min, 1hr. Three rungs — 10s, 10min, 1hr — was not a ladder: the gap
+  // from "ten seconds" to "ten minutes" is the whole usable range of this setting, and any value in
+  // between (the default 600 aside) had no position at all, which is what made an off-list value
+  // land the handle on rung 0. The endpoints are unchanged so no stored setting moves.
+  //
+  // There is deliberately no zero here. This slider answers "how often", and a frequency has no off
+  // position — the card's own switch above it is the off switch, and it is the one that stops the
+  // model calls. A `0` would also have to mean "never" to three assistant loops that read it as
+  // "immediately", which is the opposite of what the number says.
+  let extractionIntervalOptions: [Double] = [10.0, 60.0, 300.0, 600.0, 1800.0, 3600.0]
   let hourOptions = Array(0...23)
   let frequencyOptions = [
     (0, "Off"),
@@ -339,6 +409,29 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case about = "About"
+    /// The two established pages that had no door. Both were only ever written by the sidebar the
+    /// glass shell stopped rendering, so `PermissionsPage` and `HelpPage` kept working with nothing
+    /// on screen that reached them. They are sections rather than a new pill because they were
+    /// already dressed as settings panes — both lay themselves out in `SettingsGlassMetrics.pane*`
+    /// padding and the settings card corner — and because the bar's gear already promises
+    /// "permissions, capture, account". See `presentedPage`.
+    case permissions = "Permissions"
+    case help = "Help"
+
+    /// The established page this section presents *whole*, instead of a column of settings rows.
+    ///
+    /// This is the value `ShellDestination.unreachable()` checks, and the reason a row here is a
+    /// door rather than a second version of the page (INV-NAV-1): the section mounts the same
+    /// `PermissionsPage` / `HelpPage` the shell's own route does, never a trimmed copy of it.
+    /// `SettingsPage` reads it to skip the shared scroll view and pane heading, which those two
+    /// pages already carry themselves.
+    var presentedPage: ShellDestination? {
+      switch self {
+      case .permissions: return .permissions
+      case .help: return .help
+      default: return nil
+      }
+    }
 
     /// Label shown in the settings sidebar and page header. Merged sections
     /// (Account + Plan and Usage, Notifications + Privacy) share one nav item,
@@ -425,7 +518,9 @@ struct SettingsContentView: View {
     }
   }
 
-  @State var showResetOnboardingAlert: Bool = false
+  /// Raised by the Reset Onboarding card here; **presented by `SettingsPage`**, which owns a surface
+  /// this scrolling column does not — see the property there.
+  @Binding var showResetOnboardingConfirm: Bool
   @State var showRescanFilesAlert: Bool = false
   @State var showDeleteAccountAlert: Bool = false
 
@@ -465,24 +560,21 @@ struct SettingsContentView: View {
     appState: AppState,
     selectedSection: Binding<SettingsSection>,
     highlightedSettingId: Binding<String?> = .constant(nil),
-    chatProvider: ChatProvider? = nil
+    chatProvider: ChatProvider? = nil,
+    showResetOnboardingConfirm: Binding<Bool>
   ) {
     self.appState = appState
     self._selectedSection = selectedSection
     self._highlightedSettingId = highlightedSettingId
     self.chatProvider = chatProvider
+    self._showResetOnboardingConfirm = showResetOnboardingConfirm
     let settings = AssistantSettings.shared
     _isMonitoring = State(initialValue: ProactiveAssistantsPlugin.shared.isMonitoring)
     _screenCaptureHealth = State(initialValue: ProactiveAssistantsPlugin.shared.screenCaptureHealth)
     _isTranscribing = State(initialValue: appState.isTranscribing)
-    _focusEnabled = State(initialValue: FocusAssistantSettings.shared.isEnabled)
-    _cooldownInterval = State(initialValue: FocusAssistantSettings.shared.cooldownInterval)
     _glowOverlayEnabled = State(initialValue: settings.glowOverlayEnabled)
     _analysisDelay = State(initialValue: settings.analysisDelay)
-    _focusNotificationsEnabled = State(
-      initialValue: FocusAssistantSettings.shared.notificationsEnabled)
     _liveSuggestionsEnabled = State(initialValue: SuggestionAssistantSettings.shared.isEnabled)
-    _focusExcludedApps = State(initialValue: FocusAssistantSettings.shared.excludedApps)
     _taskEnabled = State(initialValue: TaskAssistantSettings.shared.isEnabled)
     _taskChatAgentEnabled = State(initialValue: TaskAgentSettings.shared.isChatEnabled)
     _taskAgentWorkingDirectory = State(initialValue: TaskAgentSettings.shared.workingDirectory)
@@ -527,16 +619,14 @@ struct SettingsContentView: View {
   /// settings page (visually mirrors `advancedCategoryHeader` but lives here so
   /// routing does not depend on the Sections content files).
   func mergedSectionHeader(title: String, icon: String) -> some View {
-    HStack(spacing: OmiSpacing.sm) {
-      Image(systemName: icon)
-        .scaledFont(size: OmiType.subheading)
-        .foregroundColor(OmiColors.accent)
+    HStack(spacing: SettingsGlassMetrics.rowContentSpacing) {
+      SettingsIconTile(symbol: icon)
       Text(title)
         .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
       Spacer()
     }
-    .padding(.top, OmiSpacing.lg)
+    .padding(.top, SettingsGlassMetrics.sectionSpacing)
   }
 
   var body: some View {
@@ -568,6 +658,11 @@ struct SettingsContentView: View {
           advancedSection
         case .about:
           aboutSection
+        case .permissions, .help:
+          // Presenting sections never reach here — `SettingsPage` mounts the whole page they
+          // present before it builds this pane. Listed explicitly rather than under a `default`
+          // so a new section still has to say what it renders.
+          EmptyView()
         }
       }
       .id(selectedSection)

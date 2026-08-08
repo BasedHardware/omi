@@ -16,7 +16,12 @@ import database.vector_db as vector_db
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
-from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
+from utils.conversations.search import (
+    conversation_matches_date_range,
+    keyword_search_conversation_ids,
+    merge_conversation_search_ids,
+    parse_exact_conversation_reference,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -317,7 +322,10 @@ def search_conversations_tool(
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
-    Search conversations using hybrid keyword + semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
+    Search conversations by topic/event or exact canonical conversation ID/share URL.
+
+    Natural-language queries use hybrid keyword + semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
+    Canonical UUIDs and h.omi.me conversation links resolve to one exact conversation.
 
     This tool combines exact keyword matching on conversation titles/summaries (best for proper names
     like people or places) with AI embeddings that find semantically similar conversations even if
@@ -361,10 +369,15 @@ def search_conversations_tool(
         include_timestamps: Add timestamps to transcript segments (default: False)
 
     Returns:
-        Formatted string with semantically matching conversations ranked by relevance, including transcripts,
-        summaries, action items, events, and metadata.
+        Formatted string with matching conversations, including transcripts, summaries, action items, events, and
+        metadata.
     """
-    logger.info(f"🔧 search_conversations_tool called with query: {query}")
+    exact_conversation_id = parse_exact_conversation_reference(query)
+    logger.info(
+        "🔧 search_conversations_tool mode=%s query_len=%s",
+        'exact-reference' if exact_conversation_id else 'semantic',
+        len(query or ''),
+    )
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -387,7 +400,12 @@ def search_conversations_tool(
     if not uid:
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    logger.info(f"✅ search_conversations_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info(
+        "✅ search_conversations_tool - uid=%s query_mode=%s limit=%s",
+        uid,
+        'exact-reference' if exact_conversation_id else 'semantic',
+        limit,
+    )
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
     if max_transcript_segments != -1:
@@ -422,17 +440,25 @@ def search_conversations_tool(
     limit = min(limit, 20)
 
     try:
-        # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
-        # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
-        keyword_ids = keyword_search_conversation_ids(
-            uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
-        )
-        vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
-        conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
+        keyword_ids: List[str] = []
+        vector_ids: List[str] = []
+        if exact_conversation_id:
+            conversation_ids = [exact_conversation_id]
+        else:
+            # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
+            # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
+            keyword_ids = keyword_search_conversation_ids(
+                uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
+            )
+            vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+            conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
 
         logger.info(
-            f"📊 search_conversations_tool - found {len(conversation_ids)} results "
-            f"({len(keyword_ids)} keyword, {len(vector_ids)} vector) for query: '{query}'"
+            "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
+            len(conversation_ids),
+            len(keyword_ids),
+            len(vector_ids),
+            'exact-reference' if exact_conversation_id else 'semantic',
         )
 
         if not conversation_ids:
@@ -445,7 +471,10 @@ def search_conversations_tool(
                 date_info = f" before the specified end date"
 
             msg = f"No conversations found matching the concept '{query}'{date_info}. The user may not have discussed this topic yet, or it may not be in their recorded conversation history."
-            logger.info(f"⚠️ search_conversations_tool - {msg}")
+            logger.info(
+                "⚠️ search_conversations_tool - no results query_mode=%s",
+                'exact-reference' if exact_conversation_id else 'semantic',
+            )
             return msg
 
         # Get full conversation data
@@ -456,6 +485,10 @@ def search_conversations_tool(
 
         # Filter out locked conversations (paid plan required)
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+        if exact_conversation_id:
+            conversations_data = [
+                c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
+            ]
 
         if not conversations_data:
             return f"No conversations found matching query: '{query}'"
@@ -497,7 +530,7 @@ def search_conversations_tool(
 
                 conversations.append(conversation)
             except Exception as e:
-                logger.error(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
+                logger.error("Error parsing conversation search result: %s", type(e).__name__)
                 continue
 
         logger.info(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
@@ -516,7 +549,8 @@ def search_conversations_tool(
         )
 
         # Return formatted string
-        result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
+        match_kind = 'matching exactly' if exact_conversation_id else 'semantically matching'
+        result = f"Found {len(conversations)} conversations {match_kind} '{query}':\n\n"
         result += conversations_to_string(
             conversations,
             use_transcript=include_transcript,

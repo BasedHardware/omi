@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 """Read-only first-user canonical-memory dev proof.
 
 The proof reads Firestore state and calls `/v3/memories`; it never writes
@@ -30,7 +33,6 @@ from database.google_credentials import prepare_google_credentials
 from database.memory_collections import MemoryCollections
 from utils.memory.v3.limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
 
-FIRST_USER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 DEFAULT_PROJECT = "based-hardware"
 
 
@@ -288,7 +290,7 @@ def build_report(*, uid: str, project: str, firestore_report: dict, api_report: 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run read-only first-user memory dev E2E proof.")
-    parser.add_argument("--uid", default=FIRST_USER_UID)
+    parser.add_argument("--uid", required=True)
     parser.add_argument("--project", default=DEFAULT_PROJECT)
     parser.add_argument("--backend-url", required=True)
     parser.add_argument("--id-token-file", default="")

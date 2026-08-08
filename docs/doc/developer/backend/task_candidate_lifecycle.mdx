@@ -138,21 +138,9 @@ python scripts/activate_task_intelligence_dogfood_user.py \
   --expected-account-generation 0
 ```
 
-After reviewing that redacted control-only report, run the exact same command with `--apply`, the exact UID
-confirmation, and the `read` acknowledgement. The tool re-reads and transactionally fences the generation, so
-an account reset or concurrent control change fails closed rather than activating stale state:
-
-```bash
-cd backend
-python scripts/activate_task_intelligence_dogfood_user.py \
-  --credential-source gcloud-user \
-  --firestore-project based-hardware \
-  --inspect-existing \
-  --expected-account-generation 0 \
-  --apply \
-  --confirm-uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
-  --confirm-workflow-mode read
-```
+Human Smart Tasks activation is currently paused with no approved dogfood UID.
+Do not run the activation tool until a reviewed cohort change explicitly names
+a replacement canary and restores the associated runtime gates.
 
 The tool writes only `workflow_mode: read` and the unchanged `account_generation`; rerunning after a successful
 activation is a no-op. The explicit `gcloud-user` source obtains a short-lived local user token without printing

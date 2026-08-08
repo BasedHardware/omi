@@ -53,9 +53,9 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "read"},
-        {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
+        {"name": "MEMORY_MODE", "value": "off"},
+        {"name": "MEMORY_ENABLED_USERS", "value": ""},
+        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
         {"name": "MEMORY_V3_CURSOR_SECRET_VERSION", "value": "dev-v1"},
         {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
 '''
@@ -112,8 +112,8 @@ def with_parity_pack_env(payload: str) -> str:
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
-        '        {"name": "OMI_PARITY_PACK_CAPTURE", "value": "1"},\n'
-        '        {"name": "OMI_PARITY_PACK_ALLOWED_PRINCIPALS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},\n'
+        '        {"name": "OMI_PARITY_PACK_CAPTURE", "value": "0"},\n'
+        '        {"name": "OMI_PARITY_PACK_ALLOWED_PRINCIPALS", "value": ""},\n'
         '        {"name": "OMI_PARITY_PACK_ROOT", "value": "/tmp/omi-parity-pack"},\n'
         '        {"name": "OMI_PARITY_PACK_GCS_URI", "value": "gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0"},\n'
         '        {"name": "OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS", "value": "3600"},',
@@ -1947,11 +1947,16 @@ def test_memory_maintenance_job_contract_rejects_request_path_cron(tmp_path):
     assert any('request-path surfaces' in error.message for error in errors)
 
 
-def test_memory_maintenance_job_contract_rejects_empty_surface_allowlist(tmp_path):
+def test_memory_maintenance_job_contract_rejects_mismatched_surface_allowlist(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     backend_env = manifest['environments']['dev']['cloud_run']['services']['backend']['env']
-    backend_env['MEMORY_ENABLED_USERS'] = {'value': '', 'category': 'memory_rollout'}
+    backend_env['MEMORY_MODE'] = {'value': 'read', 'category': 'memory_rollout'}
+    backend_env['MEMORY_ENABLED_USERS'] = {'value': 'synthetic-surface-user', 'category': 'memory_rollout'}
+    job_env = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']['env']
+    job_env['MEMORY_MODE'] = {'value': 'read', 'category': 'memory_rollout'}
+    job_env['MEMORY_ENABLED_USERS'] = {'value': 'synthetic-memory-rollout-user', 'category': 'memory_rollout'}
+    job_env['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)
     errors = validator.validate_runtime_env(env='dev', manifest_path=path)
@@ -1962,6 +1967,7 @@ def test_memory_maintenance_job_contract_requires_gateway_luna_bindings_when_ena
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
     for name in (
         'OMI_LLM_GATEWAY_URL',
         'OMI_LLM_GATEWAY_FEATURE_MODE',
@@ -1987,6 +1993,7 @@ def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_en
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'true', 'category': 'memory_rollout'}
     job['env']['OMI_LLM_GATEWAY_URL'] = {'value': 'http://172.16.63.232', 'category': 'service_discovery'}
     path = tmp_path / 'runtime_env.yaml'
     write_yaml(path, manifest)

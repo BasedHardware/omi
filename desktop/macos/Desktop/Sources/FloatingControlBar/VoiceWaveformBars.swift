@@ -19,16 +19,27 @@ import SwiftUI
 struct VoiceWaveformBars: View {
   let isActive: Bool
 
+  /// The bars' ink.
+  ///
+  /// It was a hardcoded white, which was invisible the moment this view left the black pill: the same
+  /// bars render inside `PushToTalkMicButton` in the main window's composer, which is light-pinned
+  /// glass. `Ink.primary` is `labelColor`, so it resolves near-white inside the pill (whose panel
+  /// forces a dark colour scheme) and near-black on the light composer — one token, correct on both
+  /// grounds, and nothing at either call site has to know which ground it is on.
+  var tint: Color = Ink.primary
+
   private static let barCount = 5
   private static let barWidth: CGFloat = 4
   private static let barSpacing: CGFloat = 3
   private static let barHeight: CGFloat = 18
-  private static let fillGradient = Gradient(colors: [OmiColors.accent, OmiColors.accent.opacity(0.6)])
+
+  private var fillGradient: Gradient { Gradient(colors: [tint, tint.opacity(0.6)]) }
 
   @State private var model: WaveBarsModel
 
-  init(isActive: Bool) {
+  init(isActive: Bool, tint: Color = Ink.primary) {
     self.isActive = isActive
+    self.tint = tint
     _model = State(initialValue: WaveBarsModel(barCount: Self.barCount))
   }
 
@@ -65,7 +76,7 @@ struct VoiceWaveformBars: View {
       context.fill(
         path,
         with: .linearGradient(
-          Self.fillGradient,
+          fillGradient,
           startPoint: CGPoint(x: x, y: centerY - h / 2),
           endPoint: CGPoint(x: x, y: centerY + h / 2)
         )

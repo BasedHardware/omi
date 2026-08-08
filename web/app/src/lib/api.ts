@@ -272,6 +272,33 @@ export async function processInProgressConversation(): Promise<CreateConversatio
   }
 }
 
+/**
+ * Finalize exactly one conversation by ID (desktop-style).
+ * Prefer this over processInProgressConversation when a socket owns a
+ * conversation_id — the Redis in_progress pointer is shared across device +
+ * web and must not steal a pendant session (#5388).
+ */
+export async function finalizeConversationById(
+  conversationId: string,
+): Promise<CreateConversationResponse | null> {
+  try {
+    const result = await fetchWithAuth<CreateConversationResponse>(
+      `/v1/conversations/${encodeURIComponent(conversationId)}/finalize`,
+      {
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+    );
+    invalidateCache(invalidationPatterns.conversations);
+    return result;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 // ============================================================================
 // Action Items (Tasks) API
 // ============================================================================

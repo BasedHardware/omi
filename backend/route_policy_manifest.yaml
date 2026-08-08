@@ -1824,3 +1824,28 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - route_type: http
+    method: POST
+    path: /v2/agent/vm/stop-self
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - google_compute_identity_token
+        placement: handler
+        scopes:
+          - exact_firestore_vm_owner
+          - exact_project_zone_instance
+      byok: not_applicable
+      rate_limit:
+        policy_name: agent_vm_stop_broker
+        key_subject: ip
+        enforcement: fail_closed
+        placement: inline
+      timeout_class: default_method
+      surface: internal_control_plane
+      visibility: internal
+      data_domain: agent_vm_lifecycle
+      deprecation:
+        state: active
+      owner: backend

@@ -7,11 +7,16 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+DeveloperKeys.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift
+  # `SettingsPage` mounts the shell-drawn confirmation on Advanced → Reset Onboarding, which S9b
+  # opens and cancels. A system `.alert` dimmed the *window* here, and this window is a transparent
+  # rectangle larger than the panels inside it.
+  - desktop/macos/Desktop/Sources/MainWindow/ShellConfirmationDialog.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/AppRuleEditorView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/HelpPage.swift
 preconditions:
   - auth_ready
 
@@ -83,6 +88,18 @@ steps:
       text_visible:
         - Advanced
         - AI Setup
+
+  - id: S9b
+    name: A destructive confirmation dims the shell, not the desktop
+    # Open and cancel only — confirming restarts the app. What is being checked is where the dim
+    # lands: a SwiftUI `.alert` is presented by AppKit against the host window and dims to that
+    # window's frame, which on this shell paints a rounded rectangle, window shadow and all, onto the
+    # wallpaper between and around the panels. The shell draws its own instead.
+    do: "In Advanced, press 'Reset Onboarding'. Verify a confirmation card titled 'Reset Onboarding?' appears with a sentence naming what it does, a 'Reset & Restart' button, and a way out. Verify the dim behind it stops at the settings panel's own rounded edges — the wallpaper around and between the panels, and the drag band above the top bar, must stay undimmed. Then press Escape, and reopen it and click outside the card: both must cancel. Never press 'Reset & Restart'."
+    expect:
+      interactive_count: { min: 2 }
+      text_visible:
+        - Reset Onboarding?
 
   - id: S10
     name: Navigate to About section
