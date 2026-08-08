@@ -4,6 +4,52 @@ import { isPlainJsonDataGraph, parseCanonicalJson } from "../wire/json.js";
 /** Public wire-shape version; package versioning is reviewed separately. */
 export const SYNTHESIZED_READ_CONTRACT_VERSION = "1.0.0" as const;
 
+/**
+ * The client-declared contract version header for the app-facing REST wire.
+ *
+ * MCP already carries `mcp-protocol-version` on every request
+ * (`apps/mcp/protocol.ts`); the REST door had no equivalent, which made
+ * COORD-contract-evolution-policy.md §5's N/N-1 coexistence unimplementable —
+ * nothing on an app-facing request said which contract version its client
+ * was built against. This header closes that gap, symmetrically with MCP.
+ */
+export const APP_CONTRACT_VERSION_HEADER = "x-omi-contract-version" as const;
+
+/**
+ * PROVISIONAL, not ratified. COORD-contract-evolution-policy.md §5 defines
+ * the floor as "the oldest version still served," keyed off
+ * `backend:ADR-007`'s account control record. That record carries no
+ * contract-version floor anywhere in this codebase today, and no version
+ * older than this one has ever shipped — so there is no ratified floor value
+ * to key off yet. Until one is actually set there, this package treats the
+ * floor as the current wire-shape version. This is a placeholder chosen to
+ * unblock the wire field, not a ratified floor; see the CONTRACT-lane report
+ * for `data/run-2026-08-08b/` for why this could not be resolved otherwise.
+ */
+export const APP_CONTRACT_FLOOR_VERSION: typeof SYNTHESIZED_READ_CONTRACT_VERSION = SYNTHESIZED_READ_CONTRACT_VERSION;
+
+const CONTRACT_VERSION_PATTERN = /^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$/;
+
+/** True for a syntactically well-formed contract version token (bounded, opaque-safe). */
+export function isWellFormedContractVersion(raw: string): boolean {
+  return CONTRACT_VERSION_PATTERN.test(raw);
+}
+
+/**
+ * Resolves the contract version an app-facing request declares its client
+ * was built against. Absent, empty, or malformed input all resolve to the
+ * floor - never a rejection - because an unversioned or garbled declaration
+ * is exactly the case COORD-contract-evolution-policy.md §4 requires to be
+ * tolerated, not refused: "A request without one is treated as the floor."
+ * This function never throws and never reflects untrusted bytes back
+ * unvalidated onto any downstream boundary.
+ */
+export function resolveDeclaredContractVersion(headerValue: string | null | undefined): string {
+  if (typeof headerValue !== "string") return APP_CONTRACT_FLOOR_VERSION;
+  const trimmed = headerValue.trim();
+  return trimmed.length > 0 && isWellFormedContractVersion(trimmed) ? trimmed : APP_CONTRACT_FLOOR_VERSION;
+}
+
 declare const SynthesizedItemIdBrand: unique symbol;
 declare const SynthesizedTextBrand: unique symbol;
 declare const CitationRefBrand: unique symbol;

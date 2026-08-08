@@ -9,7 +9,7 @@ Provisional naming markers for the terms used immediately below:
 `// domain-pending(DIV-DOMCORE-006)`
 
 This is the narrow shared-package boundary approved by the ADR-004 Track 1 mechanism
-review. Version `0.1.1` has no package-root export and exposes only three explicit
+review. Version `0.2.0` has no package-root export and exposes only three explicit
 subpaths:
 
 - `./pagination/cursor`, opaque HMAC-keyset cursor carriage; and
@@ -55,9 +55,34 @@ version. Its type and runtime laws enforce the six-stage subset chain, reference
 the stage implied by every outcome, while keeping trace fields out of the frontend item.
 
 Rulings of record: ADR-004, ADR-008, charter WS-006/M-001, DIV-MEM-004, FEAT-MEM-001,
-FEAT-MEM-002, FC-AUTH-003, and FEAT-AUTH-011. `DIV-DOMCORE-001` and
-`DIV-DOMCORE-008` and `DIV-DOMCORE-006` remain open;
+FEAT-MEM-002, FC-AUTH-003, FEAT-AUTH-011, and COORD-contract-evolution-policy.
+`DIV-DOMCORE-001` and `DIV-DOMCORE-008` and `DIV-DOMCORE-006` remain open;
 their code-level spellings carry mechanical rename markers.
+
+## 0.2.0 - the client contract version header (`additive`)
+
+`0.2.0` adds `APP_CONTRACT_VERSION_HEADER` (`x-omi-contract-version`),
+`APP_CONTRACT_FLOOR_VERSION`, `isWellFormedContractVersion`, and
+`resolveDeclaredContractVersion` to `./projections/synthesized` - no existing
+export, field, or shape changed. Every client built against `0.1.1` keeps
+working unchanged, which is what makes this `additive` under
+COORD-contract-evolution-policy.md §1.
+
+MCP's `mcp-protocol-version` header already tells the server which protocol
+generation a client speaks; the app-facing REST door had no equivalent, so
+N/N-1 coexistence (policy §5) had nothing to key off. An app-facing request
+now declares the contract version its client was built against; an absent,
+empty, or malformed value resolves to `APP_CONTRACT_FLOOR_VERSION` rather
+than being rejected, per policy §4's tolerate-and-count rule.
+
+**`APP_CONTRACT_FLOOR_VERSION` is a PROVISIONAL placeholder, not a ratified
+floor.** The policy defines the floor as the oldest version still served,
+keyed off `backend:ADR-007`'s account control record (§5) - a record that
+does not carry a contract-version floor anywhere in this codebase yet, and no
+version older than `0.2.0` has ever shipped. Until that record actually
+carries one, this package treats the floor as the current version. Raising a
+real floor is, per policy §7, an owner-signed product action - not something
+this bump performs or should be read as having performed.
 
 `PROVENANCE.json` binds reviewed inputs. `ARTIFACT.json` is deliberately outside the
 tarball so it can bind the tarball digest without a self-reference. The tarball includes

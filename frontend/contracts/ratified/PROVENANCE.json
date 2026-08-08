@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": {
     "name": "@omi-core/ratified-contracts",
-    "version": "0.1.1"
+    "version": "0.2.0"
   },
   "repository": "BasedHardware/omi",
   "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
@@ -15,7 +15,8 @@
     "FEAT-MEM-001",
     "FEAT-MEM-002",
     "FC-AUTH-003",
-    "FEAT-AUTH-011"
+    "FEAT-AUTH-011",
+    "COORD-contract-evolution-policy"
   ],
   "compiler": {
     "name": "typescript",
@@ -29,8 +30,8 @@
     },
     {
       "path": "fixtures/clean-consumer/consumer.ts",
-      "sha256": "132abc59ec4dd59460e93dfead3978162e33253abcc2653b5882680f9c552508",
-      "bytes": 9229
+      "sha256": "fad80e5821eee2446533215439afa2809697db636a8909161029c1eb163d29a7",
+      "bytes": 10572
     },
     {
       "path": "fixtures/clean-consumer/tsconfig.json",
@@ -74,7 +75,7 @@
     },
     {
       "path": "package.json",
-      "sha256": "9ece38c4c5e24690f15efc70dd8ec2ed78fe9b22fba828c66fbd056f845647ca",
+      "sha256": "519ecc4e6e82bc5ccbfcb1dc09e847a62f0724983dec3f2cd04f4428b791ebf0",
       "bytes": 1891
     },
     {
@@ -84,8 +85,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "2c2af47a04c46935928d871c612596bca89417c66b10393fdda86149ab6ce399",
-      "bytes": 4373
+      "sha256": "37d454fd4a0c87ca4b3d8762fb0ba460cb139090b06c9bcbba0ee004a750af58",
+      "bytes": 5886
     },
     {
       "path": "scripts/check-domain-markers.mjs",
@@ -99,13 +100,13 @@
     },
     {
       "path": "scripts/package-boundary.mjs",
-      "sha256": "e92d26a2a3af35f82de85c2b93e41d241f8a059df81a1067e4b2c5fd3759c9db",
-      "bytes": 8112
+      "sha256": "eff98d063e09dd5b51f3eec1f55b68bd8b797a127da22296686d8b2621a8a6dc",
+      "bytes": 8893
     },
     {
       "path": "scripts/provenance.mjs",
-      "sha256": "fa38e7cbff17b505122e1a1774a4d2bc992386c341c8fbf16a6b742c80b2cc02",
-      "bytes": 2526
+      "sha256": "987bb1e1b7bcce2e9b40928129de4fc97fc1e97fd3dc6916f6033694c9147973",
+      "bytes": 3100
     },
     {
       "path": "scripts/verify-ci.mjs",
@@ -119,8 +120,8 @@
     },
     {
       "path": "src/projections/synthesized.ts",
-      "sha256": "99eb387894d15aeec44d16589bb664865131330e5c592420078d4ad3c6645a8a",
-      "bytes": 19028
+      "sha256": "a244b79435627f8888fe00c08cd044ba48c381df070d8e895943e8af6f5bfd4b",
+      "bytes": 21464
     },
     {
       "path": "src/recall/trace.ts",
@@ -134,8 +135,8 @@
     },
     {
       "path": "test/contracts.test.mjs",
-      "sha256": "dc5a128cf46ab04113ec8a00cd9c25a75958b69896f58873d2abd8420f107059",
-      "bytes": 12798
+      "sha256": "25d59d0705223482dca9fca2b5e7dafe40eba66c8fcc581828300f7c6bc8aa2c",
+      "bytes": 14783
     },
     {
       "path": "tsconfig.base.json",
@@ -148,5 +149,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "060e3a44f36e3e0126fd2ef38edd4b8fb2b7dbcb123c007bc58bd13e34cef153"
+  "sourceDigest": "27bcce85752111ec4daabc14a74e5aa10520ba0acbd66bd456f5224c0e1f133f"
 }

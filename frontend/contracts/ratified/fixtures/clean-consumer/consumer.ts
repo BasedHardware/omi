@@ -1,16 +1,20 @@
 import { parseKeysetCursor } from "@omi-core/ratified-contracts/pagination/cursor";
 
 import {
+  APP_CONTRACT_FLOOR_VERSION,
+  APP_CONTRACT_VERSION_HEADER,
   SYNTHESIZED_READ_CONTRACT_VERSION,
   isTrustedPageWindowHonest,
   isTrustedRecallCompletenessHonest,
   isTrustedSynthesizedPageData,
+  isWellFormedContractVersion,
   parseCitationRef,
   parseRecallFrontier,
   parseSha256Digest,
   parseSynthesizedPageJson,
   parseSynthesizedItemId,
   parseSynthesizedText,
+  resolveDeclaredContractVersion,
 } from "@omi-core/ratified-contracts/projections/synthesized";
 import {
   isTrustedRecallTraceData,
@@ -202,8 +206,21 @@ void (null as unknown as ForbiddenFieldsMustStayAbsent);
 type PackageRootMustStayAbsent = import("@omi-core/ratified-contracts").Memory;
 void (null as unknown as PackageRootMustStayAbsent);
 
+// The declared-version resolver never rejects: absent, empty, and malformed
+// input all fall back to the floor rather than throwing or reflecting the
+// raw value.
+if (resolveDeclaredContractVersion(undefined) !== APP_CONTRACT_FLOOR_VERSION) throw new Error("missing header must resolve to the floor");
+if (resolveDeclaredContractVersion(null) !== APP_CONTRACT_FLOOR_VERSION) throw new Error("null header must resolve to the floor");
+if (resolveDeclaredContractVersion("") !== APP_CONTRACT_FLOOR_VERSION) throw new Error("empty header must resolve to the floor");
+if (resolveDeclaredContractVersion("not-a-version") !== APP_CONTRACT_FLOOR_VERSION) throw new Error("malformed header must resolve to the floor");
+if (resolveDeclaredContractVersion("2.3.1") !== "2.3.1") throw new Error("well-formed header must pass through verbatim");
+if (!isWellFormedContractVersion(APP_CONTRACT_FLOOR_VERSION)) throw new Error("the floor itself must be well-formed");
+if (APP_CONTRACT_VERSION_HEADER !== "x-omi-contract-version") throw new Error("header name must stay stable across the tarball boundary");
+
 export const consumerResult = {
   contractVersion: page.contractVersion,
   firstId: page.items[0]?.id,
   complete: page.window.complete,
+  declaredContractVersionHeader: APP_CONTRACT_VERSION_HEADER,
+  declaredContractFloorVersion: APP_CONTRACT_FLOOR_VERSION,
 } as const;

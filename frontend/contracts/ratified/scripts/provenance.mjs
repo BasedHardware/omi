@@ -47,7 +47,14 @@ const provenance = {
   package: { name: manifest.name, version: manifest.version },
   repository: "BasedHardware/omi",
   baselineCommit: "e5deec43d8814191b90d3e3db46e99bec29ae724",
-  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011"],
+  // "COORD-contract-evolution-policy" is a PROVISIONAL ruling id: the policy
+  // it cites requires "a ratified ruling id" here (§3) but never defines an
+  // id grammar for COORD-prefixed decisions the way ADR-/FEAT-/WS-/DIV-/FC-
+  // ids are defined elsewhere. This bump exists BECAUSE that document
+  // ratifies it (its §4 names this exact header as the first thing that must
+  // land) so citing its slug is the closest mechanical match available - see
+  // the CONTRACT-lane report in data/run-2026-08-08b/ for the open question.
+  rulings: ["ADR-004", "ADR-008", "WS-006", "M-001", "DIV-MEM-004", "FEAT-MEM-001", "FEAT-MEM-002", "FC-AUTH-003", "FEAT-AUTH-011", "COORD-contract-evolution-policy"],
   compiler: { name: "typescript", version: manifest.devDependencies.typescript },
   inputs: entries,
   sourceDigest,
