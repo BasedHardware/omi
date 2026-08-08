@@ -4,7 +4,7 @@
 // Rule 1: no workspace dependency cycles among @omi-core/* packages
 //         (dependencies + devDependencies in packages/*/package.json + contracts/package.json).
 // Rule 2: no *.test.ts outside their home — tests for contracts, domain, sync, kernel,
-//         and adapters-legacy live in packages/testkit/ (testkit/src/** and surfaces/**
+//         and both adapter packages live in packages/testkit/ (testkit/src/** and surfaces/**
 //         are exempt).
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -84,6 +84,7 @@ const FORBIDDEN_TEST_ROOTS = [
   "packages/sync/src",
   "packages/kernel/src",
   "packages/adapters-legacy/src",
+  "packages/adapters-platform/src",
 ];
 
 function* walk(dir) {

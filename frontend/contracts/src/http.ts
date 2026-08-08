@@ -21,6 +21,30 @@ export interface HttpResponse {
   status: number;
   /** Parsed JSON body, or null when the body was empty/unparseable. */
   json: unknown;
+  /**
+   * The RAW response body, exactly as received, when the binding can supply it.
+   *
+   * Optional and additive: every existing binding and every existing adapter
+   * keeps working without it, so this is not a breaking contract change and
+   * does not bump `BRIDGE_CONTRACT_VERSION`.
+   *
+   * It exists because a pre-parsed `json` is a lossy boundary for a contract
+   * whose validator is defined over the BYTES. `@omi-core/ratified-contracts`
+   * makes this explicit: `parseSynthesizedPageJson(raw: string)` is documented
+   * as "the authoritative no-execution boundary for untrusted canonical JSON
+   * text" — it rejects noncanonical encodings, duplicate keys, oversized
+   * payloads, and normalized escapes/numbers before the contract predicate
+   * ever runs. Its object-level sibling `isTrustedSynthesizedPageData` is
+   * documented, in the same package, as "NOT a hostile-object boundary", and a
+   * duplicate-key payload is already indistinguishable once `JSON.parse` has
+   * kept only the last value.
+   *
+   * So a binding that CAN hand over the raw body should, and an adapter that
+   * has one should prefer the text parser. An adapter must still work without
+   * it — see `fetchSynthesizedMemoryPage`, which reports WHICH boundary it
+   * used rather than pretending the two are equivalent.
+   */
+  text?: string;
   /** Retry-After in milliseconds when the server sent one. */
   retryAfterMs?: number;
 }

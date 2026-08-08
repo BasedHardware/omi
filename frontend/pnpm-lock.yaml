@@ -36,6 +36,22 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  packages/adapters-platform:
+    dependencies:
+      '@omi-core/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      '@omi-core/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@omi-core/ratified-contracts':
+        specifier: workspace:*
+        version: link:../../contracts/ratified
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/bridge-web:
     dependencies:
       '@omi-core/contracts':
@@ -148,6 +164,9 @@ importers:
       '@omi-core/adapters-legacy':
         specifier: workspace:*
         version: link:../adapters-legacy
+      '@omi-core/adapters-platform':
+        specifier: workspace:*
+        version: link:../adapters-platform
       '@omi-core/bridge-web':
         specifier: workspace:*
         version: link:../bridge-web
