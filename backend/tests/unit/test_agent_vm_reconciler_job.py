@@ -9,6 +9,7 @@ import pytest
 
 import jobs.agent_vm_reconciler as reconciler
 import services.agent_vm_lifecycle as lifecycle
+import services.agent_vm_migration_control as migration_control
 from services.agent_vm_lifecycle import AgentVmRelease
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -246,6 +247,25 @@ def test_boot_image_migration_plan_rejects_whitespace_only_allowed_uids(monkeypa
 
     with pytest.raises(ValueError, match="allowedUids"):
         reconciler._boot_image_migration_plan(raw, RELEASE)
+
+
+def test_boot_image_migration_plan_normalizes_allowlisted_uids(monkeypatch):
+    monkeypatch.setenv("AGENT_VM_ENVIRONMENT", "development")
+    monkeypatch.setenv("GCE_PROJECT_ID", "based-hardware-dev")
+
+    plan = reconciler._boot_image_migration_plan(
+        {
+            "bootImageMigration": {
+                "enabled": True,
+                "allowedUids": ["  dev-user  "],
+                "maxConcurrency": 1,
+                "soakSeconds": 60,
+            }
+        },
+        RELEASE,
+    )
+
+    assert plan == reconciler.BootImageMigrationPlan(frozenset({"dev-user"}), 1, 60)
 
 
 @pytest.mark.parametrize("firestore_status", ["stopped", "ready"])
@@ -1690,6 +1710,197 @@ def test_durable_pre_cutover_journal_recovers_detached_state_without_manifest_op
     assert cutovers and cutovers[-1]["instanceId"] == "candidate-id"
 
 
+def test_older_candidate_deleted_journal_is_superseded_only_after_provider_rollback(monkeypatch):
+    migration_id = "6" * 24
+    current_release = replace(RELEASE, source_sha="d" * 40)
+    predecessor_name = "omi-agent-user"
+    state_disk_name = "omi-agent-state-6666666666666666"
+    instance = {
+        "id": "old-id",
+        "status": "TERMINATED",
+        "disks": [
+            {
+                "boot": True,
+                "source": "projects/project/zones/us-central1-a/disks/old-boot",
+                "autoDelete": True,
+            },
+            {
+                "boot": False,
+                "deviceName": lifecycle.STATE_DISK_DEVICE_NAME,
+                "source": f"projects/project/zones/us-central1-a/disks/{state_disk_name}",
+                "autoDelete": True,
+            },
+        ],
+    }
+    journal = {
+        "migrationId": migration_id,
+        "state": "candidate_deleted",
+        "candidateDeletedAt": 90.0,
+        "oldVmName": predecessor_name,
+        "oldZone": "us-central1-a",
+        "oldAuthToken": "old-token",
+        "oldInstanceId": "old-id",
+        "candidateVmName": "omi-agent-user-m-666666666666",
+        "candidateAuthToken": "candidate-token",
+        "candidateInstanceId": "candidate-id",
+        "targetRelease": RELEASE.release_id,
+        "targetBootImage": RELEASE.boot_image,
+        "soakSeconds": 60,
+        "stateDiskName": state_disk_name,
+        "stateDiskId": "state-id",
+        "stateDiskReused": True,
+        "sourceCloneDiskName": "",
+    }
+
+    class RolledBackApi:
+        project = "project"
+        zone = "us-central1-a"
+
+        async def get_instance(self, name: str) -> dict[str, Any] | None:
+            return instance if name == predecessor_name else None
+
+        async def get_disk(self, name: str) -> dict[str, Any] | None:
+            assert name == state_disk_name
+            return {
+                "id": "state-id",
+                "labels": {
+                    "omi-agent-role": "state",
+                    "omi-agent-owner": reconciler._owner_disk_label("dev-user"),
+                },
+                "users": [f"projects/project/zones/us-central1-a/instances/{predecessor_name}"],
+            }
+
+    superseded: list[tuple[Any, ...]] = []
+    cleanup_context: dict[str, str] = {}
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(
+        migration_control,
+        "supersede_failed_boot_image_migration",
+        lambda *args: superseded.append(args) or True,
+    )
+
+    result = asyncio.run(
+        reconciler._replace_stopped_boot_image_drift(
+            "dev-user",
+            {
+                "vmName": predecessor_name,
+                "zone": "us-central1-a",
+                "status": "stopped",
+                "instanceId": "old-id",
+                "authToken": "old-token",
+            },
+            instance,
+            current_release,
+            reconciler.BootImageMigrationPlan(frozenset({"dev-user"}), 1, 60),
+            owner="worker",
+            api=RolledBackApi(),
+            cleanup_context=cleanup_context,
+            recovery_journal=journal,
+        )
+    )
+
+    assert result == reconciler.ReconcileResult(
+        "dev-user", "retry", "superseded a rolled-back migration from an older release"
+    )
+    assert superseded and superseded[-1][-2:] == (migration_id, current_release.release_id)
+    assert cleanup_context == {}
+
+
+def test_older_candidate_deleted_journal_stays_fail_closed_when_provider_rollback_is_ambiguous(monkeypatch):
+    migration_id = "8" * 24
+    cleanup_context: dict[str, str] = {}
+    superseded: list[tuple[Any, ...]] = []
+
+    async def ambiguous_rollback(_context: Mapping[str, str]) -> bool:
+        return False
+
+    monkeypatch.setattr(
+        migration_control,
+        "supersede_failed_boot_image_migration",
+        lambda *args: superseded.append(args) or True,
+    )
+
+    with pytest.raises(RuntimeError, match="provider state is ambiguous"):
+        asyncio.run(
+            migration_control.supersede_rolled_back_boot_image_migration(
+                uid="dev-user",
+                vm_name="omi-agent-user",
+                zone="us-central1-a",
+                auth_token="old-token",
+                owner="worker",
+                old_instance_id="old-id",
+                replacement_release_id=replace(RELEASE, source_sha="d" * 40).release_id,
+                recovery_journal={
+                    "migrationId": migration_id,
+                    "state": "candidate_deleted",
+                    "candidateDeletedAt": 90.0,
+                    "oldVmName": "omi-agent-user",
+                    "oldInstanceId": "old-id",
+                    "candidateVmName": "omi-agent-user-m-888888888888",
+                    "candidateInstanceId": "candidate-id",
+                    "targetRelease": RELEASE.release_id,
+                    "stateDiskName": "omi-agent-state-8888888888888888",
+                    "stateDiskId": "state-id",
+                    "stateDiskReused": True,
+                },
+                owner_label=reconciler._owner_disk_label("dev-user"),
+                cleanup_context=cleanup_context,
+                rollback=ambiguous_rollback,
+            )
+        )
+
+    assert superseded == []
+    assert cleanup_context["migrationId"] == migration_id
+
+
+def test_older_candidate_deleted_journal_reports_stale_when_firestore_fence_changes(monkeypatch):
+    migration_id = "9" * 24
+    cleanup_context: dict[str, str] = {}
+    blocking_calls: list[tuple[Any, ...]] = []
+
+    async def rolled_back(_context: Mapping[str, str]) -> bool:
+        return True
+
+    async def bounded_run(executor: Any, function: Any, *args: Any) -> bool:
+        blocking_calls.append((executor, function, *args))
+        return False
+
+    monkeypatch.setattr(migration_control, "run_blocking", bounded_run)
+
+    result = asyncio.run(
+        migration_control.supersede_rolled_back_boot_image_migration(
+            uid="dev-user",
+            vm_name="omi-agent-user",
+            zone="us-central1-a",
+            auth_token="old-token",
+            owner="worker",
+            old_instance_id="old-id",
+            replacement_release_id=replace(RELEASE, source_sha="d" * 40).release_id,
+            recovery_journal={
+                "migrationId": migration_id,
+                "state": "candidate_deleted",
+                "candidateDeletedAt": 90.0,
+                "oldVmName": "omi-agent-user",
+                "oldInstanceId": "old-id",
+                "candidateVmName": "omi-agent-user-m-999999999999",
+                "candidateInstanceId": "candidate-id",
+                "targetRelease": RELEASE.release_id,
+                "stateDiskName": "omi-agent-state-9999999999999999",
+                "stateDiskId": "state-id",
+                "stateDiskReused": True,
+            },
+            owner_label=reconciler._owner_disk_label("dev-user"),
+            cleanup_context=cleanup_context,
+            rollback=rolled_back,
+        )
+    )
+
+    assert result == "stale"
+    assert blocking_calls and blocking_calls[-1][0] is migration_control.db_executor
+    assert blocking_calls[-1][1] is migration_control.supersede_failed_boot_image_migration
+    assert cleanup_context == {}
+
+
 def test_terminal_quarantine_with_non_pre_cutover_journal_stays_fail_closed(monkeypatch):
     migration_id = "7" * 24
 
@@ -1927,6 +2138,82 @@ def test_boot_image_migration_journal_fences_predecessor_and_resumes_candidate_r
         {"vmName": migration["candidateVmName"], "instanceId": "candidate-id"},
         now=now,
     )
+
+
+def test_candidate_deleted_journal_supersession_requires_exact_owner_lease_and_new_release(monkeypatch):
+    now = 100.0
+    migration_id = "f" * 24
+    replacement_release_id = "d" * 40
+    vm = {
+        "vmName": "omi-agent-user",
+        "zone": "us-central1-a",
+        "status": "stopped",
+        "instanceId": "old-id",
+        "authToken": "old-token",
+        "reconcile": {
+            "state": "claimed",
+            "durableMigration": migration_id,
+            "lease": {"owner": "worker", "expiresAt": 200.0},
+        },
+    }
+    journal = {
+        "migrationId": migration_id,
+        "state": "candidate_deleted",
+        "candidateDeletedAt": 90.0,
+        "oldVmName": vm["vmName"],
+        "oldZone": vm["zone"],
+        "oldAuthToken": vm["authToken"],
+        "oldInstanceId": vm["instanceId"],
+        "targetRelease": RELEASE.release_id,
+    }
+    client = StrictFirestore(
+        {
+            ("users", "dev-user"): {"agentVm": vm},
+            ("users", "dev-user", "agentVmMigrations", migration_id): journal,
+        }
+    )
+    monkeypatch.setattr(migration_control, "get_firestore_client", lambda: client)
+
+    assert migration_control.supersede_failed_boot_image_migration(
+        "dev-user",
+        vm["vmName"],
+        vm["zone"],
+        vm["authToken"],
+        "worker",
+        migration_id,
+        replacement_release_id,
+        now=now,
+    )
+    owner_update = client.transactions[-1].updates[-2][1]
+    journal_update = client.transactions[-1].updates[-1][1]
+    assert owner_update["agentVm.reconcile.durableMigration"] is lifecycle.DELETE_FIELD
+    assert owner_update["agentVm.reconcile.lease"] is lifecycle.DELETE_FIELD
+    assert owner_update["agentVm.reconcile.state"] == "ready"
+    assert journal_update == {
+        "state": "superseded",
+        "supersededAt": now,
+        "supersededByRelease": replacement_release_id,
+        "updatedAt": now,
+    }
+
+    same_release_client = StrictFirestore(
+        {
+            ("users", "dev-user"): {"agentVm": vm},
+            ("users", "dev-user", "agentVmMigrations", migration_id): journal,
+        }
+    )
+    monkeypatch.setattr(migration_control, "get_firestore_client", lambda: same_release_client)
+    assert not migration_control.supersede_failed_boot_image_migration(
+        "dev-user",
+        vm["vmName"],
+        vm["zone"],
+        vm["authToken"],
+        "worker",
+        migration_id,
+        RELEASE.release_id,
+        now=now,
+    )
+    assert same_release_client.transactions[-1].updates == []
 
 
 def test_boot_image_state_journal_respects_account_deletion_fence(monkeypatch):

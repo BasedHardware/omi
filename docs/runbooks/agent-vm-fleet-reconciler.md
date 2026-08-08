@@ -127,6 +127,15 @@ active-owner `autoDelete: true`, and identity-fenced cleanup across a complete
 soak and rollback exercise. The production manifest must continue to omit the
 migration flag until that evidence is reviewed and accepted.
 
+A pre-cutover failure remains retryable under the same immutable release. If a
+normal deployment advances the release first, the reconciler does not require
+an operator to edit Firestore: it revalidates that the exact candidate is gone,
+the journaled state disk is attached to the numeric-ID-fenced predecessor, and
+the disk deletion policy is restored. Only then may a lease-guarded transaction
+mark the old journal `superseded` and clear its durable owner marker. Any
+identity or cleanup ambiguity stays fail-closed instead of starting a candidate
+for the newer release.
+
 Generate the opt-in manifest with the checked-in renderer; do not hand-edit a
 manifest after it receives `manifestSha256`:
 
