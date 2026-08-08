@@ -443,7 +443,7 @@ The system prompt guides the LLM through a 5-step strategy:
 | `text-embedding-3-large` | Vector embeddings (3,072 dims) | Pinecone queries |
 
 <Note>
-Models are selected via QoS profiles (`premium`, `max`, `fair_use`, `byok`) in `backend/utils/llm/model_config.py`. Managed desktop chat is overridden after legacy profile resolution by `generated_route_overrides.yaml` and uses the OpenAI-compatible Luna route. The `omi-sonnet` and `claude-sonnet-4-6` values remain compatibility inputs, not the active managed provider. The `fair_use` profile uses `gpt-5.1` as a fallback. See the config files for the current authoritative set.
+Models are selected via QoS profiles (`premium`, `max`, `fair_use`, `byok`) in `backend/utils/llm/model_config.py`. Managed desktop chat is classified by the `chat_agent` feature lane and its capability contract after legacy profile resolution. The `omi-sonnet` and `claude-sonnet-4-6` values remain compatibility inputs for released clients, not the active managed provider. The `fair_use` profile uses `gpt-5.1` as a fallback. See the config files for the current authoritative set.
 </Note>
 
 ## Streaming Response Format

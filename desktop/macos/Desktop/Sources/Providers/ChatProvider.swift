@@ -1513,7 +1513,7 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Current Model
   var currentModel: String {
-    "Luna"
+    "Chat agent"
   }
 
   // MARK: - System Prompt

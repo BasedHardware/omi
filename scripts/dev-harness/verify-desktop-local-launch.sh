@@ -36,7 +36,7 @@ fi
 
 chat_status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${DESKTOP_BACKEND_URL}/v2/chat/completions" \
   -H 'Content-Type: application/json' \
-  -d '{"model":"omi-sonnet","messages":[{"role":"user","content":"ping"}],"max_tokens":1}' || true)"
+  -d '{"messages":[{"role":"user","content":"ping"}],"max_tokens":1}' || true)"
 if [ "$chat_status" = "404" ]; then
   echo "chat smoke: POST /v2/chat/completions returned 404" >&2
   failures=$((failures + 1))

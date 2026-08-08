@@ -192,7 +192,7 @@ describe('provider registration', () => {
     omiProvider(cap.pi)
     const models = cap.provider?.cfg.models as Array<Record<string, unknown>>
     expect(models.map((m) => m.id)).toEqual(['omi-sonnet', 'omi-opus'])
-    expect(models.map((m) => m.name)).toEqual(['Omi Luna', 'Omi Opus'])
+    expect(models.map((m) => m.name)).toEqual(['Chat agent', 'Reasoning specialist'])
     for (const m of models) {
       expect(m.reasoning).toBe(true)
       expect(m.input).toEqual(['text', 'image'])

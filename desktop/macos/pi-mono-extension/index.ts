@@ -843,7 +843,7 @@ export default function omiProvider(pi: ExtensionAPI): void {
     models: [
       {
         id: "omi-sonnet",
-        name: "Omi Luna",
+        name: "Chat agent",
         reasoning: true,
         input: ["text", "image"],
         contextWindow: 200_000,
@@ -853,7 +853,7 @@ export default function omiProvider(pi: ExtensionAPI): void {
       },
       {
         id: "omi-opus",
-        name: "Omi Opus",
+        name: "Reasoning specialist",
         reasoning: true,
         input: ["text", "image"],
         contextWindow: 200_000,
