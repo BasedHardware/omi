@@ -212,11 +212,9 @@ conv.clamp_conversation_search_pagination = MagicMock(return_value=(1, 10))
 conv.conversation_matches_date_range = MagicMock(return_value=True)
 # Transcript helpers are stubbed at import time; keep search behavior deterministic for this suite.
 conv.search_transcript_conversation_ids = MagicMock(return_value=[])
-conv.merge_typesense_page_with_transcript_hits = (
-    lambda typesense_ids, transcript_ids, page=1, per_page=10: [str(x) for x in typesense_ids if str(x).strip()][
-        :per_page
-    ]
-)
+conv.merge_typesense_page_with_transcript_hits = lambda typesense_ids, transcript_ids, page=1, per_page=10: [
+    str(x) for x in typesense_ids if str(x).strip()
+][:per_page]
 conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
     dict(c) if isinstance(c, dict) else c for c in conversations
 ]
