@@ -10,7 +10,7 @@ struct ScoreWidget: View {
 
   private var scoreColor: Color {
     if !weeklyScore.hasTasks {
-      return Color.gray
+      return Ink.secondary
     }
     let score = weeklyScore.score
     if score >= 80 {
@@ -36,7 +36,7 @@ struct ScoreWidget: View {
         ZStack {
           // Background arc
           SemicircleShape()
-            .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            .stroke(Ink.rowFillHover, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             .frame(width: gaugeWidth, height: gaugeHeight)
 
           // Progress arc
@@ -50,7 +50,7 @@ struct ScoreWidget: View {
           VStack(spacing: OmiSpacing.hairline) {
             Text("\(Int(weeklyScore.score))%")
               .scaledFont(size: fontSize, weight: .bold)
-              .foregroundColor(OmiColors.textPrimary)
+              .foregroundColor(Ink.primary)
               .contentTransition(.numericText())
           }
           .offset(y: gaugeHeight * 0.14)
@@ -65,25 +65,25 @@ struct ScoreWidget: View {
                 .foregroundColor(scoreColor)
               Text("\(weeklyScore.completedTasks) of \(weeklyScore.totalTasks) tasks completed")
                 .scaledMonospacedDigitFont(size: 12)
-                .foregroundColor(OmiColors.textTertiary)
+                .foregroundColor(Ink.secondary)
                 .contentTransition(.numericText())
             }
           } else {
             Text("No tasks this week")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(OmiColors.textTertiary)
+              .foregroundColor(Ink.secondary)
           }
 
           Text("Last 7 days")
             .scaledFont(size: OmiType.micro)
-            .foregroundColor(OmiColors.textQuaternary)
+            .foregroundColor(Ink.secondary)
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .padding(OmiSpacing.xl)
     }
     .frame(minHeight: 200)
-    .omiPanel(fill: OmiColors.backgroundSecondary)
+    .glassCard()
   }
 }
 
@@ -103,7 +103,7 @@ struct DailyScoreWidget: View {
   private var scoreColor: Color {
     // Grey when no tasks (like Flutter)
     if !hasTasksToday {
-      return Color.gray
+      return Ink.secondary
     }
     if score >= 80 {
       return .green
@@ -122,7 +122,7 @@ struct DailyScoreWidget: View {
       HStack {
         Text("Daily Score")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .foregroundColor(Ink.primary)
         Spacer()
       }
 
@@ -130,7 +130,7 @@ struct DailyScoreWidget: View {
       ZStack {
         // Background arc
         SemicircleShape()
-          .stroke(OmiColors.backgroundQuaternary, style: StrokeStyle(lineWidth: 12, lineCap: .round))
+          .stroke(Ink.rowFillHover, style: StrokeStyle(lineWidth: 12, lineCap: .round))
           .frame(width: 140, height: 70)
 
         // Progress arc
@@ -143,7 +143,7 @@ struct DailyScoreWidget: View {
         VStack(spacing: OmiSpacing.hairline) {
           Text("\(Int(score))%")
             .scaledFont(size: OmiType.title, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
         }
         .offset(y: 10)
       }
@@ -156,16 +156,16 @@ struct DailyScoreWidget: View {
             .foregroundColor(scoreColor)
           Text("\(ds.completedTasks) of \(ds.totalTasks) tasks completed")
             .scaledMonospacedDigitFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .foregroundColor(Ink.secondary)
         }
       } else {
         Text("No tasks due today")
           .scaledFont(size: OmiType.caption)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
     }
     .padding(OmiSpacing.xl)
-    .omiPanel(fill: OmiColors.backgroundSecondary)
+    .glassCard()
   }
 }
 

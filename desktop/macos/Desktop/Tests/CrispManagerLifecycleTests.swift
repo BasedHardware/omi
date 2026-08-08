@@ -174,4 +174,80 @@ final class CrispManagerLifecycleTests: XCTestCase {
       "After stop(), neither notification should reach pollForMessages()"
     )
   }
+
+  // MARK: - The banner has somewhere to go
+
+  /// A support reply's banner used to record that it was tapped and do nothing else, so the app
+  /// interrupted the user about a message and then refused to show it. The tap keys on the
+  /// notification's **provenance**, not on its display title, so renaming the banner cannot quietly
+  /// disconnect it again.
+  func testASupportReplyTapResolvesToTheSupportThread() {
+    XCTAssertEqual(
+      NotificationService.openAction(
+        assistantId: SupportThreadRoute.assistantId, title: "Help from Founder"),
+      .openSupportThread)
+    XCTAssertEqual(
+      NotificationService.openAction(
+        assistantId: SupportThreadRoute.assistantId, title: "A note from the team"),
+      .openSupportThread,
+      "the tap must survive a copy change to the banner's title")
+
+    // The other two branches are unchanged by this: the repair notification still repairs, and an
+    // ordinary proactive notification still has nothing to open.
+    XCTAssertEqual(
+      NotificationService.openAction(
+        assistantId: "screen_capture", title: NotificationService.screenCaptureResetTitle),
+      .resetScreenCapture)
+    XCTAssertEqual(
+      NotificationService.openAction(assistantId: "memory", title: "Saved a memory"),
+      .none)
+  }
+
+  /// Opening the thread has to *navigate*, and it has to navigate somewhere the user could also
+  /// have walked to themselves — a banner that lands on a page with no door is the bug this
+  /// replaced. Driven through the real service instance rather than a real notification delivery:
+  /// `registerWithSystemNotificationCenter: false` is the existing seam for exactly this.
+  func testOpeningTheSupportThreadNavigatesToTheHelpRowInSettings() {
+    let inbox = NavigationInbox()
+    let observer = NotificationCenter.default.addObserver(
+      forName: .navigateToSidebarItem, object: nil, queue: nil
+    ) { notification in
+      inbox.record(notification.userInfo)
+    }
+    defer { NotificationCenter.default.removeObserver(observer) }
+
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    service.openSupportThread(source: "unit_test")
+
+    guard let received = inbox.userInfo else {
+      return XCTFail("tapping a support reply raised no navigation at all")
+    }
+    XCTAssertEqual(
+      received["rawValue"] as? Int, SidebarNavItem.settings.rawValue,
+      "the support thread lives behind the settings gear")
+    guard let sectionRaw = received["settingsSection"] as? String else {
+      return XCTFail("navigation named Settings but not which row")
+    }
+    // The receiver resolves the payload with `automationMatch`, so assert the payload against that
+    // rather than against a string literal — the two used to be able to disagree silently.
+    XCTAssertEqual(
+      SettingsContentView.SettingsSection.automationMatch(sectionRaw),
+      SupportThreadRoute.destination.settingsSection)
+
+    XCTAssertFalse(
+      ShellDestination.unreachable().contains(SupportThreadRoute.destination),
+      "the page a support banner opens must be one the user can reach on their own (INV-NAV-1)")
+  }
+}
+
+/// Holds the one navigation the support tap raises. `Notification.userInfo` is not `Sendable`, and
+/// the observer closure is, so the value crosses through a reference the test owns rather than a
+/// captured `var`. The post is synchronous on the main actor with `queue: nil`, so no wait is
+/// needed and none is added.
+private final class NavigationInbox: @unchecked Sendable {
+  private(set) var userInfo: [AnyHashable: Any]?
+
+  func record(_ userInfo: [AnyHashable: Any]?) {
+    self.userInfo = userInfo
+  }
 }

@@ -236,19 +236,3 @@ extension FocusSessionRecord: TableDocumented {
   static var tableDescription: String { ChatPrompts.tableAnnotations["focus_sessions"]! }
   static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["focus_sessions"] ?? [:] }
 }
-
-// MARK: - Focus Session with Screenshot
-
-/// Combined focus session and screenshot data for UI display
-struct FocusSessionWithScreenshot {
-  let session: FocusSessionRecord
-  let screenshot: Screenshot?
-
-  var imagePath: String? {
-    screenshot?.imagePath
-  }
-
-  var screenshotTimestamp: Date? {
-    screenshot?.timestamp
-  }
-}

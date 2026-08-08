@@ -5,8 +5,8 @@ import SwiftUI
 /// (transcription minutes, monthly chat/floating-bar messages, etc).
 ///
 /// Rendered as a `.overlay` on `DesktopHomeView.mainContent` so it appears
-/// above every page. The user can dismiss it with the X button or the
-/// "Not now" button; clicking "Upgrade" navigates to Settings → Plan & Usage.
+/// above every page. The user can dismiss it with the X button or by clicking the
+/// dim outside the card; clicking "Upgrade" navigates to Settings → Plan & Usage.
 struct UsageLimitPopupView: View {
   let reason: String
   let onUpgrade: () -> Void
@@ -36,10 +36,10 @@ struct UsageLimitPopupView: View {
 
   var body: some View {
     ZStack {
-      // Semi-transparent backdrop, tap-to-dismiss
-      Color.black.opacity(0.55)
-        .ignoresSafeArea()
-        .onTapGesture { onDismiss() }
+      // The modal dim, on the shell's own surface rather than on the window — see `ShellModalScrim`.
+      // This is an overlay on the whole main window, which has no visible extent, so a full-bleed dim
+      // here painted a hard-edged rectangle onto the user's wallpaper.
+      ShellModalScrim(onTap: onDismiss)
 
       // Centered card
       VStack(spacing: 0) {
@@ -49,7 +49,8 @@ struct UsageLimitPopupView: View {
           Button(action: onDismiss) {
             Image(systemName: "xmark")
               .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(OmiColors.textTertiary)
+              // `secondary` and not the glance rung: this card is glass, which carries two rungs.
+              .foregroundColor(Ink.secondary)
               .padding(OmiSpacing.sm)
               .contentShape(Rectangle())
           }
@@ -62,64 +63,42 @@ struct UsageLimitPopupView: View {
           // Icon
           ZStack {
             Circle()
-              .fill(OmiColors.accent.opacity(0.15))
+              .fill(Ink.rowFill)
               .frame(width: 64, height: 64)
             Image(systemName: "exclamationmark.triangle.fill")
               .scaledFont(size: OmiType.title, weight: .semibold)
-              .foregroundColor(OmiColors.accent)
+              .foregroundColor(Ink.primary)
           }
 
           VStack(spacing: OmiSpacing.sm) {
             Text(headline)
-              .scaledFont(size: OmiType.heading, weight: .bold)
-              .foregroundColor(OmiColors.textPrimary)
+              .inkStyle(.stepHeadline, color: Ink.primary)
               .multilineTextAlignment(.center)
 
             Text(body_text)
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(OmiColors.textTertiary)
+              .inkStyle(.prose, color: Ink.secondary)
               .multilineTextAlignment(.center)
               .fixedSize(horizontal: false, vertical: true)
               .padding(.horizontal, OmiSpacing.lg)
           }
 
           VStack(spacing: OmiSpacing.sm) {
-            Button(action: onUpgrade) {
-              Text("Upgrade")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.backgroundPrimary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(
-                  RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
-                    .fill(OmiColors.accent)
-                )
-            }
-            .buttonStyle(.plain)
+            // Stadium, not a rounded rectangle, and the label ladder inverted rather than an accent
+            // fill — `InkButton` is the one action shape in this system.
+            InkButton("Upgrade", action: onUpgrade)
+              .frame(maxWidth: .infinity)
 
-            Button(action: onBringYourOwnKeys) {
-              Text("Bring your own keys")
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.accent)
-                .frame(maxWidth: .infinity)
-                .frame(height: 32)
-            }
-            .buttonStyle(.plain)
+            InkButton("Bring your own keys", kind: .secondary, action: onBringYourOwnKeys)
+              .frame(maxWidth: .infinity)
           }
           .padding(.horizontal, OmiSpacing.xxl)
         }
         .padding(.bottom, OmiSpacing.xxl)
       }
       .frame(width: 380)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-          .fill(OmiColors.backgroundRaised)
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-              .stroke(OmiColors.border, lineWidth: 1)
-          )
-      )
-      .shadow(color: .black.opacity(0.5), radius: 24, y: 8)
+      // The card paints no ground of its own; the glass owns it, and brings the corner, the edge and
+      // the one ambient shadow with it.
+      .inkGlassPanel()
     }
     .transition(.opacity.animation(OmiMotion.gated(.easeInOut(duration: 0.2))))
   }

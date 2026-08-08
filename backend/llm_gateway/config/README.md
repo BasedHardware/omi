@@ -43,6 +43,13 @@ only in response headers and structured logs, never as Prometheus labels. Pre-ro
 `llm_gateway_request_rejections_total{api_surface,error_class}`; service authentication failures use
 `llm_gateway_auth_rejections_total{reason}`.
 
+`route_serving_class` is a closed `active|canary|lkg|actual_fallback` contract. `fallback_used=true` requires a
+prior eligible provider failure and a subsequent successful provider/route; merely selecting LKG for shadow,
+disabled, 0%, or an out-of-bucket canary request is `route_serving_class="lkg"` with `fallback_used="false"`.
+Bounded from/to route artifact labels and a non-`none` `fallback_reason` identify real failover without request or
+user identifiers. `llm_gateway_config_info` separately publishes the immutable image tag plus active/LKG route
+artifact IDs and SHA-256 content digests, avoiding build/config identity labels on the high-volume request counter.
+
 ## Usage accounting ledger
 
 Every managed and BYOK provider attempt that reaches a gateway provider is scheduled for best-effort delivery to the

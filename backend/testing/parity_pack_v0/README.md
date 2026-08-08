@@ -62,8 +62,10 @@ contract unchanged for existing players:
 | `memory_import` | `v3_memory_import_batch` | Bounded import artifacts and ingestion result (not raw media) |
 
 The development listen deployment mounts `/var/omi-parity-pack` as an `emptyDir`
-for explicitly allowlisted dogfood principals and best-effort exports cassette
-JSON to a private development bucket:
+for explicitly allowlisted dogfood principals. Pod `fsGroup: 10001` matches the
+non-root backend image group so the listener can create and persist the
+`cassettes/` directory, then best-effort export cassette JSON to a private
+development bucket:
 
 ```text
 gs://based-hardware-dev-omi-parity-pack-v0/parity-pack/v0/cassettes/<identity-key>.json

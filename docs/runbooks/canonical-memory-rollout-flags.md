@@ -13,7 +13,8 @@ an unentitled user canonical.
 | `MEMORY_MODE` | Request paths and maintenance job | Declares deployment readiness: `off` is the dark contract and `read` is the ready contract. Request routing does not read this env. The checked-in deploy contract uses only `off` and `read`; internal persisted rollout state still understands `shadow` and `write` for convergence and rollback. |
 | `MEMORY_ENABLED_USERS` | Request paths and maintenance job | Duplicated, redacted rollout inventory used by deploy validation. In `read` mode it must be non-empty and identical on request paths and the maintenance job. It does not grant product entitlement or enumerate maintenance users. |
 | `MEMORY_V3_GET_ENABLED` | Request paths | Declares that the v3 GET proof has passed. Request routing does not read this env; code entitlement plus persisted control/head/grant/projection state decide the route. The job carries the same value as readiness metadata but does not serve GET. |
-| `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | Maintenance job only | Master switch for normalization, TTL settlement, consolidation, and the projection outbox. It must be false on request-path services. Cloud Scheduler owns cadence. |
+| `MEMORY_CANONICAL_MAINTENANCE_ENABLED` | Maintenance job only | Master switch for canonical onboarding, guarded write enrollment, bounded legacy staging, normalization, TTL settlement, consolidation, and the projection outbox. It must be false on request-path services. Cloud Scheduler owns cadence. |
+| `MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED` | Maintenance job only | Separately enables the bounded historical graph-enrichment page for active canonical Long-term items. Each assertion apply is revision-, evidence-, ledger-, and account-generation-fenced, so staging may continue independently. It defaults to false and must be enabled only with maintenance; it never grants entitlement or opens reads. |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | Maintenance job only | Independently disables the L2 consolidation/model step while leaving required processing, TTL settlement, and outbox repair available. This is an incident/cost switch, not a rollout stage. |
 
 `MEMORY_TYPESENSE_COLLECTION`, `TYPESENSE_HOST_PORT`, `PINECONE_INDEX_NAME`,
@@ -53,7 +54,15 @@ resources separately before any approved production activation.
    code cohort is the product-path selection; the env inventory does not keep
    that user dark.
 2. **Backfill or stage.** Before deploying a new entitlement, run the
-   single-user inventory with `--dry-run` and review counts. If staging a
+   single-user inventory with `--dry-run` and review counts. Once the code
+   entitlement is deployed and the maintenance switch is on, the scheduled
+   lifecycle creates only its exact inert control record, advances it to the
+   guarded write stage, and resumes one bounded checkpointed staging page per
+   run. At the terminal checkpoint it reconciles only its scheduler-owned write
+   control to the independently trusted state-head generation. Separately, the
+   graph job may enrich already-active canonical Long-term items through its
+   per-item revision/evidence/ledger/account-generation fences. It never opens read gates or grants default
+   memory reads. If staging a
    non-cohort UID, use only the CLI's explicit one-user admin-override ceremony.
    Apply only the approved bucket and never delete legacy data.
 3. **Start maintenance.** In a coordinated activation, deploy the code cohort

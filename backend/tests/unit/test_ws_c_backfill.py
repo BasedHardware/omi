@@ -558,6 +558,90 @@ def test_capped_backfill_resumes_until_complete(_trusted_account):
     assert third.verified is True
 
 
+def test_capped_backfill_recovers_changed_source_from_missing_destinations(_trusted_account):
+    rows = [_legacy_row(legacy_id="leg-b", content="Existing fact", conversation_id="conv-b")]
+
+    def get_non_filtered(requested_uid, limit=100, offset=0, **_kwargs):
+        assert requested_uid == LEGACY_UID
+        return rows[offset : offset + limit]
+
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    inserted_before_cursor = _legacy_row(legacy_id="leg-a", content="Inserted fact", conversation_id="conv-a")
+    rows.append(inserted_before_cursor)
+    _seed_legacy_evidence(db, [inserted_before_cursor])
+    resumed = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+
+    assert first.completed is True
+    assert resumed.written_count == 1
+    assert resumed.completed is True
+    assert resumed.verified is True
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 2
+
+
+def test_changed_source_recovery_keeps_source_indexes_and_seeds_existing_semantic_keys(_trusted_account):
+    shared_content = "Same semantic fact"
+    rows = [
+        _legacy_row(legacy_id="leg-b", content=shared_content, conversation_id="conv-shared"),
+        _legacy_row(legacy_id="leg-c", content="Pending fact", conversation_id="conv-c"),
+    ]
+
+    def get_non_filtered(requested_uid, limit=100, offset=0, **_kwargs):
+        assert requested_uid == LEGACY_UID
+        return rows[offset : offset + limit]
+
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+    first = backfill_user(
+        LEGACY_UID,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered,
+        max_rows=1,
+    )
+    assert first.completed is False
+
+    inserted_before_cursor = _legacy_row(legacy_id="leg-a", content=shared_content, conversation_id="conv-shared")
+    rows.append(inserted_before_cursor)
+    _seed_legacy_evidence(db, [inserted_before_cursor])
+
+    real_apply = backfill_user.__globals__["_apply_one_legacy_row"]
+    observed_indexes: list[int] = []
+
+    def record_source_index(**kwargs):
+        observed_indexes.append(kwargs["index"])
+        return real_apply(**kwargs)
+
+    with patch("utils.memory.legacy_backfill._apply_one_legacy_row", side_effect=record_source_index):
+        resumed = backfill_user(
+            LEGACY_UID,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered,
+            max_rows=2,
+        )
+
+    # leg-a is already semantically materialized by leg-b; only leg-c writes,
+    # and it retains index 2 from the sorted current source, not index 0 from
+    # the filtered recovery list.
+    assert observed_indexes == [2]
+    assert resumed.skipped_semantic_duplicate == 1
+    assert resumed.completed is True
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 2
+
+
 def test_continue_on_error_refreshes_control_and_retries_row(_trusted_account):
     rows = [
         _legacy_row(legacy_id="leg-retry-1", content="Retry one", conversation_id="conv-retry-1"),

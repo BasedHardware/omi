@@ -20,12 +20,53 @@ ctl() {
   "$ROOT/scripts/omi-ctl" "$@"
 }
 
-capture_window() {
-  local output="$1"
+set_ui_presentation() {
+  local token="$1"
+  local mode="$2"
+  local activate="$3"
+  local body
+  body="$(jq -nc \
+    --arg mode "$mode" \
+    --argjson activate "$activate" \
+    '{name:"set_automation_ui_presentation",params:{mode:$mode,activate:$activate}}')"
+  curl -fsS \
+    -H "Authorization: Bearer $token" \
+    -H "Content-Type: application/json" \
+    -X POST "http://127.0.0.1:${OMI_AUTOMATION_PORT:-47777}/action" \
+    -d "$body" >/dev/null
+}
+
+run_external_capture() (
+  local token="$1"
+  shift
+  # AX/screencapture is the only lane allowed to reveal and activate the window.
+  # The EXIT trap is this shell function's finally path, including command failure.
+  trap 'set_ui_presentation "$token" quiet false >/dev/null 2>&1 || true' EXIT
+  if ! set_ui_presentation "$token" interactive true; then
+    return 1
+  fi
+  "$@"
+)
+
+run_agent_swift_capture() {
+  local bundle_id="$1"
+  local output="$2"
+  agent-swift connect --bundle-id "$bundle_id" >/dev/null 2>&1 \
+    && agent-swift screenshot "$output" >/dev/null 2>&1
+}
+
+bridge_token() {
   local token_file
   token_file="$(omi_automation_token_file "${OMI_AUTOMATION_PORT:-47777}")"
   local token="${OMI_AUTOMATION_TOKEN:-}"
   [ -n "$token" ] || token="$(tr -d '\r\n' < "$token_file")"
+  printf '%s' "$token"
+}
+
+capture_window() {
+  local output="$1"
+  local token
+  token="$(bridge_token)"
   local body
   body="$(jq -nc --arg path "$output" '{path:$path,target:"task_thread"}')"
   for _ in 1 2 3; do
@@ -39,14 +80,15 @@ capture_window() {
     sleep 0.5
   done
   if command -v agent-swift >/dev/null 2>&1; then
-    if agent-swift connect --bundle-id "$BUNDLE_ID" >/dev/null 2>&1 \
-      && agent-swift screenshot "$output" >/dev/null 2>&1; then
+    if run_external_capture "$token" run_agent_swift_capture "$BUNDLE_ID" "$output"; then
       return
     fi
   fi
-  screencapture -x "$output"
+  run_external_capture "$token" screencapture -x "$output"
 }
 
+SCENARIO_TOKEN="$(bridge_token)"
+set_ui_presentation "$SCENARIO_TOKEN" quiet false
 ctl state >"$EVIDENCE_DIR/app-state.json"
 
 # Exercise the production app→kernel continuity RPCs against a persistent
@@ -105,9 +147,10 @@ for _ in $(seq 1 40); do
   if ! pgrep -f "/Applications/${APP_NAME}.app/Contents/MacOS/" >/dev/null; then break; fi
   sleep 0.25
 done
-open -b "$BUNDLE_ID" --args \
+open -g -b "$BUNDLE_ID" --args \
   "--automation-port=${OMI_AUTOMATION_PORT:-47777}" \
-  "--automation-capture-root=$CAPTURE_ROOT"
+  "--automation-capture-root=$CAPTURE_ROOT" \
+  "--automation-ui=quiet"
 for _ in $(seq 1 80); do
   if ctl health >/dev/null 2>&1; then break; fi
   sleep 0.25
