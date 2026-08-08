@@ -1,3 +1,12 @@
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-006)
+// domain-pending(DIV-DOMCORE-007)
+// domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMCORE-012)
+// domain-pending(DIV-DOMTASK-004)
+// domain-pending(DIV-DOMX-001)
+// domain-pending(DIV-DOMX-005)
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 
@@ -9,8 +18,8 @@ import {
   createSqliteQaRecallLoader,
   SQLITE_QA_STM_SCAN_CEILING,
   type AcceptedRecentState,
-  type SqliteQaReadOnlyQuery,
   type SqliteQaRecallLimits,
+  type SqliteQaRecallLoaderOptions,
 } from "./application-recall-read";
 
 const OWNER = "owner:qa";
@@ -187,14 +196,19 @@ const insertDerivation = (target: Fixture, commitId: string, ownerAccountId = OW
 
 const loadFor = <Candidate = never>(target: Fixture, overrides: {
   readonly limits?: SqliteQaRecallLimits;
-  readonly accepted?: (query: SqliteQaReadOnlyQuery, ownerAccountId: string, limits: SqliteQaRecallLimits) => unknown;
+  readonly accepted_fixture?: unknown;
 } = {}) => createSqliteQaRecallLoader<Candidate>({
   db: target.db,
   owner_account_id: OWNER,
   account_timezone: "UTC",
   limits: overrides.limits ?? LIMITS,
-  ...(overrides.accepted ? { accepted_recent_state_port: overrides.accepted } : {}),
+  ...(Object.prototype.hasOwnProperty.call(overrides, "accepted_fixture")
+    ? { accepted_fixture_state: overrides.accepted_fixture as AcceptedRecentState<Candidate> }
+    : {}),
 });
+
+type HasCallableAcceptedPort = "accepted_recent_state_port" extends keyof SqliteQaRecallLoaderOptions<unknown> ? true : false;
+const HAS_CALLABLE_ACCEPTED_PORT: HasCallableAcceptedPort = false;
 
 const totalChanges = (db: Database): number =>
   (db.query("SELECT total_changes() AS count").get() as { count: number }).count;
@@ -203,59 +217,19 @@ const totalChanges = (db: Database): number =>
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
 describe("hermetic SQLite QA coherent recall read", () => {
-  test("executes durable, STM, and accepted reads synchronously in one deferred transaction", () => {
+  test("loads durable and STM state synchronously through its native deferred transaction", () => {
     const target = fixture();
     addRow(target, "1");
-    let durableObserved = false;
-    let stmObserved = false;
-    let acceptedObserved = false;
-    let retainedQuery: SqliteQaReadOnlyQuery | undefined;
-
-    const originalQuery = target.db.query.bind(target.db);
-    Object.defineProperty(target.db, "query", {
-      configurable: true,
-      value: (sql: string) => {
-        if (sql.includes("FROM event_revisions") && target.db.inTransaction) {
-          durableObserved = true;
-        }
-        if (sql.includes("FROM stm_items")) {
-          expect(target.db.inTransaction).toBe(true);
-          stmObserved = true;
-        }
-        return originalQuery(sql);
-      },
-    });
-
-    const result = loadFor<{ ref: string }>(target, {
-      accepted: (query, ownerAccountId, limits) => {
-        retainedQuery = query;
-        expect(Object.keys(query)).toEqual(["select"]);
-        expect("exec" in query).toBe(false);
-        expect("transaction" in query).toBe(false);
-        expect(query.select({ sql: "SELECT ? AS marker", parameters: ["accepted"], max_rows: 1 })).toEqual([{ marker: "accepted" }]);
-        expect(target.db.inTransaction).toBe(true);
-        expect(ownerAccountId).toBe(OWNER);
-        expect(limits).toEqual(LIMITS);
-        expect(Object.isFrozen(limits)).toBe(true);
-        acceptedObserved = true;
-        return {
-          state: "searched",
-          declared_frontier: "accepted:1",
-          searched_frontier: "accepted:1",
-          candidates: [{ ref: "accepted:candidate:1" }],
-        };
-      },
-    })();
-
-    expect({ durableObserved, stmObserved, acceptedObserved }).toEqual({
-      durableObserved: true,
-      stmObserved: true,
-      acceptedObserved: true,
-    });
+    const result = loadFor(target)();
     expect(result.stm_rows.map((item) => item.id)).toEqual(["claim:1"]);
-    expect(result.accepted_state.candidates).toEqual([{ ref: "accepted:candidate:1" }]);
+    expect(result.durable_snapshot.events?.map((item) => item.revision_id)).toEqual(["event-revision:1"]);
+    expect(result.accepted_state).toEqual({
+      state: "unavailable",
+      declared_frontier: null,
+      searched_frontier: null,
+      candidates: [],
+    });
     expect(target.db.inTransaction).toBe(false);
-    expect(() => retainedQuery!.select({ sql: "SELECT 1", parameters: [], max_rows: 1 })).toThrow("not active");
   });
 
   test("filters owner and ledger-decided rows before limit without moving STM coverage coordinates", () => {
@@ -408,12 +382,12 @@ describe("hermetic SQLite QA coherent recall read", () => {
     addRow(target, "1", { bytes: 12 });
     addRow(target, "2", { bytes: 13 });
     const loader = loadFor<{ a: string; z: string }>(target, {
-      accepted: () => ({
+      accepted_fixture: {
         state: "searched",
         declared_frontier: "accepted:2",
         searched_frontier: "accepted:2",
         candidates: [{ z: "last", a: "first" }],
-      }),
+      },
     });
     const before = totalChanges(target.db);
     const first = loader();
@@ -587,77 +561,33 @@ describe("strict STM row integrity", () => {
 
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMCORE-008)
-describe("accepted recent-state injection", () => {
-  test("exposes only bounded SELECT and rejects transaction, DDL, PRAGMA, attach, and close attempts", () => {
-    const attacks = [
-      "ROLLBACK; BEGIN",
-      "CREATE TABLE escaped(value TEXT)",
-      "PRAGMA user_version = 9",
-      "SELECT * FROM pragma_user_version",
-      "ATTACH DATABASE ':memory:' AS escaped",
-    ];
-    for (const sql of attacks) {
-      const target = fixture();
-      expect(loadFor(target, {
-        accepted: (query) => {
-          expect(Object.keys(query)).toEqual(["select"]);
-          expect((query as unknown as { close?: unknown }).close).toBeUndefined();
-          return query.select({ sql, parameters: [], max_rows: 1 });
-        },
-      })).toThrow("read-only SELECT");
-      expect(target.db.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
-      expect(target.db.query("SELECT name FROM sqlite_master WHERE name = 'escaped'").get()).toBeNull();
-    }
-
-    const closeTarget = fixture();
-    expect(loadFor(closeTarget, {
-      accepted: (query) => {
-        (query as unknown as { close: () => void }).close();
-        return null;
-      },
-    })).toThrow();
-    expect(closeTarget.db.query("SELECT 1 AS open").get()).toEqual({ open: 1 });
-  });
-
-  test("detects rollback/rebegin even when inTransaction becomes true again", () => {
+describe("accepted recent-state QA fixture", () => {
+  test("has no callable accepted port in its type or runtime API", () => {
+    expect(HAS_CALLABLE_ACCEPTED_PORT).toBe(false);
     const target = fixture();
-    addRow(target, "1");
-    expect(loadFor(target, {
-      accepted: () => {
-        target.db.exec("ROLLBACK; BEGIN");
-        return {
-          state: "searched",
-          declared_frontier: "accepted:1",
-          searched_frontier: "accepted:1",
-          candidates: [],
-        };
-      },
-    })).toThrow("transaction continuity");
-    expect(target.db.inTransaction).toBe(false);
-    expect(target.db.query("SELECT COUNT(*) AS count FROM stm_items").get()).toEqual({ count: 1 });
-  });
+    let calls = 0;
+    expect(() => createSqliteQaRecallLoader({
+      db: target.db,
+      owner_account_id: OWNER,
+      account_timezone: "UTC",
+      limits: LIMITS,
+      accepted_recent_state_port: () => { calls += 1; },
+    } as never)).toThrow("invalid shape");
+    expect(calls).toBe(0);
 
-  test("rolls back captured-database mutations even when the callback restores query_only", () => {
-    const target = fixture();
-    const row = addRow(target, "1");
-    expect(loadFor(target, {
-      accepted: () => {
-        target.db.exec("PRAGMA query_only = OFF");
-        target.db.query("UPDATE stm_items SET predicate_id = ? WHERE id = ?").run("mutated", row.id);
-        target.db.exec("CREATE TABLE escaped(value TEXT)");
-        target.db.exec("PRAGMA user_version = 9");
-        target.db.exec("PRAGMA query_only = ON");
-        return {
-          state: "searched",
-          declared_frontier: "accepted:1",
-          searched_frontier: "accepted:1",
-          candidates: [],
-        };
+    const loader = loadFor(target) as unknown as (unexpectedCallback: () => void) => unknown;
+    loader(() => { calls += 1; });
+    expect(calls).toBe(0);
+
+    expect(() => loadFor(target, {
+      accepted_fixture: {
+        state: "searched",
+        declared_frontier: "accepted:code",
+        searched_frontier: "accepted:code",
+        candidates: [() => { calls += 1; }],
       },
-    })).toThrow();
-    expect(target.db.query("SELECT predicate_id FROM stm_items WHERE id = ?").get(row.id)).toEqual({ predicate_id: row.predicate_id });
-    expect(target.db.query("SELECT name FROM sqlite_master WHERE name = 'escaped'").get()).toBeNull();
-    expect(target.db.query("PRAGMA user_version").get()).toEqual({ user_version: 0 });
+    })).toThrow("plain JSON");
+    expect(calls).toBe(0);
   });
 
   test("absence degrades to unavailable and never infers acceptance from durable artifacts", () => {
@@ -683,15 +613,15 @@ describe("accepted recent-state injection", () => {
     });
   });
 
-  test("accepts truthful complete and pending shapes without defining acceptance", () => {
+  test("snapshots truthful complete and pending fixtures without defining acceptance", () => {
     const completeTarget = fixture();
     const complete = loadFor<{ ref: string }>(completeTarget, {
-      accepted: () => ({
+      accepted_fixture: {
         state: "searched",
         declared_frontier: "accepted:complete:3",
         searched_frontier: "accepted:complete:3",
         candidates: [{ ref: "candidate:complete" }],
-      } satisfies AcceptedRecentState<{ ref: string }>),
+      } satisfies AcceptedRecentState<{ ref: string }>,
     })();
     expect(complete.accepted_state).toEqual({
       state: "searched",
@@ -702,12 +632,12 @@ describe("accepted recent-state injection", () => {
 
     const pendingTarget = fixture();
     const pending = loadFor<{ ref: string }>(pendingTarget, {
-      accepted: () => ({
+      accepted_fixture: {
         state: "pending",
         declared_frontier: "accepted:declared:4",
         searched_frontier: "accepted:searched:3",
         candidates: [{ ref: "candidate:searched" }],
-      } satisfies AcceptedRecentState<{ ref: string }>),
+      } satisfies AcceptedRecentState<{ ref: string }>,
     })();
     expect(pending.internal_coverage.accepted).toMatchObject({
       state: "pending",
@@ -718,17 +648,39 @@ describe("accepted recent-state injection", () => {
 
     const whollyPendingTarget = fixture();
     expect(loadFor(whollyPendingTarget, {
-      accepted: () => ({
+      accepted_fixture: {
         state: "pending",
         declared_frontier: "accepted:declared:1",
         searched_frontier: null,
         candidates: [],
-      }),
+      },
     })().accepted_state.state).toBe("pending");
+  });
+
+  test("detaches and freezes fixture data once for the loader lifetime", () => {
+    const target = fixture();
+    const candidate = { ref: "candidate:before" };
+    const fixtureState = {
+      state: "searched" as const,
+      declared_frontier: "accepted:stable",
+      searched_frontier: "accepted:stable",
+      candidates: [candidate],
+    };
+    const loader = loadFor<{ ref: string }>(target, { accepted_fixture: fixtureState });
+    candidate.ref = "candidate:after";
+    fixtureState.candidates.push({ ref: "candidate:extra" });
+
+    const first = loader();
+    const second = loader();
+    expect(first.accepted_state.candidates).toEqual([{ ref: "candidate:before" }]);
+    expect(second.accepted_state).toBe(first.accepted_state);
+    expect(Object.isFrozen(first.accepted_state)).toBe(true);
+    expect(Object.isFrozen(first.accepted_state.candidates[0]!)).toBe(true);
   });
 
   test("rejects dishonest frontier/state pairs and accepted over-return", () => {
     const cases: readonly [unknown, string][] = [
+      [null, "invalid shape"],
       [{ state: "searched", declared_frontier: "accepted:2", searched_frontier: "accepted:1", candidates: [] }, "fully searched"],
       [{ state: "pending", declared_frontier: "accepted:1", searched_frontier: "accepted:1", candidates: [] }, "unsearched declared frontier"],
       [{ state: "no_eligible", declared_frontier: "accepted:1", searched_frontier: null, candidates: [{ ref: "invented" }] }, "cannot carry"],
@@ -738,18 +690,18 @@ describe("accepted recent-state injection", () => {
     for (const [accepted, message] of cases) {
       const target = fixture();
       const limits = message === "item limit" ? { max_items: 1, max_bytes: 1_000 } : LIMITS;
-      expect(loadFor(target, { limits, accepted: () => accepted })).toThrow(message);
+      expect(() => loadFor(target, { limits, accepted_fixture: accepted })).toThrow(message);
     }
 
     const byteTarget = fixture();
-    expect(loadFor(byteTarget, {
+    expect(() => loadFor(byteTarget, {
       limits: { max_items: 2, max_bytes: 3 },
-      accepted: () => ({
+      accepted_fixture: {
         state: "searched",
         declared_frontier: "accepted:1",
         searched_frontier: "accepted:1",
         candidates: [{ payload: "too-large" }],
-      }),
+      },
     })).toThrow("byte limit");
   });
 
@@ -767,7 +719,7 @@ describe("accepted recent-state injection", () => {
       enumerable: true,
       get() { getterCalls += 1; return "searched"; },
     });
-    expect(loadFor(fixture(), { accepted: () => accessor })).toThrow("accessors");
+    expect(() => loadFor(fixture(), { accepted_fixture: accessor })).toThrow("accessors");
     expect(getterCalls).toBe(0);
 
     let proxyTraps = 0;
@@ -775,7 +727,7 @@ describe("accepted recent-state injection", () => {
       ownKeys(target) { proxyTraps += 1; return Reflect.ownKeys(target); },
       getPrototypeOf(target) { proxyTraps += 1; return Reflect.getPrototypeOf(target); },
     });
-    expect(loadFor(fixture(), { accepted: () => proxied })).toThrow("proxies");
+    expect(() => loadFor(fixture(), { accepted_fixture: proxied })).toThrow("proxies");
     expect(proxyTraps).toBe(0);
 
     class AcceptedClass {
@@ -784,29 +736,107 @@ describe("accepted recent-state injection", () => {
       searched_frontier = "accepted:1";
       candidates: unknown[] = [];
     }
-    expect(loadFor(fixture(), { accepted: () => new AcceptedClass() })).toThrow("non-plain");
+    expect(() => loadFor(fixture(), { accepted_fixture: new AcceptedClass() })).toThrow("non-plain");
 
     const symbol = valid() as Record<PropertyKey, unknown>;
     symbol[Symbol("hidden")] = "secret";
-    expect(loadFor(fixture(), { accepted: () => symbol })).toThrow("symbol");
+    expect(() => loadFor(fixture(), { accepted_fixture: symbol })).toThrow("symbol");
 
     const hidden = valid();
     Object.defineProperty(hidden, "hidden", { enumerable: false, value: "secret" });
-    expect(loadFor(fixture(), { accepted: () => hidden })).toThrow("hidden fields");
+    expect(() => loadFor(fixture(), { accepted_fixture: hidden })).toThrow("hidden fields");
 
-    expect(loadFor(fixture(), { accepted: () => ({ ...valid(), extra: "secret" }) })).toThrow("invalid shape");
+    expect(() => loadFor(fixture(), { accepted_fixture: { ...valid(), extra: "secret" } })).toThrow("invalid shape");
 
     const sparse = valid();
     sparse.candidates = new Array(1);
-    expect(loadFor(fixture(), { accepted: () => sparse })).toThrow("sparse");
+    expect(() => loadFor(fixture(), { accepted_fixture: sparse })).toThrow("sparse");
 
     const candidate = { ref: "candidate:shared" };
-    expect(loadFor(fixture(), { accepted: () => ({ ...valid(), candidates: [candidate, candidate] }) })).toThrow("shared aliases");
+    expect(() => loadFor(fixture(), { accepted_fixture: { ...valid(), candidates: [candidate, candidate] } })).toThrow("shared aliases");
+  });
+});
+
+describe("native SQLite ownership", () => {
+  test("rejects Database subclasses and factory-time method shadows", () => {
+    class DatabaseSubclass extends Database {}
+    const subclass = new DatabaseSubclass(":memory:");
+    expect(() => createSqliteQaRecallLoader({
+      db: subclass,
+      owner_account_id: OWNER,
+      account_timezone: "UTC",
+      limits: LIMITS,
+    })).toThrow("exact native SQLite Database prototype");
+    Reflect.apply(Database.prototype.close, subclass, []);
+
+    for (const name of ["query", "exec", "transaction", "close"] as const) {
+      const target = fixture();
+      Object.defineProperty(target.db, name, {
+        configurable: true,
+        value: () => { throw new Error(`shadowed ${name}`); },
+      });
+      expect(() => createSqliteQaRecallLoader({
+        db: target.db,
+        owner_account_id: OWNER,
+        account_timezone: "UTC",
+        limits: LIMITS,
+      })).toThrow(`own ${name} shadows`);
+      Reflect.apply(Database.prototype.close, target.db, []);
+    }
+  });
+
+  test("post-factory graph-head query shadow cannot mix in another database", () => {
+    const primary = fixture();
+    addRow(primary, "1");
+    insertDerivation(primary, "primary:7", OWNER, 7);
+    primary.db.query("INSERT INTO graph_heads VALUES (?, ?, ?)").run(OWNER, "primary:7", 7);
+
+    const other = fixture();
+    insertDerivation(other, "other:99", OWNER, 99);
+    other.db.query("INSERT INTO graph_heads VALUES (?, ?, ?)").run(OWNER, "other:99", 99);
+
+    const loader = loadFor(primary);
+    const nativePrimaryQuery = Database.prototype.query.bind(primary.db);
+    let shadowCalls = 0;
+    Object.defineProperty(primary.db, "query", {
+      configurable: true,
+      value: (sql: string) => {
+        shadowCalls += 1;
+        return sql.includes("graph_heads") ? other.db.query(sql) : nativePrimaryQuery(sql);
+      },
+    });
+
+    const result = loader();
+    expect(shadowCalls).toBe(0);
+    expect(result.internal_coverage.durable).toMatchObject({
+      graph_generation: 7,
+      ledger_head: { commit_id: "primary:7", sequence: 7 },
+    });
+  });
+
+  test("post-factory exec and transaction shadows cannot redirect the loader", () => {
+    const target = fixture();
+    addRow(target, "1");
+    const loader = loadFor(target);
+    const calls: string[] = [];
+    Object.defineProperties(target.db, {
+      exec: {
+        configurable: true,
+        value: () => { calls.push("exec"); throw new Error("shadowed exec"); },
+      },
+      transaction: {
+        configurable: true,
+        value: () => { calls.push("transaction"); throw new Error("shadowed transaction"); },
+      },
+    });
+
+    expect(loader().stm_rows.map((item) => item.id)).toEqual(["claim:1"]);
+    expect(calls).toEqual([]);
   });
 });
 
 describe("configuration bounds", () => {
-  test("rejects negative, fractional, unsafe, and limit-plus-one overflow configurations", () => {
+  test("rejects negative, fractional, unsafe, and arithmetic-overflow configurations", () => {
     const target = fixture();
     const invalid: readonly SqliteQaRecallLimits[] = [
       { max_items: -1, max_bytes: 1 },
@@ -832,7 +862,7 @@ describe("configuration bounds", () => {
     expect(totalChanges(target.db)).toBe(changesBefore);
   });
 
-  test("snapshots option descriptors without invoking accessors and rejects an independent ledger", () => {
+  test("snapshots fixture option descriptors without invoking accessors and rejects an independent ledger", () => {
     const target = fixture();
     let getterCalls = 0;
     const accessorOptions: Record<string, unknown> = {
@@ -841,9 +871,9 @@ describe("configuration bounds", () => {
       account_timezone: "UTC",
       limits: LIMITS,
     };
-    Object.defineProperty(accessorOptions, "accepted_recent_state_port", {
+    Object.defineProperty(accessorOptions, "accepted_fixture_state", {
       enumerable: true,
-      get() { getterCalls += 1; return () => null; },
+      get() { getterCalls += 1; return null; },
     });
     expect(() => createSqliteQaRecallLoader(accessorOptions as never)).toThrow("accessors");
     expect(getterCalls).toBe(0);
