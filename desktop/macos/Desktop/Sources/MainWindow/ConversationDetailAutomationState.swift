@@ -63,6 +63,8 @@ final class ConversationDetailAutomationState: ObservableObject {
     self.transcriptDrawerOpen = shouldShowTranscript
     if pendingTranscriptConversationId == conversationId {
       focusedTranscriptSegmentIds = pendingTranscriptSegmentIds
+    } else {
+      focusedTranscriptSegmentIds = []
     }
     if pendingTranscriptConversationId == conversationId {
       pendingTranscriptConversationId = nil

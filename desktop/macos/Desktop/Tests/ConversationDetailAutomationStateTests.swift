@@ -75,11 +75,17 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
   func testSyncPresentedDetailReplacesAutomationOpenStateWhenSwiftUIReusesTheDetailView() {
     let state = ConversationDetailAutomationState()
 
+    state.requestOpen(
+      conversationId: "conversation-1",
+      showTranscript: true,
+      transcriptSegmentIds: ["segment-2"]
+    )
     _ = state.syncPresentedDetail(conversationId: "conversation-1", transcriptDrawerOpen: true)
     let drawerOpen = state.syncPresentedDetail(conversationId: "conversation-2", transcriptDrawerOpen: false)
 
     XCTAssertEqual(state.openConversationId, "conversation-2")
     XCTAssertFalse(drawerOpen)
     XCTAssertFalse(state.transcriptDrawerOpen)
+    XCTAssertTrue(state.focusedTranscriptSegmentIds.isEmpty)
   }
 }

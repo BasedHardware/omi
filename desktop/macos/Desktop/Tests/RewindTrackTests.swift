@@ -227,6 +227,31 @@ final class RewindTrackTests: XCTestCase {
 
     XCTAssertEqual(RewindTimelineNavigation.nearestIndex(to: 249, screenshots: screenshots), 1)
     XCTAssertEqual(RewindTimelineNavigation.nearestIndex(to: 251, screenshots: screenshots), 2)
+    XCTAssertNil(RewindTimelineNavigation.clampedIndex(0, screenshots: []))
+    XCTAssertEqual(RewindTimelineNavigation.clampedIndex(99, screenshots: screenshots), 2)
+  }
+
+  func testAnEmptyViewportKeepsTheTimelineWhenRetainedHistoryExists() {
+    XCTAssertTrue(RewindTimelinePresentation.showsTimeline(screenshotCount: 0, historyRange: 100...200))
+    XCTAssertFalse(RewindTimelinePresentation.showsTimeline(screenshotCount: 0, historyRange: nil))
+  }
+
+  func testLiveRefreshRequiresAViewportContainingNow() {
+    let now = Date(timeIntervalSince1970: 1_000)
+    XCTAssertTrue(RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: 900...1_100, now: now))
+    XCTAssertFalse(RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: 100...200, now: now))
+  }
+
+  func testNewCaptureExtendsTheRetainedHistoryUpperBound() {
+    XCTAssertEqual(
+      RewindTrackWindow.extending(nil, toInclude: Date(timeIntervalSince1970: 250)),
+      250...280
+    )
+    let extended = RewindTrackWindow.extending(
+      100...200,
+      toInclude: Date(timeIntervalSince1970: 250)
+    )
+    XCTAssertEqual(extended, 100...280)
   }
 
   // MARK: - Zoom bounds

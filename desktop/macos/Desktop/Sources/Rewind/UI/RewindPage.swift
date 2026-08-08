@@ -130,7 +130,10 @@ struct RewindPage: View {
                   // Already two panels of its own, with its own gap under the bar.
                   fullScreenResultsView(width: header)
                 }
-              } else if viewModel.screenshots.isEmpty {
+              } else if !RewindTimelinePresentation.showsTimeline(
+                screenshotCount: viewModel.screenshots.count,
+                historyRange: viewModel.historyRange
+              ) {
                 emptyState.rewindPlayerPanel(width: player)
               } else {
                 // Normal timeline view (without top bar, since we have unified one)
@@ -488,6 +491,10 @@ struct RewindPage: View {
       if groups.indices.contains(groupIndex) {
         viewModel.alignSelectedDay(to: groups[groupIndex].startTime)
         trackWindow.center(on: groups[groupIndex].startTime.timeIntervalSince1970)
+        viewModel.rememberTimelineWindow(
+          from: trackWindow.start,
+          to: trackWindow.start + trackWindow.span
+        )
       }
       scheduleLoadCurrentFrame()
     }
@@ -887,7 +894,7 @@ struct RewindPage: View {
 
   private func seekToIndex(_ index: Int) {
     let screenshots = activeScreenshots
-    let newIndex = max(0, min(index, screenshots.count - 1))
+    guard let newIndex = RewindTimelineNavigation.clampedIndex(index, screenshots: screenshots) else { return }
     guard newIndex != currentIndex else { return }
 
     currentIndex = newIndex

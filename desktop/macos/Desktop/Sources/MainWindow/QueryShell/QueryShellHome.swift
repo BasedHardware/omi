@@ -42,6 +42,7 @@ struct QueryShellHome: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
+  @ObservedObject private var tasksStore = TasksStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
   /// The cohort shell keeps the existing modern Home presentation even when the reversible legacy
   /// preference is enabled. This is presentation-only; capability sampling and rich-block access
@@ -284,9 +285,8 @@ struct QueryShellHome: View {
         request: request,
         appState: appState,
         memoriesViewModel: memoriesViewModel,
-        tasksStore: TasksStore.shared,
+        tasksStore: tasksStore,
         onOpenConversation: openConversation,
-        onOpenConversationSource: openConversationSource,
         onOpenBrainMap: openBrainMap,
         onOpenRewind: openRewind
       )
@@ -558,7 +558,8 @@ struct QueryShellHome: View {
   private var total: Int? {
     guard let screenCount else { return nil }
     let conversations = appState.conversations.filter { $0.deleted != true }.count
-    return conversations + memoriesViewModel.memories.count + screenCount
+    let tasks = tasksStore.tasks.filter { !$0.isRetired }.count
+    return conversations + memoriesViewModel.memories.count + tasks + screenCount
   }
 
   private func loadScreenCount() async {

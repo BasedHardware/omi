@@ -93,7 +93,6 @@ struct SpineRowView: View {
   /// state their own time instead.
   let showsIndent: Bool
   let onOpenConversation: (ServerConversation) -> Void
-  let onOpenConversationSource: (String, [String]) -> Void
   let onToggleTask: (TaskActionItem) -> Void
   let onToggleStar: (ServerConversation) -> Void
   let onOpenMoment: (SpineMoment) -> Void
@@ -167,17 +166,13 @@ struct SpineRowView: View {
     case .memories(let memories):
       SpineMemoriesRow(
         memories: memories,
-        showsTimestamps: !row.isAttached && !showsIndent,
-        showsSourceProvenance: row.showsSourceProvenance,
-        onOpenConversationSource: onOpenConversationSource
+        showsTimestamps: !row.isAttached && !showsIndent
       )
     case .tasks(let tasks):
       SpineTasksRow(
         tasks: tasks,
         showsTimestamps: !row.isAttached && !showsIndent,
-        showsSourceProvenance: row.showsSourceProvenance,
-        onToggle: onToggleTask,
-        onOpenConversationSource: onOpenConversationSource
+        onToggle: onToggleTask
       )
     case .moments(let shown, let total):
       SpineMomentsRow(moments: shown, total: total, onOpen: onOpenMoment)
@@ -266,17 +261,13 @@ struct SpineMemoriesRow: View {
   let memories: [SpineMemory]
   /// Set when the row is soloed and there is no conversation above it to own the minute.
   let showsTimestamps: Bool
-  let showsSourceProvenance: Bool
-  let onOpenConversationSource: (String, [String]) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
       ForEach(memories) { memory in
         SpineMemoryLine(
           memory: memory,
-          showsTimestamp: showsTimestamps && memories.count > 1,
-          showsSourceProvenance: showsSourceProvenance,
-          onOpenConversationSource: onOpenConversationSource
+          showsTimestamp: showsTimestamps && memories.count > 1
         )
       }
     }
@@ -292,8 +283,6 @@ struct SpineMemoriesRow: View {
 private struct SpineMemoryLine: View {
   let memory: SpineMemory
   let showsTimestamp: Bool
-  let showsSourceProvenance: Bool
-  let onOpenConversationSource: (String, [String]) -> Void
 
   private var copy: SpineMemoryCopy { SpineFormat.memoryCopy(memory.text) }
 
@@ -325,19 +314,6 @@ private struct SpineMemoryLine: View {
           Text(SpineFormat.time(memory.timestamp))
             .inkStyle(.statusLabel, color: Ink.secondary)
         }
-        if showsSourceProvenance, let conversationID = memory.conversationID {
-          Button {
-            onOpenConversationSource(conversationID, [])
-          } label: {
-            HStack(spacing: 4) {
-              Image(systemName: "text.quote")
-              Text("From \(memory.sourceConversationTitle ?? "conversation")")
-            }
-            .inkStyle(.statusLabel, color: Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .help("Open the source conversation and full transcript")
-        }
       }
       .frame(maxWidth: SpineMetrics.proseMaxWidth, alignment: .leading)
     }
@@ -348,13 +324,11 @@ private struct SpineMemoryLine: View {
 
 // MARK: - Tasks
 
-/// Tasks use the same quiet inline hierarchy as memories, with provenance shown when they stand alone.
+/// Tasks use the same quiet inline hierarchy as memories.
 struct SpineTasksRow: View {
   let tasks: [SpineTask]
   let showsTimestamps: Bool
-  let showsSourceProvenance: Bool
   let onToggle: (TaskActionItem) -> Void
-  let onOpenConversationSource: (String, [String]) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: SpineMetrics.memoryGap) {
@@ -375,26 +349,6 @@ struct SpineTasksRow: View {
               .inkStyle(.prose, color: task.task.completed ? Ink.secondary : Ink.primary)
               .strikethrough(task.task.completed, color: Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
-            if showsSourceProvenance, let conversationID = task.conversationID {
-              Button {
-                let segmentIDs =
-                  task.task.provenance?
-                  .first(where: { $0.kind == .conversation && $0.id == conversationID })?
-                  .transcriptSegmentIds ?? []
-                onOpenConversationSource(conversationID, segmentIDs)
-              } label: {
-                HStack(spacing: 4) {
-                  Image(systemName: "text.quote")
-                  Text(task.sourceLabel)
-                }
-                .inkStyle(.statusLabel, color: Ink.secondary)
-              }
-              .buttonStyle(.plain)
-              .help("Open the source conversation and full transcript")
-            } else if showsSourceProvenance {
-              Text(task.sourceLabel)
-                .inkStyle(.statusLabel, color: Ink.secondary)
-            }
             if showsTimestamps && tasks.count > 1 {
               Text(SpineFormat.time(task.timestamp))
                 .inkStyle(.statusLabel, color: Ink.secondary)
