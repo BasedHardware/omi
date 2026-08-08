@@ -5,7 +5,7 @@
 > reach that path through the registered route module — it may not answer the
 > path itself.
 
-Status: **PROVISIONAL, HELD (round 6).** Landed 2026-08-08 with the W4
+Status: **PROVISIONAL, HELD (round 7).** Landed 2026-08-08 with the W4
 rebuild; it runs immediately, per §8, and continues to run at full strength
 while held — holding is not disabling. Rounds 1–4 each found a working
 bypass in a comment-marker escape hatch (file-wide scope; a bare substring
@@ -13,12 +13,17 @@ search; string-blindness in the shared comment stripper; no `${…}`
 interpolation-depth tracking) and each fix left a smaller hole. **Round 5 is
 a ruling, not a bypass:** the marker mechanism was replaced entirely with a
 `WIRE_PATH_HATCHES` registry, keyed by `(file, line)` — see
-**AUDIT-17 — round 5**. Round 6 re-audited that replacement and found a gap
-in the new mechanism's own granularity: two server constructions on one
-physical source line collapse onto a single registry key, so a hatch for a
-legitimate construction also covers a rogue one sharing its line — see
-**AUDIT-17 — round 6**. The DOOR lane wrote the original; a non-author (the
-coordinator) wrote every fix and the round-5 replacement, and said so
+**AUDIT-17 — round 5**. Round 6 found a gap in that replacement's own
+granularity (two constructions on one physical line sharing a registry
+key), fixed by making that shape an unconditional failure — see
+**AUDIT-17 — round 6**. Round 7 found that the round-6 fix over-corrected:
+the failure fires on ANY file combining two of the four server-construction
+patterns on one line, including the ordinary, common
+`Bun.serve({ fetch: new Hono().fetch })` idiom, **whether or not the file
+names the registered wire path at all** — a false positive with tree-wide
+blast radius, not a bypass. See **AUDIT-17 — round 7**. The DOOR lane wrote
+the original; a non-author (the coordinator) wrote every fix and the
+round-5 replacement, and said so
 explicitly rather than promoting their own work each time. If it fires on
 another lane, that is a swarm-wide blocker, never something to route around,
 regardless of held status.
@@ -968,3 +973,121 @@ program's own standing rule (§5: an assertion never seen red does not
 count) applied to the guard itself, and it is why the fence is still held
 rather than promoted on the strength of a design that is sound in
 principle.
+
+## AUDIT-17 — round 7, non-author re-audit of `185357b502`, 2026-08-08
+
+The coordinator reproduced round 6's finding before fixing it — lint exit
+0 against the real, already-hatched `live-server.ts`, matching what was
+reported — then made two constructions on one line an unconditional
+failure, independent of any hatch, on the reasoning that removing the
+ambiguity beats patching around it, the same move that replaced the marker
+with the registry. Two red-proofs in the commit message: the two-on-one-
+line case now fires; the clean tree stays green. Both reproduced.
+
+**This round's finding is a false positive, not a bypass — the first one
+of that shape in seven rounds — and its blast radius is wider than
+anything found so far, because it is not scoped to the wire path at all.**
+
+`constructionsOn(line)` sums matches **across all four**
+`serverConstructionPatterns` — `Bun.serve(`, `Deno.serve(`, `new Hono(`,
+`createServer(` — indiscriminately:
+
+```ts
+const constructionsOn = (line: string): number =>
+  serverConstructionPatterns.reduce(
+    (total, pattern) => total + (line.match(new RegExp(pattern.source, "g")) ?? []).length,
+    0,
+  );
+```
+
+`new Hono(` constructs a router/app **value** — it does not open a socket
+or listen for anything on its own; something else (`Bun.serve`,
+`@hono/node-server`'s `serve()`, etc.) has to bind it before it is a
+server at all. `Bun.serve({ fetch: new Hono().fetch })` — passing a fresh
+Hono app's fetch handler straight into `Bun.serve` — is an ordinary,
+common way to wire the two together, and it is **one** server, not two.
+Written on one line, it matches both `Bun.serve(` and `new Hono(`, so
+`constructionsOn` counts 2 and the round-6 check fires "two HTTP servers
+are constructed on one line" against a file with exactly one.
+
+Verified directly, with the fixture's irrelevance to the wire path
+confirmed by construction rather than assumed:
+
+```ts
+const server = Bun.serve({ fetch: new Hono().fetch });
+```
+
+`grep -c "memories"` on this fixture returns 0 — no occurrence of the
+wire path, the domain word, or anything wire-path-adjacent anywhere in it.
+Lint fires anyway, naming line 1, with the exact "two HTTP servers"
+message. This is **unconditional**: the check runs before, and independent
+of, whatever `WIRE_PATH_REGISTRY`/`namesWirePath` would have found, so it
+can fire on any file in the platform tree that happens to combine a
+binder with a same-line Hono construction — not files near `/v1/memories`,
+not files that stand up a door, any file at all. Confirmed the current
+tree does not trip it today: `app.ts` and `app-facing.ts` both construct
+`new Hono(` on their own line, not combined with a binder on the same
+line — but that is incidental formatting, not a property the checker
+enforces or that anyone writing ordinary code would know to preserve.
+
+**Why this is a §8 "gate is the defect" case, precisely the shape the
+mandate asked auditors to look for from round 1 onward:** the two
+documented rule-16 defects that motivated this whole audit were "a guard
+inspecting only keys while the banned thing sat in a value" and "a fence
+banning an ordinary English word, firing on prose while catching no real
+reference." This is the second shape exactly — a check that fires on
+ordinary, working code because it cannot tell "two independent server
+bindings" from "one binding whose argument happens to also match a
+different pattern in the same list."
+
+**Recommended fix, minimal and consistent with round 6's own reasoning
+("remove the ambiguity, don't patch around it"):** the ambiguity round 6
+is actually trying to close is specific to **binding** calls — the ones
+that can independently open a socket: `Bun.serve(`, `Deno.serve(`,
+`createServer(`. `new Hono(` never binds anything by itself and commonly
+appears as an argument to one of the other three; it should not be summed
+into the same count. Restrict `constructionsOn`'s "two or more is a
+failure" check to matches within that three-pattern binder subset (still
+summing multiple matches of the *same* binder pattern, which is the
+actually-suspicious case — two independent `Bun.serve(` calls on one
+line has no ordinary explanation). `new Hono(` stays exactly as it is for
+`standsUpAServer`/site detection, which round 7 did not touch and has no
+finding against.
+
+**False-positive sweep, round 7.** No file in the tree today combines two
+server-construction patterns on one line, so this is not presently firing
+on trunk — but it is a live landmine for the next ordinary PR anywhere in
+`platform/`, `apps/`, or `integration/` that writes this idiom, which
+`app.ts`/`app-facing.ts` show is already in use in this codebase (just not
+yet on a shared line with a binder).
+
+### Verdict: HOLD (round 7)
+
+Rounds 1–6's findings all stay closed; nothing here reopens any of them.
+This is a new, narrower problem in the opposite direction from every prior
+round: over-firing rather than under-firing, on ordinary code rather than
+on a crafted bypass.
+
+**What would unblock promotion:** scope the "two or more on one line"
+check to the three binder patterns only, re-run this round's
+`Bun.serve({ fetch: new Hono().fetch })` fixture against the tightened
+check and confirm it stays green, confirm round 6's own two-`Bun.serve(`-
+calls fixture still fires, re-run all existing red-proofs, non-author
+re-reads.
+
+**Blast radius if this HOLD is wrong:** small — narrowing which patterns
+feed one counting function, additive to nothing, does not touch site
+detection, hatch resolution, or staleness, and does not change any case
+already verified correct across seven rounds.
+
+**What is still open after seven rounds:** the unscoped binder-count false
+positive (blocking). Everything recorded as open after round 4 that
+rounds 5 and 6 did not touch — the pre-existing multi-server false-positive
+imprecision, the same-construction-behavior-drift gap, and rule 16's
+unfixed round-2-class hatch — remains open and unchanged. Seven rounds: six
+real findings against the fence (four in the deleted marker mechanism, one
+in the registry's granularity, one in this round's over-correction of that
+fix) and one design ruling, none found by reading. The rate of new findings
+has not gone to zero; the last two rounds were opposite-direction problems
+in the exemption path's immediate neighborhood, which reads as the
+mechanism settling, not as it being sound yet.
