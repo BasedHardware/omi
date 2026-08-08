@@ -1069,6 +1069,7 @@ export interface Conversation {
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
+  uses_custom_stt?: boolean;
   visibility?: ConversationVisibility;
 }
 
@@ -3033,6 +3034,7 @@ export interface SharedConversationResponse {
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
+  uses_custom_stt?: boolean;
   visibility?: ConversationVisibility;
   [key: string]: unknown;
 }

@@ -98,3 +98,64 @@ def test_no_chunks_anywhere_returns_empty(monkeypatch):
     _install(monkeypatch, chunks_by_conv={}, bucket=_FakeBucket())
 
     assert merge._copy_audio_chunks_for_merge('u1', _CONVS, 'merged_1') == []
+
+
+def test_merge_propagates_custom_stt_marker_from_any_source(monkeypatch):
+    """Regression for #7690: a merged conversation must carry `uses_custom_stt=True`
+    when ANY source was custom-STT, so process_conversation keeps the merged row
+    behind the Omi-paid LLM gate. A custom-STT source must not shed the marker by
+    merging with a normal-STT one (default False would bypass the gate)."""
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    sources = [
+        {
+            'id': 'conv_custom',
+            'created_at': now - timedelta(minutes=2),
+            'started_at': now - timedelta(minutes=2),
+            'finished_at': now - timedelta(minutes=1),
+            'language': 'en',
+            'source': 'omi',
+            'transcript_segments': [],
+            'uses_custom_stt': True,
+        },
+        {
+            'id': 'conv_normal',
+            'created_at': now - timedelta(minutes=1),
+            'started_at': now - timedelta(minutes=1),
+            'finished_at': now,
+            'language': 'en',
+            'source': 'omi',
+            'transcript_segments': [],
+            'uses_custom_stt': False,
+        },
+    ]
+    monkeypatch.setattr(
+        merge.conversations_db,
+        'get_conversation',
+        lambda _uid, conv_id: next(c for c in sources if c['id'] == conv_id),
+    )
+    _install(monkeypatch, chunks_by_conv={}, bucket=_FakeBucket())
+    monkeypatch.setattr(merge, '_collect_all_photos', lambda *_a, **_k: [])
+    monkeypatch.setattr(merge, 'is_audio_merge_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *_a, **_k: None)
+    monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda *_a, **_k: None)
+    # send_merge_completed_message is imported inside perform_merge_async, so
+    # patch it at its source module.
+    import utils.notifications as notifications
+
+    monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *_a, **_k: None)
+
+    created = {}
+
+    def _capture_creation(uid, data):
+        created['uid'] = uid
+        created['data'] = data
+
+    monkeypatch.setattr(merge.lifecycle_service, 'create_processing_conversation', _capture_creation)
+
+    merge.perform_merge_async('u1', ['conv_custom', 'conv_normal'], reprocess=False)
+
+    assert (
+        created['data']['uses_custom_stt'] is True
+    ), f"merged conversation lost the custom-STT marker: {created['data'].get('uses_custom_stt')}"
