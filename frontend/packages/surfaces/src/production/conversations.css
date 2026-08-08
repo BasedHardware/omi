@@ -28,7 +28,14 @@
 .conversation-detail-actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
 .conversation-detail-actions select { min-width: 9rem; }
 .conversation-detail-actions label { display: grid; gap: var(--space-xs); color: var(--content-secondary); font-size: var(--type-label-size); }
-.conversation-back { display: inline-flex; min-height: var(--min-tap-target); align-items: center; margin-bottom: var(--space-md); }
+.conversation-back {
+  display: inline-flex;
+  min-height: var(--min-tap-target);
+  align-items: center;
+  margin-bottom: var(--space-md);
+  color: var(--content-primary);
+  text-decoration: none;
+}
 .conversation-source { margin: 0; color: var(--content-secondary); font-size: var(--type-label-size); }
 html[data-platform="desktop"] .conversation-row { grid-template-columns: minmax(0, 1fr) auto; padding: var(--space-lg) var(--space-xl); }
 html[data-platform="desktop"] .conversation-list { max-width: 920px; }

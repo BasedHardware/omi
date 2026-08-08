@@ -41,6 +41,7 @@ export const EN_MESSAGES = {
   "conversations.editTitle": "Edit title",
   "conversations.saveTitle": "Save title",
   "conversations.delete": "Delete conversation",
+  "conversations.deleteConfirm": "Delete this conversation?",
   "conversations.lockedBody": "Full content was not provided; this conversation is read-only.",
   "conversations.discarded": "Discarded",
   "conversations.all": "All",

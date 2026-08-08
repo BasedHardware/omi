@@ -204,7 +204,10 @@ function ConversationDetail({ conversation, folders, locale, run, store, fixture
             </select>
           </label>
         </>
-        <button type="button" onClick={() => void run(async () => { await store.delete(conversation.id); location.assign(listHref(fixture)); })}>{t(locale, "conversations.delete")}</button>
+        <button type="button" onClick={() => {
+          if (!globalThis.confirm(t(locale, "conversations.deleteConfirm"))) return;
+          void run(async () => { await store.delete(conversation.id); location.assign(listHref(fixture)); });
+        }}>{t(locale, "conversations.delete")}</button>
       </div>}
     </section>
   );
