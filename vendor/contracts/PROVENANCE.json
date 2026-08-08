@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@omi-core/ratified-contracts",
+    "version": "0.1.0"
+  },
+  "repository": "BasedHardware/omi",
+  "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
+  "rulings": [
+    "ADR-004",
+    "WS-006",
+    "M-001",
+    "DIV-MEM-004",
+    "FEAT-MEM-001",
+    "FEAT-MEM-002",
+    "FC-AUTH-003",
+    "FEAT-AUTH-011"
+  ],
+  "compiler": {
+    "name": "typescript",
+    "version": "5.9.3"
+  },
+  "inputs": [
+    {
+      "path": "fixtures/clean-consumer/conformance.mjs",
+      "sha256": "bde155f1f552b3b1e1a04392c08aa2f1e7b588cec1255317da4b3c4348f480e0",
+      "bytes": 5272
+    },
+    {
+      "path": "fixtures/clean-consumer/consumer.ts",
+      "sha256": "a1313422af164bae857c81f48f74500bfcd16e4f825ffe3f71b6e82d05b44eea",
+      "bytes": 8489
+    },
+    {
+      "path": "fixtures/clean-consumer/tsconfig.json",
+      "sha256": "d4aa4e8b31dcbec3294d703a579ca0c463d6548cf56c516204934901bedb8e63",
+      "bytes": 171
+    },
+    {
+      "path": "fixtures/forbidden-public-fields.mjs",
+      "sha256": "a7282e3827ade03cd349f488190e4f094a4199f07bfd4483ab1edb1c536dbaf6",
+      "bytes": 532
+    },
+    {
+      "path": "fixtures/manifest.json",
+      "sha256": "a03e26e382a58b76ebe3f8e1cabe28620c4d2da4c3de51f1099a282df6b359f1",
+      "bytes": 184
+    },
+    {
+      "path": "fixtures/page-conformance.json",
+      "sha256": "91a6d345a07538a85f75db7c42615e4ea93622c280932e96a464c302f87ab6cb",
+      "bytes": 5748
+    },
+    {
+      "path": "fixtures/read-page-windows.json",
+      "sha256": "8a93f2667c7bdd7d1f6c7dfd93fa180cf8703a984c4c9eccf6226b8b936f30d0",
+      "bytes": 1240
+    },
+    {
+      "path": "fixtures/recall-completeness.json",
+      "sha256": "512d543ee932a90de10357a96b8dd3c398c292fa590bfc116953432e8e95e73b",
+      "bytes": 9246
+    },
+    {
+      "path": "fixtures/recall-trace.json",
+      "sha256": "7c8df186eb74cfcc41c36125b15dff308602a74d7faa4d321387bab9f4ad2696",
+      "bytes": 9312
+    },
+    {
+      "path": "fixtures/status-matrix.json",
+      "sha256": "43d73698915f4da482b7d656b70adfde6d61d096455840acc73e73d2dd2a0bbb",
+      "bytes": 1930
+    },
+    {
+      "path": "package.json",
+      "sha256": "a4456da883546832aeec168209bdc1989bb261ff23116726f2533b83fea1ce0b",
+      "bytes": 1891
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "sha256": "9747995ee6c20d5990a84006b6353d66070f7a2bb23b92133c1c81e02a1e5693",
+      "bytes": 439
+    },
+    {
+      "path": "README.md",
+      "sha256": "bb492a450eebb21d2da3f2c7c719793a948213b96997f0fbdf8e680b2976400b",
+      "bytes": 4134
+    },
+    {
+      "path": "scripts/check-domain-markers.mjs",
+      "sha256": "5e46a993bdf029c87b5157529f95d5338e66eee627339e035c7bfd9fdb553a81",
+      "bytes": 2205
+    },
+    {
+      "path": "scripts/clean.mjs",
+      "sha256": "fc3d04823ac4badd5fbeecee577dedeb6af4480d1c5e9965dde0d4dedbb14135",
+      "bytes": 155
+    },
+    {
+      "path": "scripts/package-boundary.mjs",
+      "sha256": "5cc5cac756dc731aed7272545ffee9f4a0089ae70032ddf3634646e6f99acbce",
+      "bytes": 8112
+    },
+    {
+      "path": "scripts/provenance.mjs",
+      "sha256": "51e89f146eec0a0de63b7864575fd53922d12a4185b04f18e2e3f6a2874ef79c",
+      "bytes": 2515
+    },
+    {
+      "path": "scripts/verify-ci.mjs",
+      "sha256": "c4177c11bc430dd1dc943ced4b672bbfa9c0ea95df8aa199496f23316b41346f",
+      "bytes": 819
+    },
+    {
+      "path": "src/pagination/cursor.ts",
+      "sha256": "b112180e017c4ea4f62dd531e2a57e3a14f29848abf4436378cf0be64f9fe894",
+      "bytes": 508
+    },
+    {
+      "path": "src/projections/synthesized.ts",
+      "sha256": "a6b1e3c73e62bda748079ef4037ce6e0295599fea404d56be1b578e697fd65c7",
+      "bytes": 18711
+    },
+    {
+      "path": "src/recall/trace.ts",
+      "sha256": "c03859605b6c918a43edf9d9762f9d457e9c36ce00706d73b0a8fbcada4b137f",
+      "bytes": 6768
+    },
+    {
+      "path": "src/wire/json.ts",
+      "sha256": "ce1bc985ae476270cab3715393d22851eab9b0572da7c5ad3cf12fdb9253fa77",
+      "bytes": 5747
+    },
+    {
+      "path": "test/contracts.test.mjs",
+      "sha256": "cc64a26bd4523114d19ee8a2653fd5097efe7cc97c87ed7ed0fd91c60749c854",
+      "bytes": 12114
+    },
+    {
+      "path": "tsconfig.base.json",
+      "sha256": "834b77bf73d7d71ed7fa4d80e77a395b902cdcc66f1612def5a6c4febe5ecb93",
+      "bytes": 518
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "008e71c487fb6040ef87de46b534f669bf75f21ebeb69429a77fec61ba6e75aa",
+      "bytes": 133
+    }
+  ],
+  "sourceDigest": "81ad79497254690762d0555435388803d9be0dd5b7f1c29d308f31bfa29bc218"
+}
