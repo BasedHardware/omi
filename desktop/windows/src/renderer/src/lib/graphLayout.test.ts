@@ -53,4 +53,28 @@ describe('computeLayout', () => {
     )
     expect(out.nodes[0].degree).toBe(1)
   })
+
+  it('ignores an edge that points to a node that is not present', () => {
+    const out = computeLayout(
+      {
+        nodes: [{ id: 'a', label: 'A', nodeType: 'person', aliases: [], memoryIds: [] }],
+        edges: [{ id: 'e', sourceId: 'a', targetId: 'ghost', label: '', memoryIds: [] }]
+      },
+      { iterations: 5 }
+    )
+    expect(out.nodes).toHaveLength(1)
+    expect(Number.isFinite(out.nodes[0].x)).toBe(true)
+  })
+
+  it('ignores an edge whose endpoint id matches an inherited object property', () => {
+    const out = computeLayout(
+      {
+        nodes: [{ id: 'a', label: 'A', nodeType: 'person', aliases: [], memoryIds: [] }],
+        edges: [{ id: 'e', sourceId: 'a', targetId: '__proto__', label: '', memoryIds: [] }]
+      },
+      { iterations: 5 }
+    )
+    expect(out.nodes).toHaveLength(1)
+    expect(Number.isFinite(out.nodes[0].x)).toBe(true)
+  })
 })

@@ -7,6 +7,10 @@ export const MIN_FILES_FOR_TECH = 3
 export function slugify(label: string): string {
   return label
     .toLowerCase()
+    // Preserve the C++ / C# distinction before the punctuation strip, otherwise
+    // "C", "C++" and "C#" all collapse to "c" and share one technology node id.
+    .replace(/\+/g, 'p')
+    .replace(/#/g, 'sharp')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
