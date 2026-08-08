@@ -20,6 +20,7 @@ const KEY_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const OPAQUE_KEY_PATTERN = /^[A-Za-z0-9_-]+$/;
 const DUMMY_SECRET = new Uint8Array(MIN_SIGNING_SECRET_BYTES);
 const DUMMY_SIGNATURE = new Uint8Array(SIGNATURE_BYTES);
+declare const opaqueVisibleKeysetBrand: unique symbol;
 
 type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
@@ -35,14 +36,23 @@ export interface McpCursorBindings {
   readonly credential_key_digest: string;
   readonly authorization_generation_digest: string;
   readonly grant_generation_digest: string;
+  readonly account_generation_digest: string;
   readonly graph_generation_digest: string;
   readonly projection_generation_digest: string;
+  readonly projection_commit_digest: string;
   readonly visibility_digest: string;
   readonly filter_digest: string;
   readonly query_digest: string;
+  readonly cursor_policy_digest: string;
   readonly source_digest: string;
   readonly read_mode_digest: string;
 }
+
+/**
+ * A service-produced opaque encoding of the deterministic stable sort keyset
+ * for the last *visible* row. It is never an offset, raw row ID, or content.
+ */
+export type OpaqueVisibleKeyset = string & { readonly [opaqueVisibleKeysetBrand]: true };
 
 export interface McpCursorSigningKey {
   readonly key_id: string;
@@ -56,11 +66,13 @@ export interface McpCursorSigningKeyset {
 
 export interface IssueMcpCursorRequest {
   /**
-   * The continuation key must already be opaque and content-free. Raw user,
-   * application, credential, query, or source identifiers do not belong here.
+   * The continuation key must already encode the deterministic stable sort
+   * keyset of the last visible row. Raw user, application, credential, query,
+   * source identifiers, hidden-row coordinates, and offsets do not belong here.
    */
-  readonly last_visible_key: string;
+  readonly last_visible_key: OpaqueVisibleKeyset;
   readonly bindings: McpCursorBindings;
+  /** The authoritative page read timestamp; cursor TTL starts from this snapshot. */
   readonly issued_at_epoch_seconds: number;
   readonly ttl_seconds: number;
 }
@@ -73,9 +85,10 @@ export interface VerifyMcpCursorRequest {
 export interface McpCursorClaims {
   readonly version: 1;
   readonly signing_key_id: string;
+  /** The signed page read timestamp, not an ambient decode or response time. */
   readonly issued_at_epoch_seconds: number;
   readonly expires_at_epoch_seconds: number;
-  readonly last_visible_key: string;
+  readonly last_visible_key: OpaqueVisibleKeyset;
   readonly bindings: Readonly<McpCursorBindings>;
 }
 
@@ -93,7 +106,7 @@ interface CursorPayload {
   readonly version: 1;
   readonly issued_at_epoch_seconds: number;
   readonly expires_at_epoch_seconds: number;
-  readonly last_visible_key: string;
+  readonly last_visible_key: OpaqueVisibleKeyset;
   readonly bindings: McpCursorBindings;
 }
 
@@ -103,11 +116,14 @@ const BINDING_KEYS = Object.freeze([
   "credential_key_digest",
   "authorization_generation_digest",
   "grant_generation_digest",
+  "account_generation_digest",
   "graph_generation_digest",
   "projection_generation_digest",
+  "projection_commit_digest",
   "visibility_digest",
   "filter_digest",
   "query_digest",
+  "cursor_policy_digest",
   "source_digest",
   "read_mode_digest",
 ] as const satisfies readonly (keyof McpCursorBindings)[]);
@@ -202,10 +218,24 @@ const validateExpected = (request: VerifyMcpCursorRequest): void => {
   }
 };
 
-const validateOpaqueLastVisibleKey = (value: unknown): value is string =>
-  typeof value === "string"
-  && OPAQUE_KEY_PATTERN.test(value)
-  && Buffer.byteLength(value, "utf8") <= MAX_LAST_VISIBLE_KEY_BYTES;
+const validateOpaqueLastVisibleKey = (value: unknown): value is OpaqueVisibleKeyset => {
+  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > MAX_LAST_VISIBLE_KEY_BYTES) return false;
+  const decoded = decodeCanonicalBase64Url(value, MAX_LAST_VISIBLE_KEY_BYTES);
+  return decoded !== null && decoded.byteLength >= 16;
+};
+
+/**
+ * Makes the caller acknowledge the stable-visible-keyset boundary before a
+ * value can be issued. This validates only the bounded opaque wire encoding;
+ * the page adapter remains responsible for deriving it solely from visible
+ * rows in the endpoint's declared deterministic sort order.
+ */
+export const asOpaqueVisibleKeyset = (encodedStableVisibleKeyset: string): OpaqueVisibleKeyset => {
+  if (!validateOpaqueLastVisibleKey(encodedStableVisibleKeyset)) {
+    return configurationError("last visible keyset must be an opaque bounded token");
+  }
+  return encodedStableVisibleKeyset;
+};
 
 const parsePayload = (encodedPayload: string): CursorPayload => {
   const decoded = decodeCanonicalBase64Url(encodedPayload, MAX_PAYLOAD_BYTES);

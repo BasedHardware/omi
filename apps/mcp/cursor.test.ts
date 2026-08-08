@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   InvalidMcpCursorError,
   MAX_MCP_CURSOR_ENCODED_BYTES,
+  asOpaqueVisibleKeyset,
   issueMcpCursor,
   readAfterMcpCursorValidation,
   verifyMcpCursor,
@@ -18,17 +19,21 @@ const digest = (value: string): string => createHash("sha256").update(value).dig
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-DOMX-006)
+// domain-pending(DIV-DOMCORE-006)
 const rawBindingValues = {
   owner_digest: "owner-private-id",
   app_digest: "application-private-id",
   credential_key_digest: "credential-private-id",
   authorization_generation_digest: "authorization-generation-7",
   grant_generation_digest: "persisted-grant-generation-11",
+  account_generation_digest: "account-generation-5",
   graph_generation_digest: "graph-generation-13",
   projection_generation_digest: "projection-generation-17",
+  projection_commit_digest: "projection-commit-19",
   visibility_digest: "synthesized-only-visible-set",
   filter_digest: "default-filter",
   query_digest: "private natural-language query",
+  cursor_policy_digest: "cursor-policy-v1",
   source_digest: "durable-plus-bounded-stm",
   read_mode_digest: "default-synthesized-read",
 } as const;
@@ -51,8 +56,13 @@ const rotatedKeyset: McpCursorSigningKeyset = {
   ],
 };
 
+const opaqueVisibleKeyset = (stableVisibleSortTuple: readonly [number, string]) =>
+  asOpaqueVisibleKeyset(Buffer.from(digest(JSON.stringify(stableVisibleSortTuple)), "hex").toString("base64url"));
+
+const LAST_VISIBLE_KEYSET = opaqueVisibleKeyset([1_799_999_900_000, "visible-item-9"]);
+
 const issue = (keyset: McpCursorSigningKeyset = oldKeyset): string => issueMcpCursor({
-  last_visible_key: "opaque_lvk_0009",
+  last_visible_key: LAST_VISIBLE_KEYSET,
   bindings: bindings(),
   issued_at_epoch_seconds: 1_800_000_000,
   ttl_seconds: 300,
@@ -103,7 +113,7 @@ describe("MCP signed keyset cursor", () => {
       signing_key_id: "cursor-old",
       issued_at_epoch_seconds: 1_800_000_000,
       expires_at_epoch_seconds: 1_800_000_300,
-      last_visible_key: "opaque_lvk_0009",
+      last_visible_key: LAST_VISIBLE_KEYSET,
       bindings: bindings(),
     });
     expect(Object.isFrozen(claims)).toBeTrue();
@@ -163,7 +173,7 @@ describe("MCP signed keyset cursor", () => {
       dataCalls++;
       return claims.last_visible_key;
     });
-    expect(result).toBe("opaque_lvk_0009");
+    expect(result).toBe(LAST_VISIBLE_KEYSET);
     expect(dataCalls).toBe(1);
   });
 
@@ -173,7 +183,7 @@ describe("MCP signed keyset cursor", () => {
 
     for (const raw of Object.values(rawBindingValues)) expect(serialized).not.toContain(raw);
     expect(serialized).toContain(bindings().visibility_digest);
-    expect(serialized).toContain("opaque_lvk_0009");
+    expect(serialized).toContain(LAST_VISIBLE_KEYSET);
     expect(Buffer.byteLength(cursor, "utf8")).toBeLessThanOrEqual(MAX_MCP_CURSOR_ENCODED_BYTES);
   });
 
@@ -191,7 +201,7 @@ describe("MCP signed keyset cursor", () => {
       expectInvalid(() => verifyMcpCursor(resign(cursor, payloadText), verification(), oldKeyset));
     }
     expect(() => issueMcpCursor({
-      last_visible_key: "A".repeat(513),
+      last_visible_key: "A".repeat(513) as ReturnType<typeof asOpaqueVisibleKeyset>,
       bindings: bindings(),
       issued_at_epoch_seconds: 1_800_000_000,
       ttl_seconds: 300,
@@ -212,5 +222,41 @@ describe("MCP signed keyset cursor", () => {
 
     expectInvalid(() => verifyMcpCursor(resign(cursor, impossible), verification(), oldKeyset));
     expectInvalid(() => verifyMcpCursor(resign(cursor, overlong), verification(), oldKeyset));
+  });
+
+  test("uses only the stable last visible keyset, so hidden rows cannot perturb the cursor", () => {
+    interface PageFixture {
+      readonly visible: readonly { readonly sort_time_ms: number; readonly opaque_id: string }[];
+      readonly hidden: readonly { readonly sort_time_ms: number; readonly raw_private_id: string }[];
+    }
+    const cursorForPage = (page: PageFixture): string => {
+      const lastVisible = page.visible.at(-1);
+      if (!lastVisible) throw new Error("fixture requires a visible row");
+      return issueMcpCursor({
+        last_visible_key: opaqueVisibleKeyset([lastVisible.sort_time_ms, lastVisible.opaque_id]),
+        bindings: bindings(),
+        // This is the snapshot read timestamp and is identical for one page.
+        issued_at_epoch_seconds: 1_800_000_000,
+        ttl_seconds: 300,
+      }, oldKeyset);
+    };
+    const withoutHidden: PageFixture = {
+      visible: [{ sort_time_ms: 1_799_999_900_000, opaque_id: "visible-item-9" }],
+      hidden: [],
+    };
+    const withHidden: PageFixture = {
+      ...withoutHidden,
+      hidden: [{ sort_time_ms: 1_799_999_950_000, raw_private_id: "private-row-must-not-bind" }],
+    };
+    const changedVisible: PageFixture = {
+      visible: [{ sort_time_ms: 1_799_999_910_000, opaque_id: "visible-item-10" }],
+      hidden: withHidden.hidden,
+    };
+
+    const absentCursor = cursorForPage(withoutHidden);
+    const hiddenCursor = cursorForPage(withHidden);
+    expect(hiddenCursor).toBe(absentCursor);
+    expect(hiddenCursor).not.toContain("private-row-must-not-bind");
+    expect(cursorForPage(changedVisible)).not.toBe(absentCursor);
   });
 });
