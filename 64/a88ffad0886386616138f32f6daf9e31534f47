@@ -1,0 +1,22 @@
+backend/models/action_item.py
+  s_d5c991760196be::t_c6a9b841e3568e 56-57
+backend/tests/unit/test_task_transcript_provenance.py
+  s_d5c991760196be::t_4262e9760ccc48 3-6
+  s_d5c991760196be::t_c6a9b841e3568e 57-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "64a88ffad0886386616138f32f6daf9e31534f47",
+  "prompts": {},
+  "sessions": {
+    "s_d5c991760196be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe211-e7a6-7da1-a56d-8c51322635f8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
