@@ -1,0 +1,31 @@
+source 'https://cdn.cocoapods.org/'
+
+platform :ios, '10.0'
+
+target 'LynxShell' do
+  pod 'Lynx', '3.4.1', :subspecs => [
+    'Framework',
+  ]
+
+  pod 'LynxDevtool', '3.4.1', :subspecs => [
+    'Framework',
+    'LynxRecorder',
+  ]
+
+  pod 'BaseDevtool', '3.4.1'
+
+  pod 'LynxService', '3.4.1', :subspecs => [
+    'Image',
+    'Log',
+    'Devtool',
+    'Http',
+  ]
+
+  # ImageService dependencies:
+  pod 'SDWebImage','5.15.5'
+  pod 'SDWebImageWebPCoder', '0.11.0'
+
+  # XElement
+  pod 'XElement', '3.4.1'
+  pod 'DebugRouter', '5.0.13-rc.1'
+end

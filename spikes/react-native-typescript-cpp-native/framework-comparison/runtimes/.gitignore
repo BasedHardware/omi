@@ -1,0 +1,10 @@
+# Generated framework shells
+**/node_modules/
+**/target/
+**/build/
+**/.gradle/
+**/DerivedData/
+compose_template/
+valdi_source/
+valdi_cli_probe/
+electrobun_shell/node_modules/
