@@ -10431,14 +10431,21 @@
             "title": "Start Seconds"
           },
           "transcript_segment_ids": {
-            "items": {
-              "maxLength": 128,
-              "minLength": 1,
-              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
-              "type": "string"
-            },
-            "title": "Transcript Segment Ids",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Segment Ids"
           },
           "version": {
             "anyOf": [

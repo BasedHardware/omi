@@ -427,6 +427,7 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
         'concrete_deliverable',
         'candidate_action',
         'target_task_id',
+        'source_segment_ids',
     ]
     assert 'default' not in action_item_schema['properties']['due_at']
 

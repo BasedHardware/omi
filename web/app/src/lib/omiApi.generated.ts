@@ -1679,7 +1679,7 @@ export interface EvidenceRef {
   kind: EvidenceKind;
   scope: EvidenceScope;
   start_seconds?: number | null;
-  transcript_segment_ids?: Array<string>;
+  transcript_segment_ids?: Array<string> | null;
   version?: string | null;
 }
 

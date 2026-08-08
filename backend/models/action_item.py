@@ -52,7 +52,7 @@ class EvidenceRef(BaseModel):
     scope: EvidenceScope
     device_id: Optional[StableId] = None
     excerpt_hash: Optional[str] = Field(default=None, pattern=r'^[a-f0-9]{64}$')
-    transcript_segment_ids: list[StableId] = Field(default_factory=list)
+    transcript_segment_ids: Optional[list[StableId]] = None
     start_seconds: Optional[float] = Field(default=None, ge=0)
     end_seconds: Optional[float] = Field(default=None, ge=0)
 

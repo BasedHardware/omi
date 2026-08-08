@@ -12,7 +12,7 @@ from fastapi import HTTPException
 import database._client as db_client_module
 from database import redis_db
 from database.auth import get_user_name
-from utils.conversations.transcript_for_llm import conversation_transcripts_for_llm
+from utils.conversations.transcript_for_llm import conversation_transcript_for_llm, conversation_transcripts_for_llm
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
