@@ -43,15 +43,6 @@ function protocolFixture(): ProtocolFixture {
       app_id: "qa-application",
       key_id: "qa-key-id",
     },
-    cursorBindings: {
-      ownerAuthorizationDigest: "qa-owner-digest",
-      appAuthorizationDigest: "qa-application-digest",
-      keyAuthorizationDigest: "qa-key-digest",
-      graphGenerationDigest: "qa-graph-digest",
-      projectionGenerationDigest: "qa-projection-digest",
-      filterDigest: "qa-filter-digest",
-      readModeDigest: "qa-read-mode-digest",
-    },
     authentication: { qaOnly: true },
   };
 
@@ -84,14 +75,6 @@ function protocolFixture(): ProtocolFixture {
       },
       async reauthorizeBeforeEmission() {
         return true;
-      },
-      cursor: {
-        parse() {
-          return { lastVisibleKey: "opaque-qa-visible-key" };
-        },
-        issue() {
-          return "opaque-qa-cursor";
-        },
       },
     },
   };
