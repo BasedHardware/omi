@@ -119,6 +119,7 @@ Future<Map<String, String>> buildHeaders({
     'X-App-Platform': PlatformManager.instance.platform,
     'X-Device-Id-Hash': PlatformManager.instance.deviceIdHash,
     'X-App-Version': PlatformManager.instance.appVersion,
+    'X-App-Build': PlatformManager.instance.appBuild,
     ...fromHeaders,
   };
 

@@ -251,10 +251,15 @@ final class SuggestedTasksStore: ObservableObject {
       recordsByID = [:]
       return
     }
-    pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
-    feedbackOutboxStore.save(pendingFeedback, ownerID: ownerScope.feedbackOwnerID)
-    await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
-    guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    if AccountCutoverControlManager.shared.quarantinesOfflineQueues {
+      pendingFeedback.removeAll()
+      feedbackOutboxStore.save(pendingFeedback, ownerID: ownerScope.feedbackOwnerID)
+    } else {
+      pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
+      feedbackOutboxStore.save(pendingFeedback, ownerID: ownerScope.feedbackOwnerID)
+      await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    }
 
     let records: [OmiAPI.CandidateRecord]
     do {

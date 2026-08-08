@@ -112,8 +112,14 @@ def test_matching_key_family_still_reaches_its_own_key_lookup() -> None:
 
 
 def test_mcp_key_on_a_firebase_endpoint_points_at_the_mcp_endpoints() -> None:
+    from unittest.mock import MagicMock
+
+    request = MagicMock()
+    request.method = 'GET'
+    request.url.path = '/v1/users'
+    request.headers = {}
     with pytest.raises(HTTPException) as raised:
-        get_current_user_uid(authorization='Bearer omi_mcp_secret')
+        get_current_user_uid(request=request, authorization='Bearer omi_mcp_secret')
 
     assert raised.value.status_code == 401
     assert '/v1/mcp/' in raised.value.detail

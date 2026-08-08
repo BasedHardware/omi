@@ -15,6 +15,8 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/account_cutover/account_cutover_control_client.dart';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -172,6 +174,9 @@ Future _init() async {
     if (!SharedPreferencesUtil().onboardingCompleted) {
       await AuthService.instance.restoreOnboardingState();
     }
+    // Fail-closed cutover gate before product traffic / offline uploads.
+    final cutoverControl = await AccountCutoverControlClient().fetchControl();
+    AccountCutoverRuntime.instance.apply(cutoverControl);
   }
   initOpus(await opus_flutter.load());
 

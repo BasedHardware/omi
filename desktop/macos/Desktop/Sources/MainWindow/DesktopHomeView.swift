@@ -48,6 +48,7 @@ struct DesktopHomeView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var updatePolicyManager = DesktopUpdatePolicyManager.shared
+  @ObservedObject private var accountCutoverManager = AccountCutoverControlManager.shared
   @ObservedObject private var automationPresentationCoordinator =
     DesktopAutomationPresentationCoordinator.shared
   @State private var selectedIndex: Int = {
@@ -209,6 +210,7 @@ struct DesktopHomeView: View {
         .onAppear {
           log("DesktopHomeView: Showing mainContent (signed in and onboarded)")
           updatePolicyManager.refresh(force: true)
+          Task { await AccountCutoverControlManager.shared.refresh() }
           // Check all permissions on launch
           appState.checkAllPermissions()
 
@@ -443,6 +445,50 @@ struct DesktopHomeView: View {
             DesktopRequiredUpdatePrompt(
               policy: policy,
               onDownload: { updatePolicyManager.openDownload(policy) }
+            )
+            .zIndex(21)
+          } else if accountCutoverManager.decision == .forceUpgrade {
+            let cutoverUpgradePolicy = DesktopUpdatePolicyResponse(
+              id: "account-cutover-force-upgrade",
+              active: true,
+              severity: .required,
+              maximumBuildNumber: nil,
+              latestBuildNumber: nil,
+              title: "Update Required",
+              message: "Install the latest Omi desktop app to continue after account migration.",
+              ctaText: "Download latest",
+              downloadURL: DesktopUpdatePolicyResponse.stableManualDownloadURL.absoluteString,
+              canDismiss: false
+            )
+            Color.black.opacity(0.62)
+              .ignoresSafeArea()
+              .zIndex(20)
+            DesktopRequiredUpdatePrompt(
+              policy: cutoverUpgradePolicy,
+              onDownload: { updatePolicyManager.openDownload(cutoverUpgradePolicy) }
+            )
+            .zIndex(21)
+          } else if accountCutoverManager.decision == .migrationMaintenance {
+            let maintenancePolicy = DesktopUpdatePolicyResponse(
+              id: "account-cutover-migration-maintenance",
+              active: true,
+              severity: .required,
+              maximumBuildNumber: nil,
+              latestBuildNumber: nil,
+              title: "Migration in Progress",
+              message: accountCutoverManager.control.strandedNewData
+                ? "Your account is in maintenance after a migration rollback. Some newer data may be stranded."
+                : "Your account is migrating. Product features are paused until migration finishes.",
+              ctaText: "OK",
+              downloadURL: DesktopUpdatePolicyResponse.stableManualDownloadURL.absoluteString,
+              canDismiss: false
+            )
+            Color.black.opacity(0.62)
+              .ignoresSafeArea()
+              .zIndex(20)
+            DesktopRequiredUpdatePrompt(
+              policy: maintenancePolicy,
+              onDownload: {}
             )
             .zIndex(21)
           }

@@ -16,6 +16,11 @@ from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
 from database.account_deletion_policy import account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
+from utils.account_cutover.access import (
+    cutover_enforcement_enabled,
+    enforce_account_cutover_http_access,
+    enforce_account_cutover_ws_access,
+)
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
@@ -27,6 +32,7 @@ logger = logging.getLogger(__name__)
 WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 WS_AUTH_CODE_ACCOUNT_DELETION = 4005
+WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
 
 
 def get_user_deletion_wipe_status(uid: str) -> str | None:
@@ -139,6 +145,7 @@ def verify_token(token: str) -> str:
 
 
 def get_current_user_uid(
+    request: Request,
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
@@ -170,6 +177,13 @@ def get_current_user_uid(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
     enforce_account_deletion_http_access(uid)
+    if cutover_enforcement_enabled():
+        enforce_account_cutover_http_access(
+            uid,
+            method=request.method,
+            path=request.url.path,
+            headers=request.headers,
+        )
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -201,6 +215,7 @@ def get_current_user_uid(
 
 
 def get_current_user_uid_no_byok_validation(
+    request: Request,
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
@@ -229,6 +244,13 @@ def get_current_user_uid_no_byok_validation(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
     enforce_account_deletion_http_access(uid)
+    if cutover_enforcement_enabled():
+        enforce_account_cutover_http_access(
+            uid,
+            method=request.method,
+            path=request.url.path,
+            headers=request.headers,
+        )
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -319,6 +341,14 @@ async def get_current_user_uid_ws_listen(
     """
     uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
     await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
+        await run_blocking(
+            db_executor,
+            enforce_account_cutover_ws_access,
+            uid,
+            path=websocket.url.path,
+            headers=websocket.headers,
+        )
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
