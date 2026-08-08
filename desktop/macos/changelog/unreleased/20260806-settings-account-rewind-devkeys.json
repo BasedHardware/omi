@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Settings: custom API keys are now checked once after you finish typing instead of on every keystroke and show a per-provider Valid/Invalid badge, Rewind storage reports an unreadable store instead of a permanent \"Loading...\" or a false \"Zero KB\", searching for Sign Out or Plan and Usage now jumps to the right card, and editing your AI profile no longer discards the edit when saving fails"
-}

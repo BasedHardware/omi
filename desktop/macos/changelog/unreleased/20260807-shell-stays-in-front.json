@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the main window vanishing whenever another app took focus — it now floats in front of your work and stays where you put it until you dismiss it with Escape or ⌘W"
-}

@@ -63,6 +63,43 @@ def test_active_release_rejects_an_invalid_rollout_phase(monkeypatch):
         reconciler.load_active_release()
 
 
+def test_active_release_download_is_pinned_to_the_resolved_generation(monkeypatch):
+    calls: list[object] = []
+
+    class FakeBlob:
+        generation = None
+
+        def reload(self):
+            calls.append("reload")
+            self.generation = 1234
+
+        def download_as_bytes(self, **kwargs):
+            calls.append(kwargs)
+            return b"current"
+
+    blob = FakeBlob()
+
+    class FakeBucket:
+        def blob(self, name):
+            calls.append(("blob", name))
+            return blob
+
+    class FakeClient:
+        def bucket(self, name):
+            calls.append(("bucket", name))
+            return FakeBucket()
+
+    monkeypatch.setattr(reconciler.storage, "Client", FakeClient)
+
+    assert reconciler._read_gcs_uri("gs://release-bucket/agent-vm/releases/active.json") == b"current"
+    assert calls == [
+        ("bucket", "release-bucket"),
+        ("blob", "agent-vm/releases/active.json"),
+        "reload",
+        {"if_generation_match": 1234},
+    ]
+
+
 def test_legacy_instance_is_drift_and_current_instance_is_not():
     release = AgentVmRelease.from_mapping(RELEASE)
     current = {

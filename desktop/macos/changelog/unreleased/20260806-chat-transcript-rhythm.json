@@ -1,3 +1,0 @@
-{
-  "change": "Tightened the chat transcript so short messages read as a conversation: replies sit close to the question that caused them, message actions and timestamps no longer reserve empty space, and proactive notifications are shown as pushes rather than as stray lines"
-}
