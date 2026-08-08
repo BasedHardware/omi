@@ -1,0 +1,11 @@
+{
+  "name": "@omi-core/shell-ios",
+  "version": "0.0.0",
+  "private": true,
+  "description": "iOS Flutter + WKWebView shell: frozen omi-ui://local scheme origin (ADR-009), version-gated bundles, privileged HTTP bridge with shell-side credential custody.",
+  "type": "module",
+  "scripts": {
+    "build": "echo \"shell-ios: Flutter build is tools/build-surfaces-bundle.mjs + flutter build (needs the Flutter SDK); not part of pnpm -r build\"",
+    "test": "node --test tests/*.test.mjs"
+  }
+}

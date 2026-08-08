@@ -21,9 +21,8 @@ const OUT_REL = {
   envVar: "OMI_IOS_SHELL_DIR",
 };
 
-const SHELL_DIR =
-  process.env[OUT_REL.envVar] ??
-  path.join(ROOT, "../../omi-frontend-unification-and-microapps-project-tracker/prototypes/flutter-webview");
+// In-repo at core/shells/ios since the PR-6 promotion; see gen-bridge-swift.mjs.
+const SHELL_DIR = process.env[OUT_REL.envVar] ?? path.join(ROOT, "shells/ios");
 
 const check = process.argv.includes("--check");
 
