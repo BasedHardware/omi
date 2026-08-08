@@ -921,6 +921,7 @@ def check_desktop_qualification_runner() -> list[str]:
         'workflows: ["Qualify Desktop Beta Candidate"]',
         "types: [completed]",
         "github.event.workflow_run.conclusion == 'success'",
+        "github.event.workflow_run.head_repository.full_name == github.repository",
         "github.event.workflow_run.id",
         "qualification-evidence.json",
         "EVIDENCE_SOURCE_SHA",
