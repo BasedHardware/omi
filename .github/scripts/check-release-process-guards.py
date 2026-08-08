@@ -771,11 +771,16 @@ def check_desktop_preview_publishing() -> list[str]:
         "PREVIEW_SOURCE_SHA",
         "### Preview approval context",
         "https://github.com/${GITHUB_REPOSITORY}/commit/${PREVIEW_SOURCE_SHA}",
+        "observe-codemagic-preview-build.py",
+        "Observe Codemagic preview build to a terminal status",
+        "Retain Codemagic preview build observation evidence",
     ):
         if required not in dispatcher_text:
             errors.append(f"desktop preview dispatcher is missing required guard fragment: {required}")
     if "pull_request:" in dispatcher_text or "push:" in dispatcher_text:
         errors.append("desktop preview dispatcher must be manual-only")
+    if not (ROOT / ".github/scripts/observe-codemagic-preview-build.py").exists():
+        errors.append("desktop preview lane is missing observe-codemagic-preview-build.py")
 
     codemagic_text = codemagic.read_text(encoding="utf-8") if codemagic.exists() else ""
     preview_workflow_match = re.search(
