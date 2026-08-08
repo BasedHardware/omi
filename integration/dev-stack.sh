@@ -23,20 +23,18 @@
 # domain with the generation that actually served it. A green legacy result is
 # NOT a new-stack result.
 #
-#   *** KNOWN GAP as of 78d8bfbbb2 — read the report before believing any
-#   *** "runs on the new backend" claim, including one this script prints.
+#   *** CLOSED as of 2026-08-08. The gap this notice used to describe — the
+#   *** ratified client existing while `surfaces/src/production/main.tsx` still
+#   *** only called `createLegacyProductionStoreFactory` — is connected. With
+#   *** `--generation platform`, BOTH apps read memories from 4851.
 #   ***
-#   *** FE-CORE has landed the client HALF: `core/packages/adapters-platform/`
-#   *** (the ratified memory-read client) and
-#   *** `core/packages/domain/src/generation-selection.ts` (the host-driven
-#   *** per-domain knob, which rejects an unavailable generation rather than
-#   *** silently downgrading).
+#   *** Verified on a clean run of this script: the backend's own counter went
+#   *** servedReads 0 -> 4 for macOS and 4 -> 6 when iOS joined, and both apps
+#   *** log `rendered=memories-platform ... mismatch=no`.
 #   ***
-#   *** What is still missing is the CONSUMER: `surfaces/src/production/
-#   *** main.tsx` still calls `createLegacyProductionStoreFactory` and nothing
-#   *** else. So every domain in the running app — memories included — is
-#   *** served by the LEGACY wire. The pieces exist; they are not connected.
-#   *** That last wire is FE-SURFACES' to land.
+#   *** Still trust the CROSS-CHECK, not this script's own summary. `rendered`
+#   *** (what was constructed) is the honest field; `selected` (what was asked
+#   *** for) has been honored-then-ignored before.
 #
 # ---------------------------------------------------------------------------
 # USAGE
@@ -177,7 +175,13 @@ free_port() {
   [[ -z "$pids" ]] && return 0
   for pid in $pids; do
     local cmd; cmd="$(ps -o command= -p "$pid" 2>/dev/null || true)"
-    if [[ "$cmd" == *"$want"* ]]; then
+    # Match the working directory too, not just argv. The legacy wire runs as a
+    # bare `node server.mjs` — its argv contains nothing identifying — so this
+    # refused to clean up a server THIS SCRIPT had started, leaking one process
+    # per run and telling the user to go kill it by hand. The identifying
+    # information is in the cwd.
+    local cwd; cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)"
+    if [[ "$cmd" == *"$want"* || "$cwd" == *"$want"* ]]; then
       kill "$pid" 2>/dev/null || true
       for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
       kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null || true
@@ -230,8 +234,19 @@ if [[ $WANT_MACOS -eq 1 ]]; then
   [[ -x "$MACOS_SHELL/scripts/run-shell.sh" ]] || { warn "macOS shell prototype not found at $MACOS_SHELL — skipping macOS"; WANT_MACOS=0; }
 fi
 if [[ $WANT_IOS -eq 1 ]]; then
+  # Pick the Flutter whose Dart can actually resolve the app's pubspec, not
+  # whatever `flutter` happens to mean on PATH. The default here is 3.41.9
+  # (Dart 3.11.5); the app declares `sdk: ^3.12.2` and fails version solving with
+  # "Failed to update packages", which reads like a network error and is not one.
+  # Prefer the newest mise-installed Flutter, fall back to PATH.
+  FLUTTER_BIN="$(command -v flutter 2>/dev/null || true)"
+  newest_flutter="$(ls -d "$HOME/.local/share/mise/installs/flutter"/[0-9]*.[0-9]*.[0-9]* 2>/dev/null \
+    | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)"
+  if [[ -n "$newest_flutter" && -x "$newest_flutter/bin/flutter" ]]; then
+    FLUTTER_BIN="$newest_flutter/bin/flutter"
+  fi
   if ! command -v xcrun >/dev/null 2>&1; then warn "xcrun missing — skipping iOS"; WANT_IOS=0;
-  elif ! command -v flutter >/dev/null 2>&1; then warn "flutter missing — skipping iOS (install: mise use flutter)"; WANT_IOS=0;
+  elif [[ -z "$FLUTTER_BIN" ]]; then warn "flutter missing — skipping iOS (install: mise use flutter)"; WANT_IOS=0;
   elif [[ ! -d "$IOS_SHELL/app" ]]; then warn "iOS shell prototype not found at $IOS_SHELL — skipping iOS"; WANT_IOS=0; fi
 fi
 ok "tools present"
@@ -336,8 +351,33 @@ curl -fsS --max-time 2 "http://127.0.0.1:$SURFACES_PORT/" >/dev/null 2>&1 \
   || fixit "surfaces server never came up on $SURFACES_PORT" "Log: $LOGDIR/surfaces-serve.log"
 ok "surfaces at http://127.0.0.1:$SURFACES_PORT/"
 
-# ── 4. macOS app ────────────────────────────────────────────────────────────
+# ── 4. Shell configuration, shared by BOTH apps ─────────────────────────────
 STATS_BEFORE="$(curl -s "$BACKEND_URL/qa/stats" 2>/dev/null || echo '{}')"
+
+# Set OUTSIDE the macOS block on purpose: iOS consumes the same three values as
+# --dart-defines. While this lived inside `if [[ $WANT_MACOS -eq 1 ]]`, running
+# --only-ios silently produced an iOS app with no API base URL and no route — a
+# bridge-disabled app that boots, looks fine, and reads nothing.
+#
+# WITHOUT OMI_API_BASE_URL a shell registers no HTTP handler at all and the
+# surface truthfully renders "bridge unavailable" — it looks broken and serves
+# zero requests.
+if [[ "$GENERATION" == "platform" ]]; then
+  # The app's memories surface reads the NEW backend over GET /v1/memories.
+  export OMI_API_BASE_URL="$BACKEND_URL"
+  export OMI_API_TOKEN="omi-integration-qa-key-v1"
+  # BOTH are required. `generation=platform` alone leaves route=home, which takes
+  # the legacy branch and dispatches legacy calls at the platform backend - they
+  # fail, and a dispatch-counting shell calls that a PASS.
+  export OMI_SURFACE_QUERY="route=memories&generation=platform"
+  say "generation=platform — memories will read the NEW backend at $BACKEND_URL"
+else
+  export OMI_API_BASE_URL="http://127.0.0.1:$LEGACY_PORT"
+  export OMI_API_TOKEN="omi-qa-fake-token-v1"
+  unset OMI_SURFACE_QUERY
+fi
+
+# ── 4a. macOS app ───────────────────────────────────────────────────────────
 if [[ $WANT_MACOS -eq 1 ]]; then
   # The shell's loopback port defaults to 5290 and is NOT in the port registry,
   # so two people running a macOS shell collide and the second one dies with a
@@ -352,36 +392,11 @@ if [[ $WANT_MACOS -eq 1 ]]; then
       fi
     done
   fi
-  # WITHOUT OMI_API_BASE_URL the shell registers no HTTP handler at all and the
-  # surface truthfully renders "bridge unavailable" — the app looks broken and
-  # serves zero requests. This is the legacy wire because that is what the
-  # surfaces actually consume today; see the KNOWN GAP note at the top.
-  if [[ "$GENERATION" == "platform" ]]; then
-    # The app's memories surface reads the NEW backend over GET /v1/memories.
-    export OMI_API_BASE_URL="$BACKEND_URL"
-    export OMI_API_TOKEN="omi-integration-qa-key-v1"
-    # BOTH are required. `generation=platform` alone leaves route=home, which takes
-    # the legacy branch and dispatches legacy calls at the platform backend - they
-    # fail, and a dispatch-counting shell calls that a PASS.
-    export OMI_SURFACE_QUERY="route=memories&generation=platform"
-    say "generation=platform — memories will read the NEW backend at $BACKEND_URL"
-  else
-    export OMI_API_BASE_URL="http://127.0.0.1:$LEGACY_PORT"
-    export OMI_API_TOKEN="omi-qa-fake-token-v1"
-    unset OMI_SURFACE_QUERY
-  fi
-
-  say "${B}macOS app${Z} — building and launching on $SHELL_PORT (bundles the dist you just built)"
-  ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
-      OMI_APP_NAME="omi-on-integration" OMI_SURFACES_DIST="$SURFACES/dist" \
-      OMI_SURFACE_PORT="$SHELL_PORT" TZ=UTC ./scripts/run-shell.sh ) > "$LOGDIR/macos.log" 2>&1
-  if [[ $? -ne 0 ]]; then
-    warn "macOS shell failed to launch — see $LOGDIR/macos.log"
-    tail -8 "$LOGDIR/macos.log" | sed 's/^/    /'
-  else
-    ok "macOS app running — its surface is at http://127.0.0.1:$SHELL_PORT/"
-    echo "    window should be open now; if not, check $LOGDIR/macos.log"
-  fi
+  # ORDER MATTERS, and it is not stylistic. Acceptance runs FIRST because it is
+  # a self-terminating probe that shares one build dir with the windowed app:
+  # running it second meant rebuilding the .app binary underneath a live process
+  # and (before the fix in run-shell.sh) killing that process outright. Probe,
+  # let it exit, then bring up the window that stays.
 
   # BRIDGE ACCEPTANCE. A separate, headless run of the same app that exits with
   # its own verdict. The app reports a HOST-OBSERVED served count and passes
@@ -410,6 +425,35 @@ if [[ $WANT_MACOS -eq 1 ]]; then
     warn "bridge acceptance FAILED (exit $accept_status) — ${accept_line:-no acceptance line emitted}"
     echo "    log: $LOGDIR/macos-acceptance.log"
   fi
+
+  # THE WINDOW YOU ACTUALLY QA WITH. Launched last so nothing that follows can
+  # rebuild or kill it.
+  say "${B}macOS app${Z} — building and launching on $SHELL_PORT (bundles the dist you just built)"
+  ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
+      OMI_APP_NAME="omi-on-integration" OMI_SURFACES_DIST="$SURFACES/dist" \
+      OMI_SURFACE_PORT="$SHELL_PORT" TZ=UTC ./scripts/run-shell.sh ) > "$LOGDIR/macos.log" 2>&1
+  shell_launch_status=$?
+  # "Launched successfully" and "there is a window in front of you" are different
+  # claims, and this script used to print the second while only checking the
+  # first. It reported "window should be open now" for a process that had already
+  # been killed. So re-verify independently: the pid the launcher recorded must
+  # still be alive AND its loopback must still answer. Both, because a live
+  # process with a dead surface is just as useless to QA as no process.
+  SHELL_PID="$(sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' "$LOGDIR/macos.log" | tail -1)"
+  if [[ $shell_launch_status -ne 0 ]]; then
+    warn "macOS shell failed to launch — see $LOGDIR/macos.log"
+    tail -8 "$LOGDIR/macos.log" | sed 's/^/    /'
+  elif [[ -z "$SHELL_PID" ]] || ! kill -0 "$SHELL_PID" 2>/dev/null; then
+    warn "macOS shell exited right after launch (pid ${SHELL_PID:-unknown} is gone) — there is NO window to QA."
+    echo "    log: $LOGDIR/macos.log"
+  elif ! curl --fail --silent --max-time 2 "http://127.0.0.1:$SHELL_PORT/" >/dev/null 2>&1; then
+    warn "macOS shell pid $SHELL_PID is alive but its surface on $SHELL_PORT does not answer."
+    echo "    log: $LOGDIR/macos.log"
+  else
+    track macos "$SHELL_PID"
+    ok "macOS app running — pid $SHELL_PID, surface answering at http://127.0.0.1:$SHELL_PORT/"
+    echo "    the window is open now (verified: process alive + surface responded)"
+  fi
 fi
 
 # ── 5. iOS simulator ────────────────────────────────────────────────────────
@@ -427,9 +471,34 @@ if [[ $WANT_IOS -eq 1 ]]; then
     ( cd "$IOS_SHELL" && SURFACES_DIST="$SURFACES/dist" node tools/build-surfaces-bundle.mjs ) \
       > "$LOGDIR/ios-bundle.log" 2>&1 \
       || warn "iOS surface bundling failed — see $LOGDIR/ios-bundle.log"
-    ( cd "$IOS_SHELL/app" && TZ=UTC flutter run -d "$UDID" --release ) > "$LOGDIR/ios.log" 2>&1 &
+    # The iOS shell takes ALL of its configuration as COMPILE-TIME --dart-defines.
+    # Passing none — which is what this did — is why the documented caveat said
+    # "iOS renders the prototype probe page, not the product UI". It was never a
+    # routing bug in the app: with no defines it falls back to SURFACE_MODE=ship,
+    # loads from a file: origin, and logs "[bridge-http] disabled". The app could
+    # do the real thing the whole time; nobody was asking it to.
+    #
+    #   SURFACE_MODE=scheme  mounts the bundle at the frozen omi-ui://local origin
+    #                        (ADR-009 — IndexedDB is origin-keyed, so this must not
+    #                        drift), instead of a file: URL.
+    #   SCHEME_BUNDLE=surfaces  the real @omi-core/surfaces build, not probe v1.
+    #   OMI_API_*            the shell's privileged HTTP custody. Never handed to
+    #                        the webview; the token stays on the Dart side.
+    #
+    # --debug, not --release: release mode is unsupported for this simulator
+    # target (iPhone 17 Pro / arm64 sim) and dies partway through the build.
+    ios_defines=(
+      --dart-define=SURFACE_MODE=scheme
+      --dart-define=SCHEME_BUNDLE=surfaces
+      --dart-define=OMI_API_BASE_URL="$OMI_API_BASE_URL"
+      --dart-define=OMI_API_TOKEN="$OMI_API_TOKEN"
+    )
+    # Same reasoning as the macOS shell: generation alone leaves route=home, which
+    # takes the legacy branch. Both, or neither.
+    [[ -n "${OMI_SURFACE_QUERY:-}" ]] && ios_defines+=( --dart-define=SURFACE_QUERY="$OMI_SURFACE_QUERY" )
+    ( cd "$IOS_SHELL/app" && TZ=UTC "$FLUTTER_BIN" run -d "$UDID" --debug "${ios_defines[@]}" ) > "$LOGDIR/ios.log" 2>&1 &
     track ios $!
-    say "iOS build started in background (cold builds take ~100s). Log: $LOGDIR/ios.log"
+    say "iOS build started in background (cold builds take ~100s) using $("$FLUTTER_BIN" --version 2>/dev/null | head -1 | cut -d' ' -f1-2). Log: $LOGDIR/ios.log"
   fi
 fi
 
