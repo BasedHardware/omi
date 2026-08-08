@@ -532,8 +532,10 @@ class TestStreamingFactoryRouting:
             env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
             try:
                 service, lang, model = get_stt_service_for_language('en')
-                assert service == STTService.deepgram
-                assert model == 'nova-3'
+                # No configured model can serve, so selection falls through to the
+                # policy default for the streaming surface, which leads with Velma-2.
+                assert service == STTService.modulate
+                assert model == 'velma-2'
             finally:
                 if env_backup:
                     os.environ['HOSTED_PARAKEET_API_URL'] = env_backup

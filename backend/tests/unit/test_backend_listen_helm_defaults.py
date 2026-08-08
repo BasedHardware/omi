@@ -27,9 +27,10 @@ ENV_IDENTITY_DEFAULTS = {
     },
 }
 
-SAFE_STREAMING_ROUTE = 'dg-nova-3,modulate-velma-2,parakeet'
+SAFE_STREAMING_ROUTE = 'modulate-velma-2,dg-nova-3,parakeet'
 # Batch queues, so the bounded self-hosted GPU is preferred there; the streaming
-# surface keeps hosted Deepgram first because a Parakeet admission cap fails users live.
+# surface keeps Velma-2 first with Deepgram behind it, because a Parakeet
+# admission cap fails users live.
 SAFE_PRERECORDED_ROUTE = 'parakeet,modulate-velma-2'
 
 
@@ -124,7 +125,7 @@ def test_dev_parity_pack_emptydir_is_writable_by_the_non_root_backend_image():
     assert _env_value(values, "OMI_PARITY_PACK_ROOT") == "/var/omi-parity-pack"
 
 
-def test_prod_values_make_deepgram_the_explicit_live_stt_primary():
+def test_prod_values_pin_the_explicit_policy_live_stt_route():
     values = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
 
     assert _env_value(values, 'STT_SERVICE_MODELS') == SAFE_STREAMING_ROUTE
