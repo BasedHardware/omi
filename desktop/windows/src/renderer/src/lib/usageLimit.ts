@@ -30,10 +30,14 @@ export function dismissUsageLimit(): void {
 // a user who keeps trying isn't nagged repeatedly.
 
 let chatQuotaPopupShown = false
+let chatQuotaProbeTail: Promise<void> = Promise.resolve()
+let chatQuotaProbeGeneration = 0
 
 /** Test-only: reset the once-per-session guards. */
 export function __resetUsageLimitSession(): void {
   chatQuotaPopupShown = false
+  chatQuotaProbeGeneration += 1
+  chatQuotaProbeTail = Promise.resolve()
   transcriptionQuotaPopupShown = false
   signal.set(null)
 }
@@ -43,23 +47,35 @@ export function __resetUsageLimitSession(): void {
  * only the first time in a session. Returns true iff the popup was shown by this
  * call. `fetchQuota` is injected so callers/tests control the network.
  */
-export async function maybeTriggerChatQuotaPopup(
+export function maybeTriggerChatQuotaPopup(
   fetchQuota: () => Promise<ChatUsageQuota>
 ): Promise<boolean> {
-  if (chatQuotaPopupShown) return false
-  let quota: ChatUsageQuota
-  try {
-    quota = await fetchQuota()
-  } catch {
-    // A quota probe must never surface an error to the user — stay silent.
+  if (chatQuotaPopupShown) return Promise.resolve(false)
+  const generation = chatQuotaProbeGeneration
+  const probe = chatQuotaProbeTail.then(async () => {
+    // Serialize probes so two quick completions cannot both pass the session
+    // latch before either GET resolves. A test reset also invalidates queued work.
+    if (generation !== chatQuotaProbeGeneration || chatQuotaPopupShown) return false
+    let quota: ChatUsageQuota
+    try {
+      quota = await fetchQuota()
+    } catch {
+      // A quota probe must never surface an error to the user — stay silent.
+      return false
+    }
+    if (generation !== chatQuotaProbeGeneration || chatQuotaPopupShown) return false
+    if (quota.allowed === false) {
+      chatQuotaPopupShown = true
+      showUsageLimit('chat')
+      return true
+    }
     return false
-  }
-  if (quota.allowed === false) {
-    chatQuotaPopupShown = true
-    showUsageLimit('chat')
-    return true
-  }
-  return false
+  })
+  chatQuotaProbeTail = probe.then(
+    () => undefined,
+    () => undefined
+  )
+  return probe
 }
 
 // ── Transcription-quota trigger ─────────────────────────────────────────────

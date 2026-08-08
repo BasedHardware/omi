@@ -266,6 +266,7 @@ describe('useChat — C4 done payload', () => {
     expect(persistedAssistant.content).toBe('Your standup is at 10am.')
     expect(persistedAssistant.content).not.toContain('[1]')
     expect(persistedAssistant.serverId).toBe('srv-msg-9')
+    expect(result.current.quotaCheckSeq).toBe(1)
   })
 
   it('drops a message: side-frame instead of leaking its base64 into the reply', async () => {
@@ -689,6 +690,7 @@ describe('useChat — C5 abort on reset (agent-task path)', () => {
     expect(result.current.sending).toBe(false)
     expect(result.current.agentActive).toBe(false)
     expect(result.current.history).toEqual([])
+    expect(result.current.quotaCheckSeq).toBe(0)
 
     // A fresh chat send takes over and starts streaming (holds the busy latch).
     await act(async () => {
@@ -718,6 +720,7 @@ describe('useChat — C5 abort on reset (agent-task path)', () => {
     })
     expect(result.current.sending).toBe(false)
     expect(lastAssistant(result.current.history)?.content).toBe('clean answer')
+    expect(result.current.quotaCheckSeq).toBe(1)
     const finalThread = persisted.at(-1) as ChatMessage[]
     expect(finalThread.some((m) => /zombie/i.test(m.content))).toBe(false)
   })
@@ -1027,6 +1030,7 @@ describe('useChat — first-chat not ready (legacy_sse readiness wait)', () => {
       expect(streams[0]).toBeUndefined()
       expect(lastAssistant(result.current.history)?.content).toBe(CHAT_NOT_READY_FINAL)
       expect(lastAssistant(result.current.history)?.content).not.toMatch(/^Error: HTTP/)
+      expect(result.current.quotaCheckSeq).toBe(0)
     } finally {
       vi.useRealTimers()
     }

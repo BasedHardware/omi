@@ -1610,7 +1610,10 @@ export type MainChatEvent =
   /** The run has been accepted and assigned a runId — the first event of a turn.
    *  Carries the runId so the caller can later cancel it via mainChatCancel. */
   | { type: 'accepted'; requestId: string; runId: string }
-  /** A run-lifecycle marker (queued/starting/running) for a spinner. */
+  /** The managed-cloud adapter wrote the provider command successfully.
+   *  Pre-dispatch owner/binding/session/concurrency failures never emit this. */
+  | { type: 'hosted_request_started'; requestId: string; runId: string }
+  /** A non-dispatch run-lifecycle marker for status UI. */
   | { type: 'status'; requestId: string; runId: string; message: string }
   /** An assistant text chunk; accumulate in order to render the streaming reply. */
   | { type: 'text_delta'; requestId: string; runId: string; text: string }
