@@ -177,27 +177,42 @@ const PORT_REGISTRY: readonly PortRegistryRow[] = [
  * question, and it lives in
  * `integration/adversarial/cross-door-identity.test.ts`.
  *
- * ESCAPE HATCH: `// wire-path-ok(<reason>)` on the server-construction line, or
- * in the comment block directly above it.
+ * ESCAPE HATCH: a row in `WIRE_PATH_HATCHES` below, keyed by (file, LINE).
+ * There is no marker, no comment, and no text to parse.
  *
- * IT USED TO BE FILE-SCOPED, and the argument for that was wrong in a way worth
- * keeping: "the finding is file-scoped, so the justification belongs at that
- * granularity." True of the finding, false of the exemption. A file-wide marker
- * is checked `text.includes(...)` unconditionally and forever, so the first
- * legitimate hatch turns the whole file into a PERMANENT BLIND SPOT — a rogue
- * door added to it later is exempted silently, by a comment written about
- * something else, possibly years earlier.
+ * IT USED TO BE A COMMENT MARKER, and four rounds of non-author audit found four
+ * working bypasses in it, each one the same question — *is this marker really
+ * inside a comment?* — answered a little better and broken again:
  *
- * That is not theoretical. A non-author audit demonstrated it: it edited the one
- * hatched file in the tree (`integration/adversarial/live-server.ts`, hatched for
- * a free-port probe) so the probe's handler actually answered `/v1/memories` with
- * a raw fixture id — the exact defect class this rule exists to catch — and the
- * lint stayed GREEN.
+ *   round 1  the marker was file-wide, so one legitimate hatch made the whole
+ *            file a permanent blind spot for every server added to it later
+ *   round 2  a bare substring search, so `banner: "wire-path-ok(fake)"` on the
+ *            construction line hatched it — no pre-existing hatch needed
+ *   round 3  `withoutComments` is string-blind, so `"/* wire-path-ok(fake) *​/"`
+ *            as a STRING VALUE satisfied "present raw, absent stripped"
+ *   round 4  the comment scanner tracked template literals but not `${…}` DEPTH,
+ *            so an unmatched backtick desynced it — and the proof type-checked
  *
- * It is also the standing §8 rule, restated: when you narrow a guard and add a
- * compensating mechanism, the compensating mechanism must be at least as strong
- * on the axis that matters. Rule 16's `port-composition-ok` was already
- * per-site, four lines up in this same file. Rule 17 simply did not copy it.
+ * Every fix was correct and every one left a smaller hole. That is convergence
+ * toward a real lexer, written to guard the mechanism whose entire job is to
+ * SWITCH A FENCE OFF. The audit's ruling, and it is right: there is no bound
+ * short of a real lexer that is not arbitrary, and "we stopped finding bypasses"
+ * is the specific failure mode this program exists to catch, not a stopping
+ * condition.
+ *
+ * So the exemption stops being text. To exempt a construction site you edit this
+ * file, which is a visible diff in the one file everybody already watches.
+ *
+ * KEYED BY LINE, NOT BY FILE — and this is not a detail. A file-keyed table would
+ * be correct for rule 16 ("one module owns this port's composition" is naturally
+ * a per-file question) and would silently REOPEN ROUND 1 here, because rule 17's
+ * subject is a specific HTTP server instance and one file may legitimately hold
+ * several unrelated ones.
+ *
+ * The locality cost is real and was accepted with eyes open: the justification no
+ * longer sits beside the code it justifies. A short pointer comment at the site
+ * keeps a reader oriented, and it is deliberately NOT read by this checker — a
+ * comment that does no work cannot be forged into doing any.
  */
 interface WirePathRegistryRow {
   /** The settled path, spelled exactly as the route registers it. */
@@ -223,7 +238,31 @@ const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
       + "dogfooded. Rule 16 could not see it because it composed no registered port.",
   },
 ];
-const wirePathAllowMarker = "wire-path-ok(";
+/**
+ * Server-construction sites exempted from rule 17. Keyed by (file, 1-indexed
+ * line). A stale row — one whose line no longer holds a server construction —
+ * is itself a failure, symmetric with `servedBy` and `composedIn`: a registry
+ * row that has quietly stopped describing reality disables a fence silently,
+ * which is the whole class this file exists to prevent.
+ */
+interface WirePathHatchRow {
+  /** Path relative to the platform root, exactly as the checker reports it. */
+  readonly file: string;
+  /** 1-indexed line of the server construction being exempted. */
+  readonly line: number;
+  readonly reason: string;
+}
+const WIRE_PATH_HATCHES: readonly WirePathHatchRow[] = [
+  {
+    file: "integration/adversarial/live-server.ts",
+    line: 67,
+    reason:
+      "A port probe that answers a constant empty body to every request and is stopped "
+      + "before it is used. The `/v1/memories` reference below it is this file CALLING "
+      + "the route as a client; nothing here serves that path, and a test-support client "
+      + "cannot hand anyone a divergent public id.",
+  },
+];
 /**
  * `code.includes("/v1/memories")` also matches `/v1/memories-legacy-export`,
  * which is a DIFFERENT route that merely starts with the registered one. Found
@@ -272,98 +311,6 @@ const storageProvenanceIdentifiers = [
 const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
-/**
- * Which characters are genuinely inside a comment — string- and
- * template-literal-aware, unlike `withoutComments` below.
- *
- * `withoutComments` is a pair of regexes with no concept of string boundaries,
- * so it blanks `/* … *​/`-shaped text WHEREVER it appears, including inside a
- * quoted string. For DETECTION that is a false negative like any other. For
- * GRANTING AN EXEMPTION it is a hole: one false negative disables the fence
- * entirely for that site rather than missing one occurrence. So the hatch is
- * judged by this scanner as well.
- *
- * Both mechanisms must agree before an exemption is granted — the same
- * two-independent-measurements discipline this repo applies to every claim about
- * behaviour, applied to the thing that switches a check off.
- *
- * Deliberately not used to replace `withoutComments`: rewriting the shared
- * stripper would change every other check in this file at once, and the audit
- * that asked for this scoped the request to the hatch for exactly that reason.
- *
- * Known imprecision, and it FAILS CLOSED: a regex literal containing a quote
- * (`/["']/`) can open a spurious string state, which makes this scanner see
- * FEWER comments, not more. The result is a legitimate hatch being rejected and
- * a human investigating — never a fake one being honoured.
- */
-const commentMask = (text: string): readonly boolean[] => {
-  const mask = new Array<boolean>(text.length).fill(false);
-  let mode: "code" | "line" | "block" | "single" | "double" | "template" = "code";
-  let index = 0;
-  while (index < text.length) {
-    const here = text[index];
-    const next = text[index + 1];
-    if (mode === "code") {
-      if (here === "/" && next === "/") { mask[index] = mask[index + 1] = true; mode = "line"; index += 2; continue; }
-      if (here === "/" && next === "*") { mask[index] = mask[index + 1] = true; mode = "block"; index += 2; continue; }
-      if (here === "'") mode = "single";
-      else if (here === '"') mode = "double";
-      else if (here === "`") mode = "template";
-      index += 1;
-      continue;
-    }
-    if (mode === "line") {
-      if (here === "\n") { mode = "code"; index += 1; continue; }
-      mask[index] = true; index += 1; continue;
-    }
-    if (mode === "block") {
-      mask[index] = true;
-      if (here === "*" && next === "/") { mask[index + 1] = true; mode = "code"; index += 2; continue; }
-      index += 1; continue;
-    }
-    // Inside a string or template literal.
-    if (here === "\\") { index += 2; continue; }
-    if ((mode === "single" && here === "'") || (mode === "double" && here === '"')
-      || (mode === "template" && here === "`")) { mode = "code"; index += 1; continue; }
-    // An unterminated quote cannot span lines; recover rather than swallow the file.
-    if (here === "\n" && mode !== "template") { mode = "code"; index += 1; continue; }
-    index += 1;
-  }
-  return mask;
-};
-
-/**
- * A line carrying a backtick cannot hatch, at all.
- *
- * `commentMask` tracks template literals but not interpolation DEPTH: once in
- * template mode it scans for the next literal backtick with no idea that one
- * inside a `${…}` might open something nested. A single unmatched backtick there
- * closes the outer template one backtick early, desyncs the scanner into code
- * mode, and a `//` that a real parser still considers inside the literal gets
- * marked as a genuine comment. The round-4 audit built one that type-checks
- * cleanly with `bunx tsc --noEmit`, so "it looks bizarre" was the only remaining
- * defence.
- *
- * The fix is NOT a depth-tracking tokenizer. That is a bigger and more
- * failure-prone thing than anything this fence has landed, and three rounds of
- * bypasses in the same place are an argument against more parsing, not for it.
- * Refusing to hatch a line with a backtick removes the entire class instead of
- * the instance. It costs nothing today — the tree's one real hatch has no
- * backtick near it — and a hatch that needs one can be moved to its own line.
- */
-const carriesTemplate = (line: string): boolean => line.includes("`");
-
-/** Offsets at which `marker` occurs inside a real comment. */
-const markerInComment = (text: string, mask: readonly boolean[], marker: string, lineStart: number, lineEnd: number): boolean => {
-  let from = lineStart;
-  for (;;) {
-    const at = text.indexOf(marker, from);
-    if (at < 0 || at >= lineEnd) return false;
-    if (mask[at]) return true;
-    from = at + 1;
-  }
-};
-
 const withoutComments = (text: string): string => text
   .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "))
   .replace(/(^|[^:])\/\/[^\n]*/g, (match, lead: string) => lead + " ".repeat(match.length - lead.length));
@@ -409,15 +356,7 @@ for (const file of files(root)) {
   // ── Rule 17: a settled wire path is served by exactly one route module ────
   if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
     const code = withoutComments(text);
-    const rawLines = text.split("\n");
     const codeLines = code.split("\n");
-    const mask = commentMask(text);
-    // Byte offset of the start of each raw line, so the mask can be indexed by line.
-    const lineStarts: number[] = [];
-    for (let offset = 0, line = 0; line < rawLines.length; line += 1) {
-      lineStarts.push(offset);
-      offset += (rawLines[line] ?? "").length + 1;
-    }
 
     // Every line that stands up a server. The hatch is judged against each of
     // these, not against the file, so one justified server cannot exempt the
@@ -433,48 +372,22 @@ for (const file of files(root)) {
      * checking only `index - 1` (rule 16's rule, adequate for a one-line
      * justification) would reject a hatch that is correctly placed.
      */
-    /**
-     * A line whose comment-stripped form is blank while its raw form is not is
-     * comment TEXT. Deriving it this way rather than by `trimStart().startsWith("//")`
-     * is what makes the two halves below agree with each other, and it is why
-     * the marker cannot be smuggled in as data — `withoutComments` blanks
-     * comments and leaves string literals alone, so a marker that survives
-     * stripping was never in a comment.
-     */
-    const isCommentText = (index: number): boolean =>
-      (codeLines[index] ?? "").trim() === "" && (rawLines[index] ?? "").trim() !== "";
+    // No text is consulted. A site is exempt iff this file declares it, by line.
+    const hatchedAt = (index: number): boolean =>
+      WIRE_PATH_HATCHES.some((row) => row.file === shown && row.line === index + 1);
 
-    const hatchedAt = (index: number): boolean => {
-      const raw = rawLines[index] ?? "";
-      const stripped = codeLines[index] ?? "";
-      // On the construction line: present raw, ABSENT after stripping — i.e. it
-      // lives in a trailing comment, not in a string literal. Without the second
-      // half this is a bare substring search over the line, and the marker can be
-      // smuggled in as a property value on the very line it exempts:
-      //
-      //   Bun.serve({ port: 0, banner: "wire-path-ok(fake)", fetch: … })
-      //
-      // which needs no pre-existing hatch to hide behind: any rogue file
-      // self-exempts on first write. Found by the round-2 non-author audit, which
-      // built it rather than reasoning about it.
-      const inRealComment = markerInComment(
-        text, mask, wirePathAllowMarker,
-        lineStarts[index] ?? 0, (lineStarts[index] ?? 0) + raw.length,
+    // A hatch row that no longer names a server construction has silently stopped
+    // exempting anything — or worse, is exempting a line that moved. Same
+    // treatment as a stale `servedBy` or `composedIn`: say so, loudly.
+    for (const row of WIRE_PATH_HATCHES) {
+      if (row.file !== shown) continue;
+      if (serverSites.includes(row.line - 1)) continue;
+      failures.push(
+        `${shown}:${row.line}: stale WIRE_PATH_HATCHES row — no server is constructed here. `
+        + `A hatch that has stopped describing reality disables a fence silently. `
+        + `Move the row to the construction's current line, or delete it.`,
       );
-      if (!carriesTemplate(raw) && raw.includes(wirePathAllowMarker)
-        && !stripped.includes(wirePathAllowMarker) && inRealComment) return true;
-      // Otherwise: the contiguous comment block directly above. A blank line or
-      // any code ends the block, which fails closed — verified by the audit.
-      for (let above = index - 1; above >= 0; above -= 1) {
-        if (!isCommentText(above)) return false;
-        const aboveRaw = rawLines[above] ?? "";
-        if (!carriesTemplate(aboveRaw) && aboveRaw.includes(wirePathAllowMarker) && markerInComment(
-          text, mask, wirePathAllowMarker,
-          lineStarts[above] ?? 0, (lineStarts[above] ?? 0) + aboveRaw.length,
-        )) return true;
-      }
-      return false;
-    };
+    }
 
     const unhatchedSite = serverSites.find((index) => !hatchedAt(index));
     const standsUpAServer = serverSites.length > 0;
@@ -493,10 +406,10 @@ for (const file of files(root)) {
         + `(${row.servedBy}). A settled wire path is SERVED by exactly one route module `
         + `(rule 17). ${row.reason} `
         + `Import and register the real route instead of answering the path here. If THIS `
-        + `server genuinely does not serve that path, justify it with `
-        + `// ${wirePathAllowMarker}<reason>) on that line or the comment block above it. `
-        + `The hatch is per server, not per file: a file-wide one would exempt the next `
-        + `server somebody adds here.`,
+        + `server genuinely does not serve that path, add a row to WIRE_PATH_HATCHES in `
+        + `scripts/lint-import-graph.ts keyed by (file, line). The hatch is per `
+        + `construction site, not per file: a file-wide one would exempt the next server `
+        + `somebody adds here.`,
       );
     }
   }

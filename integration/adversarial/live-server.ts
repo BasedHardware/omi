@@ -60,10 +60,10 @@ export async function startLiveServer(): Promise<LiveServer> {
 }
 
 async function freePort(): Promise<number> {
-  // wire-path-ok(this is a port probe that answers a constant empty body to every
-  // request and is stopped before it is used; the `/v1/memories` reference below is
-  // this file CALLING the route as a client. Nothing here serves that path, and a
-  // test-support client cannot hand anyone a divergent public id.)
+  // Exempt from rule 17 — see WIRE_PATH_HATCHES in scripts/lint-import-graph.ts.
+  // This pointer is NOT read by the checker; the exemption lives in that table,
+  // keyed by (file, line), because four rounds of audit broke every version of a
+  // comment marker. A comment that does no work cannot be forged into doing any.
   const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
   const port = probe.port;
   await probe.stop(true);

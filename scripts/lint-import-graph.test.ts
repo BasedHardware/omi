@@ -134,6 +134,32 @@ const withWirePathFixture = (source: string, assertion: (result: ReturnType<type
   }
 };
 
+/**
+ * RULE 17'S HATCH IS NO LONGER TEXT, so the nine tests that used to live here —
+ * every one of them a bypass a non-author audit found in a comment marker across
+ * four rounds — are deleted rather than kept. They exercised machinery that does
+ * not exist: `wire-path-ok(` in a string, in a block comment inside a string, in
+ * a template literal, behind a desynced `${}` interpolation. A test for a deleted
+ * mechanism is not coverage, it is a claim about nothing.
+ *
+ * The exemption is now a `(file, line)` row in `WIRE_PATH_HATCHES`, which is why
+ * the three cases below CANNOT be fixture-tested: they need the registry itself
+ * to differ, and a test-only row would be a permanent real exemption on a path
+ * that only exists during a test run — reintroducing, for the sake of testing a
+ * fence, exactly the kind of standing hole the fence is about.
+ *
+ * So they are hand-applied red-proofs, run against real source and recorded in
+ * the commit that landed them, the same way this fence's sharpest proof has been
+ * handled in every round:
+ *
+ *   - a SECOND, unhatched server in the hatched file        -> fires at :68
+ *   - move the row one line off the construction            -> "stale row"
+ *   - delete the row                                        -> the real probe fires at :67
+ *
+ * The stale-row check earned its place before it was ever tested: the first
+ * version of the row named the wrong line, and the checker said so on its first
+ * run rather than silently exempting a line that had moved.
+ */
 test("rule 17 catches a hand-rolled door that serves the registered path without reaching the registered route", () => {
   // Mechanised version of DOOR's red-proof 1/2 (the retired serve.ts shape):
   // stands up a server, names the registered path in code, imports nothing
@@ -189,219 +215,9 @@ test("rule 17 does not fire when the file only names the path in a comment (comm
   );
 });
 
-test("rule 17's escape hatch is honoured", () => {
-  withWirePathFixture(
-    [
-      "// wire-path-ok(fixture: proves the file-scoped hatch is read)",
-      'Bun.serve({',
-      '  port: 9003,',
-      '  fetch(req) {',
-      '    const url = new URL(req.url);',
-      '    if (url.pathname === "/v1/memories") {',
-      '      return new Response(JSON.stringify({ id: "raw-fixture-row-id" }));',
-      '    }',
-      '    return new Response("not found", { status: 404 });',
-      '  },',
-      '});',
-    ].join("\n"),
-    (result) => {
-      expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
 test("rule 17 does not fire on a file that only CALLS the path (a client, not a door)", () => {
   withWirePathFixture(
     ['export async function callIt(baseUrl: string) {', '  return fetch(`${baseUrl}/v1/memories`);', "}"].join("\n"),
-    (result) => {
-      expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-/**
- * THE HATCH IS PER SERVER, NOT PER FILE.
- *
- * A non-author audit HELD rule 17's promotion on exactly this. The hatch was
- * `text.includes(marker)` — file-wide, unconditional, permanent — so the first
- * legitimate justification turned the whole file into a blind spot. The audit
- * proved it by editing the tree's one hatched file so a second server there
- * really did answer the registered path with a raw fixture id: lint stayed
- * green. These two tests are that mutation and its converse, mechanised.
- */
-test("rule 17: a hatched server does not exempt a second, unhatched server in the same file", () => {
-  withWirePathFixture(
-    [
-      "const probe = Bun.serve({",
-      "  hostname: \"127.0.0.1\",",
-      "  port: 0,",
-      "  // wire-path-ok(a port probe that answers a constant empty body)",
-      "  fetch: () => new Response(\"\"),",
-      "});",
-      "void probe;",
-      "const rogue = Bun.serve({",
-      "  hostname: \"127.0.0.1\",",
-      "  port: 0,",
-      "  fetch: (request: Request) => new URL(request.url).pathname === \"/v1/memories\"",
-      "    ? Response.json({ items: [{ id: \"retrieval-node-v1:seed-0000\" }] })",
-      "    : new Response(\"\", { status: 404 }),",
-      "});",
-      "void rogue;",
-    ].join("\n"),
-    (result) => {
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-test("rule 17: the hatch marker must be in a COMMENT, not a string literal on the same line", () => {
-  // Round-2 audit finding, and worse than round 1: round 1 needed a pre-existing
-  // legitimate hatch to hide behind. This needs nothing — any rogue file
-  // self-exempts on first write, by putting the marker in a property value on the
-  // very line it is exempting.
-  withWirePathFixture(
-    // The marker MUST sit on the same physical line as the construction, which is
-    // the only line `hatchedAt` substring-searches. A first draft of this test put
-    // it three lines down; it passed, and the isolation proof (revert the fence,
-    // expect exactly one red) stayed green — proving the test, not the fence.
-    [
-      "const rogue = Bun.serve({ port: 0, banner: \"wire-path-ok(fake, not a real comment)\","
-        + " fetch: (request: Request) => new URL(request.url).pathname === \"/v1/memories\"",
-      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
-      "    : new Response(\"\", { status: 404 }) });",
-      "void rogue;",
-    ].join("\n"),
-    (result) => {
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-test("rule 17: comment SYNTAX inside a string does not hatch (round-3 audit)", () => {
-  // `withoutComments()` is a pair of regexes with no concept of string
-  // boundaries, so it blanks block-comment-shaped text wherever it appears —
-  // including inside a quoted string. That satisfied the round-2 predicate
-  // (present raw, absent stripped) without the marker ever being in a comment.
-  // The hatch now needs a second, string-aware mechanism to agree.
-  withWirePathFixture(
-    [
-      "const rogue = Bun.serve({ port: 0, banner: \"/* wire-path-ok(fake) */\","
-        + " fetch: (request: Request) => new URL(request.url).pathname === \"/v1/memories\"",
-      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
-      "    : new Response(\"\", { status: 404 }) });",
-      "void rogue;",
-    ].join("\n"),
-    (result) => {
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-test("rule 17: a line carrying a backtick cannot hatch (round-4 audit)", () => {
-  // `commentMask` tracks template literals but not interpolation DEPTH, so an
-  // unmatched backtick inside `${…}` closes the outer literal early and desyncs
-  // the scanner — after which a `//` still inside the literal reads as a real
-  // comment. The audit's version type-checks cleanly under `tsc --noEmit`, so
-  // "it looks bizarre" was the only defence left. The fix removes the class:
-  // no line with a backtick may hatch.
-  withWirePathFixture(
-    [
-      "const rogue = Bun.serve({ port: 0, banner: `${String.raw`}//wire-path-ok(fake)",
-      "` }rest`, fetch: (request: Request) =>",
-      "  new URL(request.url).pathname === \"/v1/memories\"",
-      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
-      "    : new Response(\"\", { status: 404 }) } as any);",
-      "void rogue;",
-    ].join("\n"),
-    (result) => {
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-test("rule 17: a genuine trailing BLOCK-comment hatch still works", () => {
-  // The converse of the test above. Rejecting all block-comment markers would
-  // have been the easy fix and would have broken a legitimate form.
-  withWirePathFixture(
-    [
-      "const probe = Bun.serve({ port: 0, fetch: () => new Response(\"\") });"
-        + " /* wire-path-ok(constant empty body; the reference below is a client call) */",
-      "void probe;",
-      "export const call = (base: string) => fetch(`${base}/v1/memories`);",
-    ].join("\n"),
-    (result) => {
-      expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-test("rule 17: a template-literal line contiguous with the construction does not hatch", () => {
-  // The version of the test below that ACTUALLY reaches the walk-up's
-  // string-awareness. In the other one the closing backtick sits on its own line
-  // and breaks the comment block first, so it passes without the mask ever being
-  // consulted — verified by removing the mask and watching it stay green. Here
-  // the backtick shares the marker's line, so the line is blank after stripping,
-  // non-blank raw, and directly above the construction: comment-shaped, not a
-  // comment. Removing the walk-up's mask check turns this red.
-  withWirePathFixture(
-    [
-      "const banner = `",
-      "// wire-path-ok(fake)`;",
-      "const rogue = Bun.serve({ port: 0, fetch: (request: Request) =>",
-      "  new URL(request.url).pathname === \"/v1/memories\"",
-      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
-      "    : new Response(\"\", { status: 404 }) });",
-      "void rogue; void banner;",
-    ].join("\n"),
-    (result) => {
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-test("rule 17: a template-literal line that LOOKS like a comment block does not hatch", () => {
-  // Found while fixing round 3; on neither the auditor's list nor mine. A line
-  // inside a template literal is blank after `withoutComments()` and non-blank
-  // raw, which is exactly what `isCommentText` tested for — so a fake
-  // justification could be smuggled in as data on the lines ABOVE the
-  // construction, not just on it.
-  withWirePathFixture(
-    [
-      "const banner = `",
-      "// wire-path-ok(fake)",
-      "`;",
-      "const rogue = Bun.serve({ port: 0, fetch: (request: Request) =>",
-      "  new URL(request.url).pathname === \"/v1/memories\"",
-      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
-      "    : new Response(\"\", { status: 404 }) });",
-      "void rogue; void banner;",
-    ].join("\n"),
-    (result) => {
-      expect(result.status).not.toBe(0);
-      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
-    },
-  );
-});
-
-test("rule 17: a genuine trailing-comment hatch on the construction line still works", () => {
-  // The converse of the test above, and the reason it cannot simply be
-  // "reject any marker on the construction line". A guard that rejects a
-  // legitimate justification is how a guardrail gets routed around.
-  withWirePathFixture(
-    [
-      "const probe = Bun.serve({ port: 0, fetch: () => new Response(\"\") });"
-        + " // wire-path-ok(constant empty body; the reference below is a client call)",
-      "void probe;",
-      "export const call = (base: string) => fetch(`${base}/v1/memories`);",
-    ].join("\n"),
     (result) => {
       expect(result.status).toBe(0);
       expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
