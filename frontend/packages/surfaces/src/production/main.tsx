@@ -4,7 +4,7 @@ import { t } from "@omi-core/i18n";
 import { getTheme, themeNameFor, type ColorMode, type ThemeName } from "@omi-core/tokens";
 import { realEnv } from "@omi-core/kernel";
 import { bridgeHttpClient, isBridgeHttpAvailable, openWebStorageBridge } from "@omi-core/bridge-web";
-import { createLegacyProductionStoreFactory, createPlatformProductionStoreFactory } from "./ProductionStores.js";
+import { createPlatformProductionStoreFactory } from "./ProductionStores.js";
 import { MemoriesProduction } from "./MemoriesProduction.js";
 import { ConversationsProduction } from "./ConversationsProduction.js";
 import { TasksProduction, type TasksProductionProps } from "./TasksProduction.js";
@@ -35,10 +35,28 @@ const route: "home" | "memories" | "conversations" | "tasks" = requestedRoute ==
     : requestedRoute === "memories" || requestedQa === "memories" || requestedQa === "memories-platform"
       ? "memories"
       : "home";
-// Host-supplied and untrusted: `resolveGenerationSelection` inside the platform factory
-// validates it and rejects loudly rather than silently downgrading to legacy.
-const requestedGeneration = query.get("generation");
-const requestedGenerations = requestedGeneration === "platform" ? { memories: "platform" } : undefined;
+/**
+ * Host-supplied backend-generation selection.
+ *
+ * "Host" means the launcher: a shell owns the WKWebView URL it loads AND may inject a
+ * config object before the bundle runs. Both are the host speaking; neither is a user
+ * typing a guess. The value is passed through untouched to
+ * `resolveGenerationSelection`, which validates it and rejects anything unavailable
+ * LOUDLY rather than downgrading in silence.
+ *
+ * `platformOriginLabel` is a display label only. The surface deliberately cannot learn the
+ * real base URL — the shell alone holds it (ADR-008 §3) — so the badge names the binding
+ * it was told about rather than inventing a URL from `location.origin`, which in a shell
+ * is a custom scheme and has nothing to do with the backend.
+ */
+type OmiHostConfig = {
+  readonly generations?: unknown;
+  readonly platformOriginLabel?: string;
+};
+const hostConfig: OmiHostConfig =
+  (globalThis as { __OMI_HOST_CONFIG__?: OmiHostConfig }).__OMI_HOST_CONFIG__ ?? {};
+const requestedGenerations: unknown = hostConfig.generations
+  ?? (query.get("generation") === "platform" ? { memories: "platform" } : undefined);
 const requestedPlatform = query.get("platform");
 const platform: "mobile" | "desktop" = requestedPlatform === "desktop" || requestedPlatform === "mobile"
   ? requestedPlatform
@@ -181,21 +199,31 @@ if (query.get("lab") === "1") {
         const bridge = await openWebStorageBridge(profile);
         const http = bridgeHttpClient();
         const env = realEnv();
-        if (requestedGenerations) {
-          // Platform generation: the ratified memory read path. Both transports are bound
-          // by the host — the base URL lives in the shell binding, never here (ADR-008 §3).
-          const platform = createPlatformProductionStoreFactory(bridge, env, { legacyHttp: http, platformHttp: http }, requestedGenerations);
-          if (platform.selection.memories === "platform") {
-            const store = await platform.openSynthesizedMemories();
-            root.render(<StrictMode><MemoriesPlatformProduction store={store} source={{ kind: "live", origin: location.origin }} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
-            return;
-          }
-          // Asked for platform and did not get it. Saying so is the whole point of the
-          // rejection list: a client that thinks it is on the new backend while quietly
-          // running on the old one is the worst outcome here.
+        // One factory for every route. `PlatformProductionStoreFactory` extends the legacy
+        // one, so legacy domains behave identically whatever the selection says — which is
+        // what lets Memories move generation without Tasks/Conversations/Folders moving.
+        //
+        // Both transports resolve through the same bridge channel today because
+        // `BridgeHttpRequest` carries no binding selector: the shell holds exactly one base
+        // URL. That means single-origin operation — point the shell at the platform service
+        // and the platform read path is live. Two ORIGINS at once needs an additive
+        // `binding` field on the bridge request, which is FE-CORE's contract to change; see
+        // blocked/FE-SURFACES-bridge-two-origin-binding.md. Passing the same client twice is
+        // stated here rather than hidden, because the silent version of this is exactly how
+        // a client ends up reading the legacy wire while believing it is on the new one.
+        const platform = createPlatformProductionStoreFactory(bridge, env, { legacyHttp: http, platformHttp: http }, requestedGenerations);
+        const stores = platform;
+        if (platform.rejected.length > 0) {
+          // Machine-readable on purpose: INTEGRATION asserts on this line.
           console.warn(`OMI_GENERATION_REJECTED ${JSON.stringify(platform.rejected)}`);
         }
-        const stores = createLegacyProductionStoreFactory(bridge, env, http);
+        console.info(`OMI_GENERATION_SELECTION ${JSON.stringify(platform.selection)}`);
+        if (route === "memories" && platform.selection.memories === "platform") {
+          const store = await platform.openSynthesizedMemories();
+          await store.refresh();
+          root.render(<StrictMode><MemoriesPlatformProduction store={store} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} onReady={() => emitReady("bridge:platform")} /></StrictMode>);
+          return;
+        }
         if (route === "home") {
           const [memories, conversations] = await Promise.all([
             stores.openMemories(),
