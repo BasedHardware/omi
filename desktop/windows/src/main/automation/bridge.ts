@@ -8,12 +8,19 @@ import type { AutomationPlan, PlanRunResult, StepResult, UiSnapshot } from '../.
 const REQUEST_TIMEOUT_MS = 8000
 const MAX_BACKOFF_MS = 10000
 
-type Pending = { resolve: (json: string) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
+type Pending = {
+  resolve: (json: string) => void
+  reject: (e: Error) => void
+  timer: NodeJS.Timeout
+}
 
 class AutomationBridge {
   private child: ChildProcessWithoutNullStreams | null = null
   private readonly queue: Pending[] = []
   private backoff = 500
+  // Earliest time (ms epoch) the next spawn is allowed, set after a crash so a
+  // helper that dies on startup is not re-spawned on every request.
+  private cooldownUntil = 0
   // Set once the helper binary is confirmed missing (spawn ENOENT). Without it,
   // every snapshot/step request re-spawns the missing exe — failing forever,
   // flooding the log and stalling the planner. Once unavailable, fail fast.
@@ -22,6 +29,9 @@ class AutomationBridge {
 
   private ensureStarted(): void {
     if (this.child || this.unavailable) return
+    // Capped-backoff throttle (mirrors win-ocr-helper): don't re-spawn a helper
+    // that dies on startup on every request. Requests inside the window fail fast.
+    if (Date.now() < this.cooldownUntil) return
     const exe = resolveHelperPath()
     // windowsHide: the helper is a console-subsystem .NET exe (OutputType=Exe).
     // Electron main is a GUI process with no console, so without CREATE_NO_WINDOW
@@ -36,11 +46,26 @@ class AutomationBridge {
       clearTimeout(pending.timer)
       pending.resolve(json)
     })
-    child.stdout.on('data', (chunk: Buffer) => decoder.push(chunk))
+    child.stdout.on('data', (chunk: Buffer) => {
+      try {
+        decoder.push(chunk)
+      } catch (e) {
+        // Desynced or oversized frame — drop this helper and restart clean.
+        console.error('[win-automation-helper] protocol error:', (e as Error).message)
+        if (this.child === child) this.recycle()
+      }
+    })
     child.stderr.on('data', (c: Buffer) =>
       console.log('[win-automation-helper]', c.toString().trim())
     )
+    // A write to a dead helper makes stdin emit 'error' (EPIPE). With no listener
+    // Node rethrows it as an uncaught exception and the whole main process dies.
+    child.stdin.on('error', () => {})
+    child.stdout.on('error', () => {})
+    child.stderr.on('error', () => {})
     child.on('exit', (code) => {
+      // Ignore a late exit from an already-replaced child.
+      if (this.child !== child) return
       console.warn(`[win-automation-helper] exited code=${code}`)
       this.handleExit()
     })
@@ -57,7 +82,7 @@ class AutomationBridge {
       } else {
         console.error('[win-automation-helper] spawn error:', e.message)
       }
-      this.handleExit()
+      if (this.child === child) this.handleExit()
     })
     setTimeout(() => {
       if (this.child === child) this.backoff = 500
@@ -91,6 +116,7 @@ class AutomationBridge {
       clearTimeout(p.timer)
       p.reject(new Error('helper exited'))
     }
+    this.cooldownUntil = Date.now() + this.backoff
     this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS)
   }
 
@@ -124,7 +150,10 @@ class AutomationBridge {
 
   async snapshot(windowHandle?: string): Promise<UiSnapshot> {
     try {
-      const json = await this.request(OP_SNAPSHOT, JSON.stringify({ windowHandle: windowHandle ?? '' }))
+      const json = await this.request(
+        OP_SNAPSHOT,
+        JSON.stringify({ windowHandle: windowHandle ?? '' })
+      )
       return JSON.parse(json) as UiSnapshot
     } catch (e) {
       return { ok: false, code: 'HELPER_ERROR', message: (e as Error).message }
