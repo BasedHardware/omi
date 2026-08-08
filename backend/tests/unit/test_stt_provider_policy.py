@@ -37,9 +37,11 @@ def _chart_env_value(values_path: Path, name: str) -> str | None:
     return None
 
 
-def test_hosted_deepgram_serves_live_surfaces_but_not_batch():
+def test_hosted_deepgram_serves_streaming_only():
     assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
-    assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
+    # PTT dispatches only Parakeet and Modulate and raises on anything else;
+    # batch is carried by Parakeet/Velma.
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
 
 

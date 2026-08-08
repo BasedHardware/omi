@@ -311,9 +311,10 @@ def get_stt_service_for_language(
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a serving STT provider allowed for the requested product surface.
 
-    A ``dg-*`` configuration is eligible only for the retained self-hosted
-    deployment. It never selects Deepgram's hosted API, and a missing
-    self-hosted endpoint falls through to the policy-owned alternatives.
+    A ``dg-*`` configuration serves from whichever Deepgram deployment the
+    runtime is configured for — self-hosted when its endpoint is set, otherwise
+    the hosted API. Without credentials it falls through to the policy-owned
+    alternatives rather than failing the session.
     """
     # Missing language metadata historically meant English. Preserve that
     # behavior without opening a retired-provider fallback for unknown values.

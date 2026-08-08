@@ -43,9 +43,9 @@ def test_streaming_skips_deepgram_when_no_client_is_configured(monkeypatch):
     assert model == 'velma-2'
 
 
-def test_ptt_ignores_a_deepgram_model_it_was_not_given(monkeypatch):
-    """PTT may serve Deepgram, but only when a deployment configures it."""
-    monkeypatch.setattr(streaming, 'stt_service_models', ['modulate-velma-2'])
+def test_ptt_never_selects_deepgram_even_when_configured(monkeypatch):
+    """PTT cannot connect Deepgram, so it must not be selectable there."""
+    monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', object())
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.internal')
@@ -102,6 +102,7 @@ def test_policy_keeps_hosted_and_self_hosted_deepgram_distinct():
     assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
     assert provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
+    assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
     assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PTT)
 
 

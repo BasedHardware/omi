@@ -162,9 +162,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # This is the self-hosted Deepgram credential used only with dg.omi.me.
-  # Hosted Deepgram is disabled by the serving policy and is not injected into
-  # backend-listen or Cloud Run workloads.
+  # Shared Deepgram credential: this deployment reaches self-hosted dg.omi.me,
+  # while backend-listen uses the hosted API with the same key.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:

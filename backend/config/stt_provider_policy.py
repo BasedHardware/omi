@@ -102,7 +102,10 @@ MODULATE_SUPPORTED_LANGUAGES: Final[frozenset[str]] = frozenset(
 # is a distinct product, available only to a runtime with its explicit endpoint
 # configured. Future availability changes start here.
 PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
-    DEEPGRAM_CLOUD_PROVIDER: frozenset({STTServingSurface.STREAMING, STTServingSurface.PTT}),
+    # PTT is streaming-only in transcribe_voice_message_stream, which dispatches
+    # Parakeet and Modulate and raises on anything else. Admitting Deepgram here
+    # would select a provider that surface cannot connect.
+    DEEPGRAM_CLOUD_PROVIDER: frozenset({STTServingSurface.STREAMING}),
     DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset({STTServingSurface.STREAMING}),
     MODULATE_PROVIDER: frozenset(
         {
