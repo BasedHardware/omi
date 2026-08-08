@@ -125,7 +125,9 @@ describe("seedQaSnapshot", () => {
     expect(loadRight.durable_snapshot.claims.map((item) => item.revision_id)).toEqual([
       ...right.result.claim_revision_ids,
     ]);
+    // storage-provenance-ok(test asserts loader determinism; this digest is never emitted)
     expect(loadLeft.coherent_snapshot_digest).toBe(loadRight.coherent_snapshot_digest);
+    // storage-provenance-ok(test asserts loader determinism; this digest is never emitted)
     expect(loadLeft.coherent_snapshot_digest).toMatch(/^[a-f0-9]{64}$/);
   });
 

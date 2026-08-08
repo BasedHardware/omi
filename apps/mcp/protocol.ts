@@ -118,6 +118,8 @@ export interface McpProtocolPorts {
     readonly authorization: unknown;
     readonly cursor: string | null;
     readonly limit: number;
+    // domain-pending(DIV-DOMCORE-008)
+    readonly granularity: string | null;
   }): Promise<unknown>;
   /**
    * The Track 1 contract parser validates once and returns the bounded,
@@ -291,6 +293,7 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
       authorization: gate.authorization.readAuthorization,
       cursor: call.cursor ?? null,
       limit: call.limit,
+      granularity: call.granularity ?? null,
     });
   } catch (caught) {
     if (isInvalidMcpCursorError(caught)) {
@@ -423,7 +426,10 @@ function parseRequestMeta(params: Record<string, unknown>): { protocolVersion: s
   return { protocolVersion: meta["io.modelcontextprotocol/protocolVersion"] as string };
 }
 
-function parseToolCall(params: Record<string, unknown>): { name: string; cursor?: string; limit: number } | null {
+// domain-pending(DIV-DOMCORE-008): the granularity vocabulary is unratified.
+const TOOL_GRANULARITIES = Object.freeze(["temporal_leaf", "all_nodes"]);
+
+function parseToolCall(params: Record<string, unknown>): { name: string; cursor?: string; limit: number; granularity?: string } | null {
   if (!hasOnlyKeys(params, ["name", "arguments", "_meta"]) || !isToolName(params.name)) {
     return null;
   }
@@ -431,7 +437,14 @@ function parseToolCall(params: Record<string, unknown>): { name: string; cursor?
   if (!isRecord(args)) {
     return null;
   }
-  if (!hasOnlyKeys(args, ["cursor", "limit"])) {
+  if (!hasOnlyKeys(args, ["cursor", "limit", "granularity"])) {
+    return null;
+  }
+  // An explicit parameter, never inferred from the transport. Omission means
+  // the read's default (temporal leaves), so a caller wanting the rollup
+  // hierarchy must name it rather than receive it by accident of routing.
+  if (args.granularity !== undefined
+    && (typeof args.granularity !== "string" || !TOOL_GRANULARITIES.includes(args.granularity))) {
     return null;
   }
   if (args.cursor !== undefined && (!isNonEmptyString(args.cursor) || args.cursor.length > 4096)) {
@@ -440,7 +453,12 @@ function parseToolCall(params: Record<string, unknown>): { name: string; cursor?
   if (args.limit !== undefined && (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 100)) {
     return null;
   }
-  return { name: params.name as string, cursor: args.cursor as string | undefined, limit: (args.limit as number | undefined) ?? 20 };
+  return {
+    name: params.name as string,
+    cursor: args.cursor as string | undefined,
+    limit: (args.limit as number | undefined) ?? 20,
+    granularity: args.granularity as string | undefined,
+  };
 }
 
 function validateHeaders(
@@ -686,6 +704,8 @@ function toolDescriptor(): Record<string, unknown> {
       properties: {
         cursor: { type: "string", minLength: 1, maxLength: 4096 },
         limit: { type: "integer", minimum: 1, maximum: 100 },
+        // domain-pending(DIV-DOMCORE-008)
+        granularity: { type: "string", enum: [...TOOL_GRANULARITIES] },
       },
     },
     annotations: {

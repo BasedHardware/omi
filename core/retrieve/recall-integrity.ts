@@ -43,7 +43,12 @@ const detachPlainJson = (input: unknown): PlainJson => {
         });
         return Object.freeze(result);
       }
-      if (Object.getPrototypeOf(value) !== Object.prototype) return fail("recall integrity rejects non-plain objects");
+      // Plain-data prototype rule: `Object.prototype` or null. See the note in
+      // core/retrieve/application-read.ts -- drivers emit null-prototype records
+      // deliberately, and the exact-shape validators below reject a `__proto__`
+      // own key, so accepting null costs nothing and removes a layer disagreement.
+      const objectPrototype = Object.getPrototypeOf(value);
+      if (objectPrototype !== Object.prototype && objectPrototype !== null) return fail("recall integrity rejects non-plain objects");
       const descriptors = Object.getOwnPropertyDescriptors(value);
       const keys = Reflect.ownKeys(descriptors);
       if (keys.some((key) => typeof key !== "string")) return fail("recall integrity rejects symbol keys");

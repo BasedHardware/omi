@@ -32,6 +32,11 @@ import {
 import { InvalidMcpCursorError } from "../mcp/cursor";
 import type { QaReferenceCodecs } from "./codecs";
 import { isSyntacticallyRedeemableCursor, type QaCursorAdapter } from "./cursor-bindings";
+import {
+  DEFAULT_READ_ITEM_GRANULARITY,
+  isReadItemGranularity,
+  type ReadItemGranularity,
+} from "../../core/retrieve/granularity";
 import { produceQaRenders } from "./renders";
 
 /**
@@ -74,11 +79,23 @@ export interface QaRecallReaderOptions {
    */
   readonly read_timestamp_epoch_seconds: number;
   readonly traceSink: (trace: ContentSafeRecallTrace) => void | Promise<void>;
+  /**
+   * Item granularity, stated explicitly per the coordinator's provisional
+   * ruling. Never inferred from the transport.
+   */
+  // domain-pending(DIV-DOMCORE-008)
+  readonly granularity?: ReadItemGranularity;
 }
 
 export interface QaRecallPageRequest {
   readonly limit: number;
   readonly cursor: string | null;
+  /**
+   * Stated granularity, or `null` for "caller did not ask" — which resolves to
+   * the reader's configured default, never to a transport-specific value.
+   */
+  // domain-pending(DIV-DOMCORE-008)
+  readonly granularity?: string | null;
 }
 
 interface QaCoherentMaterial {
@@ -126,6 +143,7 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
     db, principal, account_timezone: accountTimezone, limits, codecs,
     cursor: cursorAdapter, authorization, read_timestamp_epoch_seconds: readTimestamp, traceSink,
   } = options;
+  const granularity = options.granularity ?? DEFAULT_READ_ITEM_GRANULARITY;
 
   if (!Number.isSafeInteger(readTimestamp) || readTimestamp < 0) {
     throw new TypeError("QA recall reader requires an authoritative read timestamp");
@@ -143,7 +161,13 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
     verify: 0, issue: 0, visible: 0, item: 0, citation: 0, trace: 0, sink: 0,
   };
 
-  let material: QaCoherentMaterial | null = null;
+  /**
+   * One coherent material per granularity. Renders differ between granularities
+   * (different node sets produce different generation receipts), so they cannot
+   * share a cache entry. Keyed rather than rebuilt per request so repeated reads
+   * at one granularity stay deterministic and cheap.
+   */
+  const materialByGranularity = new Map<ReadItemGranularity, QaCoherentMaterial>();
 
   /**
    * Builds the coherent material once per refresh. Renders must be produced
@@ -154,7 +178,7 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
    * attempt so a revocation between the read and its revalidation is observed
    * rather than served from a stale snapshot.
    */
-  const buildMaterial = async (): Promise<QaCoherentMaterial> => {
+  const buildMaterial = async (granularity: ReadItemGranularity): Promise<QaCoherentMaterial> => {
     const load = loadCoherent();
     const snapshot = load.durable_snapshot;
 
@@ -165,7 +189,7 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
       authorization.resolveAuthorizationRequest(principal),
       () => ({ snapshot: structuredClone(snapshot), options: { account_timezone: accountTimezone } }),
     );
-    const renders = await produceQaRenders(projected);
+    const renders = await produceQaRenders(projected, granularity);
 
     // ── The visible-derivation rule ────────────────────────────────────────
     // Everything that can reach the wire is derived from the AUTHORIZED
@@ -199,7 +223,14 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
         computeApplicationSynthesizedProjectionGenerationDigest(projected, renders),
       durable_generation_digest: digestOf("durable", visibleGeneration),
       overlay_generation_digest: digestOf("overlay", { overlays: [] }),
-      declared_generation_digest: digestOf("declared", { declared_frontier: declaredFrontier }),
+      // Granularity is inside the generation receipt, so a cursor issued at one
+      // granularity cannot redeem at another. Without this, page two of a
+      // leaves-only read could be continued as an all-nodes read and silently
+      // return items page one could never have contained.
+      declared_generation_digest: digestOf("declared", {
+        declared_frontier: declaredFrontier,
+        granularity,
+      }),
       // Accepted and STM are reported as no-eligible, so their generation
       // receipts are derived from that declared state rather than from raw
       // internal counts, which would carry hidden-row cardinality to the wire.
@@ -321,13 +352,26 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
   return Object.freeze({
     refresh: async (): Promise<void> => {
       counters.refresh += 1;
-      material = await buildMaterial();
+      materialByGranularity.clear();
+      materialByGranularity.set(granularity, await buildMaterial(granularity));
     },
 
     readPage: async (request: QaRecallPageRequest): Promise<ApplicationSynthesizedPageResult> => {
-      const current = material;
-      if (current === null) {
+      if (materialByGranularity.size === 0) {
         throw new TypeError("QA recall reader was read before its first refresh");
+      }
+      // `null`/omitted means the caller did not ask, which resolves to the
+      // reader's configured default -- NOT to a transport-specific value. An
+      // unrecognised value is a client error, not a silent fallback.
+      const requested = request.granularity ?? null;
+      if (requested !== null && !isReadItemGranularity(requested)) {
+        throw new TypeError("QA recall reader received an unknown item granularity");
+      }
+      const effective: ReadItemGranularity = requested ?? granularity;
+      let current = materialByGranularity.get(effective);
+      if (current === undefined) {
+        current = await buildMaterial(effective);
+        materialByGranularity.set(effective, current);
       }
       // The ratified keyset grammar is checked here, in the invalid-cursor error
       // currency, BEFORE the core sees the bytes. The core raises a plain

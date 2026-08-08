@@ -74,12 +74,13 @@ describe("PROOF 1 — page-one / page-two pagination over the real localhost flo
       cursor = next.window.nextCursor;
     }
 
-    // 5 claims yield 12 renders (see blocked/BE-FLOW-item-granularity.md).
-    expect(collected).toHaveLength(12);
-    expect(new Set(collected).size).toBe(12);
+    // Default granularity is temporal_leaf per decisions/COORD-item-granularity.md,
+    // so 5 claims on 5 distinct local days yield exactly 5 items.
+    expect(collected).toHaveLength(5);
+    expect(new Set(collected).size).toBe(5);
 
     const whole = page(await mcpCall({ url: instance.url, token: instance.token, limit: 100 }));
-    expect(whole.items).toHaveLength(12);
+    expect(whole.items).toHaveLength(5);
     expect(whole.window.hasMore).toBe(false);
     expect(whole.window.nextCursor).toBeNull();
     // Paging must not reorder: the concatenation equals the single-page order.
@@ -479,7 +480,7 @@ describe("PROOF 6 — hidden-present and physically-absent are byte-identical", 
 
     // And the hidden record really was present in storage.
     const parsed = parseSynthesizedPageJson(hiddenText!)!;
-    expect(parsed.items.length).toBe(12);
+    expect(parsed.items.length).toBe(5);
     expect(hiddenText).not.toContain("qa-claim");
   });
 

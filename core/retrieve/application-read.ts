@@ -217,7 +217,24 @@ const detachPlainJsonStrict = (input: unknown): PlainJson => {
 
     const array = Array.isArray(value);
     const prototype = Object.getPrototypeOf(value);
-    if (array ? prototype !== Array.prototype : prototype !== Object.prototype) {
+    // THE PLAIN-DATA PROTOTYPE RULE (core-wide, see core/retrieve/plain-json.ts):
+    // a plain-data record may carry `Object.prototype` OR a null prototype;
+    // an array must carry `Array.prototype`.
+    //
+    // This module previously accepted only `Object.prototype` while
+    // `plain-json.ts` -- and therefore `authorization-boundary.ts` -- accepted
+    // null. Drivers legitimately emit null-prototype records
+    // (`drivers/sqlite/application-recall-read.ts` builds them with
+    // `Object.create(null)` on purpose), so the authorization layer admitted a
+    // record this layer then refused. The failure surfaced here, at the read,
+    // and read like a read fault rather than the contract mismatch it was.
+    //
+    // Accepting null is the safe direction, not the lax one: a null-prototype
+    // object has strictly fewer inherited members, `__proto__` becomes an
+    // ordinary own key that the exact-shape validators reject, and the copy
+    // below writes through `defineDataProperty` (Object.defineProperty), which
+    // defines an own data property and never triggers a `__proto__` setter.
+    if (array ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) {
       return fail("rejects non-plain prototypes");
     }
     const descriptors = Object.getOwnPropertyDescriptors(value);

@@ -37,7 +37,17 @@ const copyPlainJson = (value: unknown, active: WeakSet<object>): unknown => {
     if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) throw new TypeError("plain JSON requires enumerable own data properties");
     const copied = copyPlainJson(descriptor.value, active);
     if (isArray) output[Number(key)] = copied;
-    else output[key] = copied;
+    // Define, never assign. A null-prototype source can legitimately carry
+    // `__proto__` as an ordinary own key (drivers build records with
+    // `Object.create(null)`), and plain assignment would invoke the inherited
+    // `__proto__` setter on the destination: the field would silently vanish
+    // from the copy AND the copy's prototype would be replaced by attacker-
+    // supplied data. `Object.defineProperty` makes it an own data property like
+    // any other, so the exact-shape validators downstream can reject it
+    // explicitly instead of never seeing it.
+    else Object.defineProperty(output, key, {
+      value: copied, enumerable: true, writable: true, configurable: true,
+    });
   }
   active.delete(value);
   return output;

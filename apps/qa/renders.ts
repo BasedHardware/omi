@@ -3,6 +3,11 @@
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMX-005)
 import type { ApplicationGrantProjectedTreeInputSnapshot } from "../../core/retrieve/authorization-boundary";
+import {
+  DEFAULT_READ_ITEM_GRANULARITY,
+  selectNodesForGranularity,
+  type ReadItemGranularity,
+} from "../../core/retrieve/granularity";
 import { renderStructuralTree, type RenderNode } from "../../core/retrieve/render";
 import { buildDeterministicAnchors } from "../../core/retrieve/tree";
 
@@ -61,8 +66,17 @@ const summaryFor = (input: RenderRequestInput): string => {
  */
 export const produceQaRenders = async (
   projected: ApplicationGrantProjectedTreeInputSnapshot,
+  granularity: ReadItemGranularity = DEFAULT_READ_ITEM_GRANULARITY,
 ): Promise<readonly RenderNode[]> => {
   const tree = buildDeterministicAnchors(projected);
+  // Render the WHOLE tree, then select. Rollup renders depend on their children
+  // (`child_render_hashes`), so rendering a pruned tree would either fail
+  // provenance validation or silently change a surviving node's render hash --
+  // which would make the two granularities disagree about the bytes of an item
+  // they both contain. Selection is a projection concern, not a render concern.
+  const selected = new Set(
+    selectNodesForGranularity(tree.nodes, granularity).map((node) => node.node_id),
+  );
   const renders = await renderStructuralTree(tree, projected, {
     render: async (request) => {
       const input = request.input as RenderRequestInput;
@@ -77,7 +91,8 @@ export const produceQaRenders = async (
   // render has no synthesized projection to publish, and the projection boundary
   // would deny it; drop it here rather than let it surface as an opaque failure.
   return Object.freeze(renders.filter((render) =>
-    render.status === "ready"
+    selected.has(render.node_id)
+    && render.status === "ready"
     && render.render_hash !== null
     && render.summary_text !== null
     && render.summary_text.length > 0

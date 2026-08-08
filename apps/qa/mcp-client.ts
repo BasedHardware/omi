@@ -23,6 +23,9 @@ export interface McpCallOptions {
   readonly toolName?: string;
   readonly cursor?: string | null;
   readonly limit?: number;
+  /** Explicit item granularity; omitted means the server's stated default. */
+  // domain-pending(DIV-DOMCORE-008)
+  readonly granularity?: "temporal_leaf" | "all_nodes";
   /** Overrides applied last; use to omit or corrupt headers in negative tests. */
   readonly headerOverrides?: Readonly<Record<string, string | undefined>>;
 }
@@ -44,6 +47,7 @@ export const mcpCall = async (options: McpCallOptions): Promise<McpCallResult> =
   const args: Record<string, unknown> = {};
   if (options.cursor !== undefined && options.cursor !== null) args.cursor = options.cursor;
   if (options.limit !== undefined) args.limit = options.limit;
+  if (options.granularity !== undefined) args.granularity = options.granularity;
 
   const params: Record<string, unknown> = method === "tools/call"
     ? {

@@ -57,6 +57,9 @@ export interface QaServerOptions {
    * asserted to exist and never observed refusing.
    */
   readonly onTraceEmitted?: () => void;
+  /** Default item granularity for this server. Explicit, never transport-implied. */
+  // domain-pending(DIV-DOMCORE-008)
+  readonly granularity?: "temporal_leaf" | "all_nodes";
 }
 
 export interface QaServer {
@@ -142,6 +145,7 @@ export const startQaServer = async (options: QaServerOptions = {}): Promise<QaSe
       }),
     },
     read_timestamp_epoch_seconds: readTimestamp,
+    ...(options.granularity === undefined ? {} : { granularity: options.granularity }),
     traceSink: (trace) => {
       traces.push(trace);
       options.onTraceEmitted?.();

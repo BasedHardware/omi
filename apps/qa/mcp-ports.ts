@@ -126,6 +126,10 @@ export const createQaMcpPorts = (options: QaMcpPortsOptions): QaMcpPortsHandle =
         const result = await reader.readPage({
           limit: input.limit,
           cursor: input.cursor,
+          // Explicit, per the coordinator's ruling. `null` means "caller did not
+          // ask", which the reader resolves to the shared default -- it does NOT
+          // mean "MCP, therefore hierarchy".
+          granularity: input.granularity,
         });
         return { canonical_json: result.canonical_json };
       } catch (error) {
