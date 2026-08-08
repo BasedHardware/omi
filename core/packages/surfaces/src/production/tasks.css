@@ -88,6 +88,9 @@
 
 .task-card.is-completed { background: var(--surface-elevated); }
 .task-card.is-selected { border-color: var(--focus); box-shadow: 0 0 0 var(--focus-ring-width) var(--focus); }
+.task-card.is-indent-1 { margin-inline-start: var(--space-lg); }
+.task-card.is-indent-2 { margin-inline-start: calc(var(--space-lg) + var(--space-lg)); }
+.task-card.is-indent-3 { margin-inline-start: calc(var(--space-lg) + var(--space-lg) + var(--space-lg)); }
 .task-card-main { display: flex; min-width: 0; align-items: flex-start; gap: var(--space-sm); }
 .task-check { flex: 0 0 var(--min-tap-target); width: var(--min-tap-target); padding: 0; }
 .task-copy { min-width: 0; }
@@ -127,6 +130,9 @@ html[data-platform="mobile"] .tasks-create textarea { grid-column: 1 / -1; }
 html[data-platform="mobile"] .tasks-create label { grid-column: 1; }
 html[data-platform="mobile"] .tasks-shortcuts { display: none; }
 html[data-platform="mobile"] .task-card { grid-template-columns: minmax(0, 1fr); padding: var(--space-md); }
+html[data-platform="mobile"] .task-card.is-indent-1 { margin-inline-start: var(--space-sm); }
+html[data-platform="mobile"] .task-card.is-indent-2 { margin-inline-start: calc(var(--space-sm) + var(--space-sm)); }
+html[data-platform="mobile"] .task-card.is-indent-3 { margin-inline-start: calc(var(--space-sm) + var(--space-sm) + var(--space-sm)); }
 html[data-platform="mobile"] .task-actions { justify-content: flex-start; }
 html[data-platform="mobile"] .tasks-mobile-fab {
   position: fixed;

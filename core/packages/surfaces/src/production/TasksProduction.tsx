@@ -7,7 +7,7 @@ import { ProductionChrome } from "./ProductionChrome.js";
 import "./tasks.css";
 
 type Translate = <K extends MessageKey>(key: K, vars?: MessageVariables<K>) => string;
-type RunOperation = (operation: () => Promise<void>) => Promise<void>;
+type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type GroupKey = "today" | "tomorrow" | "later";
 const GROUP_KEYS: Record<GroupKey, MessageKey> = {
   today: "tasks.today",
@@ -103,8 +103,14 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
     }
   };
 
+  const indentLevel = Math.max(0, Math.min(3, task.indentLevel));
+  const requestDelete = (): void => {
+    if (!globalThis.confirm(translate("tasks.deleteConfirm"))) return;
+    void run(() => store.delete(task.id));
+  };
+
   return (
-    <article className={`task-card${task.completed ? " is-completed" : ""}${selected ? " is-selected" : ""}`} data-task-id={task.id} onClick={() => onSelect(task.id)}>
+    <article className={`task-card is-indent-${indentLevel}${task.completed ? " is-completed" : ""}${selected ? " is-selected" : ""}`} data-task-id={task.id} data-indent-level={indentLevel} onClick={() => onSelect(task.id)}>
       <div className="task-card-main">
         <button
           type="button"
@@ -136,7 +142,7 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
         {isLong && <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
           {expanded ? translate("content.showLess") : translate("content.showMore")}
         </button>}
-        <button type="button" onClick={() => void run(() => store.delete(task.id))} aria-label={translate("common.delete")}>
+        <button type="button" onClick={requestDelete} aria-label={translate("common.delete")}>
           {translate("common.delete")}
         </button>
       </div>
@@ -175,9 +181,11 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     try {
       await operation();
       await reload();
+      return true;
     } catch {
       setOperationError(translate("lifecycle.error"));
       setStatus(store.status());
+      return false;
     }
   }, [reload, store, translate]);
 
@@ -225,14 +233,17 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     return groups;
   }, [dayFormatter, now, rows]);
 
-  const add = (): void => {
+  const add = async (): Promise<void> => {
     const description = draft.trim();
     if (!description) return;
     const dueAt = dueDraft ? parseDateInput(dueDraft) : undefined;
     if (dueDraft && dueAt === undefined) return;
-    setDraft("");
-    setDueDraft("");
-    void run(() => store.create(description, dueAt));
+    const submittedDueDraft = dueDraft;
+    const succeeded = await run(() => store.create(description, dueAt));
+    if (succeeded) {
+      setDraft((current) => current.trim() === description ? "" : current);
+      setDueDraft((current) => current === submittedDueDraft ? "" : current);
+    }
   };
 
   const notice = phaseLabel(status, translate);
@@ -242,7 +253,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       const target = event.target;
-      if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (target instanceof HTMLElement && target.closest("input, textarea, select, button, a, [contenteditable='true']")) return;
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key.toLowerCase() === "n") {
         event.preventDefault();
@@ -252,6 +263,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       if (!selectedTask) return;
       if (modifier && event.key.toLowerCase() === "d") {
         event.preventDefault();
+        if (!globalThis.confirm(translate("tasks.deleteConfirm"))) return;
         void run(() => store.delete(selectedTask.id));
         setSelectedTaskId(null);
         return;
@@ -266,7 +278,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [run, selectedTask, store]);
+  }, [run, selectedTask, store, translate]);
 
   return (
     <main className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
@@ -289,7 +301,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
           <span>{translate("tasks.dueDateLabel")}</span>
           <input type="date" value={dueDraft} onChange={(event) => setDueDraft(event.target.value)} aria-label={translate("tasks.dueDateLabel")} />
         </label>
-        <button type="button" onClick={add} disabled={!draft.trim()}>{translate("tasks.add")}</button>
+        <button type="button" onClick={() => void add()} disabled={!draft.trim()}>{translate("tasks.add")}</button>
       </section>
       <div className="tasks-shortcuts" aria-label={translate("tasks.shortcuts")}>
         <span>{translate("tasks.shortcuts")}</span>
