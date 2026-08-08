@@ -59,6 +59,7 @@ const QA_SEED_TABLES = Object.freeze([
   "placement_artifacts",
   "derivation_attempts",
   "derivation_commits",
+  // storage-provenance-ok(SQL table name in the QA fixture writer; the seeder populates storage and is never on the read path, so nothing here can reach a wire value)
   "graph_heads",
   "claim_liveness_fences",
   "stm_items",
@@ -419,6 +420,7 @@ export const seedQaSnapshot = (db: Database, options: SeedQaSnapshotOptions): vo
       headSequence = sequence;
     }
 
+    // storage-provenance-ok(SQL table name in the QA fixture writer; this INSERT creates fixture storage and is never on the read path)
     db.query("INSERT INTO graph_heads VALUES (?, ?, ?)").run(
       ownerAccountId,
       headCommitId,

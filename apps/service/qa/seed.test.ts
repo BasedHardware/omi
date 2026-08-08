@@ -78,19 +78,23 @@ const load = (db: Database, accountTimezone = TIMEZONE) => createSqliteQaRecallL
 const GENERIC = new Set(["subject:generic", "sensitivity:generic", "capture:generic"]);
 
 describe("seedQaSnapshot", () => {
+  // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
   test("loader returns a non-empty durable_snapshot of application-visible claims", () => {
     // red-proof: set claim.scope.locality to "source_local" (or lifecycle/placement non-canonical) and the visibility assertions fail; omit claim_revisions inserts and durable_snapshot.claims is empty
     const db = openDb();
     seedQaSnapshot(db, options({ memory_count: 3 }));
     const result = load(db)();
 
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(result.durable_snapshot.claims.length).toBe(3);
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(result.durable_snapshot.claims.map((item) => item.revision_id)).toEqual([
       "claim:qa:000000",
       "claim:qa:000001",
       "claim:qa:000002",
     ]);
 
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     for (const item of result.durable_snapshot.claims) {
       expect(item.placement_status).toBe("canonical");
       expect(item.claim.lifecycle).toBe("canonical");
@@ -99,15 +103,20 @@ describe("seedQaSnapshot", () => {
       expect(item.claim.evidence_refs.length).toBeGreaterThan(0);
     }
 
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(result.durable_snapshot.evidence?.length).toBe(3);
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(result.durable_snapshot.events?.length).toBe(3);
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     for (const claim of result.durable_snapshot.claims) {
       for (const evidenceId of claim.claim.evidence_refs) {
+        // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
         const evidenceRows = (result.durable_snapshot.evidence ?? []).filter(
           (row) => row.evidence.evidence_id === evidenceId,
         );
         expect(evidenceRows).toHaveLength(1);
         const evidence = evidenceRows[0]!.evidence;
+        // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
         const events = (result.durable_snapshot.events ?? []).filter(
           (row) => row.revision_id === evidence.event_revision_id,
         );
@@ -127,6 +136,7 @@ describe("seedQaSnapshot", () => {
     seedQaSnapshot(first, options({ memory_count: 4 }));
     seedQaSnapshot(second, options({ memory_count: 4 }));
     expect(hashDatabaseContent(second)).toBe(hashDatabaseContent(first));
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(load(first)().coherent_snapshot_digest).toBe(load(second)().coherent_snapshot_digest);
   });
 
@@ -139,9 +149,11 @@ describe("seedQaSnapshot", () => {
     );
     seedQaSnapshot(db, options({ memory_count: 2, account_timezone: "UTC" }));
     const result = load(db, "UTC")();
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(result.durable_snapshot.claims[0]!.claim.temporal_scope.observed_at).toBe(
       QA_FIXTURE_TIME_ANCHOR_UTC,
     );
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(result.durable_snapshot.claims[0]!.claim.temporal_scope.valid_time?.derivation.timezone)
       .toBe("UTC");
     expect(result.account_timezone).toBe("UTC");
@@ -172,6 +184,7 @@ describe("seedQaSnapshot", () => {
     ).toBe(0);
     seedQaSnapshot(cycled, options({ memory_count: 5 }));
     expect(hashDatabaseContent(cycled)).toBe(freshDigest);
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(load(cycled)().durable_snapshot.claims).toHaveLength(5);
   });
 
@@ -179,9 +192,52 @@ describe("seedQaSnapshot", () => {
     // red-proof: hard-code a fixed INSERT count ignoring memory_count and this equality fails
     const db = openDb();
     seedQaSnapshot(db, options({ memory_count: 0 }));
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(load(db)().durable_snapshot.claims).toEqual([]);
 
     seedQaSnapshot(db, options({ memory_count: 7 }));
+    // storage-provenance-ok(test assertion on the loader's own output; a test that inspects storage state proves the seeder and loader agree, and emits nothing to a wire)
     expect(load(db)().durable_snapshot.claims).toHaveLength(7);
+  });
+});
+
+describe("the seeder writes no short-term overlay material", () => {
+  test("stm_items is empty after seeding, and after reset+reseed", () => {
+    // This is what warrants app-facing.ts DECLARING stmCoverageState
+    // "no_eligible" instead of deriving it from a row count.
+    //
+    // That distinction is a security property, not a style preference. The
+    // loader's eligible-STM count filters only on owner and consumption: it
+    // applies no policy-label filter, and STM rows hold PROVISIONAL claims,
+    // which can never enter this projection's authorized closure (the closure
+    // requires canonical placement, canonical lifecycle, durable locality and
+    // generic policy labels). A coverage state computed from that count is
+    // therefore 100% storage-scoped and 0% authorization-scoped, and it lands
+    // in a wire-visible completeness field. Declaring the state from a property
+    // of the seeder cannot vary with rows the reader may not see.
+    //
+    // red-proof: make the seeder insert one stm_items row, or drop "stm_items"
+    // from QA_SEED_TABLES so a foreign row survives reset, and this fails -
+    // which is precisely when the declaration would stop being warranted.
+    const db = new Database(":memory:");
+    const countStm = (): number =>
+      (db.query("SELECT COUNT(*) AS total FROM stm_items").get() as { total: number }).total;
+
+    seedQaSnapshot(db, {
+      owner_account_id: "stm-check-owner",
+      memory_count: 4,
+      account_timezone: "America/Los_Angeles",
+    });
+    expect(countStm()).toBe(0);
+
+    resetQaSnapshot(db);
+    expect(countStm()).toBe(0);
+
+    seedQaSnapshot(db, {
+      owner_account_id: "stm-check-owner",
+      memory_count: 4,
+      account_timezone: "America/Los_Angeles",
+    });
+    expect(countStm()).toBe(0);
   });
 });

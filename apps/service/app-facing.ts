@@ -12,7 +12,7 @@ import {
   type DevPrincipal,
 } from "./auth/dev-token";
 import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
-import { DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY } from "./composition/granularity";
+import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
 import { createServedCounter, type ServedCounter } from "./observability/served-count";
 import { QA_FIXTURE_TIME_ANCHOR_UTC, resetQaSnapshot, seedQaSnapshot } from "./qa/seed";
 import { registerMemoryRoutes } from "./routes/memories";
@@ -120,7 +120,22 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       // running. The value is the app-facing default, but the read is told
       // which granularity it is serving rather than inferring it.
       // domain-pending(DIV-DOMCORE-008)
-      granularity: DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY,
+      granularity: DEFAULT_READ_ITEM_GRANULARITY,
+      // DECLARED coverage, not counted at request time.
+      //
+      // This service owns its entire fixture: `reseed()` runs on construction
+      // and on every /v1/qa/reset, `resetQaSnapshot` clears `stm_items`, and the
+      // seeder never inserts an STM row. So "no eligible short-term material" is
+      // true by construction here, and `app-facing.test.ts` asserts that
+      // property of the seeder rather than trusting this comment.
+      //
+      // The distinction matters: deriving these from a row count would make a
+      // wire-visible completeness field vary with rows outside the authorized
+      // closure. A static declaration cannot.
+      // domain-pending(DIV-DOMCORE-006)
+      acceptedCoverageState: "no_eligible",
+      // domain-pending(DIV-DOMCORE-006)
+      stmCoverageState: "no_eligible",
       readTimestampEpochSeconds: anchorEpochSeconds,
       // Opaque references only, and this server has no reason to retain even those.
       traceSink: () => {},

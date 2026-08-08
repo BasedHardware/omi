@@ -39,11 +39,15 @@ import {
   type McpCursorSigningKeyset,
 } from "../../mcp/cursor";
 import { createReaderScopedOpaqueCodecs } from "../codecs/opaque-refs";
+// The canonical, transport-neutral granularity module. BE-FLOW landed it in
+// core/ while this lane had a local copy; there must be exactly one selector or
+// the two doors drift, which is the entire point of the ruling. The local copy
+// is deleted.
 import {
-  DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY,
-  selectRendersForGranularity,
-  type MemoryReadGranularity,
-} from "./granularity";
+  DEFAULT_READ_ITEM_GRANULARITY,
+  selectNodesForGranularity,
+  type ReadItemGranularity,
+} from "../../../core/retrieve/granularity";
 import { createQaDeterministicSynthesizer } from "./qa-synthesizer";
 
 /**
@@ -106,28 +110,15 @@ const canonicalJson = (value: unknown): string => {
 export interface CoherentQaLoad {
   readonly owner_account_id: string;
   readonly account_timezone: string;
+  /**
+   * The durable graph snapshot. This is the ONE storage-scoped value this
+   * composition consumes, and it is consumed for exactly one purpose: it is the
+   * input handed to `readAfterApplicationAuthorization`, which applies the
+   * policy closure and returns the authorized projection. Nothing derived from
+   * it reaches the wire un-projected.
+   */
+  // storage-provenance-ok(the durable snapshot is the input to the authorization boundary; every wire value is derived from the projection it returns, never from this)
   readonly durable_snapshot: GraphSnapshot;
-  readonly stm_rows: readonly { readonly id: string }[];
-  readonly accepted_state: {
-    readonly state: AcceptedCoverageState;
-    readonly declared_frontier: string | null;
-    readonly searched_frontier: string | null;
-    readonly candidates: readonly unknown[];
-  };
-  readonly internal_coverage: {
-    readonly durable: {
-      readonly graph_generation: string | number;
-      readonly ledger_head_digest: string;
-    };
-    readonly stm: {
-      readonly eligible_items: number;
-      readonly selected_items: number;
-      readonly has_more: boolean;
-      readonly bounds_reached: readonly ("item_limit" | "byte_limit")[];
-    };
-    readonly accepted: { readonly state: AcceptedCoverageState };
-  };
-  readonly coherent_snapshot_digest: string;
 }
 
 export interface MemoryReadCompositionConfig {
@@ -151,7 +142,25 @@ export interface MemoryReadCompositionConfig {
    * granularity when omitted.
    */
   // domain-pending(DIV-DOMCORE-008)
-  readonly granularity?: MemoryReadGranularity;
+  readonly granularity?: ReadItemGranularity;
+  /**
+   * DECLARED coverage states for the sources this read does not search.
+   *
+   * They are configuration, never a storage count. That is the whole point: a
+   * coverage state computed from row counts varies with rows the reader is not
+   * authorized to see, which republishes their existence in the completeness
+   * envelope - the same oracle class as the frontier and cursor bindings, in a
+   * field the item-level byte-identity test does not reach.
+   *
+   * Both default to the conservative `bypassed`: "we did not search it" is
+   * always true here and reveals nothing. A caller may declare `no_eligible`
+   * ONLY when it can establish emptiness from something other than counting
+   * rows at request time - for instance because it seeded the corpus itself.
+   */
+  // domain-pending(DIV-DOMCORE-006)
+  readonly acceptedCoverageState?: AcceptedCoverageState;
+  // domain-pending(DIV-DOMCORE-006)
+  readonly stmCoverageState?: StmCoverageState;
 }
 
 /**
@@ -174,7 +183,8 @@ export interface MemoryReadCompositionConfig {
 // domain-pending(DIV-DOMCORE-006)
 // domain-pending(DIV-DOMCORE-008)
 const buildCoverage = (
-  load: CoherentQaLoad,
+  declaredAccepted: AcceptedCoverageState,
+  declaredStm: StmCoverageState,
   authorizedGraphGeneration: string,
   encodeFrontier: (internalFrontier: string) => string,
 ): RecallCompletenessInput => {
@@ -191,35 +201,24 @@ const buildCoverage = (
   // items themselves are correctly filtered. A test caught exactly that.
   const declaredFrontier = encodeFrontier(`durable:${authorizedGraphGeneration}`);
 
-  // Accepted synthesis is not performed here. Only a declared no-eligible state
-  // survives as no_eligible; every other state becomes an explicit limitation.
-  const acceptedState: AcceptedCoverageState =
-    load.internal_coverage.accepted.state === "no_eligible" ? "no_eligible" : "bypassed";
-
-  // The overlay is never searched by this path. Silence about a non-empty
-  // overlay would be a false completeness claim.
-  const stmState: StmCoverageState =
-    load.internal_coverage.stm.eligible_items === 0 ? "no_eligible" : "bypassed";
-
+  // Coverage states are DECLARED by the caller, never computed here from
+  // storage. This composition previously derived the STM state from the
+  // loader's eligible-row count, which was an oracle: that count filters only
+  // on owner and consumption, applies NO policy-label filter, and counts
+  // PROVISIONAL claims - none of which can ever enter this projection's
+  // authorized closure, since the closure requires canonical placement,
+  // canonical lifecycle, durable locality and generic policy labels. So the
+  // count was 100% storage-scoped and 0% authorization-scoped, and it moved a
+  // wire-visible completeness field.
   return Object.freeze({
     declared_frontier: declaredFrontier,
-    accepted: Object.freeze({ state: acceptedState, searched_frontier: null }),
-    stm: Object.freeze({ state: stmState, searched_frontier: null }),
+    accepted: Object.freeze({ state: declaredAccepted, searched_frontier: null }),
+    stm: Object.freeze({ state: declaredStm, searched_frontier: null }),
     projection_freshness: "fresh" as const,
     intentional_bounds: Object.freeze([]),
   });
 };
 
-/**
- * Generation receipts.
- *
- * EVERY value here is derived from the AUTHORIZED projection or from coverage
- * STATE that is already visible on the wire. None of it is derived from raw
- * ledger position, row counts, or row identities, because all of those count
- * material this reader may not see - and these digests reach the wire inside
- * the signed cursor. Binding unseeable state into a cursor is an authorization
- * oracle even when the item list is filtered correctly.
- */
 const buildGenerations = (
   authorizedGraphGeneration: string,
   authorizedContentDigest: string,
@@ -335,6 +334,19 @@ const attestationToCursorBindings = (
   read_mode_digest: attestation.read_mode_digest,
 });
 
+/**
+ * Only grounded, current renders may be served. An empty, failed or stale render
+ * has no synthesized projection to publish - and presenting one as absence would
+ * be a lie.
+ */
+const isServableRender = (render: RenderNode): boolean =>
+  render.status === "ready"
+  && render.render_hash !== null
+  && render.summary_text !== null
+  && render.summary_text.length > 0
+  && !render.stale
+  && render.citations.length > 0;
+
 export interface PreparedMemoryRead {
   readonly ports: ApplicationReadPorts;
   /** How many produced renders this snapshot is willing to serve, before paging. */
@@ -385,11 +397,15 @@ export const prepareMemoryRead = async (
 
   const preRenderLoad = config.loadCoherent();
   const preRenderProjection = readAfterApplicationAuthorization(authorization, () => ({
+    // storage-provenance-ok(handed straight to readAfterApplicationAuthorization as its input; the render set is built from the PROJECTION it returns, and no value from this snapshot reaches the wire un-projected)
     snapshot: toStandardPrototypeJson(preRenderLoad.durable_snapshot),
     options: { account_timezone: preRenderLoad.account_timezone },
   }));
 
-  const granularity = config.granularity ?? DEFAULT_APP_FACING_MEMORY_READ_GRANULARITY;
+  const granularity = config.granularity ?? DEFAULT_READ_ITEM_GRANULARITY;
+  // Conservative defaults: "we did not search it" is always true and leaks nothing.
+  const declaredAcceptedState: AcceptedCoverageState = config.acceptedCoverageState ?? "bypassed";
+  const declaredStmState: StmCoverageState = config.stmCoverageState ?? "bypassed";
   const tree = buildDeterministicAnchors(preRenderProjection);
   const allRenders = await renderStructuralTree(
     tree,
@@ -403,7 +419,15 @@ export const prepareMemoryRead = async (
       schema_version: RENDER_SCHEMA_VERSION,
     },
   );
-  const servedRenders = selectRendersForGranularity(allRenders, tree, granularity);
+  const selectedNodeIds = new Set(
+    selectNodesForGranularity(tree.nodes, granularity).map((node) => node.node_id),
+  );
+  const servedRenders = Object.freeze(
+    allRenders
+      .filter((render) => selectedNodeIds.has(render.node_id) && isServableRender(render))
+      .slice()
+      .sort((left, right) => compareStrings(left.node_id, right.node_id)),
+  );
   const synthesizedProjectionGenerationDigest =
     computeApplicationSynthesizedProjectionGenerationDigest(preRenderProjection, servedRenders);
 
@@ -412,6 +436,7 @@ export const prepareMemoryRead = async (
       authorization_request: authorization,
       load_coherent: () => {
         const load = config.loadCoherent();
+        // storage-provenance-ok(handed straight to readAfterApplicationAuthorization; every wire coordinate below is derived from projected.graph_generation / projected.projected_content_digest, never from this snapshot)
         const snapshot = toStandardPrototypeJson(load.durable_snapshot);
 
         // Project HERE, before deriving any coordinate the wire will see.
@@ -433,7 +458,12 @@ export const prepareMemoryRead = async (
         }));
         const authorizedGraphGeneration = String(projected.graph_generation);
         const authorizedContentDigest = String(projected.projected_content_digest);
-        const coverage = buildCoverage(load, authorizedGraphGeneration, encodeFrontier);
+        const coverage = buildCoverage(
+          declaredAcceptedState,
+          declaredStmState,
+          authorizedGraphGeneration,
+          encodeFrontier,
+        );
 
         return {
           projection_load: {
