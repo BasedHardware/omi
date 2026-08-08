@@ -82,5 +82,125 @@
       "stages": {"eligible": [], "selected": [], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
     },
     "safe": false
+  },
+  {
+    "name": "no eligible candidates is terminal at eligible",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:no-eligible", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "no_eligible_candidates", "latencyMs": 1,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": [], "selected": [], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": true
+  },
+  {
+    "name": "no selection preserves eligible candidates only",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:no-selection", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "no_selection", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": [], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": true
+  },
+  {
+    "name": "hydration unavailable stops after selection",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:hydrate", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "hydration_unavailable", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": ["node-v1:a"], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": true
+  },
+  {
+    "name": "policy filtered stops after hydration",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:policy", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "policy_filtered", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": ["node-v1:a"], "hydrated": ["node-v1:a"], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": true
+  },
+  {
+    "name": "ungrounded has policy eligible refs but no grounded refs",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:ungrounded", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "ungrounded", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": ["node-v1:a"], "hydrated": ["node-v1:a"], "policyEligible": ["node-v1:a"], "cited": [], "grounded": []}
+    },
+    "safe": true
+  },
+  {
+    "name": "degraded requires nonfresh projection and no grounding",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:degraded", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "stale", "outcome": "degraded", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": [], "selected": [], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": true
+  },
+  {
+    "name": "no selection cannot include selected refs",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:bad-selection", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "no_selection", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": ["node-v1:a"], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": false
+  },
+  {
+    "name": "hydration unavailable cannot include hydrated refs",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:bad-hydration", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "hydration_unavailable", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": ["node-v1:a"], "hydrated": ["node-v1:a"], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": false
+  },
+  {
+    "name": "policy filtered cannot include policy eligible refs",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:bad-policy", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "policy_filtered", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": ["node-v1:a"], "hydrated": ["node-v1:a"], "policyEligible": ["node-v1:a"], "cited": [], "grounded": []}
+    },
+    "safe": false
+  },
+  {
+    "name": "ungrounded requires policy eligible refs",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:bad-ungrounded", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "ungrounded", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": ["node-v1:a"], "hydrated": ["node-v1:a"], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": false
+  },
+  {
+    "name": "degraded cannot claim fresh projection",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:bad-degraded", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "degraded", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": [], "selected": [], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": false
+  },
+  {
+    "name": "no eligible outcome cannot retain eligible refs",
+    "trace": {
+      "version": "recall-trace-v1", "traceRef": "trace-v1:bad-eligible", "strategyVersion": "strategy-v1",
+      "projectionFreshness": "fresh", "outcome": "no_eligible_candidates", "latencyMs": 2,
+      "tokenCounts": {"input": 1, "output": 0},
+      "stages": {"eligible": ["node-v1:a"], "selected": [], "hydrated": [], "policyEligible": [], "cited": [], "grounded": []}
+    },
+    "safe": false
   }
 ]

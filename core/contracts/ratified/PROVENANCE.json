@@ -23,13 +23,13 @@
   "inputs": [
     {
       "path": "fixtures/clean-consumer/conformance.mjs",
-      "sha256": "7267cb4dcc5e286a1ad107360f19cb73ab9e4855645bb133ed94a144e9b067f1",
-      "bytes": 452
+      "sha256": "ef0da7d3ba6a4e96e515c06a2b2b6ebb0fc1625157c81682b999fb4c1f6df304",
+      "bytes": 1062
     },
     {
       "path": "fixtures/clean-consumer/consumer.ts",
-      "sha256": "575814e8b9627575806fb5a94c41a215594462adbfb9afcb732ef4cf1ad7134b",
-      "bytes": 5120
+      "sha256": "12714c70e5053898c5d522e7129111417eb72a4ea532c4e201e82cfc06ece3fd",
+      "bytes": 6551
     },
     {
       "path": "fixtures/clean-consumer/tsconfig.json",
@@ -48,8 +48,8 @@
     },
     {
       "path": "fixtures/page-conformance.json",
-      "sha256": "8570300b00490ea07d7c999f67941362d88927fe728c8b7de76bce81ad69f604",
-      "bytes": 3031
+      "sha256": "aece9a2bb2175ca8682ce6503486e7f4713f49ac1ebcb9f0dd9dbb35abe2d866",
+      "bytes": 4871
     },
     {
       "path": "fixtures/read-page-windows.json",
@@ -58,13 +58,13 @@
     },
     {
       "path": "fixtures/recall-completeness.json",
-      "sha256": "11251f8c567ae16b04d64426cbc7e87a5e9ada0090c133297b63c020a752aa74",
-      "bytes": 4960
+      "sha256": "3ff274472a297a51246689363162c79e1667188181b4b5f097c4aa2c93a73b28",
+      "bytes": 5468
     },
     {
       "path": "fixtures/recall-trace.json",
-      "sha256": "344f666fa69dbd06bff13688d65a98278213b39be9a3776b40fdd2da56af7eea",
-      "bytes": 3495
+      "sha256": "7c8df186eb74cfcc41c36125b15dff308602a74d7faa4d321387bab9f4ad2696",
+      "bytes": 9312
     },
     {
       "path": "package.json",
@@ -78,8 +78,8 @@
     },
     {
       "path": "README.md",
-      "sha256": "aa4c2e92ec7db876d26036bc079ff19d7dc9e3946816a919038d2514277ed00b",
-      "bytes": 2423
+      "sha256": "49e4012f38f1faca8d411d8b3bf0759b457d4f0c5804d084784919af352962f1",
+      "bytes": 2702
     },
     {
       "path": "scripts/check-domain-markers.mjs",
@@ -113,13 +113,13 @@
     },
     {
       "path": "src/projections/synthesized.ts",
-      "sha256": "ed2d27ff6d286891d8b0251fd54410c2cdaec45cfd223de61686f682e2ccc89e",
-      "bytes": 12564
+      "sha256": "ba7f41703eaf5197993147f4313908bbf64d254e2853f61be6a316f923800a37",
+      "bytes": 13344
     },
     {
       "path": "src/recall/trace.ts",
-      "sha256": "92a167ebe9cb357c190eba0def6f15983143b6700387f78ed19dfdb5b56349e7",
-      "bytes": 4204
+      "sha256": "60b6cfcd6811bf4789e2d1808e29c497947e1c8f402eeb29db00767c31e30b0f",
+      "bytes": 6235
     },
     {
       "path": "test/contracts.test.mjs",
@@ -137,5 +137,5 @@
       "bytes": 133
     }
   ],
-  "sourceDigest": "3fadfc26e9facef4ab06d6388a5056c4c943f376c88517102b0be5e3e0fa51b1"
+  "sourceDigest": "6cf73dc7831b74d4c473d7f36c8a1a4d04189f46a7c438936a3019cefcfe5a8d"
 }

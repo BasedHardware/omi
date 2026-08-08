@@ -183,5 +183,23 @@
       "absence": {"kind": "query_gap"}
     },
     "honest": false
+  },
+  {
+    "name": "duplicate completeness reasons rejected",
+    "page": {
+      "items": [],
+      "completeness": {
+        "version": "recall-completeness-v1",
+        "status": "partial",
+        "reasons": ["source_bound", "source_bound"],
+        "frontiers": {
+          "declaredFrontier": "frontier-v1:declared",
+          "newestIncludedStmFrontier": null,
+          "missingStmFrontierReason": "source_bound"
+        }
+      },
+      "absence": {"kind": "query_gap"}
+    },
+    "honest": false
   }
 ]

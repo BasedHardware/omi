@@ -78,6 +78,18 @@ if (!hasSafeRecallTrace(trace)) throw new Error("valid content-safe trace reject
 const invalidComplete: Read.Page = { ...page, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };
 void invalidComplete;
 
+// @ts-expect-error a page with continuation cannot serialize query-gap absence.
+const invalidContinuationAbsence: Read.Page = { ...page, absence: { kind: "query_gap" } };
+void invalidContinuationAbsence;
+
+// @ts-expect-error a terminal incomplete window cannot carry a cursor.
+const invalidTerminalCursor: Read.Window = { status: "incomplete", complete: false, hasMore: false, nextCursor: cursor };
+void invalidTerminalCursor;
+
+// @ts-expect-error a continuing incomplete window requires its opaque cursor.
+const invalidMissingCursor: Read.Window = { status: "incomplete", complete: false, hasMore: true, nextCursor: null };
+void invalidMissingCursor;
+
 // @ts-expect-error unvalidated strings cannot bypass the non-empty item-id boundary.
 const invalidEmptyId: Read.Item = { ...page.items[0]!, id: "" };
 void invalidEmptyId;
@@ -85,6 +97,18 @@ void invalidEmptyId;
 // @ts-expect-error unvalidated strings cannot bypass the non-empty text boundary.
 const invalidEmptyText: Read.Item = { ...page.items[0]!, text: "" };
 void invalidEmptyText;
+
+// @ts-expect-error no-selection means the selected stage is empty.
+const invalidNoSelectionTrace: RecallTraceV1 = { ...trace, outcome: "no_selection", stages: { ...trace.stages, selected: [traceRef], hydrated: [], policyEligible: [], cited: [], grounded: [] } };
+void invalidNoSelectionTrace;
+
+// @ts-expect-error degraded traces require a non-fresh projection state.
+const invalidFreshDegradedTrace: RecallTraceV1 = { ...trace, outcome: "degraded", projectionFreshness: "fresh", stages: { ...trace.stages, grounded: [] } };
+void invalidFreshDegradedTrace;
+
+// @ts-expect-error grounded outcomes require at least one grounded reference.
+const invalidEmptyGroundedTrace: RecallTraceV1 = { ...trace, stages: { ...trace.stages, grounded: [] } };
+void invalidEmptyGroundedTrace;
 
 type AssertNever<Value extends never> = Value;
 type ExactKeys<Actual, Expected extends PropertyKey> =

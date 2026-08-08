@@ -25,11 +25,13 @@ lock/visibility/category/review fields, transcript/tags/tier/layer/cohort, expli
 ordering, store, model prompt, or provider details. Array order is the deterministic server order.
 The page carries a versioned completeness envelope with opaque aggregate frontiers plus an
 explicit query-gap absence union; the strict runtime validator rejects extra fields and false
-completeness. Empty, stale, or failed renders never serialize as items.
+completeness. Terminal and continuation windows are distinct TypeScript variants, and query-gap
+absence is valid only on an honest terminal page. Item ids, per-item citation refs, and
+completeness reasons are unique. Empty, stale, or failed renders never serialize as items.
 
 The trace carries only opaque stage refs, typed outcome/freshness, bounded counts, and strategy
-version. Its runtime law enforces the six-stage subset chain and keeps trace fields out of the
-frontend item.
+version. Its type and runtime laws enforce the six-stage subset chain, reference uniqueness, and
+the stage implied by every outcome, while keeping trace fields out of the frontend item.
 
 Rulings of record: ADR-004, charter WS-006/M-001, DIV-MEM-004, FEAT-MEM-001,
 FEAT-MEM-002, FC-AUTH-003, and FEAT-AUTH-011. `DIV-DOMCORE-001` and

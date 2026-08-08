@@ -51,30 +51,38 @@ export declare namespace SynthesizedMemoryRead {
     provenance?: Provenance;
   }
 
-  /** Final page of the authorized projection. A complete page cannot advertise continuation. */
-  interface CompleteWindow {
+  /** Terminal page of the authorized projection. */
+  interface CompleteTerminalWindow {
     status: "complete";
     complete: true;
     hasMore: false;
     nextCursor: null;
   }
 
-  interface MoreWindow {
+  interface IncompleteTerminalWindow {
+    status: "incomplete";
+    complete: false;
+    hasMore: false;
+    nextCursor: null;
+  }
+
+  interface MoreContinuationWindow {
     status: "more";
     complete: false;
     hasMore: true;
     nextCursor: KeysetCursor;
   }
 
-  /** The service cannot honestly claim completeness; continuation may be unavailable. */
-  interface IncompleteWindow {
+  interface IncompleteContinuationWindow {
     status: "incomplete";
     complete: false;
-    hasMore: boolean;
-    nextCursor: KeysetCursor | null;
+    hasMore: true;
+    nextCursor: KeysetCursor;
   }
 
-  type Window = CompleteWindow | MoreWindow | IncompleteWindow;
+  type TerminalWindow = CompleteTerminalWindow | IncompleteTerminalWindow;
+  type ContinuationWindow = MoreContinuationWindow | IncompleteContinuationWindow;
+  type Window = TerminalWindow | ContinuationWindow;
 
   type IncompleteReason = "accepted_work_pending";
   type DegradedReason =
@@ -140,13 +148,23 @@ export declare namespace SynthesizedMemoryRead {
     kind: "query_gap";
   }
 
-  interface Page {
+  interface PageBase {
     contractVersion: typeof SYNTHESIZED_READ_CONTRACT_VERSION;
     items: readonly Item[];
-    window: Window;
     completeness: Completeness;
+  }
+
+  interface ContinuationPage extends PageBase {
+    window: ContinuationWindow;
+    absence: null;
+  }
+
+  interface TerminalPage extends PageBase {
+    window: TerminalWindow;
     absence: QueryGap | null;
   }
+
+  type Page = ContinuationPage | TerminalPage;
 }
 
 /** Runtime law for JSON conformance fixtures and non-TypeScript service adapters. */
@@ -197,6 +215,7 @@ export function hasHonestRecallCompleteness(page: {
 
   const reasons = completeness.reasons;
   if (!Array.isArray(reasons)) return false;
+  if (new Set(reasons).size !== reasons.length) return false;
   if (completeness.status === "complete") {
     if (reasons.length !== 0) return false;
   } else {
@@ -247,6 +266,8 @@ export function hasSafeSynthesizedPage(value: unknown): value is SynthesizedMemo
   const page = value as { contractVersion: unknown; items: unknown; window: unknown; completeness: unknown; absence: unknown };
   if (page.contractVersion !== SYNTHESIZED_READ_CONTRACT_VERSION || !Array.isArray(page.items)) return false;
   if (!page.items.every(hasSafeItem)) return false;
+  const itemIds = page.items.map((item) => (item as { id: string }).id);
+  if (new Set(itemIds).size !== itemIds.length) return false;
   if (!hasExactKeys(page.window, ["status", "complete", "hasMore", "nextCursor"])) return false;
   const window = page.window as { status: unknown; complete: unknown; hasMore: unknown; nextCursor: unknown };
   if (typeof window.status !== "string" || typeof window.complete !== "boolean" || typeof window.hasMore !== "boolean") return false;
@@ -254,6 +275,7 @@ export function hasSafeSynthesizedPage(value: unknown): value is SynthesizedMemo
   if (!hasHonestPageWindow(window as { status: string; complete: boolean; hasMore: boolean; nextCursor: string | null })) return false;
   if (!hasSafeCompletenessObject(page.completeness)) return false;
   if (page.absence !== null && (!hasExactKeys(page.absence, ["kind"]) || (page.absence as { kind: unknown }).kind !== "query_gap")) return false;
+  if (page.absence !== null && (window.hasMore || window.nextCursor !== null)) return false;
   return hasHonestRecallCompleteness({
     items: page.items,
     completeness: page.completeness as NonNullable<Parameters<typeof hasHonestRecallCompleteness>[0]["completeness"]>,
@@ -267,6 +289,7 @@ function hasSafeItem(value: unknown): boolean {
   if (typeof item.id !== "string" || parseSynthesizedItemId(item.id) === null) return false;
   if (typeof item.text !== "string" || parseSynthesizedText(item.text) === null) return false;
   if ("citations" in item && (!Array.isArray(item.citations) || !item.citations.every((ref) => typeof ref === "string" && parseCitationRef(ref) !== null))) return false;
+  if (Array.isArray(item.citations) && new Set(item.citations).size !== item.citations.length) return false;
   if ("provenance" in item) {
     if (!hasExactKeys(item.provenance, ["synthesisVersion", "inputDigest", "outputDigest"])) return false;
     const provenance = item.provenance as { synthesisVersion: unknown; inputDigest: unknown; outputDigest: unknown };

@@ -20,26 +20,48 @@ export type RecallTraceOutcome =
 
 export type ProjectionFreshness = "fresh" | "stale" | "unavailable" | "bypassed";
 
-export interface RecallTraceV1 {
+type TraceRefs = readonly RecallTraceRef[];
+type NonEmptyTraceRefs = readonly [RecallTraceRef, ...RecallTraceRef[]];
+
+interface RecallTraceStages {
+  eligible: TraceRefs;
+  selected: TraceRefs;
+  hydrated: TraceRefs;
+  policyEligible: TraceRefs;
+  cited: TraceRefs;
+  grounded: TraceRefs;
+}
+
+interface RecallTraceBase {
   version: "recall-trace-v1";
   traceRef: RecallTraceRef;
   strategyVersion: string;
-  projectionFreshness: ProjectionFreshness;
-  outcome: RecallTraceOutcome;
   latencyMs: number;
   tokenCounts: {
     input: number;
     output: number;
   };
-  stages: {
-    eligible: readonly RecallTraceRef[];
-    selected: readonly RecallTraceRef[];
-    hydrated: readonly RecallTraceRef[];
-    policyEligible: readonly RecallTraceRef[];
-    cited: readonly RecallTraceRef[];
-    grounded: readonly RecallTraceRef[];
-  };
 }
+
+export type RecallTraceV1 = RecallTraceBase & (
+  | { outcome: "grounded"; projectionFreshness: ProjectionFreshness; stages: RecallTraceStages & { grounded: NonEmptyTraceRefs } }
+  | { outcome: "no_eligible_candidates"; projectionFreshness: ProjectionFreshness; stages: {
+      eligible: readonly []; selected: readonly []; hydrated: readonly []; policyEligible: readonly []; cited: readonly []; grounded: readonly [];
+    } }
+  | { outcome: "no_selection"; projectionFreshness: ProjectionFreshness; stages: {
+      eligible: NonEmptyTraceRefs; selected: readonly []; hydrated: readonly []; policyEligible: readonly []; cited: readonly []; grounded: readonly [];
+    } }
+  | { outcome: "hydration_unavailable"; projectionFreshness: ProjectionFreshness; stages: RecallTraceStages & {
+      selected: NonEmptyTraceRefs; hydrated: readonly []; policyEligible: readonly []; cited: readonly []; grounded: readonly [];
+    } }
+  | { outcome: "policy_filtered"; projectionFreshness: ProjectionFreshness; stages: RecallTraceStages & {
+      hydrated: NonEmptyTraceRefs; policyEligible: readonly []; cited: readonly []; grounded: readonly [];
+    } }
+  | { outcome: "ungrounded"; projectionFreshness: ProjectionFreshness; stages: RecallTraceStages & {
+      policyEligible: NonEmptyTraceRefs; grounded: readonly [];
+    } }
+  | { outcome: "degraded"; projectionFreshness: Exclude<ProjectionFreshness, "fresh">; stages: RecallTraceStages & { grounded: readonly [] } }
+);
 
 export function hasSafeRecallTrace(value: unknown): value is RecallTraceV1 {
   if (!hasExactKeys(value, ["version", "traceRef", "strategyVersion", "projectionFreshness", "outcome", "latencyMs", "tokenCounts", "stages"])) return false;
@@ -68,10 +90,28 @@ export function hasSafeRecallTrace(value: unknown): value is RecallTraceV1 {
     if (!current.every((ref) => previous.has(ref))) return false;
   }
   const eligible = stages.eligible as string[];
+  const selected = stages.selected as string[];
+  const hydrated = stages.hydrated as string[];
+  const policyEligible = stages.policyEligible as string[];
   const grounded = stages.grounded as string[];
-  if (trace.outcome === "grounded" && grounded.length === 0) return false;
-  if (trace.outcome === "no_eligible_candidates" && eligible.length !== 0) return false;
-  return true;
+  switch (trace.outcome) {
+    case "grounded":
+      return grounded.length > 0;
+    case "no_eligible_candidates":
+      return eligible.length === 0;
+    case "no_selection":
+      return eligible.length > 0 && selected.length === 0;
+    case "hydration_unavailable":
+      return selected.length > 0 && hydrated.length === 0;
+    case "policy_filtered":
+      return hydrated.length > 0 && policyEligible.length === 0;
+    case "ungrounded":
+      return policyEligible.length > 0 && grounded.length === 0;
+    case "degraded":
+      return trace.projectionFreshness !== "fresh" && grounded.length === 0;
+    default:
+      return false;
+  }
 }
 
 const TRACE_STAGE_KEYS = ["eligible", "selected", "hydrated", "policyEligible", "cited", "grounded"] as const;
