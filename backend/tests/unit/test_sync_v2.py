@@ -1822,6 +1822,12 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
             pipeline.RUN_LOCK_TTL_SECONDS = 0.006
             pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Same explicit deadline as the renew-error case: a 6 ms wall-clock
+            # window can expire before the first renewal is even attempted on a
+            # busy worker, which would assert against the scheduler, not the
+            # fail-closed behavior under test.
+            lease_readings = [0.0, 0.0, 0.001]
+            pipeline.time = types.SimpleNamespace(monotonic=lambda: lease_readings.pop(0) if lease_readings else 0.006)
             renewal_started = asyncio.Event()
 
             async def _hanging_run_blocking(_executor, _fn, *_args, **_kwargs):
@@ -1910,6 +1916,13 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
             pipeline.RUN_LOCK_TTL_SECONDS = 0.006
             pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Drive the lease deadline explicitly. A 6 ms wall-clock window can
+            # legitimately expire after one scheduler turn on a busy CI worker,
+            # even though the retry behavior under test is correct. The
+            # coordinator is parked on the capacity gate here, so the lease
+            # heartbeat is the only reader of this clock.
+            lease_readings = [0.0, 0.0, 0.001, 0.001, 0.002]
+            pipeline.time = types.SimpleNamespace(monotonic=lambda: lease_readings.pop(0) if lease_readings else 0.006)
             pipeline.renew_job_run_lock = MagicMock(side_effect=ConnectionError('redis unavailable'))
             pipeline._cleanup_files = MagicMock()
             pipeline.release_sync_content_claim = MagicMock()

@@ -16,12 +16,25 @@ from llm_gateway.gateway.errors import (
     GatewayProviderRequestRejectedError,
 )
 from llm_gateway.gateway.accounting import AttemptTrace
-from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
+from llm_gateway.gateway.executor import (
+    ProviderRegistry,
+    execute_chat_completion,
+    provider_request_for,
+    selected_serving_route_artifact_id,
+)
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutPolicy, RolloutStage
+from llm_gateway.gateway.schemas import (
+    CredentialMode,
+    FailureClass,
+    ProviderRef,
+    RolloutPolicy,
+    RolloutStage,
+    RouteServingClass,
+)
 
 LANE_ID = 'omi:auto:chat-structured'
+CHAT_AGENT_LANE_ID = 'omi:auto:chat-agent'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
 LKG_ROUTE = 'route.chat_structured.2026_06_20.001'
 
@@ -45,7 +58,11 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
     assert result.selected_provider == 'openai'
     assert result.selected_model == 'gpt-5.6-luna'
     assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.fallback_from_route_artifact_id is None
+    assert result.fallback_to_route_artifact_id is None
     assert not result.used_lkg
+    assert result.route_serving_class == RouteServingClass.ACTIVE
     assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
     assert provider.calls[0].request['stream'] is False
 
@@ -67,6 +84,46 @@ async def test_executor_forwards_prompt_parser_request_without_response_format()
 
     assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
     assert 'response_format' not in provider.calls[0].request
+
+
+def test_chat_agent_provider_request_includes_omi_luna_personality():
+    config = gateway_config()
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [
+            {'role': 'system', 'content': 'Use the user context.'},
+            {'role': 'user', 'content': 'Hello.'},
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+
+    system_message = provider_request['messages'][0]
+    assert system_message['role'] == 'system'
+    assert system_message['content'].startswith('You are Omi, a warm and perceptive personal assistant.')
+    assert system_message['content'].endswith('Use the user context.')
+    assert provider_request['messages'][1] == {'role': 'user', 'content': 'Hello.'}
+
+
+def test_chat_agent_personality_preserves_array_system_text():
+    config = gateway_config()
+    request = {
+        'model': CHAT_AGENT_LANE_ID,
+        'messages': [
+            {'role': 'system', 'content': [{'type': 'text', 'text': 'Use the user context.'}]},
+            {'role': 'user', 'content': 'Hello.'},
+        ],
+    }
+    resolved = resolve_chat_completion_route(config, request)
+
+    provider_request = provider_request_for(resolved, resolved.active_route.primary)
+
+    system_message = provider_request['messages'][0]
+    assert system_message['role'] == 'system'
+    assert system_message['content'][0]['type'] == 'text'
+    assert system_message['content'][0]['text'].startswith('You are Omi, a warm and perceptive personal assistant.')
+    assert system_message['content'][1:] == [{'type': 'text', 'text': 'Use the user context.'}]
 
 
 @pytest.mark.asyncio
@@ -253,8 +310,42 @@ async def test_executor_uses_active_route_fallback_for_policy_allowed_failures(f
     assert result.selected_model == 'gpt-4o-mini'
     assert result.fallback_used
     assert result.fallback_reason == failure_class
+    assert result.fallback_from_route_artifact_id == ACTIVE_ROUTE
+    assert result.fallback_to_route_artifact_id == ACTIVE_ROUTE
     assert not result.used_lkg
+    assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
     assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-4o-mini']
+
+
+@pytest.mark.asyncio
+async def test_executor_identical_provider_model_retry_is_not_actual_fallback():
+    """A within-route fallback to the same provider+model is a retry, not a
+    distinct provider/route failover, and must not be classified as
+    ACTUAL_FALLBACK — per the PR behavioral contract that actual fallback
+    requires a *subsequent provider/route* success."""
+    identical_ref = ProviderRef(provider='openai', model='gpt-5.6-luna')
+    config = config_with_active_route(active_route_with_fallbacks([identical_ref]))
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(identical_ref, content='{"answer":"retry"}'),
+        ]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert result.selected_model == 'gpt-5.6-luna'
+    assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.fallback_from_route_artifact_id is None
+    assert result.fallback_to_route_artifact_id is None
+    assert result.route_serving_class == RouteServingClass.ACTIVE
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
 
 
 @pytest.mark.asyncio
@@ -309,7 +400,10 @@ async def test_executor_uses_lkg_only_when_active_route_policy_allows():
     assert result.selected_model == 'gpt-5.6-luna'
     assert result.fallback_used
     assert result.fallback_reason == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert result.fallback_from_route_artifact_id == ACTIVE_ROUTE
+    assert result.fallback_to_route_artifact_id == LKG_ROUTE
     assert result.used_lkg
+    assert result.route_serving_class == RouteServingClass.ACTUAL_FALLBACK
     assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
 
 
@@ -337,6 +431,28 @@ async def test_executor_does_not_use_lkg_when_active_route_policy_rejects_failur
 
     assert exc_info.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
     assert len(provider.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_executor_remains_error_when_active_and_lkg_routes_both_fail():
+    config = config_with_active_route(active_route_with_fallbacks([]))
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID),
+        ]
+    )
+
+    with pytest.raises(GatewayProviderFailureError) as exc_info:
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+        )
+
+    assert exc_info.value.failure_class == FailureClass.PROVIDER_5XX_OMI_PAID
+    assert [call.model for call in provider.calls] == ['gpt-5.6-luna', 'gpt-5.6-luna']
 
 
 @pytest.mark.asyncio
@@ -441,6 +557,11 @@ async def test_shadow_active_route_serves_lkg_not_active():
     assert result.selected_route_artifact_id == LKG_ROUTE
     assert result.selected_model == 'gpt-5.6-luna'
     assert result.used_lkg
+    assert not result.fallback_used
+    assert result.fallback_reason is None
+    assert result.fallback_from_route_artifact_id is None
+    assert result.fallback_to_route_artifact_id is None
+    assert result.route_serving_class == RouteServingClass.LKG
     assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
     assert selected_serving_route_artifact_id(resolved) == LKG_ROUTE
 
@@ -554,6 +675,8 @@ async def test_canary_route_at_100_percent_serves_active():
 
     assert result.selected_route_artifact_id == ACTIVE_ROUTE
     assert not result.used_lkg
+    assert not result.fallback_used
+    assert result.route_serving_class == RouteServingClass.CANARY
 
 
 def valid_request(**overrides):

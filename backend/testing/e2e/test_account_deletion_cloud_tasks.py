@@ -160,6 +160,8 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
     monkeypatch.setattr(account_deletion.auth, "delete_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion.users_db, "get_user_subscription", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_user_caller_ids", lambda _uid: None)
+    monkeypatch.setattr(account_deletion, "delete_agent_vm_for_account", lambda _uid: None)
+    monkeypatch.setattr(account_deletion, "delete_account_credentials", lambda _uid: None)
 
 
 def _assert_enqueued_task_schema(tasks_client: _CapturedCloudTasksClient, wipe_job_id: str) -> dict[str, str]:
@@ -393,14 +395,14 @@ def test_queue_not_found_preserves_auth_and_reconciles_from_the_marker(
     _assert_user_data_deleted(fake_firestore, test_uid)
 
 
-def test_repeated_delete_request_joins_running_wipe_without_requeueing(
+def test_repeated_delete_request_is_fenced_without_requeueing(
     client,
     fake_firestore,
     monkeypatch,
     account_deletion_identity,
     cloud_tasks_client,
 ):
-    """A repeat request cannot move a claimed wipe backwards or create another task."""
+    """A repeat request is fenced without moving the wipe backwards or creating another task."""
     from services.users import account_deletion
 
     test_uid, auth_headers = account_deletion_identity
@@ -420,7 +422,14 @@ def test_repeated_delete_request_joins_running_wipe_without_requeueing(
     assert len(cloud_tasks_client.create_calls) == 1
 
     repeated_pending = client.delete("/v1/users/delete-account", headers=auth_headers)
-    assert repeated_pending.status_code == 200, repeated_pending.text
+    assert repeated_pending.status_code == 403, repeated_pending.text
+    assert repeated_pending.json() == {
+        "detail": {
+            "code": "account_deletion_in_progress",
+            "status": "pending",
+            "retryable": False,
+        }
+    }
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "pending"
     assert len(cloud_tasks_client.create_calls) == 1
 
@@ -429,7 +438,14 @@ def test_repeated_delete_request_joins_running_wipe_without_requeueing(
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "running"
 
     repeated_running = client.delete("/v1/users/delete-account", headers=auth_headers)
-    assert repeated_running.status_code == 200, repeated_running.text
+    assert repeated_running.status_code == 403, repeated_running.text
+    assert repeated_running.json() == {
+        "detail": {
+            "code": "account_deletion_in_progress",
+            "status": "running",
+            "retryable": False,
+        }
+    }
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "running"
     assert len(cloud_tasks_client.create_calls) == 1
 

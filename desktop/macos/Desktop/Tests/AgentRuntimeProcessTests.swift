@@ -131,6 +131,41 @@ private actor ContextProjectionRaceHarness {
   func snapshot() -> [String] { events }
 }
 
+private actor GateAdmissionOrderProbe {
+  private(set) var order: [String] = []
+
+  func append(_ value: String) {
+    order.append(value)
+  }
+
+  func snapshot() -> [String] {
+    order
+  }
+}
+
+private actor GateHoldProbe {
+  private var enteredWaiter: CheckedContinuation<Void, Never>?
+  private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+  func waitUntilEntered() async {
+    await withCheckedContinuation { enteredWaiter = $0 }
+  }
+
+  func signalEntered() {
+    enteredWaiter?.resume()
+    enteredWaiter = nil
+  }
+
+  func waitUntilReleased() async {
+    await withCheckedContinuation { releaseContinuation = $0 }
+  }
+
+  func release() {
+    releaseContinuation?.resume()
+    releaseContinuation = nil
+  }
+}
+
 private actor ContextProjectionTaskBox {
   private var task: Task<Void, Never>?
 
@@ -1548,6 +1583,53 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(finalEvents.last, "admission_attempt_2")
   }
 
+  func testContextAdmissionGateCancelledWaiterDoesNotStealTurn() async throws {
+    let gate = AgentContextAdmissionGate()
+    final class CancelledWaiterProbe: @unchecked Sendable {
+      var acquiredGate = false
+    }
+    let cancelledWaiterProbe = CancelledWaiterProbe()
+    let enteredOrder = GateAdmissionOrderProbe()
+    let holdProbe = GateHoldProbe()
+
+    let first = Task {
+      try await gate.withExclusiveAccess {
+        await enteredOrder.append("first")
+        await holdProbe.signalEntered()
+        await holdProbe.waitUntilReleased()
+        return "first"
+      }
+    }
+
+    await holdProbe.waitUntilEntered()
+
+    let second = Task {
+      _ = try? await gate.withExclusiveAccess {
+        cancelledWaiterProbe.acquiredGate = true
+        await enteredOrder.append("second")
+        return "second"
+      }
+    }
+    second.cancel()
+
+    let third = Task {
+      try await gate.withExclusiveAccess {
+        await enteredOrder.append("third")
+        return "third"
+      }
+    }
+
+    await holdProbe.release()
+    let thirdResult = try await third.value
+    XCTAssertEqual(thirdResult, "third")
+    let firstResult = try await first.value
+    XCTAssertEqual(firstResult, "first")
+    XCTAssertFalse(cancelledWaiterProbe.acquiredGate)
+    let order = await enteredOrder.snapshot()
+    XCTAssertEqual(order, ["first", "third"])
+    _ = await second.result
+  }
+
   func testContextAdmissionSecondMismatchFailsWithoutAnotherRefreshOrRetry() async {
     let initial = AgentContextFreshness(
       version: "snapshot-v1",
@@ -1587,6 +1669,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let snapshot = await state.snapshot()
     XCTAssertEqual(snapshot.refreshCount, 1)
     XCTAssertEqual(snapshot.attempts, [initial, refreshed])
+  }
+
+  func testSessionQueryUsesGatedRetryWithoutHoldingGateForStreaming() throws {
+    let source = try sourceFile("Chat/AgentClient.swift")
+    let sessionQueryStart = try XCTUnwrap(
+      source.range(of: "func query(\n      prompt: String,\n      session: AgentSurfaceSession,"))
+    let sessionQueryEnd = try XCTUnwrap(
+      source.range(of: "  static func makeSession", range: sessionQueryStart.upperBound..<source.endIndex))
+    let sessionQueryBody = String(source[sessionQueryStart.lowerBound..<sessionQueryEnd.lowerBound])
+    XCTAssertTrue(sessionQueryBody.contains("AgentContextAdmissionRetry.run("))
+    XCTAssertFalse(
+      sessionQueryBody.contains(
+        "withContextAdmissionAccess {\n        try Task.checkCancellation()\n        return QueryResult("),
+      "streaming query must not hold the admission gate for the entire bridge.query call"
+    )
   }
 
   func testContextAdmissionMismatchClassifierRequiresExactRuntimeCode() {

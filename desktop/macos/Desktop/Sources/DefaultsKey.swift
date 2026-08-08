@@ -27,6 +27,10 @@ enum DefaultsKey: String {
   case authTokenExpiry = "auth_tokenExpiry"
   case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
   case authIsImpersonating = "auth_isImpersonating"
+  /// Durable local cleanup journal written only after the backend accepts an
+  /// account deletion. It survives a crash between HTTP acceptance and the
+  /// owner transition, and is cleared only after local teardown completes.
+  case acceptedAccountDeletionOwnerId = "accepted_account_deletion_owner_id"
   /// Non-prod gauntlet owner swap: synthetic kernel owner that must NOT replace
   /// `auth_userId` (that mismatch triggers AuthService.clearTokens()).
   case automationOwnerOverride = "automation_owner_override"
@@ -63,6 +67,7 @@ enum DefaultsKey: String {
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
+  case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -89,6 +94,14 @@ struct ScopedDefaultsKey {
   /// Owner-scoped key for the legacy task-order migration completion marker.
   static func tasksSortOrderMigrated(ownerID: String) -> Self {
     Self(rawValue: "TasksSortOrderMigrated.owner.\(ownerID)")
+  }
+
+  static func importConnectorAvailabilityText(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
+  }
+
+  static func importConnectorSourceCount(connectorID: String) -> Self {
+    Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
   }
 }
 

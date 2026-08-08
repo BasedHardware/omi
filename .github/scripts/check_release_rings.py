@@ -7,9 +7,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT / ".github" / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / ".github" / "scripts"))
+
+from workflow_composite_contract import backend_deploy_contract_text
 BACKEND_RELEASE_SOURCES = (
     Path(".github/workflows/gcp_backend.yml"),
 )
+DEPLOY_BACKEND_STACK_ACTION = Path(".github/actions/deploy-backend-stack/action.yml")
 
 OBSOLETE_RELEASE_RING_SOURCES = (
     Path("backend/deploy/release_rings.yaml"),
@@ -50,11 +55,13 @@ def check() -> list[str]:
     if errors:
         return errors
 
-    workflow = paths[Path(".github/workflows/gcp_backend.yml")].read_text(encoding="utf-8")
+    workflow_path = paths[Path(".github/workflows/gcp_backend.yml")]
+    workflow = workflow_path.read_text(encoding="utf-8")
+    contract = backend_deploy_contract_text(workflow, ROOT, DEPLOY_BACKEND_STACK_ACTION)
     errors.extend(
         require(
-            workflow,
-            paths[Path(".github/workflows/gcp_backend.yml")],
+            contract,
+            workflow_path,
             (
                 "release_sha:",
                 "default: 'cloud-run-only'",
@@ -71,10 +78,9 @@ def check() -> list[str]:
             ),
         )
     )
-    workflow_path = paths[Path(".github/workflows/gcp_backend.yml")]
     errors.extend(
         require_one(
-            workflow,
+            contract,
             workflow_path,
             "canonical deploy-backend-secrets helper",
             ("backend/scripts/deploy-backend-secrets.sh", "$DEPLOY_CONTROL_SCRIPTS/deploy-backend-secrets.sh"),
@@ -82,7 +88,7 @@ def check() -> list[str]:
     )
     errors.extend(
         require_one(
-            workflow,
+            contract,
             workflow_path,
             "canonical Cloud Run snapshot helper capture",
             ("cloud_run_traffic_snapshot.py capture", 'cloud_run_traffic_snapshot.py" capture'),
@@ -90,7 +96,7 @@ def check() -> list[str]:
     )
     errors.extend(
         require_one(
-            workflow,
+            contract,
             workflow_path,
             "canonical Cloud Run snapshot helper restore",
             ("cloud_run_traffic_snapshot.py restore", 'cloud_run_traffic_snapshot.py" restore'),
@@ -98,20 +104,20 @@ def check() -> list[str]:
     )
     errors.extend(
         require_one(
-            workflow,
+            contract,
             workflow_path,
             "canonical release-vector verifier",
             ("backend/scripts/verify_backend_release_vector.py", "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py"),
         )
     )
-    promotion = workflow.find("Shift Cloud Run traffic to validated revisions")
-    verification = workflow.find("Verify serving backend release vector")
+    promotion = contract.find("Shift Cloud Run traffic to validated revisions")
+    verification = contract.find("Verify serving backend release vector")
     if promotion < 0 or verification < 0 or verification <= promotion:
         errors.append("canonical serving release-vector verification must follow traffic promotion")
-    if "probe-transcription-candidate-from-cloud-run.sh" in workflow:
+    if "probe-transcription-candidate-from-cloud-run.sh" in contract:
         errors.append("canonical production deploy must not create an ephemeral Cloud Run candidate probe")
     for binding in OBSOLETE_RELEASE_BINDINGS:
-        if binding in workflow:
+        if binding in contract:
             errors.append(f"gcp_backend.yml: obsolete release binding {binding!r} must not be required")
     for relative in OBSOLETE_RELEASE_RING_SOURCES:
         if (ROOT / relative).exists():

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-fallible-teardown-skips-required-finalizer",
+  "violated_contract": "A session's required finalizer must run after the session becomes terminal even when an earlier teardown dependency fails. Sequencing an owed durable write or export behind fallible cleanup silently loses the artifact precisely on degraded sessions, where the diagnostic evidence is most important.",
+  "canonical_prevention": "Make the session owner invoke the required finalizer from an unconditional finally boundary around fallible teardown cleanup, keep the finalizer itself fail-open where availability requires it, and cover the production lifecycle with a behavioral test that injects an earlier teardown failure and proves the finalizer runs exactly once.",
+  "canonical_prevention_artifact": [
+    "backend/routers/listen/runtime.py",
+    "backend/tests/unit/test_listen_parity_runtime.py"
+  ],
+  "evidence_prs": [
+    10840
+  ],
+  "scope_hints": [
+    "backend/routers/listen/**",
+    "backend/utils/async_tasks.py"
+  ],
+  "status": "open"
+}

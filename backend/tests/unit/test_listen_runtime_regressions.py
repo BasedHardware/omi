@@ -3,6 +3,7 @@
 import asyncio
 from collections import deque
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -11,6 +12,7 @@ from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.listen_session_bootstrap import ListenConnectBase
 from utils.stt.streaming import STTService
+from starlette.websockets import WebSocketState
 
 
 @pytest.fixture
@@ -21,6 +23,84 @@ def anyio_backend():
 class _Persistence:
     async def call(self, fn, *args, **kwargs):
         return fn(*args, **kwargs)
+
+
+def _deletion_teardown_runtime(request, persistence_call):
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.state = SimpleNamespace(
+        shutdown_event=asyncio.Event(),
+        active=True,
+        stt_terminal_failure=False,
+        close_code=1001,
+        current_conversation_id='conversation-1',
+    )
+    runtime.task_supervisor = SimpleNamespace(end_session=MagicMock(), drain_all=AsyncMock())
+    runtime._finish_live_transcription = MagicMock()
+    runtime.transcripts = SimpleNamespace(
+        flush_translations=AsyncMock(),
+        flush_speaker_assignments=AsyncMock(),
+        clear=MagicMock(),
+    )
+    runtime.receiver = SimpleNamespace(finish=MagicMock(), flush_multi_channel_tail=AsyncMock(), clear=MagicMock())
+    runtime._flush_usage = AsyncMock()
+    runtime.persistence = SimpleNamespace(call=persistence_call)
+    runtime.conversations = SimpleNamespace(process_conversation=AsyncMock())
+    runtime.is_multi_channel = False
+    runtime.pusher_close = None
+    runtime.onboarding_handler = None
+    runtime.parity_capture = SimpleNamespace(persist=MagicMock())
+    runtime.speakers = SimpleNamespace(clear=MagicMock())
+    return runtime
+
+
+def _assert_deletion_teardown_skipped_owner_writes(runtime):
+    runtime.task_supervisor.drain_all.assert_awaited_once_with(timeout=5.0, cancel=True)
+    runtime.transcripts.flush_translations.assert_not_awaited()
+    runtime.transcripts.flush_speaker_assignments.assert_not_awaited()
+    runtime.receiver.flush_multi_channel_tail.assert_not_awaited()
+    runtime._flush_usage.assert_not_awaited()
+    runtime.conversations.process_conversation.assert_not_awaited()
+    runtime.parity_capture.persist.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_deletion_fence_teardown_cancels_tasks_without_owner_persistence():
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED),
+        uid='deleted-owner',
+    )
+    request.owner_persistence_blocked.set()
+    persistence_call = AsyncMock()
+    runtime = _deletion_teardown_runtime(request, persistence_call)
+
+    await runtime._teardown()
+
+    persistence_call.assert_not_awaited()
+    _assert_deletion_teardown_skipped_owner_writes(runtime)
+
+
+@pytest.mark.anyio
+async def test_teardown_rechecks_deletion_authority_before_owner_persistence():
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.DISCONNECTED),
+        uid='newly-deleted-owner',
+    )
+    authority_reads = []
+
+    async def persistence_call(function, *args):
+        authority_reads.append((function, args))
+        return True
+
+    runtime = _deletion_teardown_runtime(request, persistence_call)
+
+    await runtime._teardown()
+
+    assert len(authority_reads) == 1
+    assert authority_reads[0][0].__name__ == '_account_deletion_blocks_owner_persistence'
+    assert authority_reads[0][1] == ('newly-deleted-owner',)
+    assert request.owner_persistence_blocked.is_set()
+    _assert_deletion_teardown_skipped_owner_writes(runtime)
 
 
 def _runtime_for_periodic_usage(*, tracking, exhausted):

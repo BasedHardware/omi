@@ -18,6 +18,25 @@ class RewindViewModel: ObservableObject {
   @Published var isSearching = false
   @Published var errorMessage: String? = nil
 
+  // MARK: - History Span (all time)
+
+  /// Every local day that holds capture, newest first.
+  ///
+  /// The page plays one day at a time, so this is what makes it *reachable* across the whole
+  /// history rather than only the day you happened to open it on.
+  @Published private(set) var capturedDays: [Date] = []
+
+  /// Whether the walk over the capture database's own days has finished at least once.
+  ///
+  /// **`false` is not the same claim as "no history".** An empty `capturedDays` before the survey
+  /// finishes means "not looked yet" and must render as such; only after this flips is an empty
+  /// list an honest "there is no capture". Collapsing the two is how a surface ends up telling a
+  /// user with months of history that they have none.
+  @Published private(set) var didSurveyHistory = false
+
+  /// Set once the user picks a day themselves, so the automatic reveal below never overrides them.
+  private var didChooseDayManually = false
+
   @Published var stats: (total: Int, indexed: Int, storageSize: Int64)? = nil
 
   /// The active search query (trimmed, non-empty) for highlighting
@@ -169,12 +188,72 @@ class RewindViewModel: ObservableObject {
     log("RewindViewModel: Posting rewindPageDidLoad notification")
     NotificationCenter.default.post(name: .rewindPageDidLoad, object: nil)
 
+    // How far back Rewind goes, asked after the first day is already on screen.
+    //
+    // **Deliberately not awaited above.** The newest day is the one the user opened the page to
+    // see, and it must be drawable before anything else finishes; the survey is one index seek per
+    // captured day and lands behind an already-readable timeline.
+    Task { await self.surveyCapturedHistory() }
+
     // Load stats asynchronously (includes storage size calculation which can be slow)
     Task {
       if let indexerStats = await RewindIndexer.shared.getStats() {
         stats = indexerStats
       }
     }
+  }
+
+  /// Ask the capture database which days it actually holds, and open the newest one that does.
+  ///
+  /// The second half matters as much as the first: capture stops when the Mac sleeps, when screen
+  /// recording permission is revoked, and when the user turns it off, so "today" is regularly a day
+  /// with nothing in it. Landing on an empty today and stopping there is indistinguishable from
+  /// having no history at all — the reveal below is what turns that into the newest day that does
+  /// hold capture, without the user having to guess a date.
+  /// - Parameter attempts: how many times a database that is still opening is re-asked.
+  ///
+  /// **A failed read is never reported as "no capture".** Rewind's pool opens asynchronously, and
+  /// swallowing the error into an empty list would flip `didSurveyHistory` and print a confident
+  /// "No screen capture yet" over an account with months of it — the same class of defect as an
+  /// unread day rendering as a zero rather than an unknown. On exhaustion the flag stays `false`,
+  /// so the label keeps saying "checking", which remains true.
+  func surveyCapturedHistory(attempts: Int = 3) async {
+    for attempt in 0..<max(1, attempts) {
+      do {
+        let days = try await RewindDatabase.shared.capturedDayStarts()
+        capturedDays = days
+        didSurveyHistory = true
+
+        guard !didChooseDayManually, activeSearchQuery == nil, screenshots.isEmpty else { return }
+        guard let newest = days.first, !Calendar.current.isDate(newest, inSameDayAs: selectedDate) else { return }
+        log("RewindViewModel: Selected day holds no capture; revealing newest captured day \(newest)")
+        selectedDate = newest
+        await loadScreenshotsForDate(newest)
+        return
+      } catch {
+        if attempt + 1 < attempts { try? await Task.sleep(for: .milliseconds(500)) }
+      }
+    }
+    logError("RewindViewModel: Could not survey captured history; leaving the span unknown rather than empty")
+  }
+
+  /// The oldest day Rewind can still reach, or `nil` while the survey has not run.
+  var oldestCapturedDay: Date? { capturedDays.last }
+
+  /// The newest day that holds capture, or `nil` while the survey has not run.
+  var newestCapturedDay: Date? { capturedDays.first }
+
+  /// The next captured day strictly older than `day` — what "step back" means when most calendar
+  /// days hold nothing.
+  func capturedDay(before day: Date) -> Date? {
+    let start = Calendar.current.startOfDay(for: day)
+    return capturedDays.first { $0 < start }
+  }
+
+  /// The next captured day strictly newer than `day`.
+  func capturedDay(after day: Date) -> Date? {
+    let start = Calendar.current.startOfDay(for: day)
+    return capturedDays.last { $0 > start }
   }
 
   /// Dismiss the recovery banner
@@ -211,10 +290,14 @@ class RewindViewModel: ObservableObject {
     // Track rewind search
     AnalyticsManager.shared.rewindSearchPerformed(queryLength: trimmedQuery.count)
 
-    // Calculate date range (date filter is always active)
-    let calendar = Calendar.current
-    let startDate = calendar.startOfDay(for: selectedDate)
-    let endDate = calendar.date(byAdding: .day, value: 1, to: startDate)!
+    // **Searching Rewind searches all of Rewind.** This used to clamp both queries to the day the
+    // timeline happened to be showing, which made the one control that could reach the whole
+    // history the one control that could not: a phrase you read last week returned nothing, and
+    // returned it in a way indistinguishable from never having read it. The result groups already
+    // carry a full date (`SearchResultGroup.formattedTimeRange` is `.medium` + time), so an
+    // all-time result set reads correctly without the caller having to know which day it came from.
+    // Cost is bounded by the same limits as before — FTS `limit: 100`, vector `topK: 50` — not by
+    // the width of the window.
 
     searchTask = Task {
       do {
@@ -222,14 +305,14 @@ class RewindViewModel: ObservableObject {
         async let ftsResults = RewindDatabase.shared.search(
           query: trimmedQuery,
           appFilter: selectedApp,
-          startDate: startDate,
-          endDate: endDate,
+          startDate: nil,
+          endDate: nil,
           limit: 100
         )
         async let vectorResults = OCREmbeddingService.shared.searchSimilar(
           query: trimmedQuery,
-          startDate: startDate,
-          endDate: endDate,
+          startDate: nil,
+          endDate: nil,
           appFilter: selectedApp,
           topK: 50
         )
@@ -274,6 +357,7 @@ class RewindViewModel: ObservableObject {
   }
 
   func filterByDate(_ date: Date) async {
+    didChooseDayManually = true
     selectedDate = date
 
     if !searchQuery.isEmpty {
@@ -281,6 +365,19 @@ class RewindViewModel: ObservableObject {
     } else {
       await loadScreenshotsForDate(date)
     }
+  }
+
+  /// Point the day control at `date` without reloading the timeline.
+  ///
+  /// Opening an all-time search result plays frames from whatever day the result came from, and
+  /// the day control has to agree with the picture — otherwise the page says "today" over a frame
+  /// from three weeks ago. Reloading here would be wrong: the search results *are* the timeline
+  /// while a search is active, so re-reading the day would throw them away.
+  func alignSelectedDay(to date: Date) {
+    let day = Calendar.current.startOfDay(for: date)
+    guard !Calendar.current.isDate(day, inSameDayAs: selectedDate) else { return }
+    didChooseDayManually = true
+    selectedDate = day
   }
 
   private func loadScreenshotsForDate(_ date: Date) async {

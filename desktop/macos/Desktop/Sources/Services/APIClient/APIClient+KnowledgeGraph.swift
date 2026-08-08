@@ -119,6 +119,10 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
   let nextCursor: String?
   let eligibleItemCount: Int?
   let processedItemCount: Int?
+  /// Optional additive catalog records. These are durable memory nodes, not
+  /// assertion-backed graph nodes, and are intentionally excluded from atlas
+  /// layout and counts.
+  let catalogNodes: [KnowledgeGraphNode]?
 
   enum CodingKeys: String, CodingKey {
     case nodes, edges
@@ -126,6 +130,7 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
     case nextCursor = "next_cursor"
     case eligibleItemCount = "eligible_item_count"
     case processedItemCount = "processed_item_count"
+    case catalogNodes = "catalog_nodes"
   }
 
   init(
@@ -134,7 +139,8 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
     hasMore: Bool = false,
     nextCursor: String? = nil,
     eligibleItemCount: Int? = nil,
-    processedItemCount: Int? = nil
+    processedItemCount: Int? = nil,
+    catalogNodes: [KnowledgeGraphNode]? = nil
   ) {
     self.nodes = nodes
     self.edges = edges
@@ -142,6 +148,7 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
     self.nextCursor = nextCursor
     self.eligibleItemCount = eligibleItemCount
     self.processedItemCount = processedItemCount
+    self.catalogNodes = catalogNodes
   }
 
   init(from decoder: Decoder) throws {
@@ -152,6 +159,30 @@ struct KnowledgeGraphResponse: Codable, Equatable, Sendable {
     nextCursor = try container.decodeIfPresent(String.self, forKey: .nextCursor)
     eligibleItemCount = try container.decodeIfPresent(Int.self, forKey: .eligibleItemCount)
     processedItemCount = try container.decodeIfPresent(Int.self, forKey: .processedItemCount)
+    catalogNodes = try container.decodeIfPresent([KnowledgeGraphNode].self, forKey: .catalogNodes)
+  }
+
+  /// Nodes that are safe for the atlas to lay out. The canonical endpoint's
+  /// `nodes` field is assertion-backed; older canonical payloads that predate
+  /// `catalog_nodes` may still have isolated catalog nodes folded into it, so
+  /// those are excluded by their stable `memory:` id prefix.
+  var atlasNodes: [KnowledgeGraphNode] {
+    if catalogNodes != nil { return nodes }
+    return nodes.filter { !$0.id.hasPrefix("memory:") }
+  }
+
+  /// A graph-shaped view for projection caches. It retains the catalog on the
+  /// response model while ensuring node consumers receive assertion-backed
+  /// nodes only.
+  var atlasResponse: KnowledgeGraphResponse {
+    KnowledgeGraphResponse(
+      nodes: atlasNodes,
+      edges: edges,
+      hasMore: hasMore,
+      nextCursor: nextCursor,
+      eligibleItemCount: eligibleItemCount,
+      processedItemCount: processedItemCount,
+      catalogNodes: catalogNodes)
   }
 
   /// Deterministically unions pages and removes edges whose endpoints were not
@@ -172,6 +203,7 @@ typealias KnowledgeGraphPageResponse = KnowledgeGraphResponse
 struct KnowledgeGraphAccumulator: Sendable {
   private var nodesByID: [String: KnowledgeGraphNode] = [:]
   private var edgesByID: [String: KnowledgeGraphEdge] = [:]
+  private var catalogNodesByID: [String: KnowledgeGraphNode]?
   private var eligibleItemCount: Int?
   private var processedItemCount: Int?
 
@@ -189,6 +221,17 @@ struct KnowledgeGraphAccumulator: Sendable {
         edgesByID[edge.id] = Self.merge(existing, edge)
       } else {
         edgesByID[edge.id] = edge
+      }
+    }
+
+    if let catalogNodes = page.catalogNodes {
+      if catalogNodesByID == nil { catalogNodesByID = [:] }
+      for node in catalogNodes {
+        if let existing = catalogNodesByID?[node.id] {
+          catalogNodesByID?[node.id] = Self.merge(existing, node)
+        } else {
+          catalogNodesByID?[node.id] = node
+        }
       }
     }
 
@@ -224,7 +267,8 @@ struct KnowledgeGraphAccumulator: Sendable {
       nodes: nodes,
       edges: edges,
       eligibleItemCount: eligibleItemCount,
-      processedItemCount: processedItemCount)
+      processedItemCount: processedItemCount,
+      catalogNodes: catalogNodesByID?.values.sorted { $0.id < $1.id })
   }
 
   private static func merge(_ lhs: KnowledgeGraphNode, _ rhs: KnowledgeGraphNode) -> KnowledgeGraphNode {
