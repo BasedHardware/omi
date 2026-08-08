@@ -96,13 +96,31 @@ else
       exit 1
     fi
   fi
+  # The shell has its own Keychain custody, so "no env token" is not the same as
+  # "no credential". Check whether custody already holds one for THIS backend
+  # before refusing — otherwise the launcher would block exactly the flow that
+  # custody exists to enable (launch once with a token, thereafter without).
+  # Only the item's existence is checked; the secret is never read out here.
+  keychain_has_credential=0
   if [[ -z "$token" ]]; then
+    kc_account="api@${api_base%/}"
+    if security find-generic-password \
+        -s "scratch.${app_name}.credential" -a "$kc_account" >/dev/null 2>&1; then
+      keychain_has_credential=1
+      echo "MODE: LIVE — no OMI_API_TOKEN set; the shell holds Keychain custody for this backend."
+    fi
+  fi
+
+  if [[ -z "$token" && $keychain_has_credential -eq 0 ]]; then
     echo "ERROR: LIVE mode needs a credential." >&2
     echo "  Set OMI_API_TOKEN=<dev token>, or OMI_DEV_TOKEN_ISSUER_URL=<issuer>." >&2
+    echo "  (No Keychain custody exists yet for $api_base either.)" >&2
     echo "  Refusing to launch a shell that would silently show an empty app." >&2
     exit 1
   fi
-  export OMI_API_TOKEN="$token"
+  if [[ -n "$token" ]]; then
+    export OMI_API_TOKEN="$token"
+  fi
 
   # Fail fast and legibly if the backend simply is not up. Without this the app
   # launches, renders an empty list, and looks like a UI bug.
@@ -124,6 +142,11 @@ fi
 if (( accept )); then
   export OMI_ACCEPTANCE=1 OMI_ACCEPTANCE_EXIT=1
   export OMI_SNAPSHOT_PATH="${OMI_SNAPSHOT_PATH:-$OMI_BUILD_DIR/acceptance.png}"
+  # run-shell.sh's 15s watchdog is tuned for a probe, not for an acceptance run
+  # that must wait for the surface's async refresh to actually reach the host.
+  # Too short a bound turns a slow-but-passing run into a timeout, which is the
+  # kind of flake that gets a real gate disabled.
+  export OMI_ACCEPTANCE_WAIT_SECONDS="${OMI_ACCEPTANCE_WAIT_SECONDS:-45}"
 fi
 
 exec "$here/scripts/run-shell.sh"

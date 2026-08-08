@@ -191,6 +191,9 @@ enum SessionBootstrapError: Error, CustomStringConvertible, Sendable {
   case issuerEmptyBody
   case issuerNoTokenField
   case issuerTransport(Int)
+  /// Custody did not answer within the launch deadline (ACL prompt, most likely).
+  case keychainTimedOut
+  case keychainUnavailable(String)
 
   var description: String {
     switch self {
@@ -204,6 +207,10 @@ enum SessionBootstrapError: Error, CustomStringConvertible, Sendable {
       return "SessionBootstrapError.issuerNoTokenField"
     case .issuerTransport(let code):
       return "SessionBootstrapError.issuerTransport(\(code))"
+    case .keychainTimedOut:
+      return "SessionBootstrapError.keychainTimedOut (ACL prompt suspected; launch not blocked)"
+    case .keychainUnavailable(let detail):
+      return "SessionBootstrapError.keychainUnavailable(\(detail))"
     }
   }
 }
@@ -275,14 +282,24 @@ enum SessionBootstrap {
     }
 
     // 2. Previously persisted custody for THIS backend.
-    do {
-      if let token = try keychain.read(account: account) {
-        return Result(
-          baseURL: baseURL, token: token, path: .keychain,
-          storeLogDescription: keychain.logDescription)
-      }
-    } catch {
-      log("keychain-read-failed store=\(keychain.logDescription) error=\(error)")
+    // BOUNDED. Neither kSecUseAuthenticationUI nor an LAContext with
+    // interactionNotAllowed suppresses the LEGACY KEYCHAIN ACL PROMPT: that
+    // prompt is about which binary is trusted for the item, not about
+    // biometric/passcode UI. An unsigned scratch build gets a fresh ad-hoc
+    // identity on every rebuild, so the first launch after ANY rebuild blocks
+    // inside SecItemCopyMatching behind a SecurityAgent dialog — verified twice
+    // on this branch, with the app stalled on a blank window after the loopback
+    // line. A launch path must never be able to hang, so the read runs off the
+    // main thread with a hard deadline and simply loses its turn on timeout.
+    switch Self.readWithDeadline(keychain, account: account, seconds: 2.0) {
+    case .success(let token?):
+      return Result(
+        baseURL: baseURL, token: token, path: .keychain,
+        storeLogDescription: keychain.logDescription)
+    case .success(nil):
+      break
+    case .failure(let error):
+      log("keychain-read-skipped store=\(keychain.logDescription) reason=\(error)")
     }
 
     // 3. Acquire from the dev-mode issuer and persist.
@@ -306,6 +323,31 @@ enum SessionBootstrap {
     return Result(
       baseURL: baseURL, token: nil, path: .none,
       storeLogDescription: keychain.logDescription)
+  }
+
+  /// Reads custody with a hard deadline. Returns .failure(timedOut) rather than
+  /// blocking the launch path when the Keychain wants to show an ACL prompt.
+  static func readWithDeadline(
+    _ store: CredentialStore, account: String, seconds: Double
+  ) -> Swift.Result<String?, SessionBootstrapError> {
+    let semaphore = DispatchSemaphore(value: 0)
+    // Unchecked box: only one writer, and the reader runs strictly after wait().
+    final class Box: @unchecked Sendable { var value: Swift.Result<String?, Error>? }
+    let box = Box()
+    DispatchQueue.global(qos: .userInitiated).async {
+      box.value = Swift.Result { try store.read(account: account) }
+      semaphore.signal()
+    }
+    if semaphore.wait(timeout: .now() + seconds) == .timedOut {
+      // The worker thread stays parked on the dialog; it is abandoned, never
+      // joined, and its result is discarded. Bootstrap continues without it.
+      return .failure(.keychainTimedOut)
+    }
+    switch box.value {
+    case .success(let token): return .success(token)
+    case .failure(let error): return .failure(.keychainUnavailable(String(describing: error)))
+    case .none: return .success(nil)
+    }
   }
 
   static func makeIssuerSession() -> URLSession {
