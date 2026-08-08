@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  MESSAGING_CHANNELS,
-  channelLabel,
-  connectorTabFromParam,
-  isChannelLinked,
-  summarizeIntegrations,
-} from '@/lib/connectors';
+import { connectorTabFromParam, summarizeIntegrations } from '@/lib/connectors';
 import type { Integration } from '@/types/user';
 
 function integration(overrides: Partial<Integration>): Integration {
@@ -19,40 +13,8 @@ function integration(overrides: Partial<Integration>): Integration {
   };
 }
 
-describe('channelLabel', () => {
-  it('capitalizes iMessage the way Apple does, not the way the id is stored', () => {
-    expect(channelLabel('imessage')).toBe('iMessage');
-  });
-
-  it('labels every declared channel', () => {
-    for (const channel of MESSAGING_CHANNELS) {
-      expect(channelLabel(channel).length).toBeGreaterThan(0);
-    }
-  });
-
-  it('falls back to a capitalized id for a channel the backend adds later', () => {
-    expect(channelLabel('whatsapp')).toBe('Whatsapp');
-  });
-});
-
-describe('isChannelLinked', () => {
-  it('is false before the status has loaded', () => {
-    expect(isChannelLinked(null, 'telegram')).toBe(false);
-  });
-
-  it('matches only the requested channel', () => {
-    const status = {
-      bindings: [{ channel: 'telegram', linked_at: 'now' }],
-      phone_registered: false,
-    };
-
-    expect(isChannelLinked(status, 'telegram')).toBe(true);
-    expect(isChannelLinked(status, 'sms')).toBe(false);
-  });
-});
-
 describe('connectorTabFromParam', () => {
-  it('selects the services group, which the channel-link redirect lands on', () => {
+  it('selects the services group', () => {
     expect(connectorTabFromParam('services')).toBe('services');
   });
 

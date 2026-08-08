@@ -133,15 +133,7 @@ def with_parity_pack_env(payload: str) -> str:
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MEMORY_V3_CURSOR_SECRET", "valueFrom": {"secretKeyRef": {"name": "MEMORY_V3_CURSOR_SECRET", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
-        {"name": "TELEGRAM_BOT_TOKEN", "valueFrom": {"secretKeyRef": {"name": "TELEGRAM_BOT_TOKEN", "key": "latest"}}},
-        {"name": "TELEGRAM_WEBHOOK_SECRET", "valueFrom": {"secretKeyRef": {"name": "TELEGRAM_WEBHOOK_SECRET", "key": "latest"}}},
-        {"name": "SENDBLUE_API_KEY_ID", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_API_KEY_ID", "key": "latest"}}},
-        {"name": "SENDBLUE_API_KEY_SECRET", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_API_KEY_SECRET", "key": "latest"}}},
-        {"name": "SENDBLUE_NUMBER", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_NUMBER", "key": "latest"}}},
-        {"name": "SENDBLUE_WEBHOOK_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_WEBHOOK_SIGNING_SECRET", "key": "latest"}}},
-        {"name": "SENDBLUE_WEBHOOK_PATH_TOKEN", "valueFrom": {"secretKeyRef": {"name": "SENDBLUE_WEBHOOK_PATH_TOKEN", "key": "latest"}}},
-        {"name": "TWILIO_SMS_NUMBER", "valueFrom": {"secretKeyRef": {"name": "TWILIO_SMS_NUMBER", "key": "latest"}}},'''
+        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
@@ -180,14 +172,6 @@ STANDARD_CLOUD_RUN_SECRETS = {
     'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
     'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
     'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
-    'TELEGRAM_BOT_TOKEN': {'secret': 'TELEGRAM_BOT_TOKEN', 'version': 'latest'},
-    'TELEGRAM_WEBHOOK_SECRET': {'secret': 'TELEGRAM_WEBHOOK_SECRET', 'version': 'latest'},
-    'SENDBLUE_API_KEY_ID': {'secret': 'SENDBLUE_API_KEY_ID', 'version': 'latest'},
-    'SENDBLUE_API_KEY_SECRET': {'secret': 'SENDBLUE_API_KEY_SECRET', 'version': 'latest'},
-    'SENDBLUE_NUMBER': {'secret': 'SENDBLUE_NUMBER', 'version': 'latest'},
-    'SENDBLUE_WEBHOOK_SIGNING_SECRET': {'secret': 'SENDBLUE_WEBHOOK_SIGNING_SECRET', 'version': 'latest'},
-    'SENDBLUE_WEBHOOK_PATH_TOKEN': {'secret': 'SENDBLUE_WEBHOOK_PATH_TOKEN', 'version': 'latest'},
-    'TWILIO_SMS_NUMBER': {'secret': 'TWILIO_SMS_NUMBER', 'version': 'latest'},
 }
 
 

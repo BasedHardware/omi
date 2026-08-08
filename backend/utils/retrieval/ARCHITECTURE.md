@@ -10,11 +10,9 @@
 
 The `tools/` package exposes LangChain tools with user identity supplied through `RunnableConfig`. Tools call persistence and provider code through `database/` or `tool_services/`; they do not own HTTP routes. `tool_services/` contains reusable retrieval operations shared by tools and route handlers. `tool_result_boundaries.py` and `tools/result_bounds.py` keep large provider results bounded before they reach the model.
 
-Messaging channel management follows the same boundary: `tools/channel_tools.py` issues authenticated-account link actions and delegates phone verification to `utils/phone_registration.py`; provider webhooks and core-chat turn persistence stay in `routers/channels.py` and `services/channel_chat.py`.
 
 ## Invariants
 
 - `CORE_TOOLS` remains stable and ordered so prompt-cache prefixes remain reusable.
 - Tool calls receive the authenticated UID from request configuration and never infer identity from user text.
 - Retrieval results are bounded before model invocation.
-- Channel link codes are generated and persisted by the database boundary; channel tools do not receive provider webhook events.

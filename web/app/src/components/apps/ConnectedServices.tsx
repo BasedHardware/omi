@@ -1,23 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, MessageSquare, Puzzle } from 'lucide-react';
+import { Loader2, Puzzle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
-  createChannelLink,
   disconnectIntegration,
-  getChannelStatus,
   getIntegrationOAuthUrl,
   getIntegrations,
-  type ChannelLinkResponse,
-  type ChannelStatus,
 } from '@/lib/api';
-import {
-  MESSAGING_CHANNELS,
-  channelLabel,
-  isChannelLinked,
-  summarizeIntegrations,
-} from '@/lib/connectors';
+import { summarizeIntegrations } from '@/lib/connectors';
 import type { Integration } from '@/types/user';
 
 function Toggle({
@@ -71,9 +62,6 @@ export function ConnectedServices() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState<string | null>(null);
-  const [channelStatus, setChannelStatus] = useState<ChannelStatus | null>(null);
-  const [channelLink, setChannelLink] = useState<ChannelLinkResponse | null>(null);
-  const [channelLoading, setChannelLoading] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const loaded = await getIntegrations().catch(() => []);
@@ -89,21 +77,6 @@ export function ConnectedServices() {
       active = false;
     };
   }, [refresh]);
-
-  useEffect(() => {
-    getChannelStatus()
-      .catch(() => null)
-      .then((status) => setChannelStatus(status));
-  }, []);
-
-  const handleCreateChannelLink = async (channel: string) => {
-    setChannelLoading(channel);
-    try {
-      setChannelLink(await createChannelLink(channel));
-    } finally {
-      setChannelLoading(null);
-    }
-  };
 
   const handleConnect = async (integration: Integration) => {
     if (integration.coming_soon || loadingId) return;
@@ -162,61 +135,6 @@ export function ConnectedServices() {
           {summary.connected} of {summary.available} connected
         </p>
       </div>
-      <Card>
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-control bg-bg-quaternary flex items-center justify-center">
-            <MessageSquare className="w-6 h-6 text-text-secondary" />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-text-primary font-medium">Messaging channels</h3>
-            <p className="text-sm text-text-tertiary mt-1">
-              Use the same Omi core chat from Telegram, iMessage, or SMS.
-            </p>
-            <div className="mt-4 space-y-3">
-              {MESSAGING_CHANNELS.map((channel) => {
-                const linked = isChannelLinked(channelStatus, channel);
-                const activeLink = channelLink?.channel === channel ? channelLink : null;
-                return (
-                  <div key={channel} className="rounded-control bg-bg-quaternary/60 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm text-text-primary">
-                          {channelLabel(channel)}
-                        </p>
-                        <p className="text-xs text-text-tertiary">
-                          {linked ? 'Connected' : 'Not connected'}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleCreateChannelLink(channel)}
-                        disabled={channelLoading !== null}
-                        className="px-3 py-1.5 rounded-element bg-white/10 text-text-primary text-xs hover:bg-white/15 disabled:opacity-50"
-                      >
-                        {channelLoading === channel
-                          ? 'Generating…'
-                          : linked
-                            ? 'Generate new code'
-                            : 'Generate code'}
-                      </button>
-                    </div>
-                    {activeLink && (
-                      <div className="mt-3 rounded-element bg-black/20 p-3 space-y-2">
-                        <p className="font-mono text-xs text-text-primary break-all">
-                          {activeLink.code}
-                        </p>
-                        <p className="text-xs text-text-secondary">
-                          {activeLink.instructions}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </Card>
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />

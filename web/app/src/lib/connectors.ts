@@ -1,29 +1,4 @@
-import type { ChannelStatus } from '@/lib/api';
 import type { Integration } from '@/types/user';
-
-/**
- * The messaging channels Omi core chat can be reached from, in display order.
- */
-export const MESSAGING_CHANNELS = ['telegram', 'imessage', 'sms'] as const;
-
-export type MessagingChannel = (typeof MESSAGING_CHANNELS)[number];
-
-const CHANNEL_LABELS: Record<MessagingChannel, string> = {
-  telegram: 'Telegram',
-  imessage: 'iMessage',
-  sms: 'SMS',
-};
-
-export function channelLabel(channel: string): string {
-  return (
-    CHANNEL_LABELS[channel as MessagingChannel] ??
-    channel.charAt(0).toUpperCase() + channel.slice(1)
-  );
-}
-
-export function isChannelLinked(status: ChannelStatus | null, channel: string): boolean {
-  return Boolean(status?.bindings.some((binding) => binding.channel === channel));
-}
 
 /**
  * The Connectors page groups, in tab order: the app catalogue, the apps the

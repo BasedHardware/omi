@@ -465,14 +465,7 @@ cached: Dict[str, Any] = {}
 _MAX_RATE_LIMIT_ENTRIES = 100000
 
 
-def store_rate_limit(key: str, value: str) -> None:
-    """Write a rate-limit entry, enforcing the cap on the shared map.
-
-    Public because the phone-verification budget in `utils.phone_registration`
-    draws on this same window: the HTTP route and the chat tool must share one
-    counter, or a caller buys extra Twilio calls by choosing the other entry
-    point. Every writer goes through here so none of them can skip the cap.
-    """
+def _store_rate_limit(key: str, value: str) -> None:
     cached[key] = value
     if len(cached) > _MAX_RATE_LIMIT_ENTRIES:
         for stale in list(cached)[: len(cached) - _MAX_RATE_LIMIT_ENTRIES]:
@@ -518,7 +511,7 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
         timestamp = int(time.time())
 
     # Update the rate limit info in the in-process cache
-    store_rate_limit(key, json.dumps({"timestamp": timestamp, "remaining": remaining}))
+    _store_rate_limit(key, json.dumps({"timestamp": timestamp, "remaining": remaining}))
 
     return True
 
