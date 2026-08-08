@@ -20,10 +20,12 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const contract = JSON.parse(readFileSync(join(root, 'contract/bridge.contract.json'), 'utf8'));
-const defaultDist = resolve(
-  root,
-  '../../../core-foundation/core/packages/surfaces/dist',
-);
+// The shell is in-repo at core/shells/ios since the PR-6 promotion, so the
+// surfaces build is a sibling package: core/shells/ios -> core/packages/...
+// The previous value pointed at a sibling `core-foundation` checkout, a layout
+// that does not exist inside a worktree — the same stale-path class of bug that
+// left the bridge drift gates silently SKIPping before promotion.
+const defaultDist = resolve(root, '../../packages/surfaces/dist');
 const dist = resolve(process.env.SURFACES_DIST ?? defaultDist);
 const out = join(root, 'app/assets/surfaces');
 
