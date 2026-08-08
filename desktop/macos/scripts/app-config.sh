@@ -60,3 +60,26 @@ derive_omi_app_config() {
     BUNDLE_ID="$bundle_id"
     URL_SCHEME="$url_scheme"
 }
+
+derive_omi_automation_ui_mode() {
+    local is_named_bundle="${1:-false}"
+    local requested_mode="${2:-}"
+
+    if [ -z "$requested_mode" ]; then
+        if [ "$is_named_bundle" = "true" ]; then
+            requested_mode="quiet"
+        else
+            requested_mode="normal"
+        fi
+    fi
+
+    case "$requested_mode" in
+        normal|quiet|interactive)
+            printf '%s\n' "$requested_mode"
+            ;;
+        *)
+            echo "ERROR: OMI_AUTOMATION_UI_MODE must be normal, quiet, or interactive" >&2
+            return 1
+            ;;
+    esac
+}

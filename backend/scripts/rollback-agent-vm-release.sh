@@ -32,5 +32,6 @@ fi
 # Read the exact prior object version, then atomically replace only the active
 # generation observed above.  A concurrent deployment or rollback fails rather
 # than overwriting its pointer.
-gcloud storage cp "${previous}#${previous_generation}" "$active" --if-generation-match="$active_generation"
+gcloud storage cp "${previous}#${previous_generation}" "$active" \
+  --cache-control='no-store,max-age=0' --if-generation-match="$active_generation"
 echo "Restored Agent VM release pointer from ${previous} with generation guard."

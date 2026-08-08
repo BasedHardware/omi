@@ -2344,6 +2344,12 @@ workflows:
           RESOURCE_BUNDLE="$SWIFT_BUILD_DIR/Omi Computer_Omi Computer.bundle"
           if [ -d "$RESOURCE_BUNDLE" ]; then
             cp -R "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+            # SwiftPM emits Resources/node at the resource-bundle root. Keep
+            # Codemagic aligned with run.sh and the signed-artifact contract by
+            # moving it to the app-style nested resource path before signing.
+            source scripts/launcher-bootstrap.sh
+            omi_normalize_packaged_resource_bundle \
+              "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
           else
             echo "WARNING: SPM resource bundle not found (non-fatal)"
           fi
@@ -2451,7 +2457,7 @@ workflows:
           fi
 
           # Sign node with JIT entitlements (V8 requires MAP_JIT under Hardened Runtime)
-          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+          NODE_BUNDLE_PATH="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
           if [ -f "$NODE_BUNDLE_PATH" ]; then
             codesign --force --options runtime --timestamp \
               --sign "$SIGN_IDENTITY" \
@@ -2721,27 +2727,37 @@ workflows:
               --launch \
               --auth-storage-canary \
               --notification-callback-canary \
+              --timeout 90 \
               --result-json "$BUILD_DIR/desktop-smoke-result.json"
-
-            # The Omi Beta variant is what beta users actually install — smoke the
-            # exact signed artifacts under the beta identity as well.
-            OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
-            scripts/smoke-signed-desktop-artifact.sh \
-              --app "$BUILD_DIR/$BETA_APP_NAME.app" \
-              --zip "$BETA_SPARKLE_ZIP_PATH" \
-              --dmg "$BETA_DMG_PATH" \
-              --tag "$CM_TAG" \
-              --source-sha "$(git rev-parse HEAD)" \
-              --expected-channel beta \
-              --expected-bundle-id "$BETA_BUNDLE_ID" \
-              --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
-              --expected-python-api-url "https://api.omiapi.com/" \
-              --expected-desktop-api-url "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/" \
-              --launch \
-              --auth-storage-canary \
-              --notification-callback-canary \
-              --result-json "$BUILD_DIR/desktop-smoke-result-beta.json"
           fi
+
+      # Keep the installable Beta identity in a distinct provider step. A failed
+      # build must reveal which signed identity failed even when the operator can
+      # see only the mirrored GitHub check summary, not private Codemagic logs.
+      - name: Smoke signed desktop beta artifact
+        script: |
+          if [[ "${PREVIEW_MODE:-false}" == "true" ]]; then
+            echo "External previews do not produce the Omi Beta identity."
+            exit 0
+          fi
+          set -euo pipefail
+          OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1 \
+          scripts/smoke-signed-desktop-artifact.sh \
+            --app "$BUILD_DIR/$BETA_APP_NAME.app" \
+            --zip "$BETA_SPARKLE_ZIP_PATH" \
+            --dmg "$BETA_DMG_PATH" \
+            --tag "$CM_TAG" \
+            --source-sha "$(git rev-parse HEAD)" \
+            --expected-channel beta \
+            --expected-bundle-id "$BETA_BUNDLE_ID" \
+            --expected-feed-url "https://api.omi.me/v2/desktop/appcast.xml?identity=beta" \
+            --expected-python-api-url "https://api.omiapi.com/" \
+            --expected-desktop-api-url "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/" \
+            --launch \
+            --auth-storage-canary \
+            --notification-callback-canary \
+            --timeout 90 \
+            --result-json "$BUILD_DIR/desktop-smoke-result-beta.json"
 
       - name: Publish immutable external preview
         script: |

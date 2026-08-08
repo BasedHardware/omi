@@ -34,13 +34,13 @@ struct AskAIInputView: View {
           HStack(spacing: OmiSpacing.xxs) {
             Text("esc")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(.secondary)
+              .foregroundColor(NotchGlass.secondary)
               .frame(width: 30, height: 16)
-              .background(Color.white.opacity(0.1))
+              .background(NotchGlass.fillHover)
               .cornerRadius(OmiChrome.stripRadius)
             Text("to clear")
               .scaledFont(size: OmiType.caption)
-              .foregroundColor(.secondary)
+              .foregroundColor(NotchGlass.quiet)
           }
         }
         .padding(.top, OmiSpacing.sm)
@@ -62,7 +62,7 @@ struct AskAIInputView: View {
           if userInput.isEmpty && !hasMarkedText {
             Text("Ask a question...")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.secondary)
+              .foregroundColor(NotchGlass.quiet)
               .padding(.horizontal, OmiSpacing.sm)
               .padding(.vertical, OmiSpacing.sm)
           }
@@ -89,6 +89,10 @@ struct AskAIInputView: View {
         .padding(.horizontal, OmiSpacing.xxs)
         .frame(height: textHeight)
 
+        // The pill's own ink scale, not the environment's `.secondary`: this bar is inside the notch
+        // pill's black glass, so the ladder here is white-on-black whatever the app's appearance is.
+        PushToTalkMicButton(idleTint: NotchGlass.secondary)
+
         Button(action: {
           guard canSend else { return }
           sendMessage()
@@ -96,7 +100,7 @@ struct AskAIInputView: View {
           Image(systemName: "arrow.up.circle.fill")
             .scaledFont(size: 24)
             .foregroundColor(
-              canSend ? .white : .secondary
+              canSend ? NotchGlass.primary : NotchGlass.disabled
             )
         }
         .disabled(!canSend)

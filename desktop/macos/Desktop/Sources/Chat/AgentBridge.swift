@@ -2054,6 +2054,10 @@ actor AgentBridge {
 enum BridgeError: LocalizedError {
   case nodeNotFound
   case bridgeScriptNotFound
+  /// The bridge script exists but the payload it loads afterwards does not —
+  /// most importantly `pi-mono-extension`, which registers the `omi` provider.
+  /// Carries the missing bundle-relative components for the local log.
+  case agentRuntimePayloadIncomplete(missing: [String])
   case notRunning
   case encodingError
   case timeout
@@ -2076,9 +2080,9 @@ enum BridgeError: LocalizedError {
     case .agentRuntimeFailure(let failure):
       guard failure.source == "runtime" else { return false }
       return failure.userMessage == exactCode || failure.technicalMessage == exactCode
-    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
-      .processExited, .outOfMemory, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
-      .quotaExceeded, .authMissing:
+    case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
+      .encodingError, .timeout, .processExited, .outOfMemory, .failedToStart, .stopped, .restarting,
+      .requestAlreadyActive, .quotaExceeded, .authMissing:
       return false
     }
   }
@@ -2095,9 +2099,9 @@ enum BridgeError: LocalizedError {
       }
       return Self.isSessionAuthenticationFailureMessage(failure.displayMessage)
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)
-    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
-      .processExited, .outOfMemory, .failedToStart, .stopped, .restarting, .requestAlreadyActive,
-      .quotaExceeded:
+    case .nodeNotFound, .bridgeScriptNotFound, .agentRuntimePayloadIncomplete, .notRunning,
+      .encodingError, .timeout, .processExited, .outOfMemory, .failedToStart, .stopped, .restarting,
+      .requestAlreadyActive, .quotaExceeded:
       return false
     }
   }
@@ -2134,6 +2138,12 @@ enum BridgeError: LocalizedError {
       return AnalyticsManager.isDevBuild
         ? "AI components missing. Run ./run.sh to install the agent runtime."
         : "AI components missing. Please reinstall the app."
+    case .agentRuntimePayloadIncomplete(let missing):
+      // Keep the classifier's own phrase in the string: this description is what
+      // reaches `localizedDescription`, and surfaces re-classify it downstream.
+      let base = Self.runtimeInstallIncompleteMessage
+      guard AnalyticsManager.isDevBuild, !missing.isEmpty else { return base }
+      return "\(base) Missing: \(missing.joined(separator: ", ")). Rebuild with ./run.sh --full."
     case .notRunning:
       return "AI is not running. Try sending your message again."
     case .encodingError:
@@ -2174,6 +2184,11 @@ enum BridgeError: LocalizedError {
         "You've hit your \(plan) plan limit (\(limitStr); \(usedStr)). Upgrade in Settings → Plan and Usage, or wait until the next reset."
     }
   }
+
+  /// Copy for a bundle that shipped without its agent runtime. Retrying cannot
+  /// help — only a repaired install can — so the classifier owns the single
+  /// string and this error reuses it rather than forking a second wording.
+  static let runtimeInstallIncompleteMessage = AgentErrorClassifier.runtimeInstallIncompleteMessage
 
   private static func userFacingAgentErrorMessage(_ msg: String) -> String {
     // Classification owns the copy so "please try again" is only ever said for

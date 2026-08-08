@@ -33,7 +33,9 @@ from database.google_credentials import prepare_google_credentials
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 from utils.memory.memory_system import CANONICAL_MEMORY_USERS
 
-TASK_INTELLIGENCE_DOGFOOD_UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+# Human dogfood is paused. A reviewed rollout must set a new explicit UID
+# before this operator tool can inspect or mutate a control document.
+TASK_INTELLIGENCE_DOGFOOD_UID = ''
 CONTROL_PATH_TEMPLATE = 'users/{uid}/task_intelligence_control/state'
 DEFAULT_FIRESTORE_RPC_TIMEOUT_SECONDS = 20.0
 GCLOUD_USER_CREDENTIAL_SOURCE = 'gcloud-user'
@@ -67,6 +69,8 @@ def control_path(uid: str) -> str:
 
 
 def require_dogfood_uid(uid: str) -> None:
+    if not TASK_INTELLIGENCE_DOGFOOD_UID:
+        raise RuntimeError('Smart Tasks dogfood is paused; no approved UID is configured')
     if uid != TASK_INTELLIGENCE_DOGFOOD_UID:
         raise ValueError('this operator tool is restricted to the approved Smart Tasks dogfood UID')
     if uid not in CANONICAL_MEMORY_USERS:
