@@ -91,12 +91,88 @@ export const ARTIFACT_SOURCE_ROOTS = Object.freeze({
 });
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-/** `<workspace>/core-foundation/integration/lib` -> `<workspace>` */
-export const WORKSPACE_ROOT = join(HERE, "..", "..", "..");
+
+/**
+ * ── WHERE THE REPOS ARE, AND WHY THIS IS NOT PATH ARITHMETIC ────────────────
+ *
+ * This used to be `join(HERE, "..", "..", "..")` — true of the checkout at
+ * `<workspace>/core-foundation`, and false of every linked worktree, which is
+ * where the swarm protocol REQUIRES lanes to work (`bin/omi-lane`). From a lane
+ * worktree the old expression resolved the workspace to the worktree ROOT, so
+ * `<that>/core-foundation` and `<that>/platform` did not exist and every lane
+ * hit `spawnSync git ENOENT` — an error naming neither the path nor the cause.
+ * No lane could run the `make l1` / `make l2` that §4 makes non-negotiable.
+ *
+ * Two rules replace the arithmetic:
+ *
+ *  1. **The core repo is the checkout this file lives in.** A lane working in a
+ *     `core-foundation` worktree must measure ITS OWN tree — measuring the
+ *     shared checkout instead would be the exact false-green this whole file
+ *     exists to prevent, with the harness reporting on a tree nobody edited.
+ *  2. **The workspace comes from git, not from `..`.** `--git-common-dir` points
+ *     at the checkout that owns the object store no matter how many worktrees
+ *     deep you are (`core-foundation` is itself a linked worktree of
+ *     `upstream-keep-clean`, so this is already true in the normal case).
+ *
+ * `OMI_CORE_ROOT` / `OMI_PLATFORM_ROOT` override either side — a platform lane
+ * points the core side at the shared checkout, and vice versa. `bin/omi-lane
+ * start` prints the exact exports.
+ */
+function resolveWorkspaceRoot() {
+  const declared = process.env.OMI_WORKSPACE_ROOT;
+  if (declared) return declared;
+  try {
+    const commonDir = execFileSync(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { cwd: HERE, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    // `<workspace>/<owning-repo>/.git` -> `<workspace>`
+    return dirname(dirname(commonDir));
+  } catch {
+    return join(HERE, "..", "..", "..");
+  }
+}
+
+function resolveCoreRoot() {
+  const declared = process.env.OMI_CORE_ROOT;
+  if (declared) return declared;
+  try {
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: HERE,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return join(HERE, "..", "..");
+  }
+}
+
+export const WORKSPACE_ROOT = resolveWorkspaceRoot();
 export const REPO_PATHS = Object.freeze({
-  "core-foundation": join(WORKSPACE_ROOT, "core-foundation"),
-  platform: join(WORKSPACE_ROOT, "platform"),
+  "core-foundation": resolveCoreRoot(),
+  platform: process.env.OMI_PLATFORM_ROOT ?? join(WORKSPACE_ROOT, "platform"),
 });
+
+/**
+ * Say which repo is missing and which variable names it. The failure this
+ * replaces was `spawnSync git ENOENT`, which points at git and is a lie.
+ */
+export function assertRepoPathsExist() {
+  const missing = [];
+  for (const [name, path] of Object.entries(REPO_PATHS)) {
+    if (!existsSync(join(path, ".git"))) {
+      missing.push(`  ${name}: ${path}  (override with ${name === "platform" ? "OMI_PLATFORM_ROOT" : "OMI_CORE_ROOT"})`);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `provenance: repository path does not exist:\n${missing.join("\n")}\n` +
+        `  workspace resolved to: ${WORKSPACE_ROOT}\n` +
+        `  Working in a lane worktree? \`bin/omi-lane start\` prints the exports you need.`,
+    );
+  }
+}
 
 function git(args, { cwd, env = {} }) {
   return execFileSync("git", args, {

@@ -45,7 +45,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { REPO_PATHS, readStampFile, verifyArtifact } from "./lib/provenance.mjs";
+import { REPO_PATHS, assertRepoPathsExist, readStampFile, verifyArtifact } from "./lib/provenance.mjs";
 
 const CORE_REPO = REPO_PATHS["core-foundation"];
 const PLATFORM_REPO = REPO_PATHS.platform;
@@ -243,6 +243,15 @@ if (!laneArg || argv.includes("--help")) {
   // makes a wrapper feel untrustworthy.
   process.exit(argv.includes("--help") ? 0 : 2);
 }
+// Before anything spawns: state which repo is missing and how to point at it.
+// A lane that cannot see a repo must say so, not fail later inside git.
+try {
+  assertRepoPathsExist();
+} catch (err) {
+  process.stderr.write(`${err.message}\n`);
+  process.exit(2);
+}
+
 try {
   receiptsModule = await import("./lib/receipts.mjs");
 } catch {

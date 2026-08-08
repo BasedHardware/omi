@@ -43,7 +43,14 @@ const { fetchSynthesizedMemoryPage, PLATFORM_MEMORY_RECALL_PATH } = await import
   new URL("../../core/packages/adapters-platform/dist/index.js", import.meta.url).href
 );
 
-const PLATFORM_REPO = new URL("../../../platform/", import.meta.url).pathname;
+// NOT `new URL("../../../platform/", import.meta.url)`. That arithmetic is true
+// of the checkout at `<workspace>/core-foundation` and false of every lane
+// worktree, where it resolved to a `platform/` that does not exist — and a
+// missing `cwd` makes `spawn` report ENOENT against the COMMAND, so this failed
+// as `spawn bun ENOENT` and read like a broken toolchain. `provenance.mjs` owns
+// repo resolution for exactly this reason; ask it.
+const { REPO_PATHS } = await import(new URL("../lib/provenance.mjs", import.meta.url).href);
+const PLATFORM_REPO = REPO_PATHS.platform;
 const TOKEN = "omi-integration-qa-key-v1";
 const BOOT_TIMEOUT_MS = 20_000;
 
