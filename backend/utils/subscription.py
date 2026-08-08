@@ -1160,6 +1160,16 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     if not subscription or subscription.plan == PlanType.basic:
         if _has_active_stripe_subscription(uid):
             return False, "User already has an active subscription (pending sync)"
+        # A cancel-at-period-end subscription is still active until the period
+        # ends but is skipped by _has_active_stripe_subscription (it continues
+        # past cancel_at_period_end subs). Enforce the same defer-plan-change rule
+        # so a different target price can't be checked out before the current
+        # period ends, while allowing same-price reactivation.
+        pending_cancel_sub = find_active_paid_subscription_for_user(uid)
+        if pending_cancel_sub is not None and is_pending_cancellation(pending_cancel_sub):
+            if target_price_id and pending_cancel_sub.current_price_id != target_price_id:
+                return False, "Plan changes are available after the current subscription ends"
+            return True, "User can reactivate the current subscription"
         return True, "User can make payment"
 
     # If unlimited plan but inactive, user can pay
