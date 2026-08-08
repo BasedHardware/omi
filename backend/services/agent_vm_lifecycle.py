@@ -809,6 +809,7 @@ def _begin_boot_image_migration_txn(
         owner=owner,
         now=now,
         allow_drain_requested=recovering_pre_cutover or initial_migration_drain,
+        allow_start_requested=initial_migration_drain,
     ):
         return None
     old_instance_id = str(migration.get("oldInstanceId") or "")

@@ -14,8 +14,8 @@ manifest="${AGENT_VM_MIGRATION_MANIFEST:-}"
 expected_generation="${AGENT_VM_MIGRATION_EXPECTED_ACTIVE_GENERATION:-}"
 region="${AGENT_VM_MIGRATION_REGION:-us-central1}"
 scheduler="${AGENT_VM_MIGRATION_SCHEDULER:-agent-vm-reconciler-5m}"
-if [[ "$project" != "based-hardware" || "$bucket" != "based-hardware-agent" || ! -f "$manifest" ]]; then
-  echo "Production project based-hardware, bucket based-hardware-agent, and an existing migration manifest are required." >&2
+if [[ "$project" != "based-hardware" || "$bucket" != "based-hardware-agent" || "$region" != "us-central1" || "$scheduler" != "agent-vm-reconciler-5m" || ! -f "$manifest" ]]; then
+  echo "Exact production project, bucket, region, scheduler identity, and an existing migration manifest are required." >&2
   exit 2
 fi
 if [[ ! "$expected_generation" =~ ^[1-9][0-9]*$ ]]; then
@@ -96,7 +96,8 @@ fi
 active_readback="$(mktemp)"
 migration_readback="$(mktemp)"
 pointer_error="$(mktemp)"
-trap 'rm -f "$active_readback" "$migration_readback" "$pointer_error"' EXIT
+previous_readback="$(mktemp)"
+trap 'rm -f "$active_readback" "$migration_readback" "$pointer_error" "$previous_readback"' EXIT
 gcloud storage cp "${active_uri}#${expected_generation}" "$active_readback"
 
 # The migration artifact may add only the hash-covered migration section to
@@ -123,6 +124,7 @@ cmp -s "$manifest" "$migration_readback"
 
 if previous_generation="$(gcloud storage objects describe "$previous_uri" --format='value(generation)' 2>"$pointer_error")"; then
   [[ "$previous_generation" =~ ^[0-9]+$ ]]
+  gcloud storage cp "${previous_uri}#${previous_generation}" "$previous_readback"
 elif grep -Eq '(^|[^-0-9])404([^0-9]|$)|NOT_FOUND' "$pointer_error"; then
   previous_generation=0
 else
@@ -132,8 +134,19 @@ else
 fi
 gcloud storage cp "${active_uri}#${expected_generation}" "$previous_uri" \
   --cache-control='no-store,max-age=0' --if-generation-match="$previous_generation"
-gcloud storage cp "$manifest_uri" "$active_uri" \
-  --cache-control='no-store,max-age=0' --if-generation-match="$expected_generation"
+staged_previous_generation="$(gcloud storage objects describe "$previous_uri" --format='value(generation)')"
+[[ "$staged_previous_generation" =~ ^[1-9][0-9]*$ ]]
+if ! gcloud storage cp "$manifest_uri" "$active_uri" \
+  --cache-control='no-store,max-age=0' --if-generation-match="$expected_generation"; then
+  if [[ "$previous_generation" == "0" ]]; then
+    gcloud storage rm "$previous_uri" --if-generation-match="$staged_previous_generation"
+  else
+    gcloud storage cp "$previous_readback" "$previous_uri" \
+      --cache-control='no-store,max-age=0' --if-generation-match="$staged_previous_generation"
+  fi
+  echo "ERROR: active production pointer was not published; previous pointer restored." >&2
+  exit 1
+fi
 activated_generation="$(gcloud storage objects describe "$active_uri" --format='value(generation)')"
 [[ "$activated_generation" =~ ^[0-9]+$ ]]
 gcloud storage cp "${active_uri}#${activated_generation}" "$migration_readback"

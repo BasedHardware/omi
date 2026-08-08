@@ -609,9 +609,9 @@ def test_boot_image_migration_never_replaces_a_provider_running_vm_with_stale_re
     )
 
 
-def test_migration_allowlist_owners_are_selected_outside_the_rollout_cohort(monkeypatch):
-    """An explicitly allowlisted, stopped VM that is not in the normal rollout
-    cohort must still be selected so its boot-image drift can be replaced."""
+def test_running_migration_canary_is_selected_outside_the_rollout_cohort(monkeypatch):
+    """An explicitly drainable running canary outside the normal cohort must
+    still be selected so its boot-image drift can be replaced."""
     monkeypatch.setattr(reconciler, "GceAgentVmClient", FakeApi)
     monkeypatch.setattr(reconciler, "_init_firebase", lambda: None)
     monkeypatch.setattr(reconciler, "claim_reconciler_run_lease", lambda *_args: True)
@@ -624,12 +624,13 @@ def test_migration_allowlist_owners_are_selected_outside_the_rollout_cohort(monk
             "allowedUids": ["migration-owner"],
             "maxConcurrency": 1,
             "soakSeconds": 60,
+            "drainRunning": True,
         }
     }
 
     def fake_owners() -> list[tuple[str, dict[str, Any]]]:
         return [
-            ("migration-owner", {"vmName": "omi-agent-migration-owner", "status": "stopped"}),
+            ("migration-owner", {"vmName": "omi-agent-migration-owner", "status": "ready"}),
             ("rollout-owner", {"vmName": "omi-agent-rollout-owner", "status": "stopped"}),
         ]
 
@@ -2506,6 +2507,8 @@ def test_boot_image_migration_atomically_exchanges_approved_initial_drain_for_jo
                         "drainRequested": True,
                         "drainRequestedAt": 95.0,
                         "migrationDrainRelease": RELEASE.release_id,
+                        "startRequested": True,
+                        "startRequestedAt": 96.0,
                     },
                 }
             }

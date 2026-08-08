@@ -1722,10 +1722,11 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
                 _select_reconcile_owners(owners, release.release_id, target_percent), key=lambda item: item[0]
             )
             # An explicit boot-image migration allowlist is independent of the
-            # ordinary release rollout cohort.  A stopped allowlisted VM that is
-            # not in the current cohort must still be selected so its drift can
-            # be replaced.  Rollout advancement only consumes rollout_selected
-            # results, so these extra owners never advance the rollout phase.
+            # ordinary release rollout cohort. A stopped owner or an explicitly
+            # drainable ready owner that is not in the current cohort must still
+            # be selected so its drift can be replaced. Rollout advancement only
+            # consumes rollout_selected results, so these extra owners never
+            # advance the rollout phase.
             if migration_plan is not None:
                 selected_uids = {uid for uid, _ in selected}
                 migration_candidates = [
@@ -1733,7 +1734,11 @@ async def run_reconciler(*, dry_run: bool = False) -> list[ReconcileResult]:
                     for uid, vm in owners
                     if uid not in selected_uids
                     and uid in migration_plan.allowed_uids
-                    and (str(vm.get("status") or "") == "stopped" or _active_migration_candidate(vm))
+                    and (
+                        str(vm.get("status") or "") == "stopped"
+                        or (migration_plan.drain_running and str(vm.get("status") or "") == "ready")
+                        or _active_migration_candidate(vm)
+                    )
                 ]
                 selected.extend(migration_candidates)
             # A migration plan has its own explicit maxConcurrency contract and

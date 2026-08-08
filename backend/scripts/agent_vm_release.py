@@ -109,7 +109,8 @@ def validate_manifest(payload: Mapping[str, Any]) -> None:
                 migration.get("approvalPolicy") != PRODUCTION_MIGRATION_APPROVAL_POLICY
                 or len(allowed_uids) != 1
                 or migration["soakSeconds"] < PRODUCTION_MIGRATION_MIN_ADMISSION_SOAK_SECONDS
-                or migration["retentionSeconds"] < PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS
+                or migration.get("retentionSeconds", migration["soakSeconds"])
+                < PRODUCTION_MIGRATION_MIN_RETENTION_SECONDS
                 or migration.get("drainRunning") is not True
             ):
                 raise ValueError(

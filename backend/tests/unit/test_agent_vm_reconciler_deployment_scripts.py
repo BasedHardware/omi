@@ -136,6 +136,86 @@ def test_release_renderer_emits_only_a_one_owner_seven_day_production_canary(tmp
     release.validate_manifest(payload)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("allowedUids", ["canary-owner", "second-owner"]),
+        ("maxConcurrency", 2),
+        ("soakSeconds", 599),
+        ("retentionSeconds", 604799),
+        ("drainRunning", False),
+        ("approvalPolicy", "unapproved"),
+    ],
+)
+def test_production_migration_validator_locks_each_canary_gate(tmp_path, field, value):
+    release = _release_module()
+    output = tmp_path / "migration.json"
+    assert (
+        release.main(
+            [
+                "--output",
+                str(output),
+                "--environment",
+                "production",
+                "--source-sha",
+                "a" * 40,
+                "--image-digest",
+                f"gcr.io/based-hardware/agent-vm@sha256:{'b' * 64}",
+                "--startup-uri",
+                "gs://based-hardware-agent/agent-vm/releases/startup.sh",
+                "--startup-sha256",
+                "c" * 64,
+                "--boot-image",
+                "projects/based-hardware/global/images/omi-agent-20260805",
+                "--service-account",
+                "omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com",
+                "--boot-image-migration-allowed-uid",
+                "canary-owner",
+                "--boot-image-migration-soak-seconds",
+                "600",
+                "--boot-image-migration-retention-seconds",
+                "604800",
+                "--boot-image-migration-drain-running",
+                "--boot-image-migration-approval-policy",
+                "state-preserving-v1",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    payload.pop("manifestSha256")
+    payload["bootImageMigration"][field] = value
+
+    with pytest.raises(ValueError):
+        release.validate_manifest(payload)
+
+
+def test_production_migration_validator_fails_closed_without_explicit_retention(tmp_path):
+    release = _release_module()
+    payload = {
+        "schemaVersion": 1,
+        "environment": "production",
+        "sourceSha": "a" * 40,
+        "imageDigest": f"gcr.io/based-hardware/agent-vm@sha256:{'b' * 64}",
+        "startupUri": "gs://based-hardware-agent/agent-vm/releases/startup.sh",
+        "startupSha256": "c" * 64,
+        "bootImage": "projects/based-hardware/global/images/omi-agent-20260805",
+        "serviceAccount": "omi-agent-vm-bootstrap@based-hardware.iam.gserviceaccount.com",
+        "rollout": {"phase": "sentinel", "targetPercent": 1, "maxConcurrency": 1},
+        "bootImageMigration": {
+            "enabled": True,
+            "allowedUids": ["canary-owner"],
+            "maxConcurrency": 1,
+            "soakSeconds": 600,
+            "drainRunning": True,
+            "approvalPolicy": "state-preserving-v1",
+        },
+    }
+
+    with pytest.raises(ValueError, match="production"):
+        release.validate_manifest(payload)
+
+
 def test_prod_migration_activator_is_generation_guarded_and_scheduler_paused():
     script = _read("backend/scripts/activate-agent-vm-prod-migration.sh")
 
@@ -143,10 +223,16 @@ def test_prod_migration_activator_is_generation_guarded_and_scheduler_paused():
     assert 'scheduler_state' in script and '"PAUSED"' in script
     assert 'project" != "based-hardware"' in script
     assert 'bucket" != "based-hardware-agent"' in script
+    assert 'region" != "us-central1"' in script
+    assert 'scheduler" != "agent-vm-reconciler-5m"' in script
     assert "state-preserving-v1" in script
     assert "7 * 24 * 60 * 60" in script
     assert "production migration must extend the exact active normal release" in script
     assert '--if-generation-match="$expected_generation"' in script
+    assert 'gcloud storage cp "${previous_uri}#${previous_generation}" "$previous_readback"' in script
+    assert 'gcloud storage rm "$previous_uri" --if-generation-match="$staged_previous_generation"' in script
+    assert '--if-generation-match="$staged_previous_generation"' in script
+    assert "previous pointer restored" in script
     assert "scheduler remains PAUSED" in script
 
 
@@ -184,6 +270,9 @@ def test_scheduler_apply_resumes_existing_trigger_then_validates_exact_contract(
     assert "gcloud scheduler jobs update http" in script
     assert "gcloud scheduler jobs resume" in script
     assert "gcloud scheduler jobs pause" in script
+    assert '"--schedule=0 0 31 2 *"' in script
+    assert 'if [[ "$current_state" == "ENABLED" ]]' in script
+    assert 'if [[ "$current_state" == "PAUSED" ]]' in script
     assert "AGENT_VM_RECONCILER_SCHEDULER_PAUSED" in script
     assert "validate_agent_vm_reconciler_scheduler.py" in script
     assert "--scheduler-service-account \"$scheduler_sa\"" in script
