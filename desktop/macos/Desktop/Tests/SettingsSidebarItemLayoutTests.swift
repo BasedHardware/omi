@@ -13,12 +13,25 @@ final class SettingsSidebarItemLayoutTests: XCTestCase {
         .scaledFont(size: OmiType.body, weight: .medium)
         .fixedSize()
     ).fittingSize.width
-    let requiredWidth = labelWidth + 20 + OmiSpacing.md + 2 * OmiSpacing.md
+    // The fixtures the row actually spends around the label, named rather than approximated: the
+    // icon column, the gap after it, and the row's own two side paddings. They are the settings-kit
+    // metrics now, not generic spacing tokens, and this sum is what decides the sidebar's width —
+    // see `SettingsSidebarMetrics.expandedWidth`, which is derived from it.
+    let requiredWidth =
+      labelWidth + 20 + SettingsGlassMetrics.rowContentSpacing
+      + 2 * SettingsGlassMetrics.rowHorizontalPadding
 
     XCTAssertLessThanOrEqual(
-      requiredWidth,
+      requiredWidth + SettingsSidebarMetrics.labelSlack,
       SettingsSidebarMetrics.itemAvailableWidth,
-      "the merged label must fit in the fixed settings-sidebar row"
+      """
+      "\(SettingsContentView.SettingsSection.notifications.displayTitle)" needs \
+      \(String(format: "%.1f", requiredWidth)) pt plus \(SettingsSidebarMetrics.labelSlack) pt of \
+      slack, and the row has \(SettingsSidebarMetrics.itemAvailableWidth). The label does not fail \
+      loudly when it runs out — it truncates to "Notifications & P…". The slack is not padding for \
+      its own sake: a build whose arithmetic cleared the requirement by 4 pt still truncated, so \
+      the fit is asserted with headroom rather than to the last point.
+      """
     )
 
     let unselectedHeight = itemHeight(isSelected: false)
@@ -59,6 +72,42 @@ final class SettingsSidebarItemLayoutTests: XCTestCase {
       60,
       "constrained sidebar label should stay on one line (truncate, not wrap)"
     )
+  }
+
+  /// `CrispManager` has counted unread founder replies all along and nothing anywhere in the app
+  /// drew the number. The `Help` row is its one reader, so the badge has to actually take room —
+  /// and has to do it without pushing the row onto a second line, which is the failure the
+  /// sidebar's whole derived width exists to prevent.
+  func testTheHelpRowsUnreadCountIsDrawnAndStaysOnOneLine() {
+    let plain = itemSize(section: .help, badgeCount: 0)
+    let badged = itemSize(section: .help, badgeCount: 12)
+
+    XCTAssertGreaterThan(
+      badged.width, plain.width,
+      "an unread count that occupies no width is not being rendered")
+    XCTAssertEqual(
+      badged.height, plain.height, accuracy: 0.5,
+      "the badge must sit in the row, not add a line to it")
+    XCTAssertLessThanOrEqual(
+      badged.width, SettingsSidebarMetrics.itemAvailableWidth,
+      "the badged Help row must still fit the sidebar it lives in")
+  }
+
+  private func itemSize(
+    section: SettingsContentView.SettingsSection, badgeCount: Int
+  ) -> CGSize {
+    let host = NSHostingView(
+      rootView: SettingsSidebarItem(
+        section: section,
+        isSelected: false,
+        iconWidth: 20,
+        badgeCount: badgeCount,
+        onTap: {}
+      )
+      .fixedSize()
+    )
+    host.layoutSubtreeIfNeeded()
+    return host.fittingSize
   }
 
   private func itemHeight(isSelected: Bool) -> CGFloat {

@@ -388,8 +388,6 @@ class AnalyticsManager {
     _pendingTimedEvents.removeWhere((_, started) => started.isBefore(cutoff));
   }
 
-  void onboardingDeviceConnected() => track('Onboarding Device Connected');
-
   void onboardingCompleted() => track('Onboarding Completed');
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
@@ -523,8 +521,7 @@ class AnalyticsManager {
     track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
   }
 
-  void deviceConnected() {
-    final device = _preferences.btDevice;
+  void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     track('Device Connected', properties: {...device.toJson(), 'type': device.type.name, 'device_vendor': vendor});
     setUserProperty('device_vendor', vendor);
@@ -552,8 +549,6 @@ class AnalyticsManager {
       'device_vendor': device.type.analyticsVendor,
       'model': _knownDeviceValue(device.modelNumber),
       'firmware_revision': _knownDeviceValue(device.firmwareRevision),
-      // The app emits at disconnect, before native auto-reconnect can attempt.
-      'reconnect_attempt_count': 0,
     };
     if (hciReasonCode != null && hciReasonCode >= 0) {
       properties['hci_reason_code'] = hciReasonCode;
@@ -844,8 +839,6 @@ class AnalyticsManager {
   void subscriptionCancelAbandoned({required int step, String? reason}) =>
       track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
 
-  void getFriendClicked() => track('Get Friend Clicked');
-
   void connectFriendClicked() => track('Connect Friend Clicked');
 
   void disconnectFriendClicked() => track('Disconnect Friend Clicked');
@@ -1102,17 +1095,6 @@ class AnalyticsManager {
         'has_photos': hasPhotos,
         'segment_count': segmentCount,
         'photo_count': photoCount,
-      },
-    );
-  }
-
-  void deviceInfoButtonClicked({String? deviceId, String? deviceName, int? batteryLevel}) {
-    track(
-      'Device Info Button Clicked',
-      properties: {
-        if (deviceId != null) 'device_id': deviceId,
-        if (deviceName != null) 'device_name': deviceName,
-        if (batteryLevel != null) 'battery_level': batteryLevel,
       },
     );
   }

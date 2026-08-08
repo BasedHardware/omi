@@ -23,6 +23,9 @@ from database import users as users_db
 from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import (
+    AgentVmRelease,
+    GceAgentVmClient,
+    STATE_SOURCE_REQUIRED_METADATA,
     claim_vm_lease,
     clear_vm_reconcile_lease_fields,
     request_vm_start,
@@ -45,6 +48,7 @@ from utils.subscription import is_trial_paywalled
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _ZONE = "us-central1-a"
+_GCE_NUMERIC_ID = re.compile(r"[0-9]+")
 _CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 _READY_TIMEOUT_SECONDS = 300
 _READY_POLL_SECONDS = 5
@@ -60,6 +64,18 @@ class AccountDeletionAccessBlocked(RuntimeError):
 
 class AgentVmCreateOutcomeUnknown(RuntimeError):
     """The provider may have accepted a create request before the failure."""
+
+
+class AgentVmReadinessError(RuntimeError):
+    """Provider creation succeeded, but the new VM failed authenticated readiness."""
+
+    def __init__(self, message: str, instance_id: str) -> None:
+        super().__init__(message)
+        self.instance_id = instance_id
+
+
+class AgentVmIdentityMismatch(RuntimeError):
+    """The provider resource no longer matches the late-cleanup fence."""
 
 
 class AgentVmResponse(BaseModel):
@@ -96,6 +112,10 @@ async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _agent_vm_owner_hash(uid: str) -> str:
+    return hashlib.sha256(uid.encode("utf-8")).hexdigest()[:20]
 
 
 def _project() -> str:
@@ -148,6 +168,8 @@ def _agent_vm_startup_metadata(bucket: str) -> dict[str, str]:
         "omi-agent-image-digest": image_digest,
         "omi-agent-startup-sha256": startup_sha256,
         "omi-agent-boot-image": boot_image,
+        "omi-agent-state-required": "true",
+        STATE_SOURCE_REQUIRED_METADATA: "false",
     }
     return metadata
 
@@ -236,6 +258,7 @@ def _set_vm_if_current_txn(
     status: str,
     ip: str | None,
     zone: str,
+    instance_id: str | None = None,
 ) -> bool:
     deletion = deletion_ref.get(transaction=transaction)
     raw_status = (deletion.to_dict() or {}).get("wipe_status") if deletion.exists else None
@@ -260,6 +283,10 @@ def _set_vm_if_current_txn(
         next_vm["ip"] = ip
     else:
         next_vm.pop("ip", None)
+    if instance_id is not None:
+        if not _GCE_NUMERIC_ID.fullmatch(instance_id):
+            raise ValueError("Agent VM instance ID must be numeric")
+        next_vm["instanceId"] = instance_id
     transaction.set(user_ref, {"agentVm": next_vm}, merge=True)
     return True
 
@@ -271,6 +298,7 @@ def _set_vm_if_current(
     status: str,
     ip: str | None = None,
     zone: str = _ZONE,
+    instance_id: str | None = None,
 ) -> bool:
     client = get_firestore_client()
     return _set_vm_if_current_txn(
@@ -282,6 +310,7 @@ def _set_vm_if_current(
         status,
         ip,
         zone,
+        instance_id,
     )
 
 
@@ -323,24 +352,32 @@ async def _instance(project: str, zone: str, vm_name: str) -> tuple[str, dict[st
     return str(instance.get("status", "UNKNOWN")), instance
 
 
-async def _wait_for_vm_ready(ip: str, auth_token: str) -> None:
-    deadline = time.monotonic() + _READY_TIMEOUT_SECONDS
-    url = f"http://{ip}:8080/health"
-    headers = {"Authorization": f"Bearer {auth_token}"}
-    async with httpx.AsyncClient(timeout=10) as client:
-        while time.monotonic() < deadline:
-            try:
-                unauthenticated = await client.get(url)
-                if unauthenticated.status_code != 401:
-                    await asyncio.sleep(_READY_POLL_SECONDS)
-                    continue
-                response = await client.get(url, headers=headers)
-                if response.status_code == 200 and response.json().get("status") == "ok":
-                    return
-            except (httpx.HTTPError, ValueError):
-                pass
-            await asyncio.sleep(_READY_POLL_SECONDS)
-    raise RuntimeError("Agent VM did not become healthy before the readiness timeout")
+def _agent_vm_release(service_account: str) -> AgentVmRelease:
+    return AgentVmRelease(
+        environment=os.getenv("ENVIRONMENT", ""),
+        source_sha=os.environ["AGENT_VM_RELEASE_ID"].strip(),
+        image_digest=os.environ["AGENT_VM_IMAGE_DIGEST"].strip(),
+        startup_uri=os.environ["AGENT_VM_STARTUP_URI"].strip(),
+        startup_sha256=os.environ["AGENT_VM_STARTUP_SHA256"].strip(),
+        boot_image=os.environ["AGENT_VM_BOOT_IMAGE"].strip(),
+        service_account=service_account,
+    )
+
+
+async def _wait_for_vm_ready(
+    project: str,
+    private_ip: str,
+    auth_token: str,
+    release: AgentVmRelease,
+    expected_state_migration_id: str,
+) -> None:
+    await GceAgentVmClient(project).wait_for_runtime(
+        private_ip,
+        auth_token,
+        release,
+        timeout=_READY_TIMEOUT_SECONDS,
+        expected_state_migration_id=expected_state_migration_id,
+    )
 
 
 def _is_usable_vm_ip(value: Any) -> bool:
@@ -362,8 +399,14 @@ def _ip(instance: dict[str, Any]) -> str | None:
 
 
 async def _create_vm(
-    project: str, source_image: str, bucket: str, vm_name: str, auth_token: str, service_account: str
-) -> str:
+    project: str,
+    source_image: str,
+    bucket: str,
+    vm_name: str,
+    auth_token: str,
+    service_account: str,
+    owner_hash: str,
+) -> tuple[str, str]:
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{_ZONE}/instances"
     startup_metadata = _agent_vm_startup_metadata(bucket)
     body = {
@@ -378,7 +421,22 @@ async def _create_vm(
                     "diskSizeGb": "50",
                     "diskType": f"zones/{_ZONE}/diskTypes/pd-balanced",
                 },
-            }
+            },
+            {
+                "boot": False,
+                "deviceName": "omi-agent-state",
+                "mode": "READ_WRITE",
+                "autoDelete": True,
+                "initializeParams": {
+                    "diskName": f"{vm_name}-state",
+                    "diskSizeGb": "50",
+                    "diskType": f"zones/{_ZONE}/diskTypes/pd-balanced",
+                    "labels": {
+                        "omi-agent-role": "state",
+                        "omi-agent-owner": owner_hash,
+                    },
+                },
+            },
         ],
         "serviceAccounts": [
             {
@@ -388,6 +446,7 @@ async def _create_vm(
                 "scopes": [_CLOUD_PLATFORM_SCOPE],
             }
         ],
+        "labels": {"omi-agent-owner": owner_hash},
         "networkInterfaces": [
             {
                 "network": "global/networks/default",
@@ -418,11 +477,26 @@ async def _create_vm(
         raise AgentVmCreateOutcomeUnknown("GCE create completion is unknown") from exc
     if instance is None:
         raise AgentVmCreateOutcomeUnknown("GCE created VM is unavailable")
+    instance_id = str(instance.get("id") or "")
+    if not _GCE_NUMERIC_ID.fullmatch(instance_id):
+        raise AgentVmCreateOutcomeUnknown("created Agent VM identity is unavailable")
+    private_ip = GceAgentVmClient.private_instance_ip(instance)
     ip = _ip(instance)
+    if private_ip is None:
+        raise AgentVmReadinessError("created Agent VM has no usable private VPC address", instance_id)
     if ip is None:
-        raise AgentVmCreateOutcomeUnknown("GCE created VM has no usable IP address")
-    await _wait_for_vm_ready(ip, auth_token)
-    return ip
+        raise AgentVmReadinessError("created Agent VM has no usable public IP address", instance_id)
+    try:
+        await _wait_for_vm_ready(
+            project,
+            private_ip,
+            auth_token,
+            _agent_vm_release(service_account),
+            vm_name,
+        )
+    except Exception as exc:
+        raise AgentVmReadinessError("created Agent VM did not become ready", instance_id) from exc
+    return ip, instance_id
 
 
 async def _stop_vm(project: str, vm_name: str, zone: str) -> None:
@@ -436,16 +510,36 @@ async def _stop_vm(project: str, vm_name: str, zone: str) -> None:
     await _operation(project, zone, operation)
 
 
-async def _delete_vm(project: str, vm_name: str, zone: str) -> None:
+async def _delete_vm(
+    project: str,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str | None = None,
+    expected_owner_hash: str | None = None,
+) -> bool:
+    if expected_instance_id is not None or expected_owner_hash is not None:
+        if expected_instance_id is not None and not _GCE_NUMERIC_ID.fullmatch(expected_instance_id):
+            raise AgentVmIdentityMismatch("late Agent VM cleanup instance identity is invalid")
+        _, instance = await _instance(project, zone, vm_name)
+        if instance is None:
+            return True
+        if expected_instance_id is not None and str(instance.get("id") or "") != expected_instance_id:
+            raise AgentVmIdentityMismatch("late Agent VM cleanup instance identity changed")
+        labels = instance.get("labels")
+        if expected_owner_hash is not None and (
+            not isinstance(labels, dict) or labels.get("omi-agent-owner") != expected_owner_hash
+        ):
+            raise AgentVmIdentityMismatch("late Agent VM cleanup owner identity changed")
     token = await run_blocking(db_executor, _get_access_token)
     url = f"https://compute.googleapis.com/compute/v1/projects/{project}/zones/{zone}/instances/{vm_name}"
     response = await _gce_request("DELETE", url, token)
     if response.status_code == 404:
-        return
+        return True
     response.raise_for_status()
     operation = response.json().get("name")
     if operation:
         await _operation(project, zone, operation)
+    return True
 
 
 def _verify_agent_vm_identity(token: str) -> dict[str, Any]:
@@ -587,20 +681,54 @@ async def stop_self(request: Request) -> dict[str, str]:
         )
 
 
-async def _delete_late_vm_or_record(uid: str, project: str, vm_name: str, zone: str) -> None:
+async def _delete_late_vm_or_record(
+    uid: str,
+    project: str,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str | None = None,
+) -> None:
     try:
-        await _delete_vm(project, vm_name, zone)
+        deleted = await _delete_vm(
+            project,
+            vm_name,
+            zone,
+            expected_instance_id,
+            _agent_vm_owner_hash(uid) if expected_instance_id is not None else None,
+        )
+        if deleted is False:
+            raise RuntimeError("late Agent VM cleanup did not delete the instance")
+    except AgentVmIdentityMismatch:
+        raise
     except Exception:
-        await run_blocking(db_executor, users_db.record_late_agent_vm_cleanup, uid, vm_name, zone)
+        await run_blocking(
+            db_executor,
+            users_db.record_late_agent_vm_cleanup,
+            uid,
+            vm_name,
+            zone,
+            expected_instance_id,
+        )
         raise
 
 
-async def _cleanup_possible_late_vm(uid: str, project: str, vm_name: str, zone: str) -> None:
+async def _cleanup_possible_late_vm(
+    uid: str,
+    project: str,
+    vm_name: str,
+    zone: str,
+    expected_instance_id: str | None = None,
+) -> bool:
     """Delete one possibly-created VM, durably recording a provider failure."""
     try:
-        await _delete_late_vm_or_record(uid, project, vm_name, zone)
+        await _delete_late_vm_or_record(uid, project, vm_name, zone, expected_instance_id)
+        return True
+    except AgentVmIdentityMismatch as exc:
+        logger.error("Late Agent VM cleanup identity fence changed for uid=%s: %s", uid, exc)
+        return False
     except Exception as exc:
         logger.error("Late Agent VM cleanup deferred for uid=%s: %s", uid, exc)
+        return False
 
 
 async def _provision_background(
@@ -610,13 +738,33 @@ async def _provision_background(
         logger.info("Skipping Agent VM create after deletion/owner transition for uid=%s", uid)
         return
     try:
-        ip = await _create_vm(project, source_image, bucket, vm_name, auth_token, service_account)
+        ip, instance_id = await _create_vm(
+            project,
+            source_image,
+            bucket,
+            vm_name,
+            auth_token,
+            service_account,
+            _agent_vm_owner_hash(uid),
+        )
     except AgentVmCreateOutcomeUnknown as exc:
         logger.error("Agent VM provisioning failed for uid=%s: %s", uid, exc)
         if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
             await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
             return
         await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error")
+        return
+    except AgentVmReadinessError as exc:
+        logger.error("Agent VM readiness failed for uid=%s: %s", uid, exc)
+        cleaned = await _cleanup_possible_late_vm(
+            uid,
+            project,
+            vm_name,
+            _ZONE,
+            expected_instance_id=exc.instance_id,
+        )
+        if cleaned and await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
+            await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "error")
         return
     except Exception as exc:
         logger.error("Agent VM provisioning failed before provider acceptance for uid=%s: %s", uid, exc)
@@ -626,11 +774,21 @@ async def _provision_background(
 
     if not await run_blocking(db_executor, _vm_lifecycle_allowed, uid, vm_name, auth_token):
         logger.warning("Deleting late-created Agent VM after deletion/owner transition for uid=%s", uid)
-        await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
+        await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE, expected_instance_id=instance_id)
         return
-    updated = await run_blocking(db_executor, _set_vm_if_current, uid, vm_name, auth_token, "ready", ip)
+    updated = await run_blocking(
+        db_executor,
+        _set_vm_if_current,
+        uid,
+        vm_name,
+        auth_token,
+        "ready",
+        ip,
+        _ZONE,
+        instance_id,
+    )
     if not updated:
-        await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE)
+        await _cleanup_possible_late_vm(uid, project, vm_name, _ZONE, expected_instance_id=instance_id)
 
 
 def _response(vm: dict[str, Any]) -> AgentVmResponse:
@@ -659,7 +817,7 @@ async def provision_agent_vm(
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     generation = uuid.uuid4().hex
-    vm_name = f"omi-agent-{hashlib.sha256(uid.encode('utf-8')).hexdigest()[:20]}-{generation[:8]}"
+    vm_name = f"omi-agent-{_agent_vm_owner_hash(uid)}-{generation[:8]}"
     auth_token = f"omi-{generation}"
     created_at = _now()
     candidate = {

@@ -29,6 +29,13 @@ final class UserNotificationCallbackBridgeTests: XCTestCase {
   }
 
   func testSignedSmokeRequiresExplicitResultPath() {
+    XCTAssertFalse(UserNotificationCallbackBridge.isSignedSmokeRequested(environment: [:]))
+    XCTAssertFalse(
+      UserNotificationCallbackBridge.isSignedSmokeRequested(
+        environment: [UserNotificationCallbackBridge.signedSmokeResultPathEnvironmentKey: ""]))
+    XCTAssertTrue(
+      UserNotificationCallbackBridge.isSignedSmokeRequested(
+        environment: [UserNotificationCallbackBridge.signedSmokeResultPathEnvironmentKey: "/tmp/proof"]))
     XCTAssertFalse(UserNotificationCallbackBridge.runSignedSmokeIfRequested(environment: [:]))
   }
 

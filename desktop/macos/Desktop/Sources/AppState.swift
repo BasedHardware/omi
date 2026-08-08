@@ -863,10 +863,6 @@ extension Notification.Name {
   static let conversationsPageDidLoad = Notification.Name("conversationsPageDidLoad")
   /// Posted when Tasks page finishes loading initial data
   static let tasksPageDidLoad = Notification.Name("tasksPageDidLoad")
-  /// Posted when Focus page finishes loading initial data
-  static let focusPageDidLoad = Notification.Name("focusPageDidLoad")
-  /// Posted when Advice page finishes loading initial data
-  static let insightPageDidLoad = Notification.Name("insightPageDidLoad")
   /// Posted when Apps page finishes loading initial data
   static let appsPageDidLoad = Notification.Name("appsPageDidLoad")
   /// Posted when a goal is auto-created by GoalGenerationService
@@ -895,8 +891,6 @@ extension Notification.Name {
     "desktopAutomationShowConversationTranscriptRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
-  /// Posted from Settings to trigger the file indexing sheet
-  static let triggerFileIndexing = Notification.Name("triggerFileIndexing")
   /// Posted from menu bar to toggle transcription (userInfo: ["enabled": Bool])
   static let toggleTranscriptionRequested = Notification.Name("toggleTranscriptionRequested")
 }

@@ -1429,6 +1429,7 @@ final class DesktopDiagnosticsManager {
     "auth_storage",
     "state_authority",
     "ptt_input_routing",
+    "account_cutover",
     "other",
   ]
 

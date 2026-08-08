@@ -4,6 +4,15 @@ import XCTest
 
 @MainActor
 final class SuggestedTasksStoreTests: XCTestCase {
+  override func setUp() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+    AccountCutoverControlManager.shared.apply(.legacyDefault)
+  }
+
+  override func tearDown() async throws {
+    AccountCutoverControlManager.shared.resetForTesting()
+  }
+
   func testActionPolicyNeverOffersMoreThanThreeChoices() {
     for state in [
       SuggestedCardState.ready, .editing, .dismissReasons, .busy,

@@ -60,7 +60,7 @@ steps:
     name: Navigate to the mounted Chat surface that owns the real rich goal link
     bridge.navigate:
       target: chat
-      activateApp: true
+      activateApp: false
       settleMs: 750
 
   - id: S1a

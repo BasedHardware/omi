@@ -18,10 +18,13 @@ enum AgentLifecycleDisplayProjection {
   static func project(_ canonicalMessages: [ChatMessage]) -> [ChatMessage] {
     var spawnByRunID: [String: Location] = [:]
     var spawnByPillID: [UUID: Location] = [:]
+    var carriesLifecycleReceipt = false
 
     for (messageIndex, message) in canonicalMessages.enumerated() {
       for (blockIndex, block) in message.contentBlocks.enumerated() {
+        if case .agentCompletion = block { carriesLifecycleReceipt = true }
         guard case .agentSpawn(_, let pillID, _, let runID, _, _, _) = block else { continue }
+        carriesLifecycleReceipt = true
         if let runID = nonEmpty(runID) {
           spawnByRunID[runID] = spawnByRunID[runID] ?? Location(messageIndex: messageIndex, blockIndex: blockIndex)
         }
@@ -30,6 +33,14 @@ enum AgentLifecycleDisplayProjection {
         }
       }
     }
+
+    // Everything below is the identity for a transcript with no lifecycle
+    // receipt: `AgentLifecycleTranscriptProjection.project` returns such a
+    // message untouched, and there is no completion to fold into a spawn. The
+    // early return therefore changes no output — it only stops the live chat
+    // surface allocating a copy of the entire transcript once per streamed
+    // token to arrive at the same rows it was handed.
+    guard carriesLifecycleReceipt else { return canonicalMessages }
 
     var completionsBySpawn: [Location: [Completion]] = [:]
     var matchedCompletionLocations = Set<Location>()

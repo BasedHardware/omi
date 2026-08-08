@@ -97,7 +97,8 @@ if [[ "$active_generation" != "0" ]]; then
   gcloud storage cp "${active_uri}#${active_generation}" "$previous_uri" --if-generation-match="$previous_generation"
 fi
 
-gcloud storage cp "$manifest_uri" "$active_uri" --if-generation-match="$active_generation"
+gcloud storage cp "$manifest_uri" "$active_uri" \
+  --cache-control='no-store,max-age=0' --if-generation-match="$active_generation"
 activated_generation="$(gcloud storage objects describe "$active_uri" --format='value(generation)')"
 [[ "$activated_generation" =~ ^[0-9]+$ ]]
 gcloud storage cp "${active_uri}#${activated_generation}" "$readback"
