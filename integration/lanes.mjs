@@ -166,12 +166,26 @@ function runLane(laneId, { json = false } = {}) {
 
   if (!json) {
     process.stdout.write(`▸ ${laneId} — ${lane.name} (${lane.budgetNote})\n`);
-    // WHICH TREES, every run, before any of them are measured. The receipt has
-    // carried this all along and nobody read it; a lane read its own green L2 as
-    // a statement about its diff while the platform stamp named the shared
-    // checkout. Evidence nobody looks at is not evidence.
+    // WHICH TREES, AND WHAT IS CHECKED OUT IN THEM, every run, before any of them
+    // are measured. The receipt has carried this all along and nobody read it; a
+    // lane read its own green L2 as a statement about its diff while the platform
+    // stamp named the shared checkout. Evidence nobody looks at is not evidence.
+    //
+    // The BRANCH is here because a shared checkout has no owner: mid-audit, the
+    // shared `platform` was found sitting on `main` — the branch BRANCHES.md
+    // records as stale — switched by another session. Every lane pointing at it
+    // would have measured the wrong tree and passed. One line of output turns
+    // that from something someone has to notice into something nobody can miss.
     for (const [repo, path] of Object.entries(REPO_PATHS)) {
-      process.stdout.write(`  ${repo.padEnd(16)} ${path}\n`);
+      let at = "";
+      try {
+        const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: path, encoding: "utf8" }).trim();
+        const commit = execSync("git rev-parse --short HEAD", { cwd: path, encoding: "utf8" }).trim();
+        at = `  (${branch} @ ${commit})`;
+      } catch {
+        at = "  (not a git checkout)";
+      }
+      process.stdout.write(`  ${repo.padEnd(16)} ${path}${at}\n`);
     }
   }
   for (const step of lane.steps) {
