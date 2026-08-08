@@ -1,12 +1,9 @@
 """Regression coverage for Deepgram serving: hosted restored, guard rails kept.
 
-Hosted Deepgram was retired in #10048-era work and re-admitted to the live
-surfaces after Velma-2 proved unable to carry live traffic alone. The rails
-that removal introduced still hold and are asserted here:
-
-* batch never silently gains a paid provider,
-* a runtime without credentials skips Deepgram instead of failing mid-session,
-* a deployment that declares self-hosting can never fall back to the hosted API.
+The rails the removal introduced still hold and are asserted here: batch never
+silently gains a paid provider, a runtime without credentials skips Deepgram
+instead of failing mid-session, and a deployment that declares self-hosting can
+never fall back to the hosted API.
 """
 
 import pytest
@@ -35,7 +32,7 @@ def test_streaming_selects_hosted_deepgram_when_configured(monkeypatch):
 
 
 def test_streaming_skips_deepgram_when_no_client_is_configured(monkeypatch):
-    """No credentials must degrade to Velma, not fail the session at connect."""
+    """No credentials must degrade to Velma, not fail at connect."""
     monkeypatch.setattr(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
     monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
     monkeypatch.setattr(streaming, 'deepgram', None)
@@ -92,7 +89,6 @@ def test_deepgram_client_cannot_be_created_without_configuration(monkeypatch):
 
 
 def test_self_hosted_endpoint_cannot_be_the_hosted_deepgram_api():
-    """A cluster that declares self-hosting must never bill the hosted account."""
     with pytest.raises(ValueError, match='must not point to api.deepgram.com'):
         streaming._require_self_hosted_deepgram_endpoint('https://api.deepgram.com')
 

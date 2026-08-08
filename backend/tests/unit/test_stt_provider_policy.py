@@ -40,8 +40,6 @@ def _chart_env_value(values_path: Path, name: str) -> str | None:
 def test_hosted_deepgram_serves_live_surfaces_but_not_batch():
     assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.STREAMING)
     assert provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PTT)
-    # Batch is carried by Parakeet and Velma; re-admitting Deepgram there would
-    # add spend without addressing a live-path failure.
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.PRERECORDED)
 
 
@@ -64,7 +62,6 @@ def test_policy_owns_the_safe_model_order_for_every_serving_surface():
 
 
 def test_deepgram_model_tokens_report_the_hosted_deployment_by_default():
-    """A token names the model; the deployment is a runtime decision."""
     assert provider_for_model_token('dg-nova-3') == DEEPGRAM_CLOUD_PROVIDER
     assert deepgram_provider_for_runtime(False) == DEEPGRAM_CLOUD_PROVIDER
     assert deepgram_provider_for_runtime(True) == DEEPGRAM_SELF_HOSTED_PROVIDER
