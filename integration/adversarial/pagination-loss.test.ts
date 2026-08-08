@@ -73,11 +73,16 @@ async function walk(baseUrl: string, limit: number): Promise<Walk> {
 
 describe("paginating a stable corpus", () => {
   /**
-   * red-proof: in `apps/service/composition/memory-read.ts`'s `prepareMemoryRead`,
-   * drop the `.sort((left, right) => compareStrings(left.node_id, right.node_id))`
-   * from `servedRenders`. APPLIED: the walk's page boundaries stop lining up
-   * with the keyset order, ids repeat across pages, and the exactly-once
-   * assertion fails naming the duplicated id.
+   * red-proof: in `integration/server/compose.ts`'s `readPage`, pass
+   * `cursor: null` instead of `input.cursor`. APPLIED: the walk never advances,
+   * page one repeats until the 30-iteration guard, and this fails on both
+   * `terminated` and the exactly-once check naming the duplicated id.
+   *
+   * Did NOT go red, recorded because it is evidence about the system:
+   * replacing `servedRenders`' `.sort(compareStrings(node_id))` with
+   * `.reverse()` in `apps/service/composition/memory-read.ts`. The read core
+   * orders the page itself, so the composition's pre-sort is not what the
+   * keyset boundary rests on.
    */
   test("a full walk returns every memory exactly once and terminates", async () => {
     await control(server.baseUrl, `/qa/reset?seed=${SEED}`);
@@ -94,11 +99,10 @@ describe("paginating a stable corpus", () => {
   });
 
   /**
-   * red-proof: in `apps/service/composition/memory-read.ts`, force the terminal
-   * window by making `buildCoverage` claim completeness unconditionally — or
-   * more directly, in `core/retrieve/application-read.ts` emit
-   * `hasMore: false` whenever a cursor was issued. The first page then claims
-   * `complete: true` while a continuation is still owed and this fails.
+   * red-proof: in `core/retrieve/application-read.ts`, build the window as
+   * `buildWindow(false, null, completeness.status)` — i.e. always terminal.
+   * APPLIED: the first page claims `complete: true` with `nextCursor: null`
+   * while six memories are owed, and all four tests in this file fail.
    *
    * Snapshot honesty: a wrong `complete: true` is user data loss via
    * reconcile, so a non-terminal page must never claim completeness.
@@ -126,12 +130,27 @@ describe("the corpus changes mid-pagination", () => {
    * invalid-cursor refusal, byte for byte, so a stale continuation is
    * indistinguishable from any other unredeemable one.
    *
-   * red-proof: in `apps/service/composition/memory-read.ts`'s
-   * `buildGenerations`, drop `authorized_graph_generation` from
-   * `declared_generation_digest` (leave only the frontier and granularity).
-   * APPLIED: the stale cursor then verifies against the grown corpus, page two
-   * is served 200 across two different snapshots, and this fails on the status
-   * and the body.
+   * red-proof: in `apps/qa/cursor-bindings.ts`'s `verifyCursor`, wrap
+   * `verifyMcpCursor` so a bindings mismatch throws a plain `TypeError`
+   * instead of `InvalidMcpCursorError`. APPLIED and observed red on THIS test
+   * only: the stale continuation becomes a 500 while a syntactically garbage
+   * cursor stays 400, so the two refusals stop being byte-identical and a
+   * caller can tell which half of its guess was wrong.
+   *
+   * THREE MUTATIONS THAT DID NOT GO RED, recorded because they are evidence
+   * about the system rather than about the test:
+   *   - dropping `authorized_graph_generation` from
+   *     `declared_generation_digest` in `buildGenerations`;
+   *   - pinning `graph_generation_digest` and `projection_commit_digest` to
+   *     constants in `qaCursorBindings`;
+   *   - memoizing the prepared read in `integration/server/compose.ts` instead
+   *     of preparing fresh per request (this one DID redden the paired test
+   *     below, which is its real subject).
+   * Each left the stale cursor refused, because the cursor binds SIX
+   * independent projection-derived digests and any one of them firing is
+   * enough. So "the continuation is refused" is over-determined and cannot be
+   * red-proofed by removing one binding; what this test actually guards, and
+   * what the applied mutation above breaks, is that the refusal SAYS NOTHING.
    */
   test("a continuation issued before the change is refused, byte-identically to any invalid cursor", async () => {
     await control(server.baseUrl, `/qa/reset?seed=${SEED}`);
@@ -159,9 +178,13 @@ describe("the corpus changes mid-pagination", () => {
    * satisfy the assertion above — and a walk that cannot resume at all is not
    * a working pagination.
    *
-   * red-proof: make `/qa/grow` a no-op in `integration/server/serve.ts`. The
-   * grown walk then returns SEED ids instead of SEED + 2 and this fails on the
-   * length, while the refusal test above still passes.
+   * red-proof: make `/qa/grow` a no-op in `integration/server/serve.ts`.
+   * APPLIED: the grown walk returns SEED ids instead of SEED + 2 and this
+   * fails on the length. (It also reddens the refusal test above, which is
+   * correct — with no change there is nothing to refuse.) Second applied
+   * proof, targeting this test alone: memoize the prepared read in
+   * `integration/server/compose.ts`; the walk then reads the pre-grow snapshot
+   * and this fails while the refusal test stays green.
    */
   test("a fresh walk after the change again covers the whole corpus exactly once", async () => {
     await control(server.baseUrl, `/qa/reset?seed=${SEED}`);

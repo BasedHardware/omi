@@ -44,14 +44,15 @@ afterAll(async () => {
 
 describe("trap 1 — an authorization-hidden record is byte-identical to an absent one", () => {
   /**
-   * red-proof: in `apps/service/composition/memory-read.ts`, derive the
-   * declared frontier from the loader's coherent snapshot instead of the
-   * authorized projection —
-   *   `const declaredFrontier = encodeFrontier(`durable:${load.durable_snapshot.graph_generation}`)`
-   * — i.e. from a value that counts rows this reader may not see. APPLIED: the
-   * two worlds then emit different `completeness.frontiers.declaredFrontier`
-   * on every page and the byte-identity assertion below fails on page 1 while
-   * `itemIds` still matches, which is exactly the shape of the real leak.
+   * red-proof: in `apps/service/composition/memory-read.ts`, pass the loader's
+   * `coherent_snapshot_digest` to `buildCoverage` in place of
+   * `authorizedGraphGeneration` — i.e. derive the declared frontier from a
+   * value that counts rows this reader may not see. APPLIED and observed red
+   * on THIS test only: the two worlds emit different
+   * `completeness.frontiers.declaredFrontier`, so the transcripts diverge
+   * while `itemIds` still matches exactly. That is the real leak's shape — the
+   * items are correctly filtered and the envelope republishes the hidden rows
+   * anyway.
    */
   test("full paginated wire transcripts are identical", async () => {
     await control(server.baseUrl, `/qa/reset?seed=${VISIBLE}&hidden=${HIDDEN}`);
@@ -95,11 +96,19 @@ describe("trap 2 — no raw data leaks through error paths", () => {
    * Error paths are where raw data leaks, because error construction is the
    * one place that tends to interpolate the offending value.
    *
-   * red-proof: in `integration/server/compose.ts`'s `readPage`, replace the
-   * `isInvalidMcpCursorError` re-throw with
-   * `throw new Error("bad cursor " + input.cursor)`. The forged and
-   * cross-owner cursors are then echoed back inside the error envelope and
-   * this fails on the echo check as well as on `qa-cursor-key-1`.
+   * red-proof: applied to the paired test below, which is where it lands.
+   *
+   * WHAT THE APPLIED MUTATION ACTUALLY SHOWED, stated because it is the more
+   * useful fact: replacing the `isInvalidMcpCursorError` re-throw in
+   * `integration/server/compose.ts` with
+   * `throw new Error("bad cursor " + input.cursor)` does NOT leak the cursor.
+   * The MCP transport collapses every unmapped throw to a fixed
+   * `{"code":-32603,"message":"Internal error"}` envelope, so a message-level
+   * leak is unreachable from here. These needle assertions are therefore a
+   * BACKSTOP against that envelope discipline being weakened, not the primary
+   * fence — and the primary fence is the transport's, not this file's. Do not
+   * read a green run here as evidence that composition code may interpolate
+   * caller input into errors; it may not.
    */
   test("invalid, forged and cross-owner cursors reveal nothing", async () => {
     await control(server.baseUrl, `/qa/reset?seed=${VISIBLE}`);
@@ -128,11 +137,20 @@ describe("trap 2 — no raw data leaks through error paths", () => {
   });
 
   /**
-   * red-proof: in `apps/service/composition/memory-read.ts`'s `readMemoryPage`,
-   * delete the `isSyntacticallyRedeemableCursor` pre-check and let the core's
-   * `TypeError` surface. The refusal becomes an internal-error envelope
-   * carrying the core's message instead of the one invalid-cursor shape, and
-   * the "Invalid cursor" assertion below fails.
+   * red-proof: in `integration/server/compose.ts`'s `readPage`, replace the
+   * `isInvalidMcpCursorError` re-throw with a plain `Error`. APPLIED and
+   * observed red here: the response becomes
+   * `{"code":-32603,"message":"Internal error"}` and the "Invalid cursor"
+   * assertion fails. The refusal must stay SPECIFIC — a cursor problem
+   * reported as an internal error tells a client to retry a request that can
+   * never succeed, and hides a real fault behind a client-input one.
+   *
+   * Did NOT go red, recorded as evidence: deleting the
+   * `isSyntacticallyRedeemableCursor` pre-check from `readMemoryPage`. The
+   * core's own guard still raises the invalid-cursor currency for `vk1_...`,
+   * so this particular string does not distinguish the two layers. The
+   * pre-check's real subject is the 4096/4097 length boundary, which
+   * `apps/service/routes/route-hardening.test.ts` pins directly.
    */
   test("internal store coordinates never reach the wire", async () => {
     await control(server.baseUrl, `/qa/reset?seed=${VISIBLE}`);

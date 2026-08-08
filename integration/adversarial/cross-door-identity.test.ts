@@ -41,11 +41,20 @@ afterAll(async () => {
 describe("the REST and MCP doors of one process", () => {
   /**
    * red-proof: in `integration/server/compose.ts`, give the MCP door its own
-   * credential identity — change `key_id: HARNESS_KEY_ID` in `authenticate`'s
-   * `rateLimitKey` to `key_id: token`. APPLIED: nothing else changes, both
-   * doors still serve seven memories with identical text, and this fails on
-   * the very first byte comparison because the reader-scoped codecs derive a
-   * different subkey. That is the wave-1 defect, reproduced on demand.
+   * APPLICATION identity — make `prepareRead` read `app_id` from a mutable
+   * module binding and have `readPage` set it to `"mcp-door-app"` before it
+   * prepares. APPLIED, and observed red HERE and only here: both doors still
+   * serve seven memories with identical text and identical provenance
+   * digests, and this fails on the first byte comparison because
+   * `principal_digest` — the scope of the reader-scoped codecs — covers
+   * owner, app AND key. That is the wave-1 defect, reproduced on demand.
+   *
+   * Note what does NOT reproduce it, because it is worth knowing: changing
+   * `key_id` inside `authenticate`'s `rateLimitKey` leaves every assertion
+   * here green. That field is the MCP rate-limit tuple and never reaches the
+   * composition; the authorization request is built from the constants in
+   * `prepareRead`. Applied and observed GREEN before the mutation above was
+   * found — a red-proof that does not go red is not a red-proof.
    */
   test("emit byte-identical pages for the same request", async () => {
     const rest = await recall(server.baseUrl, { limit: 3 });
@@ -67,8 +76,14 @@ describe("the REST and MCP doors of one process", () => {
    * one door's continuation must redeem on the other. If it does not, the two
    * doors are reading different snapshots even when page one happened to match.
    *
-   * red-proof: the same `key_id: token` mutation above. The MCP cursor then
-   * fails to verify under the REST door's bindings and this fails with 400.
+   * red-proof: `key_id: HARNESS_KEY_ID` -> `key_id: "mcp-cursor-key"` inside
+   * `prepareRead`'s `resolveAuthorization`, applied only when the caller is the
+   * MCP door. APPLIED via the same mutable-binding trick as above; note the
+   * trick's own limit, stated because it matters: because the binding stays
+   * flipped after the first MCP call, the REST redemption below also runs
+   * under the mutated identity and this test stayed GREEN while the byte
+   * comparison above went red. The load-bearing observation is therefore the
+   * one above; this test's job is to catch a split that persists per-door.
    */
   test("a continuation minted by one door redeems on the other", async () => {
     const mcp = await callTool(server.baseUrl, { limit: 3 });
