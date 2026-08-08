@@ -44,37 +44,14 @@ final class RewindTrackTests: XCTestCase {
 
   // MARK: - The drag belongs to the scrubber, not to the window
 
-  /// The shell's window monitor offers hosted content drags to the window unless an AppKit control
-  /// explicitly owns them. This one is a scrubber: its whole gesture *is* a drag, and giving it
+  /// The scrubber's whole gesture *is* a drag. Giving it to AppKit's native window-background mode
   /// away leaves a control where a click seeks and a drag walks the window sideways — a failure that
   /// reads as a rendering quirk rather than a dead gesture, which is why it needs a test rather than
   /// a screenshot.
   func testTheTrackKeepsItsDragsRatherThanHandingThemToTheWindow() {
     let day = gappedDay()
     let track = track(day.instants, day.apps)
-    track.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
-    let window = NSWindow(
-      contentRect: track.frame,
-      styleMask: [.titled, .fullSizeContentView],
-      backing: .buffered,
-      defer: true)
-    window.contentView = track
-    ShellWindowChrome.dress(window)
-
     XCTAssertFalse(track.mouseDownCanMoveWindow)
-    XCTAssertFalse(ShellWindowChrome.shouldBeginDrag(at: NSPoint(x: 200, y: 150), in: window))
-  }
-
-  /// …and the reason it has to say so: the shell installs its own drag monitor.
-  func testTheShellWindowIsTheOneThatMakesThatOptOutNecessary() {
-    let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
-      styleMask: [.titled, .closable, .miniaturizable, .resizable],
-      backing: .buffered,
-      defer: true)
-    ShellWindowChrome.dress(window)
-    XCTAssertFalse(window.isMovableByWindowBackground)
-    XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window))
   }
 
   // MARK: - The time-linearity contract

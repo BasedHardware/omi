@@ -388,7 +388,7 @@ struct DesktopHomeView: View {
       }
     }
     .environment(\.colorScheme, .light)  // No window ground since `ShellWindowChrome`; each panel is its own glass.
-    .background(ShellWindowAttachment().frame(width: 0, height: 0))
+    .background(ShellWindowAttachment().frame(width: 0, height: 0)).shellWindowDragSurface()
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)

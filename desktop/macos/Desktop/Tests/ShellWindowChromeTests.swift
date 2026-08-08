@@ -91,7 +91,7 @@ final class ShellWindowChromeTests: XCTestCase {
   }
 
   /// …and the window still moves. It has two handles: the transparent title bar over the reserved
-  /// band and a thresholded mouse monitor across the content. The native background-drag switch is
+  /// band and a thresholded SwiftUI gesture across the content. The native background-drag switch is
   /// deliberately off because AppKit mistakes hosted SwiftUI buttons for background.
   func testTheWindowIsStillMovableWithoutATitleBarToGrab() {
     let window = makeWindow()
@@ -101,7 +101,6 @@ final class ShellWindowChromeTests: XCTestCase {
 
     XCTAssertTrue(window.isMovable, "a floating window that cannot be moved is stranded")
     XCTAssertFalse(window.isMovableByWindowBackground)
-    XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window))
     XCTAssertTrue(
       window.styleMask.contains(.titled),
       "the transparent title bar remains an independent drag handle")
@@ -122,22 +121,17 @@ final class ShellWindowChromeTests: XCTestCase {
     XCTAssertTrue(
       hit.mouseDownCanMoveWindow,
       "the regression fixture no longer reproduces AppKit's SwiftUI misclassification")
-    XCTAssertTrue(
-      ShellWindowChrome.shouldBeginDrag(at: NSPoint(x: 450, y: 300), in: window),
-      "the replacement must allow a real drag to start over the same hosted SwiftUI surface")
     XCTAssertFalse(
       window.isMovableByWindowBackground,
       "native background dragging steals this hosted button's click before SwiftUI receives it")
-    XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window))
   }
 
-  func testNativeDragControlsKeepTheirOwnGestures() {
-    let window = makeWindow()
-    let scrollView = NSScrollView(frame: NSRect(origin: .zero, size: Self.contentSize))
-    window.contentView = scrollView
-    ShellWindowChrome.dress(window)
-
-    XCTAssertFalse(ShellWindowChrome.shouldBeginDrag(at: NSPoint(x: 450, y: 300), in: window))
+  func testLegacyWindowDragUsesSwiftUITranslation() {
+    XCTAssertEqual(
+      ShellWindowChrome.draggedOrigin(
+        windowOrigin: NSPoint(x: 100, y: 200),
+        translation: CGSize(width: 75, height: 40)),
+      NSPoint(x: 175, y: 160))
   }
 
   // MARK: - Summoned vs anchored
@@ -256,7 +250,6 @@ final class ShellWindowChromeTests: XCTestCase {
         window.styleMask.isSuperset(of: ShellWindowChrome.keyboardWindowCommands),
         "\(presentation) has no ⌘W or ⌘M and no buttons either")
       XCTAssertFalse(window.isMovableByWindowBackground, "\(presentation) can steal hosted button clicks")
-      XCTAssertTrue(ShellWindowChrome.hasDragMonitor(in: window), "\(presentation) cannot be dragged")
     }
   }
 
