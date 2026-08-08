@@ -151,8 +151,13 @@ test("i18n hardcoded-copy guard walks nested JSX text and expressions", async ()
   assert.match(source, /ts\.isJsxText\(node\)/);
   assert.match(source, /ts\.isJsxExpression\(node\)/);
   assert.match(source, /visitAst\(sourceFile\)/);
+  for (const semanticAttribute of ["aria-hidden", "aria-disabled", "aria-live", "viewBox", "focusable"]) {
+    assert.match(source, new RegExp(`name === \\"${semanticAttribute}\\"`));
+  }
   // red-proof: a checker that only scans top-level JSX would miss a literal
   // nested under a wrapper and let visible English copy ship untranslated.
+  // SVG geometry and ARIA state are non-copy; removing any explicit semantic
+  // allowlist entry makes the real production chrome fail the aggregate gate.
 });
 
 test("fixture ids are parsed RecordIds and platform CSS is attribute-driven", async () => {

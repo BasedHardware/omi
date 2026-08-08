@@ -78,7 +78,9 @@ function bridgeUnavailable(): React.JSX.Element {
   );
 }
 
-if (query.get("rig") === "dev") {
+if (query.get("lab") === "1") {
+  void import("../lab/main.js");
+} else if (query.get("rig") === "dev") {
   void import("../dev/main.js");
 } else {
   const fixtureValue = query.get("state");

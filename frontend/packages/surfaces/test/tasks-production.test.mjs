@@ -39,7 +39,10 @@ test("tasks derive UTC calendar groups and preserve no-due tasks in Later", asyn
 test("task actions stay within the task contract", async () => {
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /store\.create\(description, dueAt\)/);
-  assert.match(source, /store\.patch\(task\.id, \{ description \}/);
+  assert.match(source, /const patch: TaskPatch = \{\}/);
+  assert.match(source, /patch\.description = description/);
+  assert.match(source, /patch\.dueAt = dueAt/);
+  assert.match(source, /store\.patch\(task\.id, patch\)/);
   assert.match(source, /store\.patch\(task\.id, \{ completed: !task\.completed \}/);
   assert.match(source, /store\.delete\(task\.id\)/);
   assert.match(source, /store\.discardDeadLetter\(letter\.opId\)/);
@@ -61,12 +64,12 @@ test("keyboard shortcuts mutate only a selected task and are input-safe", async 
   const source = await read("src/production/TasksProduction.tsx");
   assert.match(source, /event\.key\.toLowerCase\(\) === "n"/);
   assert.match(source, /event\.key\.toLowerCase\(\) === "d"/);
-  assert.match(source, /event\.key === "Tab"/);
+  assert.ok(source.includes('modifier && (event.key === "]" || event.key === "[")'));
   assert.match(source, /Math\.max\(0, Math\.min\(3, selectedTask\.indentLevel/);
   assert.match(source, /closest\("input, textarea, select/);
   assert.match(source, /select, button, a/);
   assert.match(source, /selectedTaskId/);
-  // red-proof: removing input-safety would turn typing Meta/Control-N or Tab
+  // red-proof: removing input-safety would turn typing Meta/Control-N or Meta-[
   // inside the task editor into a destructive or structural mutation.
 });
 
@@ -123,4 +126,23 @@ test("all task UI copy is translator-backed and desktop/mobile affordances exist
   assert.doesNotMatch(styles, /@media\s*\(/);
   // red-proof: a raw JSX sentence or purple literal would bypass locale and
   // semantic-token checks while still looking correct in one screenshot.
+});
+
+test("task polish keeps rows scannable and create, edit, and focus flows accessible", async () => {
+  const source = await read("src/production/TasksProduction.tsx");
+  const styles = await read("src/production/tasks.css");
+  assert.match(source, /tasks-group-count/);
+  assert.match(source, /grouped\[group\]\.length/);
+  assert.match(source, /aria-expanded=\{createOpen\}/);
+  assert.match(source, /requestAnimationFrame\(\(\) => draftRef\.current\?\.focus\(\)\)/);
+  assert.match(source, /dateInputValue\(task\.dueAt\)/);
+  assert.match(source, /tabIndex=\{0\}/);
+  assert.match(source, /event\.key === "ArrowDown" \|\| event\.key === "ArrowUp"/);
+  assert.match(source, /querySelectorAll<HTMLElement>\("\.task-card"\)/);
+  assert.match(styles, /tasks-create\.is-open/);
+  assert.match(styles, /task-check\[aria-pressed="true"\]/);
+  assert.match(styles, /task-card:not\(\.is-selected\) \.task-actions/);
+  assert.match(styles, /tasks-shortcuts \{ position: sticky/);
+  // red-proof: always displaying the mobile composer and every row action
+  // restores the screenshot's form-heavy layout and destroys scan density.
 });

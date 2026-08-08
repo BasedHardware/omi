@@ -55,6 +55,15 @@ function parseDateInput(value: string): number | undefined {
     : undefined;
 }
 
+function dateInputValue(timestamp: number | null): string {
+  if (timestamp === null) return "";
+  const date = new Date(timestamp);
+  const year = String(date.getFullYear()).padStart(4, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function groupFor(task: Task, now: number, calendarDay: (timestamp: number) => string): GroupKey {
   if (task.dueAt === null) return "later";
   const current = calendarDay(now);
@@ -89,18 +98,31 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
   onSelect: (id: Task["id"]) => void;
 }): React.JSX.Element {
   const [draft, setDraft] = useState(task.description);
+  const [dueDraft, setDueDraft] = useState(dateInputValue(task.dueAt));
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const isLong = task.description.length > 240;
   const visibleDescription = !expanded && isLong ? `${task.description.slice(0, 240)}…` : task.description;
-  useEffect(() => setDraft(task.description), [task.description]);
+  useEffect(() => {
+    setDraft(task.description);
+    setDueDraft(dateInputValue(task.dueAt));
+  }, [task.description, task.dueAt]);
 
-  const save = (): void => {
+  const save = async (): Promise<void> => {
     const description = draft.trim();
+    const dueAt = dueDraft ? parseDateInput(dueDraft) : null;
+    if (!description || dueAt === undefined) return;
+    const patch: TaskPatch = {};
+    if (description !== task.description) patch.description = description;
+    if (dueAt !== task.dueAt) patch.dueAt = dueAt;
+    if (Object.keys(patch).length > 0 && !(await run(() => store.patch(task.id, patch)))) return;
     setEditing(false);
-    if (description && description !== task.description) {
-      void run(() => store.patch(task.id, { description } satisfies TaskPatch));
-    }
+  };
+
+  const cancelEdit = (): void => {
+    setDraft(task.description);
+    setDueDraft(dateInputValue(task.dueAt));
+    setEditing(false);
   };
 
   const indentLevel = Math.max(0, Math.min(3, task.indentLevel));
@@ -110,20 +132,42 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
   };
 
   return (
-    <article className={`task-card is-indent-${indentLevel}${task.completed ? " is-completed" : ""}${selected ? " is-selected" : ""}`} data-task-id={task.id} data-indent-level={indentLevel} onClick={() => onSelect(task.id)}>
+    <article
+      className={`task-card is-indent-${indentLevel}${task.completed ? " is-completed" : ""}${selected ? " is-selected" : ""}`}
+      data-task-id={task.id}
+      data-indent-level={indentLevel}
+      tabIndex={0}
+      onClick={() => onSelect(task.id)}
+      onFocus={() => onSelect(task.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(task.id);
+        }
+      }}
+    >
       <div className="task-card-main">
         <button
           type="button"
           className="task-check"
           aria-label={task.completed ? translate("tasks.markIncomplete") : translate("tasks.markComplete")}
           aria-pressed={task.completed}
-          onClick={() => void run(() => store.patch(task.id, { completed: !task.completed } satisfies TaskPatch))}
+          onClick={(event) => {
+            event.stopPropagation();
+            void run(() => store.patch(task.id, { completed: !task.completed } satisfies TaskPatch));
+          }}
         >
           {task.completed ? "✓" : ""}
         </button>
         <div className="task-copy">
           {editing ? (
-            <textarea className="task-editor" value={draft} aria-label={translate("common.edit")} onChange={(event) => setDraft(event.target.value)} />
+            <div className="task-edit-fields">
+              <textarea className="task-editor" value={draft} aria-label={translate("common.edit")} onChange={(event) => setDraft(event.target.value)} />
+              <label>
+                <span>{translate("tasks.dueDateLabel")}</span>
+                <input type="date" value={dueDraft} onChange={(event) => setDueDraft(event.target.value)} aria-label={translate("tasks.dueDateLabel")} />
+              </label>
+            </div>
           ) : (
             <p className="task-description">{visibleDescription}</p>
           )}
@@ -134,11 +178,10 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
           </div>
         </div>
       </div>
-      <div className="task-actions" aria-label={translate("tasks.details")}>
-        <button type="button" onClick={() => setEditing((value) => !value)} aria-label={translate("common.edit")}>
-          {editing ? translate("common.cancel") : translate("common.edit")}
-        </button>
-        {editing && <button type="button" onClick={save}>{translate("common.save")}</button>}
+      <div className="task-actions" aria-label={translate("tasks.details")} onClick={(event) => event.stopPropagation()}>
+        {editing ? <button type="button" onClick={cancelEdit}>{translate("common.cancel")}</button> :
+          <button type="button" onClick={() => setEditing(true)} aria-label={translate("common.edit")}>{translate("common.edit")}</button>}
+        {editing && <button type="button" onClick={() => void save()} disabled={!draft.trim()}>{translate("common.save")}</button>}
         {isLong && <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
           {expanded ? translate("content.showLess") : translate("content.showMore")}
         </button>}
@@ -156,9 +199,11 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   const [status, setStatus] = useState(store.status());
   const [draft, setDraft] = useState("");
   const [dueDraft, setDueDraft] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<Task["id"] | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const draftRef = useRef<HTMLTextAreaElement>(null);
+  const shellRef = useRef<HTMLElement>(null);
   const onReadyRef = useRef(onReady);
   const readyRef = useRef(false);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
@@ -243,6 +288,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
     if (succeeded) {
       setDraft((current) => current.trim() === description ? "" : current);
       setDueDraft((current) => current === submittedDueDraft ? "" : current);
+      setCreateOpen(false);
     }
   };
 
@@ -257,20 +303,30 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key.toLowerCase() === "n") {
         event.preventDefault();
-        draftRef.current?.focus();
+        setCreateOpen(true);
+        requestAnimationFrame(() => draftRef.current?.focus());
         return;
       }
       if (!selectedTask) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const cards = Array.from(shellRef.current?.querySelectorAll<HTMLElement>(".task-card") ?? []);
+        const current = cards.findIndex((card) => card.dataset["taskId"] === selectedTask.id);
+        const next = event.key === "ArrowDown" ? Math.min(cards.length - 1, current + 1) : Math.max(0, current - 1);
+        cards[next]?.focus();
+        return;
+      }
       if (modifier && event.key.toLowerCase() === "d") {
         event.preventDefault();
         if (!globalThis.confirm(translate("tasks.deleteConfirm"))) return;
-        void run(() => store.delete(selectedTask.id));
-        setSelectedTaskId(null);
+        void (async () => {
+          if (await run(() => store.delete(selectedTask.id))) setSelectedTaskId(null);
+        })();
         return;
       }
-      if (event.key === "Tab") {
+      if (modifier && (event.key === "]" || event.key === "[")) {
         event.preventDefault();
-        const nextIndent = Math.max(0, Math.min(3, selectedTask.indentLevel + (event.shiftKey ? -1 : 1)));
+        const nextIndent = Math.max(0, Math.min(3, selectedTask.indentLevel + (event.key === "[" ? -1 : 1)));
         if (nextIndent !== selectedTask.indentLevel) {
           void run(() => store.patch(selectedTask.id, { indentLevel: nextIndent } satisfies TaskPatch));
         }
@@ -281,7 +337,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   }, [run, selectedTask, store, translate]);
 
   return (
-    <main className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
+    <main ref={shellRef} className="production-shell tasks-production-shell" data-production-shell="true" data-route="tasks" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"}>
       <ProductionChrome locale={locale} active="tasks" placement="top" />
       <header className="tasks-header">
         <div>
@@ -295,16 +351,23 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
       {notice && <div className={`tasks-status-notice ${status.refresh.phase}`} role="status">{notice}</div>}
       {queueLabel && <div className={`tasks-queue-notice ${status.queue.phase}`} role="status">{queueLabel}</div>}
       {operationError && <div className="tasks-operation-error" role="alert">{operationError}</div>}
-      <section className="tasks-create" aria-label={translate("tasks.newTask")}>
-        <textarea ref={draftRef} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={translate("tasks.newTask")} aria-label={translate("tasks.newTask")} />
+      <section className={`tasks-create${createOpen ? " is-open" : ""}`} aria-label={translate("tasks.newTask")}>
+        <textarea ref={draftRef} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setCreateOpen(false);
+            event.currentTarget.blur();
+          }
+        }} placeholder={translate("tasks.newTask")} aria-label={translate("tasks.newTask")} />
         <label>
           <span>{translate("tasks.dueDateLabel")}</span>
           <input type="date" value={dueDraft} onChange={(event) => setDueDraft(event.target.value)} aria-label={translate("tasks.dueDateLabel")} />
         </label>
         <button type="button" onClick={() => void add()} disabled={!draft.trim()}>{translate("tasks.add")}</button>
+        <button type="button" className="tasks-create-cancel" onClick={() => setCreateOpen(false)}>{translate("common.cancel")}</button>
       </section>
       <div className="tasks-shortcuts" aria-label={translate("tasks.shortcuts")}>
         <span>{translate("tasks.shortcuts")}</span>
+        <span><kbd>{translate("tasks.keyNavigate")}</kbd> {translate("tasks.shortcutNavigate")}</span>
         <span><kbd>{translate("tasks.keyNew")}</kbd> {translate("tasks.shortcutNew")}</span>
         <span><kbd>{translate("tasks.keyDelete")}</kbd> {translate("tasks.shortcutDelete")}</span>
         <span><kbd>{translate("tasks.keyIndent")}</kbd> {translate("tasks.shortcutIndent")}</span>
@@ -320,7 +383,10 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         <section className="tasks-groups" aria-label={translate("tasks.title")}>
           {groups.map((group) => (
             <section className={`tasks-group tasks-group-${group}`} key={group} aria-labelledby={`tasks-heading-${group}`}>
-              <h2 id={`tasks-heading-${group}`}>{groupLabel(group, translate)}</h2>
+              <div className="tasks-group-heading">
+                <h2 id={`tasks-heading-${group}`}>{groupLabel(group, translate)}</h2>
+                <span className="tasks-group-count">{grouped[group].length}</span>
+              </div>
               {grouped[group].length === 0 ? <p className="tasks-group-empty">{translate("lifecycle.empty")}</p> : grouped[group].map((task) => (
                 <TaskCard key={task.id} task={task} store={store} translate={translate} formatDate={dateFormatter} run={run} selected={task.id === selectedTaskId} onSelect={setSelectedTaskId} />
               ))}
@@ -336,7 +402,10 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
           <button type="button" onClick={() => void run(() => store.discardDeadLetter(letter.opId))}>{translate("dead.remove")}</button>
         </div>)}
       </section>}
-      <button type="button" className="tasks-mobile-fab" onClick={() => draftRef.current?.focus()} aria-label={translate("tasks.add")}>+</button>
+      <button type="button" className="tasks-mobile-fab" aria-expanded={createOpen} onClick={() => {
+        setCreateOpen(true);
+        requestAnimationFrame(() => draftRef.current?.focus());
+      }} aria-label={translate("tasks.add")}>+</button>
       <ProductionChrome locale={locale} active="tasks" placement="bottom" />
     </main>
   );
