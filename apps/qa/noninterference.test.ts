@@ -47,9 +47,9 @@ const readPage = async (instance: QaServer, limit = 100) => {
 
 describe("two-reader noninterference", () => {
   test("identical content under two readers yields disjoint opaque identifiers", async () => {
-    // red-proof: drop `reader_scope` from the HMAC message in apps/qa/codecs.ts
-    // and both readers produce the same ids, making every public id a global
-    // correlation key across accounts.
+    // red-proof: drop `readerProjectionDigest` from `deriveReaderSubkey` in
+    // apps/service/codecs/opaque-refs.ts and both readers produce the same ids,
+    // making every public id a global correlation key across accounts.
     // CRITICAL: the SAME owner and the same seed, so the two readers see
     // byte-identical underlying content and identical internal candidate refs.
     // They differ only in credential.

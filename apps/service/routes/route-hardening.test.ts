@@ -295,6 +295,24 @@ describe("route hardening: cursor abuse", () => {
       "garbage",
       badSignature,
       foreignCursor,
+      // A REAL DEFECT this list did not reach until the two read-door
+      // compositions were collapsed. The read core caps a cursor at 4096 code
+      // units and rejects non-printable bytes with a plain `TypeError`, which
+      // this route reports as 500 internal_server_error — while every other
+      // cursor rejection above answers 400. Measured before the fix: a
+      // 4096-character cursor answered 400, a 4097-character one answered 500.
+      // Two mutations of one token producing two public outcomes tells an
+      // attacker which half of their guess was wrong.
+      //
+      // The MCP door had already closed this with a syntactic pre-check in its
+      // OWN composition; the REST door had not, because it had a different one.
+      // The check now lives in the single shared `readMemoryPage`.
+      //
+      // red-proof: delete the `isSyntacticallyRedeemableCursor` guard from
+      // `readMemoryPage` in apps/service/composition/memory-read.ts and these
+      // two rows return 500 while the three above still return 400.
+      "x".repeat(4_097),
+      "a\u0001b",
     ] as const);
 
     const captured: Captured[] = [];

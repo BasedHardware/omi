@@ -60,6 +60,86 @@ const files = (directory: string): string[] => readdirSync(directory, { withFile
  * an inline justification — which is the point: a reviewer sees every place
  * storage state enters composition code.
  */
+/**
+ * ── RULE 16: THE PORT REGISTRY ───────────────────────────────────────────────
+ *
+ * **A registered port has exactly ONE composition.** Two modules independently
+ * constructing the same port type are two implementations, not two adapters.
+ *
+ * PROVISIONAL — landed 2026-08-08. It runs immediately; it has been red-proofed
+ * and its false positives audited across `platform/` and `core-foundation/`
+ * (see `core-foundation/docs/agents/rule-16-port-registry.md`), but it is new,
+ * so if it fires on another lane that is a swarm-wide blocker, never something
+ * to route around.
+ *
+ * WHY THIS IS A FENCE AND NOT A CONVENTION. `ApplicationReadPorts` was
+ * constructed independently by the REST door (`apps/service/composition/
+ * memory-read.ts`) and the MCP door (`apps/qa/recall-service.ts`). Both were
+ * green. Both were reviewed. They disagreed on the digest scheme, the
+ * declared-frontier derivation, the coverage default and the opaque-ref codecs,
+ * and the result was measured: over ONE snapshot and ONE principal the two doors
+ * returned the SAME memory — byte-identical text, identical render hash — under
+ * DIFFERENT public item ids (`mem1_eca59618fff27e10…` vs
+ * `mem1_dd73274cc9b1a9ac…`). Every node-level cross-door assertion passed the
+ * whole time, because the divergence sat one layer below where anyone looked.
+ *
+ * OPT-IN, DELIBERATELY. A row is added when a port acquires a SECOND
+ * construction site, not before. A registry that tried to cover every port the
+ * moment it was declared would fire constantly on ordinary single-implementation
+ * code and be routed around within a day, and a routed-around guardrail is worse
+ * than none. The small, boring edit of adding a row is the ratchet.
+ *
+ * WHAT COUNTS AS A CONSTRUCTION SITE — three syntactic forms, matched on
+ * COMMENT-STRIPPED text:
+ *   `: Port = {`        an annotated binding to an object literal
+ *   `): Port =>`        a function declaring the port as its return type
+ *   `satisfies Port`    a satisfies-checked literal
+ * Casts (`as Port`) are deliberately NOT construction: a cast is how a hostile
+ * or partial value is fed to the port's own defensive checks, and banning it
+ * would ban the tests that prove those checks work.
+ *
+ * COMMENTS ARE EXEMPT WHOLESALE. This repo has already shipped a fence that
+ * banned an ordinary English word and fired on prose while catching no real
+ * reference. Prose cannot construct anything, and documenting why a port has one
+ * composition is worth more than a grep-clean file — the module header of the
+ * one registered composition names the port type five times.
+ *
+ * TESTS ARE EXEMPT. A test double is a second implementation ON PURPOSE: the
+ * port's own contract test builds hostile, partial and lookalike port records to
+ * prove the core rejects them, which is the opposite of the defect this rule
+ * exists for. A test cannot serve a user a divergent id. What the exemption
+ * gives up — "do the two doors actually agree?" — is not a fence question at
+ * all; it is an assertion, and it lives in
+ * `apps/service/composition/cross-door-identity.test.ts`.
+ *
+ * ESCAPE HATCH, mirroring the repo's `// domain-pending(<ID>)` and
+ * `// storage-provenance-ok(<reason>)` idioms:
+ * `// port-composition-ok(<reason>)` on the binding line or the line above.
+ */
+interface PortRegistryRow {
+  readonly portType: string;
+  /** Paths, relative to the platform root, allowed to construct this port. */
+  readonly composedIn: readonly string[];
+  readonly reason: string;
+}
+const PORT_REGISTRY: readonly PortRegistryRow[] = [
+  {
+    portType: "ApplicationReadPorts",
+    composedIn: ["apps/service/composition/memory-read.ts"],
+    reason:
+      "The REST and MCP doors both read through this port. Two compositions minted "
+      + "different public item ids for the same memory; the transports "
+      + "(apps/mcp/protocol.ts, apps/service/routes/memories.ts) stay separate, "
+      + "everything below them is shared.",
+  },
+];
+const portCompositionAllowMarker = "port-composition-ok(";
+const portConstructionPatterns = (portType: string): readonly RegExp[] => [
+  new RegExp(`:\\s*${portType}\\s*=\\s*\\{`),
+  new RegExp(`\\)\\s*:\\s*${portType}\\s*=>`),
+  new RegExp(`\\bsatisfies\\s+${portType}\\b`),
+];
+
 const storageProvenanceIdentifiers = [
   "coherent_snapshot_digest",
   "internal_coverage",
@@ -78,11 +158,40 @@ const withoutComments = (text: string): string => text
   .replace(/(^|[^:])\/\/[^\n]*/g, (match, lead: string) => lead + " ".repeat(match.length - lead.length));
 
 const failures: string[] = [];
+/** Rule 16 bookkeeping: which registered rows were seen constructed, and where. */
+const portConstructionSites = new Map<string, string[]>(
+  PORT_REGISTRY.map((row) => [row.portType, []]),
+);
 for (const file of files(root)) {
   const text = readFileSync(file, "utf8");
   const shown = relative(root, file);
   if (shown.startsWith("core/") && /from\s+["'][^"']*drivers\//.test(text)) {
     failures.push(`${shown}: core may not import drivers`);
+  }
+
+  // ── Rule 16: a registered port has exactly one composition ────────────────
+  if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
+    const rawLines = text.split("\n");
+    const codeLines = withoutComments(text).split("\n");
+    const hatched = (index: number): boolean =>
+      (rawLines[index] ?? "").includes(portCompositionAllowMarker)
+      || (rawLines[index - 1] ?? "").includes(portCompositionAllowMarker);
+    for (const row of PORT_REGISTRY) {
+      const patterns = portConstructionPatterns(row.portType);
+      codeLines.forEach((line, index) => {
+        if (!patterns.some((pattern) => pattern.test(line))) return;
+        portConstructionSites.get(row.portType)!.push(shown);
+        if (row.composedIn.includes(shown) || hatched(index)) return;
+        failures.push(
+          `${shown}:${index + 1}: second composition of registered port \`${row.portType}\`. `
+          + `A registered port has exactly ONE composition (rule 16); this one lives in `
+          + `${row.composedIn.join(", ")}. ${row.reason} `
+          + `Call the registered composition instead of building a parallel one. If this `
+          + `genuinely is not a second implementation, justify it with `
+          + `// ${portCompositionAllowMarker}<reason>) on this line.`,
+        );
+      });
+    }
   }
   // The fence protects WIRE COMPOSITION. Two exemptions, both principled rather
   // than convenient:
@@ -144,4 +253,21 @@ for (const file of files(root)) {
     failures.push(`${shown}: prohibited corpus path reference`);
   }
 }
+// A row whose declared composition no longer constructs the port is a STALE row,
+// and a stale row silently disables the rule for that port — the failure mode
+// the wire-seam registry calls "the selector is probably stale". Fail on it.
+for (const row of PORT_REGISTRY) {
+  const seen = portConstructionSites.get(row.portType) ?? [];
+  for (const declared of row.composedIn) {
+    if (!seen.includes(declared)) {
+      failures.push(
+        `PORT_REGISTRY row \`${row.portType}\` declares ${declared} as its composition, `
+        + "but no construction site was found there. Either the composition moved (update the "
+        + "row) or the port is no longer composed (delete the row) — a stale row silently "
+        + "disables rule 16 for this port.",
+      );
+    }
+  }
+}
+
 if (failures.length) throw new Error(failures.join("\n"));

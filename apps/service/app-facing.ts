@@ -109,7 +109,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     });
     return prepareMemoryRead({
       loadCoherent: loader as unknown as () => CoherentQaLoad,
-      authorizationRequest: devPrincipalToAuthorizationRequest(principal, {
+      // A thunk, not a value: the read core crosses the authorization boundary
+      // twice per page, and passing a captured request meant a grant revoked
+      // between the two loads was never observed.
+      resolveAuthorization: () => devPrincipalToAuthorizationRequest(principal, {
         app_id: "omi-local-dev-app",
         key_id: DEV_KEY_ID,
       }),

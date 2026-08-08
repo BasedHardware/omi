@@ -5,7 +5,7 @@
 // domain-pending(DIV-DOMAPPS-006)
 // domain-pending(DIV-DOMX-001)
 // domain-pending(DIV-DOMX-006)
-import { createHash, createHmac } from "node:crypto";
+import { createHmac } from "node:crypto";
 
 import {
   computeApplicationSynthesizedProjectionGenerationDigest,
@@ -13,7 +13,6 @@ import {
   type ApplicationReadAttestation,
   type ApplicationReadCoherentCoordinates,
   type ApplicationReadPorts,
-  type ApplicationReadSnapshotAttestation,
   type ApplicationRecallGenerationDigests,
   type ApplicationSynthesizedPageRequest,
 } from "../../../core/retrieve/application-read";
@@ -22,23 +21,16 @@ import {
   readAfterApplicationAuthorization,
   type ApplicationMemoryReadAuthorizationRequest,
 } from "../../../core/retrieve/authorization-boundary";
+import { sha256CanonicalContent } from "../../../core/retrieve/content-digest";
 import type {
   AcceptedCoverageState,
   ContentSafeRecallTrace,
   RecallCompletenessInput,
   StmCoverageState,
 } from "../../../core/retrieve/recall-integrity";
-import { renderStructuralTree, type RenderNode } from "../../../core/retrieve/render";
 import { buildDeterministicAnchors } from "../../../core/retrieve/tree";
 import type { GraphSnapshot } from "../../../core/retrieve";
-import {
-  asOpaqueVisibleKeyset,
-  issueMcpCursor,
-  verifyMcpCursor,
-  type McpCursorBindings,
-  type McpCursorSigningKeyset,
-} from "../../mcp/cursor";
-import { createReaderScopedOpaqueCodecs } from "../codecs/opaque-refs";
+import { InvalidMcpCursorError, type McpCursorSigningKeyset } from "../../mcp/cursor";
 // The canonical, transport-neutral granularity module. BE-FLOW landed it in
 // core/ while this lane had a local copy; there must be exactly one selector or
 // the two doors drift, which is the entire point of the ruling. The local copy
@@ -48,30 +40,43 @@ import {
   selectNodesForGranularity,
   type ReadItemGranularity,
 } from "../../../core/retrieve/granularity";
-import { createQaDeterministicSynthesizer } from "./qa-synthesizer";
+import {
+  createQaCursorAdapter,
+  isSyntacticallyRedeemableCursor,
+  QA_CURSOR_POLICY,
+} from "../../qa/cursor-bindings";
+import { produceQaRenders } from "../../qa/renders";
+import { createReaderScopedOpaqueCodecs } from "../codecs/opaque-refs";
 
 /**
- * The composition root for the application memory read path.
+ * THE composition root for the application memory read path — for BOTH doors.
  *
- * Every layer of this flow already existed and was individually green, but
- * nothing joined them: `readApplicationSynthesizedPage`, the SQLite QA loader,
- * and the signed cursor were each referenced only by their own unit tests. This
- * module is the single place where the authorization boundary, the projection,
- * the deterministic render set, the opaque codecs, and the signed cursor are
- * wired into one real read. There must be exactly one of these.
+ * `ApplicationReadPorts` used to be constructed twice, independently: here for
+ * the REST door and again in `apps/qa/recall-service.ts` for the MCP door. Two
+ * modules constructing one port type are two implementations, not two adapters,
+ * and the cost was measured rather than theorised: over one shared SQLite
+ * snapshot and one shared principal the two doors returned the SAME memory
+ * (byte-identical `text`, identical `provenance.outputDigest`) under DIFFERENT
+ * public item ids —
+ *
+ *   MCP  mem1_eca59618fff27e10…   REST mem1_dd73274cc9b1a9ac…
+ *
+ * — because they keyed the opaque-ref codecs differently. Every node-level
+ * cross-door assertion passed throughout. The two doors also disagreed on the
+ * digest scheme, the declared-frontier derivation and the coverage default.
+ *
+ * So there is exactly ONE construction site, and it is this one. The transports
+ * stay separate — `apps/mcp/protocol.ts` and `apps/service/routes/memories.ts`
+ * are correctly different — but everything below the transport is shared. Rule
+ * 16 (`scripts/lint-import-graph.ts` PORT_REGISTRY) is what keeps it that way.
+ *
+ * It lives under `apps/service/composition/` because that is where it already
+ * was; `apps/qa/` already depends on `apps/service/` (see `apps/qa/server.ts`),
+ * so no new edge is introduced by the MCP door calling it.
  *
  * SQLite is QA-only here and is never production authority. No production
  * store, concurrency model, or deployment topology is selected by this file.
  */
-
-/** Version tag for the cursor policy this composition binds into every cursor. */
-const CURSOR_POLICY_VERSION = "application-read-cursor-policy-v1";
-const RENDER_STRATEGY = "application-read-qa";
-const RENDER_MODEL_VERSION = "qa-deterministic-synthesizer-v1";
-const RENDER_PROMPT_VERSION = "qa-prompt-v1";
-const RENDER_POLICY_VERSION = "qa-policy-v1";
-const RENDER_SCHEMA_VERSION = "qa-schema-v1";
-
 
 /**
  * Re-roots a value onto standard object prototypes.
@@ -86,20 +91,8 @@ const RENDER_SCHEMA_VERSION = "qa-schema-v1";
  */
 const toStandardPrototypeJson = <Value>(value: Value): Value => structuredClone(value);
 
-const sha256Hex = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
-
 const compareStrings = (left: string, right: string): number =>
   left < right ? -1 : left > right ? 1 : 0;
-
-const canonicalJson = (value: unknown): string => {
-  if (value === null || typeof value === "boolean" || typeof value === "number"
-    || typeof value === "string") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (typeof value !== "object") return "null";
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record).sort(compareStrings)
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
-};
 
 /**
  * The QA coherent load this composition consumes. It is structurally the
@@ -121,14 +114,38 @@ export interface CoherentQaLoad {
   readonly durable_snapshot: GraphSnapshot;
 }
 
+/** Port-call instrumentation vocabulary. Counts only; carries no content. */
+export type MemoryReadPortCall =
+  | "resolve" | "coherent" | "durable"
+  | "visible" | "item" | "citation" | "trace"
+  | "verify" | "issue" | "sink";
+
 export interface MemoryReadCompositionConfig {
   /** Zero-argument coherent loader; called fresh for every internal revalidation. */
   readonly loadCoherent: () => CoherentQaLoad;
-  readonly authorizationRequest: ApplicationMemoryReadAuthorizationRequest;
+  /**
+   * LIVE authorization state, re-resolved on every attempt.
+   *
+   * This is the revocation fence, and it is why the config takes a thunk rather
+   * than a value. The REST door used to capture one authorization request at
+   * prepare time and hand the same frozen object to every internal
+   * revalidation, so a grant revoked BETWEEN the page build and its
+   * revalidation was not observed — the read core's second load crossed the
+   * boundary with the first load's answer. Resolving here means the revocation
+   * denies the read before any byte, cursor, or trace is produced.
+   *
+   * The resolved request is captured once PER ATTEMPT and reused for that
+   * attempt's coherent load, so the digest a cursor binds is the digest of the
+   * request the authorization boundary actually validated. The MCP door
+   * previously resolved twice per attempt, which left room for the two to
+   * disagree.
+   */
+  readonly resolveAuthorization: () => ApplicationMemoryReadAuthorizationRequest;
   /** HMAC root for the reader-scoped opaque handles. QA-supplied; never a production secret. */
   readonly codecRootSecret: Uint8Array;
   readonly cursorSigningKeyset: McpCursorSigningKeyset;
-  readonly cursorTtlSeconds: number;
+  /** Defaults to the shared QA cursor policy's TTL. Bound into every cursor. */
+  readonly cursorTtlSeconds?: number;
   /**
    * The authoritative read timestamp for this snapshot. Passed in, never read
    * from a clock, so the two internal revalidation loads agree and the flow
@@ -138,8 +155,8 @@ export interface MemoryReadCompositionConfig {
   readonly traceSink: (trace: ContentSafeRecallTrace) => void | Promise<void>;
   /**
    * Which synthesized nodes count as served memories. EXPLICIT, never implied
-   * by the transport - see ./granularity.ts. Defaults to the app-facing
-   * granularity when omitted.
+   * by the transport - see core/retrieve/granularity.ts. Defaults to the
+   * app-facing granularity when omitted.
    */
   // domain-pending(DIV-DOMCORE-008)
   readonly granularity?: ReadItemGranularity;
@@ -156,11 +173,14 @@ export interface MemoryReadCompositionConfig {
    * always true here and reveals nothing. A caller may declare `no_eligible`
    * ONLY when it can establish emptiness from something other than counting
    * rows at request time - for instance because it seeded the corpus itself.
+   * Both doors do exactly that, and each proves it at its own call site.
    */
   // domain-pending(DIV-DOMCORE-006)
   readonly acceptedCoverageState?: AcceptedCoverageState;
   // domain-pending(DIV-DOMCORE-006)
   readonly stmCoverageState?: StmCoverageState;
+  /** Optional per-port-call counter hook. Instrumentation only. */
+  readonly onPortCall?: (call: MemoryReadPortCall) => void;
 }
 
 /**
@@ -199,6 +219,12 @@ const buildCoverage = (
   // reader may not see, so a frontier derived from it changes when a hidden
   // record is added - an authorization oracle that survives even though the
   // items themselves are correctly filtered. A test caught exactly that.
+  //
+  // It is also KEYED and READER-SCOPED. The MCP door used to publish
+  // `frontier-v1:qa:<graph generation>` — the visible generation in cleartext,
+  // identical for every credential on the account, which makes the frontier a
+  // cross-reader correlation key over exactly the closure the opaque-ref codecs
+  // are scoped to keep separate.
   const declaredFrontier = encodeFrontier(`durable:${authorizedGraphGeneration}`);
 
   // Coverage states are DECLARED by the caller, never computed here from
@@ -219,40 +245,49 @@ const buildCoverage = (
   });
 };
 
+/**
+ * One digest scheme for the whole composition: the core's
+ * `sha256CanonicalContent`.
+ *
+ * The two doors used to disagree here — a local `sha256Hex(canonicalJson(…))`
+ * pair on the REST side against `sha256CanonicalContent` on the MCP side — and
+ * a composition that re-implements canonical JSON is a composition that can
+ * disagree with the core about what canonical means. The local copy is deleted.
+ */
+const digestOf = (label: string, value: unknown): string =>
+  sha256CanonicalContent({ version: `application-read-${label}-v1`, value });
+
 const buildGenerations = (
   authorizedGraphGeneration: string,
-  authorizedContentDigest: string,
   acceptedState: AcceptedCoverageState,
   stmState: StmCoverageState,
   authorizationDigest: string,
+  declaredFrontier: string,
+  granularity: ReadItemGranularity,
   synthesizedProjectionGenerationDigest: string,
 ): ApplicationRecallGenerationDigests => Object.freeze({
+  // Must equal read_coordinates.authorization_state_digest; the application
+  // read cross-checks the two and fails closed when they disagree.
   authorization_generation_digest: authorizationDigest,
   synthesized_projection_generation_digest: synthesizedProjectionGenerationDigest,
-  durable_generation_digest: sha256Hex(canonicalJson({
-    kind: "durable-generation",
-    authorized_graph_generation: authorizedGraphGeneration,
-  })),
+  durable_generation_digest: digestOf("durable-generation", authorizedGraphGeneration),
   // Only the overlay's reported STATE, never its row count or row ids. The
   // state is already published in the completeness envelope, so binding it
   // reveals nothing the client cannot already read.
-  overlay_generation_digest: sha256Hex(canonicalJson({
-    kind: "overlay-generation",
-    state: stmState,
-  })),
-  declared_generation_digest: sha256Hex(canonicalJson({
-    kind: "declared-generation",
+  overlay_generation_digest: digestOf("overlay-generation", { state: stmState }),
+  // Granularity is inside the generation receipt, so a cursor issued at one
+  // granularity cannot redeem at another. Without this, page two of a
+  // leaves-only read could be continued as an all-nodes read and silently
+  // return items page one could never have contained.
+  declared_generation_digest: digestOf("declared-generation", {
     authorized_graph_generation: authorizedGraphGeneration,
-  })),
-  accepted_generation_digest: sha256Hex(canonicalJson({
-    kind: "accepted-generation",
-    state: acceptedState,
-  })),
-  stm_generation_digest: sha256Hex(canonicalJson({
-    kind: "stm-generation",
-    state: stmState,
-  })),
-
+    declared_frontier: declaredFrontier,
+    granularity,
+  }),
+  // Accepted and STM are reported from their DECLARED state, never from raw
+  // internal counts, which would carry hidden-row cardinality to the wire.
+  accepted_generation_digest: digestOf("accepted-generation", { state: acceptedState }),
+  stm_generation_digest: digestOf("stm-generation", { state: stmState }),
 });
 
 const buildReadCoordinates = (
@@ -263,89 +298,31 @@ const buildReadCoordinates = (
   persistedGrantStateDigest: string,
   readTimestampEpochSeconds: number,
 ): ApplicationReadCoherentCoordinates => Object.freeze({
-  owner_identity_digest: sha256Hex(`owner:${authorization.owner_account_id}`),
-  application_identity_digest: sha256Hex(`app:${authorization.credential.app_id ?? ""}`),
-  credential_identity_digest: sha256Hex(`credential:${authorization.credential.key_id ?? ""}`),
+  // Identity coordinates come from the authorization request the boundary
+  // validated, never from a separately-carried principal record: a second
+  // source of truth for reader identity is how the two doors diverged.
+  owner_identity_digest: digestOf("owner", authorization.owner_account_id),
+  application_identity_digest: digestOf("application", authorization.credential.app_id ?? ""),
+  credential_identity_digest: digestOf("credential", authorization.credential.key_id ?? ""),
   // The core cross-checks this against the authorization generation digest.
+  // Re-derived from LIVE authorization on every coherent load: this is the
+  // coordinate that changes the moment a grant is revoked.
   authorization_state_digest: authorizationDigest,
   grant_state_digest: persistedGrantStateDigest,
   // Authorization-scoped, NOT the ledger head. See buildGenerations.
-  account_head_digest: sha256Hex(canonicalJson({
-    kind: "account-head",
-    authorized_graph_generation: authorizedGraphGeneration,
-  })),
-  authorized_graph_digest: sha256Hex(canonicalJson({
-    kind: "authorized-graph",
-    authorized_graph_generation: authorizedGraphGeneration,
-  })),
-  coherent_projection_commit_digest: sha256Hex(canonicalJson({
-    kind: "coherent-projection-commit",
-    authorized_content_digest: authorizedContentDigest,
-  })),
+  account_head_digest: digestOf("account-head", authorizedGraphGeneration),
+  authorized_graph_digest: digestOf("authorized-graph", authorizedGraphGeneration),
+  coherent_projection_commit_digest: digestOf("coherent-projection-commit", authorizedContentDigest),
   // This read applies the application-default visibility, no filter, and no
   // query. They are still distinct bound coordinates so that introducing any of
   // them later invalidates outstanding cursors rather than silently reusing them.
-  visibility_digest: sha256Hex("visibility:application-default-synthesized-v1"),
-  filter_digest: sha256Hex("filter:none-v1"),
-  query_digest: sha256Hex("query:none-v1"),
-  source_digest: sha256Hex("source:durable-only-v1"),
-  read_mode_digest: sha256Hex("read-mode:synthesized-latest-projection-v1"),
+  visibility_digest: digestOf("visibility", { default_synthesized: true, raw_read: false }),
+  filter_digest: digestOf("filter", { filters: [] }),
+  query_digest: digestOf("query", { query: null }),
+  source_digest: digestOf("source", { sources: ["durable"] }),
+  read_mode_digest: digestOf("read-mode", { mode: "default_synthesized" }),
   read_timestamp_epoch_seconds: readTimestampEpochSeconds,
 });
-
-/**
- * Projects a read attestation onto the fifteen signed cursor bindings.
- *
- * The binding set is fixed at fifteen fields, but the attestation carries more
- * state than that - the coverage envelope, the projected content digest, and
- * the durable/overlay/declared/accepted/STM generations. Those residual fields
- * are folded into `cursor_policy_digest`. Without that fold a cursor minted
- * against one coverage state would verify against a different one, which is a
- * replay across snapshots: a page-two request could silently be answered from a
- * snapshot whose completeness no longer matches the page-one the client saw.
- */
-// domain-pending(DIV-DOMX-001)
-const attestationToCursorBindings = (
-  attestation: ApplicationReadSnapshotAttestation,
-): McpCursorBindings => Object.freeze({
-  owner_digest: attestation.owner_identity_digest,
-  app_digest: attestation.application_identity_digest,
-  credential_key_digest: attestation.credential_identity_digest,
-  authorization_generation_digest: attestation.authorization_state_digest,
-  grant_generation_digest: attestation.grant_state_digest,
-  account_generation_digest: attestation.account_head_digest,
-  graph_generation_digest: attestation.authorized_graph_digest,
-  projection_generation_digest: attestation.synthesized_projection_generation_digest,
-  projection_commit_digest: attestation.coherent_projection_commit_digest,
-  visibility_digest: attestation.visibility_digest,
-  filter_digest: attestation.filter_digest,
-  query_digest: attestation.query_digest,
-  cursor_policy_digest: sha256Hex(canonicalJson({
-    policy: CURSOR_POLICY_VERSION,
-    projected_content_digest: attestation.projected_content_digest,
-    durable_generation_digest: attestation.durable_generation_digest,
-    overlay_generation_digest: attestation.overlay_generation_digest,
-    declared_generation_digest: attestation.declared_generation_digest,
-    accepted_generation_digest: attestation.accepted_generation_digest,
-    stm_generation_digest: attestation.stm_generation_digest,
-    coverage: attestation.coverage,
-  })),
-  source_digest: attestation.source_digest,
-  read_mode_digest: attestation.read_mode_digest,
-});
-
-/**
- * Only grounded, current renders may be served. An empty, failed or stale render
- * has no synthesized projection to publish - and presenting one as absence would
- * be a lie.
- */
-const isServableRender = (render: RenderNode): boolean =>
-  render.status === "ready"
-  && render.render_hash !== null
-  && render.summary_text !== null
-  && render.summary_text.length > 0
-  && !render.stale
-  && render.citations.length > 0;
 
 export interface PreparedMemoryRead {
   readonly ports: ApplicationReadPorts;
@@ -372,14 +349,25 @@ export interface MemoryPageResult {
 export const prepareMemoryRead = async (
   config: MemoryReadCompositionConfig,
 ): Promise<PreparedMemoryRead> => {
-  const authorization = config.authorizationRequest;
+  const onPortCall = config.onPortCall ?? ((): void => {});
   // Runs the same gate the read will run, so a denial surfaces before any
-  // render work happens rather than after.
-  const evidence = inspectApplicationMemoryReadAuthorization(authorization);
+  // render work happens rather than after. `principal_digest` covers only
+  // owner/app/key, so it is stable across a later grant change — which is what
+  // makes it a safe codec scope: revoking and re-granting must not renumber a
+  // reader's memories.
+  const prepareEvidence = inspectApplicationMemoryReadAuthorization(config.resolveAuthorization());
 
   const codecs = createReaderScopedOpaqueCodecs({
     root_secret: config.codecRootSecret,
-    reader_projection_digest: evidence.principal_digest,
+    reader_projection_digest: prepareEvidence.principal_digest,
+  });
+
+  const cursorAdapter = createQaCursorAdapter({
+    signing_keyset: config.cursorSigningKeyset,
+    policy: {
+      ...QA_CURSOR_POLICY,
+      ttl_seconds: config.cursorTtlSeconds ?? QA_CURSOR_POLICY.ttl_seconds,
+    },
   });
 
   /**
@@ -390,13 +378,13 @@ export const prepareMemoryRead = async (
   const frontierSubkey = createHmac("sha256", Buffer.from(config.codecRootSecret))
     .update("omi.service.opaque-frontier.v1", "ascii")
     .update("\0", "ascii")
-    .update(evidence.principal_digest, "ascii")
+    .update(prepareEvidence.principal_digest, "ascii")
     .digest();
   const encodeFrontier = (internalFrontier: string): string =>
     `frontier-v1:${createHmac("sha256", frontierSubkey).update(internalFrontier, "utf8").digest("hex")}`;
 
   const preRenderLoad = config.loadCoherent();
-  const preRenderProjection = readAfterApplicationAuthorization(authorization, () => ({
+  const preRenderProjection = readAfterApplicationAuthorization(config.resolveAuthorization(), () => ({
     // storage-provenance-ok(handed straight to readAfterApplicationAuthorization as its input; the render set is built from the PROJECTION it returns, and no value from this snapshot reaches the wire un-projected)
     snapshot: toStandardPrototypeJson(preRenderLoad.durable_snapshot),
     options: { account_timezone: preRenderLoad.account_timezone },
@@ -406,125 +394,139 @@ export const prepareMemoryRead = async (
   // Conservative defaults: "we did not search it" is always true and leaks nothing.
   const declaredAcceptedState: AcceptedCoverageState = config.acceptedCoverageState ?? "bypassed";
   const declaredStmState: StmCoverageState = config.stmCoverageState ?? "bypassed";
-  const tree = buildDeterministicAnchors(preRenderProjection);
-  const allRenders = await renderStructuralTree(
-    tree,
-    preRenderProjection,
-    createQaDeterministicSynthesizer(),
-    {
-      strategy: RENDER_STRATEGY,
-      model_version: RENDER_MODEL_VERSION,
-      prompt_version: RENDER_PROMPT_VERSION,
-      policy_version: RENDER_POLICY_VERSION,
-      schema_version: RENDER_SCHEMA_VERSION,
-    },
-  );
+
+  // Production is granularity-agnostic: the whole tree is rendered and the
+  // selection happens here, through the SHARED selector. Rendering a pruned
+  // tree would change a surviving rollup's render hash, so the granularities
+  // would disagree about the bytes of an item they both contain.
+  const allRenders = await produceQaRenders(preRenderProjection);
   const selectedNodeIds = new Set(
-    selectNodesForGranularity(tree.nodes, granularity).map((node) => node.node_id),
+    selectNodesForGranularity(buildDeterministicAnchors(preRenderProjection).nodes, granularity)
+      .map((structuralNode) => structuralNode.node_id),
   );
   const servedRenders = Object.freeze(
     allRenders
-      .filter((render) => selectedNodeIds.has(render.node_id) && isServableRender(render))
+      .filter((render) => selectedNodeIds.has(render.node_id))
       .slice()
       .sort((left, right) => compareStrings(left.node_id, right.node_id)),
   );
   const synthesizedProjectionGenerationDigest =
     computeApplicationSynthesizedProjectionGenerationDigest(preRenderProjection, servedRenders);
 
+  // THE ONE CONSTRUCTION SITE for ApplicationReadPorts. See the module header,
+  // and PORT_REGISTRY in scripts/lint-import-graph.ts.
   const ports: ApplicationReadPorts = {
-    resolveAttempt: () => ({
-      authorization_request: authorization,
-      load_coherent: () => {
-        const load = config.loadCoherent();
-        // storage-provenance-ok(handed straight to readAfterApplicationAuthorization; every wire coordinate below is derived from projected.graph_generation / projected.projected_content_digest, never from this snapshot)
-        const snapshot = toStandardPrototypeJson(load.durable_snapshot);
+    resolveAttempt: () => {
+      onPortCall("resolve");
+      // Live, per attempt. Captured once here and reused by this attempt's
+      // coherent load so the digest the cursor binds is the digest of the
+      // request the authorization boundary actually validated.
+      const authorization = config.resolveAuthorization();
+      return {
+        authorization_request: authorization,
+        load_coherent: () => {
+          onPortCall("coherent");
+          const evidence = inspectApplicationMemoryReadAuthorization(authorization);
+          const load = config.loadCoherent();
+          // storage-provenance-ok(handed straight to readAfterApplicationAuthorization; every wire coordinate below is derived from projected.graph_generation / projected.projected_content_digest, never from this snapshot)
+          const snapshot = toStandardPrototypeJson(load.durable_snapshot);
 
-        // Project HERE, before deriving any coordinate the wire will see.
-        //
-        // The coherent load describes the whole durable corpus, including rows
-        // this reader is not authorized to see. Deriving a frontier, generation
-        // receipt, or cursor binding from it publishes the existence of those
-        // rows: add one hidden record and the frontier and cursor change, while
-        // the item list stays correctly filtered. That is an authorization
-        // oracle, and `hidden-vs-absent.test.ts` failed on exactly it before
-        // this change. Everything below is therefore derived from the projected
-        // (authorization-scoped) generation and content digests instead.
-        //
-        // The core re-projects this same snapshot immediately afterwards; if the
-        // two ever disagreed, the produced-render binding fails closed.
-        const projected = readAfterApplicationAuthorization(authorization, () => ({
-          snapshot,
-          options: { account_timezone: load.account_timezone },
-        }));
-        const authorizedGraphGeneration = String(projected.graph_generation);
-        const authorizedContentDigest = String(projected.projected_content_digest);
-        const coverage = buildCoverage(
-          declaredAcceptedState,
-          declaredStmState,
-          authorizedGraphGeneration,
-          encodeFrontier,
-        );
-
-        return {
-          projection_load: {
+          // Project HERE, before deriving any coordinate the wire will see.
+          //
+          // The coherent load describes the whole durable corpus, including rows
+          // this reader is not authorized to see. Deriving a frontier, generation
+          // receipt, or cursor binding from it publishes the existence of those
+          // rows: add one hidden record and the frontier and cursor change, while
+          // the item list stays correctly filtered. That is an authorization
+          // oracle, and `hidden-vs-absent.test.ts` failed on exactly it before
+          // this change. Everything below is therefore derived from the projected
+          // (authorization-scoped) generation and content digests instead.
+          //
+          // The core re-projects this same snapshot immediately afterwards; if the
+          // two ever disagreed, the produced-render binding fails closed.
+          const projected = readAfterApplicationAuthorization(authorization, () => ({
             snapshot,
             options: { account_timezone: load.account_timezone },
-          },
-          coverage,
-          generations: buildGenerations(
+          }));
+          const authorizedGraphGeneration = String(projected.graph_generation);
+          const authorizedContentDigest = String(projected.projected_content_digest);
+          const coverage = buildCoverage(
+            declaredAcceptedState,
+            declaredStmState,
             authorizedGraphGeneration,
-            authorizedContentDigest,
-            coverage.accepted.state,
-            coverage.stm.state,
-            evidence.authorization_digest,
-            synthesizedProjectionGenerationDigest,
-          ),
-          read_coordinates: buildReadCoordinates(
-            authorizedGraphGeneration,
-            authorizedContentDigest,
-            authorization,
-            evidence.authorization_digest,
-            evidence.persisted_grant_state_digest,
-            config.readTimestampEpochSeconds,
-          ),
-        };
-      },
-    }),
+            encodeFrontier,
+          );
+
+          return {
+            projection_load: {
+              snapshot,
+              options: { account_timezone: load.account_timezone },
+            },
+            coverage,
+            generations: buildGenerations(
+              authorizedGraphGeneration,
+              coverage.accepted.state,
+              coverage.stm.state,
+              evidence.authorization_digest,
+              coverage.declared_frontier,
+              granularity,
+              synthesizedProjectionGenerationDigest,
+            ),
+            read_coordinates: buildReadCoordinates(
+              authorizedGraphGeneration,
+              authorizedContentDigest,
+              authorization,
+              evidence.authorization_digest,
+              evidence.persisted_grant_state_digest,
+              config.readTimestampEpochSeconds,
+            ),
+          };
+        },
+      };
+    },
     // The read core rebinds every returned render against the freshly projected
     // input and recomputes the generation receipt, so returning the memoized
     // set cannot smuggle in renders from a different projection.
-    loadDurableRenders: () => [...servedRenders],
-    encodeVisibleKey: codecs.encodeVisibleKey,
-    encodeItemRef: codecs.encodeItemRef,
-    encodeCitationRef: codecs.encodeCitationRef,
-    encodeTraceRef: codecs.encodeTraceRef,
-    verifyCursor: (cursor, attestation) => verifyMcpCursor(
-      cursor,
-      {
-        bindings: attestationToCursorBindings(attestation),
-        // The signed page read timestamp, never an ambient decode time.
-        now_epoch_seconds: attestation.read_timestamp_epoch_seconds,
-      },
-      config.cursorSigningKeyset,
-    ).last_visible_key,
-    issueCursor: (lastVisibleKey, attestation) => issueMcpCursor(
-      {
-        last_visible_key: asOpaqueVisibleKeyset(lastVisibleKey),
-        bindings: attestationToCursorBindings(attestation),
-        issued_at_epoch_seconds: attestation.read_timestamp_epoch_seconds,
-        ttl_seconds: config.cursorTtlSeconds,
-      },
-      config.cursorSigningKeyset,
-    ),
-    traceSink: config.traceSink,
+    loadDurableRenders: () => { onPortCall("durable"); return [...servedRenders]; },
+    encodeVisibleKey: (tuple) => { onPortCall("visible"); return codecs.encodeVisibleKey(tuple); },
+    encodeItemRef: (ref) => { onPortCall("item"); return codecs.encodeItemRef(ref); },
+    encodeCitationRef: (closure) => { onPortCall("citation"); return codecs.encodeCitationRef(closure); },
+    encodeTraceRef: (ref) => { onPortCall("trace"); return codecs.encodeTraceRef(ref); },
+    verifyCursor: (cursor, attestation) => {
+      onPortCall("verify");
+      return cursorAdapter.verifyCursor(cursor, attestation);
+    },
+    issueCursor: (lastVisibleKey, attestation) => {
+      onPortCall("issue");
+      return cursorAdapter.issueCursor(lastVisibleKey, attestation);
+    },
+    traceSink: async (trace) => { onPortCall("sink"); await config.traceSink(trace); },
   };
 
   return Object.freeze({ ports, servableRenderCount: servedRenders.length });
 };
 
-/** Reads one page of canonical ratified JSON through the prepared ports. */
+/**
+ * Reads one page of canonical ratified JSON through the prepared ports.
+ *
+ * The ratified keyset grammar is checked HERE, in the invalid-cursor error
+ * currency, before the core sees the bytes. The core raises a plain `TypeError`
+ * for a cursor that is too long or carries a non-printable byte, and a
+ * `TypeError` is reported as an internal error rather than an invalid cursor —
+ * so two mutations of one token produced two different public outcomes, which
+ * tells an attacker which half of their guess was wrong.
+ *
+ * Measured on the REST door before this collapse: a 4096-character cursor
+ * answered `400 bad_request`, a 4097-character one answered
+ * `500 internal_server_error`. The MCP door already closed this at its own
+ * composition; the REST door did not, because it had a different one.
+ */
 export const readMemoryPage = async (
   request: ApplicationSynthesizedPageRequest,
   prepared: PreparedMemoryRead,
-): Promise<MemoryPageResult> =>
-  readApplicationSynthesizedPageWithAttestation(request, prepared.ports);
+): Promise<MemoryPageResult> => {
+  if (request.cursor !== null && !isSyntacticallyRedeemableCursor(request.cursor)) {
+    throw new InvalidMcpCursorError();
+  }
+  return readApplicationSynthesizedPageWithAttestation(request, prepared.ports);
+};

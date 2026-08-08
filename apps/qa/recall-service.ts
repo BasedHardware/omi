@@ -5,54 +5,49 @@
 // domain-pending(DIV-DOMCORE-008)
 // domain-pending(DIV-DOMTASK-004)
 // domain-pending(DIV-DOMX-001)
-// domain-pending(DIV-DOMX-005)
 // domain-pending(DIV-DOMX-006)
 import type { Database } from "bun:sqlite";
 
-import {
-  computeApplicationSynthesizedProjectionGenerationDigest,
-  readApplicationSynthesizedPageWithAttestation,
-  type ApplicationReadPorts,
-  type ApplicationRecallGenerationDigests,
-  type ApplicationReadCoherentCoordinates,
-  type ApplicationSynthesizedPageResult,
-} from "../../core/retrieve/application-read";
-import {
-  readAfterApplicationAuthorization,
-  type ApplicationGrantProjectedTreeInputSnapshot,
-  type ApplicationMemoryReadAuthorizationRequest,
-} from "../../core/retrieve/authorization-boundary";
-import { sha256CanonicalContent } from "../../core/retrieve/content-digest";
-import type { ContentSafeRecallTrace, RecallCompletenessInput } from "../../core/retrieve/recall-integrity";
-import type { RenderNode } from "../../core/retrieve/render";
+import type { ApplicationSynthesizedPageResult } from "../../core/retrieve/application-read";
+import type { ApplicationMemoryReadAuthorizationRequest } from "../../core/retrieve/authorization-boundary";
+import type { ContentSafeRecallTrace } from "../../core/retrieve/recall-integrity";
 import {
   createSqliteQaRecallLoader,
   type SqliteQaRecallLimits,
 } from "../../drivers/sqlite/application-recall-read";
-import { InvalidMcpCursorError } from "../mcp/cursor";
-import type { QaReferenceCodecs } from "./codecs";
-import { isSyntacticallyRedeemableCursor, type QaCursorAdapter } from "./cursor-bindings";
 import {
   DEFAULT_READ_ITEM_GRANULARITY,
   isReadItemGranularity,
-  selectNodesForGranularity,
   type ReadItemGranularity,
 } from "../../core/retrieve/granularity";
-import { buildDeterministicAnchors } from "../../core/retrieve/tree";
-import { produceQaRenders } from "./renders";
+import type { McpCursorSigningKeyset } from "../mcp/cursor";
+import {
+  prepareMemoryRead,
+  readMemoryPage,
+  type CoherentQaLoad,
+  type MemoryReadPortCall,
+  type PreparedMemoryRead,
+} from "../service/composition/memory-read";
 
 /**
- * The QA composition of the localhost recall flow:
+ * The MCP door's READER over the shared read composition.
  *
  *   SQLite QA snapshot -> authorized projection -> deterministic renders ->
  *   application pagination -> signed cursor -> ratified page bytes
  *
+ * This module used to construct `ApplicationReadPorts` itself, independently of
+ * the REST door's composition, and the two disagreed on the digest scheme, the
+ * declared-frontier derivation, the coverage default and the opaque codecs —
+ * which made them mint different public item ids for the same memory. That
+ * construction is DELETED. Everything below the transport now comes from
+ * `apps/service/composition/memory-read.ts`; what remains here is the part that
+ * is genuinely this door's: the SQLite loader, the per-granularity material
+ * cache, the coverage declaration this surface is entitled to make, and the
+ * port-call counters the proofs read.
+ *
  * SQLite is QA storage only and is never a production authority. This module
  * selects no production store, concurrency model, or retrieval policy.
  */
-
-/** The declared frontier for a QA read. Content-free and stable per snapshot. */
-const QA_DECLARED_FRONTIER_PREFIX = "frontier-v1:qa:";
 
 export interface QaRecallPrincipal {
   readonly owner_account_id: string;
@@ -72,8 +67,9 @@ export interface QaRecallReaderOptions {
   readonly principal: QaRecallPrincipal;
   readonly account_timezone: string;
   readonly limits: SqliteQaRecallLimits;
-  readonly codecs: QaReferenceCodecs;
-  readonly cursor: QaCursorAdapter;
+  /** HMAC root for the shared reader-scoped opaque handles. Never a production secret. */
+  readonly codec_root_secret: Uint8Array;
+  readonly cursor_signing_keyset: McpCursorSigningKeyset;
   readonly authorization: QaAuthorizationSource;
   /**
    * The authoritative read timestamp for this snapshot. Supplied, never read
@@ -100,18 +96,6 @@ export interface QaRecallPageRequest {
   readonly granularity?: string | null;
 }
 
-interface QaCoherentMaterial {
-  readonly projected: ApplicationGrantProjectedTreeInputSnapshot;
-  readonly renders: readonly RenderNode[];
-  readonly snapshot: unknown;
-  readonly account_timezone: string;
-  readonly coverage: RecallCompletenessInput;
-  readonly generations: ApplicationRecallGenerationDigests;
-  /** Visible-closure identity. Never a storage-level digest. */
-  readonly visible_generation: string;
-  readonly visible_content_digest: string;
-}
-
 export interface QaRecallReader {
   /** Recomputes the coherent snapshot and its produced renders. */
   readonly refresh: () => Promise<void>;
@@ -122,30 +106,11 @@ export interface QaRecallReader {
 
 const fail = (message: string): never => { throw new TypeError(`QA recall service: ${message}`); };
 
-const digestOf = (label: string, value: unknown): string =>
-  sha256CanonicalContent({ version: `qa-recall-${label}-v1`, value });
-
-/**
- * Coverage for a QA read.
- *
- * `accepted` and `stm` are reported as `no_eligible` rather than `searched`
- * because neither source has a produced-render authority boundary yet — the
- * application read core rejects a claimed searched frontier for them outright.
- * Claiming otherwise would be a false completeness assertion, which the repo
- * treats as user data loss, not a rounding error.
- */
-const qaCoverage = (declaredFrontier: string): RecallCompletenessInput => Object.freeze({
-  declared_frontier: declaredFrontier,
-  accepted: Object.freeze({ state: "no_eligible", searched_frontier: null }),
-  stm: Object.freeze({ state: "no_eligible", searched_frontier: null }),
-  projection_freshness: "fresh",
-  intentional_bounds: Object.freeze([]),
-}) as RecallCompletenessInput;
-
 export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallReader => {
   const {
-    db, principal, account_timezone: accountTimezone, limits, codecs,
-    cursor: cursorAdapter, authorization, read_timestamp_epoch_seconds: readTimestamp, traceSink,
+    db, principal, account_timezone: accountTimezone, limits,
+    codec_root_secret: codecRootSecret, cursor_signing_keyset: cursorSigningKeyset,
+    authorization, read_timestamp_epoch_seconds: readTimestamp, traceSink,
   } = options;
   const granularity = options.granularity ?? DEFAULT_READ_ITEM_GRANULARITY;
 
@@ -153,240 +118,88 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
     throw new TypeError("QA recall reader requires an authoritative read timestamp");
   }
 
-  const loadCoherent = createSqliteQaRecallLoader({
+  const loadSqlite = createSqliteQaRecallLoader({
     db,
     owner_account_id: principal.owner_account_id,
     account_timezone: accountTimezone,
     limits,
   });
 
-  const counters: Record<string, number> = {
-    refresh: 0, resolve: 0, coherent: 0, durable: 0,
-    verify: 0, issue: 0, visible: 0, item: 0, citation: 0, trace: 0, sink: 0,
-  };
-
   /**
-   * One coherent material per granularity. Renders differ between granularities
-   * (different node sets produce different generation receipts), so they cannot
-   * share a cache entry. Keyed rather than rebuilt per request so repeated reads
-   * at one granularity stay deterministic and cheap.
-   */
-  const materialByGranularity = new Map<ReadItemGranularity, QaCoherentMaterial>();
-
-  /**
-   * Builds the coherent material once per refresh. Renders must be produced
-   * before the read begins because the application read's coherent-load and
-   * durable-render ports are both synchronous, while render production is not.
+   * FAIL CLOSED ON THE COVERAGE ASSUMPTION.
    *
-   * Authorization is deliberately NOT captured here. It is re-resolved on every
-   * attempt so a revocation between the read and its revalidation is observed
-   * rather than served from a stale snapshot.
+   * This surface declares `no_eligible` for accepted work and STM below. That
+   * declaration is leak-free — it is a constant, so no storage cardinality
+   * reaches the wire — and it is only *honest* while the fixtures genuinely
+   * have no STM rows. If any appeared, this path (which never searches STM)
+   * would claim completeness it has not earned, and a wrong `complete: true` is
+   * user data loss under rule 12.
+   *
+   * So assert the assumption instead of trusting it. Reading the count here is
+   * a guard that fails the read; it derives no wire value, which is exactly
+   * what the storage-provenance fence's escape hatch is for. The guard lives
+   * with the DECLARATION, not in the shared composition — the composition
+   * defaults to the conservative `bypassed` and cannot know what any given
+   * caller is entitled to claim.
    */
-  const buildMaterial = async (granularity: ReadItemGranularity): Promise<QaCoherentMaterial> => {
-    const load = loadCoherent();
-    // storage-provenance-ok(this IS the authorization boundary's input; it is filtered by applicationVisibleClosure before anything derives from it, and no wire value is computed from it directly)
-    const snapshot = load.durable_snapshot;
-
-    // A throwaway projection used only to produce renders and derive the
-    // generation receipt. The authoritative projection is rebuilt inside the
-    // authorization boundary on every attempt.
-    const projected = readAfterApplicationAuthorization(
-      authorization.resolveAuthorizationRequest(principal),
-      () => ({ snapshot: structuredClone(snapshot), options: { account_timezone: accountTimezone } }),
-    );
-    // Production is granularity-agnostic; selection happens here, after the
-    // whole tree has been rendered, so rollup child-render hashes stay correct
-    // and both doors can be handed the same unfiltered set.
-    const allRenders = await produceQaRenders(projected);
-    const selectedNodeIds = new Set(
-      selectNodesForGranularity(buildDeterministicAnchors(projected).nodes, granularity)
-        .map((structuralNode) => structuralNode.node_id),
-    );
-    const renders = allRenders.filter((render) => selectedNodeIds.has(render.node_id));
-
-    // ── The visible-derivation rule ────────────────────────────────────────
-    // Everything that can reach the wire is derived from the AUTHORIZED
-    // PROJECTION, never from the raw storage snapshot.
-    //
-    // This is not stylistic. `load.coherent_snapshot_digest` and
-    // `internal_coverage.durable.ledger_head.sequence` both cover records the
-    // reader cannot see. Measured on a 6-claim snapshot with one claim hidden by
-    // policy versus a 5-claim snapshot where it never existed: the digests differ
-    // (3ad6626b… vs 1441b306…) and the ledger sequence differs (6 vs 5). Routing
-    // either to the declared frontier or into a cursor binding publishes the
-    // existence of a record the reader is not allowed to know about — a textbook
-    // authorization oracle, and one that looks entirely reasonable in review.
-    //
-    // `projected.graph_generation` and `projected.projected_content_digest` are
-    // computed over the visible closure only, so they are safe and, as a bonus,
-    // more correct: a cursor now survives writes that do not affect this reader
-    // instead of being invalidated by unrelated activity.
-    //
-    // `load.coherent_snapshot_digest` is deliberately NOT used anywhere below.
-    const visibleGeneration = projected.graph_generation;
-    const visibleContent = projected.projected_content_digest;
-    // FAIL CLOSED ON THE COVERAGE ASSUMPTION.
-    //
-    // `qaCoverage` reports STM as `no_eligible` — a CONSTANT, so no storage
-    // cardinality reaches the wire. That is leak-free, and it is only *honest*
-    // while the fixtures genuinely have no STM rows. If any appeared, this path
-    // (which never searches STM) would be claiming completeness it has not
-    // earned, and a wrong `complete: true` is user data loss under rule 12.
-    //
-    // So assert the assumption instead of trusting it. Reading the count here is
-    // a guard that fails the read; it derives no wire value, which is exactly
-    // what the fence's escape hatch is for.
+  const loadCoherent = (): CoherentQaLoad => {
+    const load = loadSqlite();
     // storage-provenance-ok(fail-closed guard on a completeness assumption; no wire value derives from this)
     if (load.internal_coverage.stm.eligible_items !== 0) {
       return fail("QA coverage claims no eligible STM work, but STM rows exist");
     }
-
-    const declaredFrontier = `${QA_DECLARED_FRONTIER_PREFIX}${visibleGeneration}`;
-    const coverage = qaCoverage(declaredFrontier);
-
-    const generations: ApplicationRecallGenerationDigests = Object.freeze({
-      // Must equal read_coordinates.authorization_state_digest; the application
-      // read cross-checks the two and fails closed when they disagree.
-      authorization_generation_digest: digestOf("authorization", authorizationState()),
-      synthesized_projection_generation_digest:
-        computeApplicationSynthesizedProjectionGenerationDigest(projected, renders),
-      durable_generation_digest: digestOf("durable", visibleGeneration),
-      overlay_generation_digest: digestOf("overlay", { overlays: [] }),
-      // Granularity is inside the generation receipt, so a cursor issued at one
-      // granularity cannot redeem at another. Without this, page two of a
-      // leaves-only read could be continued as an all-nodes read and silently
-      // return items page one could never have contained.
-      declared_generation_digest: digestOf("declared", {
-        declared_frontier: declaredFrontier,
-        granularity,
-      }),
-      // Accepted and STM are reported as no-eligible, so their generation
-      // receipts are derived from that declared state rather than from raw
-      // internal counts, which would carry hidden-row cardinality to the wire.
-      accepted_generation_digest: digestOf("accepted", { state: "no_eligible" }),
-      stm_generation_digest: digestOf("stm", { state: "no_eligible" }),
-    });
-
-    return Object.freeze({
-      projected,
-      renders,
-      snapshot,
-      account_timezone: accountTimezone,
-      coverage,
-      generations,
-      visible_generation: visibleGeneration,
-      visible_content_digest: visibleContent,
-    });
+    return load as unknown as CoherentQaLoad;
   };
 
-  /** Content-free description of the current live authorization state. */
-  const authorizationState = (): unknown => {
-    const request = authorization.resolveAuthorizationRequest(principal);
-    return {
-      owner_account_id: request.owner_account_id,
-      credential: {
-        owner_account_id: request.credential.owner_account_id,
-        credential_kind: request.credential.credential_kind,
-        app_id: request.credential.app_id,
-        key_id: request.credential.key_id,
-        scopes: [...request.credential.scopes].sort(),
-        active: request.credential.active,
-      },
-      persisted_grant: request.persisted_grant === null ? null : {
-        owner_account_id: request.persisted_grant.owner_account_id,
-        consumer: request.persisted_grant.consumer,
-        app_id: request.persisted_grant.app_id,
-        key_id: request.persisted_grant.key_id,
-        enabled: request.persisted_grant.enabled,
-        default_read: request.persisted_grant.default_read,
-        scopes: [...request.persisted_grant.scopes].sort(),
-      },
-    };
+  const counters: Record<string, number> = {
+    refresh: 0, resolve: 0, coherent: 0, durable: 0,
+    verify: 0, issue: 0, visible: 0, item: 0, citation: 0, trace: 0, sink: 0,
   };
+  const onPortCall = (call: MemoryReadPortCall): void => { counters[call] = (counters[call] ?? 0) + 1; };
 
-  const readCoordinates = (current: QaCoherentMaterial): ApplicationReadCoherentCoordinates => Object.freeze({
-    owner_identity_digest: digestOf("owner", principal.owner_account_id),
-    application_identity_digest: digestOf("application", principal.app_id),
-    credential_identity_digest: digestOf("credential", principal.key_id),
-    // Re-derived from LIVE authorization on every coherent load. This is the
-    // coordinate that changes the moment a grant is revoked.
-    authorization_state_digest: current.generations.authorization_generation_digest,
-    grant_state_digest: digestOf("grant", authorizationState()),
-    // Visible-derived, per the rule in buildMaterial. A storage-level digest
-    // here would republish hidden-record existence through the cursor.
-    account_head_digest: digestOf("account", current.visible_generation),
-    authorized_graph_digest: digestOf("graph", current.visible_generation),
-    coherent_projection_commit_digest: digestOf("commit", current.visible_content_digest),
-    visibility_digest: digestOf("visibility", { default_synthesized: true, raw_read: false }),
-    filter_digest: digestOf("filter", { filters: [] }),
-    query_digest: digestOf("query", { query: null }),
-    source_digest: digestOf("source", { sources: ["durable"] }),
-    read_mode_digest: digestOf("read-mode", { mode: "default_synthesized" }),
-    read_timestamp_epoch_seconds: readTimestamp,
-  });
+  /**
+   * One prepared read per granularity. Renders differ between granularities
+   * (different node sets produce different generation receipts), so they cannot
+   * share a cache entry. Keyed rather than rebuilt per request so repeated reads
+   * at one granularity stay deterministic and cheap.
+   *
+   * Caching is safe across a revocation because the prepared read holds a LIVE
+   * authorization resolver, not a captured request: the grant is re-read inside
+   * every attempt.
+   */
+  const preparedByGranularity = new Map<ReadItemGranularity, PreparedMemoryRead>();
 
-  const buildPorts = (current: QaCoherentMaterial): ApplicationReadPorts => ({
-    resolveAttempt: () => {
-      counters.resolve += 1;
-      return {
-        // Live authorization: this is the fence. A revocation landing between the
-        // page build and its revalidation is seen here and denies the read
-        // before any byte, cursor, or trace is produced.
-        authorization_request: authorization.resolveAuthorizationRequest(principal),
-        load_coherent: () => {
-          counters.coherent += 1;
-          const liveAuthorizationDigest = digestOf("authorization", authorizationState());
-          return {
-            projection_load: {
-              snapshot: structuredClone(current.snapshot) as never,
-              options: { account_timezone: current.account_timezone },
-            },
-            coverage: current.coverage,
-            generations: {
-              ...current.generations,
-              authorization_generation_digest: liveAuthorizationDigest,
-            },
-            read_coordinates: {
-              ...readCoordinates(current),
-              authorization_state_digest: liveAuthorizationDigest,
-            },
-          };
-        },
-      };
-    },
-
-    loadDurableRenders: () => {
-      counters.durable += 1;
-      // A fresh plain array of the same branded render identities. The core
-      // rejects proxies, decorated arrays, and unbranded lookalikes.
-      return [...current.renders];
-    },
-
-    encodeVisibleKey: (tuple) => { counters.visible += 1; return codecs.encodeVisibleKey(tuple); },
-    encodeItemRef: (ref) => { counters.item += 1; return codecs.encodeItemRef(ref); },
-    encodeCitationRef: (closure) => { counters.citation += 1; return codecs.encodeCitationRef(closure); },
-    encodeTraceRef: (ref) => { counters.trace += 1; return codecs.encodeTraceRef(ref); },
-
-    verifyCursor: (rawCursor, attestation) => {
-      counters.verify += 1;
-      return cursorAdapter.verifyCursor(rawCursor, attestation);
-    },
-    issueCursor: (lastVisibleKey, attestation) => {
-      counters.issue += 1;
-      return cursorAdapter.issueCursor(lastVisibleKey, attestation);
-    },
-    traceSink: async (trace) => { counters.sink += 1; await traceSink(trace); },
-  });
+  const prepare = async (forGranularity: ReadItemGranularity): Promise<PreparedMemoryRead> =>
+    prepareMemoryRead({
+      loadCoherent,
+      // Live authorization: this is the fence. A revocation landing between the
+      // page build and its revalidation is seen here and denies the read before
+      // any byte, cursor, or trace is produced.
+      resolveAuthorization: () => authorization.resolveAuthorizationRequest(principal),
+      codecRootSecret,
+      cursorSigningKeyset,
+      readTimestampEpochSeconds: readTimestamp,
+      granularity: forGranularity,
+      // DECLARED, not counted at request time. This surface owns its whole
+      // fixture — the seeder writes no accepted work and no STM rows, and
+      // `loadCoherent` above fails the read if that ever stops being true.
+      // domain-pending(DIV-DOMCORE-006)
+      acceptedCoverageState: "no_eligible",
+      // domain-pending(DIV-DOMCORE-006)
+      stmCoverageState: "no_eligible",
+      traceSink,
+      onPortCall,
+    });
 
   return Object.freeze({
     refresh: async (): Promise<void> => {
       counters.refresh += 1;
-      materialByGranularity.clear();
-      materialByGranularity.set(granularity, await buildMaterial(granularity));
+      preparedByGranularity.clear();
+      preparedByGranularity.set(granularity, await prepare(granularity));
     },
 
     readPage: async (request: QaRecallPageRequest): Promise<ApplicationSynthesizedPageResult> => {
-      if (materialByGranularity.size === 0) {
+      if (preparedByGranularity.size === 0) {
         throw new TypeError("QA recall reader was read before its first refresh");
       }
       // `null`/omitted means the caller did not ask, which resolves to the
@@ -397,23 +210,14 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
         throw new TypeError("QA recall reader received an unknown item granularity");
       }
       const effective: ReadItemGranularity = requested ?? granularity;
-      let current = materialByGranularity.get(effective);
-      if (current === undefined) {
-        current = await buildMaterial(effective);
-        materialByGranularity.set(effective, current);
+      let prepared = preparedByGranularity.get(effective);
+      if (prepared === undefined) {
+        prepared = await prepare(effective);
+        preparedByGranularity.set(effective, prepared);
       }
-      // The ratified keyset grammar is checked here, in the invalid-cursor error
-      // currency, BEFORE the core sees the bytes. The core raises a plain
-      // TypeError for a syntactically bad cursor, which the transport reports as
-      // an internal error rather than an invalid cursor — and two public outcomes
-      // for two mutations of one token is an authorization oracle.
-      if (request.cursor !== null && !isSyntacticallyRedeemableCursor(request.cursor)) {
-        throw new InvalidMcpCursorError();
-      }
-      return readApplicationSynthesizedPageWithAttestation(
-        { limit: request.limit, cursor: request.cursor },
-        buildPorts(current),
-      );
+      // The syntactic cursor pre-check lives in `readMemoryPage`, so both doors
+      // reject a malformed cursor in the same error currency.
+      return readMemoryPage({ limit: request.limit, cursor: request.cursor }, prepared);
     },
 
     counters: () => Object.freeze({ ...counters }),

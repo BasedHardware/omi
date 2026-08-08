@@ -8,12 +8,16 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 
-import { readAfterApplicationAuthorization } from "../../core/retrieve/authorization-boundary";
+import {
+  inspectApplicationMemoryReadAuthorization,
+  readAfterApplicationAuthorization,
+  type ApplicationMemoryReadAuthorizationRequest,
+} from "../../core/retrieve/authorization-boundary";
 import { selectNodesForGranularity } from "../../core/retrieve/granularity";
 import { buildDeterministicAnchors } from "../../core/retrieve/tree";
 import { createSqliteQaRecallLoader } from "../../drivers/sqlite/application-recall-read";
-import { QA_CODEC_SECRET, qaReaderScope } from "./codec-scope";
-import { createQaReferenceCodecs } from "./codecs";
+import { createReaderScopedOpaqueCodecs } from "../service/codecs/opaque-refs";
+import { QA_CODEC_SECRET } from "./codec-scope";
 import { produceQaRenders } from "./renders";
 import { seedQaSnapshot } from "./seed";
 
@@ -449,7 +453,7 @@ describe("PROOF 5 — deterministic server order", () => {
       account_timezone: "UTC",
       limits: { max_items: 256, max_bytes: 4_000_000 },
     })();
-    const projected = readAfterApplicationAuthorization({
+    const authorizationRequest: ApplicationMemoryReadAuthorizationRequest = {
       owner_account_id: instance.principal.owner_account_id,
       credential: {
         owner_account_id: instance.principal.owner_account_id,
@@ -468,17 +472,25 @@ describe("PROOF 5 — deterministic server order", () => {
         default_read: true,
         scopes: ["memories.read"],
       },
+    };
+    const projected = readAfterApplicationAuthorization(
+      authorizationRequest,
       // storage-provenance-ok(test recomputes the same authorized projection the server built)
-    }, () => ({ snapshot: structuredClone(load.durable_snapshot), options: { account_timezone: "UTC" } }));
+      () => ({ snapshot: structuredClone(load.durable_snapshot), options: { account_timezone: "UTC" } }),
+    );
 
     const allRenders = await produceQaRenders(projected);
     const leafIds = new Set(
       selectNodesForGranularity(buildDeterministicAnchors(projected).nodes, "temporal_leaf")
         .map((structuralNode) => structuralNode.node_id),
     );
-    const codecs = createQaReferenceCodecs({
-      secret: QA_CODEC_SECRET,
-      reader_scope: qaReaderScope(instance.principal),
+    // The reader scope is the authorization boundary's own principal digest, not
+    // a string this test assembles. That is the single derivation both doors now
+    // share; recomputing it any other way would prove nothing about the server.
+    const codecs = createReaderScopedOpaqueCodecs({
+      root_secret: QA_CODEC_SECRET,
+      reader_projection_digest:
+        inspectApplicationMemoryReadAuthorization(authorizationRequest).principal_digest,
     });
     const expectedIds = allRenders
       .filter((render) => leafIds.has(render.node_id))
@@ -560,8 +572,47 @@ describe("PROOF 6 — hidden-present and physically-absent are byte-identical", 
     // storage sequence embedded. (An earlier version asserted the digit "6" was
     // absent, which is nonsense against hex -- equality with the absent-case
     // frontier is the assertion that actually carries the property.)
-    expect(hiddenFrontier).toMatch(/^frontier-v1:qa:[a-f0-9]{64}$/);
+    expect(hiddenFrontier).toMatch(/^frontier-v1:[a-f0-9]{64}$/);
     expect(hiddenText).not.toContain("qa-claim");
+  });
+
+  test("the declared frontier is reader-scoped, not a shared visible-generation handle", async () => {
+    // The MCP door used to publish `frontier-v1:qa:<visible generation>` — the
+    // authorized graph generation in CLEARTEXT. That is leak-free with respect
+    // to hidden rows (the assertion above), and still wrong: it is identical for
+    // every credential on the account, so it is a correlation key over exactly
+    // the closure the opaque-ref codecs are scoped to keep separate. Two readers
+    // could compare frontiers and learn they see the same graph.
+    //
+    // The shared composition derives it through a per-reader HMAC subkey, so two
+    // credentials on ONE account reading ONE corpus get different frontiers.
+    //
+    // red-proof: replace `encodeFrontier(...)` in
+    // apps/service/composition/memory-read.ts's buildCoverage with
+    // `frontier-v1:${authorizedGraphGeneration}` and this fails while every
+    // hidden-vs-absent assertion above still passes.
+    const readerA = await server({
+      claim_count: 5, owner_account_id: "owner:frontier-scope",
+      app_id: "app:a", key_id: "key:a", token: "qa_token_frontier_a",
+    });
+    const readerB = await server({
+      claim_count: 5, owner_account_id: "owner:frontier-scope",
+      app_id: "app:b", key_id: "key:b", token: "qa_token_frontier_b",
+    });
+    const frontierOf = async (instance: QaServer): Promise<string> => {
+      const text = pageTextOf(await mcpCall({ url: instance.url, token: instance.token, limit: 100 }));
+      return parseSynthesizedPageJson(text!)!.completeness.frontiers.declaredFrontier;
+    };
+    const [frontierA, frontierB] = await Promise.all([frontierOf(readerA), frontierOf(readerB)]);
+    // Non-vacuity: the two readers really do see the same underlying corpus, so
+    // a shared-generation frontier WOULD have matched.
+    const itemsOf = async (instance: QaServer): Promise<number> => {
+      const text = pageTextOf(await mcpCall({ url: instance.url, token: instance.token, limit: 100 }));
+      return parseSynthesizedPageJson(text!)!.items.length;
+    };
+    expect(await itemsOf(readerA)).toBe(5);
+    expect(await itemsOf(readerB)).toBe(5);
+    expect(frontierA).not.toBe(frontierB);
   });
 
   test("paginated reads stay byte-identical, cursor included", async () => {
