@@ -1,6 +1,6 @@
 version: 2
 name: account-cutover-gate
-tier: hermetic
+tier: 2
 description: Verify signed-in desktop home installs the account-cutover control refresh and fail-closed overlays before product traffic
 app: com.omi.desktop-dev
 covers:
