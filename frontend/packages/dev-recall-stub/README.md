@@ -31,19 +31,19 @@ pnpm --filter @omi-core/dev-recall-stub start -- 9123 --scenario=degraded
 ## Exact URL a shell should use
 
 ```
-http://127.0.0.1:4821/v1/memories/recall?limit=2
+http://127.0.0.1:4821/v1/memories?limit=2
 ```
 
 Continuation (opaque cursor from the previous page's `window.nextCursor`):
 
 ```
-http://127.0.0.1:4821/v1/memories/recall?limit=2&cursor=<opaque>
+http://127.0.0.1:4821/v1/memories?limit=2&cursor=<opaque>
 ```
 
 Scenario override on the request (takes precedence over the startup default):
 
 ```
-http://127.0.0.1:4821/v1/memories/recall?limit=2&scenario=degraded
+http://127.0.0.1:4821/v1/memories?limit=2&scenario=degraded
 ```
 
 Any other path → **404** with an empty body.
