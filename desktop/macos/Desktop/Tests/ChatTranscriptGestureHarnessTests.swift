@@ -43,6 +43,44 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
+  func testCompactHomeTranscriptOpensAtTheLiveEdge() throws {
+    let harness = try makeHarness(messageCount: 120, transcriptWindowPolicy: .compactHome)
+    defer { harness.tearDown() }
+
+    harness.settleInitialPlacement()
+
+    XCTAssertTrue(
+      harness.isAtBottom,
+      "the compact Home transcript must open at the newest mounted message "
+        + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))"
+    )
+  }
+
+  /// **The compact window has to actually bound what gets mounted.**
+  ///
+  /// The transcript keeps its rows eagerly mounted on purpose, so the row count
+  /// *is* the cost: at 400 messages the 500-row default builds 607 native views
+  /// in 910 ms, against 84 in 114 ms compact — into a panel 460 pt tall. Home
+  /// asks for the compact window for that reason, and this pins that asking for
+  /// it still means something.
+  func testTheCompactWindowMountsAFractionOfTheHistory() throws {
+    let compact = try makeHarness(messageCount: 400, transcriptWindowPolicy: .compactHome)
+    defer { compact.tearDown() }
+    compact.settleInitialPlacement()
+    let compactHeight = compact.documentHeight
+
+    let standard = try makeHarness(messageCount: 400, transcriptWindowPolicy: .standard)
+    defer { standard.tearDown() }
+    standard.settleInitialPlacement()
+
+    XCTAssertGreaterThan(compactHeight, 0, "precondition: the compact window mounted something")
+    XCTAssertGreaterThan(
+      standard.documentHeight, compactHeight * 3,
+      "the compact window must mount a fraction of the transcript, not all of it "
+        + "(compact \(compactHeight) pt vs standard \(standard.documentHeight) pt)")
+    XCTAssertTrue(compact.isAtBottom, "and it must still open at the newest mounted message")
+  }
+
   func testStreamingDoesNotPullAFastScrollingReaderBackToTheLiveEdge() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }
@@ -61,6 +99,35 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     XCTAssertEqual(
       harness.scrollTop, readerPosition, accuracy: 4,
       "streaming must not move a reader who owns the viewport")
+  }
+
+  /// **A streaming answer must stay in view, not be abandoned and then snapped
+  /// back.**
+  ///
+  /// `ChatProvider` flushes streamed text every 35 ms
+  /// (`ChatStreamingBuffer(flushInterval: 0.035)`). The follow scroll used to
+  /// cancel and reschedule itself 80 ms out on every one of those flushes, so it
+  /// never ran while the answer was arriving: measured here, the live edge ran
+  /// 387 pt past a 600 pt viewport for the whole stream and only caught up once
+  /// the tokens stopped. Drift is asserted **during** the stream for that
+  /// reason — a check after the stream ends passes either way.
+  func testStreamingKeepsAFollowingReaderAtTheLiveEdge() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    XCTAssertTrue(harness.isAtBottom, "precondition: the transcript opens at the live edge")
+
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) with enough prose to grow the row. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+
+    XCTAssertLessThan(
+      worstDrift, 120,
+      "a reader who never touched the viewport must keep the live edge in view while it streams "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
   }
 
   func testAnArrivingTurnDoesNotPullTheReaderBack() throws {
@@ -110,7 +177,12 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     XCTAssertFalse(harness.isAtBottom, "precondition: the reader left the live edge")
 
     harness.togglePresentation()
-    harness.pump(1.0)
+    // CI can run slower across multiple SwiftUI layout turns. Wait until
+    // the re-presented transcript has settled back onto the live edge.
+    let deadline = Date().addingTimeInterval(2.0)
+    while Date() < deadline && !harness.isAtBottom {
+      harness.pump(0.05)
+    }
 
     XCTAssertTrue(
       harness.isAtBottom,
@@ -118,45 +190,31 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
-  func testPromptRailKeepsTrackingThroughARapidBurst() throws {
-    let harness = try makeHarness()
+  /// The transcript used to cap its column at 760pt inside a 900pt panel so a
+  /// prompt rail could live in the leftover 70pt on each side. The rail is gone,
+  /// and with it the reserved gutter: rows now reach their container's edge, the
+  /// same edge the composer below them uses. Measured on the mounted transcript
+  /// because the inset was only ever visible as painted pixels — the view's own
+  /// frame was full width the whole time.
+  func testTranscriptRowsReachTheContainerEdgeWithNoReservedGutter() throws {
+    let harness = try makeHarness(messageCount: 12)
     defer { harness.tearDown() }
     harness.settleInitialPlacement()
 
-    let geometry = ChatTranscriptGeometry()
-    geometry.setMessages(harness.model.messages)
-    geometry.setViewport(CGSize(width: 900, height: 600), columnWidth: 760)
+    let viewportWidth = harness.viewportWidth
+    let painted = try XCTUnwrap(
+      harness.rightmostPaintedColumn(), "the mounted transcript painted nothing")
 
-    var deliveries: [CGFloat] = []
-    let detector = ScrollPositionDetector.Coordinator { position in
-      geometry.setContent(height: position.documentHeight, scrollTop: position.scrollTop)
-      deliveries.append(position.scrollTop)
-    }
-    detector.setupScrollObserver(for: harness.probeView)
-    defer { detector.stop() }
-
-    harness.performUpwardGesture(events: 30, pumpPerEvent: 0.004)
-    harness.pump(0.2)
-
-    XCTAssertGreaterThanOrEqual(
-      deliveries.count, 3,
-      "the rail must keep receiving positions throughout a rapid gesture")
-    XCTAssertEqual(
-      deliveries.last ?? -1, harness.scrollTop, accuracy: 4,
-      "the rail's last known position must be where the reader actually is")
+    // The old cap put the column's right edge at (900 - 760) / 2 + 760 = 830.
+    XCTAssertGreaterThan(
+      CGFloat(painted), viewportWidth - 60,
+      "transcript rows stop at x=\(painted) of \(viewportWidth), so a gutter is still reserved")
   }
 
-  func testRepeatedFastBurstsKeepTheMountedTranscriptAndPromptRailResponsive() throws {
+  func testRepeatedFastBurstsKeepTheMountedTranscriptResponsive() throws {
     let harness = try makeHarness(messageCount: 120)
     defer { harness.tearDown() }
     harness.settleInitialPlacement()
-
-    var deliveredScrollTop: CGFloat = -1
-    let detector = ScrollPositionDetector.Coordinator { position in
-      deliveredScrollTop = position.scrollTop
-    }
-    detector.setupScrollObserver(for: harness.probeView)
-    defer { detector.stop() }
 
     for cycle in 0..<20 {
       let beforeUp = harness.scrollTop
@@ -184,14 +242,24 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     }
     harness.pump(0.2)
 
-    XCTAssertEqual(
-      deliveredScrollTop,
-      harness.scrollTop,
-      accuracy: 4,
-      "the prompt rail stopped tracking before the repeated burst sequence ended"
+    XCTAssertTrue(
+      harness.usesOriginalScrollView,
+      "the transcript's native scroll view was replaced by the repeated burst sequence"
     )
   }
 
+  /// **Nothing a traversal touches may change what the transcript measures.**
+  ///
+  /// The first thing this caught was not row materialization, which is what it
+  /// used to claim: it was the pointer. An assistant row's hover-revealed
+  /// metadata band took its intrinsic height on reveal, so a hovered row was
+  /// ~16 pt taller than the same row unhovered and every row below it moved.
+  /// With the physical mouse over this window the document oscillated between
+  /// 7773 and 7789 pt across a traversal; with the mouse on another display
+  /// every sample was 7773 and the same binary passed. The band now draws out
+  /// of a zero-height frame (`ChatBubble.messageMetadataRow`), so height is
+  /// hover-invariant and this measurement no longer depends on where the
+  /// developer left the cursor.
   func testFastTraversalKeepsTheTranscriptDocumentHeightStable() throws {
     let harness = try makeHarness(messageCount: 120)
     defer { harness.tearDown() }
@@ -210,8 +278,9 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       maximumHeight,
       minimumHeight,
       accuracy: 4,
-      "materializing off-screen rows during a fast gesture must not re-estimate "
-        + "the transcript document height (observed \(minimumHeight)...\(maximumHeight))"
+      "a fast gesture must not change the transcript's document height — not by "
+        + "materializing off-screen rows, and not by passing the pointer over rows "
+        + "whose hover reveals something (observed \(minimumHeight)...\(maximumHeight))"
     )
   }
 
@@ -311,8 +380,11 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
 
   // MARK: - Harness
 
-  private func makeHarness(messageCount: Int = 60) throws -> Harness {
-    try Harness(messageCount: messageCount)
+  private func makeHarness(
+    messageCount: Int = 60,
+    transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
+  ) throws -> Harness {
+    try Harness(messageCount: messageCount, transcriptWindowPolicy: transcriptWindowPolicy)
   }
 
   @MainActor
@@ -330,9 +402,15 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       try self.init(messageCount: 0, startsLoading: true, pendingMessageCount: messageCount)
     }
 
-    init(messageCount: Int, startsLoading: Bool = false, pendingMessageCount: Int = 0) throws {
+    init(
+      messageCount: Int,
+      startsLoading: Bool = false,
+      pendingMessageCount: Int = 0,
+      transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
+    ) throws {
       model = TranscriptModel(messages: Self.makeMessages(count: messageCount))
       model.isLoadingInitial = startsLoading
+      model.transcriptWindowPolicy = transcriptWindowPolicy
       self.pendingMessages = Self.makeMessages(count: pendingMessageCount)
       hostingView = NSHostingView(rootView: HarnessChatHost(model: model))
       hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
@@ -341,7 +419,7 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         styleMask: [.titled], backing: .buffered, defer: false)
       window.contentView = hostingView
 
-      window.orderFrontRegardless()
+      NonintrusiveTestWindow.orderIn(window)
       Self.pumpRunLoop(0.2)
       hostingView.layoutSubtreeIfNeeded()
       Self.pumpRunLoop(0.2)
@@ -381,10 +459,55 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       Self.firstScrollView(in: hostingView) === scrollView
     }
 
+    var viewportWidth: CGFloat { scrollView.contentView.bounds.width }
+
+    /// The rightmost column of the viewport that the transcript actually paints,
+    /// or nil when it painted nothing. Read from the clip view's own bitmap: a
+    /// reserved gutter is invisible to frames, because the stack stays full width
+    /// and insets its contents.
+    func rightmostPaintedColumn() -> Int? {
+      let clipView = scrollView.contentView
+      let bounds = clipView.bounds
+      guard bounds.width > 0, bounds.height > 0,
+        let representation = clipView.bitmapImageRepForCachingDisplay(in: bounds)
+      else { return nil }
+      clipView.cacheDisplay(in: bounds, to: representation)
+      guard let image = representation.cgImage else { return nil }
+
+      let width = image.width
+      let height = image.height
+      var pixels = [UInt8](repeating: 0, count: width * height * 4)
+      guard
+        let context = CGContext(
+          data: &pixels,
+          width: width,
+          height: height,
+          bitsPerComponent: 8,
+          bytesPerRow: width * 4,
+          space: CGColorSpaceCreateDeviceRGB(),
+          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )
+      else { return nil }
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+      var rightmost: Int?
+      for y in 0..<height {
+        for x in stride(from: width - 1, through: 0, by: -1) {
+          if pixels[(y * width + x) * 4 + 3] > 25 {
+            rightmost = max(rightmost ?? 0, x)
+            break
+          }
+        }
+      }
+      guard let rightmost else { return nil }
+      // Back into the clip view's point space; the window may be backed at 2x.
+      return Int((CGFloat(rightmost) * bounds.width / CGFloat(width)).rounded())
+    }
+
     // MARK: Gestures
 
     /// Outlives every delay in `ChatScrollLiveEdge.initialRestoreSettlingDelays`.
-    func settleInitialPlacement() { pump(1.0) }
+    func settleInitialPlacement() { pump(1.2) }
 
     func performUpwardGesture(
       events: Int, deltaPerEvent: CGFloat = 40, pumpPerEvent: TimeInterval = 0,
@@ -529,12 +652,29 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
 
     /// Removes the transcript from the hierarchy and puts it back, the way
     /// Home's stage transition does.
+    ///
+    /// Both halves wait on the hierarchy, not on a fixed pump. SwiftUI commits
+    /// the removal on its own update turn, and on a loaded machine that turn can
+    /// land after a fixed pump ends — the `false`/`true` flips then coalesce into
+    /// no change at all, so nothing unmounts, `onAppear` never runs, and the
+    /// caller silently measures the same transcript the reader already scrolled.
     func togglePresentation() {
       model.isPresented = false
-      pump(0.2)
+      waitForTranscript(mounted: false)
       model.isPresented = true
-      pump(0.2)
+      waitForTranscript(mounted: true)
       if let discovered = Self.firstScrollView(in: hostingView) { scrollView = discovered }
+    }
+
+    /// Pumps until the transcript's scroll view reaches `mounted`, then returns.
+    /// On timeout it returns anyway so the caller's assertion reports the real
+    /// state rather than this helper's own failure.
+    private func waitForTranscript(mounted: Bool, timeout: TimeInterval = 2) {
+      let deadline = Date().addingTimeInterval(timeout)
+      repeat {
+        pump(0.02)
+        if (Self.firstScrollView(in: hostingView) != nil) == mounted { return }
+      } while Date() < deadline
     }
 
     // MARK: Plumbing
@@ -627,6 +767,7 @@ final class TranscriptModel: ObservableObject {
   @Published var isLoadingInitial: Bool = false
   @Published var localSendToken: LocalSendToken?
   @Published var isPresented: Bool = true
+  var transcriptWindowPolicy: ChatTranscriptWindow.Policy?
 
   init(messages: [ChatMessage]) {
     self.messages = messages
@@ -651,8 +792,7 @@ struct HarnessChatHost: View {
           onRate: { _, _ in },
           localSendToken: model.localSendToken,
           horizontalContentPadding: 0,
-          contentColumnWidth: 760,
-          timelineTrailingInset: 0,
+          transcriptWindowPolicy: model.transcriptWindowPolicy,
           welcomeContent: { EmptyView() }
         )
       }

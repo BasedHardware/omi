@@ -99,7 +99,6 @@ class TestLocalFixtureCanonicalCohort:
 
 _EXPECTED_CANONICAL_COHORT_UIDS = frozenset(
     {
-        "vi7SA9ckQCe4ccobWNxlbdcNdC23",  # david.d.zhang@gmail.com
         "omi-local-emulator-chat-first-enabled-v1",  # local emulator fixture user
         "omi-dev-what-matters-now-smoke-v1",  # dev deploy-gate smoke identity (no human account)
         # Next dogfood (re-enable with CANONICAL_MEMORY_USERS):
@@ -111,3 +110,4 @@ _EXPECTED_CANONICAL_COHORT_UIDS = frozenset(
 def test_production_cohort_constant_matches_approved_dogfood_uids():
     """Guardrail: canonical rollout stays intentionally limited to approved dogfood UIDs."""
     assert CANONICAL_MEMORY_USERS == _EXPECTED_CANONICAL_COHORT_UIDS
+    assert "vi7SA9ckQCe4ccobWNxlbdcNdC23" not in CANONICAL_MEMORY_USERS

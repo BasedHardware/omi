@@ -8,6 +8,10 @@ inputs:
   project_id:
     description: GCP project ID
     required: true
+  firestore_project_id:
+    description: GCP project ID for Firestore sync ledger TTL (mode=platform)
+    required: false
+    default: ''
   region:
     description: Cloud Run / Cloud Tasks region
     required: true
@@ -185,17 +189,19 @@ runs:
     - name: Provision and verify sync ledger TTL
       if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}
       shell: bash
+      env:
+        FIRESTORE_PROJECT_ID: ${{ inputs.firestore_project_id != '' && inputs.firestore_project_id || inputs.project_id }}
       run: |
         gcloud firestore fields ttls update expires_at \
           --collection-group=sync_content_ledger \
           --database='(default)' \
-          --project=${{ inputs.project_id }} \
+          --project="$FIRESTORE_PROJECT_ID" \
           --enable-ttl \
           --quiet
         gcloud firestore fields ttls list \
           --collection-group=sync_content_ledger \
           --database='(default)' \
-          --project=${{ inputs.project_id }} \
+          --project="$FIRESTORE_PROJECT_ID" \
           --format='value(name)' | grep '/fields/expires_at$'
 
     - name: Provision routed backfill budget alerts

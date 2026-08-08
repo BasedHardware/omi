@@ -72,18 +72,18 @@ private struct BarView: View {
   }
 
   private var barColor: Color {
-    guard isActive else { return OmiColors.textTertiary.opacity(0.5) }
+    guard isActive else { return Ink.secondary.opacity(0.5) }
 
     // Color intensity based on level
     let boostedLevel = min(1.0, pow(CGFloat(level), 0.5) * 2.5)
     if boostedLevel > 0.6 {
-      return OmiColors.accent
+      return Ink.accent
     } else if boostedLevel > 0.2 {
-      return OmiColors.textPrimary
+      return Ink.primary
     } else if boostedLevel > 0.02 {
-      return OmiColors.textSecondary
+      return Ink.secondary
     }
-    return OmiColors.textTertiary.opacity(0.5)
+    return Ink.secondary.opacity(0.5)
   }
 
   var body: some View {
@@ -102,32 +102,32 @@ private struct BarView: View {
       // Idle state
       HStack {
         Text("Idle:")
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
         AudioLevelWaveformView(level: 0.0, isActive: false)
       }
 
       // Low level
       HStack {
         Text("Low:")
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
         AudioLevelWaveformView(level: 0.1)
       }
 
       // Medium level
       HStack {
         Text("Medium:")
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
         AudioLevelWaveformView(level: 0.4)
       }
 
       // High level
       HStack {
         Text("High:")
-          .foregroundColor(.white)
+          .foregroundColor(Ink.primary)
         AudioLevelWaveformView(level: 0.8)
       }
     }
     .padding()
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 #endif

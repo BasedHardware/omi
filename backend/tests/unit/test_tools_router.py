@@ -290,6 +290,8 @@ factory_mod.deserialize_conversation = MagicMock(
 )
 search_mod = _stub_module("utils.conversations.search")
 search_mod.keyword_search_conversation_ids = MagicMock(return_value=[])
+search_mod.parse_exact_conversation_reference = MagicMock(return_value=None)
+search_mod.conversation_matches_date_range = MagicMock(return_value=True)
 
 
 def _merge_conversation_search_ids(keyword_ids, vector_ids):
@@ -311,6 +313,10 @@ transcript_chunks_mod.hydrate_chunk_texts = MagicMock(side_effect=_hydrate_chunk
 def reset_conversation_search_stubs():
     search_mod.keyword_search_conversation_ids.reset_mock()
     search_mod.keyword_search_conversation_ids.return_value = []
+    search_mod.parse_exact_conversation_reference.reset_mock()
+    search_mod.parse_exact_conversation_reference.return_value = None
+    search_mod.conversation_matches_date_range.reset_mock()
+    search_mod.conversation_matches_date_range.return_value = True
     search_mod.merge_conversation_search_ids.reset_mock()
     search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
     transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
@@ -603,6 +609,39 @@ class TestSearchConversationsText:
         result = conversations_svc.search_conversations_text(uid="test-uid", query="test query")
         assert "Found" in result
         assert "1 conversations formatted" in result
+
+    def test_exact_reference_bypasses_keyword_and_vector_search(self):
+        conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        conversations_db.get_conversations_by_id.return_value = [
+            {'id': conversation_id, 'transcript_segments': [], 'is_locked': False},
+        ]
+
+        result = conversations_svc.search_conversations_text(
+            uid="test-uid", query=f"https://h.omi.me/conversations/{conversation_id}"
+        )
+
+        assert "matching exactly" in result
+        assert "1 conversations formatted" in result
+        search_mod.keyword_search_conversation_ids.assert_not_called()
+        vector_db.query_vectors.assert_not_called()
+        conversations_db.get_conversations_by_id.assert_called_once_with("test-uid", [conversation_id])
+
+    def test_exact_reference_respects_date_filter(self):
+        conversation_id = "e8c05000-52f0-4a95-951c-ccd715523429"
+        search_mod.parse_exact_conversation_reference.return_value = conversation_id
+        search_mod.conversation_matches_date_range.return_value = False
+        conversations_db.get_conversations_by_id.return_value = [
+            {'id': conversation_id, 'transcript_segments': [], 'is_locked': False},
+        ]
+
+        result = conversations_svc.search_conversations_text(
+            uid="test-uid", query=conversation_id, start_date="2026-01-01T00:00:00Z"
+        )
+
+        assert "No conversations found" in result
+        search_mod.keyword_search_conversation_ids.assert_not_called()
+        vector_db.query_vectors.assert_not_called()
 
     def test_start_date_only_sets_ends_at(self):
         """One-sided date: start_date only should set ends_at to avoid $lte: None."""

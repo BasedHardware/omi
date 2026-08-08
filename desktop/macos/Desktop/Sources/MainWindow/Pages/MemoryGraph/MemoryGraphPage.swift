@@ -40,13 +40,8 @@ struct MemoryGraphPage: View {
 
   var body: some View {
     ZStack {
-      // Match the SceneKit canvas to the page, so the graph blends into the
-      // Memory page instead of drawing a separate gray rectangle.
-      OmiColors.backgroundPrimary.ignoresSafeArea()
-
       if !viewModel.isEmpty {
         MemoryGraphSceneView(viewModel: viewModel)
-          .ignoresSafeArea()
       }
 
       // Minimal floating controls — no boxes, no backgrounds. (The Brain Map is
@@ -63,7 +58,7 @@ struct MemoryGraphPage: View {
           } label: {
             Image(systemName: "arrow.clockwise")
               .scaledFont(size: OmiType.body)
-              .foregroundColor(.white.opacity(viewModel.isRebuilding ? 0.2 : 0.5))
+              .foregroundColor(Ink.secondary.opacity(viewModel.isRebuilding ? 0.4 : 1))
               .frame(width: 28, height: 28)
           }
           .buttonStyle(.plain)
@@ -82,20 +77,24 @@ struct MemoryGraphPage: View {
       if viewModel.isLoading || viewModel.isRebuilding {
         ProgressView()
           .scaleEffect(1.2)
-          .tint(.white.opacity(0.4))
+          .tint(Ink.secondary)
       } else if viewModel.isEmpty {
         VStack(spacing: OmiSpacing.sm) {
           Image(systemName: "brain")
             .scaledFont(size: OmiType.heading)
-            .foregroundColor(.white.opacity(0.3))
+            .foregroundColor(Ink.secondary)
           Text("Brain map will appear once enough linked memories are available.")
             .scaledFont(size: 12.5)
-            .foregroundColor(.white.opacity(0.5))
+            .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
         }
         .padding(OmiSpacing.lg)
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(OmiSpacing.md)
+    .glassMediaMat(cornerRadius: PageGlass.cardRadius)
+    .padding(OmiSpacing.md)
     .task {
       await viewModel.prepareGraph()
     }
@@ -113,7 +112,7 @@ struct MemoryGraphSceneView: NSViewRepresentable {
     scnView.pointOfView = viewModel.cameraNode
     scnView.allowsCameraControl = true
     scnView.autoenablesDefaultLighting = false  // We set up our own lights
-    scnView.backgroundColor = NSColor(OmiColors.backgroundPrimary)
+    scnView.backgroundColor = .clear
     scnView.antialiasingMode = .multisampling2X  // Lighter AA
     scnView.preferredFramesPerSecond = 30  // Cap render rate
 
@@ -187,6 +186,10 @@ class MemoryGraphViewModel: ObservableObject {
   private var sessionGeneration = 0
   private let canonicalGraphFetcher: CanonicalGraphFetcher
 
+  private static func hasAtlasContent(_ response: KnowledgeGraphResponse) -> Bool {
+    !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true)
+  }
+
   init() {
     canonicalGraphFetcher = { authorizationSnapshot in
       try await APIClient.shared.getKnowledgeGraph(
@@ -202,7 +205,7 @@ class MemoryGraphViewModel: ObservableObject {
   ) {
     self.canonicalGraphFetcher = canonicalGraphFetcher
     graphResponse = initialGraphResponse
-    isEmpty = initialGraphResponse.nodes.isEmpty
+    isEmpty = !Self.hasAtlasContent(initialGraphResponse)
     setupCamera()
     setupLighting()
   }
@@ -304,13 +307,13 @@ class MemoryGraphViewModel: ObservableObject {
     }
 
     if hasLoadedCanonicalAtlas,
-      !graphResponse.nodes.isEmpty,
+      Self.hasAtlasContent(graphResponse),
       !PollingConfig.shouldAllowActivationRefresh(lastRefresh: lastLoadedAt)
     {
       return
     }
 
-    let showSpinner = graphResponse.nodes.isEmpty
+    let showSpinner = !Self.hasAtlasContent(graphResponse)
     if showSpinner { isLoading = true }
     defer {
       if showSpinner && generation == sessionGeneration {
@@ -324,18 +327,20 @@ class MemoryGraphViewModel: ObservableObject {
         return
       }
       let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ownerName = givenName.isEmpty ? displayName : givenName
       let projection = await Task.detached(priority: .userInitiated) {
-        MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+        MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
       }.value
       guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
         return
       }
       canonicalAtlasProjection = projection
       graphResponse = response
-      isEmpty = response.nodes.isEmpty
+      isEmpty = !Self.hasAtlasContent(response)
       hasLoadedCanonicalAtlas = true
       lastLoadedAt = Date()
-      log("Memory atlas: \(response.nodes.count) nodes, \(response.edges.count) edges")
+      log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
     } catch {
       log("Failed to load memory atlas: \(error.localizedDescription)")
     }
@@ -378,20 +383,22 @@ class MemoryGraphViewModel: ObservableObject {
           return false
         }
 
-        if !response.nodes.isEmpty {
+        if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
           let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let ownerName = givenName.isEmpty ? displayName : givenName
           let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response, userName: givenName.isEmpty ? nil : givenName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return false
           }
           canonicalAtlasProjection = projection
           graphResponse = response
-          isEmpty = false
+          isEmpty = !Self.hasAtlasContent(response)
           hasLoadedCanonicalAtlas = true
           lastLoadedAt = Date()
-          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.nodes.count) nodes")
+          log("Memory atlas: rebuilt graph loaded after \(attempt) poll(s), \(response.atlasNodes.count) nodes")
           return true
         }
       }

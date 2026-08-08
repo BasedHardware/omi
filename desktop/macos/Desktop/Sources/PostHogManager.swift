@@ -281,23 +281,6 @@ extension PostHogManager {
     track("Monitoring Stopped")
   }
 
-  func distractionDetected(app: String, windowTitle: String?) {
-    track(
-      "Distraction Detected",
-      properties: [
-        "app": app,
-        "has_window_title": !(windowTitle?.isEmpty ?? true),
-      ])
-  }
-
-  func focusRestored(app: String) {
-    track(
-      "Focus Restored",
-      properties: [
-        "app": app
-      ])
-  }
-
   // MARK: - Recording Events
 
   func transcriptionStarted() {
@@ -721,23 +704,6 @@ extension PostHogManager {
   }
 
   // MARK: - Proactive Assistant Events (Desktop-specific)
-
-  func focusAlertShown(app: String) {
-    track(
-      "Focus Alert Shown",
-      properties: [
-        "app": app
-      ])
-  }
-
-  func focusAlertDismissed(app: String, action: String) {
-    track(
-      "Focus Alert Dismissed",
-      properties: [
-        "app": app,
-        "action": action,
-      ])
-  }
 
   func taskExtracted(taskCount: Int) {
     track(

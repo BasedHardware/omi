@@ -112,6 +112,7 @@ final class OmiBleManager: NSObject {
     }
 
     func stopScan() {
+        pendingScan = nil
         guard isScanning else { return }
         isScanning = false
         scanTimer?.invalidate()

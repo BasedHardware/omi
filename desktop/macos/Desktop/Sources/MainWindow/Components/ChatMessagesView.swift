@@ -36,6 +36,43 @@ enum ChatMessageDeduplicator {
   }
 }
 
+/// **When duplicate detection has to run again.**
+///
+/// It is a full pass over every long message in the mounted window — 4.2 ms at
+/// the 500-row cap, measured — and the transcript used to re-derive it on every
+/// body evaluation, which during a streamed answer is once per 35 ms flush. A
+/// streamed tail cannot create a duplicate *pair* among the rows above it, so
+/// the derivation belongs to the transcript's **shape** rather than its content:
+/// which rows are present, how many are mounted, whose conversation it is, and
+/// the moment a turn settles and its text stops being rewritten.
+struct ChatTranscriptDuplicateKey: Equatable {
+  let messageCount: Int
+  let newestMessageID: String?
+  let presentation: ChatTranscriptWindow.Presentation
+  let conversationIdentity: String
+  /// A settled turn may have had its text replaced wholesale by journal replay
+  /// without the count moving, so the settle itself is part of the shape.
+  let isSettled: Bool
+
+  init(
+    messages: [ChatMessage],
+    presentation: ChatTranscriptWindow.Presentation,
+    conversationIdentity: String,
+    isSending: Bool
+  ) {
+    messageCount = messages.count
+    newestMessageID = messages.last?.id
+    self.presentation = presentation
+    self.conversationIdentity = conversationIdentity
+    isSettled = !isSending
+  }
+}
+
+/// Stable conversation identity sentinels for surfaces without a persisted session.
+enum ChatConversationIdentity {
+  static let mainChatDefault = "main-chat-default"
+}
+
 /// Pure decision for the conversation-switch scroll-state reset. Callers pass
 /// the stable conversation/session identity; message IDs are not identities
 /// because prepending history changes the first message in the same chat.
@@ -73,6 +110,11 @@ enum ChatInitialRestoreState: Equatable {
     state == .pending ? .waiting : state
   }
 
+  /// Every new transcript presentation begins at the live edge. A previously
+  /// completed placement belongs to the old mounted scroll view, not the new
+  /// one SwiftUI creates after a Home transition or route change.
+  static func atPresentationStart(previous _: Self) -> Self { .waiting }
+
   static func afterUserInteraction(_ state: Self) -> Self {
     switch state {
     case .waiting, .pending:
@@ -83,16 +125,77 @@ enum ChatInitialRestoreState: Equatable {
   }
 }
 
+/// **The rhythm of the transcript**, which is what makes a column of short
+/// messages read as a conversation instead of as scattered text.
+///
+/// One rule: things that belong together sit closer than things that do not. A
+/// reply belongs to the question above it, so that gap is the small one; the next
+/// question starts a new exchange, so that gap is the large one. Before this the
+/// stack used a single 16 pt gap everywhere, which said nothing about what went
+/// with what — and because each row also carried a permanently reserved metadata
+/// band and a container's padding without a container, consecutive one-line
+/// messages ended up roughly 140 pt apart.
 enum ChatTranscriptLayout {
+  /// The stack's own spacing, and the largest gap in the ladder: the boundary
+  /// between one exchange and the next. Every other gap is this plus a negative
+  /// `topAdjustment`, so the stack has one spacing and the exceptions are named.
   static let regularRowSpacing: CGFloat = OmiSpacing.lg
   static let consecutiveUserRowSpacing: CGFloat = OmiSpacing.sm
+  /// A reply and the question that caused it are one exchange, not two events.
+  static let replySpacing: CGFloat = OmiSpacing.sm
+
+  /// The gap *before* `current`, given the row above it.
+  ///
+  /// An assistant row above always takes the full gap: it closes an exchange, and
+  /// it is also the row whose hover-revealed metadata band draws into the space
+  /// below it, so that space has to exist.
+  static func spacing(from previous: ChatMessage, to current: ChatMessage) -> CGFloat {
+    guard previous.sender == .user else { return regularRowSpacing }
+    return current.sender == .user ? consecutiveUserRowSpacing : replySpacing
+  }
 
   static func topAdjustment(at index: Int, in messages: [ChatMessage]) -> CGFloat {
     guard index > 0, messages.indices.contains(index) else { return 0 }
-    let previous = messages[index - 1]
-    let current = messages[index]
-    guard previous.sender == .user, current.sender == .user else { return 0 }
-    return consecutiveUserRowSpacing - regularRowSpacing
+    return spacing(from: messages[index - 1], to: messages[index]) - regularRowSpacing
+  }
+}
+
+/// **Where the jump-to-latest control sits: in the transcript's own trailing gutter, never on a
+/// message.**
+///
+/// It floats over a live transcript, so "in the corner" is not a placement. A 36 pt disc inset 16 pt
+/// reached 52 pt in from the scroll view's trailing edge while the message column stops at the
+/// transcript's trailing inset — 32 on the ask panel — so the control sat *on* the trailing edge of
+/// every user bubble it passed, which is the one place a right-aligned transcript guarantees there is
+/// something to cover.
+///
+/// The transcript already keeps a clear gutter on that side (it is the trailing half of the same
+/// symmetric inset whose leading half holds the assistant's mark). So the control is fitted to that
+/// gutter rather than dropped on top of it: as large as the gutter allows, pushed to the outside of
+/// it, and clamped so it stays a real click target on hosts whose gutter is too small to hold one.
+enum ChatScrollJumpPlacement {
+  /// The disc at full size, which is what the ask panel's gutter can hold.
+  static let maximumDiameter: CGFloat = 32
+  /// Below this it stops being a target worth aiming at, so a narrower gutter is overlapped rather
+  /// than obeyed — the honest trade, and the reason `clearsMessageColumn` exists to say which case a
+  /// host is in.
+  static let minimumDiameter: CGFloat = 24
+
+  static func diameter(trailingContentInset: CGFloat) -> CGFloat {
+    min(maximumDiameter, max(minimumDiameter, trailingContentInset))
+  }
+
+  /// How far the disc sits from the scroll view's trailing edge: whatever the gutter has left after
+  /// the disc, up to one small gap. Zero when the gutter is the disc, which is the ask panel.
+  static func trailingInset(trailingContentInset: CGFloat) -> CGFloat {
+    let leftover = trailingContentInset - diameter(trailingContentInset: trailingContentInset)
+    return max(0, min(OmiSpacing.sm, leftover))
+  }
+
+  /// Whether the disc lands entirely outside the message column.
+  static func clearsMessageColumn(trailingContentInset: CGFloat) -> Bool {
+    diameter(trailingContentInset: trailingContentInset)
+      + trailingInset(trailingContentInset: trailingContentInset) <= trailingContentInset
   }
 }
 
@@ -101,13 +204,119 @@ enum ChatTranscriptLayout {
 /// ordinary chat sessions progressively more expensive to scroll and update.
 enum ChatTranscriptWindow {
   static let maximumVisibleMessageCount = 500
+  static let compactHomeInitialMessageCount = 50
+
+  enum Presentation: Equatable {
+    case initial
+    case expanded
+  }
+
+  /// Controls how many locally available rows are mounted before the reader
+  /// explicitly asks for older context. The expanded limit stays bounded so
+  /// the eager stack retains stable rich-Markdown geometry.
+  struct Policy: Equatable {
+    let initialMessageCount: Int
+    let maximumMessageCount: Int
+
+    init(
+      initialMessageCount: Int,
+      maximumMessageCount: Int = ChatTranscriptWindow.maximumVisibleMessageCount
+    ) {
+      let boundedMaximum = min(
+        max(1, maximumMessageCount),
+        ChatTranscriptWindow.maximumVisibleMessageCount
+      )
+      self.maximumMessageCount = boundedMaximum
+      self.initialMessageCount = min(max(1, initialMessageCount), boundedMaximum)
+    }
+
+    static let standard = Self(initialMessageCount: ChatTranscriptWindow.maximumVisibleMessageCount)
+    static let compactHome = Self(initialMessageCount: ChatTranscriptWindow.compactHomeInitialMessageCount)
+  }
+
+  enum EarlierAction: Equatable {
+    case none
+    case revealLocallyLoadedRows
+    case loadMoreRows
+    case revealLocallyLoadedRowsAndLoadMore
+  }
 
   static func recentMessages(in messages: [ChatMessage]) -> [ChatMessage] {
-    Array(messages.suffix(maximumVisibleMessageCount))
+    visibleMessages(in: messages, policy: .standard, presentation: .expanded)
+  }
+
+  static func visibleMessages(
+    in messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation
+  ) -> [ChatMessage] {
+    let limit = presentation == .initial ? policy.initialMessageCount : policy.maximumMessageCount
+    return Array(messages.suffix(limit))
+  }
+
+  static func prependAnchorID(
+    in messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation
+  ) -> String? {
+    visibleMessages(in: messages, policy: policy, presentation: presentation).first?.id
+  }
+
+  /// Duplicate detection only needs to inspect rows this surface can render.
+  /// Keeping the windowing at this boundary gives streaming body evaluations a
+  /// deterministic O(visible-window) work budget even when the journal grows.
+  static func visibleDuplicateIDs(in messages: [ChatMessage]) -> Set<String> {
+    duplicateIDs(inVisibleWindow: recentMessages(in: messages))
+  }
+
+  /// Deduplicates a window that the caller has already bounded. Keeping this
+  /// overload separate avoids copying the suffix twice when the transcript
+  /// body shares one visible snapshot with the lifecycle projection.
+  static func duplicateIDs(inVisibleWindow messages: [ChatMessage]) -> Set<String> {
+    ChatMessageDeduplicator.duplicateIDs(in: messages)
   }
 
   static func allowsLoadingEarlier(for messages: [ChatMessage]) -> Bool {
-    messages.count < maximumVisibleMessageCount
+    allowsLoadingEarlier(for: messages, policy: .standard)
+  }
+
+  static func allowsLoadingEarlier(for messages: [ChatMessage], policy: Policy) -> Bool {
+    messages.count < policy.maximumMessageCount
+  }
+
+  static func canRevealLocallyLoadedRows(
+    in messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation
+  ) -> Bool {
+    presentation == .initial
+      && policy.initialMessageCount < policy.maximumMessageCount
+      && messages.count > policy.initialMessageCount
+  }
+
+  static func earlierAction(
+    for messages: [ChatMessage],
+    policy: Policy,
+    presentation: Presentation,
+    hasMoreMessages: Bool
+  ) -> EarlierAction {
+    let canReveal = canRevealLocallyLoadedRows(
+      in: messages,
+      policy: policy,
+      presentation: presentation
+    )
+    let canLoadMore = hasMoreMessages && allowsLoadingEarlier(for: messages, policy: policy)
+
+    switch (canReveal, canLoadMore) {
+    case (false, false):
+      return .none
+    case (true, false):
+      return .revealLocallyLoadedRows
+    case (false, true):
+      return .loadMoreRows
+    case (true, true):
+      return .revealLocallyLoadedRowsAndLoadMore
+    }
   }
 }
 
@@ -149,6 +358,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Explicitly enables chat-first controls only in the cohort shell's main
   /// Chat route. Nil keeps shared transcript projections safe elsewhere.
   var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
+  /// Optional transcript-window override for callers with a smaller initial
+  /// mount budget. When omitted, the existing 500-row default is preserved;
+  /// the existing Home-only rich-block capability selects the compact Home
+  /// policy automatically.
+  var transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
   /// Vertical transcript inset. Home uses a tighter value because its page
   /// shell already provides the breathing room beneath the floating top bar.
   var verticalContentPadding: CGFloat = OmiSpacing.xl
@@ -156,19 +370,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// scrollbar doesn't clip right-aligned user pills when horizontalContentPadding
   /// is 0; the left edge stays aligned with the ask bar. Default 0.
   var trailingContentPadding: CGFloat = 0
-  /// Readable cap on the message column. The scroll view remains full-width so
-  /// the prompt timeline can occupy the resulting gutter.
-  var contentColumnWidth: CGFloat? = nil
-  /// Where the prompt rail's right edge should land in the surrounding chat
-  /// surface. Home uses zero because its ask bar fills the chat column.
-  var timelineTrailingInset: CGFloat = ChatComposerLayout.pageMargin
   @ViewBuilder var welcomeContent: () -> WelcomeContent
-
-  /// IDs of messages that are near-duplicates of an earlier message in the same session.
-  /// Computed once per messages change to avoid O(n^2) per render.
-  private var duplicateMessageIds: Set<String> {
-    ChatMessageDeduplicator.duplicateIDs(in: messages)
-  }
 
   // MARK: - Scroll State
 
@@ -179,6 +381,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Throttle token for scrollToBottom — prevents the streaming + scroll
   /// detection feedback loop from saturating the main thread.
   @State private var scrollThrottleWorkItem: DispatchWorkItem?
+  /// When the transcript last re-reached the live edge, and whether one run is
+  /// already queued for the current window. See `ChatScrollFollowThrottle`.
+  @State private var lastFollowScrollTime: TimeInterval?
+  @State private var hasQueuedFollowScroll = false
   /// True when the user is actively scrolling via scroll wheel/trackpad.
   /// Set immediately by the scroll wheel monitor to win the race against
   /// throttled programmatic scrolls during streaming.
@@ -219,47 +425,63 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   /// Used to detect conversation switches so session-scoped @State can be reset.
   @State private var trackedConversationId: String?
 
-  /// Measured transcript geometry for the prompt timeline. This view deliberately
-  /// does not observe the object; only the overlay subscribes, so scrolling does
-  /// not re-evaluate every message row.
-  @State private var transcriptGeometry = ChatTranscriptGeometry()
+  /// Starts compact on Home, and expands only after the reader asks for older
+  /// locally-loaded rows. Standard callers start at the existing 500-row cap.
+  @State private var transcriptWindowPresentation: ChatTranscriptWindow.Presentation = .initial
+
+  // MARK: - Duplicate Rows
+
+  /// Derived when the transcript's shape changes, not when its tail is rewritten.
+  /// See `ChatTranscriptDuplicateKey`.
+  @State private var duplicateMessageIDs: Set<String> = []
   var body: some View {
     ScrollViewReader { proxy in
-      ZStack(alignment: .bottom) {
+      // Anchored to the trailing edge, not the middle. A floating control with
+      // nothing under it in the centre of a panel reads as a stray object; on the
+      // corner it reads as chrome belonging to the scroll view it commands.
+      ZStack(alignment: .bottomTrailing) {
         scrollContent(proxy: proxy)
         scrollToBottomButton(proxy: proxy)
       }
-      .overlay(alignment: .trailing) {
-        ChatPromptTimelineOverlay(
-          geometry: transcriptGeometry,
-          trailingInset: timelineTrailingInset,
-          onSelect: { markID in
-            jumpToPrompt(markID, proxy: proxy)
-          }
-        )
-      }
-      .onGeometryChange(for: CGSize.self) {
-        $0.size
-      } action: { size in
-        transcriptGeometry.setViewport(size, columnWidth: contentColumnWidth)
-      }
     }
   }
 
-  /// A direct timeline choice leaves live-follow mode and places the selected
-  /// prompt at the top of the viewport.
-  private func jumpToPrompt(_ markID: String, proxy: ScrollViewProxy) {
-    cancelPendingScrollsForUserInteraction()
-    userIsScrolling = false
-    scrollMode = .freeScrolling
-    hasActivityBelow = false
-    OmiMotion.withGated(ChatPromptTimelineMetrics.jumpAnimation) {
-      proxy.scrollTo(markID, anchor: .top)
-    }
+  /// Never less than the mark's gutter, whatever the host asked for.
+  private var leadingContentPadding: CGFloat {
+    max(horizontalContentPadding, ChatOmiMarkPlacement.markGutter)
+  }
+
+  /// The clear strip between the message column and the scroll view's trailing edge. The
+  /// jump-to-latest control is placed inside it — see `ChatScrollJumpPlacement`.
+  private var trailingContentInset: CGFloat {
+    horizontalContentPadding + trailingContentPadding
+  }
+
+  private var effectiveTranscriptWindowPolicy: ChatTranscriptWindow.Policy {
+    transcriptWindowPolicy
+      ?? (chatFirstRichBlockContext == nil ? .standard : .compactHome)
   }
 
   private var visibleTranscriptMessages: [ChatMessage] {
-    ChatTranscriptWindow.recentMessages(in: messages)
+    ChatTranscriptWindow.visibleMessages(
+      in: messages,
+      policy: effectiveTranscriptWindowPolicy,
+      presentation: transcriptWindowPresentation
+    )
+  }
+
+  private var duplicateKey: ChatTranscriptDuplicateKey {
+    ChatTranscriptDuplicateKey(
+      messages: messages,
+      presentation: transcriptWindowPresentation,
+      conversationIdentity: conversationIdentity,
+      isSending: isSending
+    )
+  }
+
+  private func refreshDuplicateMessageIDs() {
+    let refreshed = ChatTranscriptWindow.duplicateIDs(inVisibleWindow: visibleTranscriptMessages)
+    if refreshed != duplicateMessageIDs { duplicateMessageIDs = refreshed }
   }
 
   @ViewBuilder
@@ -275,10 +497,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         loadMoreButton
         messageContent
       }
-      .padding(.horizontal, horizontalContentPadding)
-      .padding(.trailing, trailingContentPadding)
+      // **The transcript owns the assistant mark's gutter, not its host.** The
+      // mark is drawn in an overlay offset one gutter to the left of the message
+      // column, so a host that insets by less draws it outside itself and the
+      // assistant's only identity cue silently vanishes — which is exactly what
+      // Home's chat did while passing 0. Asking every caller to know the number
+      // made that a bug each of them could reintroduce; clamping here makes it
+      // impossible.
+      .padding(.leading, leadingContentPadding)
+      .padding(.trailing, trailingContentInset)
       .padding(.vertical, verticalContentPadding)
-      .frame(maxWidth: contentColumnWidth ?? .infinity)
       .frame(maxWidth: .infinity)
       // Do not enable text selection on the whole stack. SelectionOverlay on every
       // chrome Text (agent card headers, tool summaries, timestamps) can peg the
@@ -293,23 +521,21 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           .id("bottom-anchor")
       }
     }
-    // Keep the native indicator policy static and hidden. Changing
-    // NSScrollView's scroller visibility from the prompt-rail overlay changes
-    // the transcript width, which changes wrapping and geometry, which can
-    // re-enter SwiftUI's AttributeGraph layout pass indefinitely on long
-    // histories.
-    .scrollIndicators(.hidden)
-    .coordinateSpace(name: ChatTranscriptSpace.viewport)
+    // Keep the native indicator policy static. Mutating NSScrollView's scroller
+    // visibility from a transcript overlay changes the transcript width, which
+    // changes wrapping and geometry, which can re-enter SwiftUI's AttributeGraph
+    // layout pass indefinitely on long histories.
+    // `.never`, not `.hidden`. Both are static policies, so the reason this
+    // stays out of the runtime is unchanged — but `.hidden` only asks, and AppKit
+    // still drew the overlay scroller during and after a scroll, on top of the
+    // panel's rounded leading/trailing edge. `.never` overrides the scrollable
+    // component instead of requesting.
+    .scrollIndicators(.never)
+    // MARK: - Re-derive duplicate rows when the transcript's shape changes
+    .onChange(of: duplicateKey) { _, _ in refreshDuplicateMessageIDs() }
     // MARK: - React to message count changes
     .onChange(of: messages.count) { oldCount, newCount in
-      transcriptGeometry.setMessages(visibleTranscriptMessages)
       handleMessagesCountChange(oldCount: oldCount, newCount: newCount, proxy: proxy)
-    }
-    // Refresh reply previews only once a streamed answer settles. Rebuilding
-    // sources for every token would re-walk the entire transcript.
-    .onChange(of: messages.last?.isStreaming) { wasStreaming, isStreaming in
-      guard wasStreaming == true, isStreaming != true else { return }
-      transcriptGeometry.setMessages(visibleTranscriptMessages)
     }
     // A journal restore may be populated by background events while the
     // loader is still collecting its canonical snapshot. Reveal it only after
@@ -355,11 +581,21 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     .onChange(of: isLoadingMoreMessages) { _, isLoading in
       if isLoading {
         // Capture the first message ID before the load begins
-        prependAnchorId = messages.first?.id
+        prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+          in: messages,
+          policy: effectiveTranscriptWindowPolicy,
+          presentation: transcriptWindowPresentation
+        )
       } else {
         // Load finished — restore prepend anchor if user hasn't scrolled
         restorePrependAnchor(proxy: proxy)
       }
+    }
+    // Expanding a compact mount adds rows above the reader's current context.
+    // Reuse the same anchor preservation as server-backed prepends.
+    .onChange(of: transcriptWindowPresentation) { _, presentation in
+      guard presentation == .expanded else { return }
+      restorePrependAnchor(proxy: proxy)
     }
     // MARK: - Reset session state on conversation switch
     .onChange(of: conversationIdentity) { _, newId in
@@ -372,32 +608,37 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         current: trackedConversationId, incoming: newId)
       trackedConversationId = transition.newTracked
       if transition.shouldReset {
-        for item in initialScrollWorkItems {
-          item.cancel()
-        }
-        initialScrollWorkItems.removeAll()
+        cancelAllPendingScrolls()
         initialRestoreState = .waiting
         lastSeenSendGeneration = localSendToken?.generation ?? 0
         prependAnchorId = nil
         hasActivityBelow = false
         scrollMode = .followingBottom
         userIsScrolling = false
-        transcriptGeometry.reset()
-        transcriptGeometry.setMessages(visibleTranscriptMessages)
+        transcriptWindowPresentation = .initial
         if !isLoadingInitial, !messages.isEmpty {
           handleInitialRestore(proxy: proxy)
         }
       }
     }
     .onAppear {
+      // Product invariant: a presented chat starts at its newest message.
+      // Never reuse a completed placement from a prior scroll-view instance;
+      // that instance may have been dismissed while the reader was at top.
+      cancelAllPendingScrolls()
+      initialRestoreState = ChatInitialRestoreState.atPresentationStart(previous: initialRestoreState)
+      scrollMode = .followingBottom
+      userIsScrolling = false
+      hasActivityBelow = false
       trackedConversationId = conversationIdentity
-      transcriptGeometry.setMessages(visibleTranscriptMessages)
+      refreshDuplicateMessageIDs()
       if !isLoadingInitial, !messages.isEmpty {
         handleInitialRestore(proxy: proxy)
       }
     }
     .onDisappear {
       initialRestoreState = ChatInitialRestoreState.afterDisappear(initialRestoreState)
+      transcriptWindowPresentation = .initial
       cancelAllPendingScrolls()
     }
   }
@@ -458,6 +699,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     scrollMode = .followingBottom
     hasActivityBelow = false
     initialRestoreState = .pending
+
+    // The anchor already exists by the time this handler runs in the common
+    // case. Try immediately, then retain the settling passes below for rich
+    // Markdown that expands across later layout turns.
+    scrollToBottom(proxy: proxy)
 
     let delays = ChatScrollLiveEdge.initialRestoreSettlingDelays
     guard !delays.isEmpty else {
@@ -557,6 +803,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   private func cancelAllPendingScrolls() {
     scrollThrottleWorkItem?.cancel()
     scrollThrottleWorkItem = nil
+    // The queued run is gone, so the throttle must stop reporting one as
+    // pending — otherwise every later request answers `.alreadyScheduled` and
+    // the transcript never follows again for this view's lifetime. Written only
+    // when it changes: this runs on every scroll event, and an unconditional
+    // `@State` write there is a body invalidation per event.
+    if hasQueuedFollowScroll { hasQueuedFollowScroll = false }
     userScrollEndWorkItem?.cancel()
     userScrollEndWorkItem = nil
     for item in initialScrollWorkItems {
@@ -576,18 +828,40 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
   @ViewBuilder
   private var loadMoreButton: some View {
-    if hasMoreMessages && ChatTranscriptWindow.allowsLoadingEarlier(for: messages) {
+    let action = ChatTranscriptWindow.earlierAction(
+      for: messages,
+      policy: effectiveTranscriptWindowPolicy,
+      presentation: transcriptWindowPresentation,
+      hasMoreMessages: hasMoreMessages
+    )
+    if action != .none {
       Button {
-        prependAnchorId = messages.first?.id
-        Task {
-          await onLoadMore()
+        if action == .revealLocallyLoadedRows || action == .revealLocallyLoadedRowsAndLoadMore {
+          prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+            in: messages,
+            policy: effectiveTranscriptWindowPolicy,
+            presentation: transcriptWindowPresentation
+          )
+          transcriptWindowPresentation = .expanded
+        }
+        if action == .loadMoreRows || action == .revealLocallyLoadedRowsAndLoadMore {
+          if prependAnchorId == nil {
+            prependAnchorId = ChatTranscriptWindow.prependAnchorID(
+              in: messages,
+              policy: effectiveTranscriptWindowPolicy,
+              presentation: transcriptWindowPresentation
+            )
+          }
+          Task {
+            await onLoadMore()
+          }
         }
       } label: {
         if isLoadingMoreMessages {
           ProgressView()
             .scaleEffect(0.8)
         } else {
-          Text("Load earlier messages")
+          Text(action == .loadMoreRows ? "Load earlier messages" : "Show older messages")
             .font(.caption)
             .foregroundColor(.secondary)
         }
@@ -606,7 +880,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           .scaleEffect(0.8)
         Text("Loading...")
           .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(Ink.secondary)
       }
       .frame(maxWidth: .infinity)
       .padding(.vertical, 80)
@@ -615,8 +889,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     } else if messages.isEmpty {
       welcomeContent()
     } else {
-      let dupeIds = duplicateMessageIds
-      let displayMessages = AgentLifecycleDisplayProjection.project(visibleTranscriptMessages)
+      // Streamed tokens re-evaluate this body. Take one bounded snapshot so each
+      // token avoids another suffix copy and never scans history that cannot be
+      // rendered. Duplicate detection is deliberately *not* here — it is derived
+      // from the transcript's shape (`ChatTranscriptDuplicateKey`) rather than
+      // re-run on every rewrite of the streaming tail.
+      let visibleMessages = visibleTranscriptMessages
+      let displayMessages = AgentLifecycleDisplayProjection.project(visibleMessages)
       let finalAssistantMessageID = ChatOmiMarkPlacement.finalAssistantMessageID(in: displayMessages)
       ForEach(Array(displayMessages.enumerated()), id: \.element.id) { index, message in
         ChatBubble(
@@ -629,7 +908,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           onCitationTap: { citation in
             onCitationTap?(citation)
           },
-          isDuplicate: dupeIds.contains(message.id),
+          isDuplicate: duplicateMessageIDs.contains(message.id),
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,
           onOpenAgentRef: onOpenAgentRef,
@@ -637,11 +916,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         )
         .padding(.top, ChatTranscriptLayout.topAdjustment(at: index, in: displayMessages))
         .id(message.id)
-        .background {
-          if message.sender == .user {
-            ChatPromptRowAnchorReporter(markID: message.id, geometry: transcriptGeometry)
-          }
-        }
       }
     }
   }
@@ -651,25 +925,25 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     VStack(spacing: OmiSpacing.lg) {
       Image(systemName: "exclamationmark.triangle")
         .scaledFont(size: OmiType.hero)
-        .foregroundColor(OmiColors.warning)
+        .foregroundColor(Ink.errorRed)
 
       Text("Failed to load chats")
         .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(OmiColors.textPrimary)
+        .foregroundColor(Ink.primary)
 
       Text(error)
         .scaledFont(size: OmiType.body)
-        .foregroundColor(OmiColors.textTertiary)
+        .foregroundColor(Ink.secondary)
         .multilineTextAlignment(.center)
 
       if let onRetry {
         Button(action: onRetry) {
           Text("Try Again")
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(Ink.primary)
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
-            .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
+            .glassCard(cornerRadius: PageGlass.chipRadius)
         }
         .buttonStyle(.plain)
       }
@@ -679,24 +953,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     .padding(.vertical, 48)
   }
 
-  // Both detectors share the same .background so their NSViews land inside
-  // NSScrollView.documentView. Keep this instrumentation observational:
-  // changing the enclosing scroll view's chrome here feeds geometry back into
-  // the transcript layout and can starve the main thread.
+  // The detector's .background lands its NSView inside NSScrollView.documentView.
+  // Keep this instrumentation observational: changing the enclosing scroll view's
+  // chrome here feeds geometry back into the transcript layout and can starve the
+  // main thread.
   private var scrollDetectors: some View {
     ZStack {
-      ScrollPositionDetector { position in
-        transcriptGeometry.setContent(
-          height: position.documentHeight,
-          scrollTop: position.scrollTop
-        )
-      }
       UserScrollDetector {
         scrollMode = .freeScrolling
         userIsScrolling = true
         hasActivityBelow = false
-        transcriptGeometry.setFollowingLiveEdge(false)
-        transcriptGeometry.releaseSelection()
         cancelPendingScrollsForUserInteraction()
         let endWork = DispatchWorkItem {
           userIsScrolling = false
@@ -726,7 +992,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         cancelAllPendingScrolls()
         scrollMode = .followingBottom
         hasActivityBelow = false
-        transcriptGeometry.setFollowingLiveEdge(true)
       }
     }
   }
@@ -736,6 +1001,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // Show when free-scrolled AND there are messages, AND either there's
     // activity below or we're in a non-following mode.
     if scrollMode == .freeScrolling && !messages.isEmpty {
+      let diameter = ChatScrollJumpPlacement.diameter(trailingContentInset: trailingContentInset)
       Button {
         cancelPendingScrollsForUserInteraction()
         userIsScrolling = false
@@ -745,18 +1011,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         scheduleInitialScroll(proxy: proxy, delay: ChatScrollLiveEdge.explicitJumpSettlingDelay)
       } label: {
         ZStack(alignment: .center) {
-          Circle()
-            .fill(OmiColors.backgroundPrimary)
-            .frame(width: 36, height: 36)
-            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-          Image(systemName: "arrow.down.circle.fill")
-            .scaledFont(size: OmiType.title)
-            .foregroundColor(OmiColors.textSecondary)
+          Color.clear
+            .frame(width: diameter, height: diameter)
+            // A free-floating object over the transcript, so it is real glass
+            // with its own ambient shadow rather than a wash on the panel.
+            .glassFloatingBar(cornerRadius: diameter / 2)
+          Image(systemName: "arrow.down")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+            .foregroundColor(Ink.primary)
         }
         // Activity pulse: subtle white glow when new content arrived below
         .overlay(
           Circle()
-            .stroke(OmiColors.textSecondary.opacity(hasActivityBelow ? 0.6 : 0), lineWidth: 1.5)
+            .stroke(Ink.secondary.opacity(hasActivityBelow ? 0.6 : 0), lineWidth: 1.5)
         )
         .opacity(hasActivityBelow ? 1.0 : 0.85)
         .scaleEffect(hasActivityBelow ? 1.08 : 1.0)
@@ -764,6 +1031,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       .buttonStyle(.plain)
       .accessibilityLabel("Jump to latest message")
       .padding(.bottom, OmiSpacing.lg)
+      .padding(
+        .trailing,
+        ChatScrollJumpPlacement.trailingInset(trailingContentInset: trailingContentInset)
+      )
       .transition(.scale.combined(with: .opacity))
       .omiAnimation(.easeInOut(duration: 0.2), value: scrollMode)
       .omiAnimation(.easeInOut(duration: 0.3), value: hasActivityBelow)
@@ -775,22 +1046,34 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // Don't fight the user — skip if they're actively wheel/trackpad scrolling
     guard !userIsScrolling else { return }
     guard !messages.isEmpty else { return }
-    transcriptGeometry.setFollowingLiveEdge(true)
     proxy.scrollTo("bottom-anchor", anchor: .bottom)
   }
 
-  /// Throttled version of scrollToBottom — coalesces rapid calls (e.g. during
-  /// streaming) so we scroll at most once per ~80ms instead of every token.
-  /// This prevents the scroll → notify → state update → re-render → scroll
-  /// feedback loop from saturating the main thread.
+  /// Rate-limited version of scrollToBottom: at most one follow per
+  /// `ChatScrollFollowThrottle.interval`, and **at least** one per window for as
+  /// long as content keeps arriving. Cancelling and rescheduling on every change
+  /// instead — which is what this used to do — meant a stream flushing faster
+  /// than the window never scrolled once.
   private func throttledScrollToBottom(proxy: ScrollViewProxy) {
     guard !userIsScrolling else { return }
-    // Cancel any pending scroll — we'll schedule a fresh one
-    scrollThrottleWorkItem?.cancel()
-    let workItem = DispatchWorkItem { [self] in
+    let now = ProcessInfo.processInfo.systemUptime
+    switch ChatScrollFollowThrottle.decide(
+      now: now, lastRun: lastFollowScrollTime, hasQueuedRun: hasQueuedFollowScroll)
+    {
+    case .alreadyScheduled:
+      return
+    case .now:
+      lastFollowScrollTime = now
       scrollToBottom(proxy: proxy)
+    case .schedule(let delay):
+      hasQueuedFollowScroll = true
+      let workItem = DispatchWorkItem { [self] in
+        hasQueuedFollowScroll = false
+        lastFollowScrollTime = ProcessInfo.processInfo.systemUptime
+        scrollToBottom(proxy: proxy)
+      }
+      scrollThrottleWorkItem = workItem
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
-    scrollThrottleWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: workItem)
   }
 }

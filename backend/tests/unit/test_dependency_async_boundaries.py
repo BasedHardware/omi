@@ -56,7 +56,11 @@ def _loaded_dependencies() -> Iterator[tuple[ModuleType, ModuleType, ModuleType,
         'database.dev_api_key',
         get_api_key_auth_result=lambda _token: SimpleNamespace(context=None, repairs=frozenset()),
     )
-    endpoints = _module('utils.other.endpoints', check_api_key_rate_limit=lambda **_kwargs: None)
+    endpoints = _module(
+        'utils.other.endpoints',
+        check_api_key_rate_limit=lambda **_kwargs: None,
+        enforce_account_deletion_http_access=lambda _uid: None,
+    )
     mcp_memories = _module(
         'utils.mcp_memories',
         McpVerifiedAuth=_McpVerifiedAuth,
@@ -119,7 +123,15 @@ def test_firebase_verification_uses_the_critical_executor() -> None:
         result = asyncio.run(dependencies.get_current_user_id(SimpleNamespace(credentials='firebase-token')))
 
         assert result == 'user-1'
-        assert calls == [(dependencies.critical_executor, verify_id_token, ('firebase-token',), {})]
+        assert calls == [
+            (dependencies.critical_executor, verify_id_token, ('firebase-token',), {}),
+            (
+                dependencies.db_executor,
+                dependencies.enforce_account_deletion_http_access,
+                ('user-1',),
+                {},
+            ),
+        ]
 
 
 def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
@@ -159,9 +171,11 @@ def test_mcp_and_developer_key_lookups_use_the_critical_executor() -> None:
         assert mcp_uid == 'mcp-user'
         assert dev_auth.uid == 'dev-user'
         assert [(executor, fn) for executor, fn, _args, _kwargs in calls] == [
-            (dependencies.critical_executor, lookup_mcp),
+            (dependencies.db_executor, lookup_mcp),
+            (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
             (dependencies.critical_executor, check_rate_limit),
-            (dependencies.critical_executor, lookup_dev),
+            (dependencies.db_executor, lookup_dev),
+            (dependencies.db_executor, dependencies.enforce_account_deletion_http_access),
         ]
         assert rate_limit_calls == [
             {

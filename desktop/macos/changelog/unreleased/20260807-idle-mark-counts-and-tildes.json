@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Omi mark spinning forever when nothing was loading, prices written with a tilde being struck through in answers, and the two capture counts on Home disagreeing about what they counted"
+}

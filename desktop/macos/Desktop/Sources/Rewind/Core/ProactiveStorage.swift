@@ -269,150 +269,11 @@ actor ProactiveStorage {
 
   // MARK: - Focus Session Operations
 
-  /// Insert a new focus session
-  @discardableResult
-  func insertFocusSession(_ session: FocusSessionRecord) async throws -> FocusSessionRecord {
-    let db = try await ensureInitialized()
-
-    let record = try await db.write { database in
-      try session.inserted(database)
-    }
-    log("ProactiveStorage: Inserted focus session (id: \(record.id ?? -1), status: \(session.status))")
-    return record
-  }
-
-  /// Get focus sessions for a date range
-  func getFocusSessions(from startDate: Date, to endDate: Date, limit: Int = 500) async throws -> [FocusSessionRecord] {
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      try FocusSessionRecord
-        .filter(Column("createdAt") >= startDate && Column("createdAt") <= endDate)
-        .order(Column("createdAt").desc)
-        .limit(limit)
-        .fetchAll(database)
-    }
-  }
-
-  /// Get today's focus sessions
-  func getTodayFocusSessions() async throws -> [FocusSessionRecord] {
-    let calendar = Calendar.current
-    let startOfDay = calendar.startOfDay(for: Date())
-    let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? Date()
-
-    return try await getFocusSessions(from: startOfDay, to: endOfDay)
-  }
-
-  /// Get focus stats for a date
-  func getFocusStats(for date: Date) async throws -> FocusStats {
-    let calendar = Calendar.current
-    let startOfDay = calendar.startOfDay(for: date)
-    let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? Date()
-
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      // Ordered by createdAt ascending so consecutive sessions are chronological
-      let sessions =
-        try FocusSessionRecord
-        .filter(Column("createdAt") >= startOfDay && Column("createdAt") < endOfDay)
-        .order(Column("createdAt").asc)
-        .fetchAll(database)
-
-      var focusedCount = 0
-      var distractedCount = 0
-      var distractionMap: [String: (seconds: Int, count: Int)] = [:]
-      let now = Date()
-
-      for i in 0..<sessions.count {
-        let session = sessions[i]
-        // Duration = time from this session until the next one starts (or now/endOfDay)
-        let endTime: Date
-        if i < sessions.count - 1 {
-          endTime = sessions[i + 1].createdAt
-        } else {
-          // Last session — extends to now (capped at end of day)
-          endTime = min(now, endOfDay)
-        }
-        let duration = max(0, Int(endTime.timeIntervalSince(session.createdAt)))
-
-        if session.isFocused {
-          focusedCount += 1
-        } else {
-          distractedCount += 1
-          let current = distractionMap[session.appOrSite] ?? (0, 0)
-          distractionMap[session.appOrSite] = (current.seconds + duration, current.count + 1)
-        }
-      }
-
-      let topDistractions =
-        distractionMap
-        .map { FocusStats.DistractionEntry(appOrSite: $0.key, totalSeconds: $0.value.seconds, count: $0.value.count) }
-        .sorted { $0.totalSeconds > $1.totalSeconds }
-        .prefix(5)
-
-      return FocusStats(
-        date: date,
-        focusedCount: focusedCount,
-        distractedCount: distractedCount,
-        sessionCount: sessions.count,
-        topDistractions: Array(topDistractions)
-      )
-    }
-  }
-
   /// Get total count of all focus sessions
   func getTotalFocusSessionCount() async throws -> Int {
     let db = try await ensureInitialized()
     return try await db.read { database in
       try FocusSessionRecord.fetchCount(database)
-    }
-  }
-
-  /// Update focus session sync status
-  func updateFocusSessionSyncStatus(id: Int64, backendId: String, synced: Bool) async throws {
-    let db = try await ensureInitialized()
-
-    try await db.write { database in
-      try database.execute(
-        sql: "UPDATE focus_sessions SET backendId = ?, backendSynced = ? WHERE id = ?",
-        arguments: [backendId, synced, id]
-      )
-    }
-  }
-
-  /// Delete focus session
-  func deleteFocusSession(id: Int64) async throws {
-    let db = try await ensureInitialized()
-
-    try await db.write { database in
-      try database.execute(
-        sql: "DELETE FROM focus_sessions WHERE id = ?",
-        arguments: [id]
-      )
-    }
-  }
-
-  /// Get unsynced focus sessions
-  func getUnsyncedFocusSessions() async throws -> [FocusSessionRecord] {
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      try FocusSessionRecord
-        .filter(Column("backendSynced") == false)
-        .fetchAll(database)
-    }
-  }
-
-  /// Get most recent focus session
-  func getMostRecentFocusSession() async throws -> FocusSessionRecord? {
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      try FocusSessionRecord
-        .order(Column("createdAt").desc)
-        .limit(1)
-        .fetchOne(database)
     }
   }
 
@@ -496,27 +357,6 @@ struct ExtractionUpdate {
   var isDismissed: Bool?
   var backendId: String?
   var backendSynced: Bool?
-}
-
-/// Focus statistics for a day
-struct FocusStats {
-  let date: Date
-  let focusedCount: Int
-  let distractedCount: Int
-  let sessionCount: Int
-  let topDistractions: [DistractionEntry]
-
-  struct DistractionEntry {
-    let appOrSite: String
-    let totalSeconds: Int
-    let count: Int
-  }
-
-  var focusRate: Double {
-    let total = focusedCount + distractedCount
-    guard total > 0 else { return 0 }
-    return Double(focusedCount) / Double(total) * 100
-  }
 }
 
 /// Errors for ProactiveStorage operations

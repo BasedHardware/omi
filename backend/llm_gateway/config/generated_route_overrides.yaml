@@ -5,7 +5,8 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: medium}
   - feature: chat_agent
-    primary: {provider: anthropic, model: claude-sonnet-5}
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: medium}
   - feature: chat_extraction
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}

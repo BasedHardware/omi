@@ -33,8 +33,7 @@ class ConversationCapturingPage extends StatefulWidget {
 }
 
 class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
-  static String? _preservedTranscriptSessionId;
-  static TranscriptScrollState _preservedTranscriptScrollState = TranscriptScrollState();
+  final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
   TabController? _controller;
@@ -53,11 +52,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   TranscriptScrollState _scrollStateFor(String sessionId) {
-    if (_preservedTranscriptSessionId != sessionId) {
-      _preservedTranscriptSessionId = sessionId;
-      _preservedTranscriptScrollState = TranscriptScrollState();
-    }
-    return _preservedTranscriptScrollState;
+    return _transcriptScrollStateStore.forSession(sessionId);
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
@@ -252,10 +247,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                     )
                                   : provider.photos.isNotEmpty
                                       ? _buildChronologicalTimeline(
-                                          provider,
-                                          transcriptSessionId,
-                                          transcriptScrollState,
-                                        )
+                                          provider, transcriptSessionId, transcriptScrollState)
                                       : getTranscriptWidget(
                                           false,
                                           provider.segments,
@@ -409,11 +401,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments.
-  Widget _buildChronologicalTimeline(
-    CaptureProvider provider,
-    String sessionId,
-    TranscriptScrollState scrollState,
-  ) {
+  Widget _buildChronologicalTimeline(CaptureProvider provider, String sessionId, TranscriptScrollState scrollState) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
 
