@@ -90,11 +90,11 @@ what you need, stop and surface it; that is a foundation gap, not your call to f
     every seam in its registry needs a corpus covering every frame its schema-of-record
     declares, plus a named test that reads it. A new shared wire means a new registry row.
     The three defects that wrote this rule: [`core-invariant-history`](../docs/agents/core-invariant-history.md).
-16. **A registered port has exactly ONE composition** — two modules constructing one port
-    type are two implementations, not two adapters. Registry rows in the
-    platform repo's scripts/lint-import-graph.ts are OPT-IN: add one when a port gains a SECOND
-    construction site. PROVISIONAL; defect, hatch, audit and limits:
-    [`rule-16-port-registry`](../docs/agents/rule-16-port-registry.md).
+16/17. **One composition per registered port; one route module per settled wire path.**
+    Two doors on one wire diverge — measured twice. Both fences are OPT-IN and PROVISIONAL,
+    in the platform repo's scripts/lint-import-graph.ts. Defect, hatch, audit, limits:
+    [`rule-16`](../docs/agents/rule-16-port-registry.md),
+    [`rule-17`](../docs/agents/rule-17-wire-path-fence.md).
 
 ## What you may do freely
 
