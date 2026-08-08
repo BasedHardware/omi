@@ -1,0 +1,36 @@
+desktop/windows/src/renderer/src/lib/omiApi.generated.ts
+  s_1be2305e1b81fe::t_8e42515baada99 1682
+docs/api-reference/app-client-openapi.json
+  s_1be2305e1b81fe::t_89d20b8806b35a 10434-10448
+web/personas-open-source/src/lib/omiApi.generated.ts
+  s_1be2305e1b81fe::t_3baa46eb034bc7 1682
+web/app/src/lib/omiApi.generated.ts
+  s_1be2305e1b81fe::t_d75034e316057b 1682
+backend/tests/unit/test_process_conversation_usage_context.py
+  s_1be2305e1b81fe::t_30208233382c32 968-969
+  s_1be2305e1b81fe::t_74e318521dd16f 970-971
+backend/models/action_item.py
+  s_1be2305e1b81fe::t_249d7698d7bd68 55
+backend/tests/unit/test_llm_gateway_openai_compatible.py
+  s_1be2305e1b81fe::t_249d7698d7bd68 430
+backend/utils/conversations/process_conversation.py
+  s_1be2305e1b81fe::t_adb95140bac296 15
+web/admin/lib/services/omi-api/omiApi.generated.ts
+  s_1be2305e1b81fe::t_382d6efc03cd95 1682
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "adc6bf5ba0bcb1c3e40b3843f3b198f2d5a5ad06",
+  "prompts": {},
+  "sessions": {
+    "s_1be2305e1b81fe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fdf7b-ffaf-7d13-8b30-95513dcf6929",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
