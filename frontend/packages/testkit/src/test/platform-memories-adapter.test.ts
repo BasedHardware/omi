@@ -397,17 +397,32 @@ test("a non-200 anywhere in the walk yields null, including mid-walk", async () 
   assert.equal(await fetchSynthesizedMemoryIdSnapshot(midWalk), null, "a truncated walk is not a set");
 });
 
-test("a server that never terminates is bounded, and its walk is not the whole set", async () => {
+test("a non-terminating server is bounded, and its walk is not the whole set", async () => {
   // red-proof: remove the `pages < maxPages` bound from the while condition;
   // this test hangs instead of failing, which is itself the signal.
   // APPLIED 2026-08-08: observed the test time out rather than complete.
-  const http = new RepeatingPage(
-    textResponse(buildPage({ window: "more_continuation", completeness: "complete" })),
-  );
-  const walk = await walkSynthesizedMemoryPages(http, { maxPages: 5 });
+  //
+  // The server here advances honestly — fresh ids and a fresh cursor on every
+  // page — it simply never ends. That is the case the page bound exists for.
+  // A server that REPEATS ids or cursors is a different failure and is refused
+  // outright rather than bounded; see platform-memories-hostile.test.ts.
+  let n = 0;
+  const endless: HttpClient = {
+    async request(): Promise<HttpResponse> {
+      n += 1;
+      const p = buildPage({
+        window: "more_continuation",
+        completeness: "complete",
+        items: [{ id: `retrieval-node-v1:page-${n}`, text: `item ${n}` }],
+      }) as { window: { nextCursor: string } };
+      p.window.nextCursor = `cursor-${n}`;
+      return textResponse(p);
+    },
+  };
+  const walk = await walkSynthesizedMemoryPages(endless, { maxPages: 5 });
   assert.ok(walk);
   assert.equal(walk.pages, 5);
-  assert.equal(http.calls, 5, "the bound is enforced at the transport, not just reported");
+  assert.equal(n, 5, "the bound is enforced at the transport, not just reported");
   assert.equal(walk.wholeSet, false, "a walk that did not terminate proves nothing");
   assert.ok(PLATFORM_MEMORY_RECALL_MAX_PAGES > 0);
 });
@@ -573,7 +588,7 @@ test("the page request is clamped to the limit the server will actually honor", 
   // red-proof: delete the `Math.min(requested, PLATFORM_MEMORY_RECALL_MAX_LIMIT)`
   // clamp; the first asserted path becomes `limit=100000`.
   // APPLIED 2026-08-08: observed
-  //   AssertionError ... '/v1/memories/recall?limit=100000' !== '/v1/memories/recall?limit=100'
+  //   AssertionError ... '/v1/memories?limit=100000' !== '/v1/memories?limit=100'
   const http = new ScriptedPages([
     textResponse(buildPage({ window: "complete_terminal", completeness: "complete" })),
     textResponse(buildPage({ window: "complete_terminal", completeness: "complete" })),
@@ -583,9 +598,9 @@ test("the page request is clamped to the limit the server will actually honor", 
   await walkSynthesizedMemoryPages(http, { limit: 0 });
   await walkSynthesizedMemoryPages(http, { limit: 25 });
   assert.deepEqual(http.paths, [
-    `/v1/memories/recall?limit=${PLATFORM_MEMORY_RECALL_MAX_LIMIT}`,
-    `/v1/memories/recall?limit=${PLATFORM_MEMORY_RECALL_MAX_LIMIT}`,
-    "/v1/memories/recall?limit=25",
+    `/v1/memories?limit=${PLATFORM_MEMORY_RECALL_MAX_LIMIT}`,
+    `/v1/memories?limit=${PLATFORM_MEMORY_RECALL_MAX_LIMIT}`,
+    "/v1/memories?limit=25",
   ]);
 });
 
@@ -605,7 +620,7 @@ test("a continuation carries the server's cursor verbatim, url-encoded", async (
   ]);
   await walkSynthesizedMemoryPages(http);
   assert.deepEqual(http.paths, [
-    "/v1/memories/recall?limit=100",
-    "/v1/memories/recall?limit=100&cursor=v1.sig%26x%3D1",
+    "/v1/memories?limit=100",
+    "/v1/memories?limit=100&cursor=v1.sig%26x%3D1",
   ]);
 });
