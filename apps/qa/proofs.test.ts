@@ -455,6 +455,15 @@ describe("PROOF 6 — hidden-present and physically-absent are byte-identical", 
    * the wire: any difference in ordering, count, envelope, cursor, frontier, or
    * error shape is an authorization oracle.
    *
+   * SCOPE, stated so this proof cannot be misread: it establishes **byte**
+   * identity, and explicitly NOT **timing** identity. Measured separately, a
+   * 20-visible/300-hidden snapshot answers byte-identically to a 20-visible/
+   * 0-hidden one while taking 5.25x longer (p50 34.8ms vs 6.6ms), because the
+   * loader materializes every owner row and filters afterwards. The brief counts
+   * timing as an oracle, so that residual is real and is documented in
+   * blocked/BE-FLOW-timing-oracle.md. Do not read "hidden vs absent: identical"
+   * below as "the channel is closed".
+   *
    * This caught a real leak in my own first implementation. The declared
    * frontier and three cursor bindings were derived from the SQLite loader's
    * `coherent_snapshot_digest` and ledger head sequence, both of which cover
@@ -481,6 +490,20 @@ describe("PROOF 6 — hidden-present and physically-absent are byte-identical", 
     // And the hidden record really was present in storage.
     const parsed = parseSynthesizedPageJson(hiddenText!)!;
     expect(parsed.items.length).toBe(5);
+
+    // Pins audit finding 2: the storage ledger sequence (6 vs 5) enters the
+    // projection pipeline and is then OVERWRITTEN with a visible-only digest.
+    // Byte identity above depends on that overwrite holding. Asserting the
+    // projection digests directly fails at the layer where a regression would be
+    // introduced, instead of only at the wire.
+    const hiddenFrontier = parsed.completeness.frontiers.declaredFrontier;
+    const absentFrontier = parseSynthesizedPageJson(absentText!)!.completeness.frontiers.declaredFrontier;
+    expect(hiddenFrontier).toBe(absentFrontier);
+    // The frontier is a visible-only digest, so it is a bare sha256 with no
+    // storage sequence embedded. (An earlier version asserted the digit "6" was
+    // absent, which is nonsense against hex -- equality with the absent-case
+    // frontier is the assertion that actually carries the property.)
+    expect(hiddenFrontier).toMatch(/^frontier-v1:qa:[a-f0-9]{64}$/);
     expect(hiddenText).not.toContain("qa-claim");
   });
 

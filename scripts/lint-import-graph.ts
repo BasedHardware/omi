@@ -48,7 +48,28 @@ const files = (directory: string): string[] => readdirSync(directory, { withFile
  * wholesale — prose cannot leak a byte, and documenting why the fence exists is
  * worth more than a grep-clean file.
  */
-const storageProvenanceIdentifiers = ["coherent_snapshot_digest", "internal_coverage", "ledger_head"];
+/**
+ * Widened 2026-08-08 after an audit showed the fence was narrower than the rule:
+ * a composition could emit `durable_snapshot.claims.length` under another name,
+ * pass lint, and republish hidden-row cardinality. Verified by experiment — lint
+ * stayed green while proof 6 failed. Proof 6 is the backstop, but a fence that
+ * only catches the one instance already fixed is not a ratchet.
+ *
+ * These are the loader's storage-scoped surfaces. Legitimate uses exist (the
+ * durable snapshot IS the input to the authorization boundary), and they carry
+ * an inline justification — which is the point: a reviewer sees every place
+ * storage state enters composition code.
+ */
+const storageProvenanceIdentifiers = [
+  "coherent_snapshot_digest",
+  "internal_coverage",
+  "ledger_head",
+  "durable_snapshot",
+  "stm_rows",
+  "graph_heads",
+  "eligible_items",
+  "scan_ceiling",
+];
 const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 /** Blank out comments so documentation of the fence does not trip the fence. */

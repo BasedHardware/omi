@@ -180,6 +180,7 @@ export const createQaRecallReader = (options: QaRecallReaderOptions): QaRecallRe
    */
   const buildMaterial = async (granularity: ReadItemGranularity): Promise<QaCoherentMaterial> => {
     const load = loadCoherent();
+    // storage-provenance-ok(this IS the authorization boundary's input; it is filtered by applicationVisibleClosure before anything derives from it, and no wire value is computed from it directly)
     const snapshot = load.durable_snapshot;
 
     // A throwaway projection used only to produce renders and derive the

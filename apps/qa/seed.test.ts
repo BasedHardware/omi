@@ -119,9 +119,11 @@ describe("seedQaSnapshot", () => {
       limits: LIMITS,
     })();
 
+    // storage-provenance-ok(test asserts the loader's own output; never emitted)
     expect(loadLeft.durable_snapshot.claims.map((item) => item.revision_id)).toEqual([
       ...left.result.claim_revision_ids,
     ]);
+    // storage-provenance-ok(test asserts the loader's own output; never emitted)
     expect(loadRight.durable_snapshot.claims.map((item) => item.revision_id)).toEqual([
       ...right.result.claim_revision_ids,
     ]);

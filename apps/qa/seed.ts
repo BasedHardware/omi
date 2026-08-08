@@ -282,9 +282,11 @@ export const seedQaSnapshot = (db: Database, options: QaSeedOptions): QaSeedResu
       "success",
       JSON.stringify({ commit_id: bootstrapCommitId, sequence: 0 }),
     );
+    // storage-provenance-ok(QA seed writes storage directly; it is the fixture, not a read path)
     db.query("INSERT INTO graph_heads VALUES (?, ?, ?)").run(owner, bootstrapCommitId, 0);
   } else {
     const headCommitId = `qa-commit:${owner}:${pad4(claimCount - 1)}`;
+    // storage-provenance-ok(QA seed writes storage directly; it is the fixture, not a read path)
     db.query("INSERT INTO graph_heads VALUES (?, ?, ?)").run(owner, headCommitId, graphGeneration);
   }
 
