@@ -2481,8 +2481,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: af6b457cca4cdd6c97cc2dfa8557333ee09c81f1
-      resolved-ref: af6b457cca4cdd6c97cc2dfa8557333ee09c81f1
+      ref: "00bc62694782075b7f9982a4c497e7145ba7bde0"
+      resolved-ref: "00bc62694782075b7f9982a4c497e7145ba7bde0"
       url: "https://github.com/BasedHardware/whisper_flutter_new.git"
     source: git
     version: "1.0.1"
