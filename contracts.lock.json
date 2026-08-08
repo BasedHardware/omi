@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "publicationStatus": "local-qa-evidence",
+  "publicationStatus": "upstream-branch-qa-evidence",
   "package": {
     "name": "@omi-core/ratified-contracts",
     "version": "0.2.0",
@@ -43,10 +43,10 @@
     "ref": "refs/heads/core/foundation",
     "commit": "73dca8250dd39901447f3fe1754635836a2912fd",
     "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
-    "upstreamBranchPushed": false,
+    "upstreamBranchPushed": true,
     "mergedToMain": false,
     "registryPublished": false,
-    "evidence": "The exact source commit exists on core-foundation's core/foundation branch but has NOT been pushed to the public BasedHardware/omi remote; pushing is an outward-facing action awaiting explicit human confirmation. Status is therefore local-qa-evidence, not upstream-branch-qa-evidence. It is not merged to main, registry-published, or adopted in production. Verify the positive claim with scripts/verify-publication.ts, which does a real ls-remote; qa-contracts.ts only checks this record is internally coherent."
+    "evidence": "The exact source commit is pushed to BasedHardware/omi on refs/heads/core/foundation, a real non-main branch. Published under the ratified contract evolution policy, whose authority model is a cited ruling rather than a human approval step; PROVENANCE.json cites COORD-contract-evolution-policy. Verified against the remote by scripts/verify-publication.ts (real git ls-remote plus a fetch of the pinned commit), not by self-declaration. It is not merged to main, registry-published, or adopted in production."
   },
   "toolchain": {
     "artifactBuild": {
