@@ -1718,7 +1718,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIVI', one: 'DISPOSITIVO');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DISPOSITIVI',
+      one: 'DISPOSITIVO',
+    );
     return '$count $_temp0 TROVATO/I NELLE VICINANZE';
   }
 
@@ -9844,7 +9849,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String monthsFreeBadge(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count mesi gratis', one: '1 mese gratis');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mesi gratis',
+      one: '1 mese gratis',
+    );
     return '$_temp0';
   }
 
