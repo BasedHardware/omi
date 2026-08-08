@@ -148,9 +148,10 @@ def test_reconciler_iam_installer_refuses_by_default_and_keeps_bindings_scoped(t
     assert 'AGENT_VM_RECONCILER_IAM_APPLY:-}' in script
     assert "REFUSED:" in script
     assert (
-        "compute.disks.create,compute.disks.delete,compute.disks.get,compute.disks.use,compute.disks.useReadOnly,compute.images.useReadOnly,compute.instances.attachDisk,compute.instances.create,compute.instances.delete,compute.instances.detachDisk,compute.instances.get,compute.instances.setDiskAutoDelete,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
+        "compute.disks.create,compute.disks.delete,compute.disks.get,compute.disks.setLabels,compute.disks.use,compute.disks.useReadOnly,compute.images.useReadOnly,compute.instances.attachDisk,compute.instances.create,compute.instances.delete,compute.instances.detachDisk,compute.instances.get,compute.instances.setDiskAutoDelete,compute.instances.setLabels,compute.instances.setMetadata,compute.instances.setServiceAccount,compute.instances.setTags,compute.instances.start,compute.instances.stop"
         in script
     )
+    assert "compute.disks.setLabels" in script
     assert 'subnetwork_permissions="compute.subnetworks.use,compute.subnetworks.useExternalIp"' in script
     assert "Agent VM reconciler instance scope" in script
     assert "Agent VM reconciler disk scope" in script
