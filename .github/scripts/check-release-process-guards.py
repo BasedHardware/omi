@@ -591,9 +591,12 @@ def check_desktop_codemagic_release() -> list[str]:
         "publish-desktop-debug-symbols.sh upload",
         '"$DSYM_ARCHIVE"',
         "- build/*.dSYM",
+        "source scripts/launcher-bootstrap.sh",
+        "omi_normalize_packaged_resource_bundle",
+        '"$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"',
     ):
         if required_fragment not in desktop_workflow_body:
-            errors.append(f"desktop release is missing fail-closed debug-symbol publication: {required_fragment}")
+            errors.append(f"desktop release is missing required release fragment: {required_fragment}")
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     release_index = desktop_workflow_body.find("Create GitHub release")
