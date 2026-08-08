@@ -115,6 +115,52 @@ def test_basic_plan_features_include_unlimited_memories(subscription_module):
     assert "Unlimited memories" in features
 
 
+def test_cancellation_is_pending_until_period_end(subscription_module):
+    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=200)
+
+    assert subscription_module.is_pending_cancellation(subscription, now=199)
+    assert not subscription_module.is_pending_cancellation(subscription, now=200)
+
+
+def test_missing_period_end_is_still_pending_cancellation(subscription_module):
+    subscription = SimpleNamespace(cancel_at_period_end=True, current_period_end=None)
+
+    assert subscription_module.is_pending_cancellation(subscription, now=200)
+
+
+def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypatch, subscription_module):
+    """A cancel-at-period-end Stripe subscription must block a different target
+    price even when the local Firestore record is missing/basic (lag or recovery).
+    Same-price reactivation stays allowed in that branch."""
+    sub = subscription_module
+
+    # Firestore record is basic/stale -> no pending cancellation there.
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: None
+    sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
+    # No active (non-canceling) subscription, so the basic branch proceeds.
+    monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
+
+    pending = SimpleNamespace(
+        plan="paid",
+        status="active",
+        cancel_at_period_end=True,
+        current_period_end=2_000_000_000,
+        current_price_id="price_current",
+    )
+    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: pending)
+
+    # Different target price must be deferred even though Firestore is basic.
+    can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_target")
+    assert can_pay is False
+    assert "after the current subscription ends" in reason
+
+    # Same-price reactivation is allowed.
+    can_pay, reason = sub.can_user_make_payment("u1", target_price_id="price_current")
+    assert can_pay is True
+    assert "reactivate" in reason
+
+
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
     monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)

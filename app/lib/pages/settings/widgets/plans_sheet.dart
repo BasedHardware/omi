@@ -1369,7 +1369,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           },
                         ),
                         const SizedBox(height: 16),
-                        if (isUnlimited == true && !isCancelled) ...[
+                        if (isUnlimited == true || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
                           SizedBox(
                             width: double.infinity,
                             height: 50,
@@ -1402,15 +1402,17 @@ class _PlansSheetState extends State<PlansSheet> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: () {
-                              _handleCancelSubscription();
-                            },
-                            child: Text(
-                              context.l10n.cancelSubscription,
-                              style: const TextStyle(color: Colors.red, fontSize: 16),
+                          if (!isCancelled) ...[
+                            TextButton(
+                              onPressed: () {
+                                _handleCancelSubscription();
+                              },
+                              child: Text(
+                                context.l10n.cancelSubscription,
+                                style: const TextStyle(color: Colors.red, fontSize: 16),
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(height: 8),
                         ],
                       ],
