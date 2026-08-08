@@ -246,12 +246,12 @@ export const WRITE_REFUSALS: Readonly<Record<WriteRefusalOutcome, WriteRefusal>>
 
 /**
  * Non-refusal error bodies. These are NOT refusal outcomes: a refusal is a
- * decision about the principal, these are decisions about the request.
+ * decision about the principal, these are decisions about the REQUEST.
  *
- * `maintenance` is backpressure, not evidence — a fenced account gets it and
- * NOTHING is recorded server-side. It must reach the product surface as the
- * maintenance notice, never as a bare retryable, or the queue silently buffers
- * through a migration window.
+ * There is deliberately no `maintenance` entry here. Backpressure is neither a
+ * decision about the principal nor about the request — it is the server saying
+ * it cannot decide at all — and it now has its own table, `WRITE_AVAILABILITY`,
+ * for exactly the reason `COORD-fable-rulings-wave2` W1 gives.
  */
 export const WRITE_ERRORS = Object.freeze({
   /** Malformed envelope, unknown domain, or a domain that is not writable. */
@@ -260,38 +260,83 @@ export const WRITE_ERRORS = Object.freeze({
   write_id_reuse: Object.freeze({ status: 409, body: '{"error":"write_id_reuse"}' }),
   /** `base_revision` precondition failed: a genuine concurrent edit. */
   conflict: Object.freeze({ status: 409, body: '{"error":"conflict"}' }),
-  /**
-   * Migration window, or control state that cannot authorize a decision about
-   * this write at all. Carries `retry-after`.
-   *
-   * **`body` IS DELIBERATELY `null`: this contract does NOT ratify the 503
-   * body, and must not, yet.**
-   *
-   * The serving side already spells it, in
-   * `platform/apps/service/control/fence-http.ts`, as
-   * `{"error":"maintenance","refusal_outcome":"control_unavailable"}` — and
-   * that spelling carries a live escalation to fable
-   * (`data/run-2026-08-08c/blocked/EPOCH-refusal-wire-values.md` §1): whether
-   * `refusal_outcome` is a FIVE-value enum, or whether the availability case
-   * carries no `refusal_outcome` at all and relies on the 503 alone.
-   * `backend:ADR-010` §3 names four outcomes; this is a fifth situation and
-   * none of the four.
-   *
-   * That escalation names this landing by name as the thing it blocks, because
-   * ratifying a byte string is what would make it expensive to reverse. So the
-   * contract binds what IS settled — the status, the `retry-after`, and the
-   * client obligation — and leaves the body to the serving side until fable
-   * rules. Reversal cost today: one line in `fence-http.ts`. Reversal cost had
-   * this contract fixed the bytes: a breaking contract bump.
-   *
-   * The client obligation does not depend on the ruling either way: a 503 is
-   * BACKPRESSURE, never evidence. Nothing is recorded server-side and the op
-   * must NOT be dead-lettered. Collapsing it onto `stale_epoch` would turn an
-   * ordinary migration window into a permanent lost edit for every account
-   * being migrated — which is the single worst outcome available on this wire.
-   */
-  maintenance: Object.freeze({ status: 503, body: null }),
 });
+
+/**
+ * THE FIFTH VALUE — `control_unavailable`, an AVAILABILITY SIGNAL.
+ *
+ * Ratified by `COORD-fable-rulings-wave2` W1, which is also where the framing
+ * below comes from and why it is not cosmetic.
+ *
+ * `backend:ADR-010` §3 names FOUR refusal outcomes, and all four are statements
+ * about the CALLER'S AUTHORITY. This is not a fifth one of those. It is the
+ * server saying *this side does not know, and therefore does not serve*: no
+ * control projection for the account, a projection poisoned by a conflicting or
+ * out-of-order observation, a migration window, `legacy`, or
+ * `rolled_back_stranded`. Recording it as an availability signal rather than as
+ * a fifth authorization outcome is what keeps "refusals are four distinct
+ * outcomes" true of the authorization composition — so the wire EXTENDS the ADR
+ * David accepted instead of a delegate's signature quietly amending it. That is
+ * a binding condition of the ruling, not a stylistic preference, which is why
+ * `WriteRefusalOutcome` above is still exactly four values and this lives in its
+ * own table with its own reader.
+ *
+ * WHY THE FIELD IS CARRIED AT ALL, rather than a bare 503. ADR-010 §3's test for
+ * a distinct outcome is a distinct CLIENT BEHAVIOUR, and this case has one:
+ * refresh control state, then drain the op wherever authority actually lives.
+ * That is neither `stale_epoch`'s behaviour (dead-letter, never retry — B2) nor
+ * a plain 503's (retry in place). The case where the difference is real money is
+ * rollback: `backend:ADR-007` §6 restores legacy authority, so a client that saw
+ * a bare 503 retries in place — correctly, by 503 semantics — against a platform
+ * that can never say yes, for the length of the incident, while the edit's real
+ * home is legacy. The bare-503 spelling turns every rollback into a lost-edit
+ * generator with a progress bar. Second and independent: a bare 503 is
+ * indistinguishable from an infrastructure 503 — a proxy, a dead process, a
+ * gateway timeout — none of which honour anybody's body discipline.
+ *
+ * CONDITIONS THAT RIDE ALONG, now load-bearing rather than incidental. The body
+ * is a fixed constant. `retry-after` is a fixed constant and may NEVER vary with
+ * account state. The active epoch is never returned — a "refresh and retry"
+ * hint carrying it would be a migration-progress oracle, which `backend:ADR-012`
+ * §4 forbids. And the fence runs only AFTER authentication and authorization
+ * resolve, so this value never reaches a caller without authority over the
+ * account. Weakening any of these is a guard-weakening diff under the swarm
+ * protocol §8 and blocks a push.
+ */
+export type WriteAvailabilitySignal = "control_unavailable";
+
+export const WRITE_AVAILABILITY_SIGNALS = ["control_unavailable"] as const;
+
+/** Seconds. Fixed, so the value cannot vary with account state. */
+export const CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS = 60;
+
+export interface WriteAvailabilityRefusal extends WriteRefusal {
+  readonly retryAfterSeconds: number;
+}
+
+export const WRITE_AVAILABILITY: Readonly<Record<WriteAvailabilitySignal, WriteAvailabilityRefusal>> = Object.freeze({
+  control_unavailable: Object.freeze({
+    status: 503,
+    body: '{"error":"maintenance","refusal_outcome":"control_unavailable"}',
+    retryAfterSeconds: CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  }),
+});
+
+/**
+ * Read the availability signal off a response body.
+ *
+ * Deliberately a SEPARATE reader from `readWriteRefusalOutcome`, which still
+ * answers only the four authorization outcomes. A single five-valued reader
+ * would be the "fifth authorization outcome" spelling the ruling refused, in
+ * code rather than in prose — and prose is not what a future caller reads.
+ */
+export function readWriteAvailabilitySignal(status: number, body: string): WriteAvailabilitySignal | null {
+  for (const signal of WRITE_AVAILABILITY_SIGNALS) {
+    const availability = WRITE_AVAILABILITY[signal];
+    if (availability.status === status && availability.body === body) return signal;
+  }
+  return null;
+}
 
 /**
  * The one success shape. `idempotent: true` means the registry answered from a
