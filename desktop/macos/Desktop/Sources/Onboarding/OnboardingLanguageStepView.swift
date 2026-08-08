@@ -68,28 +68,21 @@ struct OnboardingLanguageStepView: View {
               .textFieldStyle(.plain)
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.md)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                  .fill(OmiColors.backgroundSecondary)
-                  .overlay(
-                    RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
-                      .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                  )
-              )
-              .foregroundColor(OmiColors.textPrimary)
+              .glassField()
+              .foregroundColor(Ink.primary)
               .onSubmit { coordinator.addCustomLanguage() }
 
             Button("Add") {
               coordinator.addCustomLanguage()
             }
-            .buttonStyle(OmiButtonStyle(.secondary))
+            .buttonStyle(InkButtonStyle(kind: .secondary))
           }
         }
 
         if let primaryName {
           Text("Primary: \(primaryName)")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(OmiColors.textTertiary)
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
 
         HStack(spacing: OmiSpacing.md) {
@@ -98,7 +91,7 @@ struct OnboardingLanguageStepView: View {
           Button(saving ? "Saving…" : "Continue") {
             saveAndContinue()
           }
-          .buttonStyle(OmiButtonStyle(.primary))
+          .buttonStyle(InkButtonStyle(kind: .primary))
           .keyboardShortcut(.defaultAction)
           .disabled(coordinator.selectedLanguageCodes.isEmpty || saving)
         }
@@ -106,7 +99,8 @@ struct OnboardingLanguageStepView: View {
         if let error = coordinator.lastActionError {
           Text(error)
             .font(.system(size: 12, weight: .medium))
-            .foregroundColor(OmiColors.warning)
+            .foregroundColor(PageGlass.warning)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
       .frame(maxWidth: .infinity, alignment: .center)

@@ -72,6 +72,7 @@ Bright lines:
 1. Look it up before saying you don't know; say "I don't know" only after a tool came back empty.
 2. An empty result gets a short human answer, then stop: "I don't remember that coming up" — not "no data available", not paragraphs about why, not offers to reconstruct.
 3. People are the strictest case: state nothing about a person that a tool did not return.
+4. The # Current Time block prefixed to each request is Omi's authoritative clock. Use it for time-sensitive reasoning and ignore stale date references from earlier turns when they conflict.
 </critical_accuracy_rules>
 
 <tools>
@@ -109,6 +110,57 @@ export function buildDesktopChatSystemPrompt(options: DesktopChatPromptOptions =
   // when no timezone is supplied, leaving "...in the user's timezone, in a...".
   const tzClause = tz ? ` (${tz})` : ''
   return DESKTOP_CHAT_TEMPLATE.replaceAll('{user_name}', name).replaceAll('{tz}', tzClause)
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0')
+}
+
+/** Render an instant as a local ISO-8601 timestamp with its explicit offset. */
+function localIsoParts(now: Date, timeZone: string): { iso: string; offset: string } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'longOffset'
+  }).formatToParts(now)
+  const value = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? ''
+  const offsetLabel = value('timeZoneName')
+  const offsetMatch = /^GMT(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/.exec(offsetLabel)
+  if (!offsetMatch) throw new Error(`Unsupported timezone offset: ${offsetLabel}`)
+  const offset = offsetMatch[1]
+    ? `${offsetMatch[1]}${pad2(Number(offsetMatch[2]))}:${offsetMatch[3] ?? '00'}`
+    : '+00:00'
+  const iso = `${value('year')}-${value('month')}-${value('day')}T${value('hour')}:${value('minute')}:${value('second')}${offset}`
+  return { iso, offset }
+}
+
+/**
+ * Prefix a per-turn request with the host's authoritative local time.
+ *
+ * The system prompt stays byte-stable so the pi binding can be reused; this
+ * volatile block rides in the user turn, matching macOS's chat behavior.
+ */
+export function currentTimePrompt(
+  prompt: string,
+  now: Date = new Date(),
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+): string {
+  let zone = timeZone || 'UTC'
+  let parts: { iso: string; offset: string }
+  try {
+    parts = localIsoParts(now, zone)
+  } catch {
+    zone = 'UTC'
+    parts = localIsoParts(now, zone)
+  }
+  return `# Current Time\n${parts.iso} (${zone})\n\n${prompt}`
 }
 
 // ---------------------------------------------------------------------------

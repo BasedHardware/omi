@@ -17,7 +17,12 @@ from models.memory_apply import build_patch_mutation_identity
 from models.memory_admission import valid_required_processing_receipt
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.memory_promotion import PROMOTION_GRAPH_PLAN_VERSION, PromotionGraphPlan
+from models.memory_promotion import (
+    PROMOTION_GRAPH_PLAN_VERSION,
+    PROMOTION_GRAPH_PLAN_V2_VERSION,
+    GraphRelationEndpoint,
+    PromotionGraphPlan,
+)
 from models.memory_promotion import MemoryGraphAssertion
 from models.memory_evidence import SourceState
 from models.product_memory import (
@@ -56,7 +61,10 @@ class GraphEnrichmentPlan(BaseModel):
     schema_version: Literal["canonical_memory_graph_enrichment_plan.v1"] = GRAPH_ENRICHMENT_PLAN_VERSION
     subject_entity_id: str
     predicate: str
-    arguments: Dict[str, Any]
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    subject: GraphRelationEndpoint | None = None
+    object: GraphRelationEndpoint | None = None
+    qualifiers: Dict[str, Any] = Field(default_factory=dict)
     plan_hash: str = ""
 
     @field_validator("subject_entity_id")
@@ -78,14 +86,24 @@ class GraphEnrichmentPlan(BaseModel):
     def normalize_and_hash(self) -> "GraphEnrichmentPlan":
         try:
             validated = PromotionGraphPlan(
-                schema_version=PROMOTION_GRAPH_PLAN_VERSION,
+                schema_version=(
+                    PROMOTION_GRAPH_PLAN_V2_VERSION
+                    if self.subject is not None or self.object is not None
+                    else PROMOTION_GRAPH_PLAN_VERSION
+                ),
                 subject_entity_id=self.subject_entity_id,
                 predicate=self.predicate,
                 arguments=self.arguments,
+                subject=self.subject,
+                object=self.object,
+                qualifiers=self.qualifiers,
             )
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
         self.arguments = validated.arguments
+        self.subject = validated.subject
+        self.object = validated.object
+        self.qualifiers = validated.qualifiers
         # The canonical assertion builder consumes ``PromotionGraphPlan``;
         # share its hash namespace so the receipt, item promotion, and final
         # assertion all bind to one deterministic plan identity.
@@ -97,9 +115,17 @@ class GraphEnrichmentPlan(BaseModel):
 
     def promotion_plan(self) -> PromotionGraphPlan:
         return PromotionGraphPlan(
+            schema_version=(
+                PROMOTION_GRAPH_PLAN_V2_VERSION
+                if self.subject is not None or self.object is not None
+                else PROMOTION_GRAPH_PLAN_VERSION
+            ),
             subject_entity_id=self.subject_entity_id,
             predicate=self.predicate,
             arguments=self.arguments,
+            subject=self.subject,
+            object=self.object,
+            qualifiers=self.qualifiers,
         )
 
 
@@ -181,14 +207,18 @@ def _blocked(code: str, reason: str) -> GraphEnrichmentResult:
 def _coerce_plan(plan: GraphEnrichmentPlan | PromotionGraphPlan | Dict[str, Any]) -> GraphEnrichmentPlan:
     if isinstance(plan, GraphEnrichmentPlan):
         return plan
-    if isinstance(plan, PromotionGraphPlan):
-        return GraphEnrichmentPlan(
-            subject_entity_id=plan.subject_entity_id,
-            predicate=plan.predicate,
-            arguments=plan.arguments,
-        )
+    raw_plan = plan.model_dump(mode="python") if isinstance(plan, PromotionGraphPlan) else dict(plan)
     try:
-        return GraphEnrichmentPlan.model_validate(plan)
+        # Firestore stores PromotionGraphPlan directly, including its own
+        # discriminator.  GraphEnrichmentPlan has a different wrapper
+        # discriminator, so remove only the known source-plan version while
+        # retaining plan_hash for validation rather than silently rehashing it.
+        if raw_plan.get("schema_version") in {
+            PROMOTION_GRAPH_PLAN_VERSION,
+            PROMOTION_GRAPH_PLAN_V2_VERSION,
+        }:
+            raw_plan.pop("schema_version")
+        return GraphEnrichmentPlan.model_validate(raw_plan)
     except Exception as exc:
         raise GraphEnrichmentError("graph_plan_invalid", "graph enrichment plan is malformed") from exc
 
@@ -232,7 +262,16 @@ def _assertion_matches_current_item(
             return assertion.get(key, default)
         return getattr(assertion, key, default)
 
-    return (
+    def normalized_endpoint(value_: Any) -> Optional[Dict[str, Any]]:
+        try:
+            endpoint = (
+                value_ if isinstance(value_, GraphRelationEndpoint) else GraphRelationEndpoint.model_validate(value_)
+            )
+        except Exception:
+            return None
+        return endpoint.model_dump(mode="json")
+
+    base_matches = (
         value("status", "active") == "active"
         and value("uid") == item.uid
         and value("memory_id") == item.memory_id
@@ -244,6 +283,16 @@ def _assertion_matches_current_item(
         and value("subject_entity_id") == plan.subject_entity_id
         and value("predicate") == plan.predicate
         and value("arguments") == plan.arguments
+    )
+    if plan.subject is None and plan.object is None:
+        return base_matches
+    if plan.subject is None or plan.object is None:
+        return False
+    return (
+        base_matches
+        and normalized_endpoint(value("subject")) == plan.subject.model_dump(mode="json")
+        and normalized_endpoint(value("object")) == plan.object.model_dump(mode="json")
+        and value("qualifiers", {}) == plan.qualifiers
     )
 
 
@@ -258,6 +307,8 @@ def prepare_graph_enrichment(
     expected_evidence_ids: Optional[List[str]] = None,
     observed_head_commit_id: Optional[str] = None,
     existing_graph_assertion: Optional[MemoryGraphAssertion | Dict[str, Any]] = None,
+    allow_replan: bool = False,
+    planner_version: Optional[str] = None,
 ) -> GraphEnrichmentResult:
     """Validate a graph plan and build a canonical apply operation/payload.
 
@@ -307,7 +358,7 @@ def prepare_graph_enrichment(
         checked_plan = _coerce_plan(plan)
     except GraphEnrichmentError as exc:
         return _blocked(exc.code, exc.message)
-    if item.graph_ready:
+    if item.graph_ready and not allow_replan:
         try:
             current_plan = _coerce_plan((item.promotion or {}).get("graph_plan", {}))
         except GraphEnrichmentError:
@@ -317,8 +368,17 @@ def prepare_graph_enrichment(
         ):
             return _blocked("graph_assertion_invalid", "graph_ready item lacks an exact current graph assertion")
         return GraphEnrichmentResult(status=GraphEnrichmentStatus.already_enriched, plan=current_plan)
-    if not item.subject_entity_id or checked_plan.subject_entity_id != item.subject_entity_id:
-        return _blocked("subject_overwrite", "graph enrichment cannot overwrite or invent the existing subject")
+    if item.graph_ready and not (item.promotion or {}).get("graph_enrichment"):
+        return _blocked("graph_replan_not_permitted", "only a prior graph enrichment may be re-planned")
+    # Historical Long-term rows may predate graph classification entirely.  An
+    # enrichment may fill an absent classification, but it must never replace a
+    # field that the canonical item already established.
+    if not allow_replan and item.subject_entity_id and checked_plan.subject_entity_id != item.subject_entity_id:
+        return _blocked("subject_overwrite", "graph enrichment cannot overwrite the existing subject")
+    if not allow_replan and item.predicate and checked_plan.predicate != item.predicate:
+        return _blocked("predicate_overwrite", "graph enrichment cannot overwrite the existing predicate")
+    if not allow_replan and item.arguments and checked_plan.arguments != item.arguments:
+        return _blocked("arguments_overwrite", "graph enrichment cannot overwrite existing graph arguments")
     receipt = GraphEnrichmentReceipt(
         uid=item.uid,
         memory_id=item.memory_id,
@@ -335,8 +395,16 @@ def prepare_graph_enrichment(
             "graph_plan": checked_plan.promotion_plan().model_dump(mode="json"),
             "graph_enrichment_receipt": receipt.model_dump(mode="json"),
             "graph_enrichment": True,
+            "graph_enrichment_planner_version": planner_version,
         }
     )
+    existing_item = item.model_dump(mode="python")
+    if item.graph_ready and allow_replan and checked_plan.subject is not None and checked_plan.object is not None:
+        # The apply contract treats an empty arguments dict as an omitted
+        # update.  For a v2 relation, qualifiers are the canonical replacement
+        # for legacy arguments, so make that replacement explicit in the
+        # authoritative snapshot used by the existing apply path.
+        existing_item["arguments"] = checked_plan.arguments
     patch_payload: Dict[str, Any] = {
         "patch_id": f"patch_{receipt.receipt_id}",
         "packet_id": f"graph_enrichment:{item.memory_id}:{item.item_revision}",
@@ -350,7 +418,7 @@ def prepare_graph_enrichment(
         "subject_entity_id": checked_plan.subject_entity_id,
         "predicate": checked_plan.predicate,
         "arguments": checked_plan.arguments,
-        "existing_item": item.model_dump(mode="python"),
+        "existing_item": existing_item,
         "expected_item_revision": item.item_revision,
         "expected_content_hash": item.content_hash,
         "promotion_audit": promotion,

@@ -776,11 +776,12 @@ def apply_long_term_patch_transaction(
                 item_revision=existing_item.item_revision,
                 promotion=existing_item.promotion or {},
             )
+            replan = existing_item.graph_ready and bool((existing_item.promotion or {}).get("graph_enrichment"))
             if not (
                 existing_item.status == MemoryItemStatus.active
                 and existing_item.tier == MemoryTier.long_term
                 and existing_item.processing_state == ProcessingState.processed
-                and not existing_item.graph_ready
+                and (not existing_item.graph_ready or replan)
                 and graph_plan is not None
                 and _valid_graph_enrichment_receipt(
                     raw_receipt,
@@ -801,11 +802,17 @@ def apply_long_term_patch_transaction(
                 and promotion_metadata is None
                 and patch.result_status == LifecycleState.active
                 and not patch.supersedes
-                and graph_plan.subject_entity_id == existing_item.subject_entity_id
                 and patch.subject_entity_id == graph_plan.subject_entity_id
-                and patch.predicate == graph_plan.predicate == existing_item.predicate
+                and (
+                    replan
+                    or not existing_item.subject_entity_id
+                    or graph_plan.subject_entity_id == existing_item.subject_entity_id
+                )
+                and patch.predicate == graph_plan.predicate
+                and (replan or not existing_item.predicate or graph_plan.predicate == existing_item.predicate)
                 and bool(_GRAPH_PREDICATE_RE.fullmatch(graph_plan.predicate))
-                and patch.arguments == graph_plan.arguments == existing_item.arguments
+                and patch.arguments == graph_plan.arguments
+                and (replan or not existing_item.arguments or graph_plan.arguments == existing_item.arguments)
                 and sorted(record.evidence_id for record in evidence)
                 == sorted(record.evidence_id for record in existing_item.evidence)
             ):

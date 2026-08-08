@@ -750,11 +750,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String renewsOn(String date) {
-    return 'El vostre pla es renova el $date.';
-  }
-
-  @override
   String get basicPlan => 'Pla gratuït';
 
   @override
@@ -2140,16 +2135,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get editMemory => '✏️ Edita memòria';
 
   @override
-  String get pinAsBaseline => 'Pin as Baseline';
+  String get pinAsBaseline => 'Fixa com a base';
 
   @override
-  String get unpinAsBaseline => 'Unpin from Baseline';
+  String get unpinAsBaseline => 'Deixa de fixar com a base';
 
   @override
-  String get baselineMemory => 'Baseline Memory';
+  String get baselineMemory => 'Memòria base';
 
   @override
-  String get alwaysInContext => 'Always in context';
+  String get alwaysInContext => 'Sempre en context';
 
   @override
   String get memoryContentHint => 'M\'agrada menjar gelat...';
@@ -9830,4 +9825,75 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncStatusTooOld => 'Massa antic per sincronitzar — Omi no el pot acceptar';
+
+  @override
+  String get planSheetChooseYourPlan => 'Tria el teu pla per desbloquejar Omi sense límits.';
+
+  @override
+  String get availableOnMacMobileWeb => 'Disponible a Mac, mòbil i web';
+
+  @override
+  String get popularBadge => 'POPULAR';
+
+  @override
+  String get worksOnDesktop => 'Funciona a l\'escriptori';
+
+  @override
+  String get noDesktopAccess => 'No funciona a l\'escriptori';
+
+  @override
+  String annualBillingSummary(int months, String price) {
+    return '$months mesos / $price';
+  }
+
+  @override
+  String monthsFreeBadge(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mesos gratis',
+      one: '1 mes gratis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get freemiumLimitsIntro =>
+      'Omi és gratuït, però la versió gratuïta té límits que afecten la teva experiència:';
+
+  @override
+  String get downgradeLimitDelayNotRealTime => 'Retard de 5-7 segons (no en temps real)';
+
+  @override
+  String get downgradeToFreemiumAction => 'Passa a la versió gratuïta';
+
+  @override
+  String get getFreeUnlimitedAccess => 'Aconsegueix accés il·limitat gratuït';
+
+  @override
+  String get shareDataForTraining => 'Comparteix dades per a l\'entrenament';
+
+  @override
+  String get yourRequestUnderReview => 'La teva sol·licitud està en revisió';
+
+  @override
+  String get accountCutoverUpdateRequiredTitle => 'Actualización requerida';
+
+  @override
+  String get accountCutoverUpdateRequiredMessage =>
+      'Instala la última app de Omi para continuar después de la migración de la cuenta.';
+
+  @override
+  String get accountCutoverMigrationInProgressTitle => 'Migración en curso';
+
+  @override
+  String get accountCutoverMigrationInProgressMessage =>
+      'Tu cuenta se está migrando. Las funciones del producto están en pausa hasta que termine la migración.';
+
+  @override
+  String get accountCutoverMigrationRollbackMessage =>
+      'Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.';
+
+  @override
+  String get accountCutoverOpenStore => 'Abrir tienda';
 }

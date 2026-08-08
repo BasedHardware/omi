@@ -1,36 +1,38 @@
 import { useRef, useState } from 'react'
-import { signInWithGoogle } from '../lib/firebase'
+import { Apple } from 'lucide-react'
+import type { SignInProvider } from '../../../shared/types'
+import { signInWithProvider } from '../lib/firebase'
 import omiLogo from '../assets/omilogo.png'
 import { BrandImage } from '../components/ui/BrandImage'
 
 export function Login(): React.JSX.Element {
-  // 'waiting' spans the whole system-browser round-trip (opening the browser →
+  // 'activeProvider' spans the whole system-browser round-trip (opening the browser →
   // loopback callback → token exchange). Success flips auth state globally via
   // onAuthStateChanged, which unmounts this page. (A still-pending attempt's
   // loopback listener in main self-closes on supersede or its 5-min timeout —
   // at most one listener ever exists, and it's gone after success.)
-  const [waiting, setWaiting] = useState(false)
+  const [activeProvider, setActiveProvider] = useState<SignInProvider | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Per-click generation: only the NEWEST attempt may write error/waiting
   // state, so a late failure from a superseded-era attempt (however phrased)
   // can never clobber the retry's pending UI.
   const attemptRef = useRef(0)
 
-  const onClick = async (): Promise<void> => {
+  const onClick = async (provider: SignInProvider): Promise<void> => {
     // No guard on `waiting`: clicking again supersedes the pending attempt in
     // main (closes the stale loopback listener) and starts a fresh one, so a
     // closed browser tab never blocks retrying for the full 5-min timeout.
     const attempt = ++attemptRef.current
     setError(null)
-    setWaiting(true)
+    setActiveProvider(provider)
     try {
-      await signInWithGoogle()
+      await signInWithProvider(provider)
       // Signed in — onAuthStateChanged takes over; nothing else to do here.
     } catch (e) {
       if (attempt !== attemptRef.current) return // a newer attempt owns the UI
       console.error('Sign-in failed:', e)
       setError((e as Error).message)
-      setWaiting(false)
+      setActiveProvider(null)
     }
   }
 
@@ -41,8 +43,17 @@ export function Login(): React.JSX.Element {
         <p className="mt-6 text-base leading-relaxed text-white/70">Sign in to continue</p>
         <div className="h-48" />
         <button
-          onClick={onClick}
-          className="flex items-center justify-center gap-3 rounded-xl bg-white px-8 py-3.5 font-medium text-black transition-opacity hover:opacity-90"
+          type="button"
+          onClick={() => void onClick('apple')}
+          className="flex items-center justify-center gap-3 rounded-xl bg-black px-8 py-3.5 font-medium text-white transition-opacity hover:opacity-90"
+        >
+          <Apple className="h-5 w-5" strokeWidth={2.5} aria-hidden="true" />
+          {activeProvider === 'apple' ? 'Try again' : 'Continue with Apple'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void onClick('google')}
+          className="mt-3 flex items-center justify-center gap-3 rounded-xl bg-white px-8 py-3.5 font-medium text-black transition-opacity hover:opacity-90"
         >
           <svg viewBox="0 0 48 48" className="h-5 w-5">
             <path
@@ -62,10 +73,10 @@ export function Login(): React.JSX.Element {
               d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 5.97C6.51 42.62 14.62 48 24 48z"
             />
           </svg>
-          {waiting ? 'Try again' : 'Sign in with Google'}
+          {activeProvider === 'google' ? 'Try again' : 'Continue with Google'}
         </button>
         <div className="mt-4 min-h-[3rem] text-center">
-          {waiting && !error && (
+          {activeProvider && !error && (
             <p className="animate-fade-in text-sm text-white/50">
               Waiting for your browser&hellip; finish signing in there, then come back.
             </p>

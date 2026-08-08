@@ -39,6 +39,18 @@ final class RestartRelaunchCommandTests: XCTestCase {
       "production relaunch must wait for the old process, then use plain open without automation args")
   }
 
+  func testQuietNonProdRelaunchStaysBackgroundedAndRepassesPresentation() {
+    let cmd = AppState.relaunchCommand(
+      appPath: "/Applications/omi-quiet.app",
+      isNonProduction: true,
+      automationPort: 47894,
+      terminatingProcessIdentifier: 1234,
+      automationUIPresentationMode: .quiet)
+
+    XCTAssertTrue(cmd.contains("open -n -g \"/Applications/omi-quiet.app\""))
+    XCTAssertTrue(cmd.contains("--automation-port=47894 --automation-ui=quiet"))
+  }
+
   func testDelayPrecedesOpenSoTheRestartResponseFlushes() {
     // restartApp() terminates the process; the relaunch must be scheduled after the
     // `sleep` so the in-flight HTTP/UI action completes before the app dies.
