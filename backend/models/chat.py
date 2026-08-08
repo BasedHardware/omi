@@ -228,11 +228,7 @@ class PageContext(BaseModel):
     end_date: Optional[str] = None
 
     @staticmethod
-    def _require_aware_iso(value: Optional[str], field_name: str) -> Optional[str]:
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            raise ValueError(f"{field_name} must be an ISO-8601 string with timezone offset")
+    def _require_aware_iso(value: str, field_name: str) -> Optional[str]:
         stripped = value.strip()
         if not stripped:
             return None
@@ -256,8 +252,9 @@ class PageContext(BaseModel):
         if value is None:
             return None
         if not isinstance(value, str):
-            raise ValueError(f"{info.field_name} must be an ISO-8601 string with timezone offset")
-        return cls._require_aware_iso(value, info.field_name)
+            raise ValueError(f"{info.field_name or 'date'} must be an ISO-8601 string with timezone offset")
+        field_name = info.field_name if isinstance(info.field_name, str) else "date"
+        return cls._require_aware_iso(value, field_name)
 
 
 class SendMessageRequest(BaseModel):
