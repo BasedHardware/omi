@@ -111,6 +111,116 @@ test("rule 16's escape hatch is honoured, and only with a reason", () => {
   );
 });
 
+/**
+ * RULE 17 — the wire-path fence. PROVISIONAL; see the fence's own header and
+ * `core-foundation/docs/agents/rule-17-wire-path-fence.md`.
+ *
+ * DOOR's doc recorded four red-proofs as applied BY HAND against the real
+ * files (retired door, unmounted door, stale row, hatch-is-load-bearing) but
+ * left none of them mechanised, and flagged the comment-stripping exemption
+ * as UNPROVEN: "No file in the tree today names a registered wire path only
+ * in prose while also constructing a server, so the exemption is currently
+ * unexercised." These tests are AUDIT-17's mechanised versions, run against a
+ * disposable fixture rather than the real doors, plus the previously-missing
+ * comment-only case.
+ */
+const wirePathFixture = join(platformRoot, "scripts", "wire-path-tripwire-fixture.ts");
+const withWirePathFixture = (source: string, assertion: (result: ReturnType<typeof runLint>) => void): void => {
+  try {
+    writeFileSync(wirePathFixture, source);
+    assertion(runLint());
+  } finally {
+    rmSync(wirePathFixture, { force: true });
+  }
+};
+
+test("rule 17 catches a hand-rolled door that serves the registered path without reaching the registered route", () => {
+  // Mechanised version of DOOR's red-proof 1/2 (the retired serve.ts shape):
+  // stands up a server, names the registered path in code, imports nothing
+  // that reaches apps/service/routes/memories.ts.
+  withWirePathFixture(
+    [
+      'Bun.serve({',
+      '  port: 9001,',
+      '  fetch(req) {',
+      '    const url = new URL(req.url);',
+      '    if (url.pathname === "/v1/memories") {',
+      '      return new Response(JSON.stringify({ id: "raw-fixture-row-id" }));',
+      '    }',
+      '    return new Response("not found", { status: 404 });',
+      '  },',
+      '});',
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      const output = `${result.stdout}${result.stderr}`;
+      expect(output).toContain("stands up an HTTP server and names the registered wire path");
+      expect(output).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17 does not fire when the file only names the path in a comment (comment-stripping exemption, mechanised)", () => {
+  // Resolves DOOR's flagged-unproven case. The registered path never appears
+  // in code -- only in a comment -- alongside an unrelated server and an
+  // unrelated served path. If comment-stripping were not applied, this
+  // fixture would false-positive (verified by hand during the audit by
+  // temporarily disabling withoutComments() for rule 17 and re-running: the
+  // identical fixture then failed lint, naming this file).
+  withWirePathFixture(
+    [
+      "// This server answers /v1/memories -- named only in this comment.",
+      "// Never in actual code below.",
+      'Bun.serve({',
+      '  port: 9002,',
+      '  fetch(req) {',
+      '    const url = new URL(req.url);',
+      '    if (url.pathname === "/totally-unrelated-endpoint") {',
+      '      return new Response("ok");',
+      '    }',
+      '    return new Response("not found", { status: 404 });',
+      '  },',
+      '});',
+    ].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17's escape hatch is honoured", () => {
+  withWirePathFixture(
+    [
+      "// wire-path-ok(fixture: proves the file-scoped hatch is read)",
+      'Bun.serve({',
+      '  port: 9003,',
+      '  fetch(req) {',
+      '    const url = new URL(req.url);',
+      '    if (url.pathname === "/v1/memories") {',
+      '      return new Response(JSON.stringify({ id: "raw-fixture-row-id" }));',
+      '    }',
+      '    return new Response("not found", { status: 404 });',
+      '  },',
+      '});',
+    ].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17 does not fire on a file that only CALLS the path (a client, not a door)", () => {
+  withWirePathFixture(
+    ['export async function callIt(baseUrl: string) {', '  return fetch(`${baseUrl}/v1/memories`);', "}"].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
 test("T0 adversarial tripwire catches each prohibited path fragment", () => {
   const fixture = join(platformRoot, "scripts", "import-graph-tripwire-fixture.json");
   const fragments = ["." + "private", "bench" + "mark"];
