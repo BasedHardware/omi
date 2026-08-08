@@ -37,7 +37,7 @@
 #   *** for) has been honored-then-ignored before.
 #
 # ---------------------------------------------------------------------------
-# USAGE
+# USAGE — FOR A HUMAN
 # ---------------------------------------------------------------------------
 #   integration/dev-stack.sh                 # everything: backend + surfaces + macOS + iOS
 #   integration/dev-stack.sh --only-backend  # just the new backend on 4851
@@ -46,6 +46,50 @@
 #   integration/dev-stack.sh --no-ios        # skip iOS (fastest full desktop loop)
 #   integration/dev-stack.sh --stop          # stop anything a previous run left behind
 #   integration/dev-stack.sh --help
+#
+# ---------------------------------------------------------------------------
+# USAGE — FOR AN AGENT
+# ---------------------------------------------------------------------------
+# The plain invocation above ends in `while true; do sleep 3600; done`. That is
+# right for a human with a terminal and fatal for an agent, which blocks forever
+# on a command that has already succeeded. These four flags exist so a program
+# can drive this script:
+#
+#   --up            boot, report, leave the stack RUNNING, write a pidfile, exit 0.
+#   --assert        evaluate the named assertions; exit nonzero if any fails.
+#                   Alone it boots, asserts, tears down, and exits with the verdict.
+#                   With --up it leaves the stack up. With --attach it boots nothing.
+#   --attach        assert against a stack that is ALREADY running. Boots nothing,
+#                   stops nothing. This is how you check a stack you did not start.
+#   --json          emit one machine-readable object for the run on stdout.
+#   --status        what is running RIGHT NOW (add --json). Boots nothing.
+#   --doctor        standalone recovery check: deps, dist freshness, ports, branch.
+#
+# HEADLESS IS THE DEFAULT. Any automated shape (--up, --assert, --json, --attach,
+# or any non-TTY caller) puts NO window on screen and never takes focus. Only a
+# person typing the plain command at a terminal, or an explicit --headed, gets a
+# window. This is a default and not a flag to remember, because an agent loop
+# that steals focus every 90 seconds is not one anybody will keep running.
+# Headless costs no evidence: bridge traffic, JS evaluation and
+# WKWebView.takeSnapshot all work with no window. Only window-composited
+# screenshots need --headed.
+#
+# The agent-shaped command is:
+#   integration/dev-stack.sh --no-ios --generation platform --up --assert --json
+#
+# EVERY EMISSION CARRIES RUN IDENTITY — a run id, a timestamp, the git SHA and
+# the working-tree hash of both repos. Without that, --json is just a stale log
+# that parses. A run that died early once left the PREVIOUS run's `status=PASS`
+# sitting in a file to be read as today's evidence; provenance is what makes that
+# impossible rather than merely unlikely.
+#
+# WHAT THE ASSERTIONS ARE, AND WHAT THEY ARE NOT. Each names its arbiter as
+# {claim, measuredBy, corroboratedBy}, and any claim resting on ONE measurement
+# is labelled as such in the output. They assert INVARIANTS — the selection that
+# was honored is the one that rendered; the traffic was served to THIS run; the
+# artifacts were built from THIS tree; the window is alive. They deliberately do
+# NOT assert rendered content or row counts: this system is still moving, and a
+# brittle assertion costs more than it catches.
 #
 # RESET THE SEED DATA
 #   curl 'http://127.0.0.1:4851/qa/reset?seed=12'          # 12 deterministic rows
@@ -119,6 +163,24 @@ GENERATION="${OMI_GENERATION:-legacy}"
 WANT_BACKEND=1 WANT_SURFACES=1 WANT_MACOS=1 WANT_IOS=1
 export TZ=UTC
 
+# ── Run identity ────────────────────────────────────────────────────────────
+# A per-run client id, threaded to the shells and sent as `x-omi-client-id` on
+# every bridge request.
+#
+# WHY: the launcher used to prove traffic with a `servedReads before -> after`
+# DELTA on a global counter. That delta is satisfied by ANY client — a stray
+# curl, the acceptance probe, another agent's stack on the same machine, the
+# user's own window left open from an hour ago. The claim we actually want to
+# make is "the app **I** launched read the backend N times", and a delta cannot
+# express it. A client id turns an aggregate into a JOINABLE KEY: the backend
+# reports servedReadsByClient[<this id>], and nobody else's traffic can satisfy
+# it. The global delta is still reported, because it is useful context — it is
+# just no longer allowed to be the evidence.
+RUN_ID="run-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+RUN_CLIENT_ID="$RUN_ID"
+RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+export OMI_RUN_CLIENT_ID="$RUN_CLIENT_ID"
+
 # ── Output helpers ──────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then B=$'\033[1m'; R=$'\033[31m'; G=$'\033[32m'; Y=$'\033[33m'; C=$'\033[36m'; Z=$'\033[0m'
 else B=""; R=""; G=""; Y=""; C=""; Z=""; fi
@@ -130,11 +192,51 @@ die()  { printf '%s\n' "${R}✗ $*${Z}" >&2; exit 1; }
 fixit() { printf '%s\n' "${R}✗ $1${Z}" >&2; shift; for l in "$@"; do printf '    %s\n' "$l" >&2; done; exit 1; }
 
 # ── Args ────────────────────────────────────────────────────────────────────
-STOP_ONLY=0
+STOP_ONLY=0 STATUS_ONLY=0 DOCTOR_ONLY=0
+MODE_UP=0 MODE_ASSERT=0 MODE_ATTACH=0 EMIT_JSON=0
+# ── --red-proof: deliberately break this run, and require --assert to notice ──
+# core/AGENTS.md rule 14: an invariant guard carries the mutation that makes it
+# fail, and the reviewer APPLIES that mutation before accepting the guard.
+#
+# These live here as a first-class flag rather than as something a person once
+# did by hand, because the seventh failure of the night was inside the
+# acceptance path itself. An assertion path never seen red is exactly the
+# failure class this program exists to eliminate, and "I checked it once" is not
+# a property of the system — it is a property of the afternoon.
+#
+#   legacy-branch  drop `route=memories`, keeping `generation=platform`. The
+#                  REAL historical defect: nothing is rejected, the selection is
+#                  honored, route falls back to home, home takes the legacy
+#                  branch, and the app looks perfect on the wrong backend.
+#                  Must turn `no_generation_mismatch` red.
+#   stale-dist     doctor the surfaces dist stamp so it describes source that is
+#                  not checked out — a bundle built from another tree.
+#                  Must turn `stamps_agree` red.
+#   dead-backend   kill the backend after the apps have been driven.
+#                  Must turn `backend_reachable` red.
+#
+# Runner: integration/red-proof-assert.sh (runs all three, requires each red).
+RED_PROOF=""
+# ── Headless by default ─────────────────────────────────────────────────────
+# Resolved after arg parsing. HEADED=-1 means "nobody said", which becomes
+# headed ONLY for a plain interactive human invocation. Every automated shape —
+# --up, --assert, --json, --attach, or any non-TTY caller — is headless, and it
+# is the DEFAULT rather than a flag someone has to remember, because a loop that
+# steals focus every 90 seconds is not a loop anyone will run.
+HEADED=-1 HEADED_EXPLICIT=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --help|-h) sed -n '2,90p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) sed -n '2,130p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --stop) STOP_ONLY=1; shift ;;
+    --status) STATUS_ONLY=1; shift ;;
+    --doctor) DOCTOR_ONLY=1; shift ;;
+    --up) MODE_UP=1; shift ;;
+    --assert) MODE_ASSERT=1; shift ;;
+    --attach) MODE_ATTACH=1; shift ;;
+    --json) EMIT_JSON=1; shift ;;
+    --red-proof) RED_PROOF="${2:?--red-proof needs legacy-branch|stale-dist|dead-backend}"; shift 2 ;;
+    --headed) HEADED=1; shift ;;
+    --headless) HEADED=0; HEADED_EXPLICIT=1; shift ;;
     --only-backend) WANT_SURFACES=0; WANT_MACOS=0; WANT_IOS=0; shift ;;
     --only-macos)   WANT_IOS=0; shift ;;
     --only-ios)     WANT_MACOS=0; shift ;;
@@ -145,7 +247,84 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# In attach mode nothing is booted and nothing is torn down. Say it once here
+# rather than guarding every site: this script must be safe to run against a
+# stack somebody else owns, including the user's own live one.
+if [[ $MODE_ATTACH -eq 1 ]]; then WANT_BACKEND=0; WANT_SURFACES=0; fi
+
+# Resolve the display mode. An automated caller never gets a window unless it
+# asked for one in so many words.
+if [[ $HEADED -eq -1 ]]; then
+  if [[ $MODE_UP -eq 1 || $MODE_ASSERT -eq 1 || $MODE_ATTACH -eq 1 || $EMIT_JSON -eq 1 || ! -t 1 ]]; then
+    HEADED=0
+  else
+    HEADED=1   # a person, at a terminal, who typed the plain command
+  fi
+fi
+
 mkdir -p "$RUNDIR" "$LOGDIR"
+STATEFILE="$RUNDIR/state.json"
+FACTSFILE="$RUNDIR/facts.$RUN_ID.json"
+REPORTFILE="$RUNDIR/last-run.json"
+
+# ── doctor ──────────────────────────────────────────────────────────────────
+# Deliberately standalone and disposable: it boots nothing, needs no state from
+# a previous run, and answers the question an agent actually has when something
+# is wrong — "what about my machine is not ready?" — with an action per finding.
+# Worth more than another test lane, because the failures it catches (missing
+# node_modules, a stale dist, the wrong branch) are the ones that make every
+# other lane lie.
+if [[ $DOCTOR_ONLY -eq 1 ]]; then
+  exec "$HERE/doctor.sh"
+fi
+
+# ── --status ────────────────────────────────────────────────────────────────
+# State DISCOVERY, not state recall. Every field is probed live; the pidfile is
+# used only to name things, never to claim they are running. A status command
+# that reports its own bookkeeping is how "window should be open now" got
+# printed for a dead process.
+if [[ $STATUS_ONLY -eq 1 ]]; then
+  port_holder() { lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1; }
+  b_pid="$(port_holder "$BACKEND_PORT")"; s_pid="$(port_holder "$SURFACES_PORT")"
+  l_pid="$(port_holder "$LEGACY_PORT")"
+  m_port=""; m_pid=""
+  for p in 5290 5291 5292 5293 5294 5295 5296 5297 5298 5299; do
+    h="$(port_holder "$p")"
+    if [[ -n "$h" ]] && [[ "$(ps -o comm= -p "$h" 2>/dev/null)" == *omi-* ]]; then m_port="$p"; m_pid="$h"; break; fi
+  done
+  b_stats="$(curl -fsS --max-time 2 "$BACKEND_URL/qa/stats" 2>/dev/null || echo '')"
+  if [[ $EMIT_JSON -eq 1 ]]; then
+    RUN_ID="$RUN_ID" BACKEND_URL="$BACKEND_URL" B_PID="$b_pid" S_PID="$s_pid" L_PID="$l_pid" \
+    M_PID="$m_pid" M_PORT="$m_port" B_STATS="$b_stats" REPORTFILE="$REPORTFILE" \
+    node -e '
+      const e=process.env, fs=require("fs");
+      const j=(s)=>{try{return JSON.parse(s)}catch{return null}};
+      let last=null; try{last=JSON.parse(fs.readFileSync(e.REPORTFILE,"utf8"))}catch{}
+      process.stdout.write(JSON.stringify({
+        schema:1, queriedAt:new Date().toISOString(), queryRunId:e.RUN_ID,
+        backend:{url:e.BACKEND_URL,listening:e.B_PID!=="",pid:e.B_PID||null,stats:j(e.B_STATS)},
+        surfaces:{port:4852,listening:e.S_PID!=="",pid:e.S_PID||null},
+        legacy:{port:4747,listening:e.L_PID!=="",pid:e.L_PID||null},
+        macos:{port:e.M_PORT?Number(e.M_PORT):null,running:e.M_PID!=="",pid:e.M_PID||null},
+        // The previous run, clearly labelled as the PREVIOUS run. Reported
+        // because it is useful, quarantined because it is not evidence about
+        // NOW: reading a stale PASS as todays result is the exact failure
+        // this whole program exists to eliminate. (No apostrophe in that
+        // sentence on purpose - this block is inside a single-quoted bash
+        // string, and one apostrophe ends it. Ask how I know.)
+        lastRun:last?{id:last.run?.id,finishedAt:last.run?.finishedAt,result:last.result,
+                      note:"evidence about THAT run, not about the stack right now"}:null,
+      },null,2)+"\n");'
+  else
+    printf '%s\n' "${B}stack status${Z}  (probed live, $(date -u +%H:%M:%SZ))"
+    printf '  %-14s %s\n' "backend"  "$([[ -n $b_pid ]] && echo "up (pid $b_pid) $BACKEND_URL" || echo "down")"
+    printf '  %-14s %s\n' "surfaces" "$([[ -n $s_pid ]] && echo "up (pid $s_pid) :$SURFACES_PORT" || echo "down")"
+    printf '  %-14s %s\n' "legacy"   "$([[ -n $l_pid ]] && echo "up (pid $l_pid) :$LEGACY_PORT" || echo "down")"
+    printf '  %-14s %s\n' "macOS app" "$([[ -n $m_pid ]] && echo "up (pid $m_pid) :$m_port" || echo "down")"
+    [[ -n "$b_stats" ]] && printf '  %-14s %s\n' "counters" "$b_stats"
+  fi
+  trap - EXIT; exit 0
+fi
 
 # ── Child tracking + cleanup ────────────────────────────────────────────────
 # Idempotency requirement: Ctrl-C and re-run must never leave an orphan holding
@@ -195,8 +374,17 @@ free_port() {
 }
 
 CLEANED=0
+# --up and --attach both mean "this process exits but the stack does not". The
+# EXIT trap must honor that, or `--up` would kill everything it just booted one
+# microsecond after reporting it healthy — a self-inflicted instance of the
+# pkill incident that made "window should be open now" a lie.
+LEAVE_RUNNING=0
 cleanup() {
   [[ $CLEANED -eq 1 ]] && return; CLEANED=1
+  if [[ $LEAVE_RUNNING -eq 1 ]]; then
+    say "leaving the stack running (pidfile: $PIDFILE). Stop it with: integration/dev-stack.sh --stop"
+    return
+  fi
   echo; say "shutting down..."
   stop_tracked
   ok "stack stopped. Logs kept in $LOGDIR"
@@ -251,14 +439,27 @@ if [[ $WANT_IOS -eq 1 ]]; then
 fi
 ok "tools present"
 
-# Clear our own leftovers before binding anything.
-stop_tracked
-free_port "$BACKEND_PORT" "integration/server/serve.ts"
-free_port "$SURFACES_PORT" "dev-stack-static"
+# Clear our own leftovers before binding anything — but NEVER in attach mode,
+# where the entire contract is "measure what is already there". An attach that
+# sweeps ports first would destroy the thing it was asked to inspect and then
+# report on the wreckage.
+if [[ $MODE_ATTACH -eq 0 ]]; then
+  stop_tracked
+  free_port "$BACKEND_PORT" "integration/server/serve.ts"
+  free_port "$SURFACES_PORT" "dev-stack-static"
+fi
 
 # ── 1. New backend (4851) ───────────────────────────────────────────────────
 BACKEND_OWNED=0
-if [[ "$BACKEND_URL" != "http://127.0.0.1:$BACKEND_PORT" ]]; then
+if [[ $MODE_ATTACH -eq 1 ]]; then
+  say "${B}backend${Z} — attach mode: measuring the stack that is already up at $BACKEND_URL"
+  curl -fsS --max-time 3 "$BACKEND_URL/qa/stats" >/dev/null 2>&1 || fixit \
+    "attach mode, but nothing is answering at $BACKEND_URL/qa/stats" \
+    "Attach asserts against a RUNNING stack; it boots nothing on purpose." \
+    "Bring one up first:  integration/dev-stack.sh --no-ios --generation platform --up" \
+    "Or see what is running:  integration/dev-stack.sh --status"
+  ok "attached to $BACKEND_URL"
+elif [[ "$BACKEND_URL" != "http://127.0.0.1:$BACKEND_PORT" ]]; then
   say "${B}backend${Z} — using external $BACKEND_URL (not booting our own)"
   curl -fsS --max-time 3 "$BACKEND_URL/health" >/dev/null 2>&1 || fixit \
     "no backend answering at $BACKEND_URL/health" \
@@ -303,8 +504,16 @@ if [[ $BACKEND_OWNED -eq 1 ]]; then
   fi
 fi
 
-[[ $WANT_SURFACES -eq 0 && $WANT_MACOS -eq 0 && $WANT_IOS -eq 0 ]] && {
-  echo; ok "backend only. Ctrl-C to stop."; while true; do sleep 3600; done; }
+if [[ $WANT_SURFACES -eq 0 && $WANT_MACOS -eq 0 && $WANT_IOS -eq 0 ]]; then
+  echo
+  if [[ $MODE_UP -eq 1 ]]; then
+    LEAVE_RUNNING=1
+    ok "backend only, left running. Stop it with: integration/dev-stack.sh --stop"
+    exit 0
+  fi
+  ok "backend only. Ctrl-C to stop."
+  while true; do sleep 3600; done
+fi
 
 # ── 2. Legacy wire (4747) — what the apps actually consume today ────────────
 if [[ -f "$LEGACY_FAKE" ]]; then
@@ -324,6 +533,12 @@ else
 fi
 
 # ── 3. Surfaces ─────────────────────────────────────────────────────────────
+if [[ $MODE_ATTACH -eq 1 ]]; then
+  say "${B}surfaces${Z} — attach mode: not building, not serving"
+  curl -fsS --max-time 2 "http://127.0.0.1:$SURFACES_PORT/" >/dev/null 2>&1 \
+    && ok "surfaces already served at http://127.0.0.1:$SURFACES_PORT/" \
+    || warn "nothing serving surfaces on $SURFACES_PORT (attach mode does not start one)"
+else
 say "${B}surfaces${Z} — building @omi-core/surfaces"
 ( cd "$CORE_REPO/core" && pnpm install --config.confirmModulesPurge=false --silent && pnpm --filter @omi-core/surfaces build ) \
   > "$LOGDIR/surfaces-build.log" 2>&1 \
@@ -349,7 +564,21 @@ track surfaces $!
 for i in $(seq 1 20); do curl -fsS --max-time 1 "http://127.0.0.1:$SURFACES_PORT/" >/dev/null 2>&1 && break; sleep 0.25; done
 curl -fsS --max-time 2 "http://127.0.0.1:$SURFACES_PORT/" >/dev/null 2>&1 \
   || fixit "surfaces server never came up on $SURFACES_PORT" "Log: $LOGDIR/surfaces-serve.log"
-ok "surfaces at http://127.0.0.1:$SURFACES_PORT/"
+if [[ "$RED_PROOF" == "stale-dist" ]]; then
+  # Doctor the EVIDENCE CHANNEL, not the bundle: a well-formed stamp describing
+  # source that is not checked out is exactly what a dist built an hour and three
+  # commits ago looks like. Rebuilding from an older commit would prove the same
+  # thing far more slowly.
+  warn "RED-PROOF stale-dist: rewriting the surfaces build stamp to describe a tree that is not checked out."
+  node -e '
+    const fs=require("fs"), p=process.argv[1];
+    const s=JSON.parse(fs.readFileSync(p,"utf8"));
+    s.treeHash="0".repeat(40);
+    fs.writeFileSync(p, JSON.stringify(s,null,2)+"\n");
+  ' "$SURFACES/dist/omi-build-stamp.json"
+fi
+ok "surfaces at http://127.0.0.1:$SURFACES_PORT/ — $(node "$HERE/lib/provenance.mjs" --repo core-foundation --artifact surfaces-dist 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);console.log(`built from ${j.commit.slice(0,12)}/tree:${j.treeHash.slice(0,12)}${j.dirty?"+dirty":""}`)}catch{console.log("provenance unavailable")}})')"
+fi
 
 # ── 4. Shell configuration, shared by BOTH apps ─────────────────────────────
 STATS_BEFORE="$(curl -s "$BACKEND_URL/qa/stats" 2>/dev/null || echo '{}')"
@@ -378,7 +607,30 @@ else
 fi
 
 # ── 4a. macOS app ───────────────────────────────────────────────────────────
-if [[ $WANT_MACOS -eq 1 ]]; then
+MACOS_PID_ALIVE=0 MACOS_SURFACE_ANSWERS=0 SHELL_PID="" SHELL_PORT="" ACCEPT_RUNLOG=""
+if [[ $WANT_MACOS -eq 1 && $MODE_ATTACH -eq 1 ]]; then
+  # Attach mode cannot re-drive the app — relaunching it would be booting, which
+  # attach exists not to do. So it reports on the run that DID launch it, and
+  # says so. The alternative (silently reusing this run's fresh client id against
+  # an app that never saw it) would manufacture a zero and call the stack broken.
+  say "${B}macOS app${Z} — attach mode: reading the run that launched it"
+  if [[ -f "$STATEFILE" ]]; then
+    RUN_CLIENT_ID="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).clientId||"")}catch{console.log("")}' "$STATEFILE")"
+    SHELL_PORT="$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).macosPort||"")}catch{console.log("")}' "$STATEFILE")"
+    # The PRESERVED copy, not the live run log. The live one belongs to the
+    # windowed app and was truncated at its launch; the acceptance evidence for
+    # the run that booted this stack is the copy the booting run saved.
+    ACCEPT_RUNLOG="$LOGDIR/macos-acceptance.runlog"
+    [[ -n "$SHELL_PORT" ]] && curl --fail --silent --max-time 2 "http://127.0.0.1:$SHELL_PORT/" >/dev/null 2>&1 && MACOS_SURFACE_ANSWERS=1
+    SHELL_PID="$(lsof -nP -tiTCP:"${SHELL_PORT:-0}" -sTCP:LISTEN 2>/dev/null | head -1)"
+    [[ -n "$SHELL_PID" ]] && MACOS_PID_ALIVE=1
+    ok "attached to run ${RUN_CLIENT_ID:-unknown} (macOS on port ${SHELL_PORT:-unknown})"
+  else
+    warn "no state file at $STATEFILE — cannot join traffic to the run that launched this stack."
+    warn "   Per-client read counting will be reported as UNJOINABLE rather than as zero."
+    RUN_CLIENT_ID=""
+  fi
+elif [[ $WANT_MACOS -eq 1 ]]; then
   # The shell's loopback port defaults to 5290 and is NOT in the port registry,
   # so two people running a macOS shell collide and the second one dies with a
   # bare "port remained busy". Pick a free port instead, and say which.
@@ -404,13 +656,40 @@ if [[ $WANT_MACOS -eq 1 ]]; then
   # indistinguishable from offline. We propagate the CHILD's exit status —
   # waiting only for HTTP readiness would report success while this failed.
   ACCEPT_PORT=$((SHELL_PORT + 3))
+  # The acceptance probe is headless ALWAYS, even in a headed run. It is
+  # automation by definition, it is never the window a human QAs, and it used to
+  # put a second window on screen and steal focus from the first.
   say "${B}macOS bridge acceptance${Z} — headless run on $ACCEPT_PORT, asserts nonzero served traffic"
+  # OMI_PROBE_JS reads __OMI_RUNTIME_STATE__ out of the LIVE webview and prints it
+  # on a PROBE_JS line. This is the independent measurement of what the app
+  # actually did: `rendered` is what was constructed, `selected` is only what was
+  # asked for, and the night's headline defect was a selection that was honored
+  # and then never used. Reusing the shell's existing probe seam rather than
+  # adding a channel — a second channel is a second thing that silently stops
+  # working, and nobody notices because its absence looks like a pass.
   ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
       OMI_APP_NAME="omi-on-integration" OMI_SURFACES_DIST="$SURFACES/dist" \
-      OMI_SURFACE_PORT="$ACCEPT_PORT" OMI_ACCEPTANCE_EXIT=1 TZ=UTC \
+      OMI_SURFACE_PORT="$ACCEPT_PORT" OMI_ACCEPTANCE_EXIT=1 TZ=UTC OMI_HEADED=0 \
+      OMI_PROBE_JS='JSON.stringify(globalThis.__OMI_RUNTIME_STATE__ ?? null)' \
+      OMI_PROBE_DELAY="${OMI_PROBE_DELAY:-2}" OMI_PROBE_SETTLE="${OMI_PROBE_SETTLE:-1}" \
       ./scripts/run-shell.sh ) > "$LOGDIR/macos-acceptance.log" 2>&1
   accept_status=$?
-  accept_line="$(grep -o 'ACCEPTANCE .*' "$MACOS_SHELL/.build/on-integration/omi-on-integration.run.log" 2>/dev/null | tail -1)"
+  # PRESERVE THE ACCEPTANCE LOG IMMEDIATELY, under a name only this run uses.
+  #
+  # The windowed launch below runs the same app from the same build dir, and
+  # run-shell.sh truncates `<app_name>.run.log` in its preamble (correctly — a
+  # stale log read as today's evidence is what it was fixed for). So the
+  # acceptance probe's ACCEPTANCE and PROBE_JS lines are DESTROYED by the launch
+  # that follows, and the report read an empty file.
+  #
+  # This was caught by the assertions not firing, not by reading the code: the
+  # first green L3 reported PASS with `no_generation_mismatch` silently absent
+  # and the shell's success count shown as "n/a". A run whose evidence is deleted
+  # by the next step of the same run is precisely "the artifact measured is not
+  # the artifact produced" — inside the harness built to catch it.
+  ACCEPT_RUNLOG="$LOGDIR/macos-acceptance.runlog"
+  cp "$MACOS_SHELL/.build/on-integration/omi-on-integration.run.log" "$ACCEPT_RUNLOG" 2>/dev/null || true
+  accept_line="$(grep -o 'ACCEPTANCE .*' "$ACCEPT_RUNLOG" 2>/dev/null | tail -1)"
   if [[ $accept_status -eq 0 && "$accept_line" == *"status=PASS"* ]]; then
     ok "bridge acceptance reported PASS — $accept_line"
     # NEVER trust this line on its own. A shell that counts dispatches reports
@@ -428,10 +707,15 @@ if [[ $WANT_MACOS -eq 1 ]]; then
 
   # THE WINDOW YOU ACTUALLY QA WITH. Launched last so nothing that follows can
   # rebuild or kill it.
-  say "${B}macOS app${Z} — building and launching on $SHELL_PORT (bundles the dist you just built)"
+  if [[ $HEADED -eq 1 ]]; then
+    say "${B}macOS app${Z} — building and launching a VISIBLE window on $SHELL_PORT (bundles the dist you just built)"
+  else
+    say "${B}macOS app${Z} — building and launching HEADLESS on $SHELL_PORT (no window; --headed to show one)"
+  fi
   ( cd "$MACOS_SHELL" && OMI_BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
       OMI_APP_NAME="omi-on-integration" OMI_SURFACES_DIST="$SURFACES/dist" \
-      OMI_SURFACE_PORT="$SHELL_PORT" TZ=UTC ./scripts/run-shell.sh ) > "$LOGDIR/macos.log" 2>&1
+      OMI_SURFACE_PORT="$SHELL_PORT" TZ=UTC OMI_HEADED="$HEADED" \
+      ./scripts/run-shell.sh ) > "$LOGDIR/macos.log" 2>&1
   shell_launch_status=$?
   # "Launched successfully" and "there is a window in front of you" are different
   # claims, and this script used to print the second while only checking the
@@ -451,8 +735,16 @@ if [[ $WANT_MACOS -eq 1 ]]; then
     echo "    log: $LOGDIR/macos.log"
   else
     track macos "$SHELL_PID"
+    MACOS_PID_ALIVE=1 MACOS_SURFACE_ANSWERS=1
     ok "macOS app running — pid $SHELL_PID, surface answering at http://127.0.0.1:$SHELL_PORT/"
-    echo "    the window is open now (verified: process alive + surface responded)"
+    if [[ $HEADED -eq 1 ]]; then
+      echo "    the window is open now (verified: process alive + surface responded)"
+    else
+      # Say what is true. "Running headless" and "there is a window" are exactly
+      # the pair of claims this script has already been caught conflating once.
+      echo "    running headless — there is NO window on screen (this is the default)"
+      echo "    to look at it:  integration/dev-stack.sh --no-ios --generation platform --headed"
+    fi
   fi
 fi
 
@@ -535,4 +827,106 @@ printf '  %s\n' "logs:      $LOGDIR"
 printf '  %s\n' "stop:      Ctrl-C  (or: integration/dev-stack.sh --stop)"
 echo
 
+if [[ "$RED_PROOF" == "dead-backend" ]]; then
+  warn "RED-PROOF dead-backend: killing the backend now that the apps have been driven."
+  free_port "$BACKEND_PORT" "integration/server/serve.ts"
+  STATS_AFTER="$(curl -s --max-time 2 "$BACKEND_URL/qa/stats" 2>/dev/null || echo '')"
+fi
+
+# ── 7. The run report ───────────────────────────────────────────────────────
+# Everything above prints FACTS as it goes. This step turns them into a single
+# object with run identity attached, evaluates the named assertions, and is the
+# only thing allowed to say "pass".
+#
+# The facts are written to a file and handed to node rather than assembled by
+# string-concatenation in bash, because the one thing this program cannot afford
+# is a report that is subtly about a different run than the one that produced it.
+# A file named for THIS run id cannot be confused with the last one.
+[[ -n "$SHELL_PID" ]] && kill -0 "$SHELL_PID" 2>/dev/null && MACOS_PID_ALIVE=1 || true
+
+MACOS_FACTS=null
+# WINDOWED: in attach mode the window is still a fair question — we just did not
+# open it. Ask it whenever we know which port it should be on; staying silent
+# would be another assertion that quietly opts out instead of reporting that it
+# cannot measure.
+#
+# This comment lives HERE, above the command, and not inside the backslash
+# continuation below, because a `#` line in the middle of a continuation chain
+# silently swallows the rest of the command: bash joined the continuation to the
+# comment, the env assignments after it never applied, and `node` ran without
+# ACCEPT_RUNLOG or SHELL_PID. Two assertions went red with "pid unknown" and "no
+# PROBE_JS line" while the stack was perfectly healthy — a real bug found by the
+# assertions rather than by reading the diff, which is the entire point.
+WINDOWED_FACT="$([[ $MODE_ATTACH -eq 1 && -z "${SHELL_PORT:-}" ]] && echo 0 || echo 1)"
+if [[ $WANT_MACOS -eq 1 ]]; then
+  MACOS_FACTS="$(ACCEPT_RUNLOG="${ACCEPT_RUNLOG:-}" SHELL_PORT="${SHELL_PORT:-}" SHELL_PID="${SHELL_PID:-}" \
+    PID_ALIVE="$MACOS_PID_ALIVE" SURFACE_ANSWERS="$MACOS_SURFACE_ANSWERS" \
+    LAUNCH_STATUS="${shell_launch_status:-}" BUILD_DIR="$MACOS_SHELL/.build/on-integration" \
+    WINDOWED="$WINDOWED_FACT" \
+    node -e '
+      const fs=require("fs"), e=process.env;
+      let log=""; try{ log=fs.readFileSync(e.ACCEPT_RUNLOG,"utf8") }catch{}
+      process.stdout.write(JSON.stringify({
+        port:e.SHELL_PORT?Number(e.SHELL_PORT):null, pid:e.SHELL_PID||null,
+        windowed:e.WINDOWED==="1", pidAlive:e.PID_ALIVE==="1", surfaceAnswers:e.SURFACE_ANSWERS==="1",
+        launchStatus:e.LAUNCH_STATUS===""?null:Number(e.LAUNCH_STATUS),
+        acceptanceLog:log, buildDir:e.BUILD_DIR, appName:"omi-on-integration",
+      }));')"
+fi
+
+RUN_ID="$RUN_ID" STARTED_AT="$RUN_STARTED_AT" CLIENT_ID="$RUN_CLIENT_ID" GENERATION="$GENERATION" \
+BACKEND_URL="$BACKEND_URL" STATS_BEFORE="$STATS_BEFORE" STATS_AFTER="$STATS_AFTER" \
+MACOS_FACTS="$MACOS_FACTS" ATTACH="$MODE_ATTACH" WANT_SURFACES="$WANT_SURFACES" \
+MODE="$([[ $MODE_ATTACH -eq 1 ]] && echo attach || { [[ $MODE_UP -eq 1 ]] && echo up || echo run; })" \
+FACTSFILE="$FACTSFILE" \
+node -e '
+  const e=process.env;
+  require("fs").writeFileSync(e.FACTSFILE, JSON.stringify({
+    runId:e.RUN_ID, startedAt:e.STARTED_AT, clientId:e.CLIENT_ID||null, generation:e.GENERATION,
+    mode:e.MODE, attach:e.ATTACH==="1", backendUrl:e.BACKEND_URL,
+    wantSurfaces:e.WANT_SURFACES==="1",
+    backendStatsBefore:e.STATS_BEFORE, backendStatsAfter:e.STATS_AFTER,
+    macos:JSON.parse(e.MACOS_FACTS), ios:null,
+  }, null, 2));'
+
+# Remember what this run was, so a later --attach can join traffic to it by
+# client id instead of guessing.
+RUN_ID="$RUN_ID" CLIENT_ID="$RUN_CLIENT_ID" SHELL_PORT="${SHELL_PORT:-}" GENERATION="$GENERATION" \
+BACKEND_URL="$BACKEND_URL" STATEFILE="$STATEFILE" \
+node -e '
+  const e=process.env;
+  require("fs").writeFileSync(e.STATEFILE, JSON.stringify({
+    runId:e.RUN_ID, clientId:e.CLIENT_ID, macosPort:e.SHELL_PORT?Number(e.SHELL_PORT):null,
+    generation:e.GENERATION, backendUrl:e.BACKEND_URL, wroteAt:new Date().toISOString(),
+  }, null, 2));'
+
+# `--out` always writes the machine copy, whatever the human asked to see, so
+# `--status` can report the last run without re-deriving it — and so the human
+# and machine renderings are guaranteed to be the SAME object.
+report_args=(--facts "$FACTSFILE" --out "$REPORTFILE")
+[[ $EMIT_JSON   -eq 1 ]] && report_args+=(--json)
+[[ $MODE_ASSERT -eq 1 ]] && report_args+=(--assert)
+node "$HERE/lib/run-report.mjs" "${report_args[@]}"
+report_status=$?
+rm -f "$FACTSFILE"
+
+# ── 8. How this process ends ────────────────────────────────────────────────
+# Three different callers want three different endings, and conflating them is
+# what made this script unusable from a program: a human wants the stack to stay
+# up until Ctrl-C, an agent wants it to stay up and the COMMAND to return, and CI
+# wants a verdict and nothing left behind.
+if [[ $MODE_ATTACH -eq 1 ]]; then
+  LEAVE_RUNNING=1                       # attach never owned anything
+  exit $report_status
+fi
+if [[ $MODE_UP -eq 1 ]]; then
+  LEAVE_RUNNING=1
+  echo
+  ok "stack left running. pidfile: $PIDFILE  |  status: integration/dev-stack.sh --status"
+  exit $report_status
+fi
+if [[ $MODE_ASSERT -eq 1 ]]; then
+  # --assert without --up is the CI shape: assert, tear down, exit the verdict.
+  exit $report_status
+fi
 while true; do sleep 3600; done
