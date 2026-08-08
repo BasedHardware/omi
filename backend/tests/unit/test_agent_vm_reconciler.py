@@ -413,6 +413,41 @@ async def test_state_disk_compute_mutations_use_named_devices_and_identity_fence
 
 
 @pytest.mark.asyncio
+async def test_gce_operation_wait_allows_normal_instance_delete_latency(monkeypatch):
+    calls = 0
+
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    class Response:
+        def __init__(self, status: str) -> None:
+            self.status = status
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, str]:
+            return {"status": self.status}
+
+    class Client(GceAgentVmClient):
+        async def request(self, method: str, url: str, body=None):
+            nonlocal calls
+            del method, url, body
+            calls += 1
+            return Response("DONE" if calls == 61 else "RUNNING")
+
+    monkeypatch.setattr(lifecycle.asyncio, "sleep", no_sleep)
+    await Client("project").wait_operation(
+        {
+            "name": "operation-id",
+            "selfLink": "https://compute.googleapis.com/compute/v1/projects/project/zones/us-central1-a/operations/operation-id",
+        }
+    )
+
+    assert calls == 61
+
+
+@pytest.mark.asyncio
 async def test_source_clone_uses_the_stopped_boot_disk_without_inheriting_a_smaller_size():
     captured: dict[str, object] = {}
 

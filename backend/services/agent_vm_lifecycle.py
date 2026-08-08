@@ -1543,7 +1543,7 @@ class GceAgentVmClient:
             url = (
                 f"https://compute.googleapis.com/compute/v1/projects/{self.project}/zones/{self.zone}/operations/{name}"
             )
-        for _ in range(60):
+        for _ in range(150):
             await asyncio.sleep(2)
             response = await self.request("GET", url)
             response.raise_for_status()
