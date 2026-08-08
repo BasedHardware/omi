@@ -999,12 +999,15 @@
             "state": "transcription_paused_capture_continuing",
             "reason": "free_tier_transcription_limit",
             "usage": {
-              "used": 3600,
-              "limit": 3600,
+              "amount": 3600,
               "unit": "seconds"
             },
-            "upgrade_target": "plans",
-            "capture_continues": true
+            "limit": {
+              "kind": "metered",
+              "amount": 3600,
+              "unit": "seconds"
+            },
+            "upgrade_target": "plans"
           },
           "expect": "event:entitlement"
         },

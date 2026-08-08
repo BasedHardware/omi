@@ -19,17 +19,23 @@ import {
   LISTEN_HANDSHAKE_PARAM_DEFAULTS,
   LISTEN_HANDSHAKES,
   LISTEN_HEARTBEAT_TEXT,
+  LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION,
   LISTEN_RESERVED_UNEMITTED_TYPES,
   LISTEN_SERVER_EVENT_TYPES,
   checkAll,
+  createListenCaptureStreamPort,
   decode,
   decodeValue,
   indexByWireType,
+  listenEntitlementPayloadFromEvent,
+  listenReservedCloseEntitlementExhaustionInfo,
   shouldRetryAfterClose,
   unwrapDecoded,
   Validator,
   type DecodedListenFrame,
+  type EntitlementEvent,
 } from "@omi-core/wire-listen";
+import { ManualEnv } from "../fakes.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CORE_ROOT = join(HERE, "../../../..");
@@ -335,28 +341,143 @@ test("INV-LISTEN-006: unknown frame kinds emit telemetry via degrade()", () => {
   assert.equal(sink.events[0]!.at, 42);
 });
 
-test("entitlement frame: capture_continues=true is not a close", () => {
-  const sink = new RecordingSink();
-  const result = decode(
-    sink,
-    1,
-    JSON.stringify({
-      type: "entitlement",
-      state: "transcription_paused_capture_continuing",
-      reason: "free_tier_transcription_limit",
-      usage: { used: 3600, limit: 3600, unit: "seconds" },
-      upgrade_target: "plans",
-      capture_continues: true,
-    }),
+test("entitlement frame: paused state is not a close; payload is closed+strict", () => {
+  const entitlementDef = schema.$defs["EntitlementEvent"];
+  assert.ok(entitlementDef);
+  const good: EntitlementEvent = {
+    type: "entitlement",
+    state: "transcription_paused_capture_continuing",
+    reason: "free_tier_transcription_limit",
+    usage: { amount: 3600, unit: "seconds" },
+    limit: { kind: "metered", amount: 3600, unit: "seconds" },
+    upgrade_target: "plans",
+  };
+  // red-proof: delete additionalProperties:false from EntitlementEvent in the
+  // schema — the extra-key assertion below then sees an empty errors array.
+  assert.deepEqual(validator.validate(entitlementDef, good, "good"), []);
+  assert.ok(
+    validator
+      .validate(entitlementDef, { ...good, capture_continues: true }, "extra")
+      .some((e) => e.includes("unexpected property")),
   );
+  assert.ok(validator.validate(entitlementDef, { ...good, state: "ok" }, "bad-state").length > 0);
+  assert.ok(
+    validator.validate(entitlementDef, { ...good, reason: "something free text" }, "bad-reason")
+      .length > 0,
+  );
+  assert.ok(
+    validator
+      .validate(entitlementDef, { ...good, limit: { kind: "metered", amount: -1, unit: "seconds" } }, "sentinel")
+      .length > 0,
+  );
+  assert.deepEqual(
+    validator.validate(entitlementDef, { ...good, limit: { kind: "unmetered" } }, "unmetered"),
+    [],
+  );
+  assert.deepEqual(
+    validator.validate(entitlementDef, { ...good, limit: { kind: "unknown" } }, "unknown"),
+    [],
+  );
+
+  const sink = new RecordingSink();
+  const result = decode(sink, 1, JSON.stringify(good));
   assert.ok(!isDegraded(result));
   const decoded = unwrapDecoded(result);
   assert.equal(decoded.kind, "event");
   if (decoded.kind === "event") {
     assert.equal(decoded.event.type, "entitlement");
-    assert.equal(decoded.event.capture_continues, true);
+    assert.equal(decoded.event.state, "transcription_paused_capture_continuing");
+    assert.deepEqual(listenEntitlementPayloadFromEvent(decoded.event), {
+      state: "transcription_paused_capture_continuing",
+      reason: "free_tier_transcription_limit",
+      usage: { amount: 3600, unit: "seconds" },
+      limit: { kind: "metered", amount: 3600, unit: "seconds" },
+      upgradeTarget: "plans",
+    });
   }
   assert.equal(LISTEN_CLOSE_CODES[4020]?.emittedByListen, false);
+});
+
+test("reserved entitlement exhaustion close code does not collide with existing codes", () => {
+  // red-proof: change LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION to 1008 —
+  // info.emittedByListen becomes true (1008 is an emitted policy_violation code).
+  const info = listenReservedCloseEntitlementExhaustionInfo();
+  assert.ok(info);
+  assert.equal(info.code, LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION);
+  assert.equal(info.emittedByListen, false);
+  assert.equal(info.name, "entitlement_upgrade_required");
+  assert.equal(info.clientShouldRetry, false);
+  assert.match(info.meaning, /RESERVED/);
+  const colliding = Object.values(LISTEN_CLOSE_CODES).filter(
+    (c) => c.code === LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION && c.name !== "entitlement_upgrade_required",
+  );
+  assert.deepEqual(colliding, []);
+  for (const code of [1000, 1001, 1003, 1008, 1011, 4001, 4004]) {
+    assert.notEqual(code, LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION);
+  }
+});
+
+test("listen capture stream port surfaces transcript, connection, and entitlement", () => {
+  const sink = new RecordingSink();
+  const env = new ManualEnv();
+  const { port, ingest } = createListenCaptureStreamPort({ sink, env, schema });
+
+  const transcripts: string[][] = [];
+  const connections: string[] = [];
+  const entitlements: Array<string | null> = [];
+  port.subscribeTranscriptSegments((segments) => {
+    transcripts.push(segments.map((s) => `${s.id}:${s.text}`));
+  });
+  port.observeConnectionState((state) => {
+    connections.push(state.status === "closed" ? `closed:${state.code}` : state.status);
+  });
+  port.observeEntitlementState((payload) => {
+    entitlements.push(payload ? `${payload.state}|${payload.upgradeTarget}|${payload.limit.kind}` : null);
+  });
+
+  assert.deepEqual(port.getConnectionState(), { status: "idle" });
+  assert.equal(port.getEntitlementState(), null);
+
+  ingest.acceptTextFrame(
+    JSON.stringify([
+      { id: "seg-port-1", text: "hello port", is_user: true, start: 0, end: 1 },
+    ]),
+  );
+  // red-proof: remove the setEntitlement call after validator.validate in
+  // createListenCaptureStreamPort — entitlements stays [null,null] and the
+  // upgradeTarget content assertion below fails.
+  ingest.acceptTextFrame(
+    JSON.stringify({
+      type: "entitlement",
+      state: "upgrade_required",
+      reason: "trial_expired",
+      usage: { amount: 120, unit: "seconds" },
+      limit: { kind: "unmetered" },
+      upgrade_target: "plans",
+    }),
+  );
+  // Malformed entitlement (extra key) must NOT update entitlement state.
+  ingest.acceptTextFrame(
+    JSON.stringify({
+      type: "entitlement",
+      state: "limit_reached",
+      reason: "free_tier_transcription_limit",
+      usage: { amount: 120, unit: "seconds" },
+      limit: { kind: "metered", amount: 120, unit: "seconds" },
+      upgrade_target: "plans",
+      extra: true,
+    }),
+  );
+  ingest.acceptClose(LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION);
+
+  assert.deepEqual(transcripts, [["seg-port-1:hello port"]]);
+  assert.deepEqual(connections, ["idle", "open", `closed:${LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION}`]);
+  assert.deepEqual(entitlements, [null, "upgrade_required|plans|unmetered"]);
+  assert.deepEqual(port.getEntitlementState()?.upgradeTarget, "plans");
+  assert.deepEqual(port.getConnectionState(), {
+    status: "closed",
+    code: LISTEN_RESERVED_CLOSE_ENTITLEMENT_EXHAUSTION,
+  });
 });
 
 for (const message of corpus.client_messages) {
