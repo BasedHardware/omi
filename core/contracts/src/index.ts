@@ -10,4 +10,5 @@ export * from "./bridge/stream.js";
 export * from "./domain/conversations.js";
 export * from "./domain/folders.js";
 export * from "./domain/memories.js";
+export * from "./domain/synthesized-memories.js";
 export * from "./domain/tasks.js";

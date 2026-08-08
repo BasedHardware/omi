@@ -3,9 +3,12 @@
 //
 // Rule 1: nothing under core/ may import from the old trees (app/, desktop/, web/,
 //         backend/) — by relative path, tsconfig path alias, or package name.
-// Rule 3: fetch/axios/WebSocket against backend hosts may only appear inside
-//         packages/adapters-legacy/ and shells/ (the sync layer speaks contracts,
-//         not endpoints).
+// Rule 3: fetch/axios/WebSocket against backend hosts may only appear inside an
+//         ADAPTER package (packages/adapters-legacy/, packages/adapters-platform/)
+//         or shells/ — the sync layer speaks contracts, not endpoints. The rule is
+//         about the LAYER, not about one package: adapters-platform speaks the new
+//         contracts-native wire and is just as much the designated home for a raw
+//         route as adapters-legacy is for a legacy one.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -42,6 +45,7 @@ for (const file of walk(ROOT)) {
 
   const inAdapterOrShell =
     rel.startsWith("packages/adapters-legacy/") ||
+    rel.startsWith("packages/adapters-platform/") ||
     rel.startsWith("shells/") ||
     rel.startsWith("packages/testkit/src/test/"); // tests may ASSERT the wire paths adapters speak
   if (!inAdapterOrShell && RAW_ENDPOINT_RE.test(text)) {
