@@ -1,0 +1,245 @@
+.chat-header {
+  margin: var(--space-xl) 0 var(--space-lg);
+}
+
+.chat-empty-state {
+  padding: var(--space-xxxl) var(--space-md);
+  text-align: center;
+  color: var(--content-tertiary);
+}
+
+.chat-empty-state strong {
+  display: block;
+  margin-bottom: var(--space-sm);
+  color: var(--content-primary);
+}
+
+.chat-empty-state p {
+  margin: 0;
+}
+
+.chat-thread {
+  display: grid;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.chat-history-controls {
+  display: flex;
+  justify-content: center;
+}
+
+.chat-history-start {
+  margin: 0;
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.chat-message-list {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-message {
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: 0 var(--space-xs) var(--space-lg) var(--surface-scrim);
+}
+
+.chat-message.is-user {
+  margin-inline-start: var(--space-xl);
+}
+
+.chat-message.is-assistant {
+  margin-inline-end: var(--space-xl);
+  background: var(--surface-elevated);
+}
+
+.chat-message.is-pending {
+  opacity: 0.85;
+}
+
+.chat-message.is-failed {
+  border-color: var(--danger);
+}
+
+.chat-message.is-streaming {
+  border-color: var(--focus);
+}
+
+.chat-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+  color: var(--content-secondary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.chat-delivery-label {
+  color: var(--content-tertiary);
+}
+
+.chat-message-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: var(--type-body-line);
+  color: var(--content-primary);
+}
+
+.chat-message button {
+  margin-top: var(--space-sm);
+}
+
+.chat-composer {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+  background: var(--surface-elevated);
+}
+
+/*
+ * Chat owns its scroll, unlike every other route.
+ *
+ * The shell's `.desktop-page-panel` is normally the scroll container, which put the
+ * composer below the fold at the 934x671 review geometry — the first thing a person tries
+ * to do on a chat surface is type, and it required scrolling to find the input. A sticky
+ * composer fixed the reachability but let messages scroll visibly through it.
+ *
+ * So for this route only, the panel becomes a flex column that does not scroll, and the
+ * message list becomes the scroll container. The composer is then simply the last row and
+ * is always on screen, with no overlap and no translucency trick.
+ */
+html[data-platform="desktop"] main[data-route="chat"] > .desktop-page-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The shell's 74px bottom padding exists to clear a scrolling page's last row. Chat's
+     last row is the composer, which is always on screen, so that space is just dead. */
+  padding-bottom: 23px;
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-thread {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-message-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
+  flex: 0 0 auto;
+  margin-top: var(--space-md);
+}
+
+/* Mobile scrolls the document and already sticks the composer clear of the tab bar and
+   the safe-area inset — see the html[data-platform="mobile"] .chat-composer rule below. */
+
+.chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-attachments li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--min-tap-target);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--content-secondary);
+}
+
+.chat-attachment-hint {
+  margin: 0;
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+}
+
+.chat-composer-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: end;
+}
+
+.chat-draft {
+  min-height: calc(var(--min-tap-target) * 2);
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-md);
+  color: var(--content-primary);
+  background: var(--surface-raised);
+}
+
+.chat-attach,
+.chat-send {
+  min-height: var(--min-tap-target);
+}
+
+.chat-attach:disabled,
+.chat-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+html[data-platform="desktop"] .chat-thread {
+  gap: var(--space-lg);
+}
+
+html[data-platform="desktop"] .chat-message {
+  box-shadow: 0 var(--space-xs) var(--space-xl) var(--surface-scrim);
+}
+
+html[data-platform="mobile"] .chat-header > div:first-child {
+  display: none;
+}
+
+html[data-platform="mobile"] .chat-message.is-user,
+html[data-platform="mobile"] .chat-message.is-assistant {
+  margin-inline: 0;
+}
+
+html[data-platform="mobile"] .chat-composer {
+  position: sticky;
+  bottom: calc(var(--min-tap-target) + var(--space-xl) + env(safe-area-inset-bottom, 0px));
+  z-index: 1;
+  box-shadow: 0 var(--space-sm) var(--space-xl) var(--surface-scrim);
+}
+
+html[data-platform="mobile"] .chat-composer-row {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+html[data-platform="mobile"] .chat-send {
+  grid-column: 1 / -1;
+}

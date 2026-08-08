@@ -1,4 +1,35 @@
 import type { Ref } from "react";
+import { t } from "@omi-core/i18n";
+
+/**
+ * Where the rows on this surface came from.
+ *
+ * Deliberately NOT `.qa-label`, which `styles.css` sets to `display: none` at desktop
+ * width — that is exactly how a fixture render gets mistaken for a real signed-in one, and
+ * that confusion has cost this project before. This badge is visible at every width, in
+ * both colour modes, and its fixture copy says the data is not the reader's account.
+ *
+ * `source` is required wherever this is used, so no surface can render rows without
+ * declaring their origin.
+ */
+export type SurfaceDataSource =
+  | { readonly kind: "fixture"; readonly fixture: string }
+  | { readonly kind: "live"; readonly origin: string };
+
+export function ProductionDataSourceBadge({ source, locale }: {
+  source: SurfaceDataSource;
+  locale: string;
+}): React.JSX.Element {
+  const live = source.kind === "live";
+  return (
+    <p className={`data-source-badge tone-${live ? "live" : "fixture"}`} role="status">
+      {t(locale, "dataSource.detail", {
+        source: t(locale, live ? "dataSource.live" : "dataSource.fixture"),
+        detail: live ? source.origin : source.fixture,
+      })}
+    </p>
+  );
+}
 
 export function ProductionSearchField({
   label,
