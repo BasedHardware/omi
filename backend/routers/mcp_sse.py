@@ -42,6 +42,10 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    resolve_mcp_conversation_search_ids,
+)
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.default_read_rollout import (
@@ -473,7 +477,11 @@ MCP_TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "search_conversations",
-        "description": "Semantic search across the user's conversations. Returns conversations ranked by relevance to the query.",
+        "description": (
+            "Search the user's conversations by relevance to the query. Matches both conversation "
+            "summaries and transcript content when available, and returns match_snippets from "
+            "transcript segments (grep-style context) alongside each hit."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
@@ -1201,7 +1209,16 @@ def execute_tool(
             end_dt = end_of_day_utc(end_dt)
         ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
-        conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = resolve_mcp_conversation_search_ids(
+            user_id,
+            query,
+            limit=limit,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            query_vectors=vector_db.query_vectors,
+            search_transcript_chunks=vector_db.search_transcript_chunks,
+            embed_query=vector_db.embeddings.embed_query,
+        )
         if not conversation_ids:
             return {"conversations": []}
 
@@ -1215,6 +1232,9 @@ def execute_tool(
                 structured = dict(structured)
                 structured['action_items'] = []
                 structured['events'] = []
+            snippets: List[Dict[str, Any]] = []
+            if not conv.get("is_locked", False):
+                snippets = attach_match_snippets_to_conversations([conv], query)[0].get("match_snippets") or []
             results.append(
                 {
                     "id": conv.get("id"),
@@ -1222,6 +1242,7 @@ def execute_tool(
                     "finished_at": conv.get("finished_at"),
                     "structured": structured,
                     "language": conv.get("language"),
+                    "match_snippets": snippets,
                 }
             )
 
