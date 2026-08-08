@@ -202,8 +202,6 @@ WebSocket endpoints: use `WebSocketException(code=1008)`, **not** `HTTPException
 
 Rate limiting: `Depends(auth.with_rate_limit(get_current_user_uid, "policy_name"))` — policies in `utils/rate_limit_config.py`.
 
-Whole-account cutover foundation: `GET /v1/account/cutover/control` (always reachable when authenticated). Product-traffic fencing is behind `ACCOUNT_CUTOVER_ENFORCEMENT=off|on` (default off). Operator contract: `docs/runbooks/account-cohort-cutover.md`.
-
 ## Logging Security
 
 Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.
