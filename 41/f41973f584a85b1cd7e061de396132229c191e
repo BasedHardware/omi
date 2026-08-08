@@ -1,0 +1,33 @@
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineRowViews.swift
+  s_d5c991760196be::t_56fa5e11145f2d 171,178,269,278,295,328,351,355
+  s_d5c991760196be::t_65264447dc9667 378,394
+desktop/macos/Desktop/Sources/MainWindow/Spine/SpineModel.swift
+  s_d5c991760196be::t_56fa5e11145f2d 253-256
+  s_d5c991760196be::t_89bd8b5cae6455 257
+desktop/macos/Desktop/Tests/ConversationDetailAutomationStateTests.swift
+  s_d5c991760196be::t_91ae5b0aff7087 7-11
+desktop/macos/Desktop/Tests/SpineCompositionTests.swift
+  s_d5c991760196be::t_ebd49e9bdad20f 130-132,135-139
+  s_d5c991760196be::t_56fa5e11145f2d 176-182,187-189
+desktop/macos/e2e/flows/conversation-detail.yaml
+  s_d5c991760196be::t_91ae5b0aff7087 4,38
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  s_d5c991760196be::t_91ae5b0aff7087 5-9,31-32,121-124,126-147,149-152,154-161,163
+  s_d5c991760196be::t_5a31b0b6f3a5c3 165,167-168,170,388,394,397,402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "41f41973f584a85b1cd7e061de396132229c191e",
+  "prompts": {},
+  "sessions": {
+    "s_d5c991760196be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fe211-e7a6-7da1-a56d-8c51322635f8",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
