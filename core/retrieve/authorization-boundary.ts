@@ -55,9 +55,15 @@ export interface ApplicationMemoryReadAuthorizationRequest {
   persisted_grant: PersistedApplicationMemoryGrant | null;
 }
 
+// domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
-interface ApplicationReadAuthorization {
+// domain-pending(DIV-DOMX-006)
+/**
+ * Detached evidence that the application memory-read gate passed. This is an
+ * internal comparison/attestation input, not authority and never a wire DTO.
+ */
+export interface ApplicationMemoryReadAuthorizationEvidence {
   readonly owner_account_id: string;
   // domain-pending(DIV-DOMAPPS-001)
   readonly app_id: string;
@@ -65,8 +71,8 @@ interface ApplicationReadAuthorization {
   readonly key_id: string;
   /** Opaque non-owner principal; it grants no authority by itself. */
   readonly principal_digest: string;
-  readonly projection_policy_classes: readonly Readonly<PolicyClass>[];
   readonly authorization_digest: string;
+  readonly persisted_grant_state_digest: string;
 }
 
 // domain-pending(DIV-DOMCORE-001)
@@ -290,17 +296,17 @@ const applicationVisibleClosure = (snapshot: GraphSnapshot): GraphSnapshot => {
 };
 
 /**
- * Pure application authorization gate. Scope and persisted grant are checked
- * independently, and every denial is resolved before the zero-authority store
- * loader can run. Projection remains internal to this boundary.
+ * Inspects the pure application authorization gate without reading a store or
+ * invoking a model. The returned evidence grants no authority: only
+ * readAfterApplicationAuthorization can proceed to the positive projection.
  */
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
-export const readAfterApplicationAuthorization = (
+// domain-pending(DIV-DOMX-006)
+export const inspectApplicationMemoryReadAuthorization = (
   request: ApplicationMemoryReadAuthorizationRequest,
-  loadStore: ApplicationProjectionLoader,
-): ApplicationGrantProjectedTreeInputSnapshot => {
+): ApplicationMemoryReadAuthorizationEvidence => {
   request = requireAuthorizationRequestShape(normalizePlainJson(request));
   const credential = request.credential;
   if (credential.credential_kind !== "mcp_api_key") deny("unsupported_credential_kind");
@@ -345,14 +351,44 @@ export const readAfterApplicationAuthorization = (
     projection_policy_classes: [APPLICATION_DEFAULT_SYNTHESIZED_POLICY],
     projection: { default_synthesized: true, archive_read: false, raw_read: false },
   });
-  const authorization: ApplicationReadAuthorization = Object.freeze({
+  // Keep this digest separate from the combined authorization digest so a
+  // cursor can attest the entire persisted grant state without treating the
+  // evidence as reusable authority.
+  // domain-pending(DIV-DOMAPPS-001)
+  // domain-pending(DIV-DOMAPPS-006)
+  // domain-pending(DIV-DOMX-001)
+  const persistedGrantStateDigest = sha256CanonicalRedacted({
+    owner_account_id: grant.owner_account_id,
+    consumer: grant.consumer,
+    app_id: grant.app_id,
+    key_id: grant.key_id,
+    enabled: grant.enabled,
+    default_read: grant.default_read,
+    scopes: normalizedStrings(grant.scopes),
+  });
+  const evidence: ApplicationMemoryReadAuthorizationEvidence = {
     owner_account_id: String(request.owner_account_id),
     app_id: String(credential.app_id),
     key_id: String(credential.key_id),
     principal_digest: principalDigest,
-    projection_policy_classes: Object.freeze([APPLICATION_DEFAULT_SYNTHESIZED_POLICY]),
     authorization_digest: authorizationDigest,
-  });
+    persisted_grant_state_digest: persistedGrantStateDigest,
+  };
+  return deepFreezePlainJson(normalizePlainJson(evidence));
+};
+
+/**
+ * The only positive application store/projection wrapper. Scope and persisted
+ * grant are checked before the supplied zero-authority loader can run.
+ */
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-006)
+export const readAfterApplicationAuthorization = (
+  request: ApplicationMemoryReadAuthorizationRequest,
+  loadStore: ApplicationProjectionLoader,
+): ApplicationGrantProjectedTreeInputSnapshot => {
+  const authorization = inspectApplicationMemoryReadAuthorization(request);
   const loaded: unknown = normalizePlainJson(loadStore());
   if (loaded === null || typeof loaded !== "object" || Array.isArray(loaded)
     || !hasExactRecordKeys(loaded, ["snapshot", "options"])) deny("projection_binding_mismatch");
@@ -375,7 +411,7 @@ export const readAfterApplicationAuthorization = (
 const projectApplicationDefaultReadTreeInput = (
   snapshot: GraphSnapshot,
   options: { account_timezone: string },
-  authorization: ApplicationReadAuthorization,
+  authorization: ApplicationMemoryReadAuthorizationEvidence,
 ): ApplicationGrantProjectedTreeInputSnapshot => {
   if (snapshot.owner_account_id !== authorization.owner_account_id
     || typeof options.account_timezone !== "string"

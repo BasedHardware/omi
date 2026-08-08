@@ -7,10 +7,13 @@
 // domain-pending(DIV-DOMX-001)
 // domain-pending(DIV-DOMX-006)
 import { expect, test } from "bun:test";
+import { sha256CanonicalRedacted } from "../ledger";
 import {
   ApplicationReadDenied,
+  inspectApplicationMemoryReadAuthorization,
   readAfterApplicationAuthorization,
   type ApplicationMemoryReadAuthorizationRequest,
+  type PersistedApplicationMemoryGrant,
 } from "./authorization-boundary";
 import { snapshot } from "./tree.fixture";
 import { genericPolicyClassifier } from "./index";
@@ -38,15 +41,144 @@ const allowed = (): ApplicationMemoryReadAuthorizationRequest => ({
 });
 const load = (graph = snapshot(), options: { account_timezone: string } = { account_timezone: "UTC" }) =>
   () => ({ snapshot: graph, options });
+const normalizedStrings = (values: readonly string[]): readonly string[] => [...new Set(values)].sort();
+const persistedGrantStateDigest = (grant: PersistedApplicationMemoryGrant): string => sha256CanonicalRedacted({
+  owner_account_id: grant.owner_account_id,
+  consumer: grant.consumer,
+  app_id: grant.app_id,
+  key_id: grant.key_id,
+  enabled: grant.enabled,
+  default_read: grant.default_read,
+  scopes: normalizedStrings(grant.scopes),
+});
 
 test("application read requires scope and exact active persisted grant before store access", () => {
+  const evidence = inspectApplicationMemoryReadAuthorization(allowed());
   let storeCalls = 0;
   const result = readAfterApplicationAuthorization(allowed(), () => {
     storeCalls++;
     return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
   });
   expect(result.reader_projection_digest).not.toContain("owner");
+  expect(result.reader_projection_digest).toBe(evidence.principal_digest);
+  expect(result.projection_authorization_digest).toBe(evidence.authorization_digest);
   expect(storeCalls).toBe(1);
+});
+
+test("authorization inspection is detached immutable evidence, never store authority", () => {
+  const request: ApplicationMemoryReadAuthorizationRequest = {
+    ...allowed(),
+    credential: {
+      ...allowed().credential,
+      scopes: ["z.read", "memories.read", "a.read", "memories.read"],
+    },
+    persisted_grant: {
+      ...allowed().persisted_grant!,
+      scopes: ["z.read", "memories.read", "a.read", "memories.read"],
+    },
+  };
+  const evidence = inspectApplicationMemoryReadAuthorization(request);
+  const principalDigest = sha256CanonicalRedacted({
+    kind: "application-key-principal",
+    owner_account_id: "owner",
+    app_id: "app:a",
+    key_id: "key:a",
+  });
+  expect(inspectApplicationMemoryReadAuthorization.length).toBe(1);
+  expect(evidence).toEqual({
+    owner_account_id: "owner",
+    app_id: "app:a",
+    key_id: "key:a",
+    principal_digest: principalDigest,
+    authorization_digest: sha256CanonicalRedacted({
+      owner_account_id: "owner",
+      app_id: "app:a",
+      key_id: "key:a",
+      credential_scopes: ["a.read", "memories.read", "z.read"],
+      credential_kind: "mcp_api_key",
+      grant_consumer: "mcp",
+      grant_enabled: true,
+      grant_default_read: true,
+      grant_scopes: ["a.read", "memories.read", "z.read"],
+      principal_digest: principalDigest,
+      projection_policy_classes: [{ subject_class: "generic", sensitivity: "generic", capture_class: "generic" }],
+      projection: { default_synthesized: true, archive_read: false, raw_read: false },
+    }),
+    persisted_grant_state_digest: persistedGrantStateDigest(request.persisted_grant!),
+  });
+  expect(Object.isFrozen(evidence)).toBe(true);
+
+  request.owner_account_id = "owner:mutated";
+  request.credential.app_id = "app:mutated";
+  request.persisted_grant!.scopes = ["mutated.read"];
+  expect(evidence.owner_account_id).toBe("owner");
+  expect(evidence.app_id).toBe("app:a");
+  expect(Reflect.set(evidence as unknown as object, "owner_account_id", "owner:forged")).toBe(false);
+
+  let storeCalls = 0;
+  expect(() => readAfterApplicationAuthorization(evidence as never, () => {
+    storeCalls++;
+    return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+  })).toThrow("projection_binding_mismatch");
+  expect(storeCalls).toBe(0);
+});
+
+test("persisted grant state digest commits every normalized grant field", () => {
+  const grant = allowed().persisted_grant!;
+  const baseline = inspectApplicationMemoryReadAuthorization(allowed()).persisted_grant_state_digest;
+  expect(baseline).toBe(persistedGrantStateDigest(grant));
+  const changes: readonly [keyof PersistedApplicationMemoryGrant, PersistedApplicationMemoryGrant][] = [
+    ["owner_account_id", { ...grant, owner_account_id: "owner:b" }],
+    ["consumer", { ...grant, consumer: "developer_api" }],
+    ["app_id", { ...grant, app_id: "app:b" }],
+    ["key_id", { ...grant, key_id: "key:b" }],
+    ["enabled", { ...grant, enabled: false }],
+    ["default_read", { ...grant, default_read: false }],
+    ["scopes", { ...grant, scopes: ["memories.read", "other.read"] }],
+  ];
+  for (const [field, changed] of changes) {
+    expect(persistedGrantStateDigest(changed), field).not.toBe(baseline);
+  }
+  expect(inspectApplicationMemoryReadAuthorization({
+    ...allowed(),
+    credential: { ...allowed().credential, scopes: ["memories.read", "memories.read"] },
+    persisted_grant: { ...grant, scopes: ["memories.read", "memories.read"] },
+  }).persisted_grant_state_digest).toBe(baseline);
+});
+
+test("inspection and projection wrapper have parity for allowed identity and scope permutations", () => {
+  const base = allowed();
+  const requests: readonly ApplicationMemoryReadAuthorizationRequest[] = [
+    base,
+    {
+      ...base,
+      credential: { ...base.credential, scopes: ["extra.read", "memories.read", "memories.read"] },
+      persisted_grant: { ...base.persisted_grant!, scopes: ["memories.read", "extra.read"] },
+    },
+    {
+      owner_account_id: "owner:b",
+      credential: { ...base.credential, owner_account_id: "owner:b", app_id: "app:b", key_id: "key:b" },
+      persisted_grant: { ...base.persisted_grant!, owner_account_id: "owner:b", app_id: "app:b", key_id: "key:b" },
+    },
+  ];
+  for (const request of requests) {
+    const evidence = inspectApplicationMemoryReadAuthorization(request);
+    let storeCalls = 0;
+    const graph = request.owner_account_id === "owner" ? snapshot() : {
+      owner_account_id: request.owner_account_id,
+      graph_generation: 1,
+      claims: [],
+      entities: [],
+      adjacency: [],
+    };
+    const projection = readAfterApplicationAuthorization(request, () => {
+      storeCalls++;
+      return { snapshot: graph, options: { account_timezone: "UTC" } };
+    });
+    expect(projection.reader_projection_digest).toBe(evidence.principal_digest);
+    expect(projection.projection_authorization_digest).toBe(evidence.authorization_digest);
+    expect(storeCalls).toBe(1);
+  }
 });
 
 test("application read denials all occur before the supplied store callback", () => {
@@ -70,6 +202,15 @@ test("application read denials all occur before the supplied store callback", ()
     ["grant lacks read scope", { ...base, persisted_grant: { ...base.persisted_grant!, scopes: [] } }, "grant_scope_mismatch"],
   ];
   for (const [label, request, reason] of cases) {
+    let inspectionError: unknown;
+    try {
+      inspectApplicationMemoryReadAuthorization(request);
+    } catch (error) {
+      inspectionError = error;
+    }
+    expect(inspectionError, label).toBeInstanceOf(ApplicationReadDenied);
+    expect((inspectionError as ApplicationReadDenied).reason, label).toBe(reason);
+
     let storeCalls = 0;
     try {
       readAfterApplicationAuthorization(request, () => { storeCalls++; return { snapshot: snapshot(), options: { account_timezone: "UTC" } }; });
@@ -78,6 +219,75 @@ test("application read denials all occur before the supplied store callback", ()
       expect(error).toBeInstanceOf(ApplicationReadDenied);
       expect((error as ApplicationReadDenied).reason).toBe(reason);
     }
+    expect(storeCalls).toBe(0);
+  }
+});
+
+test("authorization inspection and wrapper reject accessors and proxies without executing traps", () => {
+  type Hostile = { readonly request: ApplicationMemoryReadAuthorizationRequest; readonly calls: () => number };
+  const hostileInputs: readonly (() => Hostile)[] = [
+    () => {
+      let calls = 0;
+      const request = allowed();
+      Object.defineProperty(request, "credential", { enumerable: true, get: () => { calls++; return allowed().credential; } });
+      return { request, calls: () => calls };
+    },
+    () => {
+      let calls = 0;
+      const request = allowed();
+      Object.defineProperty(request.credential, "scopes", { enumerable: true, get: () => { calls++; return ["memories.read"]; } });
+      return { request, calls: () => calls };
+    },
+    () => {
+      let calls = 0;
+      const request = allowed();
+      Object.defineProperty(request.persisted_grant!, "scopes", { enumerable: true, get: () => { calls++; return ["memories.read"]; } });
+      return { request, calls: () => calls };
+    },
+    () => {
+      let calls = 0;
+      const base = allowed();
+      const request = new Proxy(base, {
+        get: () => { calls++; return undefined; },
+        ownKeys: () => { calls++; return []; },
+        getPrototypeOf: () => { calls++; return Object.prototype; },
+        getOwnPropertyDescriptor: () => { calls++; return undefined; },
+      });
+      return { request, calls: () => calls };
+    },
+    () => {
+      let calls = 0;
+      const base = allowed();
+      const credential = new Proxy(base.credential, {
+        get: () => { calls++; return undefined; },
+        ownKeys: () => { calls++; return []; },
+        getPrototypeOf: () => { calls++; return Object.prototype; },
+        getOwnPropertyDescriptor: () => { calls++; return undefined; },
+      });
+      return { request: { ...base, credential }, calls: () => calls };
+    },
+    () => {
+      let calls = 0;
+      const base = allowed();
+      const persisted_grant = new Proxy(base.persisted_grant!, {
+        get: () => { calls++; return undefined; },
+        ownKeys: () => { calls++; return []; },
+        getPrototypeOf: () => { calls++; return Object.prototype; },
+        getOwnPropertyDescriptor: () => { calls++; return undefined; },
+      });
+      return { request: { ...base, persisted_grant }, calls: () => calls };
+    },
+  ];
+
+  for (const makeHostile of hostileInputs) {
+    const hostile = makeHostile();
+    expect(() => inspectApplicationMemoryReadAuthorization(hostile.request)).toThrow();
+    let storeCalls = 0;
+    expect(() => readAfterApplicationAuthorization(hostile.request, () => {
+      storeCalls++;
+      return { snapshot: snapshot(), options: { account_timezone: "UTC" } };
+    })).toThrow();
+    expect(hostile.calls()).toBe(0);
     expect(storeCalls).toBe(0);
   }
 });
