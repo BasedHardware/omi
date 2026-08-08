@@ -281,6 +281,93 @@ test("rule 17: the hatch marker must be in a COMMENT, not a string literal on th
   );
 });
 
+test("rule 17: comment SYNTAX inside a string does not hatch (round-3 audit)", () => {
+  // `withoutComments()` is a pair of regexes with no concept of string
+  // boundaries, so it blanks block-comment-shaped text wherever it appears —
+  // including inside a quoted string. That satisfied the round-2 predicate
+  // (present raw, absent stripped) without the marker ever being in a comment.
+  // The hatch now needs a second, string-aware mechanism to agree.
+  withWirePathFixture(
+    [
+      "const rogue = Bun.serve({ port: 0, banner: \"/* wire-path-ok(fake) */\","
+        + " fetch: (request: Request) => new URL(request.url).pathname === \"/v1/memories\"",
+      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
+      "    : new Response(\"\", { status: 404 }) });",
+      "void rogue;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17: a genuine trailing BLOCK-comment hatch still works", () => {
+  // The converse of the test above. Rejecting all block-comment markers would
+  // have been the easy fix and would have broken a legitimate form.
+  withWirePathFixture(
+    [
+      "const probe = Bun.serve({ port: 0, fetch: () => new Response(\"\") });"
+        + " /* wire-path-ok(constant empty body; the reference below is a client call) */",
+      "void probe;",
+      "export const call = (base: string) => fetch(`${base}/v1/memories`);",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).toBe(0);
+      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17: a template-literal line contiguous with the construction does not hatch", () => {
+  // The version of the test below that ACTUALLY reaches the walk-up's
+  // string-awareness. In the other one the closing backtick sits on its own line
+  // and breaks the comment block first, so it passes without the mask ever being
+  // consulted — verified by removing the mask and watching it stay green. Here
+  // the backtick shares the marker's line, so the line is blank after stripping,
+  // non-blank raw, and directly above the construction: comment-shaped, not a
+  // comment. Removing the walk-up's mask check turns this red.
+  withWirePathFixture(
+    [
+      "const banner = `",
+      "// wire-path-ok(fake)`;",
+      "const rogue = Bun.serve({ port: 0, fetch: (request: Request) =>",
+      "  new URL(request.url).pathname === \"/v1/memories\"",
+      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
+      "    : new Response(\"\", { status: 404 }) });",
+      "void rogue; void banner;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
+test("rule 17: a template-literal line that LOOKS like a comment block does not hatch", () => {
+  // Found while fixing round 3; on neither the auditor's list nor mine. A line
+  // inside a template literal is blank after `withoutComments()` and non-blank
+  // raw, which is exactly what `isCommentText` tested for — so a fake
+  // justification could be smuggled in as data on the lines ABOVE the
+  // construction, not just on it.
+  withWirePathFixture(
+    [
+      "const banner = `",
+      "// wire-path-ok(fake)",
+      "`;",
+      "const rogue = Bun.serve({ port: 0, fetch: (request: Request) =>",
+      "  new URL(request.url).pathname === \"/v1/memories\"",
+      "    ? Response.json({ id: \"raw-fixture-row-id\" })",
+      "    : new Response(\"\", { status: 404 }) });",
+      "void rogue; void banner;",
+    ].join("\n"),
+    (result) => {
+      expect(result.status).not.toBe(0);
+      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+    },
+  );
+});
+
 test("rule 17: a genuine trailing-comment hatch on the construction line still works", () => {
   // The converse of the test above, and the reason it cannot simply be
   // "reject any marker on the construction line". A guard that rejects a

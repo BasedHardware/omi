@@ -272,6 +272,77 @@ const storageProvenanceIdentifiers = [
 const storageProvenanceAllowMarker = "storage-provenance-ok(";
 
 /** Blank out comments so documentation of the fence does not trip the fence. */
+/**
+ * Which characters are genuinely inside a comment — string- and
+ * template-literal-aware, unlike `withoutComments` below.
+ *
+ * `withoutComments` is a pair of regexes with no concept of string boundaries,
+ * so it blanks `/* … *​/`-shaped text WHEREVER it appears, including inside a
+ * quoted string. For DETECTION that is a false negative like any other. For
+ * GRANTING AN EXEMPTION it is a hole: one false negative disables the fence
+ * entirely for that site rather than missing one occurrence. So the hatch is
+ * judged by this scanner as well.
+ *
+ * Both mechanisms must agree before an exemption is granted — the same
+ * two-independent-measurements discipline this repo applies to every claim about
+ * behaviour, applied to the thing that switches a check off.
+ *
+ * Deliberately not used to replace `withoutComments`: rewriting the shared
+ * stripper would change every other check in this file at once, and the audit
+ * that asked for this scoped the request to the hatch for exactly that reason.
+ *
+ * Known imprecision, and it FAILS CLOSED: a regex literal containing a quote
+ * (`/["']/`) can open a spurious string state, which makes this scanner see
+ * FEWER comments, not more. The result is a legitimate hatch being rejected and
+ * a human investigating — never a fake one being honoured.
+ */
+const commentMask = (text: string): readonly boolean[] => {
+  const mask = new Array<boolean>(text.length).fill(false);
+  let mode: "code" | "line" | "block" | "single" | "double" | "template" = "code";
+  let index = 0;
+  while (index < text.length) {
+    const here = text[index];
+    const next = text[index + 1];
+    if (mode === "code") {
+      if (here === "/" && next === "/") { mask[index] = mask[index + 1] = true; mode = "line"; index += 2; continue; }
+      if (here === "/" && next === "*") { mask[index] = mask[index + 1] = true; mode = "block"; index += 2; continue; }
+      if (here === "'") mode = "single";
+      else if (here === '"') mode = "double";
+      else if (here === "`") mode = "template";
+      index += 1;
+      continue;
+    }
+    if (mode === "line") {
+      if (here === "\n") { mode = "code"; index += 1; continue; }
+      mask[index] = true; index += 1; continue;
+    }
+    if (mode === "block") {
+      mask[index] = true;
+      if (here === "*" && next === "/") { mask[index + 1] = true; mode = "code"; index += 2; continue; }
+      index += 1; continue;
+    }
+    // Inside a string or template literal.
+    if (here === "\\") { index += 2; continue; }
+    if ((mode === "single" && here === "'") || (mode === "double" && here === '"')
+      || (mode === "template" && here === "`")) { mode = "code"; index += 1; continue; }
+    // An unterminated quote cannot span lines; recover rather than swallow the file.
+    if (here === "\n" && mode !== "template") { mode = "code"; index += 1; continue; }
+    index += 1;
+  }
+  return mask;
+};
+
+/** Offsets at which `marker` occurs inside a real comment. */
+const markerInComment = (text: string, mask: readonly boolean[], marker: string, lineStart: number, lineEnd: number): boolean => {
+  let from = lineStart;
+  for (;;) {
+    const at = text.indexOf(marker, from);
+    if (at < 0 || at >= lineEnd) return false;
+    if (mask[at]) return true;
+    from = at + 1;
+  }
+};
+
 const withoutComments = (text: string): string => text
   .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "))
   .replace(/(^|[^:])\/\/[^\n]*/g, (match, lead: string) => lead + " ".repeat(match.length - lead.length));
@@ -319,6 +390,13 @@ for (const file of files(root)) {
     const code = withoutComments(text);
     const rawLines = text.split("\n");
     const codeLines = code.split("\n");
+    const mask = commentMask(text);
+    // Byte offset of the start of each raw line, so the mask can be indexed by line.
+    const lineStarts: number[] = [];
+    for (let offset = 0, line = 0; line < rawLines.length; line += 1) {
+      lineStarts.push(offset);
+      offset += (rawLines[line] ?? "").length + 1;
+    }
 
     // Every line that stands up a server. The hatch is judged against each of
     // these, not against the file, so one justified server cannot exempt the
@@ -358,12 +436,20 @@ for (const file of files(root)) {
       // which needs no pre-existing hatch to hide behind: any rogue file
       // self-exempts on first write. Found by the round-2 non-author audit, which
       // built it rather than reasoning about it.
-      if (raw.includes(wirePathAllowMarker) && !stripped.includes(wirePathAllowMarker)) return true;
+      const inRealComment = markerInComment(
+        text, mask, wirePathAllowMarker,
+        lineStarts[index] ?? 0, (lineStarts[index] ?? 0) + raw.length,
+      );
+      if (raw.includes(wirePathAllowMarker) && !stripped.includes(wirePathAllowMarker) && inRealComment) return true;
       // Otherwise: the contiguous comment block directly above. A blank line or
       // any code ends the block, which fails closed — verified by the audit.
       for (let above = index - 1; above >= 0; above -= 1) {
         if (!isCommentText(above)) return false;
-        if ((rawLines[above] ?? "").includes(wirePathAllowMarker)) return true;
+        const aboveRaw = rawLines[above] ?? "";
+        if (aboveRaw.includes(wirePathAllowMarker) && markerInComment(
+          text, mask, wirePathAllowMarker,
+          lineStarts[above] ?? 0, (lineStarts[above] ?? 0) + aboveRaw.length,
+        )) return true;
       }
       return false;
     };
