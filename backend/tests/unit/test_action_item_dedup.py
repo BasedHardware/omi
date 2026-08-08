@@ -307,9 +307,7 @@ class TestSearchTranscriptChunksDateFilter:
         )
         shared = [0.5, 0.6]
 
-        vector_db.search_transcript_chunks(
-            'uid-abc', 'coffee', starts_at=100, ends_at=200, query_vector=shared
-        )
+        vector_db.search_transcript_chunks('uid-abc', 'coffee', starts_at=100, ends_at=200, query_vector=shared)
 
         fake_embeddings.embed_query.assert_not_called()
         kwargs = fake_index.query.call_args.kwargs
