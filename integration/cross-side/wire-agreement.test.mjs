@@ -145,9 +145,45 @@ describe("the real platform client against the real platform server", () => {
 
     // Content only a working mechanism produces, not a row count.
     assert.equal(outcome.page.contractVersion, "1.0.0");
-    assert.equal(outcome.page.items[0].id, "retrieval-node-v1:seed-0000");
     assert.equal(outcome.page.window.status, "more");
     assert.equal(typeof outcome.page.window.nextCursor, "string");
+
+    // PUBLIC ITEM IDS ARE READER-SCOPED OPAQUE REFS, NOT FIXTURE ROW IDS.
+    //
+    // This used to assert `items[0].id === "retrieval-node-v1:seed-0000"` — the
+    // raw fixture row id — and it PASSED, because the backend it drove was the
+    // third, hand-rolled read door that minted public ids straight from storage
+    // rows. That is the exact defect class the wave-1 read-door collapse was
+    // built to kill, and it was live on the port `make stack` boots. The W4
+    // ruling retired that door; the assertion moves with it, from a literal
+    // that pinned the leak to the property that forbids it.
+    //
+    // red-proof: in the platform repo's apps/service/composition/memory-read.ts,
+    // make `encodeItemRef` return
+    // `retrieval-node-v1:${codecs.encodeItemRef(ref).slice(5, 13)}` — the
+    // retired door's id grammar, wrapped around the real codec so nothing else
+    // changes. APPLIED against this test driving the real backend: `# fail 2`,
+    // this test on the opaque-ref match and the walk test alongside it.
+    // Restored; green.
+    //
+    // Did NOT go red, recorded as evidence: returning `ref.node_id` from
+    // `encodeItemRef`. The port receives no `node_id` field, so it fell
+    // through to the codec and changed nothing — a mutation that silently
+    // no-ops is not a red-proof.
+    for (const item of outcome.page.items) {
+      assert.match(
+        item.id,
+        /^mem1_[0-9a-f]{64}$/,
+        `public item id is not a reader-scoped opaque ref: ${item.id}`,
+      );
+      // Storage vocabulary must not reach the wire under ANY spelling.
+      for (const internal of ["claim:qa:", "entity:qa:", "commit:qa:", "retrieval-node-v1:"]) {
+        assert.ok(
+          !item.id.includes(internal),
+          `public item id carries storage vocabulary "${internal}": ${item.id}`,
+        );
+      }
+    }
   });
 
   // red-proof: make the server ignore the `cursor` query parameter. Page two
@@ -175,7 +211,10 @@ describe("the real platform client against the real platform server", () => {
         `row ${id} was returned more than once across the real-client walk`,
       );
     }
-    assert.ok(seen.includes("retrieval-node-v1:seed-0006"), "last row never reached");
+    // The whole seeded corpus, not a named last row: with reader-scoped opaque
+    // ids there is no stable public name for "the last one", and counting the
+    // walk is the assertion that actually catches a truncated page chain.
+    assert.equal(seen.length, 7, `walk covered ${seen.length} of 7 seeded memories`);
   });
 
   // red-proof: return 200 with an empty body for an unauthenticated request.

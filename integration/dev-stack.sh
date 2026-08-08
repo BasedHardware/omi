@@ -92,10 +92,15 @@
 # brittle assertion costs more than it catches.
 #
 # RESET THE SEED DATA
-#   curl 'http://127.0.0.1:4851/qa/reset?seed=12'          # 12 deterministic rows
-#   curl 'http://127.0.0.1:4851/qa/reset?seed=7&hidden=retrieval-node-v1:seed-0003'
+#   curl 'http://127.0.0.1:4851/qa/reset?seed=12'          # 12 deterministic memories
+#   curl 'http://127.0.0.1:4851/qa/reset?seed=7&hidden=2'  # + 2 hidden-but-present
 #   ...or just re-run this script; it reseeds on every boot.
-#   --seed N sets the initial row count.
+#   --seed N sets the initial memory count.
+#
+#   `hidden` is a COUNT, not a row id. Since the W4 rebuild the backend serves the
+#   registered read composition, whose public item ids are reader-scoped opaque
+#   refs (`mem1_...`) — there is no raw row id to name, which is the point: the
+#   retired door published fixture row ids straight onto the wire.
 #
 # POINT AT A DIFFERENT BACKEND
 #   OMI_BACKEND_URL=http://127.0.0.1:4811 integration/dev-stack.sh --no-ios
