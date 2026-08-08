@@ -18,8 +18,13 @@ region="${AGENT_VM_RECONCILER_REGION:-us-central1}"
 job="${AGENT_VM_RECONCILER_JOB:-agent-vm-reconciler}"
 scheduler_job="${AGENT_VM_RECONCILER_SCHEDULER_JOB:-agent-vm-reconciler-5m}"
 scheduler_sa="${AGENT_VM_RECONCILER_SCHEDULER_SA:-}"
+install_paused="${AGENT_VM_RECONCILER_SCHEDULER_PAUSED:-0}"
 if [[ -z "$project" || -z "$scheduler_sa" ]]; then
   echo "AGENT_VM_RECONCILER_PROJECT and AGENT_VM_RECONCILER_SCHEDULER_SA are required." >&2
+  exit 2
+fi
+if [[ "$install_paused" != "0" && "$install_paused" != "1" ]]; then
+  echo "AGENT_VM_RECONCILER_SCHEDULER_PAUSED must be 0 or 1." >&2
   exit 2
 fi
 
@@ -49,13 +54,17 @@ common=(
 
 if gcloud scheduler jobs describe "$scheduler_job" "${common[@]:0:2}" >/dev/null 2>&1; then
   gcloud scheduler jobs update http "$scheduler_job" "${common[@]}"
-  # Updating retains a paused state.  Resuming here makes re-apply converge on
-  # the required enabled contract instead of silently leaving reconciliation off.
-  gcloud scheduler jobs resume "$scheduler_job" "${common[@]:0:2}"
 else
   gcloud scheduler jobs create http "$scheduler_job" "${common[@]}"
+fi
+if [[ "$install_paused" == "1" ]]; then
+  gcloud scheduler jobs pause "$scheduler_job" "${common[@]:0:2}"
+  expected_state="PAUSED"
+else
+  gcloud scheduler jobs resume "$scheduler_job" "${common[@]:0:2}"
+  expected_state="ENABLED"
 fi
 python3 backend/scripts/validate_agent_vm_reconciler_scheduler.py \
   --state-file <(gcloud scheduler jobs describe "$scheduler_job" "${common[@]:0:2}" --format=json) \
   --project "$project" --region "$region" --scheduler-job "$scheduler_job" --cloud-run-job "$job" \
-  --scheduler-service-account "$scheduler_sa"
+  --scheduler-service-account "$scheduler_sa" --expected-state "$expected_state"
