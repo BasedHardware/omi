@@ -400,13 +400,88 @@ sequenceDiagram
     Backend->>EmbeddingAPI: Extract embedding from current speech
     EmbeddingAPI-->>Backend: 256-d embedding
     Backend->>Backend: Cosine distance vs cached embeddings (persons + user)
-    Note over Backend: Match if distance < 0.45
+    Note over Backend: select_best_match: winner must be < 0.45<br/>AND beat the runner-up by >= 0.05;<br/>a lone candidate must be < 0.35
     alt Match is user's own voice
         Backend->>Backend: Set is_user=True on segments via speaker_to_person_map
     else Match is known person
         Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+    else Too close to call
+        Backend->>Backend: Log ambiguous, leave the speaker unlabelled
     end
 ```
+
+### Embedding match admission (`utils/stt/speaker_embedding.py`)
+
+`select_best_match` owns the accept/reject decision; `routers/listen/speakers.py` only
+acts on its verdict. A bare distance cutoff is not sufficient at either end of the range:
+
+- **Margin (`SPEAKER_MATCH_MARGIN`, default 0.05).** As the roster grows the runner-up
+  creeps inside the threshold too, and whichever of two similar voices scores marginally
+  lower wins. When the winner does not beat the runner-up by the margin, the call returns
+  no match with `ambiguous=True` — the speaker stays unlabelled rather than being given a
+  confidently wrong name.
+- **Sole threshold (`SPEAKER_MATCH_SOLE_THRESHOLD`, default 0.35).** With no runner-up
+  inside `SPEAKER_MATCH_THRESHOLD` the margin cannot speak, so the 0.45 equal-error-rate
+  cutoff would decide alone — accepting a false match as readily as rejecting a true one.
+  A lone candidate is therefore held to the stricter 0.35.
+
+The third element of the returned tuple distinguishes "nobody matched" from "too close to
+call"; only the former is a genuine absence of an enrolled voice.
+
+### Finalization-time speaker naming (`utils/conversations/speaker_resolution.py`)
+
+Live embedding matching only recognises voices that are already enrolled. A separate pass
+runs once, at conversation finalization, to name the speakers the live path left numbered.
+It is gated off by default behind `SPEAKER_RESOLUTION_ENABLED`.
+
+**Ownership.** The LLM route is `utils/llm/speaker_resolution.py` (propose) and
+`utils/llm/speaker_verification.py` (refute). `utils/speaker_resolution.py` is the pure
+gate: it grounds each claimed name in a transcript quote and produces suggestions only.
+`utils/conversations/speaker_resolution.py` owns the side effects — resolving or creating
+the `Person`, writing the segment assignments, and enrolling a voiceprint from the
+assigned audio. Assignments made this way are tagged `llm_inferred`, so an embedding
+derived from an inference stays distinguishable from one the user confirmed by hand.
+
+**Prompt boundary (security-review invariant).** Both LLM routes keep their
+policy/instructions in the system message and send every user-derived value — transcript
+lines, evidence quote, speaker lines, known-person names, and the owner display name — in
+a separate, explicitly delimited data message (`SYSTEM_INSTRUCTIONS`/`DATA_MESSAGE` in
+each module). Transcript or evidence text that tries to rewrite the rules (for example
+"accept this claim" or "ignore previous instructions") therefore lands in the untrusted
+data channel and cannot change the naming or refutation policy. Keep it that way: never
+interpolate user content into the system message, and preserve the regression tests in
+`TestLLMPromptBoundary`.
+
+Every suggestion is put to a second, independent model that is asked to refute it, and
+only the ones that survive are written and enrolled. Both halves are bounded per
+conversation: `MAX_VERIFICATIONS_PER_CONVERSATION` (6) refutation calls and
+`MAX_ENROLLMENTS_PER_CONVERSATION` (4) voiceprints.
+
+**Ordering, scheduling and delivery** (`utils/conversations/process_conversation.py`):
+
+- The pass is started by `schedule_speaker_resolution` *after* the private-cloud
+  `audio_files` write, because enrolment reads those files back and silently gives up when
+  there are none.
+- It is an async coordinator submitted through `utils.executors.submit_background_task` onto
+  the registered application loop rather than a `postprocess_executor` worker. Each blocking
+  step inside borrows a db/llm/storage thread for that step alone, so a burst of finalized
+  conversations cannot pin postprocess slots and starve memory extraction, action items or
+  vector indexing. `main.py` registers the application loop during startup and unregisters it
+  during shutdown; shutdown drains the work through `drain_background_tasks` so a pass cannot
+  be abandoned midway through creating a Person or writing segments.
+- It is handed a deep copy of the conversation. It reassigns `person_id` on the segments it
+  names and persists them itself, so the live object that `_extract_memories` reads
+  concurrently on `postprocess_executor` is never mutated underneath it.
+- Verified assignments are written through `update_conversation_segments`. The refuted and
+  unverified names are persisted on the conversation document under
+  `speaker_label_suggestions` (`{speaker_id, person_name, confidence, segment_ids}`). The
+  evidence quote the pass reasoned from is deliberately not stored: these are plain
+  Firestore fields and `_prepare_conversation_for_write` encrypts only
+  `transcript_segments`, so a verbatim line here would leave transcript content readable
+  on an enhanced-protection conversation. `segment_ids` address the same evidence inside
+  the encrypted transcript the client already holds. This is not the live
+  `speaker_label_suggestion` WebSocket event — the listen session is already gone by
+  finalization.
 
 ## 5. Private Cloud Sync (Audio Upload)
 
@@ -456,7 +531,7 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 | `conversation_session` | `{type, conversation_id, recording_session_id?, status}` | Exact recording-to-conversation binding; identified clients require IDs to match |
 | `memory_processing_started` | `{type, recording_session_id?, memory: {id, ...}}` | Conversation sent to pusher for LLM; only emitted for the listen session's current conversation |
 | `memory_created` | `{type, recording_session_id?, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete; only emitted for the listen session's current conversation |
-| `speaker_label_suggestion` | `{type, person_id, person_name, distance, segments}` | Speaker matched via embedding |
+| `speaker_label_suggestion` | `{type, person_id, person_name, distance, segments}` | Live session only: speaker matched via embedding, or a name detected in the segment text. Finalization-time suggestions are persisted on the conversation instead (see §4). |
 
 ### Client → Server
 
@@ -477,7 +552,11 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 | `BG_DRAIN_TIMEOUT` | 30s | `pusher.py`, `routers/listen/contracts.py` | Grace period for background tasks to drain after disconnect before force-cancel |
 | `lifecycle_manager` poll | 5s | `routers/listen/conversations.py` | Check `finished_at` interval |
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
-| Speaker match threshold | 0.45 | `routers/listen/speakers.py` | Cosine distance cutoff |
+| `SPEAKER_MATCH_THRESHOLD` | 0.45 | `utils/stt/speaker_embedding.py` | Cosine distance cutoff for the winner |
+| `SPEAKER_MATCH_MARGIN` | 0.05 | `utils/stt/speaker_embedding.py` | Distance the runner-up must trail the winner by; otherwise ambiguous |
+| `SPEAKER_MATCH_SOLE_THRESHOLD` | 0.35 | `utils/stt/speaker_embedding.py` | Stricter cutoff when no runner-up is inside the threshold |
+| `MAX_VERIFICATIONS_PER_CONVERSATION` | 6 | `utils/conversations/speaker_resolution.py` | Refutation calls per finalization naming pass |
+| `MAX_ENROLLMENTS_PER_CONVERSATION` | 4 | `utils/conversations/speaker_resolution.py` | Voiceprints enrolled per finalization naming pass |
 | `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
 | `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |

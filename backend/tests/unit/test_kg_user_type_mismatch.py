@@ -235,6 +235,9 @@ def _build_fakes() -> dict[str, ModuleType]:
     fallback = add("utils.observability.fallback")
     fallback.record_fallback = MagicMock()
 
+    log_sanitizer = add("utils.log_sanitizer")
+    log_sanitizer.sanitize = lambda value: str(value)
+
     utils_storage = add("utils.other.storage")
     utils_storage.precache_conversation_audio = MagicMock()
 
@@ -263,6 +266,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "utils.memory.canonical_memory_adapter",
         "utils.memory.memory_api_contract",
         "utils.executors",
+        "utils.async_tasks",
     ]:
         add(name)
 

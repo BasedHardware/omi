@@ -1,7 +1,8 @@
 import asyncio
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
@@ -61,7 +62,11 @@ from utils.conversations.search import (
     search_conversations,
 )
 from utils.llm.conversation_processing import generate_summary_with_prompt
-from utils.speaker_identification import extract_speaker_samples
+from utils.speaker_identification import (
+    SPEAKER_ATTRIBUTION_USER_TAGGED,
+    extract_speaker_samples,
+    revoke_inferred_speaker_enrolment,
+)
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
@@ -1000,19 +1005,27 @@ def set_assignee_conversation_segment(
         value = None
 
     is_unassigning = value is None or value is False
+    settled_speaker_ids: Set[int] = set()
 
     if assign_type == 'is_user':
         conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
         conversation.transcript_segments[segment_idx].person_id = None
+        if bool(value):
+            settled_speaker_ids.add(conversation.transcript_segments[segment_idx].speaker_id)
     elif assign_type == 'person_id':
         conversation.transcript_segments[segment_idx].is_user = False
         conversation.transcript_segments[segment_idx].person_id = value
+        if value:
+            settled_speaker_ids.add(conversation.transcript_segments[segment_idx].speaker_id)
     else:
         logger.info(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
+        settled_speaker_ids=settled_speaker_ids,
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -1036,6 +1049,7 @@ def set_assignee_conversation_segment(
 def set_assignee_conversation_segment(
     conversation_id: str,
     speaker_id: int,
+    background_tasks: BackgroundTasks,
     assign_type: str,
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
@@ -1070,24 +1084,39 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    displaced_person_ids: Set[str] = set()
+    settled_speaker_ids: Set[int] = set()
+
     if assign_type == 'is_user':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
+                if segment.person_id:
+                    displaced_person_ids.add(segment.person_id)
                 segment.is_user = bool(value) if value is not None else False
                 segment.person_id = None
+        if bool(value):
+            settled_speaker_ids.add(speaker_id)
     elif assign_type == 'person_id':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
                 logger.info(f"{segment.speaker_id} {speaker_id} {value}")
+                if segment.person_id and segment.person_id != value:
+                    displaced_person_ids.add(segment.person_id)
                 segment.is_user = False
                 segment.person_id = value
+        if value:
+            settled_speaker_ids.add(speaker_id)
     else:
         logger.info(assign_type)
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
+        settled_speaker_ids=settled_speaker_ids,
     )
+    _revoke_contradicted_inferences(uid, conversation, displaced_person_ids, background_tasks)
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
     # segment_idx = 0
@@ -1134,18 +1163,33 @@ def assign_segments_bulk(
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
 
+    displaced_person_ids: Set[str] = set()
+    settled_speaker_ids: Set[int] = set()
+
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
         if data.assign_type == 'is_user':
+            if segment.person_id:
+                displaced_person_ids.add(segment.person_id)
             segment.is_user = bool(value) if value is not None else False
             segment.person_id = None
+            if bool(value):
+                settled_speaker_ids.add(segment.speaker_id)
         else:
+            if segment.person_id and segment.person_id != value:
+                displaced_person_ids.add(segment.person_id)
             segment.is_user = False
             segment.person_id = value
+            if value:
+                settled_speaker_ids.add(segment.speaker_id)
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid,
+        conversation_id,
+        [segment.model_dump() for segment in conversation.transcript_segments],
+        settled_speaker_ids=settled_speaker_ids,
     )
+    _revoke_contradicted_inferences(uid, conversation, displaced_person_ids, background_tasks)
 
     # Trigger speaker sample extraction when assigning to a person
     if data.assign_type == 'person_id' and value:
@@ -1157,6 +1201,204 @@ def assign_segments_bulk(
             segment_ids=resolved_segment_ids,
         )
 
+    return conversation
+
+
+def _revoke_contradicted_inferences(
+    uid: str,
+    conversation: Conversation,
+    displaced_person_ids: Set[str],
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Undo enrolments an inference made and a reassignment has now contradicted.
+
+    A Person keeps its voiceprint unless the reassignment leaves it holding no
+    segment of this conversation at all: someone who still speaks elsewhere in
+    the transcript has not been contradicted. `revoke_inferred_speaker_enrolment`
+    is the second guard -- it removes the `llm_inferred` sample and the embedding
+    built from it, and does nothing to a Person the user taught by hand.
+    """
+    if not displaced_person_ids:
+        return
+    still_speaking = {segment.person_id for segment in conversation.transcript_segments if segment.person_id}
+    _schedule_inference_revocations(uid, displaced_person_ids, still_speaking, background_tasks)
+
+
+def _schedule_inference_revocations(
+    uid: str,
+    displaced_person_ids: Set[str],
+    still_speaking_person_ids: Set[str],
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Queue the revocations for displaced people who hold no segment of this conversation.
+
+    The rule of `_revoke_contradicted_inferences` over a transcript the caller
+    already holds, for callers whose write settled the transcript in a
+    transaction and who therefore know the post-write state rather than the one
+    they read.
+    """
+    for person_id in sorted(displaced_person_ids - still_speaking_person_ids):
+        background_tasks.add_task(revoke_inferred_speaker_enrolment, uid=uid, person_id=person_id)
+
+
+def _resolve_suggested_person_id(uid: str, person_name: str) -> str:
+    """The Person the accepted name refers to, reusing an existing record when there is one.
+
+    Resolve-or-create is delegated rather than done here as a read then a
+    write: a user accepting the same name on two conversations at once would
+    otherwise have both requests miss and both coin a record, leaving two
+    contacts for one human.
+    """
+    person, _ = users_db.get_or_create_person_by_name(uid, person_name)
+    return person['id']
+
+
+def _resolve_suggested_person(
+    uid: str, person_name: str, requested_person_id: Optional[str]
+) -> tuple[str, Optional[str]]:
+    people = users_db.get_people(uid)
+    matching = [
+        person
+        for person in people
+        if isinstance(person.get('id'), str)
+        and users_db.person_name_identity_key(str(person.get('name') or ''))
+        == users_db.person_name_identity_key(person_name)
+    ]
+    if requested_person_id is not None:
+        if not any(person.get('id') == requested_person_id for person in matching):
+            raise HTTPException(status_code=400, detail="Selected person does not match the suggestion")
+        return requested_person_id, None
+    if len(matching) > 1:
+        raise HTTPException(status_code=409, detail="Choose which person should receive this suggestion")
+    if matching:
+        return matching[0]['id'], None
+    return users_db.person_name_document_id(uid, users_db.person_name_identity_key(person_name)), person_name
+
+
+def _forget_speaker_label_suggestion(conversation: Conversation, speaker_id: int) -> None:
+    """Take a suggestion the database has already settled off the in-memory conversation."""
+    conversation.speaker_label_suggestions = [
+        item for item in conversation.speaker_label_suggestions if item.speaker_id != speaker_id
+    ]
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}/accept',
+    response_model=Conversation,
+    tags=['conversations'],
+)
+def accept_speaker_label_suggestion(
+    conversation_id: str,
+    speaker_id: int,
+    background_tasks: BackgroundTasks,
+    person_id: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Accept the name the finalization pass proposed for a numbered speaker.
+
+    The suggested name resolves to the Person already carrying it or to a new one
+    coined for it, every segment of that speaker is assigned to them, and the
+    suggestion is taken off the conversation.
+
+    Enrolment differs from the pass's own: a name the user tapped is not an
+    inference, so the voiceprint is tagged `user_tagged` rather than `llm_inferred`
+    and carries none of the restrictions an inferred sample does.
+
+    The assignment and the removal of the suggestion are one transaction rather
+    than two writes computed from this request's snapshot. Two accepts landing
+    together would otherwise each replace the whole segment array and the whole
+    suggestion array, so the later write would undo the earlier speaker and
+    resurrect the suggestion it had settled, while both still enrolled a
+    voiceprint against a transcript no longer naming them.
+
+    :return: The updated conversation.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+
+    suggestion = next((item for item in conversation.speaker_label_suggestions if item.speaker_id == speaker_id), None)
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Speaker suggestion not found")
+
+    person_id, person_name = _resolve_suggested_person(uid, suggestion.person_name, person_id)
+    logger.info(
+        'accept_speaker_label_suggestion conversation=%s speaker=%s person=%s uid=%s',
+        conversation_id,
+        speaker_id,
+        person_id,
+        uid,
+    )
+
+    applied = conversations_db.accept_conversation_speaker_suggestion(
+        uid, conversation_id, speaker_id, person_id, person_name=person_name
+    )
+    if applied is None:
+        raise HTTPException(status_code=404, detail="Speaker suggestion not found")
+    if applied.get('error') in {'person_collision', 'person_missing'}:
+        raise HTTPException(status_code=409, detail="Choose which person should receive this suggestion")
+
+    _forget_speaker_label_suggestion(conversation, speaker_id)
+    accepted_person_id = applied.get('person_id') or person_id
+    for segment in conversation.transcript_segments:
+        if segment.speaker_id != speaker_id:
+            continue
+        segment.is_user = False
+        segment.person_id = accepted_person_id
+
+    assigned_segment_ids = list(applied.get('segment_ids') or [])
+    if assigned_segment_ids:
+        background_tasks.add_task(revoke_inferred_speaker_enrolment, uid=uid, person_id=accepted_person_id)
+        background_tasks.add_task(
+            extract_speaker_samples,
+            uid=uid,
+            person_id=accepted_person_id,
+            conversation_id=conversation_id,
+            segment_ids=assigned_segment_ids,
+            attribution=SPEAKER_ATTRIBUTION_USER_TAGGED,
+        )
+    _schedule_inference_revocations(
+        uid,
+        set(applied.get('displaced_person_ids') or []),
+        set(applied.get('still_speaking_person_ids') or []),
+        background_tasks,
+    )
+
+    return conversation
+
+
+@router.delete(
+    '/v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}',
+    response_model=Conversation,
+    tags=['conversations'],
+)
+def dismiss_speaker_label_suggestion(
+    conversation_id: str,
+    speaker_id: int,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Drop the name proposed for a numbered speaker without assigning anyone.
+
+    Nothing but the suggestion is touched: no Person is created or resolved, no
+    segment changes hands, no voiceprint is enrolled or revoked. The removal is
+    transactional for the same reason accept's is: a dismiss that wrote back a
+    whole array computed from its own snapshot would resurrect a suggestion a
+    concurrent accept had already settled.
+
+    :return: The updated conversation.
+    """
+    logger.info(f'dismiss_speaker_label_suggestion {conversation_id} {speaker_id} {uid}')
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+
+    if not any(item.speaker_id == speaker_id for item in conversation.speaker_label_suggestions):
+        raise HTTPException(status_code=404, detail="Speaker suggestion not found")
+
+    if conversations_db.remove_conversation_speaker_suggestion(uid, conversation_id, speaker_id) is None:
+        raise HTTPException(status_code=404, detail="Speaker suggestion not found")
+
+    _forget_speaker_label_suggestion(conversation, speaker_id)
     return conversation
 
 

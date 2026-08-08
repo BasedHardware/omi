@@ -218,6 +218,50 @@ class CalendarEventLink {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
+/// A name the backend proposed for a numbered speaker but did not apply.
+///
+/// The evidence is referenced by segment id rather than quoted: the backend
+/// stores suggestions outside the encryption boundary that covers the
+/// transcript, so the line itself is rendered from the segments the client
+/// already holds.
+class SpeakerLabelSuggestion {
+  final int speakerId;
+  final String personName;
+  final double confidence;
+  final List<String> segmentIds;
+
+  SpeakerLabelSuggestion({
+    required this.speakerId,
+    required this.personName,
+    this.confidence = 0.0,
+    this.segmentIds = const [],
+  });
+
+  factory SpeakerLabelSuggestion.fromJson(Map<String, dynamic> json) {
+    return SpeakerLabelSuggestion.fromGenerated(wire.GeneratedSpeakerLabelSuggestion.fromJson(json));
+  }
+
+  factory SpeakerLabelSuggestion.fromGenerated(wire.GeneratedSpeakerLabelSuggestion generated) {
+    return SpeakerLabelSuggestion(
+      speakerId: generated.speakerId,
+      personName: generated.personName,
+      confidence: generated.confidence,
+      segmentIds: generated.segmentIds,
+    );
+  }
+
+  wire.GeneratedSpeakerLabelSuggestion toGenerated() {
+    return wire.GeneratedSpeakerLabelSuggestion(
+      speakerId: speakerId,
+      personName: personName,
+      confidence: confidence,
+      segmentIds: segmentIds,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
+}
+
 class AudioFile {
   final String id;
   final String uid;
@@ -308,6 +352,10 @@ class ServerConversation {
 
   final Structured structured;
   final List<TranscriptSegment> transcriptSegments;
+
+  /// Names the backend proposed for numbered speakers, awaiting accept or dismiss.
+  final List<SpeakerLabelSuggestion> speakerLabelSuggestions;
+
   final Geolocation? geolocation;
   final List<ConversationPhoto> photos;
   final List<AudioFile> audioFiles;
@@ -341,6 +389,7 @@ class ServerConversation {
     this.startedAt,
     this.finishedAt,
     this.transcriptSegments = const [],
+    this.speakerLabelSuggestions = const [],
     this.appResults = const [],
     this.suggestedSummarizationApps = const [],
     this.geolocation,
@@ -399,6 +448,7 @@ class ServerConversation {
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
       transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
+      speakerLabelSuggestions: generated.speakerLabelSuggestions.map(SpeakerLabelSuggestion.fromGenerated).toList(),
       appResults: generated.appsResults.isNotEmpty
           ? generated.appsResults.map(AppResponse.fromGenerated).toList()
           : generated.pluginsResults.map((result) => AppResponse(result.content, appId: result.pluginId)).toList(),
@@ -436,6 +486,7 @@ class ServerConversation {
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
+      'speaker_label_suggestions': speakerLabelSuggestions.map((item) => item.toJson()).toList(),
       'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
       'plugins_results': appResults.map((result) {
         return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content).toJson();
@@ -465,6 +516,7 @@ class ServerConversation {
       finishedAt: finishedAt,
       structured: structured.toGenerated(),
       transcriptSegments: transcriptSegments.map((segment) => segment.toGenerated()).toList(),
+      speakerLabelSuggestions: speakerLabelSuggestions.map((item) => item.toGenerated()).toList(),
       appsResults: appResults.map((result) => result.toGenerated()).toList(),
       pluginsResults: appResults.map((result) {
         return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content);

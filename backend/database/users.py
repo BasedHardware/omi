@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, List, Literal, Optional, TypedDict
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
@@ -827,8 +827,9 @@ def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELE
     return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
-def create_person(uid: str, data: dict):
-    people_ref = db.collection('users').document(uid).collection('people')
+def create_person(uid: str, data: dict, *, firestore_client: Any | None = None):
+    client = firestore_client or db
+    people_ref = client.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
     return data
 
@@ -843,8 +844,9 @@ def get_person(uid: str, person_id: str):
     return person_data
 
 
-def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
+def get_people(uid: str, *, firestore_client: Any | None = None):
+    client = firestore_client or db
+    people_ref = client.collection('users').document(uid).collection('people')
     result = []
     for person in people_ref.stream():
         data = person.to_dict()
@@ -906,8 +908,166 @@ def delete_person(uid: str, person_id: str):
     person_ref.delete()
 
 
+PERSON_NAME_ID_PROBES = 4
+"""How many deterministic id slots a name may occupy before falling back to uuid4.
+
+A slot is only skipped when it already holds a *different* name, which happens
+after a rename frees the seed of the old name for reuse. Four slots means four
+independent renames of the same name would have to pile up before the
+non-deterministic fallback is reached.
+"""
+
+
+def person_name_identity_key(name: str) -> str:
+    """The one notion of person-name identity: `name.strip().casefold()`.
+
+    Callers building name maps out of `get_people` already used this rule, and
+    `get_person_by_name` matches a stored name exactly, which this key subsumes.
+    Route every name comparison through here so a third rule cannot appear.
+    """
+    return name.strip().casefold()
+
+
+def person_name_document_id(uid: str, name_key: str, probe: int = 0) -> str:
+    """Deterministic people-document id for a normalized name identity key.
+
+    The id is a SHA-256 digest reshaped as a UUID, so it is opaque: it neither
+    reads back as the name nor distinguishes itself from the uuid4 ids existing
+    Person documents already use. `probe` selects an alternate slot for the rare
+    case where the natural slot is held by a different name.
+    """
+    suffix = '' if probe == 0 else f':{probe}'
+    return document_id_from_seed(f"user:{uid}:person_name:{name_key}{suffix}")
+
+
 @transactional
-def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
+def _resolve_person_by_name_transaction(transaction, person_ref, name: str, name_key: str):
+    """Claim one deterministic name slot, atomically.
+
+    Returns `(person, created)` when this slot belongs to `name_key`, and
+    `(None, False)` when it is held by some other name so the caller can probe
+    the next slot. The read and the create share one transaction, so two
+    concurrent resolvers of the same unseen name contend rather than both
+    writing: the loser retries, re-reads the winner's document, and returns it.
+    """
+    snapshot = person_ref.get(transaction=transaction)
+    if snapshot.exists:
+        existing = snapshot.to_dict() or {}
+        existing.setdefault('id', snapshot.id)
+        if person_name_identity_key(str(existing.get('name') or '')) != name_key:
+            return None, False
+        return existing, False
+
+    now = datetime.now(timezone.utc)
+    person_data = {
+        'id': person_ref.id,
+        'name': name,
+        'created_at': now,
+        'updated_at': now,
+    }
+    transaction.create(person_ref, person_data)
+    return person_data, True
+
+
+def get_or_create_person_by_name(uid: str, name: str, *, firestore_client: Any | None = None) -> tuple[dict, bool]:
+    """Resolve a person by name, creating one only if no existing person matches.
+
+    Returns `(person, created)`. This is the primitive to use instead of
+    `get_people` -> casefold map -> `uuid.uuid4()` -> `create_person`, which is a
+    read-then-create race: two conversations finishing at once for the same
+    previously unknown name each miss, each coin their own uuid4, and each write,
+    leaving two Person documents for one human and two voiceprint targets.
+
+    The mechanism is a deterministic document id derived from the normalized name
+    (see `person_name_document_id`) plus a transaction over that id. A name maps
+    to one document path, so concurrent resolvers collide on a single Firestore
+    document instead of inventing two, and the transaction turns that collision
+    into a retry that returns the winner's record. A transaction alone would not
+    do: without a shared id there is no document for the two passes to contend
+    over, and Firestore has no unique index to serialize a name query against.
+
+    Existing uuid4-keyed people stay authoritative. Resolution scans `get_people`
+    by `person_name_identity_key` first, so a legacy record, or one whose name was
+    edited, is found and reused; the deterministic id is only ever consulted when
+    that scan finds nothing, and never rewrites an existing document.
+
+    On rename, the person keeps its document id — `update_person` writes only the
+    `name` field — so the id no longer matches the seed of the name it holds, and
+    the old name's slot is now stale. Both cases are handled by matching the
+    stored name inside the transaction: the renamed person is still found by the
+    name scan under its new name, and a later person genuinely named the old name
+    sees the slot held by a different name and takes the next probe slot rather
+    than adopting the stranger's record. Slot exhaustion falls back to uuid4,
+    which is the pre-existing behaviour and no worse than it.
+
+    One client is obtained at call time and used for the name scan, the slot
+    transaction and the uuid4 fallback alike, so all three arms of a single
+    resolution see one Firestore view; `firestore_client` injects that client so
+    the boundary can be exercised against a fake instead of a global.
+    """
+    normalized = name.strip()
+    name_key = person_name_identity_key(normalized)
+    if not name_key:
+        raise ValueError('person name must not be blank')
+
+    client = firestore_client or get_firestore_client()
+    for person in get_people(uid, firestore_client=client):
+        if person_name_identity_key(str(person.get('name') or '')) == name_key:
+            return person, False
+
+    people_ref = client.collection('users').document(uid).collection('people')
+    for probe in range(PERSON_NAME_ID_PROBES):
+        person_ref = people_ref.document(person_name_document_id(uid, name_key, probe))
+        person, created = _resolve_person_by_name_transaction(client.transaction(), person_ref, normalized, name_key)
+        if person is not None:
+            return person, created
+
+    now = datetime.now(timezone.utc)
+    return (
+        create_person(
+            uid,
+            {
+                'id': str(uuid.uuid4()),
+                'name': normalized,
+                'created_at': now,
+                'updated_at': now,
+            },
+            firestore_client=client,
+        ),
+        True,
+    )
+
+
+SPEECH_SAMPLE_ATTRIBUTION_USER_TAGGED = 'user_tagged'
+
+SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED = 'llm_inferred'
+
+LLM_INFERRED_SPEECH_SAMPLES_FIELD = 'llm_inferred_speech_samples'
+"""Paths of the speech samples that were stored from an LLM-inferred identity.
+
+Kept as a path-keyed set rather than a third array parallel to `speech_samples`
+and `speech_sample_transcripts`. Those two already have to be padded and popped
+in lockstep, and every index-alignment invariant added to that pair is another
+way for the arrays to drift apart the way #10453 did. A sample path is unique
+and is already the key callers hold, so membership answers "was this sample
+inferred?" with no index arithmetic at all, and a sample removal that forgets to
+touch this field leaves a harmless orphan path rather than shifting an
+attribution onto somebody else's sample.
+"""
+
+
+@transactional
+def _add_sample_transaction(
+    transaction,
+    person_ref,
+    sample_path,
+    transcript,
+    max_samples,
+    attribution=None,
+    conversation_ref=None,
+    segment_ids=None,
+    uid=None,
+):
     """Transaction to atomically add sample and transcript."""
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
@@ -915,6 +1075,25 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
 
     person_data = snapshot.to_dict()
     samples = person_data.get('speech_samples', [])
+
+    if conversation_ref is not None:
+        from database.conversations import _prepare_conversation_for_read
+
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not conversation_snapshot.exists:
+            return False
+        conversation_data = _prepare_conversation_for_read(conversation_snapshot.to_dict(), uid) or {}
+        current_segments = {
+            segment.get('id'): segment
+            for segment in conversation_data.get('transcript_segments', [])
+            if isinstance(segment, dict) and isinstance(segment.get('id'), str)
+        }
+        if not segment_ids or any(
+            current_segments.get(segment_id, {}).get('person_id') != person_ref.id
+            or current_segments.get(segment_id, {}).get('is_user')
+            for segment_id in segment_ids
+        ):
+            return False
 
     if len(samples) >= max_samples:
         return False
@@ -924,6 +1103,12 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
         'speech_samples': samples,
         'updated_at': datetime.now(timezone.utc),
     }
+
+    if attribution == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+        inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD, []))
+        if sample_path not in inferred:
+            inferred.append(sample_path)
+        update_data[LLM_INFERRED_SPEECH_SAMPLES_FIELD] = inferred
 
     if transcript is not None:
         transcripts = person_data.get('speech_sample_transcripts', [])
@@ -943,7 +1128,12 @@ def _add_sample_transaction(transaction, person_ref, sample_path, transcript, ma
 
 
 def add_person_speech_sample(
-    uid: str, person_id: str, sample_path: str, transcript: Optional[str] = None, max_samples: int = 5
+    uid: str,
+    person_id: str,
+    sample_path: str,
+    transcript: Optional[str] = None,
+    max_samples: int = 5,
+    attribution: Optional[str] = None,
 ) -> bool:
     """
     Append speech sample path to person's speech_samples list.
@@ -958,13 +1148,57 @@ def add_person_speech_sample(
         sample_path: GCS path to the speech sample
         transcript: Optional transcript text for the sample
         max_samples: Maximum number of samples to keep (default 5)
+        attribution: How the person was identified for this audio
+            ('user_tagged', 'llm_inferred', ...). An 'llm_inferred' sample is
+            recorded in `llm_inferred_speech_samples` so it is never used to
+            rebuild a speaker embedding, since rebuilding from it would
+            resurrect an enrolment the user (or a later pass) had cleared.
+            Anything else is left unmarked, which is the trusted default.
 
     Returns:
         True if sample was added, False if limit reached or person not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
-    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples)
+    return _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples, attribution)
+
+
+def add_person_speech_sample_if_assignment_current(
+    uid: str,
+    person_id: str,
+    conversation_id: str,
+    segment_ids: list[str],
+    sample_path: str,
+    transcript: Optional[str] = None,
+    max_samples: int = 5,
+    attribution: Optional[str] = None,
+) -> bool:
+    client = get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+    conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    transaction = client.transaction()
+    return _add_sample_transaction(
+        transaction,
+        person_ref,
+        sample_path,
+        transcript,
+        max_samples,
+        attribution,
+        conversation_ref,
+        segment_ids,
+        uid,
+    )
+
+
+def is_person_speech_sample_llm_inferred(person_data: dict, sample_path: str) -> bool:
+    """Report whether a sample path was stored from an LLM-inferred identity.
+
+    Takes the already-loaded person document so callers on the hot listen path
+    do not pay an extra Firestore read for a field they were handed.
+    """
+    if not sample_path:
+        return False
+    return sample_path in (person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or [])
 
 
 def get_person_speech_samples_count(uid: str, person_id: str) -> int:
@@ -999,14 +1233,17 @@ def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> boo
     if idx < len(transcripts):
         transcripts.pop(idx)
 
-    transaction.update(
-        person_ref,
-        {
-            'speech_samples': samples,
-            'speech_sample_transcripts': transcripts,
-            'updated_at': datetime.now(timezone.utc),
-        },
-    )
+    update_data = {
+        'speech_samples': samples,
+        'speech_sample_transcripts': transcripts,
+        'updated_at': datetime.now(timezone.utc),
+    }
+
+    inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD, []))
+    if sample_path in inferred:
+        update_data[LLM_INFERRED_SPEECH_SAMPLES_FIELD] = [path for path in inferred if path != sample_path]
+
+    transaction.update(person_ref, update_data)
     return True
 
 
@@ -1049,7 +1286,7 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
     return user_doc.to_dict().get('speaker_embedding')
 
 
-def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
+def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, attribution: Optional[str] = None) -> bool:
     """
     Store speaker embedding for a person.
 
@@ -1057,6 +1294,12 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> b
         uid: User ID
         person_id: Person ID
         embedding: List of floats representing the speaker embedding
+        attribution: How this person came to be identified for the audio the
+            embedding was built from ('user_tagged', 'llm_inferred', ...).
+            Recorded so an embedding enrolled from an inferred identity can be
+            told apart from one the user confirmed, and cleared on its own if
+            that inference is later contradicted. Omitted leaves the existing
+            value untouched.
 
     Returns:
         True if stored successfully, False if person not found
@@ -1067,13 +1310,81 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> b
     if not person_doc.exists:
         return False
 
-    person_ref.update(
-        {
-            'speaker_embedding': embedding,
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
+    update_data = {
+        'speaker_embedding': embedding,
+        'updated_at': datetime.now(timezone.utc),
+    }
+    if attribution is not None:
+        update_data['speaker_embedding_attribution'] = attribution
+
+    person_ref.update(update_data)
     return True
+
+
+@transactional
+def _set_person_speaker_embedding_if_assignment_current_transaction(
+    transaction, person_ref, conversation_ref, segment_ids, embedding, attribution, uid
+):
+    person_snapshot = person_ref.get(transaction=transaction)
+    if not person_snapshot.exists:
+        return False
+    person_data = person_snapshot.to_dict() or {}
+    if attribution == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+        inferred = person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or []
+        if not inferred:
+            return False
+
+    from database.conversations import _prepare_conversation_for_read
+
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    if not conversation_snapshot.exists:
+        return False
+    conversation_data = _prepare_conversation_for_read(conversation_snapshot.to_dict(), uid) or {}
+    current_segments = {
+        segment.get('id'): segment
+        for segment in conversation_data.get('transcript_segments', [])
+        if isinstance(segment, dict) and isinstance(segment.get('id'), str)
+    }
+    if not segment_ids or any(
+        current_segments.get(segment_id, {}).get('person_id') != person_ref.id
+        or current_segments.get(segment_id, {}).get('is_user')
+        for segment_id in segment_ids
+    ):
+        return False
+
+    update_data = {'speaker_embedding': embedding, 'updated_at': datetime.now(timezone.utc)}
+    if attribution is not None:
+        update_data['speaker_embedding_attribution'] = attribution
+    transaction.update(person_ref, update_data)
+    return True
+
+
+def set_person_speaker_embedding_if_assignment_current(
+    uid: str,
+    person_id: str,
+    conversation_id: str,
+    segment_ids: list[str],
+    embedding: list,
+    attribution: Optional[str] = None,
+) -> bool:
+    client = get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+    conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    transaction = client.transaction()
+    return _set_person_speaker_embedding_if_assignment_current_transaction(
+        transaction, person_ref, conversation_ref, segment_ids, embedding, attribution, uid
+    )
+
+
+def get_person_speaker_embedding_attribution(uid: str, person_id: str) -> Optional[str]:
+    """Get how a person's stored speaker embedding was attributed, if recorded."""
+    person_ref = db.collection('users').document(uid).collection('people').document(person_id)
+    person_doc = person_ref.get()
+
+    if not person_doc.exists:
+        return None
+
+    return person_doc.to_dict().get('speaker_embedding_attribution')
 
 
 def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:
@@ -1206,10 +1517,70 @@ def clear_person_speaker_embedding(uid: str, person_id: str) -> bool:
     person_ref.update(
         {
             'speaker_embedding': firestore.DELETE_FIELD,
+            'speaker_embedding_attribution': firestore.DELETE_FIELD,
             'updated_at': datetime.now(timezone.utc),
         }
     )
     return True
+
+
+def clear_person_llm_inferred_enrolment(uid: str, person_id: str) -> List[str]:
+    """Undo an enrolment that came from an LLM-inferred identity, completely.
+
+    Clearing only the embedding does not undo the enrolment: the sample it was
+    built from stays at speech_samples_version 3, and the next listen session
+    rebuilds the embedding straight back out of it. Both artifacts have to go,
+    so this removes every sample marked `llm_inferred` and then clears the
+    embedding those samples produced. Samples the user taught are untouched.
+
+    Returns the removed sample paths so the caller can delete the objects from
+    storage; an empty list means the person had nothing inferred to revoke.
+
+    The embedding is only cleared when it is still the inferred one. A person can
+    hold an old inferred sample and a later enrolment the user confirmed, which
+    overwrote the attribution to `user_tagged`; revoking the earlier inference
+    unconditionally would delete a voiceprint nobody disputed and leave that
+    person unmatchable until some later rebuild happened to succeed. The samples
+    go either way, since the inference behind them is what was contradicted.
+    """
+    client = get_firestore_client()
+    person_ref = client.collection('users').document(uid).collection('people').document(person_id)
+    transaction = client.transaction()
+
+    @transactional
+    def _clear(transaction, person_ref):
+        snapshot = person_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return []
+        person_data = snapshot.to_dict() or {}
+        inferred = list(person_data.get(LLM_INFERRED_SPEECH_SAMPLES_FIELD) or [])
+        samples = list(person_data.get('speech_samples') or [])
+        transcripts = list(person_data.get('speech_sample_transcripts') or [])
+        removed = list(dict.fromkeys(inferred))
+        if not inferred and person_data.get('speaker_embedding_attribution') != SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+            return []
+        removed_set = set(removed)
+        kept_samples = []
+        kept_transcripts = []
+        for index, path in enumerate(samples):
+            if path in removed_set:
+                continue
+            kept_samples.append(path)
+            if index < len(transcripts):
+                kept_transcripts.append(transcripts[index])
+        update_data = {
+            'speech_samples': kept_samples,
+            'speech_sample_transcripts': kept_transcripts,
+            LLM_INFERRED_SPEECH_SAMPLES_FIELD: [],
+            'updated_at': datetime.now(timezone.utc),
+        }
+        if person_data.get('speaker_embedding_attribution') == SPEECH_SAMPLE_ATTRIBUTION_LLM_INFERRED:
+            update_data['speaker_embedding'] = firestore.DELETE_FIELD
+            update_data['speaker_embedding_attribution'] = firestore.DELETE_FIELD
+        transaction.update(person_ref, update_data)
+        return removed
+
+    return _clear(transaction, person_ref)
 
 
 def update_person_speech_samples_version(uid: str, person_id: str, version: int) -> bool:

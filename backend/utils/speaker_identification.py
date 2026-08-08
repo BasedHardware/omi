@@ -1,6 +1,7 @@
 import io
 import re
 import wave
+from enum import Enum
 from typing import Any, Dict, List, Optional, cast
 
 import av
@@ -9,16 +10,79 @@ import numpy as np
 from database import conversations as conversations_db
 from database import users as users_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.log_sanitizer import sanitize
 from utils.other.storage import (
+    delete_user_person_speech_sample,
     download_audio_chunks_and_merge,
     upload_person_speech_sample_from_bytes,
 )
+from utils.speaker_names import SPEAKER_NAME_STOPWORDS
 from utils.speaker_sample import verify_and_transcribe_sample
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
 logger = logging.getLogger(__name__)
+
+SPEAKER_ATTRIBUTION_USER_TAGGED = 'user_tagged'
+
+SPEAKER_ATTRIBUTION_LLM_INFERRED = 'llm_inferred'
+
+
+class SpeakerEnrolmentOutcome(Enum):
+    """What an enrolment attempt actually left behind.
+
+    `extract_speaker_samples` gives up for many ordinary reasons -- no audio was
+    kept for the conversation, the person already holds a sample, every candidate
+    segment failed the quality gate. Returning nothing for all of them told the
+    caller only that no exception escaped, so it recorded people as enrolled who
+    had nothing stored and never reached its rollback path.
+    """
+
+    ENROLLED = 'enrolled'
+    """A sample and its embedding were both stored."""
+
+    SKIPPED = 'skipped'
+    """Nothing was written, so there is nothing to undo."""
+
+
+class SpeakerEnrolmentError(Exception):
+    """A sample was written but the enrolment could not be completed.
+
+    This is the case that must not be swallowed: the sample is stored and marked,
+    while the embedding it was meant to produce is missing, and embedding recovery
+    deliberately refuses to rebuild from an inferred sample -- so the person is
+    stuck until the half-written enrolment is revoked. Raised so the composition
+    boundary that started the enrolment rolls it back exactly once.
+    """
+
+
+async def revoke_inferred_speaker_enrolment(uid: str, person_id: str) -> List[str]:
+    """Undo an enrolment made from an LLM-inferred identity.
+
+    Clearing the stored embedding alone does not undo it: the inferred sample
+    survives at speech_samples_version 3 and the next listen session rebuilds
+    the embedding from it. This removes the sample and the embedding together,
+    so a contradicted inference stays gone. Returns the removed sample paths.
+
+    The sample objects are deleted from storage too. Dropping only the Firestore
+    references would leave the revoked audio of a person the model misidentified
+    sitting in the bucket with nothing pointing at it, so nothing would ever
+    delete it. Storage failures are logged and do not fail the revocation, which
+    has already landed in Firestore by then.
+    """
+    removed = await run_blocking(db_executor, users_db.clear_person_llm_inferred_enrolment, uid, person_id)
+    for path in removed:
+        try:
+            await run_blocking(storage_executor, delete_user_person_speech_sample, uid, person_id, path.split('/')[-1])
+        except Exception as error:
+            logger.error(
+                'Revoked inferred sample object could not be deleted person=%s type=%s %s',
+                person_id,
+                type(error).__name__,
+                uid,
+            )
+    return removed
 
 
 def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
@@ -229,87 +293,6 @@ patterns_to_check: List[str] = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
-# Pronouns and filler words the introduction patterns can capture from run-on
-# transcripts (e.g. "I'm It was great", "I'm You know...") — never real names (#5223).
-SPEAKER_NAME_STOPWORDS = frozenset(
-    {
-        'it',
-        'you',
-        'they',
-        'them',
-        'he',
-        'she',
-        'we',
-        'us',
-        'me',
-        'him',
-        'her',
-        'his',
-        'hers',
-        'its',
-        'my',
-        'mine',
-        'your',
-        'yours',
-        'our',
-        'ours',
-        'their',
-        'theirs',
-        'this',
-        'that',
-        'these',
-        'those',
-        'here',
-        'there',
-        'what',
-        'who',
-        'when',
-        'where',
-        'why',
-        'how',
-        'which',
-        'the',
-        'and',
-        'but',
-        'not',
-        'yes',
-        'no',
-        'okay',
-        'ok',
-        'yeah',
-        'just',
-        'like',
-        'so',
-        'very',
-        'really',
-        'now',
-        'then',
-        'well',
-        'still',
-        'also',
-        'too',
-        'gonna',
-        'going',
-        'sure',
-        'sorry',
-        'good',
-        'fine',
-        'right',
-        'everyone',
-        'everybody',
-        'someone',
-        'somebody',
-        'nobody',
-        'anyone',
-        'anybody',
-        'something',
-        'nothing',
-        'one',
-        'all',
-        'some',
-    }
-)
-
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
     for pattern in patterns_to_check:
@@ -327,12 +310,24 @@ async def extract_speaker_samples(
     conversation_id: str,
     segment_ids: List[str],
     sample_rate: int = 16000,
-):
+    attribution: str = SPEAKER_ATTRIBUTION_USER_TAGGED,
+) -> SpeakerEnrolmentOutcome:
     """
     Extract speech samples from segments and store as speaker profiles.
     Fetches conversation from DB to get started_at and segment details.
     Processes each segment one by one, stops when sample limit reached.
+
+    `attribution` is recorded on the stored sample as well as on the embedding.
+    Tagging only the embedding would make an inferred enrolment look reversible
+    while the sample it was built from stayed behind for the listen session to
+    rebuild the embedding from.
+
+    Returns `SpeakerEnrolmentOutcome.ENROLLED` only when a sample and its
+    embedding were both stored, and `SKIPPED` when nothing was written at all.
+    Raises `SpeakerEnrolmentError` when a sample was written and the enrolment
+    then failed, which is the only case a caller has anything to roll back.
     """
+    stored_sample_path: Optional[str] = None
     try:
         # Run lazy migration for samples before checking count
         # (migration may drop invalid samples, freeing up space)
@@ -344,18 +339,18 @@ async def extract_speaker_samples(
         sample_count = await run_blocking(db_executor, users_db.get_person_speech_samples_count, uid, person_id)
         if sample_count >= 1:
             logger.warning(f"Person {person_id} already has {sample_count} samples, skipping {uid} {conversation_id}")
-            return
+            return SpeakerEnrolmentOutcome.SKIPPED
 
         # Fetch conversation to get started_at and segment details
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation:
             logger.warning(f"Conversation {conversation_id} not found {uid}")
-            return
+            return SpeakerEnrolmentOutcome.SKIPPED
 
         started_at = conversation.get('started_at')
         if not started_at:
             logger.info(f"Conversation {conversation_id} has no started_at {uid}")
-            return
+            return SpeakerEnrolmentOutcome.SKIPPED
 
         started_at_ts = started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
 
@@ -367,7 +362,7 @@ async def extract_speaker_samples(
         audio_files = conversation.get('audio_files', [])
         if not audio_files:
             logger.warning(f"No audio files found for {conversation_id}, skipping speaker sample extraction {uid}")
-            return
+            return SpeakerEnrolmentOutcome.SKIPPED
 
         # Collect all chunk timestamps from audio files
         all_timestamps: List[Any] = []
@@ -377,7 +372,7 @@ async def extract_speaker_samples(
 
         if not all_timestamps:
             logger.warning(f"No chunk timestamps found for {conversation_id}, skipping speaker sample extraction {uid}")
-            return
+            return SpeakerEnrolmentOutcome.SKIPPED
 
         # Build chunks list in expected format
         chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
@@ -502,7 +497,12 @@ async def extract_speaker_samples(
             # Verify sample quality and get transcript using centralized function
             transcript, is_valid, reason = await verify_and_transcribe_sample(wav_bytes, sample_rate, expected_text)
             if not is_valid:
-                logger.error(f"Sample failed quality check: {reason} {uid} {conversation_id}")
+                logger.error(
+                    'Sample failed quality check error=%s uid=%s conversation=%s',
+                    sanitize(reason),
+                    uid,
+                    conversation_id,
+                )
                 continue  # Try next segment
 
             # Upload and store
@@ -510,14 +510,40 @@ async def extract_speaker_samples(
                 storage_executor, upload_person_speech_sample_from_bytes, sample_audio, uid, person_id, sample_rate
             )
 
-            success = await run_blocking(
-                db_executor, users_db.add_person_speech_sample, uid, person_id, path, transcript=transcript
-            )
+            if attribution == SPEAKER_ATTRIBUTION_LLM_INFERRED:
+                success = await run_blocking(
+                    db_executor,
+                    users_db.add_person_speech_sample_if_assignment_current,
+                    uid,
+                    person_id,
+                    conversation_id,
+                    segment_ids,
+                    path,
+                    transcript=transcript,
+                    attribution=attribution,
+                )
+            else:
+                success = await run_blocking(
+                    db_executor,
+                    users_db.add_person_speech_sample,
+                    uid,
+                    person_id,
+                    path,
+                    transcript=transcript,
+                    attribution=attribution,
+                )
             if success:
                 samples_added += 1
-                seg_text = seg.get('text', '')[:100]  # Truncate to 100 chars
+                stored_sample_path = path
                 logger.info(
-                    f"Stored speech sample {samples_added} for person {person_id}: segment_id={seg_id}, file={path}, text={seg_text} {uid} {conversation_id}"
+                    'Stored speech sample count=%s person=%s segment_id=%s file=%s text_length=%s uid=%s conversation=%s',
+                    samples_added,
+                    person_id,
+                    seg_id,
+                    path,
+                    len(seg.get('text', '')),
+                    uid,
+                    conversation_id,
                 )
 
                 # Extract and store speaker embedding (reuse wav_bytes from verification)
@@ -525,17 +551,68 @@ async def extract_speaker_samples(
                     embedding = await run_blocking(sync_executor, extract_embedding_from_bytes, wav_bytes, "sample.wav")
                     # Convert numpy array to list for Firestore storage
                     embedding_list = embedding.flatten().tolist()
-                    await run_blocking(
-                        db_executor, users_db.set_person_speaker_embedding, uid, person_id, embedding_list
-                    )
+                    if attribution == SPEAKER_ATTRIBUTION_LLM_INFERRED:
+                        embedding_stored = await run_blocking(
+                            db_executor,
+                            users_db.set_person_speaker_embedding_if_assignment_current,
+                            uid,
+                            person_id,
+                            conversation_id,
+                            segment_ids,
+                            embedding_list,
+                            attribution,
+                        )
+                    else:
+                        embedding_stored = await run_blocking(
+                            db_executor,
+                            users_db.set_person_speaker_embedding,
+                            uid,
+                            person_id,
+                            embedding_list,
+                            attribution,
+                        )
+                    if not embedding_stored:
+                        raise SpeakerEnrolmentError(
+                            f"speaker assignment changed before embedding storage for person {person_id}"
+                        )
                     logger.info(
                         f"Stored speaker embedding for person {person_id} (dim={len(embedding_list)}) {uid} {conversation_id}"
                     )
                 except Exception as emb_err:
-                    logger.error(f"Failed to extract/store speaker embedding: {emb_err} {uid} {conversation_id}")
+                    logger.error(
+                        'Failed to extract/store speaker embedding person=%s error=%s uid=%s conversation=%s',
+                        person_id,
+                        sanitize(emb_err),
+                        uid,
+                        conversation_id,
+                    )
+                    raise SpeakerEnrolmentError(
+                        f"speech sample stored without an embedding for person {person_id}"
+                    ) from emb_err
             else:
+                try:
+                    await run_blocking(
+                        storage_executor, delete_user_person_speech_sample, uid, person_id, path.split('/')[-1]
+                    )
+                except Exception as cleanup_error:
+                    logger.error(
+                        'Failed to remove unclaimed speech sample person=%s error=%s uid=%s conversation=%s',
+                        person_id,
+                        sanitize(cleanup_error),
+                        uid,
+                        conversation_id,
+                    )
                 logger.error(f"Failed to add speech sample for person {person_id} {uid} {conversation_id}")
                 break  # Likely hit limit
 
+        return SpeakerEnrolmentOutcome.ENROLLED if samples_added else SpeakerEnrolmentOutcome.SKIPPED
+
+    except SpeakerEnrolmentError:
+        raise
     except Exception as e:
-        logger.error(f"Error extracting speaker samples: {e} {uid} {conversation_id}")
+        logger.error(
+            'Error extracting speaker samples error=%s uid=%s conversation=%s', sanitize(e), uid, conversation_id
+        )
+        if stored_sample_path is not None:
+            raise SpeakerEnrolmentError(f"speech sample stored but enrolment failed for person {person_id}") from e
+        return SpeakerEnrolmentOutcome.SKIPPED

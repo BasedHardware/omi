@@ -6589,6 +6589,14 @@
             ],
             "default": "omi"
           },
+          "speaker_label_suggestions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerLabelSuggestion"
+            },
+            "title": "Speaker Label Suggestions",
+            "type": "array"
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -18126,6 +18134,14 @@
             ],
             "default": "omi"
           },
+          "speaker_label_suggestions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SpeakerLabelSuggestion"
+            },
+            "title": "Speaker Label Suggestions",
+            "type": "array"
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -18615,6 +18631,38 @@
           "talk_share"
         ],
         "title": "SpeakerAnalytics",
+        "type": "object"
+      },
+      "SpeakerLabelSuggestion": {
+        "description": "A name the finalization pass proposed but did not apply.\n\nSpeaker naming assigns a person only when a second model fails to refute\nthe identification. Everything short of that is offered here instead, with\nthe ids of the segments it was inferred from, so the user can accept it\nrather than having the backend guess on their behalf.\n\nThe evidence is referenced, never copied: this model is stored as plain\nFirestore fields on the conversation, outside the encryption boundary that\ncovers ``transcript_segments``, so carrying the verbatim line here would\npublish transcript content an enhanced-protection conversation exists to\nkeep opaque. ``segment_ids`` point into the transcript the client already\nholds, which is what it renders the evidence from.",
+        "properties": {
+          "confidence": {
+            "default": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "person_name": {
+            "title": "Person Name",
+            "type": "string"
+          },
+          "segment_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "speaker_id",
+          "person_name"
+        ],
+        "title": "SpeakerLabelSuggestion",
         "type": "object"
       },
       "SpeechProfileMutationResponse": {
@@ -34628,6 +34676,217 @@
         },
         "security": [],
         "summary": "Get Shared Conversation By Id",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}": {
+      "delete": {
+        "description": "Drop the name proposed for a numbered speaker without assigning anyone.\n\nNothing but the suggestion is touched: no Person is created or resolved, no\nsegment changes hands, no voiceprint is enrolled or revoked. The removal is\ntransactional for the same reason accept's is: a dismiss that wrote back a\nwhole array computed from its own snapshot would resurrect a suggestion a\nconcurrent accept had already settled.\n\n:return: The updated conversation.",
+        "operationId": "dismiss_speaker_label_suggestion_v1_conversations__conversation_id__speaker_suggestions__speaker_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Dismiss Speaker Label Suggestion",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/speaker-suggestions/{speaker_id}/accept": {
+      "post": {
+        "description": "Accept the name the finalization pass proposed for a numbered speaker.\n\nThe suggested name resolves to the Person already carrying it or to a new one\ncoined for it, every segment of that speaker is assigned to them, and the\nsuggestion is taken off the conversation.\n\nEnrolment differs from the pass's own: a name the user tapped is not an\ninference, so the voiceprint is tagged `user_tagged` rather than `llm_inferred`\nand carries none of the restrictions an inferred sample does.\n\nThe assignment and the removal of the suggestion are one transaction rather\nthan two writes computed from this request's snapshot. Two accepts landing\ntogether would otherwise each replace the whole segment array and the whole\nsuggestion array, so the later write would undo the earlier speaker and\nresurrect the suggestion it had settled, while both still enrolled a\nvoiceprint against a transcript no longer naming them.\n\n:return: The updated conversation.",
+        "operationId": "accept_speaker_label_suggestion_v1_conversations__conversation_id__speaker_suggestions__speaker_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "person_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Person Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Accept Speaker Label Suggestion",
         "tags": [
           "conversations"
         ]

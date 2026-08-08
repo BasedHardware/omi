@@ -4,6 +4,7 @@ import re
 import uuid
 import logging
 import asyncio
+from concurrent.futures import Future
 from datetime import timezone, timedelta, datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
@@ -57,6 +58,7 @@ from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import memory_system_request_scope
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.log_sanitizer import sanitize
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
 from models.other import Person
@@ -65,7 +67,14 @@ from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
-from utils.executors import llm_executor, postprocess_executor, submit_with_context
+from utils.executors import (
+    db_executor,
+    llm_executor,
+    postprocess_executor,
+    run_blocking,
+    submit_background_task,
+    submit_with_context,
+)
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -1399,6 +1408,102 @@ def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
         upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
 
 
+def _speaker_suggestion_payload(suggestions: List[Any]) -> List[Dict[str, Any]]:
+    """Serialize the names that were proposed but not verified, for the client to accept.
+
+    The evidence quote the pass reasoned from is deliberately not written. These land
+    as plain fields on the conversation document and `_prepare_conversation_for_write`
+    encrypts only `transcript_segments`, so persisting the verbatim line would leave
+    transcript content readable in Firestore for an enhanced-protection conversation.
+    `segment_ids` address the same evidence inside the encrypted transcript, which is
+    what the client renders it from.
+    """
+    return [
+        {
+            'speaker_id': suggestion.speaker_id,
+            'person_name': suggestion.person_name,
+            'confidence': suggestion.confidence,
+            'segment_ids': list(suggestion.segment_ids),
+        }
+        for suggestion in suggestions
+    ]
+
+
+async def _run_speaker_resolution(uid: str, conversation: Conversation) -> None:
+    """Name the numbered speakers, then persist the names that stayed suggestions.
+
+    `resolve_conversation_speakers` writes the verified assignments itself but returns
+    the refuted and unverified ones in memory only. Persisting them on the conversation
+    document is what makes them reachable: without this write the tap-to-accept
+    suggestion never leaves the worker that computed it.
+    """
+    from utils.conversations.speaker_resolution import resolve_conversation_speakers
+
+    try:
+        outcome = await resolve_conversation_speakers(uid, conversation)
+    except Exception as e:
+        logger.error('Speaker resolution failed error=%s uid=%s conversation=%s', sanitize(e), uid, conversation.id)
+        return
+    if not outcome.suggested:
+        return
+    try:
+        await run_blocking(
+            db_executor,
+            conversations_db.persist_speaker_resolution_suggestions,
+            uid,
+            conversation.id,
+            _speaker_suggestion_payload(list(outcome.suggested)),
+        )
+    except Exception as e:
+        logger.error(
+            'Error persisting speaker label suggestions error=%s uid=%s conversation=%s',
+            sanitize(e),
+            uid,
+            conversation.id,
+        )
+
+
+def schedule_speaker_resolution(uid: str, conversation: Conversation) -> Optional[Future]:
+    """Start the speaker naming pass for a finalized conversation.
+
+    Called only after the conversation's audio files are durable, because enrolment
+    reads them back and silently gives up when there are none.
+
+    The pass is handed a deep copy. It reassigns `person_id` on the segments it names
+    and persists them itself, so letting it touch the live object would let memory
+    extraction — queued on `postprocess_executor` with no ordering relative to this —
+    read half-updated speaker labels.
+    """
+    from utils.conversations.speaker_resolution import SPEAKER_RESOLUTION_ENABLED
+
+    if not SPEAKER_RESOLUTION_ENABLED:
+        return None
+    try:
+        snapshot = conversation.model_copy(deep=True)
+    except Exception as e:
+        logger.error(
+            'Error snapshotting conversation for speaker resolution error=%s uid=%s conversation=%s',
+            sanitize(e),
+            uid,
+            conversation.id,
+        )
+        return None
+    try:
+        return submit_background_task(
+            _run_speaker_resolution(uid, snapshot),
+            name=f'speaker_resolution:{conversation.id}',
+            cancel_on_shutdown=False,
+        )
+    except RuntimeError as e:
+        logger.error(
+            'Could not schedule speaker resolution error=%s uid=%s conversation=%s',
+            sanitize(e),
+            uid,
+            conversation.id,
+        )
+        return None
+
+
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
     tz = notification_db.get_user_time_zone(uid) or ''
@@ -1742,6 +1847,9 @@ def process_conversation(
                         )
             except Exception as e:
                 logger.error(f"Error creating audio files: {e}")
+
+        if not discarded and not is_reprocess:
+            schedule_speaker_resolution(uid, cast(Conversation, conversation))
 
         # Update folder conversation count after conversation is saved
         if assigned_folder_id:
