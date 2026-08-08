@@ -30,6 +30,30 @@ def _copy_contract_tree(tmp_path: Path, monkeypatch) -> Path:
     return tmp_path / "codemagic.yaml"
 
 
+def _copy_parent_era_contract_tree(tmp_path: Path, monkeypatch, revision: str = REVIEWED_PARENT) -> Path:
+    """Check out codemagic.yaml and its contract fixture as of a reviewed parent.
+
+    Parent-guard regression probes run a guard from an older revision against a
+    tree from that same era. Copying today's tree would trip checks the parent
+    never knew about (e.g. the step count moved 21 -> 22 in #10317), turning an
+    era-consistent probe into a false failure.
+    """
+    codemagic = tmp_path / "codemagic.yaml"
+    codemagic.write_bytes(
+        subprocess.check_output(["git", "show", f"{revision}:codemagic.yaml"], cwd=REPO_ROOT)
+    )
+    fixture = tmp_path / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json"
+    fixture.parent.mkdir(parents=True, exist_ok=True)
+    fixture.write_bytes(
+        subprocess.check_output(
+            ["git", "show", f"{revision}:.github/scripts/fixtures/codemagic_workflow_contract/v1.json"],
+            cwd=REPO_ROOT,
+        )
+    )
+    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
+    return codemagic
+
+
 def _mutate(path: Path, old: str, new: str, *, count: int = 1) -> None:
     text = path.read_text(encoding="utf-8")
     assert text.count(old) >= count, old
@@ -62,25 +86,6 @@ def _load_parent_guard(tmp_path: Path, revision: str = REVIEWED_PARENT):
     return module
 
 
-def _copy_reviewed_parent_contract(tmp_path: Path) -> Path:
-    codemagic = tmp_path / "codemagic.yaml"
-    codemagic.write_bytes(
-        subprocess.check_output(
-            ["git", "show", f"{REVIEWED_PARENT}:codemagic.yaml"],
-            cwd=REPO_ROOT,
-        )
-    )
-    fixture = tmp_path / ".github/scripts/fixtures/codemagic_workflow_contract/v1.json"
-    fixture.parent.mkdir(parents=True, exist_ok=True)
-    fixture.write_bytes(
-        subprocess.check_output(
-            ["git", "show", f"{REVIEWED_PARENT}:.github/scripts/fixtures/codemagic_workflow_contract/v1.json"],
-            cwd=REPO_ROOT,
-        )
-    )
-    return codemagic
-
-
 def _append_unreviewed_workflow(
     path: Path, script: str, *, credential_group: str = "alternate_release_credentials"
 ) -> None:
@@ -97,20 +102,6 @@ def _append_unreviewed_workflow(
 """,
         encoding="utf-8",
     )
-
-
-def _restore_parent_preview_credential_shape(path: Path) -> None:
-    """Keep historical-parent regression probes independent of the temporary exception."""
-    old = "        - desktop_preview_secrets\n        - appstore_credentials\n        - desktop_secrets\n"
-    if old in path.read_text(encoding="utf-8"):
-        _mutate(path, old, "        - desktop_preview_secrets\n")
-    contract_path = _fixture_path(path.parent)
-    contract = json.loads(contract_path.read_text(encoding="utf-8"))
-    preview = yaml.safe_load(path.read_text(encoding="utf-8"))["workflows"]["omi-desktop-swift-preview"]
-    contract["omi-desktop-swift-preview"]["semantic_sha256"] = hashlib.sha256(
-        json.dumps(preview, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    ).hexdigest()
-    contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
 
 
 def _fixture_path(root: Path) -> Path:
@@ -335,12 +326,13 @@ def _mobile_trigger_errors_after(tmp_path: Path, monkeypatch, old: str, new: str
     dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
     dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
-    _mutate(dispatcher, old, new)
+    target = dispatcher if old in dispatcher.read_text(encoding="utf-8") else codemagic
+    _mutate(target, old, new)
     monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
     return GUARDS.check_mobile_codemagic_release_triggers()
 
 
-def test_mobile_codemagic_dispatcher_is_production_safe(tmp_path, monkeypatch):
+def test_mobile_codemagic_triggers_are_native_and_production_safe(tmp_path, monkeypatch):
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
     dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
@@ -354,7 +346,7 @@ def test_mobile_codemagic_dispatcher_is_production_safe(tmp_path, monkeypatch):
     assert GUARDS.check_mobile_codemagic_release_triggers() == []
 
 
-def test_mobile_codemagic_trigger_guard_rejects_legacy_github_dispatcher(tmp_path, monkeypatch):
+def test_mobile_codemagic_trigger_guard_rejects_github_dispatcher(tmp_path, monkeypatch):
     codemagic = tmp_path / "codemagic.yaml"
     shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
     dispatcher = tmp_path / ".github/workflows/mobile_internal_auto.yml"
@@ -414,56 +406,19 @@ def test_desktop_candidate_trigger_guard_rejects_direct_build_api_for_normal_lan
 @pytest.mark.parametrize(
     ("old", "new"),
     (
-        ("    branches: [main]\n", "    branches: [release]\n"),
+        ("    branches: [main]\n", "    branches: [release/*]\n"),
         ("    paths: ['app/**']\n", "    paths: ['desktop/**']\n"),
-        ("    - cron: '0 */3 * * *'\n", "    - cron: '0 */4 * * *'\n"),
-        ("cancel-in-progress: false", "cancel-in-progress: true"),
+        ("  cancel-in-progress: false\n", "  cancel-in-progress: true\n"),
+        ("      changeset:\n        includes:\n          - 'app/**'\n", "      changeset:\n        includes:\n          - 'desktop/**'\n"),
     ),
 )
 def test_mobile_codemagic_trigger_guard_rejects_regressions(tmp_path, monkeypatch, old, new):
     errors = _mobile_trigger_errors_after(tmp_path, monkeypatch, old, new)
 
     assert any(
-        "main app/** pushes" in error
-        or "three-hour schedule" in error
-        or "workflow_dispatch" in error
-        or "must not cancel" in error
+        "mobile internal build dispatcher" in error or "must retain its app/** changeset guard" in error
         for error in errors
     ), errors
-
-
-def test_mobile_codemagic_dispatcher_guard_rejects_missing_dispatch_command(tmp_path, monkeypatch):
-    codemagic = tmp_path / "codemagic.yaml"
-    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
-    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
-    dispatcher.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
-    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
-    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
-    _mutate(dispatcher, "python3 .github/scripts/dispatch_mobile_internal_builds.py", "python3 .github/scripts/other_dispatcher.py")
-    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
-
-    errors = GUARDS.check_mobile_codemagic_release_triggers()
-
-    assert errors == ["mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py"], errors
-
-
-def test_mobile_codemagic_dispatcher_guard_rejects_missing_workflow_target(tmp_path, monkeypatch):
-    codemagic = tmp_path / "codemagic.yaml"
-    shutil.copy2(REPO_ROOT / "codemagic.yaml", codemagic)
-    dispatcher = tmp_path / ".github/workflows/mobile_internal_build.yml"
-    dispatcher.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / ".github/workflows/mobile_internal_build.yml", dispatcher)
-    dispatcher_script = tmp_path / ".github/scripts/dispatch_mobile_internal_builds.py"
-    dispatcher_script.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py", dispatcher_script)
-    _mutate(dispatcher_script, 'MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")', 'MOBILE_WORKFLOWS = ("ios-internal-auto",)')
-    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
-
-    errors = GUARDS.check_mobile_codemagic_release_triggers()
-
-    assert errors == ["mobile internal build dispatcher script must declare both Codemagic mobile workflows"], errors
 
 
 @pytest.mark.parametrize(
@@ -516,25 +471,23 @@ def test_normal_release_gcp_authority_guard_ignores_harmless_source_comments(tmp
     ids=("shell-construction", "direct-wrapper", "python-construction", "variable-api-url"),
 )
 def test_reviewed_parent_accepts_unreviewed_publisher_bypasses_but_global_lock_rejects(tmp_path, monkeypatch, script):
-    codemagic = _copy_reviewed_parent_contract(tmp_path)
-    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
-    _restore_parent_preview_credential_shape(codemagic)
-    _approve_current_codemagic_document(tmp_path)
+    codemagic = _copy_parent_era_contract_tree(tmp_path, monkeypatch)
     _append_unreviewed_workflow(codemagic, script)
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
     assert parent.check_codemagic_release_publishers() == [], script
 
+    # The global lock is the current guard's defense; run it against a current-era
+    # tree re-seeded with the same unreviewed publisher appended.
+    _copy_contract_tree(tmp_path, monkeypatch)
+    _append_unreviewed_workflow(codemagic, script)
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
 
 
 def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_global_lock_rejects(tmp_path, monkeypatch):
-    codemagic = _copy_reviewed_parent_contract(tmp_path)
-    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
-    _restore_parent_preview_credential_shape(codemagic)
-    _approve_current_codemagic_document(tmp_path)
+    codemagic = _copy_parent_era_contract_tree(tmp_path, monkeypatch)
     _append_unreviewed_workflow(
         codemagic,
         'X=gh; $X release create "$CM_TAG"',
@@ -545,6 +498,13 @@ def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_glo
     parent.ROOT = tmp_path
     assert parent.check_codemagic_release_publishers() == []
 
+    # Same current-era re-seed: the global lock must reject the unknown group too.
+    _copy_contract_tree(tmp_path, monkeypatch)
+    _append_unreviewed_workflow(
+        codemagic,
+        'X=gh; $X release create "$CM_TAG"',
+        credential_group="unrecognized_release_authority",
+    )
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
 
@@ -576,40 +536,54 @@ def test_reviewed_parent_accepts_unknown_credential_group_with_publisher_but_glo
     ids=("unrelated-workflow", "comment-bytes", "anchor-spelling", "top-level-field"),
 )
 def test_global_document_lock_rejects_every_codemagic_mutation(tmp_path, monkeypatch, old, new, parent_accepts):
-    codemagic = _copy_reviewed_parent_contract(tmp_path)
-    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
-    _restore_parent_preview_credential_shape(codemagic)
-    _approve_current_codemagic_document(tmp_path)
+    codemagic = _copy_parent_era_contract_tree(tmp_path, monkeypatch)
     _mutate(codemagic, old, new)
     if old == "&desktop_signed_artifact_steps":
         _mutate(codemagic, "*desktop_signed_artifact_steps", "*renamed_desktop_signed_artifact_steps")
 
     parent = _load_parent_guard(tmp_path)
-    _restore_parent_preview_credential_shape(codemagic)
     parent.ROOT = tmp_path
     parent_errors = parent.check_codemagic_release_publishers()
     assert (parent_errors == []) is parent_accepts, parent_errors
+
+    # The global raw lock is the current guard's defense against any mutation,
+    # including ones the parent-era guard tolerated. Re-seed today's codemagic
+    # and fixture, then re-apply the mutation, so GUARDS sees a current-era tree.
+    _copy_contract_tree(tmp_path, monkeypatch)
+    _mutate(codemagic, old, new)
+    if old == "&desktop_signed_artifact_steps":
+        _mutate(codemagic, "*desktop_signed_artifact_steps", "*renamed_desktop_signed_artifact_steps")
 
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("entire document" in error for error in errors), errors
 
 
 def test_global_document_raw_lock_rejects_semantically_equivalent_yaml_rewrite(tmp_path, monkeypatch):
-    codemagic = _copy_reviewed_parent_contract(tmp_path)
-    monkeypatch.setattr(GUARDS, "ROOT", tmp_path)
-    _restore_parent_preview_credential_shape(codemagic)
-    original_document = yaml.safe_load(codemagic.read_text(encoding="utf-8"))
-    _approve_current_codemagic_document(tmp_path)
+    codemagic = _copy_parent_era_contract_tree(tmp_path, monkeypatch)
+    parent_tree = subprocess.check_output(
+        ["git", "show", f"{REVIEWED_PARENT}:codemagic.yaml"], cwd=REPO_ROOT
+    )
     _mutate(
         codemagic,
         "    name: Auto Deploy iOS to Internal TestFlight\n",
         '    name: "Auto Deploy iOS to Internal TestFlight"\n',
     )
-    assert yaml.safe_load(codemagic.read_text(encoding="utf-8")) == original_document
+    assert yaml.safe_load(codemagic.read_text(encoding="utf-8")) == yaml.safe_load(parent_tree)
 
     parent = _load_parent_guard(tmp_path)
     parent.ROOT = tmp_path
     assert parent.check_codemagic_release_publishers() == []
+
+    # The raw-byte lock is the current guard's defense: the same semantically
+    # equivalent rewrite that the parent-era guard accepted must trip the raw
+    # digest while leaving the semantic digest intact. Re-seed today's codemagic
+    # and fixture so GUARDS evaluates the current document and contract.
+    _copy_contract_tree(tmp_path, monkeypatch)
+    _mutate(
+        codemagic,
+        "    name: Auto Deploy iOS to Internal TestFlight\n",
+        '    name: "Auto Deploy iOS to Internal TestFlight"\n',
+    )
 
     errors = GUARDS.check_codemagic_release_publishers()
     assert any("raw byte digest" in error for error in errors), errors

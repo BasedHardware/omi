@@ -66,6 +66,11 @@ checks:
     triggers: [".github/workflows/desktop_qualify_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "SCA-174: qualification must check out the exact release tag inside its isolated source directory; the guard and its focused behavioral test run on every relevant diff"
+  - id: release-process-guard-self-tests
+    command: ["bash", "scripts/run-release-process-guard-tests.sh"]
+    triggers: [".github/scripts/check-release-process-guards.py", ".github/scripts/test_check_release_process_guards.py", "scripts/run-release-process-guard-tests.sh", "scripts/dev-harness/_resolve_python.sh", "backend/scripts/sync-python-deps.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#10351: the release-process guard pytest suite was failing silently because no CI lane ran it; the suite must stay green now that it is wired in"
   - id: failure-class-retirement-author
     command: ["python3", ".github/scripts/test_failure_class_retirement.py"]
     triggers: [".github/scripts/failure_class_retirement.py", ".github/scripts/test_failure_class_retirement.py", ".github/workflows/repo-hygiene.yml", "scripts/failure-class", ".github/checks-manifest.yaml"]

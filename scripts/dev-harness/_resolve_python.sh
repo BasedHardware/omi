@@ -15,6 +15,27 @@ dev_harness_canonical_python() {
   return 1
 }
 
+# Resolve the canonical backend interpreter and ensure it can import $1,
+# syncing locked backend deps when the import probe fails. Prints the
+# interpreter path; exits 1 when sync does not produce a usable venv.
+# Single source of truth for the two release-process guard lanes.
+dev_harness_ensure_python_with() {
+  local module="$1"
+  local repo_root candidate
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+  if ! candidate="$(dev_harness_canonical_python)" \
+    || ! "$candidate" -c "import $module" >/dev/null 2>&1; then
+    "$repo_root/backend/scripts/sync-python-deps.sh" >&2
+    if ! candidate="$(dev_harness_canonical_python)"; then
+      echo "FAIL: dependency sync did not create the canonical backend/.venv interpreter." >&2
+      return 1
+    fi
+  fi
+
+  printf '%s\n' "$candidate"
+}
+
 # Print the interpreter for local dev-harness commands. PYTHON is an explicit
 # caller choice; otherwise prefer the canonical venv while retaining support
 # for existing checkouts that use the legacy backend/venv location.
