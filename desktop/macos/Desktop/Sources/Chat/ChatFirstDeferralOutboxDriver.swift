@@ -135,6 +135,9 @@ extension APIClient {
   func recordChatFirstDeferral(
     _ request: ChatFirstDeferralDeliveryRequest
   ) async throws {
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      throw APIError.accountCutoverOfflineQueueBlocked
+    }
     let body = ChatFirstDeferralCreateBody(
       controlGeneration: request.controlGeneration,
       ownerFence: request.ownerID,

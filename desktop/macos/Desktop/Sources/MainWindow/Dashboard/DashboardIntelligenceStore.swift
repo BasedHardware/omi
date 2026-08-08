@@ -274,8 +274,10 @@ final class DashboardIntelligenceStore: ObservableObject {
     pendingFeedback = outboxStore.load(ownerID: ownerScope.ownerID)
     pendingFeedback.removeAll { $0.accountGeneration != control.accountGeneration }
     outboxStore.save(pendingFeedback, ownerID: ownerScope.ownerID)
-    await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
-    guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    if AccountCutoverOfflineUploadAdmission.allowsUpload() {
+      await retryPendingFeedback(ownerScope: ownerScope, loadToken: loadToken)
+      guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+    }
     do {
       let projection = try await client.getWhatMattersNow(deviceID: deviceID())
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
@@ -634,6 +636,7 @@ final class DashboardIntelligenceStore: ObservableObject {
     var succeeded = Set<String>()
     for entry in outboxStore.load(ownerID: ownerScope.ownerID) {
       guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
+      guard AccountCutoverOfflineUploadAdmission.allowsUpload() else { return }
       do {
         _ = try await client.recordTaskFeedback(
           entry.request, idempotencyKey: entry.idempotencyKey,

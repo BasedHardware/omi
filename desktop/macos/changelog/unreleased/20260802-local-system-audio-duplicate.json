@@ -1,3 +1,0 @@
-{
-  "change": "Avoid duplicate local transcripts when the same system-audio playback is also heard by the microphone"
-}

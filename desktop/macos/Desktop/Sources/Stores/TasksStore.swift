@@ -2354,6 +2354,10 @@ class TasksStore: ObservableObject {
       )
     else { return }
     let ownerID = lease.ownerID
+    guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+      log("TasksStore: Skipping retryUnsyncedItems — account cutover offline upload gate closed")
+      return
+    }
     guard activeRetryLease == nil else {
       log("TasksStore: Skipping retryUnsyncedItems (already in progress)")
       return
@@ -2380,6 +2384,10 @@ class TasksStore: ObservableObject {
     var synced = 0
     for item in items {
       guard isCurrent(lease) else { return }
+      guard await AccountCutoverOfflineUploadAdmission.allowsUploadOffMainActor() else {
+        log("TasksStore: Interrupted retryUnsyncedItems — account cutover offline upload gate closed")
+        return
+      }
       guard let localId = item.id else { continue }
 
       // Re-check: the normal sync path may have synced this item while we were iterating
