@@ -719,22 +719,32 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               trailing: Switch(
                 value: _omiButtonActionsEnabled,
                 activeThumbColor: Colors.white,
-                activeTrackColor: const Color(0xFF8E8E93),
+                activeTrackColor: const Color(0xFF8B5CF6),
                 onChanged: (value) {
                   setState(() => _omiButtonActionsEnabled = value);
                   SharedPreferencesUtil().omiButtonActionsEnabled = value;
                 },
               ),
             ),
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            if (_omiButtonActionsEnabled) ...[
+              const Divider(height: 1, color: Color(0xFF3C3C43)),
+              // Double Tap (only configurable while Omi button actions are enabled)
+              _buildProfileStyleItem(
+                icon: FontAwesomeIcons.handPointer,
+                title: context.l10n.doubleTap,
+                chipValue: _getDoubleTapActionLabel(doubleTapAction),
+                onTap: _showDoubleTapActionSheet,
+              ),
+            ],
+          ] else ...[
+            // Double Tap (non-Omi devices)
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.handPointer,
+              title: context.l10n.doubleTap,
+              chipValue: _getDoubleTapActionLabel(doubleTapAction),
+              onTap: _showDoubleTapActionSheet,
+            ),
           ],
-          // Double Tap
-          _buildProfileStyleItem(
-            icon: FontAwesomeIcons.handPointer,
-            title: context.l10n.doubleTap,
-            chipValue: _getDoubleTapActionLabel(doubleTapAction),
-            onTap: _showDoubleTapActionSheet,
-          ),
           // LED Brightness
           if (_isDimRatioLoaded && _hasDimmingFeature == true) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),
