@@ -22,9 +22,10 @@ const (
 type CodecID byte
 
 const (
-	CodecPCM16 CodecID = 0
-	CodecPCM8  CodecID = 1
-	CodecOpus  CodecID = 20
+	CodecPCM16     CodecID = 0
+	CodecPCM8      CodecID = 1
+	CodecOpus      CodecID = 20
+	CodecOpusFS320 CodecID = 21
 )
 
 // StripPacketHeader removes the 3-byte Omi audio header.

@@ -19,6 +19,23 @@ inline constexpr int kPcmSampleRateHz = 16000;
 inline constexpr int kOpusFrameSamples = 960;
 inline constexpr int kPcmChannels = 1;
 
+enum class BleAudioCodec : std::uint8_t {
+  Pcm16 = 0,
+  Pcm8 = 1,
+  Opus = 20,
+  OpusFs320 = 21,
+};
+
+inline constexpr BleAudioCodec MapCodecId(std::uint8_t id) {
+  switch (id) {
+    case 0: return BleAudioCodec::Pcm16;
+    case 1: return BleAudioCodec::Pcm8;
+    case 20: return BleAudioCodec::Opus;
+    case 21: return BleAudioCodec::OpusFs320;
+    default: return static_cast<BleAudioCodec>(id);
+  }
+}
+
 // Returns payload after the 3-byte header; empty if packet too short.
 std::vector<std::uint8_t> StripPacketHeader(const std::uint8_t* data, std::size_t len);
 
