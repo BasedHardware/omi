@@ -204,8 +204,32 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
   private let sessionDelegate: BridgeHttpURLSessionDelegate
   private let session: URLSession
 
-  /// Requests served, for verification output. No URLs or tokens recorded.
+  /// Traffic counters for verification output. No URLs or tokens recorded.
+  ///
+  /// WHY THESE ARE SEPARATE: `servedCount` alone counts requests *dispatched*,
+  /// which is incremented before the response arrives. A shell whose every
+  /// request 401s therefore reports a healthy nonzero "served" count while the
+  /// app renders an empty list — observed directly on this branch, and the
+  /// exact false-green shape of the wave-9 bridge failure. An acceptance run
+  /// must key on `succeededCount`, because that is the only counter that cannot
+  /// be satisfied by a request that failed.
   private(set) var servedCount = 0
+  /// Responses with a 2xx status.
+  private(set) var succeededCount = 0
+  /// Responses that arrived with a non-2xx status.
+  private(set) var httpErrorCount = 0
+  /// Requests that never produced a response at all.
+  private(set) var transportFailureCount = 0
+  /// Last non-2xx status seen, for a legible diagnosis. Never a URL or token.
+  private(set) var lastErrorStatus: Int?
+
+  /// One-line, secret-free traffic summary for acceptance output.
+  var trafficSummary: String {
+    var out =
+      "dispatched=\(servedCount) succeeded=\(succeededCount) httpError=\(httpErrorCount) transportFailure=\(transportFailureCount)"
+    if let lastErrorStatus { out += " lastErrorStatus=\(lastErrorStatus)" }
+    return out
+  }
 
   init(baseURL: URL, token: String?) {
     self.baseURL = baseURL
@@ -262,6 +286,12 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
           replyHandler(self.failure(id, .shellError, "non-HTTP response"), nil)
           return
         }
+        if (200..<300).contains(http.statusCode) {
+          self.succeededCount += 1
+        } else {
+          self.httpErrorCount += 1
+          self.lastErrorStatus = http.statusCode
+        }
         let body = data.isEmpty ? nil : String(data: data, encoding: .utf8)
         let retryAfter = http.value(forHTTPHeaderField: "retry-after").flatMap(Int.init)
         let normalized = BridgeHttpPolicy.normalizeResponse(
@@ -269,6 +299,7 @@ final class BridgeHttpHandler: NSObject, WKScriptMessageHandlerWithReply {
         let out = BridgeHttpPolicy.responsePayload(normalized)
         replyHandler(["ok": true, "response": out], nil)
       } catch {
+        self.transportFailureCount += 1
         let ns = error as NSError
         let reasonName: String
         switch ns.code {
