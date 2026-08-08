@@ -8,12 +8,21 @@ import {
   fetchIdSnapshot,
   fetchMemoryIdSnapshot,
 } from "@omi-core/adapters-legacy";
+import { fetchSynthesizedMemoryIdSnapshot } from "@omi-core/adapters-platform";
 import { checkSnapshotConformance, type SnapshotDescriptor } from "../snapshot-conformance.js";
 
 /**
- * `completeEvidence` is the ONLY thing that licenses `complete: true`. Two of
- * four domains have it; both were re-verified against the legacy source rather
- * than assumed. The other two are filtered and must never claim completeness.
+ * `completeEvidence` is the ONLY thing that licenses `complete: true`. Three of
+ * five entries have it; the two legacy ones were re-verified against the legacy
+ * source rather than assumed, and the platform one cites a contract the SERVER
+ * is bound to rather than a handler we read. The other two are filtered and
+ * must never claim completeness.
+ *
+ * Note what the two memories rows say side by side: the SAME domain is
+ * complete-incapable on the legacy generation and complete-capable on the
+ * platform generation. That is not an inconsistency, it is the entire value of
+ * the rewrite, and rule 12 is what makes the difference legible instead of a
+ * flag someone flipped.
  */
 const DESCRIPTORS: SnapshotDescriptor[] = [
   {
@@ -35,6 +44,50 @@ const DESCRIPTORS: SnapshotDescriptor[] = [
     // (`user_review is not False`) and invalidated (`invalid_at`) rows, and
     // applies that filter in Python AFTER Firestore's .limit(), so not even a
     // short page proves the set was exhausted.
+  },
+  {
+    // The FIRST domain in this repo that may legitimately claim completeness
+    // from a list read — and it may only because the SERVER declares its
+    // coverage rather than the client inferring it. Everything about this
+    // descriptor is that distinction.
+    domain: "memories-platform",
+    fetch: (http) => fetchSynthesizedMemoryIdSnapshot(http),
+    okBody: (ids) => ({
+      contractVersion: "1.0.0",
+      items: ids.map((id) => ({ id: `retrieval-node-v1:${id}`, text: `synthesized ${id}` })),
+      window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+      completeness: {
+        version: "recall-completeness-v1",
+        status: "complete",
+        reasons: [],
+        frontiers: {
+          declaredFrontier: "frontier-v1:declared",
+          newestSearchedAcceptedFrontier: "frontier-v1:declared",
+          missingAcceptedFrontierReason: null,
+          newestSearchedStmFrontier: "frontier-v1:included",
+          missingStmFrontierReason: null,
+        },
+      },
+      absence: null,
+    }),
+    // NO pageSize, deliberately, and this is the one judgment call in this
+    // file. The full-page law encodes "a short page is not proof, so a full
+    // page is definitely not proof" — a heuristic about page FULLNESS, which
+    // is the only signal the legacy wire offers. The ratified contract does
+    // not use that signal at all: completeness is a declared envelope
+    // (`completeness.status` + frontiers + typed null reasons) that is
+    // independent of how many items fit on a page. Declaring a pageSize here
+    // would make the harness build a full page — which our okBody renders as
+    // an honest terminal-complete page, because that is what the contract
+    // says a terminal page looks like — and then fail it for claiming
+    // completeness the server explicitly declared. That would be the harness
+    // enforcing the legacy wire's limitation against a wire that fixed it.
+    // The laws that DO apply (non-200 -> null, junk -> null, no-evidence ->
+    // never complete, evidence -> not a dead license) all still run, and the
+    // multi-page walk laws that replace the full-page law live in
+    // platform-memories-adapter.test.ts with their own red-proofs.
+    completeEvidence:
+      "@omi-core/ratified-contracts 0.1.1 SynthesizedMemoryRead: the server DECLARES coverage in a versioned completeness envelope (recall-completeness-v1) carrying declaredFrontier vs newestSearchedAcceptedFrontier and typed null reasons; fetchSynthesizedMemoryIdSnapshot claims complete only when every page of a walk begun at the first page declared status:'complete' AND the walk terminated on the CompleteTerminalWindow variant within maxPages — see contracts/ratified/fixtures/recall-completeness.json and status-matrix.json, both executed in platform-memories-adapter.test.ts",
   },
   {
     domain: "conversations",

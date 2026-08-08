@@ -24,6 +24,9 @@
       "path": "../adapters-legacy"
     },
     {
+      "path": "../adapters-platform"
+    },
+    {
       "path": "../domain"
     },
     {
