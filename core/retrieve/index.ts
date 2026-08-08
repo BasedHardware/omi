@@ -1,3 +1,10 @@
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-007)
+// domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMCORE-012)
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMX-001)
+// domain-pending(DIV-DOMX-006)
 import { compareStrings } from "../order";
 import type { ClaimPlacementStatus, GeneratedAdjacency, PlacementArtifact } from "../ledger";
 import type { CanonicalClaim, ClaimArgument, Entity, Evidence, IdentityAuthorization, IdentityConstraint, IdentityEndpoint, L1Event, Mention, PersistedValidTime, Predicate, PredicateAssertion, ProvisionalClaim } from "../schema";

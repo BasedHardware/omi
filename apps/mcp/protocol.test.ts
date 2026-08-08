@@ -1,3 +1,8 @@
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMX-006)
 import { describe, expect, test } from "bun:test";
 
 import { InvalidMcpCursorError } from "./cursor";
