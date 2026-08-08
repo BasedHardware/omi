@@ -1,8 +1,5 @@
 import type { MessageKey } from "@omi-core/i18n";
-import type {
-  SynthesizedMemoryItem,
-  SynthesizedRecallState,
-} from "./ProductionSynthesizedMemoryStore.js";
+import type { SynthesizedMemoryItem, SynthesizedRecallReason, SynthesizedRecallState } from "@omi-core/contracts";
 
 /** Compile-time proof that a narrow key union really exists in the catalog. */
 type CatalogKey<T extends MessageKey> = T;
@@ -52,21 +49,30 @@ export type CompletenessNotice = {
   readonly kind: CompletenessNoticeKind;
   readonly titleKey: CompletenessTitleKey | null;
   readonly reasonKeys: readonly ReasonKey[];
-  /** Reasons the server sent that this build has no copy for. Counted, never invented. */
-  readonly unrecognizedReasonCount: number;
   readonly tone: "neutral" | "caution" | "warning";
 };
 
-const DEGRADED_REASONS = ["projection_stale", "projection_unavailable", "projection_bypassed"];
-const PARTIAL_REASONS = ["source_bound", "time_bound", "policy_bound"];
+const DEGRADED_REASONS: readonly SynthesizedRecallReason[] = [
+  "projection_stale",
+  "projection_unavailable",
+  "projection_bypassed",
+];
+const PARTIAL_REASONS: readonly SynthesizedRecallReason[] = ["source_bound", "time_bound", "policy_bound"];
 
 /**
- * Wire vocabulary to catalog copy. Explicit rather than derived: the ratified reasons are
- * snake_case and canonical message keys must be camelCase, so a computed key would be
- * both unchecked and wrong. An entry missing here makes the reason *unrecognised*, which
- * the notice reports as a count instead of inventing copy for it.
+ * Wire vocabulary to catalog copy. Explicit rather than computed: the ratified reasons are
+ * snake_case and canonical message keys must be camelCase, so a template-built key would
+ * be both unchecked and wrong.
+ *
+ * Typed as a TOTAL record over `SynthesizedRecallReason`. That is the drift guard: if the
+ * ratified contract gains an eighth limitation reason, this file stops compiling until
+ * someone writes copy for it. There is deliberately no "unrecognised reason" runtime path
+ * — `parseSynthesizedPageJson` rejects a whole page whose reasons are not in the ratified
+ * vocabulary, so such a page reaches this surface as `kind: "unknown"`, never as a known
+ * state with a mystery reason. A count of unrecognised reasons would be unreachable code
+ * describing a state the contract cannot produce.
  */
-const REASON_KEYS: Readonly<Record<string, ReasonKey>> = {
+const REASON_KEYS: Readonly<Record<SynthesizedRecallReason, ReasonKey>> = {
   "accepted_work_pending": "memoriesPlatform.reason.acceptedWorkPending",
   "projection_stale": "memoriesPlatform.reason.projectionStale",
   "projection_unavailable": "memoriesPlatform.reason.projectionUnavailable",
@@ -81,23 +87,17 @@ const REASON_KEYS: Readonly<Record<string, ReasonKey>> = {
  * `contracts/ratified/src/projections/synthesized.ts`): degraded outranks incomplete
  * outranks partial.
  */
-function deriveStatusFromReasons(reasons: readonly string[]): CompletenessNoticeKind {
+function deriveStatusFromReasons(reasons: readonly SynthesizedRecallReason[]): CompletenessNoticeKind {
   if (reasons.some((reason) => DEGRADED_REASONS.includes(reason))) return "degraded";
   if (reasons.includes("accepted_work_pending")) return "incomplete";
   if (reasons.some((reason) => PARTIAL_REASONS.includes(reason))) return "partial";
-  // A reason we do not recognise still means the answer was limited. Falling back to
-  // "partial" keeps the surface cautious about a vocabulary it has not been taught.
-  return reasons.length > 0 ? "partial" : "complete";
+  return "complete";
 }
 
 function toneFor(kind: CompletenessNoticeKind): CompletenessNotice["tone"] {
   if (kind === "degraded") return "warning";
   if (kind === "complete" || kind === "unstated") return "neutral";
   return "caution";
-}
-
-function isKnownReason(reason: string): boolean {
-  return Object.hasOwn(REASON_KEYS, reason);
 }
 
 /**
@@ -108,16 +108,14 @@ function isKnownReason(reason: string): boolean {
  */
 export function completenessNotice(recall: SynthesizedRecallState): CompletenessNotice {
   if (recall.kind === "unknown") {
-    return { kind: "unstated", titleKey: null, reasonKeys: [], unrecognizedReasonCount: 0, tone: "neutral" };
+    return { kind: "unstated", titleKey: null, reasonKeys: [], tone: "neutral" };
   }
   const reasons = recall.reasons ?? [];
   const kind = reasons.length > 0 ? deriveStatusFromReasons(reasons) : recall.status;
-  const recognized = reasons.filter(isKnownReason);
   return {
     kind,
     titleKey: `memoriesPlatform.completeness.${kind === "unstated" ? "partial" : kind}` as CompletenessTitleKey,
-    reasonKeys: recognized.map((reason) => REASON_KEYS[reason]!),
-    unrecognizedReasonCount: reasons.length - recognized.length,
+    reasonKeys: reasons.map((reason) => REASON_KEYS[reason]),
     tone: toneFor(kind),
   };
 }

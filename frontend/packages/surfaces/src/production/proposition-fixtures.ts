@@ -1,9 +1,6 @@
 import type { RefreshPhase, StoreStatus } from "@omi-core/domain";
-import type {
-  ProductionSynthesizedMemoryStore,
-  SynthesizedMemoryItem,
-  SynthesizedRecallState,
-} from "./ProductionSynthesizedMemoryStore.js";
+import type { ProductionSynthesizedMemoryStore } from "./ProductionStores.js";
+import type { SynthesizedMemoryItem, SynthesizedRecallReason, SynthesizedRecallState } from "@omi-core/contracts";
 
 /**
  * Deterministic fixtures for the platform-generation Memories read model.
@@ -75,7 +72,7 @@ function continuationItems(): readonly SynthesizedMemoryItem[] {
 
 function known(
   status: "complete" | "incomplete" | "degraded" | "partial",
-  reasons: readonly string[],
+  reasons: readonly SynthesizedRecallReason[],
   extras: { queryGap?: boolean; hasMore?: boolean } = {},
 ): SynthesizedRecallState {
   return {
@@ -96,7 +93,6 @@ export const PROPOSITION_FIXTURE_STATES = [
   "incomplete",
   "degraded",
   "partial",
-  "unrecognized-reason",
   "query-gap",
   "empty",
   "unavailable",
@@ -128,10 +124,6 @@ function shapeFor(state: PropositionFixtureState): FixtureShape {
       return { first: baseItems(), recall: known("degraded", ["projection_stale"]), phase: "ready" };
     case "partial":
       return { first: baseItems(), recall: known("partial", ["time_bound"]), phase: "ready" };
-    case "unrecognized-reason":
-      // A server that has learned a reason this build has not. The surface must stay
-      // cautious rather than presenting the page as complete.
-      return { first: baseItems(), recall: known("complete", ["quota_bound_2027"]), phase: "ready" };
     case "query-gap":
       // Served successfully, matched nothing. Not the same story as an empty projection.
       return { first: [], recall: known("complete", [], { queryGap: true }), phase: "ready" };
