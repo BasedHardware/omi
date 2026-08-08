@@ -896,19 +896,22 @@ function UsageSectionContent({
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
 
-  // Set initial selected price when plans load
+  // Set initial selected price when plans load, and keep it in sync when the
+  // subscription's current price changes (e.g. after a plan change or
+  // cancellation) so a pending-cancellation user isn't left on a stale option.
+  const currentPriceId = subscription?.current_price_id;
   useEffect(() => {
-    if (cachedPlans && cachedPlans.length > 0 && !selectedPriceId) {
+    if (cachedPlans && cachedPlans.length > 0) {
       const activePlan = cachedPlans.find(
-        (p) => p.is_active || p.id === subscription?.current_price_id,
+        (p) => p.is_active || p.id === currentPriceId,
       );
       if (activePlan) {
         setSelectedPriceId(activePlan.id);
-      } else {
+      } else if (!selectedPriceId) {
         setSelectedPriceId(cachedPlans[0].id);
       }
     }
-  }, [cachedPlans, selectedPriceId]);
+  }, [cachedPlans, currentPriceId]);
 
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -1213,6 +1216,14 @@ function UsageSectionContent({
                   </div>
                 </div>
               </Card>
+
+              {/* Billing error surfaced in the Basic view (not only the upgrade panel) */}
+              {error && !showUpgradeOptions && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
+                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              )}
 
               {/* Upgrade Options (shown when clicked) */}
               {showUpgradeOptions && (
