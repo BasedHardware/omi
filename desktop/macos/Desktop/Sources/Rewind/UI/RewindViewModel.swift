@@ -142,9 +142,9 @@ class RewindViewModel: ObservableObject {
     // destroy the expanded view tree and lose @State (typed notes).
     guard !isTranscriptExpanded else { return }
 
-    // Only refresh if viewing today
-    let calendar = Calendar.current
-    guard calendar.isDateInToday(selectedDate) else { return }
+    // A today label can remain selected while the continuous viewport is panned into older history.
+    // Only append live frames when the actual visible window contains now.
+    guard RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: visibleTimelineRange, now: Date()) else { return }
 
     // Silent refresh: append newly finalized frames without rescanning the retained history.
     await silentlyRefreshNewestFrames()
@@ -383,6 +383,17 @@ class RewindViewModel: ObservableObject {
     selectedDate = day
   }
 
+  /// Preserve the viewport chosen while search results temporarily own `screenshots`, so clearing
+  /// the query restores the opened result's time instead of the pre-search window.
+  func rememberTimelineWindow(from start: Double, to end: Double) {
+    guard end > start else { return }
+    let requested = RewindTrackWindow.clamp(
+      start: start,
+      span: end - start,
+      within: historyRange ?? (start...end))
+    visibleTimelineRange = requested.start...(requested.start + requested.span)
+  }
+
   /// Load a bounded sample for the current continuous viewport. Queries are overscanned by one
   /// quarter-window on either side so a continuing pan keeps drawing while the next read is pending.
   func loadTimelineWindow(from start: Double, to end: Double, showLoading: Bool = false) async {
@@ -482,6 +493,7 @@ class RewindViewModel: ObservableObject {
       }
       guard !additions.isEmpty else { return }
       screenshots.append(contentsOf: additions)
+      historyRange = RewindTrackWindow.extending(historyRange, toInclude: additions[additions.count - 1].timestamp)
 
       let today = calendar.startOfDay(for: additions[additions.count - 1].timestamp)
       if !capturedDays.contains(where: { calendar.isDate($0, inSameDayAs: today) }) {

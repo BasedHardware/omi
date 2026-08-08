@@ -322,7 +322,20 @@ final class SpineStore: ObservableObject {
       hasher.combine(task.id)
       hasher.combine(task.description)
       hasher.combine(task.completed)
+      hasher.combine(task.createdAt)
       hasher.combine(task.conversationId)
+      hasher.combine(task.source)
+      hasher.combine(task.isRetired)
+      hasher.combine(task.provenance?.count ?? 0)
+      for evidence in task.provenance ?? [] {
+        hasher.combine(evidence.id)
+        hasher.combine(evidence.kind.rawValue)
+        hasher.combine(evidence.scope.rawValue)
+        hasher.combine(evidence.deviceId)
+        hasher.combine(evidence.startSeconds)
+        hasher.combine(evidence.endSeconds)
+        hasher.combine(evidence.transcriptSegmentIds)
+      }
     }
     return hasher.finalize()
   }

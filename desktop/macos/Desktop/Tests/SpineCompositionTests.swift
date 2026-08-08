@@ -129,6 +129,9 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertTrue(rows[conversationIndex + 1].isAttached)
     XCTAssertEqual(rows[conversationIndex + 2].kind, .screen)
     XCTAssertTrue(rows[conversationIndex + 2].isAttached)
+
+    let memoriesOnly = SpineComposer.filter(days, kind: .memories, query: "")
+    XCTAssertTrue(memoriesOnly[0].rows.allSatisfy { !$0.isAttached })
   }
 
   func testAMemoryWhoseConversationIsNotLoadedStillAppears() {
@@ -167,6 +170,12 @@ final class SpineCompositionTests: XCTestCase {
     XCTAssertTrue(days[0].rows[conversationIndex + 1].isAttached)
     XCTAssertTrue(days[0].rows.contains { $0.id == "task:manual" && !$0.isAttached })
     XCTAssertEqual(days[0].taskCount, 2)
+
+    let matchingOneTask = SpineComposer.filter(days, kind: .everything, query: "coffee")
+    XCTAssertEqual(
+      matchingOneTask[0].taskCount, 2,
+      "a filtered day header still describes every task hidden behind that day"
+    )
 
     let tasksOnly = SpineComposer.filter(days, kind: .tasks, query: "")
     XCTAssertTrue(tasksOnly[0].rows.allSatisfy { $0.kind == .tasks && !$0.isAttached })

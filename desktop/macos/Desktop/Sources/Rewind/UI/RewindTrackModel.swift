@@ -16,6 +16,11 @@ struct RewindActivityBlock: Equatable {
 
 /// Pure navigation policy shared by the AppKit track and the SwiftUI page.
 enum RewindTimelineNavigation {
+  static func clampedIndex(_ index: Int, screenshots: [Screenshot]) -> Int? {
+    guard !screenshots.isEmpty else { return nil }
+    return max(0, min(index, screenshots.count - 1))
+  }
+
   /// The capture nearest an absolute moment in an ascending viewport sample.
   static func nearestIndex(to instant: Double, screenshots: [Screenshot]) -> Int? {
     guard !screenshots.isEmpty else { return nil }
@@ -117,5 +122,21 @@ enum RewindTrackWindow {
     guard !gaps.isEmpty else { return 60 }
     gaps.sort()
     return gaps[gaps.count / 2]
+  }
+
+  static func extending(_ range: ClosedRange<Double>?, toInclude date: Date) -> ClosedRange<Double> {
+    let instant = date.timeIntervalSince1970
+    guard let range else { return instant...(instant + 30) }
+    return range.lowerBound...max(range.upperBound, instant + 30)
+  }
+
+  static func shouldRefreshLiveFrames(visibleRange: ClosedRange<Double>?, now: Date) -> Bool {
+    visibleRange?.contains(now.timeIntervalSince1970) == true
+  }
+}
+
+enum RewindTimelinePresentation {
+  static func showsTimeline(screenshotCount: Int, historyRange: ClosedRange<Double>?) -> Bool {
+    screenshotCount > 0 || historyRange != nil
   }
 }

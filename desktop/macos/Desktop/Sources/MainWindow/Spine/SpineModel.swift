@@ -264,6 +264,7 @@ struct SpineDay: Identifiable, Equatable {
   let title: String
   let momentCount: Int
   let conversationCount: Int
+  let taskCount: Int
   let rows: [SpineRow]
 
   /// How many memories the day holds. Counted off the rows rather than carried alongside them, so it
@@ -271,13 +272,6 @@ struct SpineDay: Identifiable, Equatable {
   var memoryCount: Int {
     rows.reduce(0) { total, row in
       if case .memories(let memories) = row.content { return total + memories.count }
-      return total
-    }
-  }
-
-  var taskCount: Int {
-    rows.reduce(0) { total, row in
-      if case .tasks(let tasks) = row.content { return total + tasks.count }
       return total
     }
   }
@@ -513,6 +507,7 @@ enum SpineComposer {
         title: day.title,
         momentCount: day.momentCount,
         conversationCount: day.conversationCount,
+        taskCount: day.taskCount,
         rows: rows
       )
     }
@@ -635,6 +630,10 @@ enum SpineComposer {
       title: SpineFormat.day(day, calendar: calendar),
       momentCount: screen.total,
       conversationCount: conversations.count,
+      taskCount: rows.reduce(0) { total, row in
+        if case .tasks(let tasks) = row.content { return total + tasks.count }
+        return total
+      },
       rows: rows
     )
   }

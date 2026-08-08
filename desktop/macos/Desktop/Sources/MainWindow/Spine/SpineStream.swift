@@ -94,8 +94,6 @@ struct SpineStream: View {
 
   /// Hands a conversation to the page that owns conversations.
   let onOpenConversation: (String) -> Void
-  /// Opens a task or memory's source conversation, optionally focused on exact transcript segments.
-  let onOpenConversationSource: (String, [String]) -> Void
   /// Hands the day's memories to the surface that owns the graph.
   let onOpenBrainMap: () -> Void
   /// Hands a frame to Rewind.
@@ -197,7 +195,6 @@ struct SpineStream: View {
                   row: row,
                   showsIndent: store.kind == .everything,
                   onOpenConversation: { onOpenConversation($0.id) },
-                  onOpenConversationSource: onOpenConversationSource,
                   onToggleTask: { task in Task { await tasksStore.toggleTask(task) } },
                   onToggleStar: toggleStar,
                   onOpenMoment: { _ in onOpenRewind() },
