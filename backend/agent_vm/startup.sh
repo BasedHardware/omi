@@ -167,6 +167,20 @@ summary_path.write_text(
 PY
 }
 
+state_receipt_initial_tree() {
+  local receipt="$1"
+  python3 - "$receipt" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    tree = json.load(stream)["tree"]
+print(tree["digest"])
+print(tree["count"])
+print(tree["bytes"])
+PY
+}
+
 state_fsync_tree() {
   local root="$1"
   python3 - "$root" <<'PY'
@@ -541,10 +555,18 @@ PY
   fi
 
   mkdir -p "$data_dir/data" "$data_dir/workspace"
-  state_manifest_file="$(mktemp)"
-  state_summary_file="$(mktemp)"
-  state_manifest "$data_dir" "$state_manifest_file" "$state_summary_file" || state_fail "could not inspect state"
-  state_tree_values="$(python3 - "$state_summary_file" <<'PY'
+  if [[ "$state_receipt_present" == true ]]; then
+    # The tree summary proves the initial source-to-state migration copy. It is
+    # intentionally not an ongoing snapshot lock: normal agent work may add,
+    # change, or delete workspace files. Ongoing readiness is fenced by the
+    # exact persistent-disk identity and by the SQLite presence/integrity check.
+    state_tree_values="$(state_receipt_initial_tree "$state_receipt")" \
+      || state_fail "could not read state receipt tree"
+  else
+    state_manifest_file="$(mktemp)"
+    state_summary_file="$(mktemp)"
+    state_manifest "$data_dir" "$state_manifest_file" "$state_summary_file" || state_fail "could not inspect state"
+    state_tree_values="$(python3 - "$state_summary_file" <<'PY'
 import json
 import sys
 
@@ -554,33 +576,17 @@ print(summary["digest"])
 print(summary["count"])
 print(summary["bytes"])
 PY
-  )"
+    )"
+  fi
   mapfile -t state_tree <<<"$state_tree_values"
   [[ "${#state_tree[@]}" == 3 ]] || state_fail "invalid state tree summary"
   state_db_integrity_value="$(state_db_integrity "$data_dir/data/omi.db")" || state_fail "state database integrity check failed"
   if [[ "$state_previous_db_integrity" == ok && "$state_db_integrity_value" != ok ]]; then
     state_fail "previously durable state database is missing"
   fi
-  if [[ "$state_receipt_present" == true ]]; then
-    state_previous_tree_values="$(python3 - "$state_receipt" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as stream:
-    receipt = json.load(stream)
-tree = receipt["tree"]
-print(tree["digest"])
-print(tree["count"])
-print(tree["bytes"])
-PY
-    )" || state_fail "could not read state receipt tree"
-    mapfile -t state_previous_tree <<<"$state_previous_tree_values"
-    [[ "${#state_previous_tree[@]}" == 3 ]] || state_fail "invalid state receipt tree"
-    if [[ "${state_tree[0]}" != "${state_previous_tree[0]}" || "${state_tree[1]}" != "${state_previous_tree[1]}" || "${state_tree[2]}" != "${state_previous_tree[2]}" ]]; then
-      state_fail "durable state does not match state receipt"
-    fi
+  if [[ "$state_receipt_present" == false ]]; then
+    state_fsync_tree "$data_dir" || state_fail "could not durably sync state"
   fi
-  state_fsync_tree "$data_dir" || state_fail "could not durably sync state"
   state_write_receipt "$state_receipt" "$state_migration_id" "${state_tree[0]}" "${state_tree[1]}" "${state_tree[2]}" "$state_db_integrity_value" \
     || state_fail "could not write state receipt"
   state_receipt_for_container="$state_receipt"

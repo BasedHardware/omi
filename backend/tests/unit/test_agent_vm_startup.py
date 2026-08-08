@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 from testing.shell import bash_command, bash_path
@@ -154,7 +155,7 @@ def _write_fake_command(bin_dir: Path, name: str, body: str) -> None:
 
 
 def _state_startup_environment(
-    tmp_path: Path, *, corrupt_copy: bool = False
+    tmp_path: Path, *, corrupt_copy: bool = False, trace_state_operations: bool = False
 ) -> tuple[dict[str, str], Path, Path, Path]:
     log = tmp_path / "commands"
     bin_dir = tmp_path / "bin"
@@ -226,6 +227,22 @@ def _state_startup_environment(
         "else\n  printf '%s\\n' ro\nfi",
     )
     _write_fake_command(bin_dir, "umount", "printf 'umount %s\\n' \"$*\" >> \"$COMMAND_LOG\"")
+    if trace_state_operations:
+        _write_fake_command(
+            bin_dir,
+            "python3",
+            'script_file="${COMMAND_LOG}.python-script"\n'
+            'cat > "$script_file"\n'
+            'if grep -q "total_bytes = 0" "$script_file"; then\n'
+            '  printf "state_manifest\\n" >> "$COMMAND_LOG"\n'
+            'elif grep -q "def sync_file" "$script_file"; then\n'
+            '  printf "state_fsync_tree\\n" >> "$COMMAND_LOG"\n'
+            'fi\n'
+            '"$REAL_PYTHON3" "$@" < "$script_file"\n'
+            'status=$?\n'
+            'rm -f "$script_file"\n'
+            'exit "$status"',
+        )
     if corrupt_copy:
         _write_fake_command(
             bin_dir,
@@ -252,6 +269,7 @@ def _state_startup_environment(
         "FS_MARKER": bash_path(fs_marker, cwd=ROOT),
         "STATE_DEVICE": bash_path(state_device, cwd=ROOT),
         "STATE_SOURCE_DEVICE": bash_path(source_device, cwd=ROOT),
+        "REAL_PYTHON3": sys.executable,
         "STATE_MOUNT": bash_path(state_mount, cwd=ROOT),
         "OMI_TEST_FAKE_BIN": bash_path(bin_dir, cwd=ROOT),
     }
@@ -438,18 +456,69 @@ def test_startup_allows_an_explicitly_optional_legacy_source_to_be_absent(tmp_pa
     assert "mount -o ro" not in log.read_text(encoding="utf-8")
 
 
-def test_startup_revalidates_existing_receipt_against_actual_state(tmp_path: Path) -> None:
+def test_startup_allows_mutated_state_and_refreshes_existing_receipt(tmp_path: Path) -> None:
     environment, state_mount, _, _ = _state_startup_environment(tmp_path)
     first = _run_state_startup(environment)
     assert first.returncode == 0, first.stderr
     receipt_path = state_mount / "state-receipt.json"
+    previous_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     (state_mount / "legacy.txt").write_text("changed after receipt", encoding="utf-8")
 
     second = _run_state_startup(environment)
 
+    assert second.returncode == 0, second.stderr
+    refreshed_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert refreshed_receipt["migrationId"] == "migration-test-1"
+    assert refreshed_receipt["tree"] == previous_receipt["tree"]
+    assert refreshed_receipt["db"]["integrity"] == "ok"
+
+
+def test_startup_fails_closed_on_an_invalid_existing_receipt_schema(tmp_path: Path) -> None:
+    environment, state_mount, _, _ = _state_startup_environment(tmp_path)
+    first = _run_state_startup(environment)
+    assert first.returncode == 0, first.stderr
+    (state_mount / "state-receipt.json").write_text('{"schemaVersion":2}', encoding="utf-8")
+
+    second = _run_state_startup(environment)
+
     assert second.returncode != 0
-    assert "durable state does not match state receipt" in second.stderr
-    assert json.loads(receipt_path.read_text(encoding="utf-8"))["migrationId"] == "migration-test-1"
+    assert "state receipt schema mismatch" in second.stderr
+
+
+def test_startup_manifests_and_fsyncs_only_during_first_state_copy(tmp_path: Path) -> None:
+    environment, state_mount, _, log = _state_startup_environment(tmp_path, trace_state_operations=True)
+    first = _run_state_startup(environment)
+
+    assert first.returncode == 0, first.stderr
+    first_commands = log.read_text(encoding="utf-8")
+    assert first_commands.count("state_manifest") == 3
+    assert first_commands.count("state_fsync_tree") == 1
+
+    for index in range(64):
+        (state_mount / "workspace" / f"mutable-{index:03d}.txt").write_text("x" * 65536, encoding="utf-8")
+    (state_mount / "legacy.txt").write_text("mutated after first durable receipt", encoding="utf-8")
+    previous_receipt = json.loads((state_mount / "state-receipt.json").read_text(encoding="utf-8"))
+
+    second = _run_state_startup(environment)
+
+    assert second.returncode == 0, second.stderr
+    second_commands = log.read_text(encoding="utf-8")
+    assert second_commands.count("state_manifest") == first_commands.count("state_manifest")
+    assert second_commands.count("state_fsync_tree") == first_commands.count("state_fsync_tree")
+    assert (
+        json.loads((state_mount / "state-receipt.json").read_text(encoding="utf-8"))["tree"] == previous_receipt["tree"]
+    )
+
+
+def test_startup_allows_a_workspace_symlink_added_after_receipt(tmp_path: Path) -> None:
+    environment, state_mount, _, _ = _state_startup_environment(tmp_path)
+    first = _run_state_startup(environment)
+    assert first.returncode == 0, first.stderr
+    (state_mount / "workspace" / "state-link").symlink_to("../legacy.txt")
+
+    second = _run_state_startup(environment)
+
+    assert second.returncode == 0, second.stderr
 
 
 def test_startup_fails_closed_when_source_and_destination_manifests_differ(tmp_path: Path) -> None:

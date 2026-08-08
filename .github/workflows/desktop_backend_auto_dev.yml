@@ -262,6 +262,9 @@ jobs:
             --allow-unauthenticated
             --revision-suffix=${{ steps.candidate-identity.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
+            --network=default
+            --subnet=default
+            --vpc-egress=private-ranges-only
             --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
           env_vars: |
             FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
@@ -271,6 +274,7 @@ jobs:
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
+            AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
             AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
             GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
             GCE_RUNTIME_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com

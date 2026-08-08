@@ -470,8 +470,10 @@ async def _active_state_disk_info(
     uid: str,
     vm: Mapping[str, Any],
     instance: Mapping[str, Any],
+    *,
+    repair_auto_delete: bool = True,
 ) -> dict[str, str] | None:
-    """Validate the active owner state disk and repair its auto-delete policy."""
+    """Validate the active owner state disk and optionally repair auto-delete."""
     attachment = _disk_attachment(instance, STATE_DISK_DEVICE_NAME)
     expected = vm.get("stateDisk")
     if attachment is None:
@@ -498,7 +500,7 @@ async def _active_state_disk_info(
         or normalized_users != [expected_user]
     ):
         raise RuntimeError("active Agent VM state disk identity is ambiguous")
-    if attachment.get("autoDelete") is not True:
+    if repair_auto_delete and attachment.get("autoDelete") is not True:
         await api.set_disk_auto_delete(str(vm["vmName"]), STATE_DISK_DEVICE_NAME, True)
     return {"deviceName": STATE_DISK_DEVICE_NAME, "diskName": disk_name, "diskId": disk_id}
 
@@ -556,13 +558,11 @@ async def _rollback_failed_boot_image_candidate(
         return False
     if reused:
         predecessor = await api.get_instance(predecessor_name)
-        predecessor_labels = predecessor.get("labels") if isinstance(predecessor, Mapping) else None
-        if (
-            not isinstance(predecessor, Mapping)
-            or str(predecessor.get("id") or "") != old_instance_id
-            or not isinstance(predecessor_labels, Mapping)
-            or predecessor_labels.get("omi-agent-migration") != migration_id
-        ):
+        # Reused state disks may come from normal provisioning or an earlier
+        # migration, so the predecessor need not carry this migration's label.
+        # The journaled predecessor instance ID plus the state disk ID and
+        # owner label above are the identity fence for restoring the disk.
+        if not isinstance(predecessor, Mapping) or str(predecessor.get("id") or "") != old_instance_id:
             return False
         expected_user = f"projects/{api.project}/zones/{api.zone}/instances/{predecessor_name}"
         normalized_users = _normalized_disk_users(state_disk)
@@ -1270,7 +1270,15 @@ async def reconcile_one(
                 "recreate_required",
                 f"{reason}; operator must recreate VM from exact immutable image {release.boot_image}",
             )
-        state_disk_info = await _active_state_disk_info(api, uid, vm, instance)
+        state_disk_info = await _active_state_disk_info(
+            api,
+            uid,
+            vm,
+            instance,
+            repair_auto_delete=not (
+                isinstance(active_migration, Mapping) or reconcile_state.get("state") == "migration_soaking"
+            ),
+        )
         retirement = await _retire_soaked_boot_image_predecessor(uid, vm, owner=owner, api=api, release=release)
         if retirement is not None:
             return retirement

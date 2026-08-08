@@ -678,7 +678,7 @@ def test_reused_state_rollback_repairs_auto_delete_before_detach_completed():
                 return None
             return {
                 "id": "old-id",
-                "labels": {"omi-agent-migration": migration_id},
+                "labels": {},
                 "disks": [
                     {
                         "deviceName": lifecycle.STATE_DISK_DEVICE_NAME,
@@ -998,6 +998,94 @@ def test_post_cutover_state_failure_keeps_admission_drained_and_retryable(monkey
     assert updates[-1]["drainRequested"] is True
 
 
+def test_first_post_cutover_reconcile_keeps_candidate_state_disk_protected(monkeypatch):
+    auto_delete_repairs: list[tuple[str, str, bool]] = []
+
+    class CandidateApi:
+        def __init__(self, _project: str, _zone: str) -> None:
+            self.instance = {
+                "id": "candidate-id",
+                "status": "RUNNING",
+                "disks": [
+                    {
+                        "boot": False,
+                        "deviceName": lifecycle.STATE_DISK_DEVICE_NAME,
+                        "source": "projects/project/zones/us-central1-a/disks/candidate-state",
+                        "autoDelete": False,
+                    }
+                ],
+            }
+
+        async def get_instance(self, _vm_name: str) -> dict[str, Any]:
+            return self.instance
+
+        async def get_disk(self, _disk_name: str) -> dict[str, Any]:
+            return {
+                "id": "candidate-state-id",
+                "labels": {
+                    "omi-agent-role": "state",
+                    "omi-agent-owner": reconciler._owner_disk_label("dev-user"),
+                },
+                "users": ["projects/project/zones/us-central1-a/instances/candidate"],
+            }
+
+        @staticmethod
+        def instance_url(name: str) -> str:
+            return "https://compute.googleapis.com/compute/v1/projects/project/zones/" f"us-central1-a/instances/{name}"
+
+        async def set_disk_auto_delete(self, vm_name: str, device_name: str, enabled: bool) -> None:
+            auto_delete_repairs.append((vm_name, device_name, enabled))
+
+        @staticmethod
+        def private_instance_ip(_instance: dict[str, Any]) -> str:
+            return "10.0.0.2"
+
+        async def runtime_is_current(self, *_args: Any, **_kwargs: Any) -> bool:
+            return True
+
+    async def no_boot_drift(*_args: Any) -> None:
+        return None
+
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", CandidateApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "_boot_image_drift", no_boot_drift)
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(reconciler, "claim_boot_image_migration_retirement", lambda *_args: {"state": "soaking"})
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "dev-user",
+            {
+                "vmName": "candidate",
+                "zone": "us-central1-a",
+                "status": "ready",
+                "instanceId": "candidate-id",
+                "authToken": "candidate-token",
+                "stateDisk": {
+                    "deviceName": lifecycle.STATE_DISK_DEVICE_NAME,
+                    "diskName": "candidate-state",
+                    "diskId": "candidate-state-id",
+                },
+                "reconcile": {
+                    "state": "migration_soaking",
+                    "migration": {
+                        "migrationId": "a" * 24,
+                        "oldVmName": "old-vm",
+                        "oldInstanceId": "old-id",
+                        "candidateInstanceId": "candidate-id",
+                    },
+                },
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "soaking"
+    assert auto_delete_repairs == []
+
+
 def test_existing_candidate_failure_populates_compensating_cleanup_context(monkeypatch):
     migration_id = "f" * 24
     journal = {
@@ -1126,6 +1214,71 @@ def test_boot_image_migration_retains_source_clone_until_retirement_claim(monkey
 
     assert result and result.state == "soaking"
     assert "within its journaled soak" in result.detail
+
+
+def test_boot_image_migration_retirement_enables_state_auto_delete_after_journal_claim(monkeypatch):
+    events: list[tuple[Any, ...]] = []
+
+    class RetirementApi:
+        async def get_instance(self, _name: str) -> dict[str, Any]:
+            return {"id": "candidate-id", "status": "RUNNING"}
+
+        @staticmethod
+        def private_instance_ip(_instance: dict[str, Any]) -> str:
+            return "10.0.0.2"
+
+        async def runtime_is_current(self, *_args: Any, **_kwargs: Any) -> bool:
+            return True
+
+        async def set_disk_auto_delete(self, vm_name: str, device_name: str, enabled: bool) -> None:
+            events.append(("auto-delete", vm_name, device_name, enabled))
+
+        async def delete_replacement(self, vm_name: str, instance_id: str, migration_id: str) -> bool:
+            events.append(("delete-predecessor", vm_name, instance_id, migration_id))
+            return True
+
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(
+        reconciler,
+        "claim_boot_image_migration_retirement",
+        lambda *_args: events.append(("claim-retirement",))
+        or {"state": "retiring", "oldVmName": "old-vm", "oldInstanceId": "old-id"},
+    )
+    monkeypatch.setattr(
+        reconciler,
+        "complete_boot_image_migration",
+        lambda *_args: events.append(("complete-migration",)) or True,
+    )
+    migration = {
+        "migrationId": "4" * 24,
+        "oldVmName": "old-vm",
+        "oldInstanceId": "old-id",
+        "candidateInstanceId": "candidate-id",
+        "sourceCloneDiskName": "",
+    }
+
+    result = asyncio.run(
+        reconciler._retire_soaked_boot_image_predecessor(
+            "dev-user",
+            {
+                "vmName": "candidate",
+                "authToken": "candidate-token",
+                "instanceId": "candidate-id",
+                "reconcile": {"migration": migration},
+            },
+            owner="worker",
+            api=RetirementApi(),
+            release=RELEASE,
+        )
+    )
+
+    assert result and result.state == "retired"
+    assert events == [
+        ("claim-retirement",),
+        ("auto-delete", "candidate", lifecycle.STATE_DISK_DEVICE_NAME, True),
+        ("delete-predecessor", "old-vm", "old-id", migration["migrationId"]),
+        ("complete-migration",),
+    ]
 
 
 def test_boot_image_migration_never_creates_for_an_active_session(monkeypatch):

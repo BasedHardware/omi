@@ -420,7 +420,7 @@ async def upload_database(request: Request) -> tuple[int, int]:
         if integrity != ["ok"]:
             raise HTTPException(status_code=400, detail="Uploaded database failed SQLite integrity check")
 
-        install_uploaded_database(temporary)
+        await asyncio.to_thread(install_uploaded_database, temporary)
         runtime.last_activity_at = time.monotonic()
         return received, final_size
     except HTTPException:

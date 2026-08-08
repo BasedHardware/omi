@@ -469,9 +469,11 @@ async def test_active_state_disk_repairs_auto_delete_only_after_identity_validat
     assert info == {"deviceName": "omi-agent-state", "diskName": "omi-agent-owner-state", "diskId": "state-id"}
     assert repairs == [("omi-agent-owner", "omi-agent-state", True)]
 
+    repairs.clear()
     vm["stateDisk"]["diskId"] = "foreign-id"
     with pytest.raises(RuntimeError, match="identity is ambiguous"):
         await reconciler._active_state_disk_info(Api(), "uid", vm, instance)
+    assert repairs == []
 
 
 def test_rollout_selection_is_stable_and_backoff_is_bounded():

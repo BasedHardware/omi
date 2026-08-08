@@ -186,6 +186,70 @@ def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monk
     assert result == (len(payload), len(payload))
 
 
+def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    create_database(module.runtime.db_path, "durable", "preserved")
+    uploaded = tmp_path / "uploaded.db"
+    payload = create_database(uploaded, "replacement", "ready")
+    assert module.runtime.open_database()
+
+    install_started = threading.Event()
+    release_install = threading.Event()
+    query_started = threading.Event()
+    install_thread = None
+    original_close = module.runtime.close_database
+    original_execute_sql = module.execute_sql
+
+    def blocking_close():
+        nonlocal install_thread
+        if not install_started.is_set():
+            install_thread = threading.current_thread()
+            install_started.set()
+            assert release_install.wait(2)
+        return original_close()
+
+    def tracked_execute_sql(query):
+        query_started.set()
+        return original_execute_sql(query)
+
+    monkeypatch.setattr(module.runtime, "close_database", blocking_close)
+    monkeypatch.setattr(module, "execute_sql", tracked_execute_sql)
+
+    class Request:
+        headers = {"content-length": str(len(payload))}
+
+        async def stream(self):
+            yield payload
+
+    async def run_upload():
+        upload_task = asyncio.create_task(module.upload_database(Request()))
+        assert await asyncio.to_thread(install_started.wait, 1)
+        query_task = asyncio.create_task(asyncio.to_thread(module.execute_sql, "SELECT 1"))
+        assert await asyncio.to_thread(query_started.wait, 1)
+        await asyncio.sleep(0.01)
+        query_blocked = not query_task.done()
+        release_install.set()
+        result = await upload_task
+        query_result = await query_task
+        return query_blocked, result, query_result
+
+    timer = threading.Timer(0.2, release_install.set)
+    started_at = time.monotonic()
+    timer.start()
+    try:
+        query_blocked, result, query_result = asyncio.run(run_upload())
+    finally:
+        release_install.set()
+        timer.cancel()
+        module.runtime.close_database()
+
+    assert time.monotonic() - started_at < 0.15
+    assert install_thread is not threading.main_thread()
+    assert query_blocked
+    assert result == (len(payload), len(payload))
+    assert json.loads(query_result) == {"rows": [{"1": 1}], "count": 1}
+
+
 def test_valid_database_upload_atomically_replaces_open_database(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     sqlite3.connect(module.runtime.db_path).close()
