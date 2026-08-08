@@ -1,0 +1,173 @@
+.settings-production-shell {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--content-primary);
+}
+
+.settings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-xl);
+  margin: var(--space-xl) 0 var(--space-lg);
+}
+
+.settings-header h1 {
+  margin: var(--space-xs) 0;
+  font-family: var(--type-title-family, var(--type-display-family));
+  font-size: var(--type-title-size, var(--type-display-size));
+  font-weight: var(--type-title-weight, var(--type-display-weight));
+}
+
+.settings-header p,
+.settings-empty-copy {
+  margin: var(--space-xs) 0;
+  color: var(--content-secondary);
+}
+
+.settings-eyebrow {
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.settings-save-notice,
+.surface-notices .status-notice,
+.surface-notices .queue-notice,
+.surface-notices .operation-error {
+  margin: var(--space-sm) 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.surface-notices .status-notice.saved-but-refresh-failed { border: 1px solid var(--warning); }
+.surface-notices .status-notice.unavailable,
+.surface-notices .operation-error { border: 1px solid var(--danger); }
+.surface-notices .queue-notice.needs-auth { border: 1px solid var(--warning); }
+.surface-notices .operation-error { color: var(--danger); }
+
+.settings-section {
+  display: grid;
+  gap: var(--space-md);
+  margin: var(--space-xxl) 0;
+  padding: var(--space-lg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel, var(--radius-control));
+  background: var(--surface-raised);
+}
+
+.settings-section h2 {
+  margin: 0;
+  font-family: var(--type-title-family, var(--type-display-family));
+  font-size: var(--type-body-size);
+  font-weight: var(--type-title-weight, 600);
+}
+
+.settings-account-panel,
+.settings-plan-details,
+.settings-identity-details {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.settings-signed-in {
+  margin: 0;
+  color: var(--content-primary);
+}
+
+.settings-identity-details dt,
+.settings-plan-details dt {
+  color: var(--content-tertiary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.settings-identity-details dd,
+.settings-plan-details dd {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.settings-sign-out,
+.settings-sign-in,
+.settings-upgrade,
+.settings-appearance-control select {
+  min-height: var(--min-tap-target);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--content-primary);
+  background: var(--surface-elevated);
+  font: inherit;
+}
+
+.settings-sign-out,
+.settings-upgrade {
+  width: fit-content;
+}
+
+.settings-sign-in:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-appearance-control {
+  display: grid;
+  gap: var(--space-xs);
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+}
+
+.settings-appearance-control select {
+  width: 100%;
+}
+
+.settings-limit-notice {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-control);
+  background: var(--surface-elevated);
+}
+
+.settings-limit-title {
+  margin: 0;
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.settings-upgrade-unavailable {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+html[data-platform="mobile"] .settings-header {
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+html[data-platform="mobile"] .settings-section {
+  padding: var(--space-md);
+}
+
+html[data-platform="mobile"] .settings-sign-out,
+html[data-platform="mobile"] .settings-sign-in,
+html[data-platform="mobile"] .settings-upgrade,
+html[data-platform="mobile"] .settings-appearance-control select {
+  width: 100%;
+}
+
+html[data-platform="desktop"] .settings-header .settings-eyebrow,
+html[data-platform="desktop"] .settings-header > div > p:last-child {
+  display: none;
+}
+
+html[data-platform="desktop"] .settings-production-shell .desktop-page-panel {
+  padding: var(--space-lg);
+}
