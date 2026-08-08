@@ -66,7 +66,7 @@ private object PigeonCommunicatorPigeonUtils {
     }
     return a == b
   }
-      
+
 }
 
 /**
@@ -390,6 +390,119 @@ data class BluetoothHfpInput (
 
   override fun hashCode(): Int = toList().hashCode()
 }
+
+/**
+ * One rendered row of a HUD screen. [style] is 'heading' | 'body' | 'meta'.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class HudLineWire (
+  val text: String,
+  val style: String,
+  val muted: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): HudLineWire {
+      val text = pigeonVar_list[0] as String
+      val style = pigeonVar_list[1] as String
+      val muted = pigeonVar_list[2] as Boolean
+      return HudLineWire(text, style, muted)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      text,
+      style,
+      muted,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is HudLineWire) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/**
+ * A tappable control on a HUD screen; [id] comes back through
+ * RayBanMetaFlutterAPI.onDisplayActionTapped.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class HudActionWire (
+  val id: String,
+  val label: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): HudActionWire {
+      val id = pigeonVar_list[0] as String
+      val label = pigeonVar_list[1] as String
+      return HudActionWire(id, label)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      label,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is HudActionWire) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
+
+/**
+ * A whole HUD screen. The native side owns the translation into the vendor's
+ * renderer, so nothing here is Meta-specific.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class HudScreenWire (
+  val title: String,
+  val lines: List<HudLineWire>,
+  val actions: List<HudActionWire>
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): HudScreenWire {
+      val title = pigeonVar_list[0] as String
+      val lines = pigeonVar_list[1] as List<HudLineWire>
+      val actions = pigeonVar_list[2] as List<HudActionWire>
+      return HudScreenWire(title, lines, actions)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      title,
+      lines,
+      actions,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other !is HudScreenWire) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    return PigeonCommunicatorPigeonUtils.deepEquals(toList(), other.toList())  }
+
+  override fun hashCode(): Int = toList().hashCode()
+}
 private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -428,6 +541,21 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
           BluetoothHfpInput.fromList(it)
         }
       }
+      136.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          HudLineWire.fromList(it)
+        }
+      }
+      137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          HudActionWire.fromList(it)
+        }
+      }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          HudScreenWire.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -459,6 +587,18 @@ private open class PigeonCommunicatorPigeonCodec : StandardMessageCodec() {
       }
       is BluetoothHfpInput -> {
         stream.write(135)
+        writeValue(stream, value.toList())
+      }
+      is HudLineWire -> {
+        stream.write(136)
+        writeValue(stream, value.toList())
+      }
+      is HudActionWire -> {
+        stream.write(137)
+        writeValue(stream, value.toList())
+      }
+      is HudScreenWire -> {
+        stream.write(138)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -758,7 +898,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRecordingStopped(callback: (Result<Unit>) -> Unit)
@@ -775,7 +915,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onAudioData(audioDataArg: ByteArray, callback: (Result<Unit>) -> Unit)
@@ -792,7 +932,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onAudioChunk(audioChunkArg: ByteArray, chunkIndexArg: Long, isLastArg: Boolean, sampleRateArg: Double, callback: (Result<Unit>) -> Unit)
@@ -809,7 +949,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRecordingError(errorArg: String, callback: (Result<Unit>) -> Unit)
@@ -826,7 +966,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onMicrophonePermissionResult(grantedArg: Boolean, callback: (Result<Unit>) -> Unit)
@@ -843,7 +983,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onMainAppMicrophonePermissionResult(grantedArg: Boolean, callback: (Result<Unit>) -> Unit)
@@ -860,7 +1000,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onWatchBatteryUpdate(batteryLevelArg: Double, batteryStateArg: Long, callback: (Result<Unit>) -> Unit)
@@ -877,7 +1017,7 @@ class WatchRecorderFlutterAPI(private val binaryMessenger: BinaryMessenger, priv
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }
@@ -1283,7 +1423,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onPeripheralDiscovered(peripheralArg: BlePeripheral, callback: (Result<Unit>) -> Unit)
@@ -1300,7 +1440,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onDeviceReady(peripheralUuidArg: String, servicesArg: List<BleService>, callback: (Result<Unit>) -> Unit)
@@ -1317,7 +1457,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onPeripheralDisconnected(peripheralUuidArg: String, errorArg: String?, callback: (Result<Unit>) -> Unit)
@@ -1334,7 +1474,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onCharacteristicValueUpdated(peripheralUuidArg: String, serviceUuidArg: String, characteristicUuidArg: String, valueArg: ByteArray, callback: (Result<Unit>) -> Unit)
@@ -1351,7 +1491,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onRssiUpdate(peripheralUuidArg: String, rssiArg: Long, callback: (Result<Unit>) -> Unit)
@@ -1368,7 +1508,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onStateRestored(peripheralUuidsArg: List<String>, callback: (Result<Unit>) -> Unit)
@@ -1385,7 +1525,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /**
@@ -1406,7 +1546,7 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
 }
@@ -1462,6 +1602,21 @@ interface RayBanMetaHostAPI {
   fun stopCamera()
   /** Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured. */
   fun capturePhoto()
+  /**
+   * Whether the connected glasses can render, from the toolkit's own
+   * capability check rather than the device type. False on builds without
+   * the Display module, so the HUD gate closes instead of throwing.
+   */
+  fun deviceSupportsDisplay(): Boolean
+  /**
+   * Attaches a display capability to the active device session. Requires the
+   * DAT App Model (DAMEnabled in Info.plist).
+   */
+  fun attachDisplay()
+  fun detachDisplay()
+  /** Renders [screen], replacing whatever the glasses currently show. */
+  fun sendDisplayScreen(screen: HudScreenWire)
+  fun clearDisplay()
 
   companion object {
     /** The codec used by RayBanMetaHostAPI. */
@@ -1765,6 +1920,87 @@ interface RayBanMetaHostAPI {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.deviceSupportsDisplay$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.deviceSupportsDisplay())
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.attachDisplay$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.attachDisplay()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.detachDisplay$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.detachDisplay()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.sendDisplayScreen$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val screenArg = args[0] as HudScreenWire
+            val wrapped: List<Any?> = try {
+              api.sendDisplayScreen(screenArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.clearDisplay$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.clearDisplay()
+              listOf(null)
+            } catch (exception: Throwable) {
+              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -1794,7 +2030,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onGlassesDiscovered(glassesArg: RayBanMetaGlasses, callback: (Result<Unit>) -> Unit)
@@ -1811,7 +2047,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onConnectionStateChanged(deviceIdArg: String, stateArg: String, callback: (Result<Unit>) -> Unit)
@@ -1828,7 +2064,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** PCM16 little-endian mono audio at [sampleRate] Hz from the glasses mic. */
@@ -1846,7 +2082,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** Whether the glasses' HFP mic is the active input route right now. */
@@ -1864,7 +2100,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** JPEG bytes plus clockwise orientation in degrees (0/90/180/270). */
@@ -1882,7 +2118,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   /** 'stopped' | 'starting' | 'streaming' | 'paused'. */
@@ -1900,7 +2136,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onCameraPermissionChanged(statusArg: String, callback: (Result<Unit>) -> Unit)
@@ -1917,7 +2153,7 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
     }
   }
   fun onError(codeArg: String, messageArg: String, callback: (Result<Unit>) -> Unit)
@@ -1934,7 +2170,43 @@ class RayBanMetaFlutterAPI(private val binaryMessenger: BinaryMessenger, private
         }
       } else {
         callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
-      } 
+      }
+    }
+  }
+  /** 'unavailable' | 'detached' | 'attaching' | 'ready' | 'error'. */
+  fun onDisplayStateChanged(stateArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onDisplayStateChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(stateArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      }
+    }
+  }
+  /** The id of the HudActionWire the wearer tapped. */
+  fun onDisplayActionTapped(actionIdArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.RayBanMetaFlutterAPI.onDisplayActionTapped$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(actionIdArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      }
     }
   }
 }

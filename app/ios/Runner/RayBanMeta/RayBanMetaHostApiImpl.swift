@@ -9,6 +9,9 @@ import UIKit
 #if canImport(MWDATCamera)
     import MWDATCamera
 #endif
+#if canImport(MWDATDisplay)
+    import MWDATDisplay
+#endif
 
 /// Pigeon host API for Ray-Ban Meta glasses.
 ///
@@ -125,6 +128,11 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
         #if canImport(MWDATCamera)
             private var cameraStream: MWDATCamera.Stream?
             private var cameraListenerTokens: [Any] = []
+        #endif
+
+        #if canImport(MWDATDisplay)
+            private var display: MWDATDisplay.Display?
+            private var displayStateToken: AnyListenerToken?
         #endif
 
         func initialize() throws {
@@ -417,10 +425,143 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             #endif
         }
 
+        // MARK: - Display
+
+        func deviceSupportsDisplay() throws -> Bool {
+            #if canImport(MWDATDisplay)
+                guard configured, let deviceId = connectedDeviceId else { return false }
+                return Wearables.shared.deviceForIdentifier(deviceId)?.supportsDisplay() ?? false
+            #else
+                return false
+            #endif
+        }
+
+        func attachDisplay() throws {
+            #if canImport(MWDATDisplay)
+                guard display == nil else { return }
+                guard let session = session else {
+                    throw PigeonError(
+                        code: "display_no_session",
+                        message: "Connect the glasses before attaching the display",
+                        details: nil
+                    )
+                }
+                guard try deviceSupportsDisplay() else {
+                    throw PigeonError(
+                        code: "display_unsupported",
+                        message: "The connected glasses have no display",
+                        details: nil
+                    )
+                }
+
+                emitDisplayState("attaching")
+                let capability: MWDATDisplay.Display
+                do {
+                    capability = try session.addDisplay()
+                } catch {
+                    emitDisplayState("error")
+                    throw error
+                }
+                display = capability
+
+                displayStateToken = capability.statePublisher.listen { [weak self] state in
+                    self?.emitDisplayState(Self.normalizeDisplayState(state))
+                }
+
+                capability.start()
+            #else
+                throw PigeonError(code: "display_unavailable", message: "MWDATDisplay not linked", details: nil)
+            #endif
+        }
+
+        func detachDisplay() throws {
+            #if canImport(MWDATDisplay)
+                display?.stop()
+                displayStateToken = nil
+                display = nil
+                emitDisplayState("detached")
+            #endif
+        }
+
+        func sendDisplayScreen(screen: HudScreenWire) throws {
+            #if canImport(MWDATDisplay)
+                guard let capability = display else {
+                    throw PigeonError(
+                        code: "display_not_attached",
+                        message: "Attach the display before sending a screen",
+                        details: nil
+                    )
+                }
+                let view = RayBanMetaDisplayRenderer.flexBox(for: screen) { [weak self] actionId in
+                    DispatchQueue.main.async {
+                        self?.flutterAPI.onDisplayActionTapped(actionId: actionId) { _ in }
+                    }
+                }
+                Task { [weak self] in
+                    do {
+                        try await capability.send(view)
+                    } catch {
+                        self?.emitError(
+                            code: "display_send_failed",
+                            message: (error as? DisplayError)?.description ?? error.localizedDescription
+                        )
+                    }
+                }
+            #else
+                throw PigeonError(code: "display_unavailable", message: "MWDATDisplay not linked", details: nil)
+            #endif
+        }
+
+        func clearDisplay() throws {
+            #if canImport(MWDATDisplay)
+                guard let capability = display else { return }
+                Task { [weak self] in
+                    do {
+                        try await capability.clearDisplay()
+                    } catch {
+                        self?.emitError(
+                            code: "display_clear_failed",
+                            message: (error as? DisplayError)?.description ?? error.localizedDescription
+                        )
+                    }
+                }
+            #endif
+        }
+
+        #if canImport(MWDATDisplay)
+            private func emitDisplayState(_ state: String) {
+                DispatchQueue.main.async {
+                    self.flutterAPI.onDisplayStateChanged(state: state) { _ in }
+                }
+            }
+
+            private static func normalizeDisplayState(_ state: DisplayState) -> String {
+                switch state {
+                case .starting: return "attaching"
+                case .started: return "ready"
+                case .stopping, .stopped: return "detached"
+                }
+            }
+        #endif
+
     #else
         // =====================================================================
         // Audio-only mode — no Meta Wearables toolkit in this build
         // =====================================================================
+
+        func deviceSupportsDisplay() throws -> Bool { return false }
+
+        func attachDisplay() throws {
+            throw PigeonError(code: "display_unavailable", message: "Meta Wearables SDK not in this build", details: nil)
+        }
+
+        func detachDisplay() throws {}
+
+        func sendDisplayScreen(screen: HudScreenWire) throws {
+            throw PigeonError(code: "display_unavailable", message: "Meta Wearables SDK not in this build", details: nil)
+        }
+
+        func clearDisplay() throws {}
 
         func initialize() throws {}
 
