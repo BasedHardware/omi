@@ -9105,9 +9105,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get phoneCallSubtitle => 'Запис дзвінка з живою транскрипцією';
 
   @override
-  String get searchActionItems => 'Шукати дії';
-
-  @override
   String get selectActionItems => 'Вибрати кілька';
 
   @override
@@ -9806,4 +9803,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get navBrain => 'Мозок';
+
+  @override
+  String get searchGoalsAndTodos => 'Пошук цілей і завдань';
 }

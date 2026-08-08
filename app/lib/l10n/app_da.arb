@@ -2983,7 +2983,6 @@
     "connectTaskAppToExport": "Forbind en opgaveapp i Indstillinger for at eksportere",
     "deselectAllTasksMenu": "Fravælg alle",
     "hideCompletedTasks": "Skjul fuldførte",
-    "searchActionItems": "Søg i handlingspunkter",
     "selectActionItems": "Vælg flere",
     "selectAllTasksMenu": "Vælg alle",
     "showCompletedTasks": "Vis fuldførte",
@@ -3214,5 +3213,6 @@
     "navTodos": "Opgaver",
     "navHome": "Hjem",
     "navConvos": "Samtaler",
-    "navBrain": "Hjerne"
+    "navBrain": "Hjerne",
+    "searchGoalsAndTodos": "Søg i mål og opgaver"
 }

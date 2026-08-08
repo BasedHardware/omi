@@ -2941,7 +2941,6 @@
     "connectTaskAppToExport": "قم بربط تطبيق مهام في الإعدادات للتصدير",
     "deselectAllTasksMenu": "إلغاء تحديد الكل",
     "hideCompletedTasks": "إخفاء المكتملة",
-    "searchActionItems": "البحث في عناصر الإجراء",
     "selectActionItems": "تحديد متعدد",
     "selectAllTasksMenu": "تحديد الكل",
     "showCompletedTasks": "إظهار المكتملة",
@@ -3172,5 +3171,6 @@
     "navTodos": "المهام",
     "navHome": "الرئيسية",
     "navConvos": "المحادثات",
-    "navBrain": "الدماغ"
+    "navBrain": "الدماغ",
+    "searchGoalsAndTodos": "بحث في الأهداف والمهام"
 }

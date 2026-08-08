@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "เชื่อมต่อแอปงานในการตั้งค่าเพื่อส่งออก",
     "deselectAllTasksMenu": "ยกเลิกเลือกทั้งหมด",
     "hideCompletedTasks": "ซ่อนที่เสร็จแล้ว",
-    "searchActionItems": "ค้นหารายการดำเนินการ",
     "selectActionItems": "เลือกหลายรายการ",
     "selectAllTasksMenu": "เลือกทั้งหมด",
     "showCompletedTasks": "แสดงที่เสร็จแล้ว",
@@ -3196,5 +3195,6 @@
     "navTodos": "งาน",
     "navHome": "หน้าแรก",
     "navConvos": "การสนทนา",
-    "navBrain": "สมอง"
+    "navBrain": "สมอง",
+    "searchGoalsAndTodos": "ค้นหาเป้าหมายและงาน"
 }

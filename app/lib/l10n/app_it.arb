@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Collega un'app attività nelle Impostazioni per esportare",
     "deselectAllTasksMenu": "Deseleziona tutto",
     "hideCompletedTasks": "Nascondi completate",
-    "searchActionItems": "Cerca azioni",
     "selectActionItems": "Selezione multipla",
     "selectAllTasksMenu": "Seleziona tutto",
     "showCompletedTasks": "Mostra completate",
@@ -3196,5 +3195,6 @@
     "navTodos": "Attività",
     "navHome": "Home",
     "navConvos": "Conversazioni",
-    "navBrain": "Cervello"
+    "navBrain": "Cervello",
+    "searchGoalsAndTodos": "Cerca obiettivi e attività"
 }

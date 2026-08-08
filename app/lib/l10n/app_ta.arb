@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "ஏற்றுமதி செய்ய அமைப்புகளில் ஒரு பணி செயலியை இணைக்கவும்",
     "deselectAllTasksMenu": "அனைத்தையும் தேர்வு நீக்கு",
     "hideCompletedTasks": "முடிந்தவற்றை மறை",
-    "searchActionItems": "செயல் உருப்படிகளைத் தேடு",
     "selectActionItems": "பலவற்றைத் தேர்ந்தெடு",
     "selectAllTasksMenu": "அனைத்தையும் தேர்ந்தெடு",
     "showCompletedTasks": "முடிந்தவற்றைக் காட்டு",
@@ -10771,5 +10770,6 @@
     "navTodos": "பணிகள்",
     "navHome": "முகப்பு",
     "navConvos": "உரையாடல்கள்",
-    "navBrain": "மூளை"
+    "navBrain": "மூளை",
+    "searchGoalsAndTodos": "இலக்குகள் மற்றும் பணிகளைத் தேடு"
 }

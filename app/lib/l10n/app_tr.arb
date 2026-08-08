@@ -3009,7 +3009,6 @@
     "connectTaskAppToExport": "Dışa aktarmak için Ayarlar'da bir görev uygulaması bağlayın",
     "deselectAllTasksMenu": "Tümünün seçimini kaldır",
     "hideCompletedTasks": "Tamamlananları gizle",
-    "searchActionItems": "Eylem öğelerini ara",
     "selectActionItems": "Birden fazla seç",
     "selectAllTasksMenu": "Tümünü seç",
     "showCompletedTasks": "Tamamlananları göster",
@@ -3231,5 +3230,6 @@
     "navTodos": "Görevler",
     "navHome": "Ana Sayfa",
     "navConvos": "Konuşmalar",
-    "navBrain": "Beyin"
+    "navBrain": "Beyin",
+    "searchGoalsAndTodos": "Hedefleri ve görevleri ara"
 }

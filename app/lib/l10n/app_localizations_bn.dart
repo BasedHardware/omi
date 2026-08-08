@@ -9100,9 +9100,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get phoneCallSubtitle => 'লাইভ ট্রান্সক্রিপশন সহ কল রেকর্ড করুন';
 
   @override
-  String get searchActionItems => 'অ্যাকশন আইটেম অনুসন্ধান';
-
-  @override
   String get selectActionItems => 'একাধিক নির্বাচন';
 
   @override
@@ -9792,4 +9789,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get navBrain => 'মস্তিষ্ক';
+
+  @override
+  String get searchGoalsAndTodos => 'লক্ষ্য ও কাজ খুঁজুন';
 }

@@ -2975,7 +2975,6 @@
     "connectTaskAppToExport": "निर्यात करने के लिए सेटिंग्स में एक टास्क ऐप कनेक्ट करें",
     "deselectAllTasksMenu": "सभी का चयन हटाएं",
     "hideCompletedTasks": "पूर्ण छिपाएं",
-    "searchActionItems": "कार्य आइटम खोजें",
     "selectActionItems": "एकाधिक चुनें",
     "selectAllTasksMenu": "सभी चुनें",
     "showCompletedTasks": "पूर्ण दिखाएं",
@@ -3197,5 +3196,6 @@
     "navTodos": "कार्य",
     "navHome": "होम",
     "navConvos": "बातचीत",
-    "navBrain": "दिमाग"
+    "navBrain": "दिमाग",
+    "searchGoalsAndTodos": "लक्ष्य और कार्य खोजें"
 }

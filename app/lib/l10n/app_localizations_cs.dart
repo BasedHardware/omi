@@ -9086,9 +9086,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get phoneCallSubtitle => 'Nahrávejte hovor s živým přepisem';
 
   @override
-  String get searchActionItems => 'Hledat akční položky';
-
-  @override
   String get selectActionItems => 'Vybrat více';
 
   @override
@@ -9786,4 +9783,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get navBrain => 'Mozek';
+
+  @override
+  String get searchGoalsAndTodos => 'Hledat cíle a úkoly';
 }

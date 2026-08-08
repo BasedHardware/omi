@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Eksportimiseks ühendage Seadetes ülesannete rakendus",
     "deselectAllTasksMenu": "Tühista kõigi valik",
     "hideCompletedTasks": "Peida lõpetatud",
-    "searchActionItems": "Otsi tegevusüksusi",
     "selectActionItems": "Vali mitu",
     "selectAllTasksMenu": "Vali kõik",
     "showCompletedTasks": "Kuva lõpetatud",
@@ -3196,5 +3195,6 @@
     "navTodos": "Ülesanded",
     "navHome": "Avaleht",
     "navConvos": "Vestlused",
-    "navBrain": "Aju"
+    "navBrain": "Aju",
+    "searchGoalsAndTodos": "Otsi eesmärke ja ülesandeid"
 }

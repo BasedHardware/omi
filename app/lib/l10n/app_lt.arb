@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Prijunkite užduočių programą Nustatymuose, kad galėtumėte eksportuoti",
     "deselectAllTasksMenu": "Atžymėti viską",
     "hideCompletedTasks": "Slėpti užbaigtas",
-    "searchActionItems": "Ieškoti veiksmų elementų",
     "selectActionItems": "Pasirinkti kelis",
     "selectAllTasksMenu": "Pasirinkti viską",
     "showCompletedTasks": "Rodyti užbaigtas",
@@ -3196,5 +3195,6 @@
     "navTodos": "Užduotys",
     "navHome": "Pradžia",
     "navConvos": "Pokalbiai",
-    "navBrain": "Smegenys"
+    "navBrain": "Smegenys",
+    "searchGoalsAndTodos": "Ieškoti tikslų ir užduočių"
 }

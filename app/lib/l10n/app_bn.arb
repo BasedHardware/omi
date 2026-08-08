@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "রপ্তানি করতে সেটিংসে একটি টাস্ক অ্যাপ সংযুক্ত করুন",
     "deselectAllTasksMenu": "সমস্ত নির্বাচন বাতিল",
     "hideCompletedTasks": "সম্পন্ন লুকান",
-    "searchActionItems": "অ্যাকশন আইটেম অনুসন্ধান",
     "selectActionItems": "একাধিক নির্বাচন",
     "selectAllTasksMenu": "সমস্ত নির্বাচন",
     "showCompletedTasks": "সম্পন্ন দেখান",
@@ -10771,5 +10770,6 @@
     "navTodos": "কাজ",
     "navHome": "হোম",
     "navConvos": "কথোপকথন",
-    "navBrain": "মস্তিষ্ক"
+    "navBrain": "মস্তিষ্ক",
+    "searchGoalsAndTodos": "লক্ষ্য ও কাজ খুঁজুন"
 }

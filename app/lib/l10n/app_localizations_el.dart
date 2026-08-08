@@ -9155,9 +9155,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get phoneCallSubtitle => 'Καταγράψτε κλήση με ζωντανή μεταγραφή';
 
   @override
-  String get searchActionItems => 'Αναζήτηση ενεργειών';
-
-  @override
   String get selectActionItems => 'Πολλαπλή επιλογή';
 
   @override
@@ -9855,4 +9852,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get navBrain => 'Εγκέφαλος';
+
+  @override
+  String get searchGoalsAndTodos => 'Αναζήτηση σε στόχους και εργασίες';
 }

@@ -406,7 +406,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         children: [
                           ConversationsGroupWidget(
                             key: ValueKey(date),
-                            isFirst: index == 0,
                             conversations: memoriesForDate,
                             recordings: recordingsForDate,
                             date: date,

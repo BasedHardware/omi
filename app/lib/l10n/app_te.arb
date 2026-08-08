@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "ఎగుమతి చేయడానికి సెట్టింగ్‌లలో టాస్క్ యాప్‌ను కనెక్ట్ చేయండి",
     "deselectAllTasksMenu": "అన్ని ఎంపికలు తొలగించు",
     "hideCompletedTasks": "పూర్తయినవి దాచు",
-    "searchActionItems": "చర్య అంశాలను వెతకండి",
     "selectActionItems": "బహుళ ఎంపిక",
     "selectAllTasksMenu": "అన్నీ ఎంచుకోండి",
     "showCompletedTasks": "పూర్తయినవి చూపించు",
@@ -10771,5 +10770,6 @@
     "navTodos": "పనులు",
     "navHome": "హోమ్",
     "navConvos": "సంభాషణలు",
-    "navBrain": "మెదడు"
+    "navBrain": "మెదడు",
+    "searchGoalsAndTodos": "లక్ష్యాలు మరియు పనులను వెతకండి"
 }

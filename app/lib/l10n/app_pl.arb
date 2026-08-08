@@ -3009,7 +3009,6 @@
     "connectTaskAppToExport": "Połącz aplikację zadań w Ustawieniach, aby eksportować",
     "deselectAllTasksMenu": "Odznacz wszystkie",
     "hideCompletedTasks": "Ukryj ukończone",
-    "searchActionItems": "Szukaj pozycji działań",
     "selectActionItems": "Zaznacz wiele",
     "selectAllTasksMenu": "Zaznacz wszystkie",
     "showCompletedTasks": "Pokaż ukończone",
@@ -3231,5 +3230,6 @@
     "navTodos": "Zadania",
     "navHome": "Główna",
     "navConvos": "Rozmowy",
-    "navBrain": "Mózg"
+    "navBrain": "Mózg",
+    "searchGoalsAndTodos": "Szukaj celów i zadań"
 }

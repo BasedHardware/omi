@@ -4,12 +4,14 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -255,6 +257,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
+          _buildExportButton(),
+          const SizedBox(width: 8),
           Expanded(
             child: TextFormField(
               controller: _searchController,
@@ -266,7 +270,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 });
               },
               decoration: InputDecoration(
-                hintText: context.l10n.searchActionItems,
+                hintText: context.l10n.searchGoalsAndTodos,
                 hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
                 filled: true,
                 fillColor: const Color(0xFF1F1F25),
@@ -295,6 +299,25 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           const SizedBox(width: 8),
           _buildOverflowMenu(provider),
         ],
+      ),
+    );
+  }
+
+  /// Export lives left of the search field, mirroring the overflow menu on the
+  /// right — same 48pt circle, so the header reads as one pair of controls.
+  Widget _buildExportButton() {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        _searchFocusNode.unfocus();
+        PlatformManager.instance.analytics.exportTasksBannerClicked();
+        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
+      },
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
+        child: const Center(child: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70)),
       ),
     );
   }

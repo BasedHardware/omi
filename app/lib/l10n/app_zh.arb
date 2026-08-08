@@ -3000,7 +3000,6 @@
     "connectTaskAppToExport": "在设置中连接任务应用以导出",
     "deselectAllTasksMenu": "取消全选",
     "hideCompletedTasks": "隐藏已完成",
-    "searchActionItems": "搜索操作项",
     "selectActionItems": "多选",
     "selectAllTasksMenu": "全选",
     "showCompletedTasks": "显示已完成",
@@ -3222,5 +3221,6 @@
     "navTodos": "任务",
     "navHome": "首页",
     "navConvos": "对话",
-    "navBrain": "大脑"
+    "navBrain": "大脑",
+    "searchGoalsAndTodos": "搜索目标和任务"
 }

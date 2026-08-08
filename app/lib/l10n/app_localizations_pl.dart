@@ -9111,9 +9111,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get phoneCallSubtitle => 'Nagrywaj rozmowę z transkrypcją na żywo';
 
   @override
-  String get searchActionItems => 'Szukaj pozycji działań';
-
-  @override
   String get selectActionItems => 'Zaznacz wiele';
 
   @override
@@ -9813,4 +9810,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get navBrain => 'Mózg';
+
+  @override
+  String get searchGoalsAndTodos => 'Szukaj celów i zadań';
 }

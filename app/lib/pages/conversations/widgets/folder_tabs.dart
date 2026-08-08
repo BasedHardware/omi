@@ -98,22 +98,20 @@ class _FolderTabsState extends State<FolderTabs> {
         children: [
           PullDownButton(
             itemBuilder: (context) => [
-              PullDownMenuItem.selectable(
+              PullDownMenuItem(
                 title: context.l10n.all,
-                selected: !widget.showStarredOnly && widget.selectedFolderId == null,
+                iconWidget: const Icon(Icons.inbox_outlined, size: 18),
                 onTap: _selectAll,
               ),
-              PullDownMenuItem.selectable(
+              PullDownMenuItem(
                 title: context.l10n.starred,
-                selected: widget.showStarredOnly,
                 iconWidget: const FaIcon(FontAwesomeIcons.solidStar, size: 14, color: Colors.amber),
                 onTap: _selectStarred,
               ),
               if (widget.folders.isNotEmpty) const PullDownMenuDivider.large(),
               ...widget.folders.map(
-                (folder) => PullDownMenuItem.selectable(
+                (folder) => PullDownMenuItem(
                   title: folder.name,
-                  selected: !widget.showStarredOnly && widget.selectedFolderId == folder.id,
                   iconWidget: FaIcon(folderIconToFa(folder.icon), size: 14, color: folder.colorValue),
                   onTap: () => _selectFolder(folder),
                 ),
@@ -141,6 +139,7 @@ class _FolderTabsState extends State<FolderTabs> {
                 showMenu();
               },
               child: Container(
+                height: 32,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
                   color: Colors.grey.withValues(alpha: 0.12),

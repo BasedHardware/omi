@@ -9166,9 +9166,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get phoneCallSubtitle => 'Anruf mit Live-Transkription aufnehmen';
 
   @override
-  String get searchActionItems => 'Aktionspunkte durchsuchen';
-
-  @override
   String get selectActionItems => 'Mehrere auswählen';
 
   @override
@@ -9868,4 +9865,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get navBrain => 'Gehirn';
+
+  @override
+  String get searchGoalsAndTodos => 'Ziele und Aufgaben durchsuchen';
 }

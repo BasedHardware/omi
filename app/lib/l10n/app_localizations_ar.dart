@@ -9031,9 +9031,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get phoneCallSubtitle => 'سجّل مكالمة مع تفريغ مباشر';
 
   @override
-  String get searchActionItems => 'البحث في عناصر الإجراء';
-
-  @override
   String get selectActionItems => 'تحديد متعدد';
 
   @override
@@ -9726,4 +9723,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get navBrain => 'الدماغ';
+
+  @override
+  String get searchGoalsAndTodos => 'بحث في الأهداف والمهام';
 }

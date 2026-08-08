@@ -3070,7 +3070,6 @@
     "connectTaskAppToExport": "Csatlakoztasson egy feladatalkalmazást a Beállításokban az exportáláshoz",
     "deselectAllTasksMenu": "Összes kijelölés törlése",
     "hideCompletedTasks": "Befejezettek elrejtése",
-    "searchActionItems": "Teendők keresése",
     "selectActionItems": "Több kijelölése",
     "selectAllTasksMenu": "Összes kijelölése",
     "showCompletedTasks": "Befejezettek megjelenítése",
@@ -3292,5 +3291,6 @@
     "navTodos": "Feladatok",
     "navHome": "Kezdőlap",
     "navConvos": "Beszélgetések",
-    "navBrain": "Agy"
+    "navBrain": "Agy",
+    "searchGoalsAndTodos": "Célok és feladatok keresése"
 }

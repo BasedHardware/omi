@@ -29,6 +29,18 @@ import 'package:omi/widgets/extensions/string.dart';
 /// version pulled more attention than the conversation title it sat next to.
 const Color _starColor = Color(0xA6FFC107);
 
+/// "Today" / "Yesterday" / "Aug 06" for a conversation's own date. The list no
+/// longer carries date group headings, so each card states its own day.
+String _relativeDay(BuildContext context, DateTime date) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(date.year, date.month, date.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return context.l10n.today;
+  if (diff == 1) return context.l10n.yesterday;
+  return dateTimeFormat('MMM dd', date, locale: Localizations.localeOf(context).languageCode);
+}
+
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
   final DateTime date;
@@ -377,6 +389,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             )
                           : Row(
                               children: [
+                                Text(
+                                  _relativeDay(context, widget.conversation.startedAt ?? widget.conversation.createdAt),
+                                  style: const TextStyle(color: Color(0xFF9A9BA1), fontSize: 14),
+                                  maxLines: 1,
+                                ),
+                                const Text(' • ', style: TextStyle(color: Color(0xFF9A9BA1), fontSize: 14)),
                                 Text(
                                   dateTimeFormat(
                                     'h:mm a',

@@ -16971,12 +16971,6 @@ abstract class AppLocalizations {
   /// **'Record a call with live transcription'**
   String get phoneCallSubtitle;
 
-  /// Hint text for the action items search field
-  ///
-  /// In en, this message translates to:
-  /// **'Search action items'**
-  String get searchActionItems;
-
   /// Top-bar button to enter selection mode on the action items page
   ///
   /// In en, this message translates to:
@@ -18248,6 +18242,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Brain'**
   String get navBrain;
+
+  /// Search field placeholder on the Tasks page, which searches goals and todos
+  ///
+  /// In en, this message translates to:
+  /// **'Search Goals & Todos'**
+  String get searchGoalsAndTodos;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

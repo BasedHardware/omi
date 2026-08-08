@@ -9102,9 +9102,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get phoneCallSubtitle => 'लाइव्ह ट्रान्स्क्रिप्शनसह कॉल रेकॉर्ड करा';
 
   @override
-  String get searchActionItems => 'कृती आयटम शोधा';
-
-  @override
   String get selectActionItems => 'अनेक निवडा';
 
   @override
@@ -9795,4 +9792,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get navBrain => 'मेंदू';
+
+  @override
+  String get searchGoalsAndTodos => 'उद्दिष्टे आणि कार्ये शोधा';
 }

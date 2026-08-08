@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Sambungkan aplikasi tugas dalam Tetapan untuk mengeksport",
     "deselectAllTasksMenu": "Nyahpilih semua",
     "hideCompletedTasks": "Sembunyikan selesai",
-    "searchActionItems": "Cari item tindakan",
     "selectActionItems": "Pilih beberapa",
     "selectAllTasksMenu": "Pilih semua",
     "showCompletedTasks": "Tunjukkan selesai",
@@ -3196,5 +3195,6 @@
     "navTodos": "Tugas",
     "navHome": "Utama",
     "navConvos": "Perbualan",
-    "navBrain": "Otak"
+    "navBrain": "Otak",
+    "searchGoalsAndTodos": "Cari matlamat dan tugas"
 }

@@ -9110,9 +9110,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get phoneCallSubtitle => 'Ierakstiet zvanu ar tiešraides transkripciju';
 
   @override
-  String get searchActionItems => 'Meklēt darbības vienumus';
-
-  @override
   String get selectActionItems => 'Atlasīt vairākus';
 
   @override
@@ -9808,4 +9805,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get navBrain => 'Smadzenes';
+
+  @override
+  String get searchGoalsAndTodos => 'Meklēt mērķus un uzdevumus';
 }

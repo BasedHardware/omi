@@ -9046,9 +9046,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get phoneCallSubtitle => 'บันทึกการโทรพร้อมถอดเสียงสด';
 
   @override
-  String get searchActionItems => 'ค้นหารายการดำเนินการ';
-
-  @override
   String get selectActionItems => 'เลือกหลายรายการ';
 
   @override
@@ -9732,4 +9729,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get navBrain => 'สมอง';
+
+  @override
+  String get searchGoalsAndTodos => 'ค้นหาเป้าหมายและงาน';
 }

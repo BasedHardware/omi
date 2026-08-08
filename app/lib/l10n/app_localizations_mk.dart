@@ -9140,9 +9140,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get phoneCallSubtitle => 'Снимајте повик со транскрипција во живо';
 
   @override
-  String get searchActionItems => 'Пребарај акциски ставки';
-
-  @override
   String get selectActionItems => 'Избери повеќе';
 
   @override
@@ -9838,4 +9835,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get navBrain => 'Мозок';
+
+  @override
+  String get searchGoalsAndTodos => 'Пребарај цели и задачи';
 }

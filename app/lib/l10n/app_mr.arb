@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "निर्यात करण्यासाठी सेटिंग्जमध्ये टास्क ॲप जोडा",
     "deselectAllTasksMenu": "सर्वांची निवड रद्द करा",
     "hideCompletedTasks": "पूर्ण झालेले लपवा",
-    "searchActionItems": "कृती आयटम शोधा",
     "selectActionItems": "अनेक निवडा",
     "selectAllTasksMenu": "सर्व निवडा",
     "showCompletedTasks": "पूर्ण झालेले दाखवा",
@@ -10771,5 +10770,6 @@
     "navTodos": "कार्य",
     "navHome": "होम",
     "navConvos": "संभाषण",
-    "navBrain": "मेंदू"
+    "navBrain": "मेंदू",
+    "searchGoalsAndTodos": "उद्दिष्टे आणि कार्ये शोधा"
 }

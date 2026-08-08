@@ -10799,10 +10799,6 @@
     "@phoneCallSubtitle": {
         "description": "Subtitle for the phone-call option in the record-options sheet"
     },
-    "searchActionItems": "Search action items",
-    "@searchActionItems": {
-        "description": "Hint text for the action items search field"
-    },
     "selectActionItems": "Select multiple",
     "@selectActionItems": {
         "description": "Top-bar button to enter selection mode on the action items page"
@@ -11571,5 +11567,9 @@
     "navBrain": "Brain",
     "@navBrain": {
         "description": "Bottom navigation label for the knowledge-graph tab"
+    },
+    "searchGoalsAndTodos": "Search Goals & Todos",
+    "@searchGoalsAndTodos": {
+        "description": "Search field placeholder on the Tasks page, which searches goals and todos"
     }
 }

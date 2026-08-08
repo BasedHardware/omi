@@ -9104,9 +9104,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get phoneCallSubtitle => 'Canlı transkripsiyonla bir aramayı kaydedin';
 
   @override
-  String get searchActionItems => 'Eylem öğelerini ara';
-
-  @override
   String get selectActionItems => 'Birden fazla seç';
 
   @override
@@ -9798,4 +9795,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get navBrain => 'Beyin';
+
+  @override
+  String get searchGoalsAndTodos => 'Hedefleri ve görevleri ara';
 }

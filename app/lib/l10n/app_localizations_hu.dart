@@ -9129,9 +9129,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get phoneCallSubtitle => 'Hívás rögzítése élő átirattal';
 
   @override
-  String get searchActionItems => 'Teendők keresése';
-
-  @override
   String get selectActionItems => 'Több kijelölése';
 
   @override
@@ -9826,4 +9823,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get navBrain => 'Agy';
+
+  @override
+  String get searchGoalsAndTodos => 'Célok és feladatok keresése';
 }

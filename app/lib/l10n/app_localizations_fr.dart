@@ -9173,9 +9173,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get phoneCallSubtitle => 'Enregistrez un appel avec transcription en direct';
 
   @override
-  String get searchActionItems => 'Rechercher des actions';
-
-  @override
   String get selectActionItems => 'Sélection multiple';
 
   @override
@@ -9873,4 +9870,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get navBrain => 'Cerveau';
+
+  @override
+  String get searchGoalsAndTodos => 'Rechercher objectifs et tâches';
 }

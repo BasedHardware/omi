@@ -99,7 +99,11 @@ class _HomeHeroState extends State<HomeHero> with SingleTickerProviderStateMixin
               color: Color(0xFFFFFFFF),
               fontSize: 20,
               fontWeight: FontWeight.w600,
-              height: 1.35,
+              // No fractional line height. A `height` of 1.35 put the baseline
+              // on a sub-pixel offset, and the vertical antialiasing that
+              // caused dulled the glyphs to ~194/255 — the headline read grey
+              // beside the app bar's own white text. It's a single line, so
+              // there is no leading to set anyway.
             ),
           ),
           // child: Text(

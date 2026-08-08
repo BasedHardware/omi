@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Verbind een taken-app in Instellingen om te exporteren",
     "deselectAllTasksMenu": "Alles deselecteren",
     "hideCompletedTasks": "Voltooide verbergen",
-    "searchActionItems": "Actiepunten zoeken",
     "selectActionItems": "Meerdere selecteren",
     "selectAllTasksMenu": "Alles selecteren",
     "showCompletedTasks": "Voltooide tonen",
@@ -3196,5 +3195,6 @@
     "navTodos": "Taken",
     "navHome": "Start",
     "navConvos": "Gesprekken",
-    "navBrain": "Brein"
+    "navBrain": "Brein",
+    "searchGoalsAndTodos": "Zoek doelen en taken"
 }

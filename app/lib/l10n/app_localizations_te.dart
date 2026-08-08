@@ -9141,9 +9141,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get phoneCallSubtitle => 'లైవ్ ట్రాన్స్‌క్రిప్షన్‌తో కాల్‌ను రికార్డ్ చేయండి';
 
   @override
-  String get searchActionItems => 'చర్య అంశాలను వెతకండి';
-
-  @override
   String get selectActionItems => 'బహుళ ఎంపిక';
 
   @override
@@ -9835,4 +9832,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get navBrain => 'మెదడు';
+
+  @override
+  String get searchGoalsAndTodos => 'లక్ష్యాలు మరియు పనులను వెతకండి';
 }

@@ -2979,7 +2979,6 @@
     "connectTaskAppToExport": "Pripojte aplikáciu úloh v Nastaveniach na export",
     "deselectAllTasksMenu": "Zrušiť výber všetkých",
     "hideCompletedTasks": "Skryť dokončené",
-    "searchActionItems": "Hľadať akčné položky",
     "selectActionItems": "Vybrať viacero",
     "selectAllTasksMenu": "Vybrať všetko",
     "showCompletedTasks": "Zobraziť dokončené",
@@ -3201,5 +3200,6 @@
     "navTodos": "Úlohy",
     "navHome": "Domov",
     "navConvos": "Konverzácie",
-    "navBrain": "Mozog"
+    "navBrain": "Mozog",
+    "searchGoalsAndTodos": "Hľadať ciele a úlohy"
 }

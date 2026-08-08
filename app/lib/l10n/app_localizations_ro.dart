@@ -9132,9 +9132,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get phoneCallSubtitle => 'Înregistrează un apel cu transcriere în direct';
 
   @override
-  String get searchActionItems => 'Căutați elemente de acțiune';
-
-  @override
   String get selectActionItems => 'Selectare multiplă';
 
   @override
@@ -9832,4 +9829,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get navBrain => 'Creier';
+
+  @override
+  String get searchGoalsAndTodos => 'Caută obiective și sarcini';
 }

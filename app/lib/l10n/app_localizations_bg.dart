@@ -9125,9 +9125,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get phoneCallSubtitle => 'Записвайте обаждане с транскрипция в реално време';
 
   @override
-  String get searchActionItems => 'Търсене на действия';
-
-  @override
   String get selectActionItems => 'Избиране на няколко';
 
   @override
@@ -9823,4 +9820,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get navBrain => 'Мозък';
+
+  @override
+  String get searchGoalsAndTodos => 'Търсене в цели и задачи';
 }

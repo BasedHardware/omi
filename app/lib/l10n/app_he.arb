@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "חבר אפליקציית משימות בהגדרות כדי לייצא",
     "deselectAllTasksMenu": "בטל בחירת הכל",
     "hideCompletedTasks": "הסתר הושלמו",
-    "searchActionItems": "חפש פריטי פעולה",
     "selectActionItems": "בחירה מרובה",
     "selectAllTasksMenu": "בחר הכל",
     "showCompletedTasks": "הצג הושלמו",
@@ -10771,5 +10770,6 @@
     "navTodos": "משימות",
     "navHome": "בית",
     "navConvos": "שיחות",
-    "navBrain": "מוח"
+    "navBrain": "מוח",
+    "searchGoalsAndTodos": "חיפוש יעדים ומשימות"
 }

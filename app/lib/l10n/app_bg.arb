@@ -2943,7 +2943,6 @@
     "connectTaskAppToExport": "Свържете приложение за задачи в Настройки, за да експортирате",
     "deselectAllTasksMenu": "Премахване на избора",
     "hideCompletedTasks": "Скриване на завършените",
-    "searchActionItems": "Търсене на действия",
     "selectActionItems": "Избиране на няколко",
     "selectAllTasksMenu": "Избиране на всички",
     "showCompletedTasks": "Показване на завършените",
@@ -3174,5 +3173,6 @@
     "navTodos": "Задачи",
     "navHome": "Начало",
     "navConvos": "Разговори",
-    "navBrain": "Мозък"
+    "navBrain": "Мозък",
+    "searchGoalsAndTodos": "Търсене в цели и задачи"
 }

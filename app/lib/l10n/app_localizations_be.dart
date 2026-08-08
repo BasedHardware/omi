@@ -9116,9 +9116,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get phoneCallSubtitle => 'Запіс званка з жывой транскрыпцыяй';
 
   @override
-  String get searchActionItems => 'Шукаць элементы дзеянняў';
-
-  @override
   String get selectActionItems => 'Выбраць некалькі';
 
   @override
@@ -9816,4 +9813,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get navBrain => 'Мозг';
+
+  @override
+  String get searchGoalsAndTodos => 'Пошук мэт і задач';
 }

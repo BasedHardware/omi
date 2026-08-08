@@ -93,7 +93,11 @@ class DailyRecapsCarouselState extends State<DailyRecapsCarousel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+          // Bottom matches the Conversations header (16) so both section
+          // titles sit the same distance above their content. Top matches the
+          // Brain tab's "Mind Map" header so the first section on a tab always
+          // clears the status bar by the same amount.
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [

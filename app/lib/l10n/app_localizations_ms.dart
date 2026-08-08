@@ -9115,9 +9115,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get phoneCallSubtitle => 'Rakam panggilan dengan transkripsi langsung';
 
   @override
-  String get searchActionItems => 'Cari item tindakan';
-
-  @override
   String get selectActionItems => 'Pilih beberapa';
 
   @override
@@ -9811,4 +9808,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get navBrain => 'Otak';
+
+  @override
+  String get searchGoalsAndTodos => 'Cari matlamat dan tugas';
 }

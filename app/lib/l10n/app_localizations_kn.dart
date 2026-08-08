@@ -9122,9 +9122,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get phoneCallSubtitle => 'ಲೈವ್ ಪ್ರತಿಲೇಖನದೊಂದಿಗೆ ಕರೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ';
 
   @override
-  String get searchActionItems => 'ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ಹುಡುಕಿ';
-
-  @override
   String get selectActionItems => 'ಬಹು ಆಯ್ಕೆ';
 
   @override
@@ -9818,4 +9815,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get navBrain => 'ಮೆದುಳು';
+
+  @override
+  String get searchGoalsAndTodos => 'ಗುರಿಗಳು ಮತ್ತು ಕಾರ್ಯಗಳನ್ನು ಹುಡುಕಿ';
 }

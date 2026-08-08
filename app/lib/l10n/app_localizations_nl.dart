@@ -9117,9 +9117,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get phoneCallSubtitle => 'Neem een gesprek op met live transcriptie';
 
   @override
-  String get searchActionItems => 'Actiepunten zoeken';
-
-  @override
   String get selectActionItems => 'Meerdere selecteren';
 
   @override
@@ -9813,4 +9810,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get navBrain => 'Brein';
+
+  @override
+  String get searchGoalsAndTodos => 'Zoek doelen en taken';
 }

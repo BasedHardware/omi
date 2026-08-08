@@ -9144,9 +9144,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get phoneCallSubtitle => 'Enregistra una trucada amb transcripció en directe';
 
   @override
-  String get searchActionItems => 'Cerca elements d\'acció';
-
-  @override
   String get selectActionItems => 'Selecció múltiple';
 
   @override
@@ -9842,4 +9839,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get navBrain => 'Cervell';
+
+  @override
+  String get searchGoalsAndTodos => 'Cerca objectius i tasques';
 }

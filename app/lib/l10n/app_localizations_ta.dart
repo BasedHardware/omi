@@ -9157,9 +9157,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get phoneCallSubtitle => 'நேரடி படியெடுத்தலுடன் அழைப்பைப் பதிவு செய்யவும்';
 
   @override
-  String get searchActionItems => 'செயல் உருப்படிகளைத் தேடு';
-
-  @override
   String get selectActionItems => 'பலவற்றைத் தேர்ந்தெடு';
 
   @override
@@ -9856,4 +9853,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get navBrain => 'மூளை';
+
+  @override
+  String get searchGoalsAndTodos => 'இலக்குகள் மற்றும் பணிகளைத் தேடு';
 }

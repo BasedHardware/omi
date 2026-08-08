@@ -9106,9 +9106,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get phoneCallSubtitle => 'لائیو ٹرانسکرپشن کے ساتھ کال ریکارڈ کریں';
 
   @override
-  String get searchActionItems => 'ایکشن آئٹمز تلاش کریں';
-
-  @override
   String get selectActionItems => 'متعدد منتخب کریں';
 
   @override
@@ -9800,4 +9797,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get navBrain => 'دماغ';
+
+  @override
+  String get searchGoalsAndTodos => 'اہداف اور کام تلاش کریں';
 }

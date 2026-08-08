@@ -9091,9 +9091,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get phoneCallSubtitle => 'Tallenna puhelu reaaliaikaisella tekstityksellä';
 
   @override
-  String get searchActionItems => 'Hae toimintakohteita';
-
-  @override
   String get selectActionItems => 'Valitse useita';
 
   @override
@@ -9787,4 +9784,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get navBrain => 'Aivot';
+
+  @override
+  String get searchGoalsAndTodos => 'Hae tavoitteita ja tehtäviä';
 }

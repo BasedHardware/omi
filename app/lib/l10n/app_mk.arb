@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "Поврзете апликација за задачи во Поставки за извоз",
     "deselectAllTasksMenu": "Одселектирај ги сите",
     "hideCompletedTasks": "Сокриј завршени",
-    "searchActionItems": "Пребарај акциски ставки",
     "selectActionItems": "Избери повеќе",
     "selectAllTasksMenu": "Избери ги сите",
     "showCompletedTasks": "Прикажи завршени",
@@ -10771,5 +10770,6 @@
     "navTodos": "Задачи",
     "navHome": "Почетна",
     "navConvos": "Разговори",
-    "navBrain": "Мозок"
+    "navBrain": "Мозок",
+    "searchGoalsAndTodos": "Пребарај цели и задачи"
 }

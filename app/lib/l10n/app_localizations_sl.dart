@@ -9115,9 +9115,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get phoneCallSubtitle => 'Posnemite klic s prepisom v živo';
 
   @override
-  String get searchActionItems => 'Iskanje akcijskih elementov';
-
-  @override
   String get selectActionItems => 'Izberi več';
 
   @override
@@ -9814,4 +9811,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get navBrain => 'Možgani';
+
+  @override
+  String get searchGoalsAndTodos => 'Iskanje ciljev in nalog';
 }

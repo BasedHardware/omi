@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Συνδέστε μια εφαρμογή εργασιών στις Ρυθμίσεις για εξαγωγή",
     "deselectAllTasksMenu": "Αποεπιλογή όλων",
     "hideCompletedTasks": "Απόκρυψη ολοκληρωμένων",
-    "searchActionItems": "Αναζήτηση ενεργειών",
     "selectActionItems": "Πολλαπλή επιλογή",
     "selectAllTasksMenu": "Επιλογή όλων",
     "showCompletedTasks": "Εμφάνιση ολοκληρωμένων",
@@ -3196,5 +3195,6 @@
     "navTodos": "Εργασίες",
     "navHome": "Αρχική",
     "navConvos": "Συνομιλίες",
-    "navBrain": "Εγκέφαλος"
+    "navBrain": "Εγκέφαλος",
+    "searchGoalsAndTodos": "Αναζήτηση σε στόχους και εργασίες"
 }

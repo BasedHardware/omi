@@ -290,7 +290,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // Navigate uri
     Uri? navigateToUri;
     var pageAlias = "home";
-    var homePageIdx = 1; // TEMP-VERIFY
+    var homePageIdx = 0;
     String? detailPageId;
 
     if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
@@ -789,14 +789,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   /// Tabs that render their own full-bleed surface and carry no app-bar chrome:
-  /// Conversations (1), Brain (3) and Apps (4).
+  /// Conversations (1), Brain (2), Tasks (3) and Apps (4). Only Home (0) still
+  /// draws a populated bar.
   ///
   /// Conversations keeps its calendar button — only the device status chip and
-  /// the settings gear drop away. Apps carries its own overflow menu next to
-  /// the search field, so it needs neither.
-  // Conversations (1), Brain (2) and Apps (4) render no app bar content of
-  // their own; Home (0) and Tasks (3) do.
-  static bool _hidesAppBarChrome(int selectedIndex) => selectedIndex == 1 || selectedIndex == 2 || selectedIndex == 4;
+  /// the settings gear drop away. Tasks and Apps each carry their own controls
+  /// next to their search field, so they need neither.
+  static bool _hidesAppBarChrome(int selectedIndex) =>
+      selectedIndex == 1 || selectedIndex == 2 || selectedIndex == 3 || selectedIndex == 4;
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     // Tabs in [_hidesAppBarChrome] render no app bar content of their own, and
@@ -994,59 +994,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Tasks page buttons - export and completed toggle
-              Consumer2<HomeProvider, ActionItemsProvider>(
-                builder: (context, homeProvider, actionItemsProvider, _) {
-                  if (homeProvider.selectedIndex != 3) {
-                    return const SizedBox.shrink();
-                  }
-                  final showCompleted = actionItemsProvider.showCompletedView;
-                  return Row(
-                    children: [
-                      // Export button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            PlatformManager.instance.analytics.exportTasksBannerClicked();
-                            Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Completed toggle
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: FaIcon(
-                            FontAwesomeIcons.solidCircleCheck,
-                            size: 16,
-                            color: showCompleted ? Colors.white : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            actionItemsProvider.toggleShowCompletedView();
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                  );
-                },
-              ),
+              // Tasks tab owns its own header controls (export left of the
+              // search field, overflow menu right of it) — nothing here.
               // The Apps tab's create menu now lives in the overflow menu
               // beside its search field — see _AppsOverflowMenu.
               // Settings button — hidden on the tabs that keep a bare app bar.

@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "Povežite aplikacijo za naloge v Nastavitvah za izvoz",
     "deselectAllTasksMenu": "Prekliči izbor vseh",
     "hideCompletedTasks": "Skrij dokončane",
-    "searchActionItems": "Iskanje akcijskih elementov",
     "selectActionItems": "Izberi več",
     "selectAllTasksMenu": "Izberi vse",
     "showCompletedTasks": "Prikaži dokončane",
@@ -10771,5 +10770,6 @@
     "navTodos": "Naloge",
     "navHome": "Domov",
     "navConvos": "Pogovori",
-    "navBrain": "Možgani"
+    "navBrain": "Možgani",
+    "searchGoalsAndTodos": "Iskanje ciljev in nalog"
 }

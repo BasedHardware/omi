@@ -9088,9 +9088,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get phoneCallSubtitle => 'Record a call with live transcription';
 
   @override
-  String get searchActionItems => 'Search action items';
-
-  @override
   String get selectActionItems => 'Select multiple';
 
   @override
@@ -9780,4 +9777,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get navBrain => 'Brain';
+
+  @override
+  String get searchGoalsAndTodos => 'Search Goals & Todos';
 }

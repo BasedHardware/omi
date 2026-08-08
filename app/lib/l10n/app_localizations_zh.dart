@@ -8935,9 +8935,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get phoneCallSubtitle => '录制带实时转录的通话';
 
   @override
-  String get searchActionItems => '搜索操作项';
-
-  @override
   String get selectActionItems => '多选';
 
   @override
@@ -9606,4 +9603,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get navBrain => '大脑';
+
+  @override
+  String get searchGoalsAndTodos => '搜索目标和任务';
 }

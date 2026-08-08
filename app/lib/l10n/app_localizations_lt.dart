@@ -9101,9 +9101,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get phoneCallSubtitle => 'Įrašykite skambutį su tiesiogine transkripcija';
 
   @override
-  String get searchActionItems => 'Ieškoti veiksmų elementų';
-
-  @override
   String get selectActionItems => 'Pasirinkti kelis';
 
   @override
@@ -9803,4 +9800,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get navBrain => 'Smegenys';
+
+  @override
+  String get searchGoalsAndTodos => 'Ieškoti tikslų ir užduočių';
 }

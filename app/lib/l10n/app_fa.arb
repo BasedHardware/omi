@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "برای صادرات، یک برنامه وظایف را در تنظیمات متصل کنید",
     "deselectAllTasksMenu": "لغو انتخاب همه",
     "hideCompletedTasks": "پنهان کردن انجام‌شده‌ها",
-    "searchActionItems": "جستجوی موارد اقدام",
     "selectActionItems": "انتخاب چندگانه",
     "selectAllTasksMenu": "انتخاب همه",
     "showCompletedTasks": "نمایش انجام‌شده‌ها",
@@ -10771,5 +10770,6 @@
     "navTodos": "وظایف",
     "navHome": "خانه",
     "navConvos": "گفتگوها",
-    "navBrain": "مغز"
+    "navBrain": "مغز",
+    "searchGoalsAndTodos": "جستجوی اهداف و وظایف"
 }

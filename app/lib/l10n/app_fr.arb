@@ -3009,7 +3009,6 @@
     "connectTaskAppToExport": "Connectez une application de tâches dans les Paramètres pour exporter",
     "deselectAllTasksMenu": "Tout désélectionner",
     "hideCompletedTasks": "Masquer les terminées",
-    "searchActionItems": "Rechercher des actions",
     "selectActionItems": "Sélection multiple",
     "selectAllTasksMenu": "Tout sélectionner",
     "showCompletedTasks": "Afficher les terminées",
@@ -3231,5 +3230,6 @@
     "navTodos": "Tâches",
     "navHome": "Accueil",
     "navConvos": "Conversations",
-    "navBrain": "Cerveau"
+    "navBrain": "Cerveau",
+    "searchGoalsAndTodos": "Rechercher objectifs et tâches"
 }

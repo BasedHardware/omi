@@ -2943,7 +2943,6 @@
     "connectTaskAppToExport": "Connecta una aplicació de tasques a Configuració per exportar",
     "deselectAllTasksMenu": "Desselecciona tot",
     "hideCompletedTasks": "Amaga les completades",
-    "searchActionItems": "Cerca elements d'acció",
     "selectActionItems": "Selecció múltiple",
     "selectAllTasksMenu": "Selecciona tot",
     "showCompletedTasks": "Mostra les completades",
@@ -3174,5 +3173,6 @@
     "navTodos": "Tasques",
     "navHome": "Inici",
     "navConvos": "Converses",
-    "navBrain": "Cervell"
+    "navBrain": "Cervell",
+    "searchGoalsAndTodos": "Cerca objectius i tasques"
 }

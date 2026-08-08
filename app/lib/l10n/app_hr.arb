@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "Povežite aplikaciju za zadatke u Postavkama za izvoz",
     "deselectAllTasksMenu": "Poništi odabir svih",
     "hideCompletedTasks": "Sakrij dovršene",
-    "searchActionItems": "Pretraži akcijske stavke",
     "selectActionItems": "Odaberi više",
     "selectAllTasksMenu": "Odaberi sve",
     "showCompletedTasks": "Prikaži dovršene",
@@ -10771,5 +10770,6 @@
     "navTodos": "Zadaci",
     "navHome": "Početna",
     "navConvos": "Razgovori",
-    "navBrain": "Mozak"
+    "navBrain": "Mozak",
+    "searchGoalsAndTodos": "Pretraži ciljeve i zadatke"
 }

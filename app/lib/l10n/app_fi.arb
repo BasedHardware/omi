@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Yhdistä tehtäväsovellus Asetuksissa vientiä varten",
     "deselectAllTasksMenu": "Poista kaikkien valinta",
     "hideCompletedTasks": "Piilota valmiit",
-    "searchActionItems": "Hae toimintakohteita",
     "selectActionItems": "Valitse useita",
     "selectAllTasksMenu": "Valitse kaikki",
     "showCompletedTasks": "Näytä valmiit",
@@ -3196,5 +3195,6 @@
     "navTodos": "Tehtävät",
     "navHome": "Koti",
     "navConvos": "Keskustelut",
-    "navBrain": "Aivot"
+    "navBrain": "Aivot",
+    "searchGoalsAndTodos": "Hae tavoitteita ja tehtäviä"
 }

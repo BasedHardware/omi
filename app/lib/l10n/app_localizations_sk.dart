@@ -9080,9 +9080,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get phoneCallSubtitle => 'Nahrávajte hovor so živým prepisom';
 
   @override
-  String get searchActionItems => 'Hľadať akčné položky';
-
-  @override
   String get selectActionItems => 'Vybrať viacero';
 
   @override
@@ -9778,4 +9775,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get navBrain => 'Mozog';
+
+  @override
+  String get searchGoalsAndTodos => 'Hľadať ciele a úlohy';
 }

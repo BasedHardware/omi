@@ -9088,9 +9088,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get phoneCallSubtitle => 'Ta opp en samtale med direkte transkripsjon';
 
   @override
-  String get searchActionItems => 'Søk i handlingspunkter';
-
-  @override
   String get selectActionItems => 'Velg flere';
 
   @override
@@ -9785,4 +9782,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get navBrain => 'Hjerne';
+
+  @override
+  String get searchGoalsAndTodos => 'Søk i mål og oppgaver';
 }

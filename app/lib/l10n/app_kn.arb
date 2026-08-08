@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ",
     "deselectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ",
     "hideCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ಮರೆಮಾಡಿ",
-    "searchActionItems": "ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ಹುಡುಕಿ",
     "selectActionItems": "ಬಹು ಆಯ್ಕೆ",
     "selectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ",
     "showCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ",
@@ -10771,5 +10770,6 @@
     "navTodos": "ಕಾರ್ಯಗಳು",
     "navHome": "ಮುಖಪುಟ",
     "navConvos": "ಸಂವಾದಗಳು",
-    "navBrain": "ಮೆದುಳು"
+    "navBrain": "ಮೆದುಳು",
+    "searchGoalsAndTodos": "ಗುರಿಗಳು ಮತ್ತು ಕಾರ್ಯಗಳನ್ನು ಹುಡುಕಿ"
 }

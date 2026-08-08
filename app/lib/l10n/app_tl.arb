@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "Ikonekta ang isang task app sa Settings para mag-export",
     "deselectAllTasksMenu": "I-deselect lahat",
     "hideCompletedTasks": "Itago ang tapos na",
-    "searchActionItems": "Maghanap ng mga action item",
     "selectActionItems": "Pumili ng marami",
     "selectAllTasksMenu": "Piliin lahat",
     "showCompletedTasks": "Ipakita ang tapos na",
@@ -10771,5 +10770,6 @@
     "navTodos": "Mga Gawain",
     "navHome": "Home",
     "navConvos": "Mga Conversation",
-    "navBrain": "Utak"
+    "navBrain": "Utak",
+    "searchGoalsAndTodos": "Maghanap ng mga layunin at gawain"
 }

@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Savienojiet uzdevumu lietotni Iestatījumos, lai eksportētu",
     "deselectAllTasksMenu": "Noņemt visu atlasi",
     "hideCompletedTasks": "Slēpt pabeigtās",
-    "searchActionItems": "Meklēt darbības vienumus",
     "selectActionItems": "Atlasīt vairākus",
     "selectAllTasksMenu": "Atlasīt visus",
     "showCompletedTasks": "Rādīt pabeigtās",
@@ -3196,5 +3195,6 @@
     "navTodos": "Uzdevumi",
     "navHome": "Sākums",
     "navConvos": "Sarunas",
-    "navBrain": "Smadzenes"
+    "navBrain": "Smadzenes",
+    "searchGoalsAndTodos": "Meklēt mērķus un uzdevumus"
 }

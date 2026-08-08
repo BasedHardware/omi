@@ -2942,7 +2942,6 @@
     "connectTaskAppToExport": "Verbinde eine Aufgaben-App in den Einstellungen zum Exportieren",
     "deselectAllTasksMenu": "Alle abwählen",
     "hideCompletedTasks": "Erledigte ausblenden",
-    "searchActionItems": "Aktionspunkte durchsuchen",
     "selectActionItems": "Mehrere auswählen",
     "selectAllTasksMenu": "Alle auswählen",
     "showCompletedTasks": "Erledigte anzeigen",
@@ -3173,5 +3172,6 @@
     "navTodos": "Aufgaben",
     "navHome": "Start",
     "navConvos": "Gespräche",
-    "navBrain": "Gehirn"
+    "navBrain": "Gehirn",
+    "searchGoalsAndTodos": "Ziele und Aufgaben durchsuchen"
 }

@@ -9120,9 +9120,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get phoneCallSubtitle => 'Запись звонка с транскрипцией в реальном времени';
 
   @override
-  String get searchActionItems => 'Поиск действий';
-
-  @override
   String get selectActionItems => 'Выбрать несколько';
 
   @override
@@ -9822,4 +9819,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get navBrain => 'Мозг';
+
+  @override
+  String get searchGoalsAndTodos => 'Поиск целей и задач';
 }

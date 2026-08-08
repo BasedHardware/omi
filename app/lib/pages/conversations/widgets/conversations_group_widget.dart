@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/local_recording.dart';
 import 'conversation_list_item.dart';
-import 'date_list_item.dart';
 import 'recording_list_item.dart';
 
 class ConversationsGroupWidget extends StatelessWidget {
@@ -13,13 +12,11 @@ class ConversationsGroupWidget extends StatelessWidget {
   /// conversations by time. They have no title/icon yet — see [RecordingListItem].
   final List<LocalRecording> recordings;
   final DateTime date;
-  final bool isFirst;
   const ConversationsGroupWidget({
     super.key,
     required this.conversations,
     this.recordings = const [],
     required this.date,
-    required this.isFirst,
   });
 
   @override
@@ -38,7 +35,8 @@ class ConversationsGroupWidget extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        DateListItem(date: date, isFirst: isFirst),
+        // No date heading: each card states its own day, so the list reads as
+        // one continuous section instead of a stack of one-item sections.
         ...entries.map((e) {
           if (e.convo != null) {
             return ConversationListItem(
@@ -50,7 +48,6 @@ class ConversationsGroupWidget extends StatelessWidget {
           }
           return RecordingListItem(key: ValueKey('rec_${e.rec!.id}'), recording: e.rec!);
         }),
-        const SizedBox(height: 10),
       ],
     );
   }

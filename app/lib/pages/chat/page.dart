@@ -627,18 +627,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          // Placeholder for the floating LEFT button so the pill
-                          // sits at the right x-position. The actual button is
-                          // rendered as a Positioned overlay below so the pill's
-                          // shadow can't bleed onto it.
-                          if ((voiceRecorderProvider.isActive &&
-                                  voiceRecorderProvider.state == VoiceRecorderState.recording) ||
-                              (!voiceRecorderProvider.isActive && shouldShowMenuButton()))
-                            const SizedBox(width: 56),
-                          // CENTER pill — text field/waveform + right-side button stays inside.
+                          // CENTER pill — text field/waveform, with the left and
+                          // right buttons both sitting inside it.
                           Expanded(
                             child: Container(
-                              padding: const EdgeInsets.only(left: 14, right: 8, top: 7, bottom: 7),
+                              // Left inset clears the in-pill button when one is
+                              // showing, so the placeholder text doesn't run
+                              // underneath it.
+                              padding: EdgeInsets.only(
+                                left: ((voiceRecorderProvider.isActive &&
+                                            voiceRecorderProvider.state == VoiceRecorderState.recording) ||
+                                        (!voiceRecorderProvider.isActive && shouldShowMenuButton()))
+                                    ? 52
+                                    : 14,
+                                right: 8,
+                                top: 7,
+                                bottom: 7,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF1F1F25),
                                 borderRadius: BorderRadius.circular(32),
@@ -893,7 +898,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       // the inner Row so it sits on top of the pill's shadow.
                       if (voiceRecorderProvider.isActive && voiceRecorderProvider.state == VoiceRecorderState.recording)
                         Positioned(
-                          left: 0,
+                          // Inside the pill's left edge now, not floating beside it.
+                          left: 6,
                           top: 0,
                           bottom: 0,
                           child: Center(
@@ -936,7 +942,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         )
                       else if (!voiceRecorderProvider.isActive && shouldShowMenuButton())
                         Positioned(
-                          left: 0,
+                          // Inside the pill's left edge now, not floating beside it.
+                          left: 6,
                           top: 0,
                           bottom: 0,
                           child: Center(
@@ -996,29 +1003,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 child: Container(
                                   height: 48,
                                   width: 48,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF1F1F25),
+                                  // Sits on the pill now rather than beside it,
+                                  // so it carries no surface of its own: a
+                                  // filled, bordered circle inside a filled,
+                                  // bordered pill reads as a control stacked on
+                                  // another control. The shadows go too — they
+                                  // existed to lift it off the page background.
+                                  decoration: const BoxDecoration(
+                                    color: Colors.transparent,
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: const Color(0xFF35343B), width: 1),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.65),
-                                        blurRadius: 60,
-                                        spreadRadius: 14,
-                                        offset: const Offset(0, -16),
-                                      ),
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.45),
-                                        blurRadius: 32,
-                                        spreadRadius: 6,
-                                        offset: const Offset(0, -8),
-                                      ),
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.25),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ],
                                   ),
                                   child: Center(
                                     child: FaIcon(

@@ -9021,9 +9021,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get phoneCallSubtitle => 'הקלט שיחה עם תמלול חי';
 
   @override
-  String get searchActionItems => 'חפש פריטי פעולה';
-
-  @override
   String get selectActionItems => 'בחירה מרובה';
 
   @override
@@ -9711,4 +9708,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get navBrain => 'מוח';
+
+  @override
+  String get searchGoalsAndTodos => 'חיפוש יעדים ומשימות';
 }

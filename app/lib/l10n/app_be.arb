@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "Падключыце праграму задач у Наладах для экспарту",
     "deselectAllTasksMenu": "Зняць выбар усіх",
     "hideCompletedTasks": "Схаваць завершаныя",
-    "searchActionItems": "Шукаць элементы дзеянняў",
     "selectActionItems": "Выбраць некалькі",
     "selectAllTasksMenu": "Выбраць усе",
     "showCompletedTasks": "Паказаць завершаныя",
@@ -10771,5 +10770,6 @@
     "navTodos": "Задачы",
     "navHome": "Галоўная",
     "navConvos": "Разнамовы",
-    "navBrain": "Мозг"
+    "navBrain": "Мозг",
+    "searchGoalsAndTodos": "Пошук мэт і задач"
 }

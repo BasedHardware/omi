@@ -10548,7 +10548,6 @@
     "connectTaskAppToExport": "ایکسپورٹ کے لیے ترتیبات میں ٹاسک ایپ جوڑیں",
     "deselectAllTasksMenu": "تمام کا انتخاب ختم کریں",
     "hideCompletedTasks": "مکمل شدہ چھپائیں",
-    "searchActionItems": "ایکشن آئٹمز تلاش کریں",
     "selectActionItems": "متعدد منتخب کریں",
     "selectAllTasksMenu": "سب منتخب کریں",
     "showCompletedTasks": "مکمل شدہ دکھائیں",
@@ -10771,5 +10770,6 @@
     "navTodos": "کام",
     "navHome": "ہوم",
     "navConvos": "بات چیتیں",
-    "navBrain": "دماغ"
+    "navBrain": "دماغ",
+    "searchGoalsAndTodos": "اہداف اور کام تلاش کریں"
 }

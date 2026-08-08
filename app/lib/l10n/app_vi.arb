@@ -2979,7 +2979,6 @@
     "connectTaskAppToExport": "Kết nối ứng dụng tác vụ trong Cài đặt để xuất",
     "deselectAllTasksMenu": "Bỏ chọn tất cả",
     "hideCompletedTasks": "Ẩn đã hoàn thành",
-    "searchActionItems": "Tìm kiếm mục hành động",
     "selectActionItems": "Chọn nhiều",
     "selectAllTasksMenu": "Chọn tất cả",
     "showCompletedTasks": "Hiện đã hoàn thành",
@@ -3201,5 +3200,6 @@
     "navTodos": "Nhiệm vụ",
     "navHome": "Trang chủ",
     "navConvos": "Cuộc trò chuyện",
-    "navBrain": "Não"
+    "navBrain": "Não",
+    "searchGoalsAndTodos": "Tìm mục tiêu và công việc"
 }

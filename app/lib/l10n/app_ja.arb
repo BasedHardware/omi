@@ -2975,7 +2975,6 @@
     "connectTaskAppToExport": "エクスポートするには設定でタスクアプリを接続してください",
     "deselectAllTasksMenu": "すべて選択解除",
     "hideCompletedTasks": "完了を非表示",
-    "searchActionItems": "アクション項目を検索",
     "selectActionItems": "複数選択",
     "selectAllTasksMenu": "すべて選択",
     "showCompletedTasks": "完了を表示",
@@ -3172,5 +3171,6 @@
     "navTodos": "タスク",
     "navHome": "ホーム",
     "navConvos": "会話",
-    "navBrain": "ブレイン"
+    "navBrain": "ブレイン",
+    "searchGoalsAndTodos": "目標とタスクを検索"
 }

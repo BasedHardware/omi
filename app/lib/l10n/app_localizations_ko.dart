@@ -8950,9 +8950,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallSubtitle => '실시간 전사로 통화 녹음';
 
   @override
-  String get searchActionItems => '실행 항목 검색';
-
-  @override
   String get selectActionItems => '여러 개 선택';
 
   @override
@@ -9625,4 +9622,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get navBrain => '브레인';
+
+  @override
+  String get searchGoalsAndTodos => '목표 및 작업 검색';
 }

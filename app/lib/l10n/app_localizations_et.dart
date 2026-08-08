@@ -9089,9 +9089,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get phoneCallSubtitle => 'Salvesta kõne reaalajas transkriptsiooniga';
 
   @override
-  String get searchActionItems => 'Otsi tegevusüksusi';
-
-  @override
   String get selectActionItems => 'Vali mitu';
 
   @override
@@ -9782,4 +9779,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get navBrain => 'Aju';
+
+  @override
+  String get searchGoalsAndTodos => 'Otsi eesmärke ja ülesandeid';
 }

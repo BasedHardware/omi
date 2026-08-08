@@ -9093,9 +9093,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get phoneCallSubtitle => 'یک تماس را با رونویسی زنده ضبط کنید';
 
   @override
-  String get searchActionItems => 'جستجوی موارد اقدام';
-
-  @override
   String get selectActionItems => 'انتخاب چندگانه';
 
   @override
@@ -9788,4 +9785,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get navBrain => 'مغز';
+
+  @override
+  String get searchGoalsAndTodos => 'جستجوی اهداف و وظایف';
 }

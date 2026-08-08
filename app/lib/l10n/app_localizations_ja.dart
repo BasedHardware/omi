@@ -8949,9 +8949,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSubtitle => 'ライブ文字起こしで通話を録音';
 
   @override
-  String get searchActionItems => 'アクション項目を検索';
-
-  @override
   String get selectActionItems => '複数選択';
 
   @override
@@ -9624,4 +9621,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get navBrain => 'ブレイン';
+
+  @override
+  String get searchGoalsAndTodos => '目標とタスクを検索';
 }

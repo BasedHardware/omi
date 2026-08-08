@@ -9092,9 +9092,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get phoneCallSubtitle => 'Ghi âm cuộc gọi với phiên âm trực tiếp';
 
   @override
-  String get searchActionItems => 'Tìm kiếm mục hành động';
-
-  @override
   String get selectActionItems => 'Chọn nhiều';
 
   @override
@@ -9782,4 +9779,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get navBrain => 'Não';
+
+  @override
+  String get searchGoalsAndTodos => 'Tìm mục tiêu và công việc';
 }

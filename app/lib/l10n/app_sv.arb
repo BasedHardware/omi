@@ -2974,7 +2974,6 @@
     "connectTaskAppToExport": "Anslut en uppgiftsapp i Inställningar för att exportera",
     "deselectAllTasksMenu": "Avmarkera alla",
     "hideCompletedTasks": "Dölj slutförda",
-    "searchActionItems": "Sök åtgärdspunkter",
     "selectActionItems": "Välj flera",
     "selectAllTasksMenu": "Välj alla",
     "showCompletedTasks": "Visa slutförda",
@@ -3196,5 +3195,6 @@
     "navTodos": "Uppgifter",
     "navHome": "Hem",
     "navConvos": "Konversationer",
-    "navBrain": "Hjärna"
+    "navBrain": "Hjärna",
+    "searchGoalsAndTodos": "Sök mål och uppgifter"
 }

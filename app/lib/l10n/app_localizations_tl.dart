@@ -9175,9 +9175,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get phoneCallSubtitle => 'Mag-record ng tawag na may live na transkripsyon';
 
   @override
-  String get searchActionItems => 'Maghanap ng mga action item';
-
-  @override
   String get selectActionItems => 'Pumili ng marami';
 
   @override
@@ -9876,4 +9873,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get navBrain => 'Utak';
+
+  @override
+  String get searchGoalsAndTodos => 'Maghanap ng mga layunin at gawain';
 }
