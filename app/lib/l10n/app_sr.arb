@@ -10774,5 +10774,11 @@
     "pinAsBaseline": "Закачи као основу",
     "unpinAsBaseline": "Откачи са основе",
     "baselineMemory": "Основна меморија",
-    "alwaysInContext": "Увек у контексту"
+    "alwaysInContext": "Увек у контексту",
+    "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
+    "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
+    "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
+    "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
+    "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
+    "accountCutoverOpenStore": "Otevřít obchod"
 }
