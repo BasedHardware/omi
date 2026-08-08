@@ -13,7 +13,7 @@ import os
 
 import firebase_admin
 
-from utils.x_connector import run_x_sync_job
+from utils.x_connector import raise_if_x_sync_job_failed, run_x_sync_job
 
 logging.basicConfig(level=logging.INFO)
 
@@ -33,7 +33,9 @@ def _init_firebase() -> None:
 def main() -> None:
     _init_firebase()
     logger.info("Starting x-connector-sync-job...")
-    asyncio.run(run_x_sync_job())
+    summary = asyncio.run(run_x_sync_job())
+    logger.info("x-connector-sync-job summary: %s", summary)
+    raise_if_x_sync_job_failed(summary)
 
 
 if __name__ == "__main__":
